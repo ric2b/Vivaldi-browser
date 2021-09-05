@@ -28,10 +28,11 @@
 
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "third_party/blink/public/mojom/speech/speech_synthesis.mojom-blink-forward.h"
-#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
+#include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
 #include "third_party/blink/renderer/modules/event_target_modules.h"
 #include "third_party/blink/renderer/modules/speech/speech_synthesis_voice.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
+#include "third_party/blink/renderer/platform/mojo/heap_mojo_receiver.h"
 #include "third_party/blink/renderer/platform/wtf/math_extras.h"
 
 namespace blink {
@@ -39,12 +40,14 @@ class SpeechSynthesis;
 
 class SpeechSynthesisUtterance final
     : public EventTargetWithInlineData,
-      public ContextClient,
+      public ExecutionContextClient,
       public mojom::blink::SpeechSynthesisClient {
   DEFINE_WRAPPERTYPEINFO();
+  USING_PRE_FINALIZER(SpeechSynthesisUtterance, Dispose);
   USING_GARBAGE_COLLECTED_MIXIN(SpeechSynthesisUtterance);
 
  public:
+  static SpeechSynthesisUtterance* Create(ExecutionContext*);
   static SpeechSynthesisUtterance* Create(ExecutionContext*, const String&);
 
   SpeechSynthesisUtterance(ExecutionContext*, const String&);
@@ -86,10 +89,10 @@ class SpeechSynthesisUtterance final
   DEFINE_ATTRIBUTE_EVENT_LISTENER(boundary, kBoundary)
 
   ExecutionContext* GetExecutionContext() const override {
-    return ContextClient::GetExecutionContext();
+    return ExecutionContextClient::GetExecutionContext();
   }
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
   // mojom::blink::SpeechSynthesisClient
   void OnStartedSpeaking() override;
@@ -105,12 +108,16 @@ class SpeechSynthesisUtterance final
   void Start(SpeechSynthesis* synthesis);
 
  private:
+  // USING_PRE_FINALIZER interface.
+  // Called before the object gets garbage collected.
+  void Dispose();
+
   void OnDisconnected();
 
   // EventTarget
   const AtomicString& InterfaceName() const override;
 
-  mojo::Receiver<mojom::blink::SpeechSynthesisClient> receiver_{this};
+  HeapMojoReceiver<mojom::blink::SpeechSynthesisClient> receiver_;
   mojom::blink::SpeechSynthesisUtterancePtr mojom_utterance_;
   Member<SpeechSynthesis> synthesis_;
   Member<SpeechSynthesisVoice> voice_;

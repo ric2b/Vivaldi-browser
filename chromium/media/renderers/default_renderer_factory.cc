@@ -8,6 +8,8 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "media/base/audio_buffer.h"
+#include "media/base/bind_to_current_loop.h"
 #include "media/base/decoder_factory.h"
 #include "media/renderers/audio_renderer_impl.h"
 #include "media/renderers/renderer_impl.h"
@@ -34,10 +36,12 @@ namespace media {
 DefaultRendererFactory::DefaultRendererFactory(
     MediaLog* media_log,
     DecoderFactory* decoder_factory,
-    const GetGpuFactoriesCB& get_gpu_factories_cb)
+    const GetGpuFactoriesCB& get_gpu_factories_cb,
+    std::unique_ptr<SpeechRecognitionClient> speech_recognition_client)
     : media_log_(media_log),
       decoder_factory_(decoder_factory),
-      get_gpu_factories_cb_(get_gpu_factories_cb) {
+      get_gpu_factories_cb_(get_gpu_factories_cb),
+      speech_recognition_client_(std::move(speech_recognition_client)) {
   DCHECK(decoder_factory_);
 }
 
@@ -59,6 +63,9 @@ DefaultRendererFactory::CreateAudioDecoders(
     audio_decoders.push_back(
         std::make_unique<ATAudioDecoder>(media_task_runner));
 #elif defined(OS_WIN)
+    if (!mf_session_) {
+      mf_session_ = InitializeMediaFoundation();
+    }
     audio_decoders.push_back(
         std::make_unique<WMFAudioDecoder>(media_task_runner));
 #endif
@@ -73,7 +80,7 @@ DefaultRendererFactory::CreateAudioDecoders(
 std::vector<std::unique_ptr<VideoDecoder>>
 DefaultRendererFactory::CreateVideoDecoders(
     const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
-    const RequestOverlayInfoCB& request_overlay_info_cb,
+    RequestOverlayInfoCB request_overlay_info_cb,
     const gfx::ColorSpace& target_color_space,
     GpuVideoAcceleratorFactories* gpu_factories,
     bool use_platform_media_pipeline) {
@@ -87,13 +94,9 @@ DefaultRendererFactory::CreateVideoDecoders(
   } else {
 #endif
 
-  // TODO(pgraszka): When chrome fixes the dropping frames issue in the
-  // GpuVideoDecoder, we should make it our first choice on the list of video
-  // decoders, for more details see: DNA-36050,
-  // https://code.google.com/p/chromium/issues/detail?id=470466.
-  decoder_factory_->CreateVideoDecoders(media_task_runner, gpu_factories,
-                                        media_log_, request_overlay_info_cb,
-                                        target_color_space, &video_decoders);
+  decoder_factory_->CreateVideoDecoders(
+      media_task_runner, gpu_factories, media_log_,
+      std::move(request_overlay_info_cb), target_color_space, &video_decoders);
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
   }
@@ -105,7 +108,11 @@ DefaultRendererFactory::CreateVideoDecoders(
     VivVideoDecoder::Create(media_task_runner, media_log_));
 #endif // OS_MACOSX
 #if defined(OS_WIN)
-  video_decoders.push_back(std::make_unique<WMFVideoDecoder>(media_task_runner));
+  if (!mf_session_) {
+    mf_session_ = InitializeMediaFoundation();
+  }
+  video_decoders.push_back(
+      std::make_unique<WMFVideoDecoder>(media_task_runner));
 #endif // OS_WIN
 #endif // USE_SYSTEM_PROPRIETARY_CODECS
 
@@ -117,7 +124,7 @@ std::unique_ptr<Renderer> DefaultRendererFactory::CreateRenderer(
     const scoped_refptr<base::TaskRunner>& worker_task_runner,
     AudioRendererSink* audio_renderer_sink,
     VideoRendererSink* video_renderer_sink,
-    const RequestOverlayInfoCB& request_overlay_info_cb,
+    RequestOverlayInfoCB request_overlay_info_cb,
     const gfx::ColorSpace& target_color_space,
     bool use_platform_media_pipeline) {
   DCHECK(audio_renderer_sink);
@@ -133,7 +140,9 @@ std::unique_ptr<Renderer> DefaultRendererFactory::CreateRenderer(
       base::BindRepeating(&DefaultRendererFactory::CreateAudioDecoders,
                           base::Unretained(this), media_task_runner,
                           use_platform_media_pipeline),
-      media_log_));
+      media_log_,
+      BindToCurrentLoop(base::BindRepeating(
+          &DefaultRendererFactory::TranscribeAudio, base::Unretained(this)))));
 
   GpuVideoAcceleratorFactories* gpu_factories = nullptr;
   if (get_gpu_factories_cb_)
@@ -157,12 +166,21 @@ std::unique_ptr<Renderer> DefaultRendererFactory::CreateRenderer(
       // finishes.
       base::BindRepeating(&DefaultRendererFactory::CreateVideoDecoders,
                           base::Unretained(this), media_task_runner,
-                          request_overlay_info_cb, target_color_space,
-                          gpu_factories, use_platform_media_pipeline),
+                          std::move(request_overlay_info_cb),
+                          target_color_space, gpu_factories,
+                          use_platform_media_pipeline),
       true, media_log_, std::move(gmb_pool)));
 
   return std::make_unique<RendererImpl>(
       media_task_runner, std::move(audio_renderer), std::move(video_renderer));
+}
+
+void DefaultRendererFactory::TranscribeAudio(
+    scoped_refptr<media::AudioBuffer> buffer) {
+  if (speech_recognition_client_ &&
+      speech_recognition_client_->IsSpeechRecognitionAvailable()) {
+    speech_recognition_client_->AddAudio(std::move(buffer));
+  }
 }
 
 }  // namespace media

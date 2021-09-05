@@ -17,14 +17,15 @@
 #include "components/payments/content/payment_details_converter.h"
 #include "components/payments/content/payment_request_converter.h"
 #include "components/payments/content/payment_request_web_contents_manager.h"
-#include "components/payments/content/service_worker_payment_instrument.h"
 #include "components/payments/core/can_make_payment_query.h"
+#include "components/payments/core/error_message_util.h"
 #include "components/payments/core/error_strings.h"
 #include "components/payments/core/features.h"
+#include "components/payments/core/method_strings.h"
 #include "components/payments/core/native_error_strings.h"
+#include "components/payments/core/payment_app.h"
 #include "components/payments/core/payment_details.h"
 #include "components/payments/core/payment_details_validation.h"
-#include "components/payments/core/payment_instrument.h"
 #include "components/payments/core/payment_prefs.h"
 #include "components/payments/core/payments_experimental_features.h"
 #include "components/payments/core/payments_validators.h"
@@ -34,9 +35,11 @@
 #include "components/url_formatter/elide_url.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/origin_util.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 
 namespace payments {
 namespace {
@@ -44,30 +47,9 @@ namespace {
 using ::payments::mojom::CanMakePaymentQueryResult;
 using ::payments::mojom::HasEnrolledInstrumentQueryResult;
 
-bool IsGooglePaymentMethodInstrumentSelected(const std::string& method_name) {
-  return method_name == kGooglePayMethodName ||
-         method_name == kAndroidPayMethodName;
-}
-
-std::string GetNotSupportedErrorMessage(PaymentRequestSpec* spec) {
-  if (!spec || spec->payment_method_identifiers_set().empty())
-    return errors::kGenericPaymentMethodNotSupportedMessage;
-
-  std::vector<std::string> method_names(
-      spec->payment_method_identifiers_set().size());
-  std::transform(
-      spec->payment_method_identifiers_set().begin(),
-      spec->payment_method_identifiers_set().end(), method_names.begin(),
-      [](const std::string& method_name) { return "\"" + method_name + "\""; });
-
-  std::string output;
-  bool replaced = base::ReplaceChars(
-      method_names.size() == 1
-          ? errors::kSinglePaymentMethodNotSupportedFormat
-          : errors::kMultiplePaymentMethodsNotSupportedFormat,
-      "$", base::JoinString(method_names, ", "), &output);
-  DCHECK(replaced);
-  return output;
+bool IsGooglePaymentMethod(const std::string& method_name) {
+  return method_name == methods::kGooglePay ||
+         method_name == methods::kAndroidPay;
 }
 
 // Redact shipping address before exposing it in ShippingAddressChangeEvent.
@@ -97,6 +79,11 @@ PaymentRequest::PaymentRequest(
     mojo::PendingReceiver<mojom::PaymentRequest> receiver,
     ObserverForTest* observer_for_testing)
     : web_contents_(web_contents),
+      // TODO(crbug.com/1058840): change to WeakPtr<RenderFrameHost> once
+      // RenderFrameHost provides a WeakPtr API.
+      initiator_frame_routing_id_(content::GlobalFrameRoutingId(
+          render_frame_host->GetProcess()->GetID(),
+          render_frame_host->GetRoutingID())),
       log_(web_contents_),
       delegate_(std::move(delegate)),
       manager_(manager),
@@ -107,6 +94,7 @@ PaymentRequest::PaymentRequest(
           web_contents_->GetLastCommittedURL())),
       frame_origin_(url_formatter::FormatUrlForSecurityDisplay(
           render_frame_host->GetLastCommittedURL())),
+      frame_security_origin_(render_frame_host->GetLastCommittedOrigin()),
       observer_for_testing_(observer_for_testing),
       journey_logger_(delegate_->IsIncognito(),
                       ukm::GetSourceIdForWebContentsDocument(web_contents)) {
@@ -181,14 +169,26 @@ void PaymentRequest::Init(
     return;
   }
 
+  // TODO(crbug.com/1058840): change to WeakPtr<RenderFrameHost> once
+  // RenderFrameHost provides a WeakPtr API.
+  content::RenderFrameHost* initiator_frame =
+      content::RenderFrameHost::FromID(initiator_frame_routing_id_);
+  if (!initiator_frame) {
+    log_.Error(errors::kInvalidInitiatorFrame);
+    OnConnectionTerminated();
+    return;
+  }
+
   spec_ = std::make_unique<PaymentRequestSpec>(
       std::move(options), std::move(details), std::move(method_data),
       /*observer=*/this, delegate_->GetApplicationLocale());
   state_ = std::make_unique<PaymentRequestState>(
-      web_contents_, top_level_origin_, frame_origin_, spec_.get(),
+      web_contents_, initiator_frame, top_level_origin_, frame_origin_,
+      frame_security_origin_, spec_.get(),
       /*delegate=*/this, delegate_->GetApplicationLocale(),
       delegate_->GetPersonalDataManager(), delegate_.get(),
-      /*sw_identity_observer=*/weak_ptr_factory_.GetWeakPtr(),
+      base::BindRepeating(&PaymentRequest::SetInvokedServiceWorkerIdentity,
+                          weak_ptr_factory_.GetWeakPtr()),
       &journey_logger_);
 
   journey_logger_.SetRequestedInformation(
@@ -196,8 +196,8 @@ void PaymentRequest::Init(
       spec_->request_payer_phone(), spec_->request_payer_name());
 
   // Log metrics around which payment methods are requested by the merchant.
-  GURL google_pay_url(kGooglePayMethodName);
-  GURL android_pay_url(kAndroidPayMethodName);
+  GURL google_pay_url(methods::kGooglePay);
+  GURL android_pay_url(methods::kAndroidPay);
   // Looking for payment methods that are NOT google-related payment methods.
   auto non_google_it =
       std::find_if(spec_->url_payment_method_identifiers().begin(),
@@ -309,6 +309,7 @@ void PaymentRequest::Retry(mojom::PaymentValidationErrorsPtr errors) {
     return;
   }
 
+  state()->SetAvailablePaymentAppForRetry();
   spec()->Retry(std::move(errors));
   display_handle_->Retry();
 }
@@ -341,14 +342,13 @@ void PaymentRequest::UpdateWith(mojom::PaymentDetailsPtr details) {
     return;
   }
 
-  if (state()->selected_instrument() && state()->IsPaymentAppInvoked() &&
-      payment_handler_host_.is_changing()) {
+  if (state()->selected_app() && state()->IsPaymentAppInvoked() &&
+      payment_handler_host_.is_waiting_for_payment_details_update()) {
     payment_handler_host_.UpdateWith(
-        PaymentDetailsConverter::ConvertToPaymentMethodChangeResponse(
-            details, state()->selected_instrument()->HandlesShippingAddress(),
-            base::BindRepeating(
-                &PaymentInstrument::IsValidForPaymentMethodIdentifier,
-                state()->selected_instrument()->AsWeakPtr())));
+        PaymentDetailsConverter::ConvertToPaymentRequestDetailsUpdate(
+            details, state()->selected_app()->HandlesShippingAddress(),
+            base::BindRepeating(&PaymentApp::IsValidForPaymentMethodIdentifier,
+                                state()->selected_app()->AsWeakPtr())));
   }
 
   bool is_resolving_promise_passed_into_show_method = !spec_->IsInitialized();
@@ -368,7 +368,7 @@ void PaymentRequest::UpdateWith(mojom::PaymentDetailsPtr details) {
   }
 }
 
-void PaymentRequest::NoUpdatedPaymentDetails() {
+void PaymentRequest::OnPaymentDetailsNotUpdated() {
   // This Mojo call is triggered by the user of the API doing nothing in
   // response to a shipping address update event, so the error messages cannot
   // be more verbose.
@@ -386,8 +386,9 @@ void PaymentRequest::NoUpdatedPaymentDetails() {
 
   spec_->RecomputeSpecForDetails();
 
-  if (state()->IsPaymentAppInvoked() && payment_handler_host_.is_changing()) {
-    payment_handler_host_.NoUpdatedPaymentDetails();
+  if (state()->IsPaymentAppInvoked() &&
+      payment_handler_host_.is_waiting_for_payment_details_update()) {
+    payment_handler_host_.OnPaymentDetailsNotUpdated();
   }
 }
 
@@ -420,6 +421,9 @@ void PaymentRequest::Abort() {
 
   if (observer_for_testing_)
     observer_for_testing_->OnAbortCalled();
+
+  if (accepting_abort)
+    state_->OnAbort();
 }
 
 void PaymentRequest::Complete(mojom::PaymentComplete result) {
@@ -433,6 +437,10 @@ void PaymentRequest::Complete(mojom::PaymentComplete result) {
     log_.Error(errors::kCannotAbortWithoutShow);
     OnConnectionTerminated();
     return;
+  }
+
+  if (observer_for_testing_) {
+    observer_for_testing_->OnCompleteCalled();
   }
 
   // Failed transactions show an error. Successful and unknown-state
@@ -557,7 +565,7 @@ void PaymentRequest::AreRequestedMethodsSupportedCallback(
     bool methods_supported,
     const std::string& error_message) {
   if (is_show_called_ && observer_for_testing_)
-    observer_for_testing_->OnShowInstrumentsReady();
+    observer_for_testing_->OnShowAppsReady();
 
   if (methods_supported) {
     if (SatisfiesSkipUIConstraints())
@@ -568,7 +576,9 @@ void PaymentRequest::AreRequestedMethodsSupportedCallback(
     journey_logger_.SetNotShown(
         JourneyLogger::NOT_SHOWN_REASON_NO_SUPPORTED_PAYMENT_METHOD);
     client_->OnError(mojom::PaymentErrorReason::NOT_SUPPORTED,
-                     GetNotSupportedErrorMessage(spec_.get()) +
+                     GetNotSupportedErrorMessage(
+                         spec_ ? spec_->payment_method_identifiers_set()
+                               : std::set<std::string>()) +
                          (error_message.empty() ? "" : " " + error_message));
     if (observer_for_testing_)
       observer_for_testing_->OnNotSupportedError();
@@ -585,24 +595,46 @@ bool PaymentRequest::IsThisPaymentRequestShowing() const {
   return is_show_called_ && display_handle_ && spec_ && state_;
 }
 
+bool PaymentRequest::OnlySingleAppCanProvideAllRequiredInformation() const {
+  DCHECK(state()->IsInitialized());
+  DCHECK(spec()->IsInitialized());
+
+  if (!spec()->request_shipping() && !spec()->request_payer_name() &&
+      !spec()->request_payer_phone() && !spec()->request_payer_email()) {
+    return state()->available_apps().size() == 1 &&
+           state()->available_apps().at(0)->type() !=
+               PaymentApp::Type::AUTOFILL;
+  }
+
+  bool an_app_can_provide_all_info = false;
+  for (const auto& app : state()->available_apps()) {
+    if ((!spec()->request_shipping() || app->HandlesShippingAddress()) &&
+        (!spec()->request_payer_name() || app->HandlesPayerName()) &&
+        (!spec()->request_payer_phone() || app->HandlesPayerPhone()) &&
+        (!spec()->request_payer_email() || app->HandlesPayerEmail())) {
+      // There is another available app that can provide all merchant requested
+      // information information.
+      if (an_app_can_provide_all_info)
+        return false;
+
+      an_app_can_provide_all_info = true;
+    }
+  }
+  return an_app_can_provide_all_info;
+}
+
 bool PaymentRequest::SatisfiesSkipUIConstraints() {
   // Only allowing URL base payment apps to skip the payment sheet.
   skipped_payment_request_ui_ =
-      (spec()->url_payment_method_identifiers().size() == 1 ||
+      (spec()->url_payment_method_identifiers().size() > 0 ||
        delegate_->SkipUiForBasicCard()) &&
       base::FeatureList::IsEnabled(features::kWebPaymentsSingleAppUiSkip) &&
       base::FeatureList::IsEnabled(::features::kServiceWorkerPaymentApps) &&
       is_show_user_gesture_ && state()->IsInitialized() &&
-      spec()->IsInitialized() && state()->available_instruments().size() == 1 &&
-      spec()->stringified_method_data().size() == 1 &&
-      (!spec()->request_shipping() ||
-       state()->available_instruments().front()->HandlesShippingAddress()) &&
-      (!spec()->request_payer_name() ||
-       state()->available_instruments().front()->HandlesPayerName()) &&
-      (!spec()->request_payer_phone() ||
-       state()->available_instruments().front()->HandlesPayerPhone()) &&
-      (!spec()->request_payer_email() ||
-       state()->available_instruments().front()->HandlesPayerEmail());
+      spec()->IsInitialized() &&
+      OnlySingleAppCanProvideAllRequiredInformation() &&
+      // The available app should be preselectable.
+      state()->selected_app() != nullptr;
   if (skipped_payment_request_ui_) {
     DCHECK(state()->IsInitialized() && spec()->IsInitialized());
     journey_logger_.SetEventOccurred(JourneyLogger::EVENT_SKIPPED_SHOW);
@@ -623,30 +655,29 @@ void PaymentRequest::OnPaymentResponseAvailable(
 
   // Log the correct "selected instrument" metric according to its type and
   // the method name in response.
-  DCHECK(state_->selected_instrument());
+  DCHECK(state_->selected_app());
   JourneyLogger::Event selected_event =
       JourneyLogger::Event::EVENT_SELECTED_OTHER;
-  switch (state_->selected_instrument()->type()) {
-    case PaymentInstrument::Type::AUTOFILL:
+  switch (state_->selected_app()->type()) {
+    case PaymentApp::Type::AUTOFILL:
       selected_event = JourneyLogger::Event::EVENT_SELECTED_CREDIT_CARD;
       break;
-    case PaymentInstrument::Type::SERVICE_WORKER_APP: {
-      selected_event =
-          IsGooglePaymentMethodInstrumentSelected(response->method_name)
-              ? JourneyLogger::Event::EVENT_SELECTED_GOOGLE
-              : JourneyLogger::Event::EVENT_SELECTED_OTHER;
+    case PaymentApp::Type::SERVICE_WORKER_APP: {
+      selected_event = IsGooglePaymentMethod(response->method_name)
+                           ? JourneyLogger::Event::EVENT_SELECTED_GOOGLE
+                           : JourneyLogger::Event::EVENT_SELECTED_OTHER;
       break;
     }
-    case PaymentInstrument::Type::NATIVE_MOBILE_APP:
+    case PaymentApp::Type::NATIVE_MOBILE_APP:
       NOTREACHED();
       break;
   }
   journey_logger_.SetEventOccurred(selected_event);
 
   // If currently interactive, show the processing spinner. Autofill payment
-  // instruments request a CVC, so they are always interactive at this point. A
-  // payment handler may elect to be non-interactive by not showing a
-  // confirmation page to the user.
+  // apps request a CVC, so they are always interactive at this point. A payment
+  // handler may elect to be non-interactive by not showing a confirmation page
+  // to the user.
   if (delegate_->IsInteractive())
     delegate_->ShowProcessingSpinner();
 
@@ -733,10 +764,9 @@ void PaymentRequest::OnConnectionTerminated() {
 
 void PaymentRequest::Pay() {
   journey_logger_.SetEventOccurred(JourneyLogger::EVENT_PAY_CLICKED);
-  DCHECK(state_->selected_instrument());
-  if (state_->selected_instrument()->type() ==
-      PaymentInstrument::Type::SERVICE_WORKER_APP) {
-    static_cast<ServiceWorkerPaymentInstrument*>(state_->selected_instrument())
+  DCHECK(state_->selected_app());
+  if (state_->selected_app()->type() == PaymentApp::Type::SERVICE_WORKER_APP) {
+    static_cast<ServiceWorkerPaymentApp*>(state_->selected_app())
         ->set_payment_handler_host(payment_handler_host_.Bind());
   }
   state_->GeneratePaymentResponse();
@@ -748,6 +778,14 @@ void PaymentRequest::HideIfNecessary() {
 
 bool PaymentRequest::IsIncognito() const {
   return delegate_->IsIncognito();
+}
+
+void PaymentRequest::OnPaymentHandlerOpenWindowCalled() {
+  DCHECK(state_->selected_app());
+  // UKM for payment app origin should get recorded only when the origin of the
+  // invoked payment app is shown to the user.
+  journey_logger_.SetPaymentAppUkmSourceId(
+      state_->selected_app()->UkmSourceId());
 }
 
 void PaymentRequest::RecordFirstAbortReason(

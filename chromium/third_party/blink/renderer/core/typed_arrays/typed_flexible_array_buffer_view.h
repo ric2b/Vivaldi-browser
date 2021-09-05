@@ -6,37 +6,43 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_TYPED_ARRAYS_TYPED_FLEXIBLE_ARRAY_BUFFER_VIEW_H_
 
 #include "base/macros.h"
-#include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/typed_arrays/flexible_array_buffer_view.h"
 
 namespace blink {
 
-template <typename WTFTypedArray>
+template <typename ValueType, bool clamped = false>
 class TypedFlexibleArrayBufferView final : public FlexibleArrayBufferView {
   STACK_ALLOCATED();
 
  public:
-  using ValueType = typename WTFTypedArray::ValueType;
-
-  TypedFlexibleArrayBufferView() : FlexibleArrayBufferView() {}
+  TypedFlexibleArrayBufferView() = default;
+  TypedFlexibleArrayBufferView(const TypedFlexibleArrayBufferView&) = default;
+  TypedFlexibleArrayBufferView(TypedFlexibleArrayBufferView&&) = default;
+  TypedFlexibleArrayBufferView(v8::Local<v8::ArrayBufferView> array_buffer_view)
+      : FlexibleArrayBufferView(array_buffer_view) {}
+  ~TypedFlexibleArrayBufferView() = default;
 
   ValueType* DataMaybeOnStack() const {
     return static_cast<ValueType*>(BaseAddressMaybeOnStack());
   }
 
-  unsigned length() const {
-    DCHECK_EQ(ByteLength() % sizeof(ValueType), 0u);
-    return ByteLength() / sizeof(ValueType);
+  size_t lengthAsSizeT() const {
+    DCHECK_EQ(ByteLengthAsSizeT() % sizeof(ValueType), 0u);
+    return ByteLengthAsSizeT() / sizeof(ValueType);
   }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(TypedFlexibleArrayBufferView);
 };
 
-using FlexibleFloat32ArrayView =
-    TypedFlexibleArrayBufferView<WTF::Float32Array>;
-using FlexibleInt32ArrayView = TypedFlexibleArrayBufferView<WTF::Int32Array>;
-using FlexibleUint32ArrayView = TypedFlexibleArrayBufferView<WTF::Uint32Array>;
+using FlexibleInt8Array = TypedFlexibleArrayBufferView<int8_t>;
+using FlexibleInt16Array = TypedFlexibleArrayBufferView<int16_t>;
+using FlexibleInt32Array = TypedFlexibleArrayBufferView<int32_t>;
+using FlexibleUint8Array = TypedFlexibleArrayBufferView<uint8_t>;
+using FlexibleUint8ClampedArray = TypedFlexibleArrayBufferView<uint8_t, true>;
+using FlexibleUint16Array = TypedFlexibleArrayBufferView<uint16_t>;
+using FlexibleUint32Array = TypedFlexibleArrayBufferView<uint32_t>;
+using FlexibleBigInt64Array = TypedFlexibleArrayBufferView<int64_t>;
+using FlexibleBigUint64Array = TypedFlexibleArrayBufferView<uint64_t>;
+using FlexibleFloat32Array = TypedFlexibleArrayBufferView<float>;
+using FlexibleFloat64Array = TypedFlexibleArrayBufferView<double>;
 
 }  // namespace blink
 

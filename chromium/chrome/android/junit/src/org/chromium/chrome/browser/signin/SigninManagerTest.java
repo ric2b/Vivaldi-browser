@@ -10,6 +10,7 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
@@ -20,8 +21,6 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.MockitoAnnotations.initMocks;
 
-import android.accounts.Account;
-
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -30,14 +29,15 @@ import org.mockito.Mock;
 import org.robolectric.annotation.Config;
 
 import org.chromium.base.test.BaseRobolectricTestRunner;
+import org.chromium.base.test.DisableNativeTestRule;
 import org.chromium.base.test.util.JniMocker;
-import org.chromium.chrome.test.DisableNativeTestRule;
-import org.chromium.components.signin.AccountManagerFacade;
+import org.chromium.chrome.browser.externalauth.ExternalAuthUtils;
 import org.chromium.components.signin.AccountTrackerService;
-import org.chromium.components.signin.identitymanager.CoreAccountId;
-import org.chromium.components.signin.identitymanager.CoreAccountInfo;
+import org.chromium.components.signin.base.CoreAccountId;
+import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.components.signin.identitymanager.IdentityManager;
 import org.chromium.components.signin.identitymanager.IdentityMutator;
+import org.chromium.components.signin.metrics.SigninAccessPoint;
 import org.chromium.components.signin.metrics.SignoutReason;
 import org.chromium.components.sync.AndroidSyncSettings;
 
@@ -74,15 +74,36 @@ public class SigninManagerTest {
 
         mIdentityMutator = mock(IdentityMutator.class);
 
-        mIdentityManager = spy(new IdentityManager(0 /* nativeIdentityManager */));
+        mIdentityManager = spy(
+                new IdentityManager(0 /* nativeIdentityManager */, null /* OAuth2TokenService */));
 
         AndroidSyncSettings androidSyncSettings = mock(AndroidSyncSettings.class);
 
-        mSigninManager = new SigninManager(0 /* nativeSigninManagerAndroid */,
-                mAccountTrackerService, mIdentityManager, mIdentityMutator, androidSyncSettings);
+        ExternalAuthUtils externalAuthUtils = mock(ExternalAuthUtils.class);
+        // Pretend Google Play services are available as it is required for the sign-in
+        doReturn(false).when(externalAuthUtils).isGooglePlayServicesMissing(any());
 
-        mAccount = new CoreAccountInfo(new CoreAccountId("gaia-id-user"),
-                AccountManagerFacade.createAccountFromName("user@domain.com"), "gaia-id-user");
+        doReturn(null).when(mIdentityManager).getPrimaryAccountInfo();
+        mSigninManager =
+                new SigninManager(0 /* nativeSigninManagerAndroid */, mAccountTrackerService,
+                        mIdentityManager, mIdentityMutator, androidSyncSettings, externalAuthUtils);
+
+        mAccount = new CoreAccountInfo(
+                new CoreAccountId("gaia-id-user"), "user@domain.com", "gaia-id-user");
+    }
+
+    @Test
+    public void signInFromJava() {
+        doReturn(true).when(mAccountTrackerService).checkAndSeedSystemAccounts();
+        doReturn(mAccount)
+                .when(mIdentityManager)
+                .findExtendedAccountInfoForAccountWithRefreshTokenByEmailAddress(
+                        eq(mAccount.getEmail()));
+
+        mSigninManager.onFirstRunCheckDone();
+        mSigninManager.signIn(SigninAccessPoint.START_PAGE, mAccount, null);
+
+        verify(mNativeMock).fetchAndApplyCloudPolicy(anyLong(), eq(mAccount), any());
     }
 
     @Test
@@ -209,9 +230,8 @@ public class SigninManagerTest {
 
     @Test
     public void callbackNotifiedOnSignin() {
-        CoreAccountInfo account = new CoreAccountInfo(new CoreAccountId("test_at_gmail.com"),
-                new Account("test@gmail.com", AccountManagerFacade.GOOGLE_ACCOUNT_TYPE),
-                "test_at_gmail.com");
+        CoreAccountInfo account = new CoreAccountInfo(
+                new CoreAccountId("test_at_gmail.com"), "test@gmail.com", "test_at_gmail.com");
 
         // No need to seed accounts to the native code.
         doReturn(true).when(mAccountTrackerService).checkAndSeedSystemAccounts();
@@ -222,12 +242,15 @@ public class SigninManagerTest {
         doReturn(account)
                 .when(mIdentityManager)
                 .findExtendedAccountInfoForAccountWithRefreshTokenByEmailAddress(any());
+        // TODO(https://crbug.com/1054780): Mock getPrimaryAccountInfo instead.
+        doReturn(false).when(mIdentityManager).hasPrimaryAccount();
         doReturn(true).when(mIdentityMutator).setPrimaryAccount(any());
+        doReturn(account).when(mIdentityManager).getPrimaryAccountInfo();
         doNothing().when(mIdentityMutator).reloadAllAccountsFromSystemWithPrimaryAccount(any());
 
         mSigninManager.onFirstRunCheckDone(); // Allow sign-in.
 
-        mSigninManager.signIn(account.getAccount(), null);
+        mSigninManager.signIn(SigninAccessPoint.UNKNOWN, account, null);
         assertTrue(mSigninManager.isOperationInProgress());
         AtomicInteger callCount = new AtomicInteger(0);
         mSigninManager.runAfterOperationInProgress(callCount::incrementAndGet);
@@ -236,5 +259,30 @@ public class SigninManagerTest {
         mSigninManager.finishSignInAfterPolicyEnforced();
         assertFalse(mSigninManager.isOperationInProgress());
         assertEquals(1, callCount.get());
+    }
+
+    @Test(expected = AssertionError.class)
+    public void failIfAlreadySignedin() {
+        CoreAccountInfo account = new CoreAccountInfo(
+                new CoreAccountId("test_at_gmail.com"), "test@gmail.com", "test_at_gmail.com");
+
+        // No need to seed accounts to the native code.
+        doReturn(true).when(mAccountTrackerService).checkAndSeedSystemAccounts();
+        // Request that policy is loaded. It will pause sign-in until onPolicyCheckedBeforeSignIn is
+        // invoked.
+        doNothing().when(mNativeMock).fetchAndApplyCloudPolicy(anyLong(), any(), any());
+
+        doReturn(account)
+                .when(mIdentityManager)
+                .findExtendedAccountInfoForAccountWithRefreshTokenByEmailAddress(any());
+        doReturn(true).when(mIdentityManager).hasPrimaryAccount();
+
+        mSigninManager.onFirstRunCheckDone(); // Allow sign-in.
+
+        mSigninManager.signIn(SigninAccessPoint.UNKNOWN, account, null);
+        assertTrue(mSigninManager.isOperationInProgress());
+
+        // The following should throw an assertion error
+        mSigninManager.finishSignInAfterPolicyEnforced();
     }
 }

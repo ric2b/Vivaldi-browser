@@ -5,8 +5,8 @@
 cr.define('gcmInternals', function() {
   'use strict';
 
-  var isRecording = false;
-  var keyPressState = 0;
+  let isRecording = false;
+  let keyPressState = 0;
 
   /**
    * If the info dictionary has property prop, then set the text content of
@@ -16,15 +16,47 @@ cr.define('gcmInternals', function() {
    * @param {string} elementId The id of a HTML element.
    */
   function setIfExists(info, prop, elementId) {
-    var element = $(elementId);
-    if (!element)
+    const element = $(elementId);
+    if (!element) {
       return;
+    }
 
     if (info[prop] !== undefined) {
       element.textContent = info[prop];
     } else {
       element.textContent = '';
     }
+  }
+
+  /**
+   * Sets the registeredAppIds from |info| to the element identified by
+   * |elementId|. The list will have duplicates counted and visually shown.
+   * @param {!Object} info A dictionary of device infos to be displayed.
+   * @param {string} prop Name of the property.
+   * @param {string} elementId The id of a HTML element.
+   */
+  function setRegisteredAppIdsIfExists(info, prop, elementId) {
+    const element = $(elementId);
+    if (!element) {
+      return;
+    }
+
+    if (info[prop] === undefined || !Array.isArray(info[prop])) {
+      return;
+    }
+
+    const registeredAppIds = new Map();
+    info[prop].forEach(registeredAppId => {
+      registeredAppIds.set(
+          registeredAppId, (registeredAppIds.get(registeredAppId) || 0) + 1);
+    });
+
+    const list = [];
+    for (const [registeredAppId, count] of registeredAppIds.entries()) {
+      list.push(registeredAppId + (count > 1 ? ` (x${count})` : ``));
+    }
+
+    element.textContent = list.join(', ');
   }
 
   /**
@@ -42,9 +74,10 @@ cr.define('gcmInternals', function() {
     setIfExists(info, 'connectionState', 'connection-state');
     setIfExists(info, 'lastCheckin', 'last-checkin');
     setIfExists(info, 'nextCheckin', 'next-checkin');
-    setIfExists(info, 'registeredAppIds', 'registered-app-ids');
     setIfExists(info, 'sendQueueSize', 'send-queue-size');
     setIfExists(info, 'resendQueueSize', 'resend-queue-size');
+
+    setRegisteredAppIdsIfExists(info, 'registeredAppIds', 'registered-app-ids');
   }
 
   /**
@@ -63,17 +96,17 @@ cr.define('gcmInternals', function() {
    * @param {!Object} list A list of list of item.
    */
   function addRows(table, list) {
-    for (var i = 0; i < list.length; ++i) {
-      var row = document.createElement('tr');
+    for (let i = 0; i < list.length; ++i) {
+      const row = document.createElement('tr');
 
       // The first element is always a timestamp.
-      var cell = document.createElement('td');
-      var d = new Date(list[i][0]);
+      let cell = document.createElement('td');
+      const d = new Date(list[i][0]);
       cell.textContent = d;
       row.appendChild(cell);
 
-      for (var j = 1; j < list[i].length; ++j) {
-        var cell = document.createElement('td');
+      for (let j = 1; j < list[i].length; ++j) {
+        cell = document.createElement('td');
         cell.textContent = list[i][j];
         row.appendChild(cell);
       }
@@ -125,10 +158,11 @@ cr.define('gcmInternals', function() {
    * @param {!Event} event The keypress event handler.
    */
   function handleKeyPress(event) {
-    var PHRASE = 'secret';
+    const PHRASE = 'secret';
     if (PHRASE.charCodeAt(keyPressState) === event.keyCode) {
-      if (++keyPressState < PHRASE.length)
+      if (++keyPressState < PHRASE.length) {
         return;
+      }
 
       $('android-secret-container').classList.remove('invisible');
     }
@@ -143,13 +177,15 @@ cr.define('gcmInternals', function() {
    * @param {!Object} data A list of list of data items.
    */
   function refreshLogTable(tableId, data) {
-    var element = $(tableId);
-    if (!element)
+    const element = $(tableId);
+    if (!element) {
       return;
+    }
 
     removeAllChildNodes(element);
-    if (data !== undefined)
+    if (data !== undefined) {
       addRows(element, data);
+    }
   }
 
   /**
@@ -158,10 +194,11 @@ cr.define('gcmInternals', function() {
    */
   function setGcmInternalsInfo(infos) {
     isRecording = infos.isRecording;
-    if (isRecording)
+    if (isRecording) {
       $('recording').textContent = 'Stop Recording';
-    else
+    } else {
       $('recording').textContent = 'Start Recording';
+    }
     $('recording').disabled = false;
     if (infos.deviceInfo !== undefined) {
       displayDeviceInfo(infos.deviceInfo);

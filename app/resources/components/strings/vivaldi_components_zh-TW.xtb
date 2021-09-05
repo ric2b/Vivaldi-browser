@@ -26,7 +26,7 @@
         <ph name="SETTINGS_TITLE" />
         &gt;
         <ph name="ADVANCED_TITLE" />
-        然後取消勾選「<ph name="NO_PREFETCH_DESCRIPTION" />」。
+        取消勾選「<ph name="NO_PREFETCH_DESCRIPTION" />」。
         如果仍然無法解決問題，建議你重新勾選這個選項以增進效能。</translation>
 <translation id="8187289872471304532">前往 Vivaldi 設定 &gt; 網路 &gt; 代理設定，取消勾選全部代理。</translation>
 </translationbundle>

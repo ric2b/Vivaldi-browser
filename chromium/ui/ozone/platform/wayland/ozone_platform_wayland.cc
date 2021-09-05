@@ -12,11 +12,13 @@
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_pump_type.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "ui/base/buildflags.h"
 #include "ui/base/cursor/ozone/bitmap_cursor_factory_ozone.h"
 #include "ui/base/ime/linux/input_method_auralinux.h"
 #include "ui/events/ozone/layout/keyboard_layout_engine_manager.h"
 #include "ui/gfx/linux/client_native_pixmap_dmabuf.h"
+#include "ui/gfx/native_widget_types.h"
 #include "ui/ozone/common/stub_overlay_manager.h"
 #include "ui/ozone/platform/wayland/common/wayland_util.h"
 #include "ui/ozone/platform/wayland/gpu/drm_render_node_path_finder.h"
@@ -45,8 +47,13 @@
 
 #if defined(WAYLAND_GBM)
 #include "ui/base/ui_base_features.h"
-#include "ui/ozone/common/linux/gbm_wrapper.h"
+#include "ui/gfx/linux/gbm_wrapper.h"
 #include "ui/ozone/platform/wayland/gpu/drm_render_node_handle.h"
+#endif
+
+#if BUILDFLAG(USE_GTK)
+#include "ui/gtk/gtk_ui_delegate.h"  // nogncheck
+#include "ui/ozone/platform/wayland/host/gtk_ui_delegate_wayland.h"  //nogncheck
 #endif
 
 namespace ui {
@@ -103,13 +110,11 @@ class OzonePlatformWayland : public OzonePlatform {
     return nullptr;
   }
 
-  std::unique_ptr<PlatformWindowBase> CreatePlatformWindow(
+  std::unique_ptr<PlatformWindow> CreatePlatformWindow(
       PlatformWindowDelegate* delegate,
       PlatformWindowInitProperties properties) override {
-    auto window = std::make_unique<WaylandWindow>(delegate, connection_.get());
-    if (!window->Initialize(std::move(properties)))
-      return nullptr;
-    return std::move(window);
+    return WaylandWindow::Create(delegate, connection_.get(),
+                                 std::move(properties));
   }
 
   std::unique_ptr<display::NativeDisplayDelegate> CreateNativeDisplayDelegate()
@@ -131,7 +136,18 @@ class OzonePlatformWayland : public OzonePlatform {
   }
 
   std::unique_ptr<InputMethod> CreateInputMethod(
-      internal::InputMethodDelegate* delegate) override {
+      internal::InputMethodDelegate* delegate,
+      gfx::AcceleratedWidget widget) override {
+    // Instantiate and set LinuxInputMethodContextFactory unless it is already
+    // set (e.g: tests may have already set it).
+    if (!LinuxInputMethodContextFactory::instance() &&
+        !input_method_context_factory_) {
+      input_method_context_factory_ =
+          std::make_unique<WaylandInputMethodContextFactory>(connection_.get());
+      LinuxInputMethodContextFactory::SetInstance(
+          input_method_context_factory_.get());
+    }
+
     return std::make_unique<InputMethodAuraLinux>(delegate);
   }
 
@@ -153,12 +169,13 @@ class OzonePlatformWayland : public OzonePlatform {
 
   void InitializeUI(const InitParams& args) override {
 #if BUILDFLAG(USE_XKBCOMMON)
-    KeyboardLayoutEngineManager::SetKeyboardLayoutEngine(
-        std::make_unique<XkbKeyboardLayoutEngine>(xkb_evdev_code_converter_));
+    keyboard_layout_engine_ =
+        std::make_unique<XkbKeyboardLayoutEngine>(xkb_evdev_code_converter_);
 #else
-    KeyboardLayoutEngineManager::SetKeyboardLayoutEngine(
-        std::make_unique<StubKeyboardLayoutEngine>());
+    keyboard_layout_engine_ = std::make_unique<StubKeyboardLayoutEngine>();
 #endif
+    KeyboardLayoutEngineManager::SetKeyboardLayoutEngine(
+        keyboard_layout_engine_.get());
     connection_ = std::make_unique<WaylandConnection>();
     if (!connection_->Initialize())
       LOG(FATAL) << "Failed to initialize Wayland platform";
@@ -172,16 +189,12 @@ class OzonePlatformWayland : public OzonePlatform {
 
     supported_buffer_formats_ =
         connection_->buffer_manager_host()->GetSupportedBufferFormats();
-
-    // Instantiate and set LinuxInputMethodContextFactory unless it is already
-    // set (e.g: tests may have already set it).
-    if (!LinuxInputMethodContextFactory::instance() &&
-        !input_method_context_factory_) {
-      input_method_context_factory_ =
-          std::make_unique<WaylandInputMethodContextFactory>(connection_.get());
-      LinuxInputMethodContextFactory::SetInstance(
-          input_method_context_factory_.get());
-    }
+#if BUILDFLAG(USE_GTK)
+    DCHECK(!GtkUiDelegate::instance());
+    gtk_ui_delegate_ =
+        std::make_unique<GtkUiDelegateWayland>(connection_.get());
+    GtkUiDelegate::SetInstance(gtk_ui_delegate_.get());
+#endif
   }
 
   void InitializeGPU(const InitParams& args) override {
@@ -210,11 +223,12 @@ class OzonePlatformWayland : public OzonePlatform {
     return kWaylandPlatformProperties;
   }
 
-  void AddInterfaces(service_manager::BinderRegistry* registry) override {
-    registry->AddInterface<ozone::mojom::WaylandBufferManagerGpu>(
+  void AddInterfaces(mojo::BinderMap* binders) override {
+    binders->Add<ozone::mojom::WaylandBufferManagerGpu>(
         base::BindRepeating(
             &OzonePlatformWayland::CreateWaylandBufferManagerGpuBinding,
-            base::Unretained(this)));
+            base::Unretained(this)),
+        base::SequencedTaskRunnerHandle::Get());
   }
 
   void CreateWaylandBufferManagerGpuBinding(
@@ -223,6 +237,11 @@ class OzonePlatformWayland : public OzonePlatform {
   }
 
  private:
+#if BUILDFLAG(USE_XKBCOMMON)
+  XkbEvdevCodes xkb_evdev_code_converter_;
+#endif
+
+  std::unique_ptr<KeyboardLayoutEngine> keyboard_layout_engine_;
   std::unique_ptr<WaylandConnection> connection_;
   std::unique_ptr<WaylandSurfaceFactory> surface_factory_;
   std::unique_ptr<BitmapCursorFactoryOzone> cursor_factory_;
@@ -232,10 +251,6 @@ class OzonePlatformWayland : public OzonePlatform {
   std::unique_ptr<WaylandInputMethodContextFactory>
       input_method_context_factory_;
   std::unique_ptr<WaylandBufferManagerConnector> buffer_manager_connector_;
-
-#if BUILDFLAG(USE_XKBCOMMON)
-  XkbEvdevCodes xkb_evdev_code_converter_;
-#endif
 
   // Objects, which solely live in the GPU process.
   std::unique_ptr<WaylandBufferManagerGpu> buffer_manager_;
@@ -247,6 +262,10 @@ class OzonePlatformWayland : public OzonePlatform {
   // This is used both in the gpu and browser processes to find out if a drm
   // render node is available.
   DrmRenderNodePathFinder path_finder_;
+
+#if BUILDFLAG(USE_GTK)
+  std::unique_ptr<GtkUiDelegateWayland> gtk_ui_delegate_;
+#endif
 
   DISALLOW_COPY_AND_ASSIGN(OzonePlatformWayland);
 };

@@ -43,7 +43,6 @@ using base::android::ScopedJavaLocalRef;
 using base::android::ToJavaArrayOfStrings;
 using content::BrowserThread;
 using content::RenderFrameHost;
-using content::ResourceType;
 using content::WebContents;
 using std::map;
 using std::pair;
@@ -323,9 +322,7 @@ AwContentsIoThreadClient::AwContentsIoThreadClient(bool pending_association,
                                                    const JavaRef<jobject>& obj)
     : pending_association_(pending_association), java_object_(obj) {}
 
-AwContentsIoThreadClient::~AwContentsIoThreadClient() {
-  // explict, out-of-line destructor.
-}
+AwContentsIoThreadClient::~AwContentsIoThreadClient() = default;
 
 bool AwContentsIoThreadClient::PendingAssociation() const {
   return pending_association_;
@@ -346,7 +343,7 @@ namespace {
 // Used to specify what kind of url was intercepted by the embedded
 // using shouldIntercepterRequest callback.
 // Note: these values are persisted in UMA logs, so they should never be
-// renumbered nor reused.
+// renumbered or reused.
 enum class InterceptionType {
   kNoIntercept,
   kOther,

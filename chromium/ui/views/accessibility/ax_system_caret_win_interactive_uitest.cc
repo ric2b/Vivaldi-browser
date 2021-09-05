@@ -2,11 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <windows.h>
+#include <windows.h>  // Must come before other Windows system headers.
+
 #include <oleacc.h>
 #include <wrl/client.h>
 
-#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/win/scoped_variant.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -30,6 +30,8 @@ namespace {
 class AXSystemCaretWinTest : public test::DesktopWidgetTest {
  public:
   AXSystemCaretWinTest() : self_(CHILDID_SELF) {}
+  AXSystemCaretWinTest(const AXSystemCaretWinTest&) = delete;
+  AXSystemCaretWinTest& operator=(const AXSystemCaretWinTest&) = delete;
   ~AXSystemCaretWinTest() override = default;
 
   void SetUp() override {
@@ -62,13 +64,15 @@ class AXSystemCaretWinTest : public test::DesktopWidgetTest {
   Widget* widget_;
   Textfield* textfield_;
   base::win::ScopedVariant self_;
-
-  DISALLOW_COPY_AND_ASSIGN(AXSystemCaretWinTest);
 };
 
 class WinAccessibilityCaretEventMonitor {
  public:
   WinAccessibilityCaretEventMonitor(UINT event_min, UINT event_max);
+  WinAccessibilityCaretEventMonitor(const WinAccessibilityCaretEventMonitor&) =
+      delete;
+  WinAccessibilityCaretEventMonitor& operator=(
+      const WinAccessibilityCaretEventMonitor&) = delete;
   ~WinAccessibilityCaretEventMonitor();
 
   // Blocks until the next event is received. When it's received, it
@@ -105,8 +109,6 @@ class WinAccessibilityCaretEventMonitor {
   base::RunLoop loop_runner_;
   HWINEVENTHOOK win_event_hook_handle_;
   static WinAccessibilityCaretEventMonitor* instance_;
-
-  DISALLOW_COPY_AND_ASSIGN(WinAccessibilityCaretEventMonitor);
 };
 
 // static

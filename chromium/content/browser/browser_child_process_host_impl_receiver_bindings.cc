@@ -9,14 +9,19 @@
 #include "base/bind.h"
 #include "base/no_destructor.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "build/build_config.h"
 #include "components/discardable_memory/public/mojom/discardable_shared_memory_manager.mojom.h"
 #include "components/discardable_memory/service/discardable_shared_memory_manager.h"
+#include "content/browser/field_trial_recorder.h"
+#include "content/common/field_trial_recorder.mojom.h"
 #include "content/public/browser/browser_child_process_host_delegate.h"
 #include "content/public/browser/browser_task_traits.h"
-#include "content/public/browser/system_connector.h"
-#include "services/device/public/mojom/constants.mojom.h"
+#include "content/public/browser/device_service.h"
 #include "services/device/public/mojom/power_monitor.mojom.h"
+#include "services/metrics/public/cpp/ukm_recorder.h"
+#include "services/metrics/public/mojom/ukm_interface.mojom.h"
+#include "services/metrics/ukm_recorder_interface.h"
 
 #if defined(OS_MACOSX)
 #include "content/browser/sandbox_support_mac_impl.h"
@@ -74,14 +79,19 @@ void BrowserChildProcessHostImpl::BindHostReceiver(
   }
 
   if (auto r = receiver.As<blink::mojom::DWriteFontProxy>()) {
-    base::CreateSequencedTaskRunner({base::ThreadPool(),
-                                     base::TaskPriority::USER_BLOCKING,
-                                     base::MayBlock()})
+    base::ThreadPool::CreateSequencedTaskRunner(
+        {base::TaskPriority::USER_BLOCKING, base::MayBlock()})
         ->PostTask(FROM_HERE,
                    base::BindOnce(&DWriteFontProxyImpl::Create, std::move(r)));
     return;
   }
 #endif
+
+  if (auto r = receiver.As<mojom::FieldTrialRecorder>()) {
+    base::PostTask(FROM_HERE, {BrowserThread::UI},
+                   base::BindOnce(&FieldTrialRecorder::Create, std::move(r)));
+    return;
+  }
 
   if (auto r = receiver.As<
                discardable_memory::mojom::DiscardableSharedMemoryManager>()) {
@@ -95,10 +105,15 @@ void BrowserChildProcessHostImpl::BindHostReceiver(
         FROM_HERE, {BrowserThread::UI},
         base::BindOnce(
             [](mojo::PendingReceiver<device::mojom::PowerMonitor> r) {
-              GetSystemConnector()->Connect(device::mojom::kServiceName,
-                                            std::move(r));
+              GetDeviceService().BindPowerMonitor(std::move(r));
             },
             std::move(r)));
+    return;
+  }
+
+  if (auto r = receiver.As<ukm::mojom::UkmRecorderInterface>()) {
+    metrics::UkmRecorderInterface::Create(ukm::UkmRecorder::Get(),
+                                          std::move(r));
     return;
   }
 

@@ -7,13 +7,15 @@
 #include "base/memory/scoped_refptr.h"
 #include "build/build_config.h"
 #include "mojo/public/cpp/system/platform_handle.h"
-#include "third_party/blink/public/platform/interface_provider.h"
+#include "third_party/blink/public/common/browser_interface_broker_proxy.h"
+#include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_drag_data.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/renderer/core/clipboard/clipboard_mime_types.h"
 #include "third_party/blink/renderer/core/clipboard/clipboard_utilities.h"
 #include "third_party/blink/renderer/core/clipboard/data_object.h"
+#include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/platform/graphics/image.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
@@ -29,14 +31,8 @@ String NonNullString(const String& string) {
 
 }  // namespace
 
-// static
-SystemClipboard& SystemClipboard::GetInstance() {
-  DEFINE_STATIC_LOCAL(SystemClipboard, clipboard, ());
-  return clipboard;
-}
-
-SystemClipboard::SystemClipboard() {
-  Platform::Current()->GetInterfaceProvider()->GetInterface(
+SystemClipboard::SystemClipboard(LocalFrame* frame) {
+  frame->GetBrowserInterfaceBroker().GetInterface(
       clipboard_.BindNewPipeAndPassReceiver());
 }
 
@@ -156,6 +152,12 @@ SkBitmap SystemClipboard::ReadImage(mojom::ClipboardBuffer buffer) {
   return image;
 }
 
+String SystemClipboard::ReadImageAsImageMarkup(
+    mojom::blink::ClipboardBuffer buffer) {
+  SkBitmap bitmap = ReadImage(buffer);
+  return BitmapToImageMarkup(bitmap);
+}
+
 void SystemClipboard::WriteImageWithTag(Image* image,
                                                 const KURL& url,
                                                 const String& title) {
@@ -213,11 +215,11 @@ void SystemClipboard::WriteDataObject(DataObject* data_object) {
   WebDragData data = data_object->ToWebDragData();
   for (const WebDragData::Item& item : data.Items()) {
     if (item.storage_type == WebDragData::Item::kStorageTypeString) {
-      if (item.string_type == blink::kMimeTypeTextPlain) {
+      if (item.string_type == kMimeTypeTextPlain) {
         clipboard_->WriteText(NonNullString(item.string_data));
-      } else if (item.string_type == blink::kMimeTypeTextHTML) {
+      } else if (item.string_type == kMimeTypeTextHTML) {
         clipboard_->WriteHtml(NonNullString(item.string_data), KURL());
-      } else if (item.string_type != blink::kMimeTypeDownloadURL) {
+      } else if (item.string_type != kMimeTypeDownloadURL) {
         custom_data.insert(item.string_type, NonNullString(item.string_data));
       }
     }

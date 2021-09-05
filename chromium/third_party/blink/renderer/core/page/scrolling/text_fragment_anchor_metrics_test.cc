@@ -35,10 +35,10 @@ class TextFragmentAnchorMetricsTest : public SimTest {
   }
 
   void SimulateClick(int x, int y) {
-    WebMouseEvent event(
-        WebInputEvent::kMouseDown, WebFloatPoint(x, y), WebFloatPoint(x, y),
-        WebPointerProperties::Button::kLeft, 0,
-        WebInputEvent::Modifiers::kLeftButtonDown, base::TimeTicks::Now());
+    WebMouseEvent event(WebInputEvent::kMouseDown, gfx::PointF(x, y),
+                        gfx::PointF(x, y), WebPointerProperties::Button::kLeft,
+                        0, WebInputEvent::Modifiers::kLeftButtonDown,
+                        base::TimeTicks::Now());
     event.SetFrameScale(1);
     GetDocument().GetFrame()->GetEventHandler().HandleMousePressEvent(event);
   }
@@ -65,9 +65,9 @@ TEST_F(TextFragmentAnchorMetricsTest, UMAMetricsCollected) {
     <p>This is a test page</p>
     <p>With ambiguous test content</p>
   )HTML");
-  Compositor().BeginFrame();
-
   RunAsyncMatchingTasks();
+
+  Compositor().BeginFrame();
 
   histogram_tester_.ExpectTotalCount("TextFragmentAnchor.SelectorCount", 1);
   histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.SelectorCount", 2,
@@ -109,9 +109,9 @@ TEST_F(TextFragmentAnchorMetricsTest, NoMatchFound) {
     </style>
     <p>This is a test page</p>
   )HTML");
-  Compositor().BeginFrame();
-
   RunAsyncMatchingTasks();
+
+  Compositor().BeginFrame();
 
   histogram_tester_.ExpectTotalCount("TextFragmentAnchor.SelectorCount", 1);
   histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.SelectorCount", 1,
@@ -169,9 +169,9 @@ TEST_F(TextFragmentAnchorMetricsTest, MatchFoundNoScroll) {
     <!DOCTYPE html>
     <p>This is a test page</p>
   )HTML");
-  Compositor().BeginFrame();
-
   RunAsyncMatchingTasks();
+
+  Compositor().BeginFrame();
 
   histogram_tester_.ExpectTotalCount("TextFragmentAnchor.SelectorCount", 1);
   histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.SelectorCount", 1,
@@ -199,6 +199,12 @@ TEST_F(TextFragmentAnchorMetricsTest, MatchFoundNoScroll) {
 // Test that the ScrollCancelled metric gets reported when a user scroll cancels
 // the scroll into view.
 TEST_F(TextFragmentAnchorMetricsTest, ScrollCancelled) {
+  // This test isn't relevant with this flag enabled. When it's enabled,
+  // there's no way to block rendering and the fragment is installed and
+  // invoked as soon as parsing finishes which means the user cannot scroll
+  // before this point.
+  ScopedBlockHTMLParserOnStyleSheetsForTest block_parser(false);
+
   SimRequest request("https://example.com/test.html#:~:text=test", "text/html");
   SimSubresourceRequest css_request("https://example.com/test.css", "text/css");
   LoadURL("https://example.com/test.html#:~:text=test");
@@ -219,15 +225,15 @@ TEST_F(TextFragmentAnchorMetricsTest, ScrollCancelled) {
   )HTML");
 
   Compositor().PaintFrame();
-  GetDocument().View()->LayoutViewport()->ScrollBy(ScrollOffset(0, 100),
-                                                   kUserScroll);
+  GetDocument().View()->LayoutViewport()->ScrollBy(
+      ScrollOffset(0, 100), mojom::blink::ScrollType::kUser);
 
   // Set the target text to visible and change its position to cause a layout
   // and invoke the fragment anchor.
   css_request.Complete("p { visibility: visible; top: 1001px; }");
+  RunAsyncMatchingTasks();
 
   Compositor().BeginFrame();
-  RunAsyncMatchingTasks();
 
   histogram_tester_.ExpectTotalCount("TextFragmentAnchor.SelectorCount", 1);
   histogram_tester_.ExpectUniqueSample("TextFragmentAnchor.SelectorCount", 1,
@@ -269,8 +275,9 @@ TEST_F(TextFragmentAnchorMetricsTest, TapToDismiss) {
     </style>
     <p>This is a test page</p>
   )HTML");
-  Compositor().BeginFrame();
   RunAsyncMatchingTasks();
+
+  Compositor().BeginFrame();
 
   EXPECT_TRUE(GetDocument().IsUseCounted(WebFeature::kTextFragmentAnchor));
   EXPECT_TRUE(
@@ -298,7 +305,7 @@ TEST_F(TextFragmentAnchorMetricsTest, InvalidFragmentDirective) {
       {"#foo:~:bar", kCounted},
       {"#:~:utext=foo", kCounted},
       {"#:~:text=foo", kUncounted},
-      {"#:~:text=foo&invalid", kCounted},
+      {"#:~:text=foo&invalid", kUncounted},
       {"#foo:~:text=foo", kUncounted}};
 
   for (auto test_case : test_cases) {
@@ -336,7 +343,7 @@ class TextFragmentRelatedMetricTest : public TextFragmentAnchorMetricsTest,
 
 // These tests will run with and without the TextFragmentIdentifiers feature
 // enabled to ensure we collect metrics correctly under both situations.
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          TextFragmentRelatedMetricTest,
                          testing::Values(false, true));
 

@@ -16,10 +16,10 @@
 #include "chrome/common/extensions/api/context_menus.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/version_info/channel.h"
+#include "content/public/browser/context_menu_params.h"
 #include "content/public/browser/render_frame_host.h"
-#include "content/public/common/context_menu_params.h"
 #include "content/public/test/browser_test_utils.h"
-#include "extensions/common/features/feature_channel.h"
+#include "extensions/common/scoped_worker_based_extensions_channel.h"
 #include "extensions/test/result_catcher.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "ui/base/models/menu_model.h"
@@ -134,10 +134,10 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, ContextMenus) {
 }
 
 IN_PROC_BROWSER_TEST_F(ExtensionApiTest, ServiceWorkerContextMenus) {
-  // Service Workers are currently available only in Canary or trunk.
-  ScopedCurrentChannel current_channel_override(version_info::Channel::UNKNOWN);
+  ScopedWorkerBasedExtensionsChannel worker_channel_override;
   ASSERT_TRUE(RunExtensionTestWithFlags("context_menus/event_page",
-                                        kFlagRunAsServiceWorkerBasedExtension))
+                                        kFlagRunAsServiceWorkerBasedExtension,
+                                        kFlagNone))
       << message_;
 }
 

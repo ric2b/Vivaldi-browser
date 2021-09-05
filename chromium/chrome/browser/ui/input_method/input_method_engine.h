@@ -35,9 +35,16 @@ class InputMethodEngine : public InputMethodEngineBase,
       uint32_t before,
       uint32_t after,
       const std::vector<ui::ImeTextSpan>& text_spans) override;
+
+  bool SetSelectionRange(uint32_t start, uint32_t end) override;
+
   void CommitTextToInputContext(int context_id,
                                 const std::string& text) override;
-  bool SendKeyEvent(ui::KeyEvent* ui_event, const std::string& code) override;
+
+  bool SendKeyEvent(ui::KeyEvent* ui_event,
+                    const std::string& code,
+                    std::string* error) override;
+
   bool IsActive() const override;
 
   std::string GetExtensionId() const;
@@ -58,13 +65,16 @@ class InputMethodEngine : public InputMethodEngineBase,
   // ui::ImeWindowObserver:
   void OnWindowDestroyed(ui::ImeWindow* ime_window) override;
 
+  // input_method::InputMethodEngineBase override:
+  bool IsValidKeyEvent(const ui::KeyEvent* ui_event) override;
+
   ui::ImeWindow* FindWindowById(int window_id) const;
 
   // Checks if the page is special page that we want to disable some key events.
   bool IsSpecialPage(ui::InputMethod* method);
 
   // Checks if the key event are whitelisted key for all pages.
-  bool IsValidKeyForAllPages(ui::KeyEvent* ui_event);
+  bool IsValidKeyForAllPages(const ui::KeyEvent* ui_event);
 
   // Holds the IME window instances for properly closing in the destructor.
   // The follow-cursor window is singleton.

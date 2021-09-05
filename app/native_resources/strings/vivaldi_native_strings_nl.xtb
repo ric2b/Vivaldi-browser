@@ -45,7 +45,6 @@
 <translation id="3542768452570884558">Koppeling openen in &amp;nieuw venster</translation>
 <translation id="3588820906588687999">Afbeelding openen in nieuwe &amp;tab</translation>
 <translation id="3601066750251199488">Monster 3</translation>
-<translation id="366643050267431920">Toevoegen als gebeurtenis</translation>
 <translation id="3732157130969736834">Koppeling toevoegen aan &amp;bladwijzers</translation>
 <translation id="3732388226447288666">Dier 2</translation>
 <translation id="3732439195215136813">Dier 5</translation>
@@ -68,7 +67,6 @@
 <translation id="4636708767492582204">Selectie &amp;e-mailen</translation>
 <translation id="4677434526832593569">Dier 8</translation>
 <translation id="4881695831933465202">Openen</translation>
-<translation id="4973311370126107785">Het uitvoeren van JavaScript via AppleScript is uitgeschakeld. Om dit in te schakelen, ga je naar het menu Extra &gt; Sta JavaScript toe vanuit Apple Events.</translation>
 <translation id="5014281392052865061">Geïmporteerde snelkiezers</translation>
 <translation id="5092656712000637858">Pagina toevoegen aan &amp;webpaneel</translation>
 <translation id="5177818338935286353">Monster 7</translation>
@@ -89,6 +87,7 @@
 <translation id="6229528619562190452">Klik hier om Vivaldi te vernieuwen.</translation>
 <translation id="6234173136417926046">Afbeelding &amp;gebruiken als snelkiezerachtergrond</translation>
 <translation id="630690498669249215">Bladwijzerbestand uit Opera</translation>
+<translation id="6339818817272922368">Lokaal account</translation>
 <translation id="6438786710866753178">Landschap 4</translation>
 <translation id="6477028720702061455">Te importeren Opera-profielmap selecteren</translation>
 <translation id="6510706699590490869">Vivaldi bijwerken</translation>
@@ -103,6 +102,7 @@
 <translation id="7496505986576158197">Vivaldi wordt mogelijk gemaakt door het <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> opensourceproject en andere <ph name="BEGIN_LINK_OSS" />opensourceprogrammatuur<ph name="END_LINK_OSS" />.</translation>
 <translation id="7715497554424665066">Nieuwe versie negeren</translation>
 <translation id="7724603315864178912">Knippen</translation>
+<translation id="7793738202466490491">Toevoegen als kalendergebeurtenis</translation>
 <translation id="7865983598101744945">Afsluiten bevestigen</translation>
 <translation id="7957213167373139414">Mijn kalender</translation>
 <translation id="8027581147000338959">Openen in nieuw venster</translation>
@@ -112,6 +112,7 @@
 <translation id="8331671104904436324">Openen in achtergrondtab</translation>
 <translation id="8373293945112511707">Landschap 1</translation>
 <translation id="8427094907586191051">Landschap 17</translation>
+<translation id="8446668873108041390">Het uitvoeren van JavaScript door AppleScript is uitgeschakeld. Onder Instellingen &gt; Privacy &gt; Apple Events staat een instelling om JavaScript vanuit Apple Events toe te staan.</translation>
 <translation id="8539196077526389150">Landschap 13</translation>
 <translation id="8624587806981488221">Afbeelding he&amp;rladen</translation>
 <translation id="864444594187862076">Opera versie 15+ (Developer)</translation>

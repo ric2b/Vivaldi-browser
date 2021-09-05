@@ -19,6 +19,7 @@ from pylib.instrumentation import instrumentation_parser
 from pylib.symbols import deobfuscator
 from pylib.symbols import stack_symbolizer
 from pylib.utils import dexdump
+from pylib.utils import gold_utils
 from pylib.utils import instrumentation_tracing
 from pylib.utils import proguard
 from pylib.utils import shared_preference_utils
@@ -54,7 +55,9 @@ _TEST_LIST_JUNIT4_RUNNERS = [
     'org.chromium.base.test.BaseChromiumAndroidJUnitRunner']
 
 _SKIP_PARAMETERIZATION = 'SkipCommandLineParameterization'
-_COMMANDLINE_PARAMETERIZATION = 'CommandLineParameter'
+_PARAMETERIZED_COMMAND_LINE_FLAGS = 'ParameterizedCommandLineFlags'
+_PARAMETERIZED_COMMAND_LINE_FLAGS_SWITCHES = (
+    'ParameterizedCommandLineFlags$Switches')
 _NATIVE_CRASH_RE = re.compile('(process|native) crash', re.IGNORECASE)
 _PICKLE_FORMAT_VERSION = 12
 
@@ -64,6 +67,12 @@ class MissingSizeAnnotationError(test_exception.TestException):
     super(MissingSizeAnnotationError, self).__init__(class_name +
         ': Test method is missing required size annotation. Add one of: ' +
         ', '.join('@' + a for a in _VALID_ANNOTATIONS))
+
+
+class CommandLineParameterizationException(test_exception.TestException):
+
+  def __init__(self, msg):
+    super(CommandLineParameterizationException, self).__init__(msg)
 
 
 class TestListPickleException(test_exception.TestException):
@@ -238,7 +247,13 @@ def FilterTests(tests, filter_str=None, annotations=None,
     if filter_av is None:
       return True
     elif isinstance(av, dict):
-      return filter_av in av['value']
+      tav_from_dict = av['value']
+      # If tav_from_dict is an int, the 'in' operator breaks, so convert
+      # filter_av and manually compare. See https://crbug.com/1019707
+      if isinstance(tav_from_dict, int):
+        return int(filter_av) == tav_from_dict
+      else:
+        return filter_av in tav_from_dict
     elif isinstance(av, list):
       return filter_av in av
     return filter_av == av
@@ -502,6 +517,9 @@ class InstrumentationTestInstance(test_instance.TestInstance):
     self._use_webview_provider = None
     self._initializeUseWebviewProviderAttributes(args)
 
+    self._skia_gold_properties = None
+    self._initializeSkiaGoldAttributes(args)
+
     self._external_shard_index = args.test_launcher_shard_index
     self._total_external_shards = args.test_launcher_total_shards
 
@@ -602,7 +620,10 @@ class InstrumentationTestInstance(test_instance.TestInstance):
           self._package_info = package_info
           break
     if not self._package_info:
-      logging.warning('Unable to find package info for %s', self._test_package)
+      logging.warning(("Unable to find package info for %s. " +
+                       "(This may just mean that the test package is " +
+                       "currently being installed.)"),
+                       self._test_package)
 
     for apk in args.additional_apks:
       if not os.path.exists(apk):
@@ -707,6 +728,9 @@ class InstrumentationTestInstance(test_instance.TestInstance):
       return
     self._use_webview_provider = args.use_webview_provider
 
+  def _initializeSkiaGoldAttributes(self, args):
+    self._skia_gold_properties = gold_utils.SkiaGoldProperties(args)
+
   @property
   def additional_apks(self):
     return self._additional_apks
@@ -782,6 +806,10 @@ class InstrumentationTestInstance(test_instance.TestInstance):
   @property
   def screenshot_dir(self):
     return self._screenshot_dir
+
+  @property
+  def skia_gold_properties(self):
+    return self._skia_gold_properties
 
   @property
   def store_tombstones(self):
@@ -901,18 +929,51 @@ class InstrumentationTestInstance(test_instance.TestInstance):
     return inflated_tests
 
   def _ParameterizeTestsWithFlags(self, tests):
+
+    def _checkParameterization(annotations):
+      types = [
+          _PARAMETERIZED_COMMAND_LINE_FLAGS_SWITCHES,
+          _PARAMETERIZED_COMMAND_LINE_FLAGS,
+      ]
+      if types[0] in annotations and types[1] in annotations:
+        raise CommandLineParameterizationException(
+            'Multiple command-line parameterization types: {}.'.format(
+                ', '.join(types)))
+
+    def _switchesToFlags(switches):
+      return ['--{}'.format(s) for s in switches if s]
+
+    def _annotationToSwitches(clazz, methods):
+      if clazz == _PARAMETERIZED_COMMAND_LINE_FLAGS_SWITCHES:
+        return [methods['value']]
+      elif clazz == _PARAMETERIZED_COMMAND_LINE_FLAGS:
+        list_of_switches = []
+        for annotation in methods['value']:
+          for clazz, methods in annotation.iteritems():
+            list_of_switches += _annotationToSwitches(clazz, methods)
+        return list_of_switches
+      else:
+        return []
+
+    def _setTestFlags(test, flags):
+      if flags:
+        test['flags'] = flags
+      elif 'flags' in test:
+        del test['flags']
+
     new_tests = []
     for t in tests:
       annotations = t['annotations']
-      parameters = None
-      if (annotations.get(_COMMANDLINE_PARAMETERIZATION)
-          and _SKIP_PARAMETERIZATION not in annotations):
-        parameters = annotations[_COMMANDLINE_PARAMETERIZATION]['value']
-      if parameters:
-        t['flags'] = [parameters[0]]
-        for p in parameters[1:]:
+      list_of_switches = []
+      _checkParameterization(annotations)
+      if _SKIP_PARAMETERIZATION not in annotations:
+        for clazz, methods in annotations.iteritems():
+          list_of_switches += _annotationToSwitches(clazz, methods)
+      if list_of_switches:
+        _setTestFlags(t, _switchesToFlags(list_of_switches[0]))
+        for p in list_of_switches[1:]:
           parameterized_t = copy.copy(t)
-          parameterized_t['flags'] = ['--%s' % p]
+          _setTestFlags(parameterized_t, _switchesToFlags(p))
           new_tests.append(parameterized_t)
     return tests + new_tests
 

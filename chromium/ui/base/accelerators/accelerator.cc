@@ -26,11 +26,56 @@
 #include "ui/events/keycodes/keyboard_code_conversion.h"
 #endif
 
+#if defined(OS_CHROMEOS)
+#include "ui/base/ui_base_features.h"
+#endif
+
 #include "app/vivaldi_apptools.h"
 
 namespace ui {
 
 namespace {
+
+#if defined(OS_CHROMEOS)
+template <DomKey::Base T>
+using DomKeyConst = typename ui::DomKey::Constant<T>;
+
+// ChromeOS has several shortcuts that uses ASCII punctuation key as a main key
+// to triger them (e.g. ctrl+shift+alt+/). However, many of these keys have
+// different VKEY on different keyboard layouts, (some require shift or altgr
+// to type in), so using these keys combined with shift may not work well on
+// non-US layouts.  Instead of using VKEY, the new mapping uses DomKey as a key
+// to trigger and maps to VKEY+modifier that would have generated the same key
+// on US-keyboard.  See crbug.com/1067269 for more details.
+struct {
+  KeyboardCode vkey;
+  const DomKey::Base dom_key;
+  const DomKey::Base shifted_dom_key;
+} kAccelConversionMap[] = {
+    {VKEY_1, DomKeyConst<'1'>::Character, DomKeyConst<'!'>::Character},
+    {VKEY_2, DomKeyConst<'2'>::Character, DomKeyConst<'@'>::Character},
+    {VKEY_3, DomKeyConst<'3'>::Character, DomKeyConst<'#'>::Character},
+    {VKEY_4, DomKeyConst<'4'>::Character, DomKeyConst<'$'>::Character},
+    {VKEY_5, DomKeyConst<'5'>::Character, DomKeyConst<'%'>::Character},
+    {VKEY_6, DomKeyConst<'6'>::Character, DomKeyConst<'&'>::Character},
+    {VKEY_7, DomKeyConst<'7'>::Character, DomKeyConst<'^'>::Character},
+    {VKEY_8, DomKeyConst<'8'>::Character, DomKeyConst<'*'>::Character},
+    {VKEY_9, DomKeyConst<'9'>::Character, DomKeyConst<'('>::Character},
+    {VKEY_0, DomKeyConst<'0'>::Character, DomKeyConst<')'>::Character},
+    {VKEY_OEM_MINUS, DomKeyConst<'-'>::Character, DomKeyConst<'_'>::Character},
+    {VKEY_OEM_PLUS, DomKeyConst<'='>::Character, DomKeyConst<'+'>::Character},
+    {VKEY_OEM_4, DomKeyConst<'['>::Character, DomKeyConst<'{'>::Character},
+    {VKEY_OEM_6, DomKeyConst<']'>::Character, DomKeyConst<'}'>::Character},
+    {VKEY_OEM_5, DomKeyConst<'\\'>::Character, DomKeyConst<'|'>::Character},
+    {VKEY_OEM_1, DomKeyConst<';'>::Character, DomKeyConst<':'>::Character},
+    {VKEY_OEM_7, DomKeyConst<'\''>::Character, DomKeyConst<'\"'>::Character},
+    {VKEY_OEM_3, DomKeyConst<'`'>::Character, DomKeyConst<'~'>::Character},
+    {VKEY_OEM_COMMA, DomKeyConst<','>::Character, DomKeyConst<'<'>::Character},
+    {VKEY_OEM_PERIOD, DomKeyConst<'.'>::Character, DomKeyConst<'>'>::Character},
+    {VKEY_OEM_2, DomKeyConst<'/'>::Character, DomKeyConst<'?'>::Character},
+};
+
+#endif
 
 const int kModifierMask = EF_SHIFT_DOWN | EF_CONTROL_DOWN | EF_ALT_DOWN |
                           EF_COMMAND_DOWN | EF_ALTGR_DOWN;
@@ -68,7 +113,28 @@ Accelerator::Accelerator(const KeyEvent& key_event)
       modifiers_(key_event.flags() & kInterestingFlagsMask),
       time_stamp_(key_event.time_stamp()),
       interrupted_by_mouse_event_(false),
-      source_device_id_(key_event.source_device_id()) {}
+      source_device_id_(key_event.source_device_id()) {
+#if defined(OS_CHROMEOS)
+  if (features::IsNewShortcutMappingEnabled()) {
+    DomKey dom_key = key_event.GetDomKey();
+    if (!dom_key.IsCharacter())
+      return;
+    for (auto entry : kAccelConversionMap) {
+      // ALTGR is always canceled because it's not required on US Keyboard.
+      if (entry.dom_key == dom_key) {
+        // No shift punctuation key on US keyboard.
+        key_code_ = entry.vkey;
+        modifiers_ &= ~(ui::EF_SHIFT_DOWN | ui::EF_ALTGR_DOWN);
+      }
+      if (entry.shifted_dom_key == dom_key) {
+        // Punctuation key with shift on US keyboard.
+        key_code_ = entry.vkey;
+        modifiers_ = (modifiers_ | ui::EF_SHIFT_DOWN) & ~ui::EF_ALTGR_DOWN;
+      }
+    }
+  }
+#endif
+}
 
 Accelerator::Accelerator(const Accelerator& accelerator) {
   key_code_ = accelerator.key_code_;
@@ -135,6 +201,10 @@ bool Accelerator::IsAltDown() const {
   return (modifiers_ & EF_ALT_DOWN) != 0;
 }
 
+bool Accelerator::IsAltGrDown() const {
+  return (modifiers_ & EF_ALTGR_DOWN) != 0;
+}
+
 bool Accelerator::IsCmdDown() const {
   return (modifiers_ & EF_COMMAND_DOWN) != 0;
 }
@@ -187,6 +257,9 @@ base::string16 Accelerator::GetShortcutText() const {
     }
   }
 
+#if defined(OS_MACOSX)
+  shortcut = ApplyShortFormModifiers(shortcut);
+#else
   // Checking whether the character used for the accelerator is alphanumeric.
   // If it is not, then we need to adjust the string later on if the locale is
   // right-to-left. See below for more information of why such adjustment is
@@ -199,11 +272,7 @@ base::string16 Accelerator::GetShortcutText() const {
     shortcut_rtl.assign(shortcut);
   }
 
-#if defined(OS_MACOSX)
-  shortcut = ApplyShortFormModifiers(shortcut);
-#else
   shortcut = ApplyLongFormModifiers(shortcut);
-#endif
 
   // For some reason, menus in Windows ignore standard Unicode directionality
   // marks (such as LRE, PDF, etc.). On RTL locales, we use RTL menus and
@@ -234,6 +303,7 @@ base::string16 Accelerator::GetShortcutText() const {
     shortcut_rtl.append(shortcut, 0, shortcut.length() - key_length - 1);
     shortcut.swap(shortcut_rtl);
   }
+#endif  // OS_MACOSX
 
   return shortcut;
 }
@@ -242,31 +312,31 @@ base::string16 Accelerator::GetShortcutText() const {
 base::string16 Accelerator::KeyCodeToMacSymbol() const {
   switch (key_code_) {
     case VKEY_CAPITAL:
-      return base::string16({0x21ea, 0});
+      return base::string16({0x21ea});
     case VKEY_RETURN:
-      return base::string16({0x2324, 0});
+      return base::string16({0x2324});
     case VKEY_BACK:
-      return base::string16({0x232b, 0});
+      return base::string16({0x232b});
     case VKEY_ESCAPE:
-      return base::string16({0x238b, 0});
+      return base::string16({0x238b});
     case VKEY_RIGHT:
-      return base::string16({0x2192, 0});
+      return base::string16({0x2192});
     case VKEY_LEFT:
-      return base::string16({0x2190, 0});
+      return base::string16({0x2190});
     case VKEY_UP:
-      return base::string16({0x2191, 0});
+      return base::string16({0x2191});
     case VKEY_DOWN:
-      return base::string16({0x2193, 0});
+      return base::string16({0x2193});
     case VKEY_PRIOR:
-      return base::string16({0x21de, 0});
+      return base::string16({0x21de});
     case VKEY_NEXT:
-      return base::string16({0x21df, 0});
+      return base::string16({0x21df});
     case VKEY_HOME:
-      return base::string16({0x2196, 0});
+      return base::string16({0x2196});
     case VKEY_END:
-      return base::string16({0x2198, 0});
+      return base::string16({0x2198});
     case VKEY_TAB:
-      return base::string16({0x21e5, 0});
+      return base::string16({0x21e5});
     // Mac has a shift-tab icon (0x21e4) but we don't use it.
     // "Space" and some other keys are written out; fall back to KeyCodeToName()
     // for those (and any other unhandled keys).

@@ -12,6 +12,7 @@
 
 #include "base/logging.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/base/load_flags.h"
 #include "services/network/public/cpp/header_util.h"
@@ -20,8 +21,8 @@
 #include "services/network/public/mojom/url_response_head.mojom.h"
 
 using assistant_client::HttpConnection;
+using network::PendingSharedURLLoaderFactory;
 using network::SharedURLLoaderFactory;
-using network::SharedURLLoaderFactoryInfo;
 
 // A macro which ensures we are running in |task_runner_|'s sequence.
 #define ENSURE_IN_SEQUENCE(method, ...)                                  \
@@ -42,13 +43,13 @@ constexpr int kResponseCodeInvalid = -1;
 }  // namespace
 
 ChromiumHttpConnection::ChromiumHttpConnection(
-    std::unique_ptr<SharedURLLoaderFactoryInfo> url_loader_factory_info,
+    std::unique_ptr<PendingSharedURLLoaderFactory> pending_url_loader_factory,
     Delegate* delegate)
     : delegate_(delegate),
-      task_runner_(base::CreateSequencedTaskRunner({base::ThreadPool()})),
-      url_loader_factory_info_(std::move(url_loader_factory_info)) {
+      task_runner_(base::ThreadPool::CreateSequencedTaskRunner({})),
+      pending_url_loader_factory_(std::move(pending_url_loader_factory)) {
   DCHECK(delegate_);
-  DCHECK(url_loader_factory_info_);
+  DCHECK(pending_url_loader_factory_);
 
   // Add a reference, so |this| cannot go away until Close() is called.
   AddRef();
@@ -110,6 +111,7 @@ void ChromiumHttpConnection::SetChunkedUploadContentType(
   upload_content_ = "";
   upload_content_type_ = "";
   chunked_upload_content_type_ = content_type;
+  AddHeader(::net::HttpRequestHeaders::kContentType, content_type);
 }
 
 void ChromiumHttpConnection::EnableHeaderResponse() {
@@ -172,7 +174,7 @@ void ChromiumHttpConnection::Start() {
     url_loader_->AttachStringForUpload(upload_content_, upload_content_type_);
 
   auto factory =
-      SharedURLLoaderFactory::Create(std::move(url_loader_factory_info_));
+      SharedURLLoaderFactory::Create(std::move(pending_url_loader_factory_));
   if (handle_partial_response_) {
     url_loader_->SetOnResponseStartedCallback(
         base::BindOnce(&ChromiumHttpConnection::OnResponseStarted, this));
@@ -393,9 +395,9 @@ void ChromiumHttpConnection::OnResponseStarted(
 }
 
 ChromiumHttpConnectionFactory::ChromiumHttpConnectionFactory(
-    std::unique_ptr<SharedURLLoaderFactoryInfo> url_loader_factory_info)
-    : url_loader_factory_(
-          SharedURLLoaderFactory::Create(std::move(url_loader_factory_info))) {}
+    std::unique_ptr<PendingSharedURLLoaderFactory> pending_url_loader_factory)
+    : url_loader_factory_(SharedURLLoaderFactory::Create(
+          std::move(pending_url_loader_factory))) {}
 
 ChromiumHttpConnectionFactory::~ChromiumHttpConnectionFactory() = default;
 

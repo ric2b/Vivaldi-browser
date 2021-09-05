@@ -23,6 +23,7 @@
 #include "ui/aura/test/test_window_delegate.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
+#include "ui/base/mojom/cursor_type.mojom-shared.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/events/event.h"
 #include "ui/events/event_constants.h"
@@ -30,7 +31,7 @@
 #include "ui/events/event_utils.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/events/test/event_generator.h"
-#include "ui/views/window/dialog_client_view.h"
+#include "ui/events/types/event_type.h"
 
 namespace ash {
 
@@ -139,7 +140,7 @@ class AutoclickTest : public AshTestBase {
   }
 
   void FastForwardBy(int milliseconds) {
-    task_environment_->FastForwardBy(
+    task_environment()->FastForwardBy(
         base::TimeDelta::FromMilliseconds(milliseconds));
   }
 
@@ -961,7 +962,7 @@ TEST_F(AutoclickTest, ShelfAutohidesWithAutoclickBubble) {
                        gfx::Rect(0, 0, 200, 200), true /* show */);
 
   // Turn on auto-hide for the shelf.
-  shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
+  shelf->SetAutoHideBehavior(ShelfAutoHideBehavior::kAlways);
   EXPECT_EQ(SHELF_AUTO_HIDE, shelf->GetVisibilityState());
   EXPECT_EQ(SHELF_AUTO_HIDE_HIDDEN, shelf->GetAutoHideState());
 
@@ -988,12 +989,12 @@ TEST_F(AutoclickTest, BubbleMovesWithShelfPositionChange) {
   Shell::Get()->accessibility_controller()->SetAutoclickMenuPosition(
       AutoclickMenuPosition::kBottomRight);
   Shelf* shelf = GetPrimaryShelf();
-  shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_NEVER);
+  shelf->SetAutoHideBehavior(ShelfAutoHideBehavior::kNever);
   EXPECT_EQ(shelf->GetVisibilityState(), SHELF_VISIBLE);
   AutoclickMenuView* menu = GetAutoclickMenuView();
   ASSERT_TRUE(menu);
 
-  shelf->SetAlignment(SHELF_ALIGNMENT_BOTTOM);
+  shelf->SetAlignment(ShelfAlignment::kBottom);
   // The menu should be positioned above the shelf, not overlapping.
   EXPECT_EQ(menu->GetBoundsInScreen().bottom_right().y(),
             screen_height - shelf->GetIdealBounds().height() -
@@ -1002,7 +1003,7 @@ TEST_F(AutoclickTest, BubbleMovesWithShelfPositionChange) {
   EXPECT_EQ(menu->GetBoundsInScreen().bottom_right().x(),
             screen_width - kCollisionWindowWorkAreaInsetsDp);
 
-  shelf->SetAlignment(SHELF_ALIGNMENT_LEFT);
+  shelf->SetAlignment(ShelfAlignment::kLeft);
   // The menu should move to the bottom of the screen.
   EXPECT_EQ(menu->GetBoundsInScreen().bottom_right().y(),
             screen_height - kCollisionWindowWorkAreaInsetsDp);
@@ -1010,7 +1011,7 @@ TEST_F(AutoclickTest, BubbleMovesWithShelfPositionChange) {
   EXPECT_EQ(menu->GetBoundsInScreen().bottom_right().x(),
             screen_width - kCollisionWindowWorkAreaInsetsDp);
 
-  shelf->SetAlignment(SHELF_ALIGNMENT_RIGHT);
+  shelf->SetAlignment(ShelfAlignment::kRight);
   // The menu should stay at the bottom of the screen.
   EXPECT_EQ(menu->GetBoundsInScreen().bottom_right().y(),
             screen_height - kCollisionWindowWorkAreaInsetsDp);
@@ -1020,7 +1021,7 @@ TEST_F(AutoclickTest, BubbleMovesWithShelfPositionChange) {
                 shelf->GetIdealBounds().width());
 
   // Reset state.
-  shelf->SetAlignment(SHELF_ALIGNMENT_BOTTOM);
+  shelf->SetAlignment(ShelfAlignment::kBottom);
 }
 
 TEST_F(AutoclickTest, AvoidsShelfBubble) {
@@ -1075,10 +1076,20 @@ TEST_F(AutoclickTest, ConfirmationDialogShownWhenDisablingFeature) {
   Shell::Get()->accessibility_controller()->SetAutoclickEnabled(false);
   AccessibilityFeatureDisableDialog* dialog =
       GetAutoclickController()->GetDisableDialogForTesting();
-  EXPECT_TRUE(dialog);
+  ASSERT_TRUE(dialog);
 
   // Canceling the dialog will cause the feature to continue to be enabled.
-  dialog->GetDialogClientView()->CancelWindow();
+  dialog->CancelDialog();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(GetAutoclickController()->GetDisableDialogForTesting());
+  EXPECT_TRUE(Shell::Get()->accessibility_controller()->autoclick_enabled());
+  EXPECT_TRUE(GetAutoclickController()->IsEnabled());
+
+  // Disable it again and close the dialog; the feature stays enabled.
+  Shell::Get()->accessibility_controller()->SetAutoclickEnabled(false);
+  dialog = GetAutoclickController()->GetDisableDialogForTesting();
+  ASSERT_TRUE(dialog);
+  dialog->GetWidget()->Close();
   base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(GetAutoclickController()->GetDisableDialogForTesting());
   EXPECT_TRUE(Shell::Get()->accessibility_controller()->autoclick_enabled());
@@ -1088,8 +1099,8 @@ TEST_F(AutoclickTest, ConfirmationDialogShownWhenDisablingFeature) {
   // disable the feature.
   Shell::Get()->accessibility_controller()->SetAutoclickEnabled(false);
   dialog = GetAutoclickController()->GetDisableDialogForTesting();
-  EXPECT_TRUE(dialog);
-  dialog->GetDialogClientView()->AcceptWindow();
+  ASSERT_TRUE(dialog);
+  dialog->AcceptDialog();
   base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(GetAutoclickController()->GetDisableDialogForTesting());
   EXPECT_FALSE(Shell::Get()->accessibility_controller()->autoclick_enabled());
@@ -1099,7 +1110,7 @@ TEST_F(AutoclickTest, ConfirmationDialogShownWhenDisablingFeature) {
 TEST_F(AutoclickTest, HidesBubbleInFullscreenWhenCursorHides) {
   Shell::Get()->accessibility_controller()->SetAutoclickEnabled(true);
   ::wm::CursorManager* cursor_manager = Shell::Get()->cursor_manager();
-  cursor_manager->SetCursor(ui::CursorType::kPointer);
+  cursor_manager->SetCursor(ui::mojom::CursorType::kPointer);
 
   const struct {
     const std::string display_spec;
@@ -1141,11 +1152,11 @@ TEST_F(AutoclickTest, HidesBubbleInFullscreenWhenCursorHides) {
 
     // Changing the type to another visible type doesn't cause the bubble to
     // hide.
-    cursor_manager->SetCursor(ui::CursorType::kHand);
+    cursor_manager->SetCursor(ui::mojom::CursorType::kHand);
     EXPECT_TRUE(GetAutoclickBubbleWidget()->IsVisible());
 
     // Changing the type to an kNone causes the bubble to hide.
-    cursor_manager->SetCursor(ui::CursorType::kNone);
+    cursor_manager->SetCursor(ui::mojom::CursorType::kNone);
     EXPECT_FALSE(GetAutoclickBubbleWidget()->IsVisible());
 
     // Hiding and showing don't re-show the bubble because the type is still
@@ -1156,7 +1167,7 @@ TEST_F(AutoclickTest, HidesBubbleInFullscreenWhenCursorHides) {
     EXPECT_FALSE(GetAutoclickBubbleWidget()->IsVisible());
 
     // The bubble is shown when the cursor is a visible type again.
-    cursor_manager->SetCursor(ui::CursorType::kPointer);
+    cursor_manager->SetCursor(ui::mojom::CursorType::kPointer);
     EXPECT_TRUE(GetAutoclickBubbleWidget()->IsVisible());
   }
 }
@@ -1165,7 +1176,7 @@ TEST_F(AutoclickTest, DoesNotHideBubbleWhenNotOverFullscreenWindow) {
   UpdateDisplay("800x600,800x600");
   Shell::Get()->accessibility_controller()->SetAutoclickEnabled(true);
   ::wm::CursorManager* cursor_manager = Shell::Get()->cursor_manager();
-  cursor_manager->SetCursor(ui::CursorType::kPointer);
+  cursor_manager->SetCursor(ui::mojom::CursorType::kPointer);
 
   std::unique_ptr<views::Widget> widget =
       CreateTestWidget(nullptr, desks_util::GetActiveDeskContainerId(),
@@ -1186,7 +1197,7 @@ TEST_F(AutoclickTest, DoesNotHideBubbleWhenNotOverFullscreenWindow) {
 TEST_F(AutoclickTest, DoesNotHideBubbleWhenOverInactiveFullscreenWindow) {
   Shell::Get()->accessibility_controller()->SetAutoclickEnabled(true);
   ::wm::CursorManager* cursor_manager = Shell::Get()->cursor_manager();
-  cursor_manager->SetCursor(ui::CursorType::kPointer);
+  cursor_manager->SetCursor(ui::mojom::CursorType::kPointer);
 
   std::unique_ptr<views::Widget> widget =
       CreateTestWidget(nullptr, desks_util::GetActiveDeskContainerId(),
@@ -1194,8 +1205,8 @@ TEST_F(AutoclickTest, DoesNotHideBubbleWhenOverInactiveFullscreenWindow) {
   GetEventGenerator()->MoveMouseTo(gfx::Point(10, 10));
   widget->SetFullscreen(true);
   EXPECT_TRUE(widget->IsActive());
-  views::Widget* popup_widget = views::Widget::CreateWindowWithContextAndBounds(
-      nullptr, CurrentContext(), gfx::Rect(200, 200, 200, 200));
+  views::Widget* popup_widget = views::Widget::CreateWindowWithContext(
+      nullptr, GetContext(), gfx::Rect(200, 200, 200, 200));
   popup_widget->Show();
 
   cursor_manager->HideCursor();

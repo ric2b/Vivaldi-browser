@@ -14,33 +14,48 @@
 <translation id="1710259589646384581">Betriebssystem</translation>
 <translation id="1728677426644403582">Das esch dä Quelltext vonere Internetsite</translation>
 <translation id="1734878702283171397">Probieret Sie dä Systemadministrator z'kontaktiere.</translation>
+<translation id="1768211456781949159"><ph name="BEGIN_LINK" />Probieret Sie en Windows Netzwerchdiagnose uszfüehre<ph name="END_LINK" />.</translation>
+<translation id="1919345977826869612">Werbig</translation>
 <translation id="194030505837763158">Gang zu <ph name="LINK" /></translation>
 <translation id="1974060860693918893">Erwiteret</translation>
 <translation id="2030481566774242610">Meinet Sie <ph name="LINK" />?</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Proxy ond Firewall prüefe<ph name="END_LINK" /></translation>
+<translation id="2147827593068025794">Hentergrond-Abglich</translation>
 <translation id="2166378884831602661">Die Internetsite chan kei secheri Verbendig herstelle</translation>
 <translation id="2230458221926704099">Löset Sie dä Verbendigsfähler met Helf vo dä <ph name="BEGIN_LINK" />Diagnose Ahwendig<ph name="END_LINK" /></translation>
 <translation id="2292556288342944218">Ehri Internetverbendig esch gsperrt</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> verlangt Benotzername ond Passwort.</translation>
+<translation id="2344028582131185878">Automatischs Abelade</translation>
+<translation id="2355395290879513365">Ahgriffer chönd onder Omständ d'Belder gseh, wo Sie uf dere Internetsite ahluegit ond chönd dä probiere, Sie met andere Belder z'tüsche.</translation>
+<translation id="2356070529366658676">Nachefroge</translation>
+<translation id="2467694685043708798"><ph name="BEGIN_LINK" />Netzwerchdiagnose usfüehre<ph name="END_LINK" /></translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> het en ongöltigi Antwort gscheckt.</translation>
 <translation id="2609632851001447353">Möglechkeite</translation>
+<translation id="2634124572758952069">IP-Adresse vom Server <ph name="HOST_NAME" /> ned gfunde.</translation>
+<translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
 <translation id="2650446666397867134">Dä Zuegreff uf die Datei esch ned erlaubt</translation>
 <translation id="2705137772291741111">Die (im Cache) gspeichereti Kopie vo dere Internetsite chan ned gläse werde.</translation>
+<translation id="2730326759066348565"><ph name="BEGIN_LINK" />Verbendigsdiagnose usfüehre<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">D'Verbendig esch zroggsetzt worde.</translation>
 <translation id="2856444702002559011">Hacker chönd probiere, Ehri Date vo <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> z'chlaue, zum Bispel Passwörter, Nachrechte oder Kreditchartedate. <ph name="BEGIN_LEARN_MORE_LINK" />Witeri Informatione<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">En Netzwerkveränderig esch festgstellt worde.</translation>
 <translation id="2948083400971632585">Sie chönd jede Proxy, wo förd Verbendig ihgrechet esch, ih dä Ihstellige usschalte.</translation>
 <translation id="2991571918955627853">Sie chönd <ph name="SITE" /> jetzt ned öffne, well d'Internetsite HSTS brucht. Netzwerkfähler ond Ahgreff send normalerwis nor korzwilig, so dass d'Site wahrschindlech spöter weder fonktioniert.</translation>
 <translation id="3005723025932146533">Gspeicherti Kopie ahzeige</translation>
+<translation id="301521992641321250">Automatisch verbote</translation>
 <translation id="3109728660330352905">Sie hend kei Erlaubnis die Site ahzluege.</translation>
+<translation id="31207688938192855"><ph name="BEGIN_LINK" />Probieret Sie, d'Verbendigsdiagnose uszfüehre<ph name="END_LINK" />.</translation>
 <translation id="3176929007561373547">Gönd Sie secher, dass dä Proxyserver fontkioniert. Öberprüefet Sie d'Proxyihstellige
       oder wendet Sie sech ah Ehre Netzwerkadministrator.
       Wenn Sie kei Proxyserver wend, schaltet Sie dä wie folgt us: <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Dröcket Sie uf "neu lade", om alli benötigte Date förs Lade vo dä Site nomal z'schecke.</translation>
+<translation id="3234666976984236645">Wechtigi Inhalt uf dere Site emmer erkenne</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> esch momentan ned erreichbar.</translation>
+<translation id="3427092606871434483">Zueloh (standard)</translation>
 <translation id="3447661539832366887">Dä Bsetzer vo dem Grät hets Antonio-Spel usgschalte.</translation>
 <translation id="3462200631372590220">Erwiterti Informatione usblende</translation>
 <translation id="3566021033012934673">Das esch kei secheri Verbendig</translation>
+<translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Details usblende</translation>
 <translation id="3630155396527302611">Falls s'Programm scho ih dä Liste met erlaubtem Netzwerkzuegreff ihtreit esch, entfernet Sies us dä Liste ond tüend Sies nomol dri.</translation>
 <translation id="3658742229777143148">Öberarbeitig</translation>
@@ -49,17 +64,24 @@
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> esch gsperrt</translation>
 <translation id="3987940399970879459">Weniger als 1 MB</translation>
 <translation id="4075732493274867456">Client ond Server onterstötzed kei gmeinsami SSL Protokollversione oder Verschlösseligsmethode.</translation>
+<translation id="4116663294526079822">Uf dere Site emmer zueloh</translation>
 <translation id="4130226655945681476">Prüefet Sie Netzwerkkabel, Modem ond Router</translation>
 <translation id="4165986682804962316">Internetsite Ihstellige</translation>
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />Firewall- ond Antivirusihstellige prüefe<ph name="END_LINK" /></translation>
+<translation id="4226937834893929579"><ph name="BEGIN_LINK" />Probieret Sie en Netzwerchdiagnose uszfühere<ph name="END_LINK" />.</translation>
+<translation id="4265872034478892965">Vo Ehrem Administrator zuegloh</translation>
+<translation id="4312866146174492540">verbiete (standard)</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> het Ehres Ahmeldezertifikat ned akzeptiert oder es esch keis ome.</translation>
 <translation id="4506599922270137252">Kontakt metem Systemadministrator ufnäh</translation>
 <translation id="4522570452068850558">Details</translation>
 <translation id="4558551763791394412">Schaltet Sie Ehri Erwiterige us.</translation>
+<translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Ehri Verbendig esch onterbroche</translation>
+<translation id="4722547256916164131"><ph name="BEGIN_LINK" />Windows Netzwerchdiagnose usfüehre<ph name="END_LINK" /></translation>
 <translation id="4744603770635761495">Usfüehrbare Pfad</translation>
 <translation id="4764776831041365478">D'Internetsite onder <ph name="URL" /> esch vellecht momentan ned erreichbar oder esch duurhaft uf en neui Adresse verschobe worde.</translation>
 <translation id="5023310440958281426">Informieret Sie sech öber d'Rechtlinie, wo Ehre Administrator gsetzt het</translation>
+<translation id="5039804452771397117">Zueloh</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Proxyadresse prüefe<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-Bit)</translation>
 <translation id="5355557959165512791">Sie chönd <ph name="SITE" /> jetzt ned öffne, well s'Zertifikat weg esch. Netzwerkfähler ond Ahgreff send normalerwis nor korzwilig, so dass d'Site wahrschindlech spöter weder fonktioniert.</translation>
@@ -92,7 +114,10 @@
 <translation id="6685834062052613830">Abmelde ond Ihrechtig abschlüsse</translation>
 <translation id="6711464428925977395">Met dem Proxyserver gets es Problem oder d'Adresse esch falsch.</translation>
 <translation id="6897140037006041989">Benotzer Agent</translation>
+<translation id="7053983685419859001">verbiete</translation>
 <translation id="7090678807593890770">Be Google nach <ph name="LINK" /> sueche</translation>
+<translation id="7108819624672055576">Vonere Erwiterig zuegloh</translation>
+<translation id="7111012039238467737">(Göltig)</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> erföllt d'Secherheitsstandards ned.</translation>
 <translation id="7353601530677266744">Befählszile</translation>
 <translation id="7419106976560586862">Profil Pfad</translation>
@@ -103,15 +128,20 @@
 <translation id="7758069387465995638">Möglecherwis esch d'Verbendig weg nere Firewall oder nem Antivirus Programm blockiert.</translation>
 <translation id="7834399512844817676"><ph name="SITE" /> schötzt Ehri Date eigentlech dörr Verschlösselig. Wo Vivaldi dasmal versuecht het, en Verbendig zu <ph name="SITE" /> ufzbaue, het die Internetsite bi dä Identifizierig ongwöhnlechi ond falschi Informatione zrog gscheckt. Entweder probiert en Ahgriffer, sech als <ph name="SITE" /> uszgäh, oder d'Verbendig esch dörr en WLAN Ahmeldesite onterbroche. Well Vivaldi d'Verbendig vorem Ustusch vo Date onterbroche het, send Ehri Informatione witerhin secher.</translation>
 <translation id="7951415247503192394">(32-Bit)</translation>
+<translation id="8025119109950072390">Ahgriffer uf dere Internetsite chönd Sie dezue verleite, öbbis gföhrlechs z'mache, wie d'Installation vo Programm oder d'Offeleggig vo persönleche Date (z.B: Passwörter, Telefonnummere oder Kreditkarte-Informatione).</translation>
+<translation id="8037357227543935929">Nachefroge (standard)</translation>
 <translation id="8142868475871995937">Onder &lt;strong&gt;vivaldi://policy&lt;/strong&gt; fendet Sie en Liste vo gsperrte URLs ond andere Rechtlini, wo Ehre Systemadministrator gsetzt het.</translation>
 <translation id="8150722005171944719">D'Datei onder <ph name="URL" /> chan ned gläse werde. Sie esch möglecherwis entfernt oder verschobe worde. Oder d'Berechtigonge verhenderet dä Zuegreff.</translation>
 <translation id="8225771182978767009">Die Person, wo dä Computer ihgrechtet het, het die Internetsite gsperrt.</translation>
+<translation id="8241712895048303527">Uf dere Site verbiete</translation>
 <translation id="8289355894181816810">Wenn Sie witeri Informationen dezue bruchet, chan Ehne Ehre Netzwerkadministrator helfe.</translation>
 <translation id="8332188693563227489">Zuegreff uf <ph name="HOST_NAME" /> ned erlaubt</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> het am Gateway kei Antwort gäh.</translation>
 <translation id="8503813439785031346">Benotzername</translation>
 <translation id="8740359287975076522">Die &lt;abbr id="dnsDefinition"&gt;DNS Adresse&lt;/abbr&gt; vo <ph name="HOST_NAME" /> hemmer ned gfonde. En Problemdiagnose werd gmacht.</translation>
 <translation id="9001074447101275817">Dä Proxy <ph name="DOMAIN" /> verlangt Benotzername ond Passwort.</translation>
+<translation id="9025348182339809926">(Ongöltig)</translation>
+<translation id="9169664750068251925">Uf dere Site emmer verbiete</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> brucht es ned onterstötzts Protokoll.</translation>
 <translation id="969892804517981540">Offizielli Version</translation>
 <translation id="988159990683914416">Entweckler Version</translation>

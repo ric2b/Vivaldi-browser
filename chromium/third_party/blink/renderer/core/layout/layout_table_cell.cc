@@ -43,8 +43,6 @@
 
 namespace blink {
 
-using namespace html_names;
-
 struct SameSizeAsLayoutTableCell : public LayoutBlockFlow,
                                    public LayoutNGTableCellInterface {
   unsigned bitfields;
@@ -89,12 +87,12 @@ void LayoutTableCell::WillBeRemovedFromTree() {
     // remove-cell-with-border-box.html only passes with setNeedsLayout but
     // other places use setChildNeedsLayout.
     PreviousCell()->SetNeedsLayout(layout_invalidation_reason::kTableChanged);
-    PreviousCell()->SetPreferredLogicalWidthsDirty();
+    PreviousCell()->SetIntrinsicLogicalWidthsDirty();
   }
   if (NextCell()) {
     // TODO(dgrogan): Same as above re: setChildNeedsLayout vs setNeedsLayout.
     NextCell()->SetNeedsLayout(layout_invalidation_reason::kTableChanged);
-    NextCell()->SetPreferredLogicalWidthsDirty();
+    NextCell()->SetIntrinsicLogicalWidthsDirty();
   }
 }
 
@@ -102,17 +100,15 @@ unsigned LayoutTableCell::ParseColSpanFromDOM() const {
   DCHECK(GetNode());
   // TODO(dgrogan): HTMLTableCellElement::colSpan() already clamps to something
   // smaller than maxColumnIndex; can we just DCHECK here?
-  if (IsHTMLTableCellElement(*GetNode()))
-    return std::min<unsigned>(ToHTMLTableCellElement(*GetNode()).colSpan(),
-                              kMaxColumnIndex);
+  if (auto* cell_element = DynamicTo<HTMLTableCellElement>(GetNode()))
+    return std::min<unsigned>(cell_element->colSpan(), kMaxColumnIndex);
   return 1;
 }
 
 unsigned LayoutTableCell::ParseRowSpanFromDOM() const {
   DCHECK(GetNode());
-  if (IsHTMLTableCellElement(*GetNode()))
-    return std::min<unsigned>(ToHTMLTableCellElement(*GetNode()).rowSpan(),
-                              kMaxRowIndex);
+  if (auto* cell_element = DynamicTo<HTMLTableCellElement>(GetNode()))
+    return std::min<unsigned>(cell_element->rowSpan(), kMaxRowIndex);
   return 1;
 }
 
@@ -125,11 +121,11 @@ void LayoutTableCell::UpdateColAndRowSpanFlags() {
 
 void LayoutTableCell::ColSpanOrRowSpanChanged() {
   DCHECK(GetNode());
-  DCHECK(IsHTMLTableCellElement(*GetNode()));
+  DCHECK(IsA<HTMLTableCellElement>(*GetNode()));
 
   UpdateColAndRowSpanFlags();
 
-  SetNeedsLayoutAndPrefWidthsRecalcAndFullPaintInvalidation(
+  SetNeedsLayoutAndIntrinsicWidthsRecalcAndFullPaintInvalidation(
       layout_invalidation_reason::kAttributeChanged);
   if (Parent() && Section()) {
     Section()->SetNeedsCellRecalc();
@@ -179,7 +175,7 @@ Length LayoutTableCell::LogicalWidthFromColumns(
   return Length::Fixed(col_width_sum);
 }
 
-void LayoutTableCell::ComputePreferredLogicalWidths() {
+MinMaxSizes LayoutTableCell::PreferredLogicalWidths() const {
   // The child cells rely on the grids up in the sections to do their
   // computePreferredLogicalWidths work.  Normally the sections are set up
   // early, as table cells are added, but relayout can cause the cells to be
@@ -191,28 +187,30 @@ void LayoutTableCell::ComputePreferredLogicalWidths() {
   // notional height on the cell, such as can happen when a percent sized image
   // scales up its width to match the available height. Setting a zero override
   // height prevents this from happening.
+  auto* mutable_this = const_cast<LayoutTableCell*>(this);
   LayoutUnit logical_height =
       HasOverrideLogicalHeight() ? OverrideLogicalHeight() : LayoutUnit(-1);
   if (logical_height > -1)
-    SetOverrideLogicalHeight(LayoutUnit());
-  LayoutBlockFlow::ComputePreferredLogicalWidths();
+    mutable_this->SetOverrideLogicalHeight(LayoutUnit());
+  MinMaxSizes sizes = LayoutBlockFlow::PreferredLogicalWidths();
   if (logical_height > -1)
-    SetOverrideLogicalHeight(logical_height);
+    mutable_this->SetOverrideLogicalHeight(logical_height);
 
   if (GetNode() && StyleRef().AutoWrap()) {
     // See if nowrap was set.
     Length w = StyleOrColLogicalWidth();
     const AtomicString& nowrap =
-        To<Element>(GetNode())->getAttribute(kNowrapAttr);
+        To<Element>(GetNode())->FastGetAttribute(html_names::kNowrapAttr);
     if (!nowrap.IsNull() && w.IsFixed()) {
       // Nowrap is set, but we didn't actually use it because of the fixed width
       // set on the cell. Even so, it is a WinIE/Moz trait to make the minwidth
       // of the cell into the fixed width. They do this even in strict mode, so
       // do not make this a quirk. Affected the top of hiptop.com.
-      min_preferred_logical_width_ =
-          std::max(LayoutUnit(w.Value()), min_preferred_logical_width_);
+      sizes.min_size = std::max(sizes.min_size, LayoutUnit(w.Value()));
     }
   }
+
+  return sizes;
 }
 
 void LayoutTableCell::ComputeIntrinsicPadding(int collapsed_height,
@@ -478,13 +476,13 @@ void LayoutTableCell::StyleDidChange(StyleDifference diff,
       // TODO(dgrogan) Add a web test showing that SetChildNeedsLayout is
       // needed instead of SetNeedsLayout.
       PreviousCell()->SetChildNeedsLayout();
-      PreviousCell()->SetPreferredLogicalWidthsDirty(kMarkOnlyThis);
+      PreviousCell()->SetIntrinsicLogicalWidthsDirty(kMarkOnlyThis);
     }
     if (NextCell()) {
       // TODO(dgrogan) Add a web test showing that SetChildNeedsLayout is
       // needed instead of SetNeedsLayout.
       NextCell()->SetChildNeedsLayout();
-      NextCell()->SetPreferredLogicalWidthsDirty(kMarkOnlyThis);
+      NextCell()->SetIntrinsicLogicalWidthsDirty(kMarkOnlyThis);
     }
   }
 }

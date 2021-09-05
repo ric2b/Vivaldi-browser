@@ -59,7 +59,7 @@ class TEST_RUNNER_EXPORT WebWidgetTestProxy : public content::RenderWidget {
   ~WebWidgetTestProxy() override;
 
   // RenderWidget overrides.
-  void BeginMainFrame(base::TimeTicks frame_time) override;
+  void WillBeginCompositorFrame() override;
   void RequestDecode(const cc::PaintImage& image,
                      base::OnceCallback<void(bool)> callback) override;
   void RequestPresentation(PresentationTimeCallback callback) override;
@@ -67,11 +67,12 @@ class TEST_RUNNER_EXPORT WebWidgetTestProxy : public content::RenderWidget {
   // WebWidgetClient implementation.
   void ScheduleAnimation() override;
   bool RequestPointerLock(blink::WebLocalFrame* requester_frame,
+                          blink::WebWidgetClient::PointerLockCallback callback,
                           bool request_unajusted_movement) override;
   void RequestPointerUnlock() override;
   bool IsPointerLocked() override;
   void SetToolTipText(const blink::WebString& text,
-                      blink::WebTextDirection hint) override;
+                      base::i18n::TextDirection hint) override;
   void StartDragging(network::mojom::ReferrerPolicy policy,
                      const blink::WebDragData& data,
                      blink::WebDragOperationsMask mask,
@@ -105,6 +106,9 @@ class TEST_RUNNER_EXPORT WebWidgetTestProxy : public content::RenderWidget {
 
   void ScheduleAnimationInternal(bool do_raster);
   void AnimateNow();
+
+  // Perform the synchronous composite step for a given RenderWidget.
+  static void DoComposite(content::RenderWidget* widget, bool do_raster);
 
   EventSender event_sender_{this};
 

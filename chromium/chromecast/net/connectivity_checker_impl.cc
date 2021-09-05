@@ -65,8 +65,8 @@ const char kMetricNameNetworkConnectivityCheckingErrorType[] =
 // static
 scoped_refptr<ConnectivityCheckerImpl> ConnectivityCheckerImpl::Create(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-    std::unique_ptr<network::SharedURLLoaderFactoryInfo>
-        url_loader_factory_info,
+    std::unique_ptr<network::PendingSharedURLLoaderFactory>
+        pending_url_loader_factory,
     network::NetworkConnectionTracker* network_connection_tracker) {
   DCHECK(task_runner);
 
@@ -75,7 +75,7 @@ scoped_refptr<ConnectivityCheckerImpl> ConnectivityCheckerImpl::Create(
   task_runner->PostTask(
       FROM_HERE,
       base::BindOnce(&ConnectivityCheckerImpl::Initialize, connectivity_checker,
-                     std::move(url_loader_factory_info)));
+                     std::move(pending_url_loader_factory)));
   return connectivity_checker;
 }
 
@@ -96,12 +96,12 @@ ConnectivityCheckerImpl::ConnectivityCheckerImpl(
 }
 
 void ConnectivityCheckerImpl::Initialize(
-    std::unique_ptr<network::SharedURLLoaderFactoryInfo>
-        url_loader_factory_info) {
+    std::unique_ptr<network::PendingSharedURLLoaderFactory>
+        pending_url_loader_factory) {
   DCHECK(task_runner_->BelongsToCurrentThread());
-  DCHECK(url_loader_factory_info);
+  DCHECK(pending_url_loader_factory);
   url_loader_factory_ = network::SharedURLLoaderFactory::Create(
-      std::move(url_loader_factory_info));
+      std::move(pending_url_loader_factory));
 
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   base::CommandLine::StringType check_url_str =
@@ -158,14 +158,18 @@ void ConnectivityCheckerImpl::CheckInternal() {
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK(url_loader_factory_);
 
-  // Don't check connectivity if network is offline, because Internet could be
-  // accessible via netifs ignored.
   auto connection_type = network::mojom::ConnectionType::CONNECTION_UNKNOWN;
-  network_connection_tracker_->GetConnectionType(
+  bool is_sync = network_connection_tracker_->GetConnectionType(
       &connection_type,
       base::BindOnce(&ConnectivityCheckerImpl::OnConnectionChanged,
                      weak_this_));
-  if (connection_type == network::mojom::ConnectionType::CONNECTION_NONE) {
+
+  // Don't check connectivity if network is offline.
+  // Also don't check connectivity if the connection_type cannot be
+  // synchronously retrieved, since OnConnectionChanged will be triggered later
+  // which will cause duplicate checks.
+  if (!is_sync ||
+      connection_type == network::mojom::ConnectionType::CONNECTION_NONE) {
     return;
   }
 

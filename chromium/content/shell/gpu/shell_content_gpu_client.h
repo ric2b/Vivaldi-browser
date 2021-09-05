@@ -9,7 +9,7 @@
 
 #include "base/macros.h"
 #include "content/public/gpu/content_gpu_client.h"
-#include "services/network/public/mojom/network_service_test.mojom.h"
+#include "services/network/public/mojom/network_service_test.mojom-forward.h"
 
 namespace content {
 
@@ -19,7 +19,8 @@ class ShellContentGpuClient : public ContentGpuClient {
   ~ShellContentGpuClient() override;
 
   // ContentGpuClient:
-  void InitializeRegistry(service_manager::BinderRegistry* registry) override;
+  void ExposeInterfacesToBrowser(const gpu::GpuPreferences& gpu_preferences,
+                                 mojo::BinderMap* binders) override;
 
   DISALLOW_COPY_AND_ASSIGN(ShellContentGpuClient);
 };

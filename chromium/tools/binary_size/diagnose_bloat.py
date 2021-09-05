@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # Copyright 2017 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
@@ -9,8 +9,6 @@ See //tools/binary_size/README.md for example usage.
 
 Note: this tool will perform gclient sync/git checkout on your local repo.
 """
-
-from __future__ import print_function
 
 import atexit
 import argparse
@@ -39,8 +37,8 @@ _RESOURCE_SIZES_PATH = os.path.join(
     _SRC_ROOT, 'build', 'android', 'resource_sizes.py')
 _LLVM_TOOLS_DIR = os.path.join(
     _SRC_ROOT, 'third_party', 'llvm-build', 'Release+Asserts', 'bin')
-_DOWNLOAD_OBJDUMP_PATH = os.path.join(
-    _SRC_ROOT, 'tools', 'clang', 'scripts', 'download_objdump.py')
+_CLANG_UPDATE_PATH = os.path.join(_SRC_ROOT, 'tools', 'clang', 'scripts',
+                                  'update.py')
 _GN_PATH = os.path.join(_SRC_ROOT, 'third_party', 'depot_tools', 'gn')
 _NINJA_PATH = os.path.join(_SRC_ROOT, 'third_party', 'depot_tools', 'ninja')
 
@@ -139,7 +137,7 @@ class ResourceSizesDiff(BaseDiff):
 
   @property
   def summary_stat(self):
-    for section_name, results in self._diff.iteritems():
+    for section_name, results in self._diff.items():
       for subsection_name, value, units in results:
         if 'normalized' in subsection_name:
           full_name = '{} {}'.format(section_name, subsection_name)
@@ -162,8 +160,8 @@ class ResourceSizesDiff(BaseDiff):
     before = self._LoadResults(before_dir)
     after = self._LoadResults(after_dir)
     self._diff = collections.defaultdict(list)
-    for section, section_dict in after.iteritems():
-      for subsection, v in section_dict.iteritems():
+    for section, section_dict in after.items():
+      for subsection, v in section_dict.items():
         # Ignore entries when resource_sizes.py chartjson format has changed.
         if (section not in before or
             subsection not in before[section] or
@@ -180,7 +178,7 @@ class ResourceSizesDiff(BaseDiff):
   def _ResultLines(self, include_sections=None):
     """Generates diff lines for the specified sections (defaults to all)."""
     section_lines = collections.defaultdict(list)
-    for section_name, section_results in self._diff.iteritems():
+    for section_name, section_results in self._diff.items():
       if not include_sections or section_name in include_sections:
         subsection_lines = []
         section_sum = 0
@@ -213,7 +211,7 @@ class ResourceSizesDiff(BaseDiff):
     charts = chartjson['charts']
     # Older versions of resource_sizes.py prefixed the apk onto section names.
     ret = {}
-    for section, section_dict in charts.iteritems():
+    for section, section_dict in charts.items():
       section_no_target = re.sub(r'^.*_', '', section)
       ret[section_no_target] = section_dict
     return ret
@@ -334,6 +332,9 @@ class _BuildHelper(object):
     gn_args += ' treat_warnings_as_errors=false'
     # Speed things up a bit by skipping lint & errorprone.
     gn_args += ' disable_android_lint=true'
+    # Down from default of 2 to speed up compile and use less disk.
+    # Compiles need at least symbol_level=1 for pak whitelist to work.
+    gn_args += ' symbol_level=1'
     gn_args += ' use_errorprone_java_compiler=false'
     gn_args += ' use_goma=%s' % str(self.use_goma).lower()
     gn_args += ' target_os="%s"' % self.target_os
@@ -372,14 +373,13 @@ class _BuildHelper(object):
 
 class _BuildArchive(object):
   """Class for managing a directory with build results and build metadata."""
-  def __init__(self, rev, base_archive_dir, build, subrepo, slow_options,
-               save_unstripped):
+
+  def __init__(self, rev, base_archive_dir, build, subrepo, save_unstripped):
     self.build = build
     self.dir = os.path.join(base_archive_dir, rev)
     metadata_path = os.path.join(self.dir, 'metadata.txt')
     self.rev = rev
     self.metadata = _Metadata([self], build, metadata_path, subrepo)
-    self._slow_options = slow_options
     self._save_unstripped = save_unstripped
 
   def ArchiveBuildResults(self, supersize_path, tool_prefix=None):
@@ -415,8 +415,6 @@ class _BuildArchive(object):
         _RESOURCE_SIZES_PATH, self.build.abs_apk_path, '--output-dir', self.dir,
         '--chartjson', '--chromium-output-dir', self.build.output_directory
     ]
-    if self._slow_options:
-      cmd += ['--estimate-patch-size', '--dump-static-initializers']
     _RunCmd(cmd)
 
   def _ArchiveFile(self, filename):
@@ -445,13 +443,12 @@ class _BuildArchive(object):
 
 class _DiffArchiveManager(object):
   """Class for maintaining BuildArchives and their related diff artifacts."""
-  def __init__(self, revs, archive_dir, diffs, build, subrepo, slow_options,
-               save_unstripped):
+
+  def __init__(self, revs, archive_dir, diffs, build, subrepo, save_unstripped):
     self.archive_dir = archive_dir
     self.build = build
     self.build_archives = [
-        _BuildArchive(rev, archive_dir, build, subrepo, slow_options,
-                      save_unstripped)
+        _BuildArchive(rev, archive_dir, build, subrepo, save_unstripped)
         for rev in revs
     ]
     self.diffs = diffs
@@ -624,7 +621,9 @@ def _RunCmd(cmd, verbose=False, exit_on_failure=True):
   if verbose:
     proc_stdout, proc_stderr = sys.stdout, subprocess.STDOUT
 
-  proc = subprocess.Popen(cmd, stdout=proc_stdout, stderr=proc_stderr)
+  # pylint: disable=unexpected-keyword-arg
+  proc = subprocess.Popen(
+      cmd, stdout=proc_stdout, stderr=proc_stderr, encoding='utf-8')
   stdout, stderr = proc.communicate()
 
   if proc.returncode and exit_on_failure:
@@ -725,7 +724,7 @@ def _ValidateRevs(rev, reference_rev, subrepo, extra_rev):
 
 def _VerifyUserAccepts(message):
   print(message + ' Do you want to proceed? [y/n]')
-  if raw_input('> ').lower() != 'y':
+  if input('> ').lower() != 'y':
     sys.exit()
 
 
@@ -744,7 +743,7 @@ def _Die(s, *args):
 
 
 def _WriteToFile(logfile, s, *args, **kwargs):
-  if isinstance(s, basestring):
+  if isinstance(s, str):
     data = s.format(*args, **kwargs) + '\n'
   else:
     data = '\n'.join(s) + '\n'
@@ -767,9 +766,9 @@ def _TmpCopyBinarySizeDir():
     shutil.copytree(_BINARY_SIZE_DIR, bs_dir)
     # We also copy the tools supersize needs, but only if they exist.
     tool_prefix = None
-    if os.path.exists(_DOWNLOAD_OBJDUMP_PATH):
+    if os.path.exists(_CLANG_UPDATE_PATH):
       if not os.path.exists(os.path.join(_LLVM_TOOLS_DIR, 'llvm-readelf')):
-        _RunCmd([_DOWNLOAD_OBJDUMP_PATH])
+        _RunCmd([_CLANG_UPDATE_PATH, '--package=objdump'])
       tools_dir = os.path.join(bs_dir, 'bintools')
       tool_prefix = os.path.join(tools_dir, 'llvm-')
       shutil.copytree(_LLVM_TOOLS_DIR, tools_dir)
@@ -812,11 +811,6 @@ def main():
                       action='store_true',
                       help='Build/download all revs from --reference-rev to '
                            'rev and diff the contiguous revisions.')
-  parser.add_argument('--include-slow-options',
-                      action='store_true',
-                      help='Run some extra steps that take longer to complete. '
-                           'This includes apk-patch-size estimation and '
-                           'static-initializer counting.')
   parser.add_argument('--single',
                       action='store_true',
                       help='Sets --reference-rev=rev.')
@@ -909,8 +903,7 @@ def main():
           ResourceSizesDiff(build.apk_name)
       ]
     diff_mngr = _DiffArchiveManager(revs, args.archive_directory, diffs, build,
-                                    subrepo, args.include_slow_options,
-                                    args.unstripped)
+                                    subrepo, args.unstripped)
     consecutive_failures = 0
     i = 0
     for i, archive in enumerate(diff_mngr.build_archives):

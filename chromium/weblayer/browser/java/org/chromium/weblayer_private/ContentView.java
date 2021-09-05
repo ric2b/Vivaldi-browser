@@ -10,6 +10,7 @@ import android.graphics.Rect;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.util.SparseArray;
 import android.view.DragEvent;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
@@ -18,9 +19,10 @@ import android.view.View.OnSystemUiVisibilityChangeListener;
 import android.view.ViewGroup.OnHierarchyChangeListener;
 import android.view.ViewStructure;
 import android.view.accessibility.AccessibilityNodeProvider;
+import android.view.autofill.AutofillValue;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
-import android.widget.FrameLayout;
+import android.widget.RelativeLayout;
 
 import org.chromium.base.ObserverList;
 import org.chromium.base.TraceEvent;
@@ -38,7 +40,7 @@ import org.chromium.ui.base.EventOffsetHandler;
  * The containing view for {@link WebContents} that exists in the Android UI hierarchy and exposes
  * the various {@link View} functionality to it.
  */
-public class ContentView extends FrameLayout
+public class ContentView extends RelativeLayout
         implements ViewEventSink.InternalAccessDelegate, SmartClipProvider,
                    OnHierarchyChangeListener, OnSystemUiVisibilityChangeListener {
     private static final String TAG = "ContentView";
@@ -47,6 +49,7 @@ public class ContentView extends FrameLayout
     public static final int DEFAULT_MEASURE_SPEC =
             MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED);
 
+    private TabImpl mTab;
     private WebContents mWebContents;
     private final ObserverList<OnHierarchyChangeListener> mHierarchyChangeListeners =
             new ObserverList<>();
@@ -71,6 +74,9 @@ public class ContentView extends FrameLayout
      */
     public static ContentView createContentView(
             Context context, EventOffsetHandler eventOffsetHandler) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            return new ContentViewApi26(context, eventOffsetHandler);
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             return new ContentViewApi23(context, eventOffsetHandler);
         }
@@ -102,6 +108,16 @@ public class ContentView extends FrameLayout
 
         setOnHierarchyChangeListener(this);
         setOnSystemUiVisibilityChangeListener(this);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            // The Autofill system-level infrastructure has heuristics for which Views it considers
+            // important for autofill; only these Views will be queried for their autofill
+            // structure on notifications that a new (virtual) View was entered. By default,
+            // RelativeLayout is not considered important for autofill. Thus, for ContentView to be
+            // queried for its autofill structure, we must explicitly inform the autofill system
+            // that this View is important for autofill.
+            setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_YES);
+        }
     }
 
     protected WebContentsAccessibility getWebContentsAccessibility() {
@@ -110,14 +126,19 @@ public class ContentView extends FrameLayout
                 : null;
     }
 
-    public void setWebContents(WebContents webContents) {
+    protected TabImpl getTab() {
+        return mTab;
+    }
+
+    public void setTab(TabImpl tab) {
+        mTab = tab;
         boolean wasFocused = isFocused();
         boolean wasWindowFocused = hasWindowFocus();
         boolean wasAttached = isAttachedToWindow();
         if (wasFocused) onFocusChanged(false, View.FOCUS_FORWARD, null);
         if (wasWindowFocused) onWindowFocusChanged(false);
         if (wasAttached) onDetachedFromWindow();
-        mWebContents = webContents;
+        mWebContents = mTab != null ? mTab.getWebContents() : null;
         if (wasFocused) onFocusChanged(true, View.FOCUS_FORWARD, null);
         if (wasWindowFocused) onWindowFocusChanged(true);
         if (wasAttached) onAttachedToWindow();
@@ -239,13 +260,13 @@ public class ContentView extends FrameLayout
     @Override
     public InputConnection onCreateInputConnection(EditorInfo outAttrs) {
         // Calls may come while/after WebContents is destroyed. See https://crbug.com/821750#c8.
-        if (mWebContents != null && mWebContents.isDestroyed()) return null;
+        if (mWebContents == null || mWebContents.isDestroyed()) return null;
         return ImeAdapter.fromWebContents(mWebContents).onCreateInputConnection(outAttrs);
     }
 
     @Override
     public boolean onCheckIsTextEditor() {
-        if (mWebContents != null && mWebContents.isDestroyed()) return false;
+        if (mWebContents == null || mWebContents.isDestroyed()) return false;
         return ImeAdapter.fromWebContents(mWebContents).onCheckIsTextEditor();
     }
 
@@ -410,7 +431,7 @@ public class ContentView extends FrameLayout
         return mWebContents != null ? RenderCoordinates.fromWebContents(mWebContents) : null;
     }
 
-    // End FrameLayout overrides.
+    // End RelativeLayout overrides.
 
     @Override
     public boolean awakenScrollBars(int startDelay, boolean invalidate) {
@@ -485,6 +506,34 @@ public class ContentView extends FrameLayout
         public void onProvideVirtualStructure(final ViewStructure structure) {
             WebContentsAccessibility wcax = getWebContentsAccessibility();
             if (wcax != null) wcax.onProvideVirtualStructure(structure, false);
+        }
+    }
+
+    private static class ContentViewApi26 extends ContentViewApi23 {
+        public ContentViewApi26(Context context, EventOffsetHandler eventOffsetHandler) {
+            super(context, eventOffsetHandler);
+        }
+
+        @Override
+        public void onProvideAutofillVirtualStructure(ViewStructure structure, int flags) {
+            // A new (virtual) View has been entered, and the autofill system-level
+            // infrastructure wants us to populate |structure| with the autofill structure of the
+            // (virtual) View. Forward this on to TabImpl to accomplish.
+            TabImpl tab = getTab();
+            if (tab != null) {
+                tab.onProvideAutofillVirtualStructure(structure, flags);
+            }
+        }
+
+        @Override
+        public void autofill(final SparseArray<AutofillValue> values) {
+            // The autofill system-level infrastructure has information that we can use to
+            // autofill the current (virtual) View. Forward this on to TabImpl to
+            // accomplish.
+            TabImpl tab = getTab();
+            if (tab != null) {
+                tab.autofill(values);
+            }
         }
     }
 }

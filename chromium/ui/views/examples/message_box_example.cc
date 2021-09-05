@@ -10,6 +10,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/message_box_view.h"
+#include "ui/views/examples/examples_window.h"
 #include "ui/views/layout/grid_layout.h"
 #include "ui/views/view.h"
 
@@ -18,8 +19,7 @@ using base::ASCIIToUTF16;
 namespace views {
 namespace examples {
 
-MessageBoxExample::MessageBoxExample() : ExampleBase("Message Box View") {
-}
+MessageBoxExample::MessageBoxExample() : ExampleBase("Message Box View") {}
 
 MessageBoxExample::~MessageBoxExample() = default;
 
@@ -40,10 +40,10 @@ void MessageBoxExample::CreateExampleView(View* container) {
 
   const int button_column = 1;
   column_set = layout->AddColumnSet(button_column);
-  column_set->AddColumn(GridLayout::FILL, GridLayout::FILL,
-                        0.5f, GridLayout::USE_PREF, 0, 0);
-  column_set->AddColumn(GridLayout::FILL, GridLayout::FILL,
-                        0.5f, GridLayout::USE_PREF, 0, 0);
+  column_set->AddColumn(GridLayout::FILL, GridLayout::FILL, 0.5f,
+                        GridLayout::USE_PREF, 0, 0);
+  column_set->AddColumn(GridLayout::FILL, GridLayout::FILL, 0.5f,
+                        GridLayout::USE_PREF, 0, 0);
 
   layout->StartRow(0 /* no expand */, button_column);
 
@@ -57,8 +57,9 @@ void MessageBoxExample::ButtonPressed(Button* sender, const ui::Event& event) {
   if (sender == status_) {
     message_box_view_->SetCheckBoxLabel(
         ASCIIToUTF16(message_box_view_->IsCheckBoxSelected() ? "on" : "off"));
-    PrintStatus(message_box_view_->IsCheckBoxSelected() ?
-       "Check Box Selected" : "Check Box Not Selected");
+    LogStatus(message_box_view_->IsCheckBoxSelected()
+                  ? "Check Box Selected"
+                  : "Check Box Not Selected");
   } else if (sender == toggle_) {
     message_box_view_->SetCheckBoxSelected(
         !message_box_view_->IsCheckBoxSelected());

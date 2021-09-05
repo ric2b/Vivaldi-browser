@@ -14,8 +14,8 @@
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/browser/service_worker/service_worker_controllee_request_handler.h"
-#include "content/browser/service_worker/service_worker_navigation_handle.h"
-#include "content/browser/service_worker/service_worker_navigation_handle_core.h"
+#include "content/browser/service_worker/service_worker_main_resource_handle.h"
+#include "content/browser/service_worker/service_worker_main_resource_handle_core.h"
 #include "content/browser/service_worker/service_worker_provider_host.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
@@ -29,7 +29,7 @@ namespace {
 // Core thread helpers
 
 void LoaderCallbackWrapperOnCoreThread(
-    ServiceWorkerNavigationHandleCore* handle_core,
+    ServiceWorkerMainResourceHandleCore* handle_core,
     base::WeakPtr<ServiceWorkerNavigationLoaderInterceptor> interceptor_on_ui,
     NavigationLoaderInterceptor::LoaderCallback loader_callback,
     SingleRequestURLLoaderFactory::RequestHandler handler) {
@@ -66,19 +66,18 @@ void FallbackCallbackWrapperOnCoreThread(
 void InvokeRequestHandlerOnCoreThread(
     SingleRequestURLLoaderFactory::RequestHandler handler,
     const network::ResourceRequest& resource_request,
-    network::mojom::URLLoaderRequest request,
-    network::mojom::URLLoaderClientPtrInfo client_info) {
+    mojo::PendingReceiver<network::mojom::URLLoader> receiver,
+    mojo::PendingRemote<network::mojom::URLLoaderClient> client_remote) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
-  network::mojom::URLLoaderClientPtr client(std::move(client_info));
-  std::move(handler).Run(resource_request, std::move(request),
-                         std::move(client));
+  std::move(handler).Run(resource_request, std::move(receiver),
+                         std::move(client_remote));
 }
 
 // Does setup on the the core thread and calls back to
 // |interceptor_on_ui->LoaderCallbackWrapper()| on the UI thread.
 void MaybeCreateLoaderOnCoreThread(
     base::WeakPtr<ServiceWorkerNavigationLoaderInterceptor> interceptor_on_ui,
-    ServiceWorkerNavigationHandleCore* handle_core,
+    ServiceWorkerMainResourceHandleCore* handle_core,
     const ServiceWorkerNavigationLoaderInterceptorParams& params,
     mojo::PendingAssociatedReceiver<blink::mojom::ServiceWorkerContainerHost>
         host_receiver,
@@ -88,7 +87,7 @@ void MaybeCreateLoaderOnCoreThread(
     BrowserContext* browser_context,
     NavigationLoaderInterceptor::LoaderCallback loader_callback,
     NavigationLoaderInterceptor::FallbackCallback fallback_callback,
-    bool initialize_provider_only) {
+    bool initialize_container_host_only) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
 
   ServiceWorkerContextCore* context_core =
@@ -104,48 +103,49 @@ void MaybeCreateLoaderOnCoreThread(
     return;
   }
 
-  if (!handle_core->provider_host()) {
-    // This is the initial request before redirects, so make the provider host.
+  if (!handle_core->container_host()) {
+    // This is the initial request before redirects, so make the container host.
     // Its lifetime is tied to the |provider_info| in the
-    // ServiceWorkerNavigationHandle on the UI thread and which will be passed
+    // ServiceWorkerMainResourceHandle on the UI thread and which will be passed
     // to the renderer when the navigation commits.
     DCHECK(host_receiver);
     DCHECK(client_remote);
-    base::WeakPtr<ServiceWorkerProviderHost> provider_host;
+    base::WeakPtr<ServiceWorkerContainerHost> container_host;
 
-    if (params.resource_type == ResourceType::kMainFrame ||
-        params.resource_type == ResourceType::kSubFrame) {
-      provider_host = ServiceWorkerProviderHost::PreCreateNavigationHost(
+    if (params.resource_type == blink::mojom::ResourceType::kMainFrame ||
+        params.resource_type == blink::mojom::ResourceType::kSubFrame) {
+      container_host = ServiceWorkerContainerHost::CreateForWindow(
           context_core->AsWeakPtr(), params.are_ancestors_secure,
           params.frame_tree_node_id, std::move(host_receiver),
           std::move(client_remote));
     } else {
-      DCHECK(params.resource_type == ResourceType::kWorker ||
-             params.resource_type == ResourceType::kSharedWorker);
-      auto provider_type =
-          params.resource_type == ResourceType::kWorker
-              ? blink::mojom::ServiceWorkerProviderType::kForDedicatedWorker
-              : blink::mojom::ServiceWorkerProviderType::kForSharedWorker;
-      provider_host = ServiceWorkerProviderHost::CreateForWebWorker(
-          context_core->AsWeakPtr(), params.process_id, provider_type,
+      DCHECK(params.resource_type == blink::mojom::ResourceType::kWorker ||
+             params.resource_type == blink::mojom::ResourceType::kSharedWorker);
+      auto container_type =
+          params.resource_type == blink::mojom::ResourceType::kWorker
+              ? blink::mojom::ServiceWorkerContainerType::kForDedicatedWorker
+              : blink::mojom::ServiceWorkerContainerType::kForSharedWorker;
+      container_host = ServiceWorkerContainerHost::CreateForWebWorker(
+          context_core->AsWeakPtr(), params.process_id, container_type,
           std::move(host_receiver), std::move(client_remote));
     }
-    DCHECK(provider_host);
-    handle_core->set_provider_host(provider_host);
+    DCHECK(container_host);
+    handle_core->set_container_host(container_host);
 
     // Also make the inner interceptor.
     DCHECK(!handle_core->interceptor());
     handle_core->set_interceptor(
         std::make_unique<ServiceWorkerControlleeRequestHandler>(
-            context_core->AsWeakPtr(), provider_host, params.resource_type,
+            context_core->AsWeakPtr(), container_host, params.resource_type,
             params.skip_service_worker));
   }
 
-  // If |initialize_provider_only| is true, we have already determined there is
-  // no registered service worker on the UI thread, so just initialize the
-  // provider for this request.
-  if (initialize_provider_only) {
-    handle_core->interceptor()->InitializeProvider(tentative_resource_request);
+  // If |initialize_container_host_only| is true, we have already determined
+  // there is no registered service worker on the UI thread, so just initialize
+  // the container host for this request.
+  if (initialize_container_host_only) {
+    handle_core->interceptor()->InitializeContainerHost(
+        tentative_resource_request);
     LoaderCallbackWrapperOnCoreThread(handle_core, interceptor_on_ui,
                                       std::move(loader_callback),
                                       /*handler=*/{});
@@ -171,7 +171,7 @@ void MaybeCreateLoaderOnCoreThread(
 ServiceWorkerNavigationLoaderInterceptor::
     ServiceWorkerNavigationLoaderInterceptor(
         const ServiceWorkerNavigationLoaderInterceptorParams& params,
-        base::WeakPtr<ServiceWorkerNavigationHandle> handle)
+        base::WeakPtr<ServiceWorkerMainResourceHandle> handle)
     : handle_(std::move(handle)), params_(params) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(handle_);
@@ -207,7 +207,7 @@ void ServiceWorkerNavigationLoaderInterceptor::MaybeCreateLoader(
     handle_->OnCreatedProviderHost(std::move(provider_info));
   }
 
-  bool initialize_provider_only = false;
+  bool initialize_container_host_only = false;
   LoaderCallback original_callback;
   if (!ServiceWorkerContext::IsServiceWorkerOnUIEnabled() &&
       !handle_->context_wrapper()->HasRegistrationForOrigin(
@@ -218,8 +218,8 @@ void ServiceWorkerNavigationLoaderInterceptor::MaybeCreateLoader(
     // after starting it.
     original_callback = std::move(loader_callback);
     loader_callback =
-        base::BindOnce([](SingleRequestURLLoaderFactory::RequestHandler) {});
-    initialize_provider_only = true;
+        base::BindOnce([](scoped_refptr<network::SharedURLLoaderFactory>) {});
+    initialize_container_host_only = true;
   }
 
   // Start the inner interceptor on the core thread. It will call back to
@@ -230,7 +230,8 @@ void ServiceWorkerNavigationLoaderInterceptor::MaybeCreateLoader(
                      handle_->core(), params_, std::move(host_receiver),
                      std::move(client_remote), tentative_resource_request,
                      browser_context, std::move(loader_callback),
-                     std::move(fallback_callback), initialize_provider_only));
+                     std::move(fallback_callback),
+                     initialize_container_host_only));
 
   if (original_callback)
     std::move(original_callback).Run({});
@@ -269,9 +270,9 @@ void ServiceWorkerNavigationLoaderInterceptor::LoaderCallbackWrapper(
   // |handler_on_core_thread| expects to run on the core thread. Give our own
   // wrapper to the loader callback.
   std::move(loader_callback)
-      .Run(base::BindOnce(
+      .Run(base::MakeRefCounted<SingleRequestURLLoaderFactory>(base::BindOnce(
           &ServiceWorkerNavigationLoaderInterceptor::RequestHandlerWrapper,
-          GetWeakPtr(), std::move(handler_on_core_thread)));
+          GetWeakPtr(), std::move(handler_on_core_thread))));
 }
 
 void ServiceWorkerNavigationLoaderInterceptor::FallbackCallbackWrapper(
@@ -290,14 +291,14 @@ ServiceWorkerNavigationLoaderInterceptor::GetWeakPtr() {
 void ServiceWorkerNavigationLoaderInterceptor::RequestHandlerWrapper(
     SingleRequestURLLoaderFactory::RequestHandler handler_on_core_thread,
     const network::ResourceRequest& resource_request,
-    network::mojom::URLLoaderRequest request,
-    network::mojom::URLLoaderClientPtr client) {
+    mojo::PendingReceiver<network::mojom::URLLoader> receiver,
+    mojo::PendingRemote<network::mojom::URLLoaderClient> client) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   ServiceWorkerContextWrapper::RunOrPostTaskOnCoreThread(
       FROM_HERE,
       base::BindOnce(InvokeRequestHandlerOnCoreThread,
                      std::move(handler_on_core_thread), resource_request,
-                     std::move(request), client.PassInterface()));
+                     std::move(receiver), std::move(client)));
 }
 
 }  // namespace content

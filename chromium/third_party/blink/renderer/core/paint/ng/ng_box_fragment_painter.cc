@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/core/paint/ng/ng_box_fragment_painter.h"
 
+#include "base/containers/adapters.h"
 #include "third_party/blink/renderer/core/editing/drag_caret.h"
 #include "third_party/blink/renderer/core/editing/frame_selection.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
@@ -23,10 +24,12 @@
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/paint/background_image_geometry.h"
 #include "third_party/blink/renderer/core/paint/box_decoration_data.h"
+#include "third_party/blink/renderer/core/paint/box_painter.h"
 #include "third_party/blink/renderer/core/paint/compositing/composited_layer_mapping.h"
 #include "third_party/blink/renderer/core/paint/ng/ng_fieldset_painter.h"
 #include "third_party/blink/renderer/core/paint/ng/ng_fragment_painter.h"
 #include "third_party/blink/renderer/core/paint/ng/ng_inline_box_fragment_painter.h"
+#include "third_party/blink/renderer/core/paint/ng/ng_mathml_painter.h"
 #include "third_party/blink/renderer/core/paint/ng/ng_paint_fragment.h"
 #include "third_party/blink/renderer/core/paint/ng/ng_text_fragment_painter.h"
 #include "third_party/blink/renderer/core/paint/object_painter.h"
@@ -43,8 +46,6 @@
 #include "third_party/blink/renderer/platform/graphics/graphics_context_state_saver.h"
 #include "third_party/blink/renderer/platform/graphics/paint/display_item_cache_skipper.h"
 #include "third_party/blink/renderer/platform/graphics/paint/drawing_recorder.h"
-#include "third_party/blink/renderer/platform/graphics/paint/hit_test_display_item.h"
-#include "third_party/blink/renderer/platform/graphics/paint/scroll_hit_test_display_item.h"
 
 namespace blink {
 
@@ -63,13 +64,29 @@ inline bool IsVisibleToPaint(const NGPhysicalFragment& fragment,
          style.Visibility() == EVisibility::kVisible;
 }
 
-bool FragmentVisibleToHitTestRequest(const NGPaintFragment& paint_fragment,
+inline bool IsVisibleToPaint(const NGFragmentItem& item,
+                             const ComputedStyle& style) {
+  return !item.IsHiddenForPaint() &&
+         style.Visibility() == EVisibility::kVisible;
+}
+
+inline bool IsVisibleToHitTest(const HitTestRequest& request,
+                               const ComputedStyle& style) {
+  return request.IgnorePointerEventsNone() ||
+         style.PointerEvents() != EPointerEvents::kNone;
+}
+
+inline bool IsVisibleToHitTest(const NGFragmentItem& item,
+                               const HitTestRequest& request) {
+  const ComputedStyle& style = item.Style();
+  return IsVisibleToPaint(item, style) && IsVisibleToHitTest(request, style);
+}
+
+bool FragmentVisibleToHitTestRequest(const NGPhysicalFragment& fragment,
                                      const HitTestRequest& request) {
-  const NGPhysicalFragment& fragment = paint_fragment.PhysicalFragment();
   const ComputedStyle& style = fragment.Style();
   return IsVisibleToPaint(fragment, style) &&
-         (request.IgnorePointerEventsNone() ||
-          style.PointerEvents() != EPointerEvents::kNone);
+         IsVisibleToHitTest(request, style);
 }
 
 // Hit tests inline ancestor elements of |fragment| who do not have their own
@@ -86,7 +103,7 @@ bool HitTestCulledInlineAncestors(HitTestResult& result,
   // To be passed as |accumulated_offset| to LayoutInline::HitTestCulledInline,
   // where it equals the physical offset of the containing block in paint layer.
   const PhysicalOffset fallback_accumulated_offset =
-      physical_offset - fragment.InlineOffsetToContainerBox();
+      physical_offset - fragment.OffsetInContainerBlock();
   const LayoutObject* limit_layout_object =
       parent.PhysicalFragment().IsLineBox() ? parent.Parent()->GetLayoutObject()
                                             : parent.GetLayoutObject();
@@ -139,71 +156,122 @@ bool FragmentRequiresLegacyFallback(const NGPhysicalFragment& fragment) {
   // Fallback to LayoutObject if this is a root of NG block layout.
   // If this box is for this painter, LayoutNGBlockFlow will call this back.
   // Otherwise it calls legacy painters.
-  return fragment.IsBlockFormattingContextRoot();
+  return fragment.IsFormattingContextRoot();
 }
 
-// Recursively build up backplates behind inline text boxes, each split at the
-// paragraph level. Store the results in paragraph_backplates.
-void BuildBackplate(const NGPaintFragment* line,
-                    const PhysicalOffset& paint_offset,
-                    PhysicalRect* current_backplate,
-                    int* consecutive_line_breaks,
-                    Vector<PhysicalRect>* paragraph_backplates) {
-  DCHECK(current_backplate && consecutive_line_breaks && paragraph_backplates);
-
+// Returns a vector of backplates that surround the paragraphs of text within
+// line_boxes.
+//
+// This function traverses descendants of an inline formatting context in
+// pre-order DFS and build up backplates behind inline text boxes, each split at
+// the paragraph level. Store the results in paragraph_backplates.
+Vector<PhysicalRect> BuildBackplate(NGInlineCursor* descendants,
+                                    const PhysicalOffset& paint_offset) {
   // The number of consecutive forced breaks that split the backplate by
   // paragraph.
   static constexpr int kMaxConsecutiveLineBreaks = 2;
+
+  struct Backplates {
+    STACK_ALLOCATED();
+
+   public:
+    void AddTextRect(const PhysicalRect& box_rect) {
+      if (consecutive_line_breaks >= kMaxConsecutiveLineBreaks) {
+        // This is a paragraph point.
+        paragraph_backplates.push_back(current_backplate);
+        current_backplate = PhysicalRect();
+      }
+      consecutive_line_breaks = 0;
+
+      current_backplate.Unite(box_rect);
+    }
+
+    void AddLineBreak() { consecutive_line_breaks++; }
+
+    Vector<PhysicalRect> paragraph_backplates;
+    PhysicalRect current_backplate;
+    int consecutive_line_breaks = 0;
+  } backplates;
 
   // Build up and paint backplates of all child inline text boxes. We are not
   // able to simply use the linebox rect to compute the backplate because the
   // backplate should only be painted for inline text and not for atomic
   // inlines.
-  for (const NGPaintFragment* child : line->Children()) {
-    const NGPhysicalFragment& child_fragment = child->PhysicalFragment();
-    if (child_fragment.IsHiddenForPaint() || child_fragment.IsFloating())
-      continue;
-    if (auto* text_fragment =
-            DynamicTo<NGPhysicalTextFragment>(child_fragment)) {
-      if (text_fragment->IsLineBreak()) {
-        (*consecutive_line_breaks)++;
+  for (; *descendants; descendants->MoveToNext()) {
+    if (const NGPaintFragment* child = descendants->CurrentPaintFragment()) {
+      const NGPhysicalFragment& child_fragment = child->PhysicalFragment();
+      if (child_fragment.IsHiddenForPaint() || child_fragment.IsFloating())
         continue;
-      }
+      if (auto* text_fragment =
+              DynamicTo<NGPhysicalTextFragment>(child_fragment)) {
+        if (text_fragment->IsLineBreak()) {
+          backplates.AddLineBreak();
+          continue;
+        }
 
-      if (*consecutive_line_breaks >= kMaxConsecutiveLineBreaks) {
-        // This is a paragraph point.
-        paragraph_backplates->push_back(*current_backplate);
-        *current_backplate = PhysicalRect();
+        PhysicalRect box_rect(child->OffsetInContainerBlock() + paint_offset,
+                              child->Size());
+        backplates.AddTextRect(box_rect);
       }
-      *consecutive_line_breaks = 0;
-      PhysicalRect box_rect(child->InlineOffsetToContainerBox() + paint_offset,
-                            child->Size());
-      current_backplate->Unite(box_rect);
+      continue;
     }
-    if (child_fragment.Type() == NGPhysicalFragment::kFragmentBox) {
-      // If a fragment box was reached, continue to recursively build
-      // up the backplate.
-      BuildBackplate(child, paint_offset, current_backplate,
-                     consecutive_line_breaks, paragraph_backplates);
+    if (const NGFragmentItem* child_item = descendants->CurrentItem()) {
+      if (child_item->IsHiddenForPaint())
+        continue;
+      if (child_item->IsText()) {
+        if (child_item->IsLineBreak()) {
+          backplates.AddLineBreak();
+          continue;
+        }
+
+        PhysicalRect box_rect(
+            child_item->OffsetInContainerBlock() + paint_offset,
+            child_item->Size());
+        backplates.AddTextRect(box_rect);
+      }
+      continue;
     }
+    NOTREACHED();
   }
+
+  if (!backplates.current_backplate.IsEmpty())
+    backplates.paragraph_backplates.push_back(backplates.current_backplate);
+  return backplates.paragraph_backplates;
 }
 
-// Returns a vector of backplates that surround the paragraphs of text within
-// line_boxes.
-Vector<PhysicalRect> BuildBackplate(const NGPaintFragment::ChildList line_boxes,
-                                    const PhysicalOffset& paint_offset) {
-  Vector<PhysicalRect> paragraph_backplates;
-  PhysicalRect current_backplate;
-  int consecutive_line_breaks = 0;
-  for (const NGPaintFragment* line : line_boxes) {
-    // Recursively build up and paint backplates for line boxes containing text.
-    BuildBackplate(line, paint_offset, &current_backplate,
-                   &consecutive_line_breaks, &paragraph_backplates);
+bool HitTestAllPhasesInFragment(const NGPhysicalBoxFragment& fragment,
+                                const HitTestLocation& hit_test_location,
+                                PhysicalOffset accumulated_offset,
+                                HitTestResult* result) {
+  // Hit test all phases of inline blocks, inline tables, replaced elements and
+  // non-positioned floats as if they created their own (pseudo- [1]) stacking
+  // context. https://www.w3.org/TR/CSS22/zindex.html#painting-order
+  //
+  // [1] As if it creates a new stacking context, but any positioned descendants
+  // and descendants which actually create a new stacking context should be
+  // considered part of the parent stacking context, not this new one.
+
+  if (!fragment.CanTraverse()) {
+    return fragment.GetMutableLayoutObject()->HitTestAllPhases(
+        *result, hit_test_location, accumulated_offset);
   }
-  if (!current_backplate.IsEmpty())
-    paragraph_backplates.push_back(current_backplate);
-  return paragraph_backplates;
+
+  return NGBoxFragmentPainter(To<NGPhysicalBoxFragment>(fragment))
+      .HitTestAllPhases(*result, hit_test_location, accumulated_offset);
+}
+
+bool NodeAtPointInFragment(const NGPhysicalBoxFragment& fragment,
+                           const HitTestLocation& hit_test_location,
+                           PhysicalOffset accumulated_offset,
+                           HitTestAction action,
+                           HitTestResult* result) {
+  if (!fragment.CanTraverse()) {
+    return fragment.GetMutableLayoutObject()->NodeAtPoint(
+        *result, hit_test_location, accumulated_offset, action);
+  }
+
+  return NGBoxFragmentPainter(fragment).NodeAtPoint(*result, hit_test_location,
+                                                    accumulated_offset, action);
 }
 
 }  // anonymous namespace
@@ -217,16 +285,35 @@ const NGBorderEdges& NGBoxFragmentPainter::BorderEdges() const {
   return *border_edges_;
 }
 
+PhysicalRect NGBoxFragmentPainter::SelfInkOverflow() const {
+  if (paint_fragment_)
+    return paint_fragment_->SelfInkOverflow();
+  if (box_item_)
+    return box_item_->SelfInkOverflow();
+  const NGPhysicalFragment& fragment = PhysicalFragment();
+  DCHECK(fragment.IsBox() && !fragment.IsInlineBox());
+  return ToLayoutBox(fragment.GetLayoutObject())
+      ->PhysicalSelfVisualOverflowRect();
+}
+
+PhysicalRect NGBoxFragmentPainter::ContentsInkOverflow() const {
+  if (const LayoutObject* layout_object = box_fragment_.GetLayoutObject())
+    return ToLayoutBox(layout_object)->PhysicalContentsVisualOverflowRect();
+  return box_fragment_.ContentsInkOverflow();
+}
+
 void NGBoxFragmentPainter::Paint(const PaintInfo& paint_info) {
-  if (PhysicalFragment().IsAtomicInline() &&
+  if (PhysicalFragment().IsPaintedAtomically() &&
       !box_fragment_.HasSelfPaintingLayer())
-    PaintAtomicInline(paint_info);
+    PaintAllPhasesAtomically(paint_info);
   else
     PaintInternal(paint_info);
 }
 
 void NGBoxFragmentPainter::PaintInternal(const PaintInfo& paint_info) {
-  ScopedPaintState paint_state(box_fragment_, paint_info);
+  // Avoid initialization of Optional ScopedPaintState::chunk_properties_
+  // and ScopedPaintState::adjusted_paint_info_.
+  STACK_UNINITIALIZED ScopedPaintState paint_state(box_fragment_, paint_info);
   if (!ShouldPaint(paint_state))
     return;
 
@@ -234,28 +321,56 @@ void NGBoxFragmentPainter::PaintInternal(const PaintInfo& paint_info) {
   PhysicalOffset paint_offset = paint_state.PaintOffset();
   PaintPhase original_phase = info.phase;
 
+  ScopedPaintTimingDetectorBlockPaintHook
+      scoped_paint_timing_detector_block_paint_hook;
+  if (original_phase == PaintPhase::kForeground &&
+      box_fragment_.GetLayoutObject()->IsBox()) {
+    scoped_paint_timing_detector_block_paint_hook.EmplaceIfNeeded(
+        ToLayoutBox(*box_fragment_.GetLayoutObject()),
+        paint_info.context.GetPaintController().CurrentPaintChunkProperties());
+  }
+
   if (original_phase == PaintPhase::kOutline) {
     info.phase = PaintPhase::kDescendantOutlinesOnly;
   } else if (ShouldPaintSelfBlockBackground(original_phase)) {
     info.phase = PaintPhase::kSelfBlockBackgroundOnly;
-    PaintObject(info, paint_offset);
+    // With CompositeAfterPaint we need to call PaintObject twice: once for the
+    // background painting that does not scroll, and a second time for the
+    // background painting that scrolls.
+    // Without CompositeAfterPaint, this happens as the main graphics layer
+    // paints the background, and then the scrolling contents graphics layer
+    // paints the background.
+    if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled()) {
+      auto paint_location = ToLayoutBox(*box_fragment_.GetLayoutObject())
+                                .GetBackgroundPaintLocation();
+      if (!(paint_location & kBackgroundPaintInGraphicsLayer))
+        info.SetSkipsBackground(true);
+      PaintObject(info, paint_offset);
+      info.SetSkipsBackground(false);
+
+      if (paint_location & kBackgroundPaintInScrollingContents) {
+        info.SetIsPaintingScrollingBackground(true);
+        PaintObject(info, paint_offset);
+        info.SetIsPaintingScrollingBackground(false);
+      }
+    } else {
+      PaintObject(info, paint_offset);
+    }
     if (ShouldPaintDescendantBlockBackgrounds(original_phase))
       info.phase = PaintPhase::kDescendantBlockBackgroundsOnly;
   }
 
   if (original_phase != PaintPhase::kSelfBlockBackgroundOnly &&
-      original_phase != PaintPhase::kSelfOutlineOnly) {
-    if ((original_phase == PaintPhase::kForeground ||
-         original_phase == PaintPhase::kFloat ||
-         original_phase == PaintPhase::kForcedColorsModeBackplate ||
-         original_phase == PaintPhase::kDescendantOutlinesOnly) &&
-        box_fragment_.GetLayoutObject()->IsBox()) {
+      original_phase != PaintPhase::kSelfOutlineOnly &&
+      original_phase != PaintPhase::kOverlayOverflowControls) {
+    if (original_phase == PaintPhase::kMask ||
+        !box_fragment_.GetLayoutObject()->IsBox()) {
+      PaintObject(info, paint_offset);
+    } else {
       ScopedBoxContentsPaintState contents_paint_state(
           paint_state, ToLayoutBox(*box_fragment_.GetLayoutObject()));
       PaintObject(contents_paint_state.GetPaintInfo(),
                   contents_paint_state.PaintOffset());
-    } else {
-      PaintObject(info, paint_offset);
     }
   }
 
@@ -276,51 +391,24 @@ void NGBoxFragmentPainter::PaintInternal(const PaintInfo& paint_info) {
 void NGBoxFragmentPainter::RecordScrollHitTestData(
     const PaintInfo& paint_info,
     const DisplayItemClient& background_client) {
-  // Hit test display items are only needed for compositing. This flag is used
-  // for for printing and drag images which do not need hit testing.
-  if (paint_info.GetGlobalPaintFlags() & kGlobalPaintFlattenCompositingLayers)
+  if (!box_fragment_.GetLayoutObject()->IsBox())
     return;
-
-  // If an object is not visible, it does not scroll.
-  if (!IsVisibleToPaint(PhysicalFragment(), box_fragment_.Style()))
-    return;
-
-  // Only create scroll hit test data for objects that scroll.
-  const auto* layer = PhysicalFragment().Layer();
-  if (!layer || !layer->GetScrollableArea() ||
-      !layer->GetScrollableArea()->ScrollsOverflow())
-    return;
-
-  // TODO(pdr): Break dependency on LayoutObject functionality.
-  const LayoutObject& layout_object = *box_fragment_.GetLayoutObject();
-  const auto* fragment = paint_info.FragmentToPaint(layout_object);
-  const auto* properties = fragment ? fragment->PaintProperties() : nullptr;
-
-  // If there is an associated scroll node, emit a scroll hit test display item.
-  if (properties && properties->Scroll()) {
-    DCHECK(properties->ScrollTranslation());
-    // The local border box properties are used instead of the contents
-    // properties so that the scroll hit test is not clipped or scrolled.
-    ScopedPaintChunkProperties scroll_hit_test_properties(
-        paint_info.context.GetPaintController(),
-        fragment->LocalBorderBoxProperties(), background_client,
-        DisplayItem::kScrollHitTest);
-    ScrollHitTestDisplayItem::Record(
-        paint_info.context, background_client, DisplayItem::kScrollHitTest,
-        properties->ScrollTranslation(), fragment->VisualRect());
-  }
+  BoxPainter(ToLayoutBox(*box_fragment_.GetLayoutObject()))
+      .RecordScrollHitTestData(paint_info, background_client);
 }
 
-void NGBoxFragmentPainter::RecordHitTestDataForLine(
-    const PaintInfo& paint_info,
-    const PhysicalOffset& paint_offset,
-    const NGPaintFragment& line) {
-  PhysicalRect border_box = line.PhysicalFragment().LocalRect();
-  border_box.offset += paint_offset;
-  HitTestDisplayItem::Record(
-      paint_info.context, line,
-      HitTestRect(border_box.ToLayoutRect(),
-                  PhysicalFragment().EffectiveAllowedTouchAction()));
+bool NGBoxFragmentPainter::ShouldRecordHitTestData(
+    const PaintInfo& paint_info) {
+  // Hit test data are only needed for compositing. This flag is used for for
+  // printing and drag images which do not need hit testing.
+  if (paint_info.GetGlobalPaintFlags() & kGlobalPaintFlattenCompositingLayers)
+    return false;
+
+  // If an object is not visible, it does not participate in hit testing.
+  if (PhysicalFragment().Style().Visibility() != EVisibility::kVisible)
+    return false;
+
+  return true;
 }
 
 void NGBoxFragmentPainter::PaintObject(
@@ -347,18 +435,48 @@ void NGBoxFragmentPainter::PaintObject(
     return;
   }
 
-  if (paint_phase == PaintPhase::kForeground &&
-      paint_info.ShouldAddUrlMetadata()) {
-    NGFragmentPainter(box_fragment_, paint_fragment_)
-        .AddURLRectIfNeeded(paint_info, paint_offset);
+  if (paint_phase == PaintPhase::kForeground) {
+    if (paint_info.ShouldAddUrlMetadata()) {
+      NGFragmentPainter(box_fragment_, GetDisplayItemClient())
+          .AddURLRectIfNeeded(paint_info, paint_offset);
+    }
+    if (is_visible && box_fragment_.IsMathMLFraction())
+      NGMathMLPainter(box_fragment_).PaintFractionBar(paint_info, paint_offset);
   }
 
   if (paint_phase != PaintPhase::kSelfOutlineOnly &&
-      !physical_box_fragment.Children().empty() &&
+      (!physical_box_fragment.Children().empty() ||
+       physical_box_fragment.HasItems() || inline_box_cursor_) &&
       !paint_info.DescendantPaintingBlocked()) {
-    if (physical_box_fragment.ChildrenInline()) {
-      DCHECK(paint_fragment_ || PhysicalFragment().HasItems());
-      if (paint_phase != PaintPhase::kFloat) {
+    if (UNLIKELY(paint_phase == PaintPhase::kForeground &&
+                 box_fragment_.Style().HasColumnRule()))
+      PaintColumnRules(paint_info, paint_offset);
+
+    if (paint_phase != PaintPhase::kFloat) {
+      if (UNLIKELY(inline_box_cursor_)) {
+        // Use the descendants cursor for this painter if it is given.
+        // Self-painting inline box paints only parts of the container block.
+        // Adjust |paint_offset| because it is the offset of the inline box, but
+        // |descendants_| has offsets to the contaiing block.
+        DCHECK(box_item_);
+        NGInlineCursor descendants = inline_box_cursor_->CursorForDescendants();
+        const PhysicalOffset paint_offset_to_inline_formatting_context =
+            paint_offset - box_item_->OffsetInContainerBlock();
+        PaintInlineItems(paint_info.ForDescendants(),
+                         paint_offset_to_inline_formatting_context,
+                         box_item_->OffsetInContainerBlock(), &descendants);
+      } else if (items_) {
+        if (physical_box_fragment.IsBlockFlow()) {
+          PaintBlockFlowContents(paint_info, paint_offset);
+        } else {
+          DCHECK(physical_box_fragment.IsInlineBox());
+          NGInlineCursor cursor(*items_);
+          PaintInlineItems(paint_info.ForDescendants(), paint_offset,
+                           PhysicalOffset(), &cursor);
+        }
+      } else if (physical_box_fragment.IsInlineFormattingContext()) {
+        DCHECK(!RuntimeEnabledFeatures::LayoutNGFragmentItemEnabled());
+        DCHECK(paint_fragment_);
         if (physical_box_fragment.IsBlockFlow()) {
           PaintBlockFlowContents(paint_info, paint_offset);
         } else if (ShouldPaintDescendantOutlines(paint_info.phase)) {
@@ -371,27 +489,21 @@ void NGBoxFragmentPainter::PaintObject(
           PaintInlineChildren(paint_fragment_->Children(), paint_info,
                               paint_offset);
         }
+      } else {
+        PaintBlockChildren(paint_info, paint_offset);
       }
+    }
 
-      if (paint_phase == PaintPhase::kFloat ||
-          paint_phase == PaintPhase::kSelection ||
-          paint_phase == PaintPhase::kTextClip) {
-        if (physical_box_fragment.HasFloatingDescendants())
-          PaintFloats(paint_info);
-      }
-    } else {
-      if (paint_phase != PaintPhase::kFloat)
-        PaintBlockChildren(paint_info);
-
-      if (paint_phase == PaintPhase::kFloat ||
-          paint_phase == PaintPhase::kSelection ||
-          paint_phase == PaintPhase::kTextClip)
+    if (paint_phase == PaintPhase::kFloat ||
+        paint_phase == PaintPhase::kSelectionDragImage ||
+        paint_phase == PaintPhase::kTextClip) {
+      if (physical_box_fragment.HasFloatingDescendantsForPaint())
         PaintFloats(paint_info);
     }
   }
 
   if (ShouldPaintSelfOutline(paint_phase)) {
-    NGFragmentPainter(box_fragment_, paint_fragment_)
+    NGFragmentPainter(box_fragment_, GetDisplayItemClient())
         .PaintOutline(paint_info, paint_offset);
   }
 
@@ -420,14 +532,19 @@ void NGBoxFragmentPainter::PaintBlockFlowContents(
     const PhysicalOffset& paint_offset) {
   const NGPhysicalBoxFragment& fragment = PhysicalFragment();
   const LayoutObject* layout_object = fragment.GetLayoutObject();
+  DCHECK(fragment.IsInlineFormattingContext());
 
-  DCHECK(fragment.ChildrenInline());
-  DCHECK(paint_fragment_ || items_);
-
-  if (items_) {
-    PaintInlineItems(paint_info.ForDescendants(), paint_offset);
+  // When the layout-tree gets into a bad state, we can end up trying to paint
+  // a fragment with inline children, without a paint fragment. See:
+  // http://crbug.com/1022545
+  if ((!paint_fragment_ && !items_) ||
+      (layout_object && layout_object->NeedsLayout())) {
+    NOTREACHED();
     return;
   }
+
+  // Trying to rule out a null GraphicsContext, see: https://crbug.com/1040298
+  CHECK(&paint_info.context);
 
   // Check if there were contents to be painted and return early if none.
   // The union of |ContentsInkOverflow()| and |LocalRect()| covers the rect to
@@ -439,76 +556,60 @@ void NGBoxFragmentPainter::PaintBlockFlowContents(
   // |LayoutOverflow()|, but this can be approximiated with
   // |ContentsInkOverflow()|.
   PhysicalRect content_ink_rect = fragment.LocalRect();
-  content_ink_rect.Unite(paint_fragment_->ContentsInkOverflow());
+  content_ink_rect.Unite(ContentsInkOverflow());
   content_ink_rect.offset += PhysicalOffset(paint_offset);
   if (!paint_info.GetCullRect().Intersects(content_ink_rect.ToLayoutRect()))
     return;
 
-  if (paint_info.phase == PaintPhase::kMask) {
-    PaintMask(paint_info, paint_offset);
+  if (paint_fragment_) {
+    NGInlineCursor children(*paint_fragment_);
+    PaintLineBoxChildren(&children, paint_info.ForDescendants(), paint_offset);
     return;
   }
-
-  DCHECK(layout_object->IsLayoutBlockFlow());
-  const auto& layout_block = To<LayoutBlock>(*layout_object);
-  DCHECK(layout_block.ChildrenInline());
-  PaintLineBoxChildren(paint_fragment_->Children(), paint_info.ForDescendants(),
-                       paint_offset);
+  DCHECK(items_);
+  NGInlineCursor children(*items_);
+  PaintLineBoxChildren(&children, paint_info.ForDescendants(), paint_offset);
 }
 
-void NGBoxFragmentPainter::PaintBlockChildren(const PaintInfo& paint_info) {
-  DCHECK(!box_fragment_.ChildrenInline());
-  DCHECK(!box_fragment_.GetLayoutObject()->ChildrenInline());
+void NGBoxFragmentPainter::PaintBlockChildren(const PaintInfo& paint_info,
+                                              PhysicalOffset paint_offset) {
+  DCHECK(!box_fragment_.IsInlineFormattingContext());
   PaintInfo paint_info_for_descendants = paint_info.ForDescendants();
   for (const NGLink& child : box_fragment_.Children()) {
     const NGPhysicalFragment& child_fragment = *child;
-    if (child_fragment.HasSelfPaintingLayer() || child_fragment.IsFloating())
+    DCHECK(child_fragment.IsBox());
+    if (child_fragment.HasSelfPaintingLayer() || child_fragment.IsFloating() ||
+        child_fragment.IsColumnBox())
       continue;
 
-    if (child_fragment.Type() == NGPhysicalFragment::kFragmentBox) {
-      // TODO(kojii): We could skip going through |LayoutObject| when we know
-      // children are always laid out by NG. See
-      // |FragmentRequiresLegacyFallback|.
-      child_fragment.GetLayoutObject()->Paint(paint_info_for_descendants);
-    } else {
-      DCHECK_EQ(child_fragment.Type(),
-                NGPhysicalFragment::kFragmentRenderedLegend);
+    const auto& box_child_fragment = To<NGPhysicalBoxFragment>(child_fragment);
+    if (box_child_fragment.CanTraverse()) {
+      if (!box_child_fragment.GetLayoutObject()) {
+        // It's normally FragmentData that provides us with the paint offset.
+        // FragmentData is (at least currently) associated with a LayoutObject.
+        // If we have no LayoutObject, we have no FragmentData, so we need to
+        // calculate the offset on our own (which is very simple, anyway).
+        // Bypass Paint() and jump directly to PaintObject(), to skip the code
+        // that assumes that we have a LayoutObject (and FragmentData).
+        PhysicalOffset child_offset = paint_offset + child.offset;
+        NGBoxFragmentPainter(box_child_fragment)
+            .PaintObject(paint_info, child_offset);
+        continue;
+      }
+
+      NGBoxFragmentPainter(box_child_fragment)
+          .Paint(paint_info_for_descendants);
+      continue;
     }
+    child_fragment.GetLayoutObject()->Paint(paint_info_for_descendants);
   }
 }
 
-void NGBoxFragmentPainter::PaintInlineFloatingChildren(
-    NGPaintFragment::ChildList children,
-    const PaintInfo& paint_info) {
-  for (const NGPaintFragment* child : children) {
-    const NGPhysicalFragment& child_fragment = child->PhysicalFragment();
-    if (child_fragment.HasSelfPaintingLayer())
-      continue;
-    if (child_fragment.IsFloating()) {
-      // TODO(kojii): The float is outside of the inline formatting context and
-      // that it maybe another NG inline formatting context, NG block layout, or
-      // legacy. NGBoxFragmentPainter can handle only the first case. In order
-      // to cover more tests for other two cases, we always fallback to legacy,
-      // which will forward back to NGBoxFragmentPainter if the float is for
-      // NGBoxFragmentPainter. We can shortcut this for the first case when
-      // we're more stable.
-      ObjectPainter(*child_fragment.GetLayoutObject())
-          .PaintAllPhasesAtomically(paint_info);
-      continue;
-    }
-    if (const auto* child_container =
-            DynamicTo<NGPhysicalContainerFragment>(&child_fragment)) {
-      if (child_container->HasFloatingDescendants())
-        PaintInlineFloatingChildren(child->Children(), paint_info);
-    }
-  }
-}
-
-void NGBoxFragmentPainter::PaintFloatingItems(const PaintInfo& paint_info) {
-  DCHECK(items_);
-  DCHECK(PhysicalFragment().HasFloatingDescendants());
-
-  for (const std::unique_ptr<NGFragmentItem>& item : items_->Items()) {
+void NGBoxFragmentPainter::PaintFloatingItems(const PaintInfo& paint_info,
+                                              NGInlineCursor* cursor) {
+  for (; *cursor; cursor->MoveToNext()) {
+    const NGFragmentItem* item = cursor->Current().Item();
+    DCHECK(item);
     const NGPhysicalBoxFragment* child_fragment = item->BoxFragment();
     if (!child_fragment || child_fragment->HasSelfPaintingLayer() ||
         !child_fragment->IsFloating())
@@ -525,47 +626,102 @@ void NGBoxFragmentPainter::PaintFloatingItems(const PaintInfo& paint_info) {
   }
 }
 
-void NGBoxFragmentPainter::PaintBlockFloatingChildren(
+void NGBoxFragmentPainter::PaintFloatingChildren(
     const NGPhysicalContainerFragment& container,
-    const PaintInfo& paint_info) {
+    const PaintInfo& paint_info,
+    const PaintInfo& float_paint_info) {
+  DCHECK(container.HasFloatingDescendantsForPaint());
+
+  if (const NGPhysicalBoxFragment* box =
+          DynamicTo<NGPhysicalBoxFragment>(&container)) {
+    if (const NGFragmentItems* items = box->Items()) {
+      NGInlineCursor cursor(*items);
+      PaintFloatingItems(float_paint_info, &cursor);
+      return;
+    }
+    if (inline_box_cursor_) {
+      DCHECK(box->IsInlineBox());
+      NGInlineCursor descendants = inline_box_cursor_->CursorForDescendants();
+      PaintFloatingItems(float_paint_info, &descendants);
+      return;
+    }
+    DCHECK(!RuntimeEnabledFeatures::LayoutNGFragmentItemEnabled() ||
+           !box->IsInlineBox());
+  }
+
   for (const NGLink& child : container.Children()) {
     const NGPhysicalFragment& child_fragment = *child;
-    if (child_fragment.HasSelfPaintingLayer())
+    if (child_fragment.HasSelfPaintingLayer() || child_fragment.IsColumnBox())
       continue;
-    if (child_fragment.IsFloating()) {
-      // TODO(kojii): The float is outside of the inline formatting context and
-      // that it maybe another NG inline formatting context, NG block layout, or
-      // legacy. NGBoxFragmentPainter can handle only the first case. In order
-      // to cover more tests for other two cases, we always fallback to legacy,
-      // which will forward back to NGBoxFragmentPainter if the float is for
-      // NGBoxFragmentPainter. We can shortcut this for the first case when
-      // we're more stable.
-      ObjectPainter(*child_fragment.GetLayoutObject())
-          .PaintAllPhasesAtomically(paint_info);
+
+    if (child_fragment.CanTraverse()) {
+      if (child_fragment.IsFloating()) {
+        NGBoxFragmentPainter(To<NGPhysicalBoxFragment>(child_fragment))
+            .Paint(float_paint_info);
+        continue;
+      }
+
+      // Any non-floated children which paint atomically shouldn't be traversed.
+      if (child_fragment.IsPaintedAtomically())
+        continue;
+    } else {
+      if (child_fragment.IsFloating()) {
+        // TODO(kojii): The float is outside of the inline formatting context
+        // and that it maybe another NG inline formatting context, NG block
+        // layout, or legacy. NGBoxFragmentPainter can handle only the first
+        // case. In order to cover more tests for other two cases, we always
+        // fallback to legacy, which will forward back to NGBoxFragmentPainter
+        // if the float is for NGBoxFragmentPainter. We can shortcut this for
+        // the first case when we're more stable.
+
+        ObjectPainter(*child_fragment.GetLayoutObject())
+            .PaintAllPhasesAtomically(float_paint_info);
+        continue;
+      }
+
+      // Any children which paint atomically shouldn't be traversed.
+      if (child_fragment.IsPaintedAtomically())
+        continue;
+
+      if (child_fragment.Type() == NGPhysicalFragment::kFragmentBox &&
+          FragmentRequiresLegacyFallback(child_fragment)) {
+        child_fragment.GetLayoutObject()->Paint(paint_info);
+        continue;
+      }
+    }
+
+    // The selection paint traversal is special. We will visit all fragments
+    // (including floats) in the normal paint traversal. There isn't any point
+    // performing the special float traversal here.
+    if (paint_info.phase == PaintPhase::kSelectionDragImage)
+      continue;
+
+    const auto* child_container =
+        DynamicTo<NGPhysicalContainerFragment>(&child_fragment);
+    if (!child_container || !child_container->HasFloatingDescendantsForPaint())
+      continue;
+
+    if (child_container->HasOverflowClip()) {
+      // We need to properly visit this fragment for painting, rather than
+      // jumping directly to its children (which is what we normally do when
+      // looking for floats), in order to set up the clip rectangle.
+      NGBoxFragmentPainter(To<NGPhysicalBoxFragment>(*child_container))
+          .Paint(paint_info);
       continue;
     }
-    if (const auto* child_container =
-            DynamicTo<NGPhysicalContainerFragment>(&child_fragment))
-      PaintBlockFloatingChildren(*child_container, paint_info);
+
+    PaintFloatingChildren(*child_container, paint_info, float_paint_info);
   }
 }
 
 void NGBoxFragmentPainter::PaintFloats(const PaintInfo& paint_info) {
-  DCHECK(PhysicalFragment().HasFloatingDescendants() ||
-         !PhysicalFragment().ChildrenInline());
+  DCHECK(PhysicalFragment().HasFloatingDescendantsForPaint() ||
+         !PhysicalFragment().IsInlineFormattingContext());
 
   PaintInfo float_paint_info(paint_info);
   if (paint_info.phase == PaintPhase::kFloat)
     float_paint_info.phase = PaintPhase::kForeground;
-  if (paint_fragment_) {
-    PaintInlineFloatingChildren(paint_fragment_->Children(), float_paint_info);
-    return;
-  }
-  if (items_) {
-    PaintFloatingItems(float_paint_info);
-    return;
-  }
-  PaintBlockFloatingChildren(PhysicalFragment(), float_paint_info);
+  PaintFloatingChildren(PhysicalFragment(), paint_info, float_paint_info);
 }
 
 void NGBoxFragmentPainter::PaintMask(const PaintInfo& paint_info,
@@ -626,6 +782,10 @@ void NGBoxFragmentPainter::PaintBoxDecorationBackground(
   } else {
     paint_rect.offset = paint_offset;
     paint_rect.size = box_fragment_.Size();
+    if (layout_object.IsTableCell()) {
+      paint_rect.size =
+          PhysicalSize(ToLayoutBox(layout_object).PixelSnappedSize());
+    }
     background_client = &GetDisplayItemClient();
   }
 
@@ -643,12 +803,10 @@ void NGBoxFragmentPainter::PaintBoxDecorationBackground(
     }
   }
 
-  if (NGFragmentPainter::ShouldRecordHitTestData(paint_info,
-                                                 PhysicalFragment())) {
-    HitTestDisplayItem::Record(
-        paint_info.context, *background_client,
-        HitTestRect(paint_rect.ToLayoutRect(),
-                    PhysicalFragment().EffectiveAllowedTouchAction()));
+  if (ShouldRecordHitTestData(paint_info)) {
+    paint_info.context.GetPaintController().RecordHitTestData(
+        *background_client, PixelSnappedIntRect(paint_rect),
+        PhysicalFragment().EffectiveAllowedTouchAction());
   }
 
   bool needs_scroll_hit_test = true;
@@ -675,24 +833,6 @@ void NGBoxFragmentPainter::PaintBoxDecorationBackground(
 
 // TODO(kojii): This logic is kept in sync with BoxPainter. Not much efforts to
 // eliminate LayoutObject dependency were done yet.
-bool NGBoxFragmentPainter::BackgroundIsKnownToBeOpaque(
-    const PaintInfo& paint_info) {
-  const LayoutBox& layout_box = ToLayoutBox(*box_fragment_.GetLayoutObject());
-
-  // If the box has multiple fragments, its VisualRect is the bounding box of
-  // all fragments' visual rects, which is likely to cover areas that are not
-  // covered by painted background.
-  if (layout_box.FirstFragment().NextFragment())
-    return false;
-
-  PhysicalRect bounds = IsPaintingScrollingBackground(paint_info)
-                            ? layout_box.PhysicalLayoutOverflowRect()
-                            : layout_box.PhysicalSelfVisualOverflowRect();
-  return layout_box.BackgroundIsKnownToBeOpaqueInRect(bounds);
-}
-
-// TODO(kojii): This logic is kept in sync with BoxPainter. Not much efforts to
-// eliminate LayoutObject dependency were done yet.
 void NGBoxFragmentPainter::PaintBoxDecorationBackgroundWithRect(
     const PaintInfo& paint_info,
     const PhysicalRect& paint_rect,
@@ -703,17 +843,9 @@ void NGBoxFragmentPainter::PaintBoxDecorationBackgroundWithRect(
   const ComputedStyle& style = box_fragment_.Style();
 
   base::Optional<DisplayItemCacheSkipper> cache_skipper;
-  // Disable cache in under-invalidation checking mode for MediaSliderPart
-  // because we always paint using the latest data (buffered ranges, current
-  // time and duration) which may be different from the cached data, and for
-  // delayed-invalidation object because it may change before it's actually
-  // invalidated. Note that we still report harmless under-invalidation of
-  // non-delayed-invalidation animated background, which should be ignored.
   if (RuntimeEnabledFeatures::PaintUnderInvalidationCheckingEnabled() &&
-      (style.EffectiveAppearance() == kMediaSliderPart ||
-       layout_box.ShouldDelayFullPaintInvalidation())) {
+      ShouldSkipPaintUnderInvalidationChecking(layout_box))
     cache_skipper.emplace(paint_info.context);
-  }
 
   BoxDecorationData box_decoration_data(paint_info, PhysicalFragment());
   if (!box_decoration_data.ShouldPaint())
@@ -727,11 +859,6 @@ void NGBoxFragmentPainter::PaintBoxDecorationBackgroundWithRect(
   DrawingRecorder recorder(paint_info.context, background_client,
                            DisplayItem::kBoxDecorationBackground);
   GraphicsContextStateSaver state_saver(paint_info.context, false);
-
-  if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled() &&
-      paint_rect.EdgesOnPixelBoundaries() &&
-      BackgroundIsKnownToBeOpaque(paint_info))
-    recorder.SetKnownToBeOpaque();
 
   const NGBorderEdges& border_edges = BorderEdges();
   if (box_decoration_data.ShouldPaintShadow()) {
@@ -827,6 +954,104 @@ void NGBoxFragmentPainter::PaintBoxDecorationBackgroundWithRect(
     paint_info.context.EndLayer();
 }
 
+void NGBoxFragmentPainter::PaintColumnRules(
+    const PaintInfo& paint_info,
+    const PhysicalOffset& paint_offset) {
+  const ComputedStyle& style = box_fragment_.Style();
+  DCHECK(style.HasColumnRule());
+
+  // TODO(crbug.com/792437): Certain rule styles should be converted.
+  EBorderStyle rule_style = style.ColumnRuleStyle();
+
+  if (DrawingRecorder::UseCachedDrawingIfPossible(paint_info.context,
+                                                  GetDisplayItemClient(),
+                                                  DisplayItem::kColumnRules))
+    return;
+
+  DrawingRecorder recorder(paint_info.context, GetDisplayItemClient(),
+                           DisplayItem::kColumnRules);
+
+  const Color& rule_color =
+      LayoutObject::ResolveColor(style, GetCSSPropertyColumnRuleColor());
+  LayoutUnit rule_thickness(style.ColumnRuleWidth());
+  PhysicalRect previous_column;
+  bool past_first_column_in_row = false;
+  for (const NGLink& child : box_fragment_.Children()) {
+    if (!child->IsColumnBox()) {
+      // Column spanner. Continue in the next row, if there are 2 columns or
+      // more there.
+      past_first_column_in_row = false;
+      previous_column = PhysicalRect();
+      continue;
+    }
+
+    PhysicalRect current_column(child.offset, child->Size());
+    if (!past_first_column_in_row) {
+      // Rules are painted *between* columns. Need to see if we have a second
+      // one before painting anything.
+      past_first_column_in_row = true;
+      previous_column = current_column;
+      continue;
+    }
+
+    PhysicalRect rule;
+    BoxSide box_side;
+    if (previous_column.Y() == current_column.Y() ||
+        previous_column.Bottom() == current_column.Bottom()) {
+      // Horizontal writing-mode.
+      DCHECK(style.IsHorizontalWritingMode());
+      LayoutUnit center;
+      if (previous_column.X() < current_column.X()) {
+        // Left to right.
+        center = (previous_column.X() + current_column.Right()) / 2;
+        box_side = BoxSide::kLeft;
+      } else {
+        // Right to left.
+        center = (current_column.X() + previous_column.Right()) / 2;
+        box_side = BoxSide::kRight;
+      }
+      LayoutUnit rule_length = previous_column.Height();
+      DCHECK_GE(rule_length, current_column.Height());
+      rule.offset.top = previous_column.offset.top;
+      rule.size.height = rule_length;
+      rule.offset.left = center - rule_thickness / 2;
+      rule.size.width = rule_thickness;
+    } else {
+      // Vertical writing-mode.
+      LayoutUnit center;
+      if (previous_column.Y() < current_column.Y()) {
+        // Top to bottom.
+        center = (previous_column.Y() + current_column.Bottom()) / 2;
+        box_side = BoxSide::kTop;
+      } else {
+        // Bottom to top.
+        center = (current_column.Y() + previous_column.Bottom()) / 2;
+        box_side = BoxSide::kBottom;
+      }
+      LayoutUnit rule_length = previous_column.Width();
+      DCHECK_GE(rule_length, current_column.Width());
+      rule.offset.left = previous_column.offset.left;
+      rule.size.width = rule_length;
+      rule.offset.top = center - rule_thickness / 2;
+      rule.size.height = rule_thickness;
+    }
+
+    // TODO(crbug.com/792435): The spec actually kind of says that the rules
+    // should be as tall as the entire multicol container, not just as tall as
+    // the column fragments (this difference matters when block-size is
+    // specified and columns are balanced).
+
+    rule.Move(paint_offset);
+    IntRect snapped_rule = PixelSnappedIntRect(rule);
+    ObjectPainter::DrawLineForBoxSide(paint_info.context, snapped_rule.X(),
+                                      snapped_rule.Y(), snapped_rule.MaxX(),
+                                      snapped_rule.MaxY(), box_side, rule_color,
+                                      rule_style, 0, 0, true);
+
+    previous_column = current_column;
+  }
+}
+
 // TODO(kojii): This logic is kept in sync with BoxPainter. Not much efforts to
 // eliminate LayoutObject dependency were done yet.
 void NGBoxFragmentPainter::PaintBackground(
@@ -834,15 +1059,14 @@ void NGBoxFragmentPainter::PaintBackground(
     const PhysicalRect& paint_rect,
     const Color& background_color,
     BackgroundBleedAvoidance bleed_avoidance) {
-  const LayoutObject& layout_object = *box_fragment_.GetLayoutObject();
-  const LayoutBox& layout_box = ToLayoutBox(layout_object);
+  const LayoutBox& layout_box = ToLayoutBox(*box_fragment_.GetLayoutObject());
   if (layout_box.BackgroundTransfersToView())
     return;
   if (layout_box.BackgroundIsKnownToBeObscured())
     return;
+
   // TODO(eae): Switch to LayoutNG version of BackgroundImageGeometry.
-  BackgroundImageGeometry geometry(*static_cast<const LayoutBoxModelObject*>(
-      box_fragment_.GetLayoutObject()));
+  BackgroundImageGeometry geometry(layout_box);
   PaintFillLayers(paint_info, background_color,
                   box_fragment_.Style().BackgroundLayers(), paint_rect,
                   geometry, bleed_avoidance);
@@ -872,14 +1096,15 @@ void NGBoxFragmentPainter::PaintInlineChildBoxUsingLegacyFallback(
 void NGBoxFragmentPainter::PaintAllPhasesAtomically(
     const PaintInfo& paint_info) {
   // Self-painting AtomicInlines should go to normal paint logic.
-  DCHECK(!(PhysicalFragment().IsAtomicInline() &&
+  DCHECK(!(PhysicalFragment().IsPaintedAtomically() &&
            box_fragment_.HasSelfPaintingLayer()));
 
   // Pass PaintPhaseSelection and PaintPhaseTextClip is handled by the regular
   // foreground paint implementation. We don't need complete painting for these
   // phases.
   PaintPhase phase = paint_info.phase;
-  if (phase == PaintPhase::kSelection || phase == PaintPhase::kTextClip)
+  if (phase == PaintPhase::kSelectionDragImage ||
+      phase == PaintPhase::kTextClip)
     return PaintInternal(paint_info);
 
   if (phase != PaintPhase::kForeground)
@@ -902,48 +1127,68 @@ void NGBoxFragmentPainter::PaintAllPhasesAtomically(
   PaintInternal(local_paint_info);
 }
 
-void NGBoxFragmentPainter::PaintInlineItems(
-    const PaintInfo& paint_info,
-    const PhysicalOffset& paint_offset) {
-  DCHECK(items_);
-
-  ScopedPaintTimingDetectorBlockPaintHook
-      scoped_paint_timing_detector_block_paint_hook;
-  // TODO(kojii): Copy more from |PaintLineBoxChildren|.
-
-  NGInlineCursor cursor(*items_);
-  while (cursor) {
-    const NGFragmentItem* item = cursor.CurrentItem();
+void NGBoxFragmentPainter::PaintInlineItems(const PaintInfo& paint_info,
+                                            const PhysicalOffset& paint_offset,
+                                            const PhysicalOffset& parent_offset,
+                                            NGInlineCursor* cursor) {
+  while (*cursor) {
+    const NGFragmentItem* item = cursor->CurrentItem();
     DCHECK(item);
     switch (item->Type()) {
       case NGFragmentItem::kText:
-        PaintTextItem(cursor, paint_info, paint_offset);
-        break;
       case NGFragmentItem::kGeneratedText:
-        // TODO(kojii): Implement.
-        break;
-      case NGFragmentItem::kLine:
-        // TODO(kojii): Implement.
+        if (!item->IsHiddenForPaint())
+          PaintTextItem(*cursor, paint_info, paint_offset, parent_offset);
+        cursor->MoveToNext();
         break;
       case NGFragmentItem::kBox:
-        if (PaintBoxItem(*item, paint_info, paint_offset) == kSkipChildren) {
-          cursor.MoveToNextSkippingChildren();
-          continue;
-        }
+        if (!item->IsHiddenForPaint())
+          PaintBoxItem(*item, *cursor, paint_info, paint_offset, parent_offset);
+        cursor->MoveToNextSkippingChildren();
+        break;
+      case NGFragmentItem::kLine:
+        NOTREACHED();
+        cursor->MoveToNext();
         break;
     }
-    cursor.MoveToNext();
+  }
+}
+
+// Paint a line box. This function paints hit tests and backgrounds of
+// `::first-line`. In all other cases, the container box paints background.
+inline void NGBoxFragmentPainter::PaintLineBox(
+    const NGPhysicalFragment& line_box_fragment,
+    const DisplayItemClient& display_item_client,
+    const NGPaintFragment* line_box_paint_fragment,
+    const NGFragmentItem* line_box_item,
+    const PaintInfo& paint_info,
+    const PhysicalOffset& child_offset) {
+  if (paint_info.phase != PaintPhase::kForeground)
+    return;
+
+  if (ShouldRecordHitTestData(paint_info)) {
+    PhysicalRect border_box = line_box_fragment.LocalRect();
+    border_box.offset += child_offset;
+    paint_info.context.GetPaintController().RecordHitTestData(
+        display_item_client, PixelSnappedIntRect(border_box),
+        PhysicalFragment().EffectiveAllowedTouchAction());
+  }
+  if (NGLineBoxFragmentPainter::NeedsPaint(line_box_fragment)) {
+    NGLineBoxFragmentPainter line_box_painter(
+        line_box_fragment, line_box_paint_fragment, line_box_item,
+        PhysicalFragment(), paint_fragment_);
+    line_box_painter.PaintBackgroundBorderShadow(paint_info, child_offset);
   }
 }
 
 void NGBoxFragmentPainter::PaintLineBoxChildren(
-    NGPaintFragment::ChildList line_boxes,
+    NGInlineCursor* children,
     const PaintInfo& paint_info,
     const PhysicalOffset& paint_offset) {
   // Only paint during the foreground/selection phases.
   if (paint_info.phase != PaintPhase::kForeground &&
       paint_info.phase != PaintPhase::kForcedColorsModeBackplate &&
-      paint_info.phase != PaintPhase::kSelection &&
+      paint_info.phase != PaintPhase::kSelectionDragImage &&
       paint_info.phase != PaintPhase::kTextClip &&
       paint_info.phase != PaintPhase::kMask &&
       paint_info.phase != PaintPhase::kDescendantOutlinesOnly &&
@@ -952,7 +1197,7 @@ void NGBoxFragmentPainter::PaintLineBoxChildren(
 
   // The only way an inline could paint like this is if it has a layer.
   const auto* layout_object = box_fragment_.GetLayoutObject();
-  DCHECK(layout_object->IsLayoutBlock() ||
+  DCHECK(!layout_object || layout_object->IsLayoutBlock() ||
          (layout_object->IsLayoutInline() && layout_object->HasLayer()));
 
   // if (paint_info.phase == PaintPhase::kForeground && paint_info.IsPrinting())
@@ -960,27 +1205,24 @@ void NGBoxFragmentPainter::PaintLineBoxChildren(
   //                                             paint_offset);
 
   // If we have no lines then we have no work to do.
-  if (line_boxes.IsEmpty())
+  if (!*children)
     return;
 
-  ScopedPaintTimingDetectorBlockPaintHook
-      scoped_paint_timing_detector_block_paint_hook;
-  const auto& layout_block = To<LayoutBlock>(*layout_object);
-  if (paint_info.phase == PaintPhase::kForeground) {
-    scoped_paint_timing_detector_block_paint_hook.EmplaceIfNeeded(
-        layout_block,
-        paint_info.context.GetPaintController().CurrentPaintChunkProperties());
+  if (paint_info.phase == PaintPhase::kForcedColorsModeBackplate &&
+      box_fragment_.GetDocument().InForcedColorsMode()) {
+    PaintBackplate(children, paint_info, paint_offset);
+    return;
   }
 
-  if (paint_info.phase == PaintPhase::kForcedColorsModeBackplate &&
-      layout_block.GetDocument().InForcedColorsMode()) {
-    PaintBackplate(line_boxes, paint_info, paint_offset);
+  if (UNLIKELY(children->IsItemCursor())) {
+    PaintLineBoxChildItems(children, paint_info, paint_offset);
     return;
   }
 
   const bool is_horizontal = box_fragment_.Style().IsHorizontalWritingMode();
-
-  for (const NGPaintFragment* line : line_boxes) {
+  for (; *children; children->MoveToNextSkippingChildren()) {
+    const NGPaintFragment* line = children->CurrentPaintFragment();
+    DCHECK(line);
     const NGPhysicalFragment& child_fragment = line->PhysicalFragment();
     DCHECK(!child_fragment.IsOutOfFlowPositioned());
     if (child_fragment.IsFloating())
@@ -1008,34 +1250,73 @@ void NGBoxFragmentPainter::PaintLineBoxChildren(
       continue;
     }
     DCHECK(child_fragment.IsLineBox());
-
-    if (paint_info.phase == PaintPhase::kForeground) {
-      if (NGFragmentPainter::ShouldRecordHitTestData(paint_info,
-                                                     PhysicalFragment())) {
-        RecordHitTestDataForLine(paint_info, child_offset, *line);
-      }
-
-      // Line boxes don't paint anything, except when its ::first-line style has
-      // a background.
-      if (UNLIKELY(NGLineBoxFragmentPainter::NeedsPaint(child_fragment))) {
-        DCHECK(paint_fragment_);
-        NGLineBoxFragmentPainter line_box_painter(*line, *paint_fragment_);
-        line_box_painter.PaintBackgroundBorderShadow(paint_info, child_offset);
-      }
-    }
-
+    PaintLineBox(child_fragment, *line, line, /* line_box_item */ nullptr,
+                 paint_info, child_offset);
     PaintInlineChildren(line->Children(), paint_info, child_offset);
   }
 }
 
-void NGBoxFragmentPainter::PaintBackplate(NGPaintFragment::ChildList line_boxes,
+void NGBoxFragmentPainter::PaintLineBoxChildItems(
+    NGInlineCursor* children,
+    const PaintInfo& paint_info,
+    const PhysicalOffset& paint_offset) {
+  const bool is_horizontal = box_fragment_.Style().IsHorizontalWritingMode();
+  for (; *children; children->MoveToNextSkippingChildren()) {
+    const NGFragmentItem* child_item = children->CurrentItem();
+    DCHECK(child_item);
+
+    // Check if CullRect intersects with this child, only in block direction
+    // because soft-wrap and <br> needs to paint outside of InkOverflow() in
+    // inline direction.
+    const PhysicalOffset& child_offset =
+        paint_offset + child_item->OffsetInContainerBlock();
+    const PhysicalRect child_rect = child_item->InkOverflow();
+    if (is_horizontal) {
+      LayoutUnit y = child_rect.offset.top + child_offset.top;
+      if (!paint_info.GetCullRect().IntersectsVerticalRange(
+              y, y + child_rect.size.height))
+        continue;
+    } else {
+      LayoutUnit x = child_rect.offset.left + child_offset.left;
+      if (!paint_info.GetCullRect().IntersectsHorizontalRange(
+              x, x + child_rect.size.width))
+        continue;
+    }
+
+    if (child_item->Type() == NGFragmentItem::kLine) {
+      const NGPhysicalLineBoxFragment* line_box_fragment =
+          child_item->LineBoxFragment();
+      DCHECK(line_box_fragment);
+      PaintLineBox(*line_box_fragment, *child_item,
+                   /* line_box_paint_fragment */ nullptr, child_item,
+                   paint_info, child_offset);
+      NGInlineCursor line_box_cursor = children->CursorForDescendants();
+      PaintInlineItems(paint_info, paint_offset,
+                       child_item->OffsetInContainerBlock(), &line_box_cursor);
+      continue;
+    }
+
+    if (const NGPhysicalBoxFragment* child_fragment =
+            child_item->BoxFragment()) {
+      if (child_fragment->IsListMarker()) {
+        PaintBoxItem(*child_item, *child_fragment, *children, paint_info,
+                     paint_offset);
+        continue;
+      }
+    }
+
+    NOTREACHED();
+  }
+}
+
+void NGBoxFragmentPainter::PaintBackplate(NGInlineCursor* line_boxes,
                                           const PaintInfo& paint_info,
                                           const PhysicalOffset& paint_offset) {
   if (paint_info.phase != PaintPhase::kForcedColorsModeBackplate)
     return;
 
   // Only paint backplates behind text when forced-color-adjust is auto.
-  const ComputedStyle& style = line_boxes.front().Style();
+  const ComputedStyle& style = PhysicalFragment().Style();
   if (style.ForcedColorAdjust() == EForcedColorAdjust::kNone)
     return;
 
@@ -1117,7 +1398,7 @@ void NGBoxFragmentPainter::PaintTextChild(const NGPaintFragment& paint_fragment,
 
   // Only paint during the foreground/selection phases.
   if (paint_info.phase != PaintPhase::kForeground &&
-      paint_info.phase != PaintPhase::kSelection &&
+      paint_info.phase != PaintPhase::kSelectionDragImage &&
       paint_info.phase != PaintPhase::kTextClip &&
       paint_info.phase != PaintPhase::kMask)
     return;
@@ -1129,69 +1410,96 @@ void NGBoxFragmentPainter::PaintTextChild(const NGPaintFragment& paint_fragment,
 
 void NGBoxFragmentPainter::PaintTextItem(const NGInlineCursor& cursor,
                                          const PaintInfo& paint_info,
-                                         const PhysicalOffset& paint_offset) {
-  DCHECK_EQ(cursor.CurrentItem()->Type(), NGFragmentItem::kText);
-  DCHECK(items_);
+                                         const PhysicalOffset& paint_offset,
+                                         const PhysicalOffset& parent_offset) {
+  DCHECK(cursor.CurrentItem());
+  const NGFragmentItem& item = *cursor.CurrentItem();
+  DCHECK(item.IsText()) << item;
 
   // Only paint during the foreground/selection phases.
   if (paint_info.phase != PaintPhase::kForeground &&
-      paint_info.phase != PaintPhase::kSelection &&
+      paint_info.phase != PaintPhase::kSelectionDragImage &&
       paint_info.phase != PaintPhase::kTextClip &&
       paint_info.phase != PaintPhase::kMask)
     return;
 
-  NGTextFragmentPainter<NGInlineCursor> text_painter(cursor);
+  NGTextFragmentPainter<NGInlineCursor> text_painter(cursor, parent_offset);
   text_painter.Paint(paint_info, paint_offset);
 }
 
-NGBoxFragmentPainter::MoveTo NGBoxFragmentPainter::PaintBoxItem(
+NGBoxFragmentPainter::MoveTo NGBoxFragmentPainter::PaintLineBoxItem(
     const NGFragmentItem& item,
     const PaintInfo& paint_info,
     const PhysicalOffset& paint_offset) {
-  DCHECK_EQ(item.Type(), NGFragmentItem::kBox);
+  DCHECK_EQ(item.Type(), NGFragmentItem::kLine);
   DCHECK(items_);
-
-  // Nothing to paint if this is a culled inline box. Proceed to its
-  // descendants.
-  const NGPhysicalBoxFragment* child_fragment = item.BoxFragment();
-  if (!child_fragment)
-    return kDontSkipChildren;
-
-  if (child_fragment->HasSelfPaintingLayer() ||
-      child_fragment->IsHiddenForPaint() || child_fragment->IsFloating())
-    return kSkipChildren;
-
   // TODO(kojii): Check CullRect.
-
-  if (child_fragment->IsAtomicInline() || child_fragment->IsListMarker()) {
-    if (FragmentRequiresLegacyFallback(*child_fragment)) {
-      PaintInlineChildBoxUsingLegacyFallback(*child_fragment, paint_info);
-      return kDontSkipChildren;
-    }
-    NGBoxFragmentPainter(*child_fragment).PaintAllPhasesAtomically(paint_info);
-    return kDontSkipChildren;
-  }
-
-  NGInlineBoxFragmentPainter(item, *child_fragment)
-      .Paint(paint_info, paint_offset);
+  const PhysicalOffset line_box__offset =
+      paint_offset + item.OffsetInContainerBlock();
+  const NGPhysicalLineBoxFragment* line_box_fragment = item.LineBoxFragment();
+  DCHECK(line_box_fragment);
+  PaintLineBox(*line_box_fragment, item, /* line_box_paint_fragment */ nullptr,
+               &item, paint_info, line_box__offset);
   return kDontSkipChildren;
 }
 
-void NGBoxFragmentPainter::PaintAtomicInline(const PaintInfo& paint_info) {
-  DCHECK(PhysicalFragment().IsAtomicInline());
-  // Self-painting AtomicInlines should go to normal paint logic.
-  DCHECK(!box_fragment_.HasSelfPaintingLayer());
-
-  // Text clips are painted only for the direct inline children of the object
-  // that has a text clip style on it, not block children.
-  if (paint_info.phase == PaintPhase::kTextClip)
+// Paint non-culled box item.
+void NGBoxFragmentPainter::PaintBoxItem(
+    const NGFragmentItem& item,
+    const NGPhysicalBoxFragment& child_fragment,
+    const NGInlineCursor& cursor,
+    const PaintInfo& paint_info,
+    const PhysicalOffset& paint_offset) {
+  DCHECK_EQ(item.Type(), NGFragmentItem::kBox);
+  DCHECK_EQ(&item, cursor.Current().Item());
+  DCHECK_EQ(item.BoxFragment(), &child_fragment);
+  DCHECK(!child_fragment.IsHiddenForPaint());
+  if (child_fragment.HasSelfPaintingLayer() || child_fragment.IsFloating())
     return;
 
-  PaintAllPhasesAtomically(paint_info);
+  // TODO(kojii): Check CullRect.
+
+  if (child_fragment.IsAtomicInline() || child_fragment.IsListMarker()) {
+    if (FragmentRequiresLegacyFallback(child_fragment)) {
+      PaintInlineChildBoxUsingLegacyFallback(child_fragment, paint_info);
+      return;
+    }
+    NGBoxFragmentPainter(child_fragment).PaintAllPhasesAtomically(paint_info);
+    return;
+  }
+
+  DCHECK(child_fragment.IsInlineBox());
+  NGInlineBoxFragmentPainter(cursor, item, child_fragment)
+      .Paint(paint_info, paint_offset);
+}
+
+void NGBoxFragmentPainter::PaintBoxItem(const NGFragmentItem& item,
+                                        const NGInlineCursor& cursor,
+                                        const PaintInfo& paint_info,
+                                        const PhysicalOffset& paint_offset,
+                                        const PhysicalOffset& parent_offset) {
+  DCHECK_EQ(item.Type(), NGFragmentItem::kBox);
+  DCHECK_EQ(&item, cursor.Current().Item());
+
+  if (const NGPhysicalBoxFragment* child_fragment = item.BoxFragment()) {
+    PaintBoxItem(item, *child_fragment, cursor, paint_info, paint_offset);
+    return;
+  }
+
+  // This |item| is a culled inline box.
+  DCHECK(item.GetLayoutObject()->IsLayoutInline());
+  NGInlineCursor children = cursor.CursorForDescendants();
+  // Pass the given |parent_offset| because culled inline boxes do not affect
+  // the sub-pixel snapping behavior. TODO(kojii): This is for the
+  // compatibility, we may want to revisit in future.
+  PaintInlineItems(paint_info, paint_offset, parent_offset, &children);
 }
 
 bool NGBoxFragmentPainter::IsPaintingScrollingBackground(
-    const PaintInfo& paint_info) {
+    const PaintInfo& paint_info) const {
+  if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
+    return paint_info.IsPaintingScrollingBackground();
+
   // TODO(layout-dev): Change paint_info.PaintContainer to accept fragments
   // once LayoutNG supports scrolling containers.
   return paint_info.PaintFlags() & kPaintLayerPaintingOverflowContents &&
@@ -1222,27 +1530,43 @@ void NGBoxFragmentPainter::PaintTextClipMask(GraphicsContext& context,
                                              bool object_has_multiple_boxes) {
   PaintInfo paint_info(context, mask_rect, PaintPhase::kTextClip,
                        kGlobalPaintNormalPhase, 0);
-  if (object_has_multiple_boxes) {
-    DCHECK(paint_fragment_);
-    PhysicalOffset local_offset = paint_fragment_->Offset();
-    DCHECK(paint_fragment_);
-    NGInlineBoxFragmentPainter inline_box_painter(*paint_fragment_);
-    if (box_fragment_.Style().BoxDecorationBreak() ==
-        EBoxDecorationBreak::kSlice) {
-      LayoutUnit offset_on_line;
-      LayoutUnit total_width;
-      inline_box_painter.ComputeFragmentOffsetOnLine(
-          box_fragment_.Style().Direction(), &offset_on_line, &total_width);
-      LayoutSize line_offset(offset_on_line, LayoutUnit());
-      local_offset -=
-          PhysicalOffset(box_fragment_.Style().IsHorizontalWritingMode()
-                             ? line_offset
-                             : line_offset.TransposedSize());
-    }
-    inline_box_painter.Paint(paint_info, paint_offset - local_offset);
-  } else {
+  if (!object_has_multiple_boxes) {
     PaintObject(paint_info, paint_offset);
+    return;
   }
+
+  if (paint_fragment_) {
+    NGInlineBoxFragmentPainter inline_box_painter(*paint_fragment_);
+    PaintTextClipMask(paint_info, paint_offset - paint_fragment_->Offset(),
+                      &inline_box_painter);
+    return;
+  }
+
+  DCHECK(inline_box_cursor_);
+  DCHECK(box_item_);
+  NGInlineBoxFragmentPainter inline_box_painter(*inline_box_cursor_,
+                                                *box_item_);
+  PaintTextClipMask(paint_info,
+                    paint_offset - box_item_->OffsetInContainerBlock(),
+                    &inline_box_painter);
+}
+
+void NGBoxFragmentPainter::PaintTextClipMask(
+    const PaintInfo& paint_info,
+    PhysicalOffset paint_offset,
+    NGInlineBoxFragmentPainter* inline_box_painter) {
+  const ComputedStyle& style = box_fragment_.Style();
+  if (style.BoxDecorationBreak() == EBoxDecorationBreak::kSlice) {
+    LayoutUnit offset_on_line;
+    LayoutUnit total_width;
+    inline_box_painter->ComputeFragmentOffsetOnLine(
+        style.Direction(), &offset_on_line, &total_width);
+    if (style.IsHorizontalWritingMode())
+      paint_offset.left += offset_on_line;
+    else
+      paint_offset.top += offset_on_line;
+  }
+  inline_box_painter->Paint(paint_info, paint_offset);
 }
 
 PhysicalRect NGBoxFragmentPainter::AdjustRectForScrolledContent(
@@ -1260,7 +1584,7 @@ PhysicalRect NGBoxFragmentPainter::AdjustRectForScrolledContent(
 
     // Adjust the paint rect to reflect a scrolled content box with borders at
     // the ends.
-    PhysicalOffset offset(physical.ScrolledContentOffset());
+    PhysicalOffset offset(physical.PixelSnappedScrolledContentOffset());
     scrolled_paint_rect.Move(-offset);
     LayoutRectOutsets borders = AdjustedBorderOutsets(info);
     scrolled_paint_rect.size =
@@ -1282,183 +1606,249 @@ LayoutRectOutsets NGBoxFragmentPainter::ComputePadding() const {
 BoxPainterBase::FillLayerInfo NGBoxFragmentPainter::GetFillLayerInfo(
     const Color& color,
     const FillLayer& bg_layer,
-    BackgroundBleedAvoidance bleed_avoidance) const {
+    BackgroundBleedAvoidance bleed_avoidance,
+    bool is_painting_scrolling_background) const {
   const NGBorderEdges& border_edges = BorderEdges();
   const NGPhysicalBoxFragment& fragment = PhysicalFragment();
   return BoxPainterBase::FillLayerInfo(
       fragment.GetLayoutObject()->GetDocument(), fragment.Style(),
       fragment.HasOverflowClip(), color, bg_layer, bleed_avoidance,
+      LayoutObject::ShouldRespectImageOrientation(fragment.GetLayoutObject()),
       border_edges.line_left, border_edges.line_right,
-      fragment.GetLayoutObject()->IsInline());
+      fragment.GetLayoutObject()->IsLayoutInline(),
+      is_painting_scrolling_background);
 }
 
-bool NGBoxFragmentPainter::IsInSelfHitTestingPhase(HitTestAction action) const {
-  // TODO(layout-dev): We should set an IsContainingBlock flag on
-  // NGPhysicalBoxFragment, instead of routing back to LayoutObject.
-  if (const auto* box = ToLayoutBoxOrNull(PhysicalFragment().GetLayoutObject()))
-    return box->IsInSelfHitTestingPhase(action);
-  return action == kHitTestForeground;
+bool NGBoxFragmentPainter::HitTestContext::AddNodeToResult(
+    Node* node,
+    const PhysicalRect& bounds_rect,
+    const PhysicalOffset& offset) const {
+  if (node && !result->InnerNode())
+    result->SetNodeAndPosition(node, location.Point() - offset);
+  return result->AddNodeToListBasedTestResult(node, location, bounds_rect) ==
+         kStopHitTesting;
 }
 
 bool NGBoxFragmentPainter::NodeAtPoint(HitTestResult& result,
                                        const HitTestLocation& hit_test_location,
                                        const PhysicalOffset& physical_offset,
                                        HitTestAction action) {
+  HitTestContext hit_test(action, hit_test_location, physical_offset, &result);
+  return NodeAtPoint(hit_test, physical_offset);
+}
+
+bool NGBoxFragmentPainter::NodeAtPoint(HitTestResult& result,
+                                       const HitTestLocation& hit_test_location,
+                                       const PhysicalOffset& physical_offset,
+                                       const PhysicalOffset& inline_root_offset,
+                                       HitTestAction action) {
+  HitTestContext hit_test(action, hit_test_location, inline_root_offset,
+                          &result);
+  return NodeAtPoint(hit_test, physical_offset);
+}
+
+bool NGBoxFragmentPainter::NodeAtPoint(const HitTestContext& hit_test,
+                                       const PhysicalOffset& physical_offset) {
   const NGPhysicalBoxFragment& fragment = PhysicalFragment();
   const PhysicalSize& size = box_fragment_.Size();
   const ComputedStyle& style = box_fragment_.Style();
 
-  bool hit_test_self = IsInSelfHitTestingPhase(action);
+  bool hit_test_self = fragment.IsInSelfHitTestingPhase(hit_test.action);
 
-  // TODO(layout-dev): Add support for hit testing overflow controls once we
-  // overflow has been implemented.
-  // if (hit_test_self && HasOverflowClip() &&
-  //   HitTestOverflowControl(result, hit_test_location, physical_offset))
-  // return true;
+  if (hit_test_self && box_fragment_.HasOverflowClip() &&
+      HitTestOverflowControl(hit_test, physical_offset))
+    return true;
 
-  bool skip_children = result.GetHitTestRequest().GetStopNode() ==
-                       PhysicalFragment().GetLayoutObject();
+  const LayoutObject* layout_object = PhysicalFragment().GetLayoutObject();
+  bool skip_children =
+      layout_object &&
+      layout_object == hit_test.result->GetHitTestRequest().GetStopNode();
   if (!skip_children && box_fragment_.ShouldClipOverflow()) {
     // PaintLayer::HitTestContentsForFragments checked the fragments'
     // foreground rect for intersection if a layer is self painting,
     // so only do the overflow clip check here for non-self-painting layers.
     if (!box_fragment_.HasSelfPaintingLayer() &&
-        !hit_test_location.Intersects(PhysicalFragment().OverflowClipRect(
+        !hit_test.location.Intersects(PhysicalFragment().OverflowClipRect(
             physical_offset, kExcludeOverlayScrollbarSizeForHitTesting))) {
       skip_children = true;
     }
     if (!skip_children && style.HasBorderRadius()) {
       PhysicalRect bounds_rect(physical_offset, size);
-      skip_children = !hit_test_location.Intersects(
+      skip_children = !hit_test.location.Intersects(
           style.GetRoundedInnerBorderFor(bounds_rect.ToLayoutRect()));
     }
   }
 
-  DCHECK(paint_fragment_);
   if (!skip_children) {
-    PhysicalOffset scrolled_offset = physical_offset;
-    if (box_fragment_.HasOverflowClip()) {
-      scrolled_offset -=
-          PhysicalOffset(PhysicalFragment().ScrolledContentOffset());
-    }
-    if (HitTestChildren(result, paint_fragment_->Children(), hit_test_location,
-                        scrolled_offset, action)) {
-      return true;
+    if (!box_fragment_.HasOverflowClip()) {
+      if (HitTestChildren(hit_test, physical_offset))
+        return true;
+    } else {
+      const PhysicalOffset scrolled_offset =
+          physical_offset -
+          PhysicalOffset(
+              PhysicalFragment().PixelSnappedScrolledContentOffset());
+      HitTestContext adjusted_hit_test(hit_test.action, hit_test.location,
+                                       scrolled_offset, hit_test.result);
+      if (HitTestChildren(adjusted_hit_test, scrolled_offset))
+        return true;
     }
   }
 
   if (style.HasBorderRadius() &&
-      HitTestClippedOutByBorder(hit_test_location, physical_offset))
+      HitTestClippedOutByBorder(hit_test.location, physical_offset))
     return false;
 
   // Now hit test ourselves.
-  if (hit_test_self && VisibleToHitTestRequest(result.GetHitTestRequest())) {
+  if (hit_test_self &&
+      VisibleToHitTestRequest(hit_test.result->GetHitTestRequest())) {
     PhysicalRect bounds_rect(physical_offset, size);
-    if (UNLIKELY(result.GetHitTestRequest().GetType() &
+    if (UNLIKELY(hit_test.result->GetHitTestRequest().GetType() &
                  HitTestRequest::kHitTestVisualOverflow)) {
-      bounds_rect = paint_fragment_->SelfInkOverflow();
+      bounds_rect = SelfInkOverflow();
       bounds_rect.Move(physical_offset);
     }
     // TODO(kojii): Don't have good explanation why only inline box needs to
     // snap, but matches to legacy and fixes crbug.com/976606.
     if (fragment.IsInlineBox())
       bounds_rect = PhysicalRect(PixelSnappedIntRect(bounds_rect));
-    if (hit_test_location.Intersects(bounds_rect)) {
-      Node* node = paint_fragment_->NodeForHitTest();
-      if (!result.InnerNode() && node) {
-        PhysicalOffset point = hit_test_location.Point() - physical_offset;
-        result.SetNodeAndPosition(node, point);
-      }
-      if (result.AddNodeToListBasedTestResult(node, hit_test_location,
-                                              bounds_rect) == kStopHitTesting) {
+    if (hit_test.location.Intersects(bounds_rect)) {
+      if (hit_test.AddNodeToResult(fragment.NodeForHitTest(), bounds_rect,
+                                   physical_offset))
         return true;
-      }
     }
   }
 
   return false;
+}
+
+bool NGBoxFragmentPainter::HitTestAllPhases(
+    HitTestResult& result,
+    const HitTestLocation& hit_test_location,
+    const PhysicalOffset& accumulated_offset,
+    HitTestFilter hit_test_filter) {
+  // Logic taken from LayoutObject::HitTestAllPhases().
+  HitTestContext hit_test(kHitTestForeground, hit_test_location,
+                          accumulated_offset, &result);
+  bool inside = false;
+  if (hit_test_filter != kHitTestSelf) {
+    // First test the foreground layer (lines and inlines).
+    inside = NodeAtPoint(hit_test, accumulated_offset);
+
+    // Test floats next.
+    if (!inside) {
+      hit_test.action = kHitTestFloat;
+      inside = NodeAtPoint(hit_test, accumulated_offset);
+    }
+
+    // Finally test to see if the mouse is in the background (within a child
+    // block's background).
+    if (!inside) {
+      hit_test.action = kHitTestChildBlockBackgrounds;
+      inside = NodeAtPoint(hit_test, accumulated_offset);
+    }
+  }
+
+  // See if the pointer is inside us but not any of our descendants.
+  if (hit_test_filter != kHitTestDescendants && !inside) {
+    hit_test.action = kHitTestChildBlockBackground;
+    inside = NodeAtPoint(hit_test, accumulated_offset);
+  }
+
+  return inside;
 }
 
 bool NGBoxFragmentPainter::VisibleToHitTestRequest(
     const HitTestRequest& request) const {
-  DCHECK(paint_fragment_);
-  return FragmentVisibleToHitTestRequest(*paint_fragment_, request);
+  return FragmentVisibleToHitTestRequest(box_fragment_, request);
 }
 
 bool NGBoxFragmentPainter::HitTestTextFragment(
-    HitTestResult& result,
-    const NGPaintFragment& text_paint_fragment,
-    const HitTestLocation& hit_test_location,
-    const PhysicalOffset& physical_offset,
-    HitTestAction action) {
-  if (action != kHitTestForeground)
+    const HitTestContext& hit_test,
+    const NGInlineBackwardCursor& cursor,
+    const PhysicalOffset& physical_offset) {
+  if (hit_test.action != kHitTestForeground)
     return false;
 
+  const NGPaintFragment* text_paint_fragment = cursor.Current().PaintFragment();
+  DCHECK(text_paint_fragment);
   const auto& text_fragment =
-      To<NGPhysicalTextFragment>(text_paint_fragment.PhysicalFragment());
-  PhysicalSize size(text_fragment.Size().width, text_fragment.Size().height);
-  PhysicalRect border_rect(physical_offset, size);
+      To<NGPhysicalTextFragment>(text_paint_fragment->PhysicalFragment());
+  if (!FragmentVisibleToHitTestRequest(text_fragment,
+                                       hit_test.result->GetHitTestRequest()))
+    return false;
 
   // TODO(layout-dev): Clip to line-top/bottom.
+  PhysicalRect border_rect(physical_offset, text_fragment.Size());
   PhysicalRect rect(PixelSnappedIntRect(border_rect));
-  if (UNLIKELY(result.GetHitTestRequest().GetType() &
+  if (UNLIKELY(hit_test.result->GetHitTestRequest().GetType() &
                HitTestRequest::kHitTestVisualOverflow)) {
     rect = text_fragment.SelfInkOverflow();
     rect.Move(border_rect.offset);
   }
+  if (!hit_test.location.Intersects(rect))
+    return false;
 
-  if (FragmentVisibleToHitTestRequest(text_paint_fragment,
-                                      result.GetHitTestRequest()) &&
-      hit_test_location.Intersects(rect)) {
-    Node* node = text_paint_fragment.NodeForHitTest();
-    if (!result.InnerNode() && node) {
-      PhysicalOffset point = hit_test_location.Point() - physical_offset +
-                             text_paint_fragment.InlineOffsetToContainerBox();
-      result.SetNodeAndPosition(node, point);
-    }
+  return hit_test.AddNodeToResult(
+      text_fragment.NodeForHitTest(), rect,
+      physical_offset - text_paint_fragment->OffsetInContainerBlock());
+}
 
-    if (result.AddNodeToListBasedTestResult(node, hit_test_location, rect) ==
-        kStopHitTesting) {
-      return true;
-    }
+bool NGBoxFragmentPainter::HitTestTextItem(const HitTestContext& hit_test,
+                                           const NGFragmentItem& text_item) {
+  DCHECK(text_item.IsText());
+
+  if (hit_test.action != kHitTestForeground)
+    return false;
+  if (!IsVisibleToHitTest(text_item, hit_test.result->GetHitTestRequest()))
+    return false;
+
+  // TODO(layout-dev): Clip to line-top/bottom.
+  const PhysicalOffset offset =
+      hit_test.inline_root_offset + text_item.OffsetInContainerBlock();
+  PhysicalRect border_rect(offset, text_item.Size());
+  PhysicalRect rect(PixelSnappedIntRect(border_rect));
+  if (UNLIKELY(hit_test.result->GetHitTestRequest().GetType() &
+               HitTestRequest::kHitTestVisualOverflow)) {
+    rect = text_item.SelfInkOverflow();
+    rect.Move(border_rect.offset);
   }
+  if (!hit_test.location.Intersects(rect))
+    return false;
 
-  return false;
+  return hit_test.AddNodeToResult(text_item.NodeForHitTest(), rect,
+                                  hit_test.inline_root_offset);
 }
 
 // Replicates logic in legacy InlineFlowBox::NodeAtPoint().
 bool NGBoxFragmentPainter::HitTestLineBoxFragment(
-    HitTestResult& result,
-    const NGPaintFragment& fragment,
-    const HitTestLocation& hit_test_location,
-    const PhysicalOffset& physical_offset,
-    HitTestAction action) {
-  if (HitTestChildren(result, fragment.Children(), hit_test_location,
-                      physical_offset, action))
+    const HitTestContext& hit_test,
+    const NGPhysicalLineBoxFragment& fragment,
+    const NGInlineBackwardCursor& cursor,
+    const PhysicalOffset& physical_offset) {
+  if (HitTestChildren(hit_test, cursor.CursorForDescendants(), physical_offset))
     return true;
 
-  if (action != kHitTestForeground)
+  if (hit_test.action != kHitTestForeground)
     return false;
 
-  if (!VisibleToHitTestRequest(result.GetHitTestRequest()))
+  if (!VisibleToHitTestRequest(hit_test.result->GetHitTestRequest()))
     return false;
 
   const PhysicalOffset overflow_location =
-      fragment.SelfInkOverflow().offset + physical_offset;
-  if (HitTestClippedOutByBorder(hit_test_location, overflow_location))
+      cursor.Current().SelfInkOverflow().offset + physical_offset;
+  if (HitTestClippedOutByBorder(hit_test.location, overflow_location))
     return false;
 
-  const PhysicalSize size = fragment.Size();
-  const PhysicalRect bounds_rect(physical_offset, size);
+  const PhysicalRect bounds_rect(physical_offset, fragment.Size());
   const ComputedStyle& containing_box_style = box_fragment_.Style();
   if (containing_box_style.HasBorderRadius() &&
-      !hit_test_location.Intersects(containing_box_style.GetRoundedBorderFor(
-          bounds_rect.ToLayoutRect()))) {
+      !hit_test.location.Intersects(
+          containing_box_style.GetRoundedBorderFor(bounds_rect.ToLayoutRect())))
     return false;
-  }
 
   // Now hit test ourselves.
-  if (!hit_test_location.Intersects(bounds_rect))
+  if (!hit_test.location.Intersects(bounds_rect))
     return false;
 
   // Floats will be hit-tested in |kHitTestFloat| phase, but
@@ -1467,108 +1857,386 @@ bool NGBoxFragmentPainter::HitTestLineBoxFragment(
   // descendants. TODO(kojii): Computing this is redundant, consider
   // restructuring. Changing the caller logic isn't easy because currently
   // floats are in the bounds of line boxes only in NG.
-  const auto& line = To<NGPhysicalLineBoxFragment>(fragment.PhysicalFragment());
-  if (line.HasFloatingDescendants()) {
-    DCHECK_NE(action, kHitTestFloat);
-    if (HitTestChildren(result, fragment.Children(), hit_test_location,
-                        physical_offset, kHitTestFloat)) {
+  if (fragment.HasFloatingDescendantsForPaint()) {
+    DCHECK_NE(hit_test.action, kHitTestFloat);
+    HitTestContext hit_test_float = hit_test;
+    hit_test_float.action = kHitTestFloat;
+    if (HitTestChildren(hit_test_float, cursor.CursorForDescendants(),
+                        physical_offset))
       return false;
-    }
   }
 
-  Node* node = fragment.NodeForHitTest();
-  if (!result.InnerNode() && node) {
-    const PhysicalOffset point = hit_test_location.Point() - physical_offset +
-                                 fragment.InlineOffsetToContainerBox();
-    result.SetNodeAndPosition(node, point);
-  }
-  return result.AddNodeToListBasedTestResult(node, hit_test_location,
-                                             bounds_rect) == kStopHitTesting;
+  return hit_test.AddNodeToResult(
+      fragment.NodeForHitTest(), bounds_rect,
+      physical_offset - cursor.Current().OffsetInContainerBlock());
 }
 
 bool NGBoxFragmentPainter::HitTestChildBoxFragment(
-    HitTestResult& result,
-    const NGPaintFragment& paint_fragment,
-    const HitTestLocation& hit_test_location,
-    const PhysicalOffset& physical_offset,
-    HitTestAction action) {
-  const NGPhysicalFragment& fragment = paint_fragment.PhysicalFragment();
-
+    const HitTestContext& hit_test,
+    const NGPhysicalBoxFragment& fragment,
+    const NGInlineBackwardCursor& backward_cursor,
+    const PhysicalOffset& physical_offset) {
   // Note: Floats should only be hit tested in the |kHitTestFloat| phase, so we
   // shouldn't enter a float when |action| doesn't match. However, as floats may
   // scatter around in the entire inline formatting context, we should always
   // enter non-floating inline child boxes to search for floats in the
   // |kHitTestFloat| phase, unless the child box forms another context.
-
-  if (fragment.IsFloating() && action != kHitTestFloat)
+  if (fragment.IsFloating() && hit_test.action != kHitTestFloat)
     return false;
 
   if (!FragmentRequiresLegacyFallback(fragment)) {
-    // TODO(layout-dev): Implement HitTestAllPhases in NG after we stop
-    // falling back to legacy for child atomic inlines and floats.
     DCHECK(!fragment.IsAtomicInline());
     DCHECK(!fragment.IsFloating());
-    return NGBoxFragmentPainter(paint_fragment)
-        .NodeAtPoint(result, hit_test_location, physical_offset, action);
+    if (const NGPaintFragment* paint_fragment =
+            backward_cursor.Current().PaintFragment()) {
+      if (fragment.IsInlineBox()) {
+        return NGBoxFragmentPainter(*paint_fragment)
+            .NodeAtPoint(hit_test, physical_offset);
+      }
+      // When traversing into a different inline formatting context,
+      // |inline_root_offset| needs to be updated.
+      return NGBoxFragmentPainter(*paint_fragment)
+          .NodeAtPoint(*hit_test.result, hit_test.location, physical_offset,
+                       hit_test.action);
+    }
+    NGInlineCursor cursor(backward_cursor);
+    const NGFragmentItem* item = cursor.Current().Item();
+    DCHECK(item);
+    DCHECK_EQ(item->BoxFragment(), &fragment);
+    if (fragment.IsInlineBox()) {
+      return NGBoxFragmentPainter(cursor, *item, fragment)
+          .NodeAtPoint(hit_test, physical_offset);
+    }
+    // When traversing into a different inline formatting context,
+    // |inline_root_offset| needs to be updated.
+    return NGBoxFragmentPainter(cursor, *item, fragment)
+        .NodeAtPoint(*hit_test.result, hit_test.location, physical_offset,
+                     hit_test.action);
   }
 
-  if (fragment.IsInline() && action != kHitTestForeground)
+  if (fragment.IsInline() && hit_test.action != kHitTestForeground)
     return false;
 
-  LayoutBox* const layout_box = ToLayoutBox(fragment.GetMutableLayoutObject());
+  if (fragment.IsPaintedAtomically()) {
+    return HitTestAllPhasesInFragment(fragment, hit_test.location,
+                                      physical_offset, hit_test.result);
+  }
 
-  // https://www.w3.org/TR/CSS22/zindex.html#painting-order
-  // Hit test all phases of inline blocks, inline tables, replaced elements and
-  // non-positioned floats as if they created their own stacking contexts.
-  const bool should_hit_test_all_phases =
-      fragment.IsAtomicInline() || fragment.IsFloating();
-  return should_hit_test_all_phases
-             ? layout_box->HitTestAllPhases(result, hit_test_location,
-                                            physical_offset)
-             : layout_box->NodeAtPoint(result, hit_test_location,
-                                       physical_offset, action);
+  return fragment.GetMutableLayoutObject()->NodeAtPoint(
+      *hit_test.result, hit_test.location, physical_offset, hit_test.action);
+}
+
+bool NGBoxFragmentPainter::HitTestChildBoxItem(
+    const HitTestContext& hit_test,
+    const NGFragmentItem& item,
+    const NGInlineBackwardCursor& cursor) {
+  DCHECK_EQ(&item, cursor.Current().Item());
+
+  if (const NGPhysicalBoxFragment* child_fragment = item.BoxFragment()) {
+    const PhysicalOffset child_offset =
+        hit_test.inline_root_offset + item.OffsetInContainerBlock();
+    return HitTestChildBoxFragment(hit_test, *child_fragment, cursor,
+                                   child_offset);
+  }
+
+  DCHECK(item.GetLayoutObject()->IsLayoutInline());
+  DCHECK(!ToLayoutInline(item.GetLayoutObject())->ShouldCreateBoxFragment());
+  if (NGInlineCursor descendants = cursor.CursorForDescendants()) {
+    if (HitTestItemsChildren(hit_test, descendants))
+      return true;
+  }
+
+  // Now hit test ourselves.
+  if (hit_test.action == kHitTestForeground &&
+      IsVisibleToHitTest(item, hit_test.result->GetHitTestRequest())) {
+    const PhysicalOffset child_offset =
+        hit_test.inline_root_offset + item.OffsetInContainerBlock();
+    PhysicalRect bounds_rect(child_offset, item.Size());
+    if (UNLIKELY(hit_test.result->GetHitTestRequest().GetType() &
+                 HitTestRequest::kHitTestVisualOverflow)) {
+      bounds_rect = item.SelfInkOverflow();
+      bounds_rect.Move(child_offset);
+    }
+    // TODO(kojii): Don't have good explanation why only inline box needs to
+    // snap, but matches to legacy and fixes crbug.com/976606.
+    bounds_rect = PhysicalRect(PixelSnappedIntRect(bounds_rect));
+    if (hit_test.location.Intersects(bounds_rect)) {
+      if (hit_test.AddNodeToResult(item.NodeForHitTest(), bounds_rect,
+                                   child_offset))
+        return true;
+    }
+  }
+
+  return false;
 }
 
 bool NGBoxFragmentPainter::HitTestChildren(
+    const HitTestContext& hit_test,
+    const PhysicalOffset& accumulated_offset) {
+  if (paint_fragment_) {
+    NGInlineCursor cursor(*paint_fragment_);
+    return HitTestChildren(hit_test, cursor, accumulated_offset);
+  }
+  if (UNLIKELY(inline_box_cursor_)) {
+    NGInlineCursor descendants = inline_box_cursor_->CursorForDescendants();
+    if (descendants)
+      return HitTestChildren(hit_test, descendants, accumulated_offset);
+    return false;
+  }
+  if (items_) {
+    NGInlineCursor cursor(*items_);
+    return HitTestChildren(hit_test, cursor, accumulated_offset);
+  }
+  // Check descendants of this fragment because floats may be in the
+  // |NGFragmentItems| of the descendants.
+  if (hit_test.action == kHitTestFloat &&
+      box_fragment_.HasFloatingDescendantsForPaint() &&
+      RuntimeEnabledFeatures::LayoutNGFragmentItemEnabled()) {
+    return HitTestFloatingChildren(hit_test, box_fragment_, accumulated_offset);
+  }
+
+  if (hit_test.action == kHitTestFloat) {
+    return box_fragment_.HasFloatingDescendantsForPaint() &&
+           HitTestFloatingChildren(hit_test, box_fragment_, accumulated_offset);
+  }
+  return HitTestBlockChildren(*hit_test.result, hit_test.location,
+                              accumulated_offset, hit_test.action);
+}
+
+bool NGBoxFragmentPainter::HitTestChildren(
+    const HitTestContext& hit_test,
+    const NGInlineCursor& children,
+    const PhysicalOffset& accumulated_offset) {
+  if (children.IsPaintFragmentCursor())
+    return HitTestPaintFragmentChildren(hit_test, children, accumulated_offset);
+  if (children.IsItemCursor())
+    return HitTestItemsChildren(hit_test, children);
+  // Hits nothing if there were no children.
+  return false;
+}
+
+bool NGBoxFragmentPainter::HitTestBlockChildren(
     HitTestResult& result,
-    NGPaintFragment::ChildList children,
     const HitTestLocation& hit_test_location,
-    const PhysicalOffset& accumulated_offset,
+    PhysicalOffset accumulated_offset,
     HitTestAction action) {
-  Vector<NGPaintFragment*, 16> child_vector;
-  children.ToList(&child_vector);
-  for (unsigned i = child_vector.size(); i;) {
-    const NGPaintFragment* child = child_vector[--i];
-    const PhysicalOffset offset = child->Offset();
-    if (child->HasSelfPaintingLayer())
+  if (action == kHitTestChildBlockBackgrounds)
+    action = kHitTestChildBlockBackground;
+  auto children = box_fragment_.Children();
+  for (const NGLink& child : base::Reversed(children)) {
+    const auto& block_child = To<NGPhysicalBoxFragment>(*child);
+    if (block_child.HasSelfPaintingLayer() || block_child.IsFloating())
       continue;
 
-    const NGPhysicalFragment& fragment = child->PhysicalFragment();
-    const PhysicalOffset child_physical_offset = accumulated_offset + offset;
+    const PhysicalOffset child_offset = accumulated_offset + child.offset;
 
-    bool stop_hit_testing = false;
-    if (fragment.Type() == NGPhysicalFragment::kFragmentBox) {
-      stop_hit_testing = HitTestChildBoxFragment(
-          result, *child, hit_test_location, child_physical_offset, action);
+    if (block_child.IsPaintedAtomically()) {
+      if (HitTestAllPhasesInFragment(block_child, hit_test_location,
+                                     child_offset, &result))
+        return true;
 
-    } else if (fragment.Type() == NGPhysicalFragment::kFragmentLineBox) {
-      stop_hit_testing = HitTestLineBoxFragment(
-          result, *child, hit_test_location, child_physical_offset, action);
-
-    } else if (fragment.Type() == NGPhysicalFragment::kFragmentText) {
-      stop_hit_testing = HitTestTextFragment(result, *child, hit_test_location,
-                                             child_physical_offset, action);
+      continue;
     }
-    if (stop_hit_testing)
-      return true;
 
-    if (!fragment.IsInline() || action != kHitTestForeground)
+    if (NodeAtPointInFragment(block_child, hit_test_location, child_offset,
+                              action, &result)) {
+      if (const LayoutObject* child_object = block_child.GetLayoutObject()) {
+        child_object->UpdateHitTestResult(
+            result, hit_test_location.Point() - accumulated_offset);
+      }
+      return true;
+    }
+  }
+
+  return false;
+}
+
+bool NGBoxFragmentPainter::HitTestPaintFragmentChildren(
+    const HitTestContext& hit_test,
+    const NGInlineCursor& children,
+    const PhysicalOffset& accumulated_offset) {
+  DCHECK(children.IsPaintFragmentCursor());
+  for (NGInlineBackwardCursor cursor(children); cursor;) {
+    const NGPaintFragment* child_paint_fragment =
+        cursor.Current().PaintFragment();
+    DCHECK(child_paint_fragment);
+    const NGPhysicalFragment& child_fragment =
+        child_paint_fragment->PhysicalFragment();
+    if (child_fragment.HasSelfPaintingLayer()) {
+      cursor.MoveToPreviousSibling();
+      continue;
+    }
+
+    const PhysicalOffset child_offset =
+        child_paint_fragment->Offset() + accumulated_offset;
+    if (child_fragment.Type() == NGPhysicalFragment::kFragmentBox) {
+      if (HitTestChildBoxFragment(hit_test,
+                                  To<NGPhysicalBoxFragment>(child_fragment),
+                                  cursor, child_offset))
+        return true;
+    } else if (child_fragment.Type() == NGPhysicalFragment::kFragmentLineBox) {
+      if (HitTestLineBoxFragment(hit_test,
+                                 To<NGPhysicalLineBoxFragment>(child_fragment),
+                                 cursor, child_offset))
+        return true;
+    } else if (child_fragment.Type() == NGPhysicalFragment::kFragmentText) {
+      if (HitTestTextFragment(hit_test, cursor, child_offset))
+        return true;
+    }
+
+    cursor.MoveToPreviousSibling();
+
+    if (child_fragment.IsInline() && hit_test.action == kHitTestForeground) {
+      // Hit test culled inline boxes between |fragment| and its parent
+      // fragment.
+      const NGPaintFragment* previous_sibling =
+          cursor ? cursor.Current().PaintFragment() : nullptr;
+      if (HitTestCulledInlineAncestors(*hit_test.result, *child_paint_fragment,
+                                       previous_sibling, hit_test.location,
+                                       child_offset))
+        return true;
+    }
+  }
+
+  return false;
+}
+
+bool NGBoxFragmentPainter::HitTestItemsChildren(
+    const HitTestContext& hit_test,
+    const NGInlineCursor& children) {
+  DCHECK(children.IsItemCursor());
+  for (NGInlineBackwardCursor cursor(children); cursor;) {
+    const NGFragmentItem* item = cursor.Current().Item();
+    DCHECK(item);
+    if (item->HasSelfPaintingLayer()) {
+      cursor.MoveToPreviousSibling();
+      continue;
+    }
+
+    if (item->IsText()) {
+      if (HitTestTextItem(hit_test, *item))
+        return true;
+    } else if (item->Type() == NGFragmentItem::kLine) {
+      const NGPhysicalLineBoxFragment* child_fragment = item->LineBoxFragment();
+      DCHECK(child_fragment);
+      const PhysicalOffset child_offset =
+          hit_test.inline_root_offset + item->OffsetInContainerBlock();
+      if (HitTestLineBoxFragment(hit_test, *child_fragment, cursor,
+                                 child_offset))
+        return true;
+    } else if (item->Type() == NGFragmentItem::kBox) {
+      if (HitTestChildBoxItem(hit_test, *item, cursor))
+        return true;
+    } else {
+      NOTREACHED();
+    }
+
+    cursor.MoveToPreviousSibling();
+  }
+
+  return false;
+}
+
+bool NGBoxFragmentPainter::HitTestFloatingChildren(
+    const HitTestContext& hit_test,
+    const NGPhysicalContainerFragment& container,
+    const PhysicalOffset& accumulated_offset) {
+  DCHECK_EQ(hit_test.action, kHitTestFloat);
+  DCHECK(container.HasFloatingDescendantsForPaint());
+
+  if (const auto* box = DynamicTo<NGPhysicalBoxFragment>(&container)) {
+    if (const NGFragmentItems* items = box->Items()) {
+      NGInlineCursor children(*items);
+      return HitTestFloatingChildItems(hit_test, children, accumulated_offset);
+    }
+  }
+
+  auto children = container.Children();
+  for (const NGLink& child : base::Reversed(children)) {
+    const NGPhysicalFragment& child_fragment = *child.fragment;
+    if (child_fragment.HasSelfPaintingLayer())
       continue;
 
-    // Hit test culled inline boxes between |fragment| and its parent fragment.
-    const NGPaintFragment* previous_sibling = i ? child_vector[i - 1] : nullptr;
-    if (HitTestCulledInlineAncestors(result, *child, previous_sibling,
-                                     hit_test_location, child_physical_offset))
+    const PhysicalOffset child_offset = accumulated_offset + child.offset;
+
+    if (child_fragment.IsFloating()) {
+      if (HitTestAllPhasesInFragment(To<NGPhysicalBoxFragment>(child_fragment),
+                                     hit_test.location, child_offset,
+                                     hit_test.result))
+        return true;
+      continue;
+    }
+
+    if (child_fragment.IsPaintedAtomically())
+      continue;
+
+    const auto* child_container =
+        DynamicTo<NGPhysicalContainerFragment>(&child_fragment);
+    if (!child_container || !child_container->HasFloatingDescendantsForPaint())
+      continue;
+
+    if (child_container->HasOverflowClip()) {
+      // We need to properly visit this fragment for hit-testing, rather than
+      // jumping directly to its children (which is what we normally do when
+      // looking for floats), in order to set up the clip rectangle.
+      if (child_container->CanTraverse()) {
+        if (NGBoxFragmentPainter(*To<NGPhysicalBoxFragment>(child_container))
+                .NodeAtPoint(*hit_test.result, hit_test.location, child_offset,
+                             kHitTestFloat))
+          return true;
+      } else if (child_fragment.GetMutableLayoutObject()->NodeAtPoint(
+                     *hit_test.result, hit_test.location, child_offset,
+                     kHitTestFloat)) {
+        return true;
+      }
+      continue;
+    }
+
+    if (HitTestFloatingChildren(hit_test, *child_container, child_offset))
+      return true;
+  }
+  return false;
+}
+
+bool NGBoxFragmentPainter::HitTestFloatingChildItems(
+    const HitTestContext& hit_test,
+    const NGInlineCursor& children,
+    const PhysicalOffset& accumulated_offset) {
+  for (NGInlineBackwardCursor cursor(children); cursor;
+       cursor.MoveToPreviousSibling()) {
+    const NGFragmentItem* item = cursor.Current().Item();
+    DCHECK(item);
+    if (item->Type() == NGFragmentItem::kBox) {
+      if (const NGPhysicalBoxFragment* child_box = item->BoxFragment()) {
+        if (child_box->HasSelfPaintingLayer())
+          continue;
+
+        const PhysicalOffset child_offset =
+            accumulated_offset + item->OffsetInContainerBlock();
+        if (child_box->IsFloating()) {
+          if (HitTestAllPhasesInFragment(*child_box, hit_test.location,
+                                         child_offset, hit_test.result))
+            return true;
+          continue;
+        }
+
+        // Look into descendants of all inline boxes because inline boxes do not
+        // have |HasFloatingDescendantsForPaint()| flag.
+        if (!child_box->IsInlineBox())
+          continue;
+      }
+      DCHECK(item->GetLayoutObject()->IsLayoutInline());
+    } else if (item->Type() == NGFragmentItem::kLine) {
+      const NGPhysicalLineBoxFragment* child_line = item->LineBoxFragment();
+      DCHECK(child_line);
+      if (!child_line->HasFloatingDescendantsForPaint())
+        continue;
+    } else {
+      continue;
+    }
+
+    NGInlineCursor descendants = cursor.CursorForDescendants();
+    if (HitTestFloatingChildItems(hit_test, descendants, accumulated_offset))
       return true;
   }
 
@@ -1584,6 +2252,15 @@ bool NGBoxFragmentPainter::HitTestClippedOutByBorder(
   const NGBorderEdges& border_edges = BorderEdges();
   return !hit_test_location.Intersects(style.GetRoundedBorderFor(
       rect.ToLayoutRect(), border_edges.line_left, border_edges.line_right));
+}
+
+bool NGBoxFragmentPainter::HitTestOverflowControl(
+    const HitTestContext& hit_test,
+    PhysicalOffset accumulated_offset) {
+  const auto* layout_box = ToLayoutBoxOrNull(box_fragment_.GetLayoutObject());
+  return layout_box &&
+         layout_box->HitTestOverflowControl(*hit_test.result, hit_test.location,
+                                            accumulated_offset);
 }
 
 }  // namespace blink

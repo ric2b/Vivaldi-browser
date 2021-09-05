@@ -19,7 +19,7 @@
 #include "chrome/credential_provider/gaiacp/gcp_crash_reporter_client.h"
 #include "chrome/credential_provider/gaiacp/gcp_crash_reporting_utils.h"
 #include "chrome/credential_provider/setup/setup_lib.h"
-#include "components/crash/content/app/crashpad.h"
+#include "components/crash/core/app/crashpad.h"
 #include "components/crash/core/common/crash_key.h"
 #include "components/crash/core/common/crash_keys.h"
 
@@ -40,9 +40,9 @@ void ConfigureGcpInstallerCrashReporting(
   crash_reporter::InitializeCrashpadWithEmbeddedHandler(true, "GCPW Installer",
                                                         "", base::FilePath());
 
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
   SetCommonCrashKeys(command_line);
 
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
   static crash_reporter::CrashKeyString<64> operation("operation");
 
   bool is_uninstall =

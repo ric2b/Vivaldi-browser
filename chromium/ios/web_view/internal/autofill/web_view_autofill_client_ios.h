@@ -73,7 +73,6 @@ class WebViewAutofillClientIOS : public AutofillClient {
       const base::string16& tip_message,
       const std::vector<MigratableCreditCard>& migratable_credit_cards,
       MigrationDeleteCardCallback delete_local_card_callback) override;
-  void ShowWebauthnOfferDialog(WebauthnOfferDialogCallback callback) override;
   void ConfirmSaveAutofillProfile(const AutofillProfile& profile,
                                   base::OnceClosure callback) override;
   void ConfirmSaveCreditCardLocally(
@@ -82,6 +81,10 @@ class WebViewAutofillClientIOS : public AutofillClient {
       LocalSaveCardPromptCallback callback) override;
   void ConfirmAccountNameFixFlow(
       base::OnceCallback<void(const base::string16&)> callback) override;
+  void ConfirmExpirationDateFixFlow(
+      const CreditCard& card,
+      base::OnceCallback<void(const base::string16&, const base::string16&)>
+          callback) override;
   void ConfirmSaveCreditCardToCloud(
       const CreditCard& card,
       const LegalMessageLines& legal_message_lines,
@@ -91,7 +94,7 @@ class WebViewAutofillClientIOS : public AutofillClient {
   void ConfirmCreditCardFillAssist(const CreditCard& card,
                                    base::OnceClosure callback) override;
   bool HasCreditCardScanFeature() override;
-  void ScanCreditCard(const CreditCardScanCallback& callback) override;
+  void ScanCreditCard(CreditCardScanCallback callback) override;
   void ShowAutofillPopup(
       const gfx::RectF& element_bounds,
       base::i18n::TextDirection text_direction,
@@ -102,7 +105,11 @@ class WebViewAutofillClientIOS : public AutofillClient {
   void UpdateAutofillPopupDataListValues(
       const std::vector<base::string16>& values,
       const std::vector<base::string16>& labels) override;
-  void HideAutofillPopup() override;
+  base::span<const autofill::Suggestion> GetPopupSuggestions() const override;
+  void PinPopupView() override;
+  void UpdatePopup(const std::vector<autofill::Suggestion>& suggestions,
+                   PopupType popup_type) override;
+  void HideAutofillPopup(PopupHidingReason reason) override;
   bool IsAutocompleteEnabled() override;
   void PropagateAutofillPredictions(
       content::RenderFrameHost* rfh,

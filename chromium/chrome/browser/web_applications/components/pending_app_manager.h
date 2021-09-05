@@ -16,7 +16,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/web_applications/components/external_install_options.h"
-#include "chrome/browser/web_applications/components/web_app_helpers.h"
+#include "chrome/browser/web_applications/components/web_app_id.h"
 #include "url/gurl.h"
 
 namespace web_app {
@@ -24,6 +24,8 @@ namespace web_app {
 enum class InstallResultCode;
 
 class AppRegistrar;
+class AppShortcutManager;
+class FileHandlerManager;
 class InstallFinalizer;
 class WebAppUiManager;
 
@@ -55,6 +57,8 @@ class PendingAppManager {
   virtual ~PendingAppManager();
 
   void SetSubsystems(AppRegistrar* registrar,
+                     AppShortcutManager* shortcut_manager,
+                     FileHandlerManager* file_handler_manager,
                      WebAppUiManager* ui_manager,
                      InstallFinalizer* finalizer);
 
@@ -85,6 +89,7 @@ class PendingAppManager {
   // uninstall succeeded. Runs |callback| for every completed uninstallation -
   // whether or not the uninstallation actually succeeded.
   virtual void UninstallApps(std::vector<GURL> uninstall_urls,
+                             ExternalInstallSource install_source,
                              const UninstallCallback& callback) = 0;
 
   // Installs an app for each ExternalInstallOptions in
@@ -112,6 +117,8 @@ class PendingAppManager {
 
  protected:
   AppRegistrar* registrar() { return registrar_; }
+  AppShortcutManager* shortcut_manager() { return shortcut_manager_; }
+  FileHandlerManager* file_handler_manager() { return file_handler_manager_; }
   WebAppUiManager* ui_manager() { return ui_manager_; }
   InstallFinalizer* finalizer() { return finalizer_; }
 
@@ -144,6 +151,8 @@ class PendingAppManager {
   void OnAppSynchronized(ExternalInstallSource source, const GURL& app_url);
 
   AppRegistrar* registrar_ = nullptr;
+  AppShortcutManager* shortcut_manager_ = nullptr;
+  FileHandlerManager* file_handler_manager_ = nullptr;
   WebAppUiManager* ui_manager_ = nullptr;
   InstallFinalizer* finalizer_ = nullptr;
 

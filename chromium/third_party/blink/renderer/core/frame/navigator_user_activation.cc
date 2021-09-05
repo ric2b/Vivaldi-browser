@@ -30,13 +30,14 @@ UserActivation* NavigatorUserActivation::userActivation() {
   return user_activation_;
 }
 
-void NavigatorUserActivation::Trace(blink::Visitor* visitor) {
+void NavigatorUserActivation::Trace(Visitor* visitor) {
   visitor->Trace(user_activation_);
   Supplement<Navigator>::Trace(visitor);
 }
 
 NavigatorUserActivation::NavigatorUserActivation(Navigator& navigator) {
-  user_activation_ = UserActivation::CreateLive(navigator.DomWindow());
+  user_activation_ =
+      MakeGarbageCollected<UserActivation>(navigator.DomWindow());
 }
 
 }  // namespace blink

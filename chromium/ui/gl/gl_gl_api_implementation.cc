@@ -26,9 +26,6 @@ static CurrentGL* g_no_context_current_gl = nullptr;
 // TODO: Consider adding a new GLApi that no-ops these functions
 static bool g_null_draw_bindings_enabled = false;
 
-// If the GL debug bindings are enabled.
-static bool g_debug_bindings_enabled = false;
-
 namespace {
 
 // TODO(epenner): Could the above function be merged into GetInternalFormat and
@@ -227,14 +224,6 @@ void ClearBindingsGL() {
     delete g_current_gl_context_tls;
     g_current_gl_context_tls = nullptr;
   }
-}
-
-void InitializeDebugGLBindingsGL() {
-  g_debug_bindings_enabled = true;
-}
-
-bool GetDebugGLBindingsInitializedGL() {
-  return g_debug_bindings_enabled;
 }
 
 bool SetNullDrawGLBindingsEnabled(bool enabled) {
@@ -548,9 +537,9 @@ void RealGLApi::set_version(std::unique_ptr<GLVersionInfo> version) {
 TraceGLApi::~TraceGLApi() {
 }
 
-DebugGLApi::DebugGLApi(GLApi* gl_api) : gl_api_(gl_api) {}
+LogGLApi::LogGLApi(GLApi* gl_api) : gl_api_(gl_api) {}
 
-DebugGLApi::~DebugGLApi() {}
+LogGLApi::~LogGLApi() {}
 
 NoContextGLApi::NoContextGLApi() {
 }

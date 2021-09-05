@@ -31,6 +31,7 @@
 #include "extensions/browser/warning_service_factory.h"
 #include "extensions/browser/warning_set.h"
 #include "extensions/common/api/declarative_net_request.h"
+#include "extensions/common/api/declarative_net_request/constants.h"
 #include "extensions/common/api/declarative_net_request/dnr_manifest_data.h"
 #include "extensions/common/api/declarative_net_request/utils.h"
 #include "extensions/common/extension_id.h"
@@ -74,16 +75,17 @@ class RulesMonitorService::FileSequenceBridge {
 
   void UpdateDynamicRules(
       LoadRequestData load_data,
-      std::vector<dnr_api::Rule> rules,
-      DynamicRuleUpdateAction action,
+      std::vector<int> rule_ids_to_remove,
+      std::vector<dnr_api::Rule> rules_to_add,
       FileSequenceHelper::UpdateDynamicRulesUICallback ui_callback) const {
     // base::Unretained is safe here because we trigger the destruction of
     // |file_sequence_state_| on |file_task_runner_| from our destructor. Hence
     // it is guaranteed to be alive when |update_dynamic_rules_task| is run.
-    base::OnceClosure update_dynamic_rules_task = base::BindOnce(
-        &FileSequenceHelper::UpdateDynamicRules,
-        base::Unretained(file_sequence_helper_.get()), std::move(load_data),
-        std::move(rules), action, std::move(ui_callback));
+    base::OnceClosure update_dynamic_rules_task =
+        base::BindOnce(&FileSequenceHelper::UpdateDynamicRules,
+                       base::Unretained(file_sequence_helper_.get()),
+                       std::move(load_data), std::move(rule_ids_to_remove),
+                       std::move(rules_to_add), std::move(ui_callback));
     file_task_runner_->PostTask(FROM_HERE,
                                 std::move(update_dynamic_rules_task));
   }
@@ -123,8 +125,8 @@ bool RulesMonitorService::HasRegisteredRuleset(
 
 void RulesMonitorService::UpdateDynamicRules(
     const Extension& extension,
-    std::vector<api::declarative_net_request::Rule> rules,
-    DynamicRuleUpdateAction action,
+    std::vector<int> rule_ids_to_remove,
+    std::vector<api::declarative_net_request::Rule> rules_to_add,
     DynamicRuleUpdateUICallback callback) {
   DCHECK(HasRegisteredRuleset(extension.id()));
 
@@ -137,9 +139,9 @@ void RulesMonitorService::UpdateDynamicRules(
   auto update_rules_callback =
       base::BindOnce(&RulesMonitorService::OnDynamicRulesUpdated,
                      weak_factory_.GetWeakPtr(), std::move(callback));
-  file_sequence_bridge_->UpdateDynamicRules(std::move(data), std::move(rules),
-                                            action,
-                                            std::move(update_rules_callback));
+  file_sequence_bridge_->UpdateDynamicRules(
+      std::move(data), std::move(rule_ids_to_remove), std::move(rules_to_add),
+      std::move(update_rules_callback));
 }
 
 RulesMonitorService::RulesMonitorService(
@@ -149,7 +151,8 @@ RulesMonitorService::RulesMonitorService(
       extension_registry_(ExtensionRegistry::Get(browser_context)),
       warning_service_(WarningService::Get(browser_context)),
       context_(browser_context),
-      ruleset_manager_(browser_context) {
+      ruleset_manager_(browser_context),
+      action_tracker_(browser_context) {
   registry_observer_.Add(extension_registry_);
 }
 
@@ -169,7 +172,6 @@ RulesMonitorService::~RulesMonitorService() = default;
       - UI.
 
    On dynamic rules update.
-
       - UI -> File -> UI -> IPC to extension
 */
 
@@ -188,13 +190,23 @@ void RulesMonitorService::OnExtensionLoaded(
 
   // Static ruleset.
   {
-    bool has_checksum = prefs_->GetDNRRulesetChecksum(
-        extension->id(), &expected_ruleset_checksum);
-    DCHECK(has_checksum);
+    std::vector<RulesetSource> static_rulesets =
+        RulesetSource::CreateStatic(*extension);
 
-    RulesetInfo static_ruleset(RulesetSource::CreateStatic(*extension));
-    static_ruleset.set_expected_checksum(expected_ruleset_checksum);
-    load_data.rulesets.push_back(std::move(static_ruleset));
+    // TODO(crbug.com/754526): Load all static rulesets for the extension.
+    RulesetInfo static_ruleset(std::move(static_rulesets[0]));
+    bool has_checksum = prefs_->GetDNRStaticRulesetChecksum(
+        extension->id(), static_ruleset.source().id(),
+        &expected_ruleset_checksum);
+
+    if (!has_checksum) {
+      // This might happen on prefs corruption.
+      warning_service_->AddWarnings(
+          {Warning::CreateRulesetFailedToLoadWarning(load_data.extension_id)});
+    } else {
+      static_ruleset.set_expected_checksum(expected_ruleset_checksum);
+      load_data.rulesets.push_back(std::move(static_ruleset));
+    }
   }
 
   // Dynamic ruleset
@@ -205,6 +217,9 @@ void RulesMonitorService::OnExtensionLoaded(
     dynamic_ruleset.set_expected_checksum(expected_ruleset_checksum);
     load_data.rulesets.push_back(std::move(dynamic_ruleset));
   }
+
+  if (load_data.rulesets.empty())
+    return;
 
   auto load_ruleset_callback = base::BindOnce(
       &RulesMonitorService::OnRulesetLoaded, weak_factory_.GetWeakPtr());
@@ -239,8 +254,10 @@ void RulesMonitorService::OnExtensionUninstalled(
 
   // Skip if the extension doesn't have a dynamic ruleset.
   int dynamic_checksum;
-  if (!prefs_->GetDNRDynamicRulesetChecksum(extension->id(), &dynamic_checksum))
+  if (!prefs_->GetDNRDynamicRulesetChecksum(extension->id(),
+                                            &dynamic_checksum)) {
     return;
+  }
 
   // Cleanup the dynamic rules directory for the extension.
   // TODO(karandeepb): It's possible that this task fails, e.g. during shutdown.
@@ -259,24 +276,25 @@ void RulesMonitorService::OnRulesetLoaded(LoadRequestData load_data) {
   // per extension.
   DCHECK(load_data.rulesets.size() == 1u || load_data.rulesets.size() == 2u);
   RulesetInfo& static_ruleset = load_data.rulesets[0];
-  DCHECK_EQ(static_ruleset.source().id(), RulesetSource::kStaticRulesetID)
+  DCHECK_GE(static_ruleset.source().id(), kMinValidStaticRulesetID)
       << static_ruleset.source().id();
 
   RulesetInfo* dynamic_ruleset =
       load_data.rulesets.size() == 2 ? &load_data.rulesets[1] : nullptr;
   DCHECK(!dynamic_ruleset ||
-         dynamic_ruleset->source().id() == RulesetSource::kDynamicRulesetID)
+         dynamic_ruleset->source().id() == kDynamicRulesetID)
       << dynamic_ruleset->source().id();
 
   // Update the ruleset checksums if needed.
   if (static_ruleset.new_checksum()) {
-    prefs_->SetDNRRulesetChecksum(load_data.extension_id,
-                                  *(static_ruleset.new_checksum()));
+    prefs_->SetDNRStaticRulesetChecksum(load_data.extension_id,
+                                        static_ruleset.source().id(),
+                                        *(static_ruleset.new_checksum()));
   }
 
   if (dynamic_ruleset && dynamic_ruleset->new_checksum()) {
-    prefs_->SetDNRRulesetChecksum(load_data.extension_id,
-                                  *(dynamic_ruleset->new_checksum()));
+    prefs_->SetDNRDynamicRulesetChecksum(load_data.extension_id,
+                                         *(dynamic_ruleset->new_checksum()));
   }
 
   // It's possible that the extension has been disabled since the initial load
@@ -304,8 +322,7 @@ void RulesMonitorService::OnRulesetLoaded(LoadRequestData load_data) {
 
   extensions_with_rulesets_.insert(load_data.extension_id);
   LoadRuleset(load_data.extension_id,
-              std::make_unique<CompositeMatcher>(std::move(matchers)),
-              prefs_->GetDNRAllowedPages(load_data.extension_id));
+              std::make_unique<CompositeMatcher>(std::move(matchers)));
 }
 
 void RulesMonitorService::OnDynamicRulesUpdated(
@@ -350,6 +367,7 @@ void RulesMonitorService::OnDynamicRulesUpdated(
 void RulesMonitorService::UnloadRuleset(const ExtensionId& extension_id) {
   bool had_extra_headers_matcher = ruleset_manager_.HasAnyExtraHeadersMatcher();
   ruleset_manager_.RemoveRuleset(extension_id);
+  action_tracker_.ClearExtensionData(extension_id);
 
   if (had_extra_headers_matcher &&
       !ruleset_manager_.HasAnyExtraHeadersMatcher()) {
@@ -358,14 +376,13 @@ void RulesMonitorService::UnloadRuleset(const ExtensionId& extension_id) {
   }
 }
 
-void RulesMonitorService::LoadRuleset(const ExtensionId& extension_id,
-                                      std::unique_ptr<CompositeMatcher> matcher,
-                                      URLPatternSet allowed_pages) {
+void RulesMonitorService::LoadRuleset(
+    const ExtensionId& extension_id,
+    std::unique_ptr<CompositeMatcher> matcher) {
   bool increment_extra_headers =
       !ruleset_manager_.HasAnyExtraHeadersMatcher() &&
       matcher->HasAnyExtraHeadersMatcher();
-  ruleset_manager_.AddRuleset(extension_id, std::move(matcher),
-                              prefs_->GetDNRAllowedPages(extension_id));
+  ruleset_manager_.AddRuleset(extension_id, std::move(matcher));
 
   if (increment_extra_headers) {
     ExtensionWebRequestEventRouter::GetInstance()

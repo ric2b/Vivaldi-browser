@@ -8,6 +8,7 @@ import android.text.TextUtils;
 import android.util.Log;
 
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.annotations.MainDex;
 import org.chromium.base.annotations.NativeMethods;
@@ -18,6 +19,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -57,6 +59,11 @@ public abstract class CommandLine {
     }
 
     /**
+     * Return a copy of all switches, along with their values.
+     */
+    public abstract Map getSwitches();
+
+    /**
      * Append a switch to the command line.  There is no guarantee
      * this action happens before the switch is needed.
      * @param switchString the switch to add.  It should NOT start with '--' !
@@ -81,6 +88,12 @@ public abstract class CommandLine {
      *   Unlike init(), this does not include the program name in array[0].
      */
     public abstract void appendSwitchesAndArguments(String[] array);
+
+    /**
+     * Remove the switch from the command line.  If no such switch is present, this has no effect.
+     * @param switchString The switch key to lookup. It should NOT start with '--' !
+     */
+    public abstract void removeSwitch(String switchString);
 
     /**
      * Determine if the command line is bound to the native (JNI) implementation.
@@ -228,6 +241,15 @@ public abstract class CommandLine {
     }
 
     /**
+     * Set {@link CommandLine} for testing.
+     * @param commandLine The {@link CommandLine} to use.
+     */
+    @VisibleForTesting
+    public static void setInstanceForTesting(CommandLine commandLine) {
+        setInstance(commandLine);
+    }
+
+    /**
      * @param fileName the file to read in.
      * @return Array of chars read from the file, or null if the file cannot be read.
      */
@@ -282,6 +304,11 @@ public abstract class CommandLine {
         }
 
         @Override
+        public Map<String, String> getSwitches() {
+            return new HashMap<>(mSwitches);
+        }
+
+        @Override
         public void appendSwitch(String switchString) {
             appendSwitchWithValue(switchString, null);
         }
@@ -331,6 +358,22 @@ public abstract class CommandLine {
                 }
             }
         }
+
+        @Override
+        public void removeSwitch(String switchString) {
+            mSwitches.remove(switchString);
+            String combinedSwitchString = SWITCH_PREFIX + switchString;
+
+            // Since we permit a switch to be added multiple times, we need to remove all instances
+            // from mArgs.
+            for (int i = mArgsBegin - 1; i > 0; i--) {
+                if (mArgs.get(i).equals(combinedSwitchString)
+                        || mArgs.get(i).startsWith(combinedSwitchString + SWITCH_VALUE_SEPARATOR)) {
+                    --mArgsBegin;
+                    mArgs.remove(i);
+                }
+            }
+        }
     }
 
     private static class NativeCommandLine extends CommandLine {
@@ -349,6 +392,23 @@ public abstract class CommandLine {
         }
 
         @Override
+        public Map<String, String> getSwitches() {
+            HashMap<String, String> switches = new HashMap<String, String>();
+
+            // Iterate 2 array members at a time. JNI doesn't support returning Maps, but because
+            // key & value are both Strings, we can join them into a flattened String array:
+            // [ key1, value1, key2, value2, ... ]
+            String[] keysAndValues = CommandLineJni.get().getSwitchesFlattened();
+            assert keysAndValues.length % 2 == 0 : "must have same number of keys and values";
+            for (int i = 0; i < keysAndValues.length; i += 2) {
+                String key = keysAndValues[i];
+                String value = keysAndValues[i + 1];
+                switches.put(key, value);
+            }
+            return switches;
+        }
+
+        @Override
         public void appendSwitch(String switchString) {
             CommandLineJni.get().appendSwitch(switchString);
         }
@@ -361,6 +421,11 @@ public abstract class CommandLine {
         @Override
         public void appendSwitchesAndArguments(String[] array) {
             CommandLineJni.get().appendSwitchesAndArguments(array);
+        }
+
+        @Override
+        public void removeSwitch(String switchString) {
+            CommandLineJni.get().removeSwitch(switchString);
         }
 
         @Override
@@ -387,8 +452,10 @@ public abstract class CommandLine {
         void init(String[] args);
         boolean hasSwitch(String switchString);
         String getSwitchValue(String switchString);
+        String[] getSwitchesFlattened();
         void appendSwitch(String switchString);
         void appendSwitchWithValue(String switchString, String value);
         void appendSwitchesAndArguments(String[] array);
+        void removeSwitch(String switchString);
     }
 }

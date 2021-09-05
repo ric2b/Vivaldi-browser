@@ -17,8 +17,7 @@ namespace blink {
 class LayoutBox;
 
 // Snap Coordinator keeps track of snap containers and all of their associated
-// snap areas. It also contains the logic to generate the list of valid snap
-// positions for a given snap container.
+// snap areas.
 //
 // Snap container:
 //   A scroll container that has 'scroll-snap-type' value other
@@ -37,7 +36,7 @@ class CORE_EXPORT SnapCoordinator final
  public:
   explicit SnapCoordinator();
   ~SnapCoordinator();
-  void Trace(blink::Visitor* visitor) {}
+  void Trace(Visitor* visitor) {}
 
   void AddSnapContainer(LayoutBox& snap_container);
   void RemoveSnapContainer(LayoutBox& snap_container);
@@ -50,32 +49,23 @@ class CORE_EXPORT SnapCoordinator final
   cc::SnapAreaData CalculateSnapAreaData(const LayoutBox& snap_area,
                                          const LayoutBox& snap_container);
 
-  // Called by LocalFrameView::PerformPostLayoutTasks(), so that the snap data
-  // are updated whenever a layout happens.
-  void UpdateAllSnapContainerData();
+  bool AnySnapContainerDataNeedsUpdate() const {
+    return any_snap_container_data_needs_update_;
+  }
+  void SetAnySnapContainerDataNeedsUpdate(bool needs_update) {
+    any_snap_container_data_needs_update_ = needs_update;
+  }
+  // Called by Document::PerformScrollSnappingTasks() whenever a style or layout
+  // change happens. This will update all snap container data that was affected
+  // by the style/layout change.
+  void UpdateAllSnapContainerDataIfNeeded();
 
-  // SnapAtCurrentPosition(), SnapForEndPosition(), SnapForDirection(), and
-  // SnapForEndAndDirection() return true if snapping was performed, and false
-  // otherwise. Note that this does not necessarily mean that any scrolling was
-  // performed as a result e.g., if we are already at the snap point.
-  //
-  // SnapAtCurrentPosition() calls SnapForEndPosition() with the current
-  // scroll position.
-  bool SnapAtCurrentPosition(const LayoutBox& snap_container,
-                             bool scrolled_x,
-                             bool scrolled_y) const;
-  bool SnapForEndPosition(const LayoutBox& snap_container,
-                          const FloatPoint& end_position,
-                          bool scrolled_x,
-                          bool scrolled_y) const;
-  bool SnapForDirection(const LayoutBox& snap_container,
-                        const ScrollOffset& delta) const;
-  bool SnapForEndAndDirection(const LayoutBox& snap_container,
-                              const ScrollOffset& delta) const;
+  // Resnaps all snap containers to their current snap target, or to the
+  // closest snap point if there is no target (e.g. on the initial layout or if
+  // the previous snapped target was removed).
+  void ResnapAllContainersIfNeeded();
 
-  base::Optional<FloatPoint> GetSnapPosition(
-      const LayoutBox& snap_container,
-      const cc::SnapSelectionStrategy& strategy) const;
+  void UpdateSnapContainerData(LayoutBox&);
 
 #ifndef NDEBUG
   void ShowSnapAreaMap();
@@ -86,13 +76,13 @@ class CORE_EXPORT SnapCoordinator final
  private:
   friend class SnapCoordinatorTest;
 
-  // Returns true if a snap point was found.
-  bool PerformSnapping(const LayoutBox& snap_container,
-                       const cc::SnapSelectionStrategy& strategy) const;
-
-  void UpdateSnapContainerData(LayoutBox&);
-
   HashSet<LayoutBox*> snap_containers_;
+  bool any_snap_container_data_needs_update_ = true;
+
+  // Used for reporting to UMA when snapping on the initial layout affects the
+  // initial scroll position.
+  bool did_first_resnap_all_containers_ = false;
+
   DISALLOW_COPY_AND_ASSIGN(SnapCoordinator);
 };
 

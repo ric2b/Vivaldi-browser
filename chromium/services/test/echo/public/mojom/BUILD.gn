@@ -5,7 +5,6 @@
 import("//mojo/public/tools/bindings/mojom.gni")
 
 mojom("mojom") {
-  sources = [
-    "echo.mojom",
-  ]
+  generate_java = true
+  sources = [ "echo.mojom" ]
 }

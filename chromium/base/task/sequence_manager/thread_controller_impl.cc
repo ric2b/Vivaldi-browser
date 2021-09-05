@@ -59,14 +59,6 @@ std::unique_ptr<ThreadControllerImpl> ThreadControllerImpl::Create(
       time_source));
 }
 
-std::unique_ptr<ThreadControllerImpl>
-ThreadControllerImpl::CreateSequenceFunneled(
-    scoped_refptr<SingleThreadTaskRunner> task_runner,
-    const TickClock* time_source) {
-  return WrapUnique(
-      new ThreadControllerImpl(nullptr, std::move(task_runner), time_source));
-}
-
 void ThreadControllerImpl::SetSequencedTaskSource(
     SequencedTaskSource* sequence) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(associated_thread_->sequence_checker);
@@ -322,7 +314,13 @@ MessagePump* ThreadControllerImpl::GetBoundMessagePump() const {
 void ThreadControllerImpl::AttachToMessagePump() {
   NOTREACHED();
 }
-#endif
+#endif  // OS_IOS || OS_ANDROID
+
+#if defined(OS_IOS)
+void ThreadControllerImpl::DetachFromMessagePump() {
+  NOTREACHED();
+}
+#endif  // OS_IOS
 
 }  // namespace internal
 }  // namespace sequence_manager

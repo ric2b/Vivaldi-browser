@@ -13,8 +13,8 @@
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "components/viz/common/surfaces/local_surface_id.h"
 #include "components/viz/service/display/display_client.h"
+#include "components/viz/service/display/frame_rate_decider.h"
 #include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
-#include "mojo/public/cpp/bindings/associated_binding.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -50,16 +50,17 @@ class RootCompositorFrameSinkImpl : public mojom::CompositorFrameSink,
 
   // mojom::DisplayPrivate:
   void SetDisplayVisible(bool visible) override;
+#if defined(OS_WIN)
   void DisableSwapUntilResize(DisableSwapUntilResizeCallback callback) override;
+#endif
   void Resize(const gfx::Size& size) override;
   void SetDisplayColorMatrix(const gfx::Transform& color_matrix) override;
-  void SetDisplayColorSpace(const gfx::ColorSpace& device_color_space,
-                            float sdr_white_level) override;
+  void SetDisplayColorSpaces(
+      const gfx::DisplayColorSpaces& display_color_spaces) override;
   void SetOutputIsSecure(bool secure) override;
   void SetDisplayVSyncParameters(base::TimeTicks timebase,
                                  base::TimeDelta interval) override;
   void ForceImmediateDrawAndSwapIfPossible() override;
-  void SetDisplayTransformHint(gfx::OverlayTransform transform) override;
 #if defined(OS_ANDROID)
   void SetVSyncPaused(bool paused) override;
   void UpdateRefreshRate(float refresh_rate) override;
@@ -67,7 +68,7 @@ class RootCompositorFrameSinkImpl : public mojom::CompositorFrameSink,
       const std::vector<float>& supported_refresh_rates) override;
 #endif
   void AddVSyncParameterObserver(
-      mojom::VSyncParameterObserverPtr observer) override;
+      mojo::PendingRemote<mojom::VSyncParameterObserver> observer) override;
 
   // mojom::CompositorFrameSink:
   void SetNeedsBeginFrame(bool needs_begin_frame) override;
@@ -97,11 +98,12 @@ class RootCompositorFrameSinkImpl : public mojom::CompositorFrameSink,
       mojo::PendingAssociatedReceiver<mojom::CompositorFrameSink>
           frame_sink_receiver,
       mojo::PendingRemote<mojom::CompositorFrameSinkClient> frame_sink_client,
-      mojom::DisplayPrivateAssociatedRequest display_request,
-      mojom::DisplayClientPtr display_client,
+      mojo::PendingAssociatedReceiver<mojom::DisplayPrivate> display_receiver,
+      mojo::Remote<mojom::DisplayClient> display_client,
       std::unique_ptr<SyntheticBeginFrameSource> synthetic_begin_frame_source,
       std::unique_ptr<ExternalBeginFrameSource> external_begin_frame_source,
-      std::unique_ptr<Display> display);
+      std::unique_ptr<Display> display,
+      bool use_preferred_interval_for_video);
 
   // DisplayClient:
   void DisplayOutputSurfaceLost() override;
@@ -114,15 +116,16 @@ class RootCompositorFrameSinkImpl : public mojom::CompositorFrameSink,
   void SetPreferredFrameInterval(base::TimeDelta interval) override;
   base::TimeDelta GetPreferredFrameIntervalForFrameSinkId(
       const FrameSinkId& id) override;
+  void UpdateVSyncParameters();
 
   BeginFrameSource* begin_frame_source();
 
   mojo::Remote<mojom::CompositorFrameSinkClient> compositor_frame_sink_client_;
   mojo::AssociatedReceiver<mojom::CompositorFrameSink>
       compositor_frame_sink_receiver_;
-  // |display_client_| may be nullptr on platforms that do not use it.
-  mojom::DisplayClientPtr display_client_;
-  mojo::AssociatedBinding<mojom::DisplayPrivate> display_private_binding_;
+  // |display_client_| may be NullRemote on platforms that do not use it.
+  mojo::Remote<mojom::DisplayClient> display_client_;
+  mojo::AssociatedReceiver<mojom::DisplayPrivate> display_private_receiver_;
 
   std::unique_ptr<VSyncParameterListener> vsync_listener_;
 
@@ -139,6 +142,14 @@ class RootCompositorFrameSinkImpl : public mojom::CompositorFrameSink,
   // Should be destroyed before begin frame sources since it can issue callbacks
   // to the BFS.
   std::unique_ptr<Display> display_;
+
+  // |use_preferred_interval_| indicates if we should use the preferred interval
+  // from FrameRateDecider to tick.
+  bool use_preferred_interval_ = false;
+  base::TimeTicks display_frame_timebase_;
+  base::TimeDelta display_frame_interval_ = BeginFrameArgs::DefaultInterval();
+  base::TimeDelta preferred_frame_interval_ =
+      FrameRateDecider::UnspecifiedFrameInterval();
 
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
   gfx::Size last_swap_pixel_size_;

@@ -7,8 +7,9 @@
 
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "services/video_capture/public/mojom/device.mojom.h"
-#include "services/video_capture/public/mojom/receiver.mojom.h"
+#include "services/video_capture/public/mojom/video_frame_handler.mojom.h"
 #include "services/video_capture/public/mojom/video_source.mojom.h"
 
 namespace video_capture {
@@ -21,11 +22,11 @@ class PushVideoStreamSubscriptionImpl
   PushVideoStreamSubscriptionImpl(
       mojo::PendingReceiver<mojom::PushVideoStreamSubscription>
           subscription_receiver,
-      mojo::PendingRemote<mojom::Receiver> subscriber,
+      mojo::PendingRemote<mojom::VideoFrameHandler> subscriber,
       const media::VideoCaptureParams& requested_settings,
       mojom::VideoSource::CreatePushSubscriptionCallback creation_callback,
       BroadcastingReceiver* broadcaster,
-      mojom::DevicePtr* device);
+      mojo::Remote<mojom::Device>* device);
   ~PushVideoStreamSubscriptionImpl() override;
 
   void SetOnClosedHandler(
@@ -57,11 +58,11 @@ class PushVideoStreamSubscriptionImpl
   void OnConnectionLost();
 
   mojo::Receiver<mojom::PushVideoStreamSubscription> receiver_;
-  mojo::PendingRemote<mojom::Receiver> subscriber_;
+  mojo::PendingRemote<mojom::VideoFrameHandler> subscriber_;
   const media::VideoCaptureParams requested_settings_;
   mojom::VideoSource::CreatePushSubscriptionCallback creation_callback_;
   BroadcastingReceiver* const broadcaster_;
-  mojom::DevicePtr* const device_;
+  mojo::Remote<mojom::Device>* const device_;
   Status status_;
 
   // Client id handed out by |broadcaster_| when registering |this| as its

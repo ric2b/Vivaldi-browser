@@ -96,10 +96,12 @@ ResourceError::ResourceError(const KURL& url,
 ResourceError::ResourceError(const WebURLError& error)
     : error_code_(error.reason()),
       extended_error_code_(error.extended_reason()),
+      resolve_error_info_(error.resolve_error_info()),
       failing_url_(error.url()),
       is_access_check_(error.is_web_security_violation()),
       has_copy_in_cache_(error.has_copy_in_cache()),
-      cors_error_status_(error.cors_error_status()) {
+      cors_error_status_(error.cors_error_status()),
+      blocked_by_response_reason_(error.blocked_by_response_reason()) {
   DCHECK_NE(error_code_, 0);
   InitializeDescription();
 }
@@ -108,6 +110,7 @@ ResourceError ResourceError::Copy() const {
   ResourceError error_copy(error_code_, failing_url_.Copy(),
                            cors_error_status_);
   error_copy.extended_error_code_ = extended_error_code_;
+  error_copy.resolve_error_info_ = resolve_error_info_;
   error_copy.has_copy_in_cache_ = has_copy_in_cache_;
   error_copy.localized_description_ = localized_description_.IsolatedCopy();
   error_copy.is_access_check_ = is_access_check_;
@@ -124,11 +127,11 @@ ResourceError::operator WebURLError() const {
     return WebURLError(*cors_error_status_, has_copy_in_cache, failing_url_);
   }
 
-  return WebURLError(error_code_, extended_error_code_, has_copy_in_cache,
-                     is_access_check_
-                         ? WebURLError::IsWebSecurityViolation::kTrue
-                         : WebURLError::IsWebSecurityViolation::kFalse,
-                     failing_url_);
+  return WebURLError(
+      error_code_, extended_error_code_, resolve_error_info_, has_copy_in_cache,
+      is_access_check_ ? WebURLError::IsWebSecurityViolation::kTrue
+                       : WebURLError::IsWebSecurityViolation::kFalse,
+      failing_url_);
 }
 
 bool ResourceError::Compare(const ResourceError& a, const ResourceError& b) {
@@ -151,6 +154,9 @@ bool ResourceError::Compare(const ResourceError& a, const ResourceError& b) {
     return false;
 
   if (a.extended_error_code_ != b.extended_error_code_)
+    return false;
+
+  if (a.resolve_error_info_ != b.resolve_error_info_)
     return false;
 
   return true;
@@ -178,11 +184,44 @@ bool ResourceError::ShouldCollapseInitiator() const {
              ResourceRequestBlockedReason::kCollapsedByClient;
 }
 
+namespace {
+
+blink::ResourceRequestBlockedReason
+BlockedByResponseReasonToResourceRequestBlockedReason(
+    network::BlockedByResponseReason reason) {
+  switch (reason) {
+    case network::BlockedByResponseReason::kCoepFrameResourceNeedsCoepHeader:
+      return blink::ResourceRequestBlockedReason::
+          kCoepFrameResourceNeedsCoepHeader;
+    case network::BlockedByResponseReason::
+        kCoopSandboxedIFrameCannotNavigateToCoopPage:
+      return blink::ResourceRequestBlockedReason::
+          kCoopSandboxedIFrameCannotNavigateToCoopPage;
+    case network::BlockedByResponseReason::kCorpNotSameOrigin:
+      return blink::ResourceRequestBlockedReason::kCorpNotSameOrigin;
+    case network::BlockedByResponseReason::
+        kCorpNotSameOriginAfterDefaultedToSameOriginByCoep:
+      return blink::ResourceRequestBlockedReason::
+          kCorpNotSameOriginAfterDefaultedToSameOriginByCoep;
+      break;
+    case network::BlockedByResponseReason::kCorpNotSameSite:
+      return blink::ResourceRequestBlockedReason::kCorpNotSameSite;
+      break;
+  }
+  NOTREACHED();
+  return blink::ResourceRequestBlockedReason::kOther;
+}
+
+}  // namespace
 base::Optional<ResourceRequestBlockedReason>
 ResourceError::GetResourceRequestBlockedReason() const {
   if (error_code_ != net::ERR_BLOCKED_BY_CLIENT &&
       error_code_ != net::ERR_BLOCKED_BY_RESPONSE) {
     return base::nullopt;
+  }
+  if (blocked_by_response_reason_) {
+    return BlockedByResponseReasonToResourceRequestBlockedReason(
+        *blocked_by_response_reason_);
   }
   return static_cast<ResourceRequestBlockedReason>(extended_error_code_);
 }
@@ -216,6 +255,23 @@ String DescriptionForBlockedByClientOrResponse(int error, int extended_error) {
       break;
     case ResourceRequestBlockedReason::kCollapsedByClient:
       detail = "Collapsed";
+      break;
+    case ResourceRequestBlockedReason::kCoepFrameResourceNeedsCoepHeader:
+      detail = "ResponseNeedsCrossOriginEmbedderPolicy";
+      break;
+    case ResourceRequestBlockedReason::
+        kCoopSandboxedIFrameCannotNavigateToCoopPage:
+      detail = "SandboxedIFrameCannotNavigateToOriginIsolatedPage";
+      break;
+    case ResourceRequestBlockedReason::kCorpNotSameOrigin:
+      detail = "NotSameOrigin";
+      break;
+    case ResourceRequestBlockedReason::
+        kCorpNotSameOriginAfterDefaultedToSameOriginByCoep:
+      detail = "NotSameOriginAfterDefaultedToSameOriginByCoep";
+      break;
+    case ResourceRequestBlockedReason::kCorpNotSameSite:
+      detail = "NotSameSite";
       break;
   }
   return WebString::FromASCII(net::ErrorToString(error) + "." + detail);

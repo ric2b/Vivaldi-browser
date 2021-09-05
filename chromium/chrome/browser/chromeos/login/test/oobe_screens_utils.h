@@ -22,12 +22,11 @@ void ExitDiscoverPinSetupScreen();
 void SkipToEnrollmentOnRecovery();
 void WaitForEnrollmentScreen();
 
-#if defined(GOOGLE_CHROME_BUILD)
 void WaitForEulaScreen();
 void TapEulaAccept();
 void WaitForSyncConsentScreen();
 void ExitScreenSyncConsent();
-#endif
+void WaitForLastScreenAndTapGetStarted();
 
 }  // namespace test
 }  // namespace chromeos

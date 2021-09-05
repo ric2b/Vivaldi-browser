@@ -12,28 +12,38 @@
 #include <string>
 #include <vector>
 
+#include "base/callback_forward.h"
 #include "base/containers/circular_deque.h"
+#include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "base/strings/string16.h"
 #include "content/shell/test_runner/mock_screen_orientation_client.h"
 #include "content/shell/test_runner/test_runner_export.h"
-#include "content/shell/test_runner/web_test_runner.h"
 #include "content/shell/test_runner/web_test_runtime_flags.h"
 #include "third_party/blink/public/platform/web_effective_connection_type.h"
-#include "third_party/blink/public/platform/web_image.h"
+#include "third_party/skia/include/core/SkBitmap.h"
 #include "v8/include/v8.h"
 
 class GURL;
 class SkBitmap;
+
+namespace base {
+class DictionaryValue;
+}
 
 namespace blink {
 class WebContentSettingsClient;
 class WebFrame;
 class WebLocalFrame;
 class WebString;
+class WebTextCheckClient;
 class WebView;
+}
+
+namespace content {
+class RenderView;
 }
 
 namespace gin {
@@ -62,7 +72,7 @@ class WebTestDelegate;
 //    - Tracking topLoadingFrame that can finish the test when it loads.
 //    - WorkQueue holding load requests from the TestInterfaces
 //    - WebTestRuntimeFlags
-class TestRunner : public WebTestRunner {
+class TEST_RUNNER_EXPORT TestRunner {
  public:
   explicit TestRunner(TestInterfaces*);
   virtual ~TestRunner();
@@ -86,24 +96,65 @@ class TestRunner : public WebTestRunner {
   // the middle of blink call stacks that have inconsistent state.
   void FinishTestIfReady();
 
-  // WebTestRunner implementation.
-  bool ShouldGeneratePixelResults() override;
-  bool ShouldDumpAsAudio() const override;
-  void GetAudioData(std::vector<unsigned char>* buffer_view) const override;
-  bool IsRecursiveLayoutDumpRequested() override;
-  std::string DumpLayout(blink::WebLocalFrame* frame) override;
-  bool ShouldDumpSelectionRect() const override;
-  bool CanDumpPixelsFromRenderer() const override;
-  void DumpPixelsAsync(
-      content::RenderView* render_view,
-      base::OnceCallback<void(const SkBitmap&)> callback) override;
+  // Returns a mock WebContentSettings that is used for web tests. An
+  // embedder should use this for all WebViews it creates.
+  blink::WebContentSettingsClient* GetWebContentSettings() const;
+
+  // Returns a mock WebTextCheckClient that is used for web tests. An
+  // embedder should use this for all WebLocalFrames it creates.
+  blink::WebTextCheckClient* GetWebTextCheckClient() const;
+
+  // After WebTestDelegate::TestFinished was invoked, the following methods
+  // can be used to determine what kind of dump the main WebViewTestProxy can
+  // provide.
+
+  // If true, WebTestDelegate::audioData returns an audio dump and no text
+  // or pixel results are available.
+  bool ShouldDumpAsAudio() const;
+  void GetAudioData(std::vector<unsigned char>* buffer_view) const;
+
+  // Reports if tests requested a recursive layout dump of all frames
+  // (i.e. by calling testRunner.dumpChildFramesAsText() from javascript).
+  bool IsRecursiveLayoutDumpRequested();
+
+  // Dumps layout of |frame| using the mode requested by the current test
+  // (i.e. text mode if testRunner.dumpAsText() was called from javascript).
+  std::string DumpLayout(blink::WebLocalFrame* frame);
+
+  // Returns true if the selection window should be painted onto captured
+  // pixels.
+  bool ShouldDumpSelectionRect() const;
+
+  // Returns false if the browser should capture the pixel output, true if it
+  // can be done locally in the renderer via DumpPixelsAsync().
+  bool CanDumpPixelsFromRenderer() const;
+
+  // Snapshots the content of |render_view| using the mode requested by the
+  // current test and calls |callback| with the result.  Caller needs to ensure
+  // that |render_view| stays alive until |callback| is called.
+  void DumpPixelsAsync(content::RenderView* render_view,
+                       base::OnceCallback<void(const SkBitmap&)> callback);
+
+  // Replicates changes to web test runtime flags (i.e. changes that happened in
+  // another renderer). See also WebTestDelegate::OnWebTestRuntimeFlagsChanged.
   void ReplicateWebTestRuntimeFlagsChanges(
-      const base::DictionaryValue& changed_values) override;
-  bool HasCustomTextDump(std::string* custom_text_dump) const override;
-  bool ShouldDumpBackForwardList() const override;
-  blink::WebContentSettingsClient* GetWebContentSettings() const override;
-  blink::WebTextCheckClient* GetWebTextCheckClient() const override;
-  void SetFocus(blink::WebView* web_view, bool focus) override;
+      const base::DictionaryValue& changed_values);
+
+  // If custom text dump is present (i.e. if testRunner.setCustomTextOutput has
+  // been called from javascript), then returns |true| and populates the
+  // |custom_text_dump| argument.  Otherwise returns |false|.
+  bool HasCustomTextDump(std::string* custom_text_dump) const;
+
+  // Returns true if the history should be included in text results generated at
+  // the end of the test.
+  bool ShouldDumpBackForwardList() const;
+
+  // Returns true if pixel results should be generated at the end of the test.
+  bool ShouldGeneratePixelResults();
+
+  // Sets focus on the given view.  Internally tracks currently focused view,
+  // to aid in defocusing previously focused views at the right time.
+  void SetFocus(blink::WebView* web_view, bool focus);
 
   // Methods used by WebViewTestClient and WebFrameTestClient.
   std::string GetAcceptLanguages() const;
@@ -132,6 +183,7 @@ class TestRunner : public WebTestRunner {
   bool ShouldDumpSpellCheckCallbacks() const;
   bool ShouldWaitUntilExternalURLLoad() const;
   const std::set<std::string>* HttpHeadersToClear() const;
+  bool ClearReferrer() const;
   bool is_web_platform_tests_mode() const {
     return is_web_platform_tests_mode_;
   }
@@ -376,7 +428,6 @@ class TestRunner : public WebTestRunner {
   void SetStorageAllowed(bool allowed);
   void SetPluginsAllowed(bool allowed);
   void SetAllowRunningOfInsecureContent(bool allowed);
-  void SetAutoplayAllowed(bool allowed);
   void DumpPermissionClientCallbacks();
 
   // Sets up a mock DocumentSubresourceFilter to disallow subsequent subresource
@@ -409,7 +460,14 @@ class TestRunner : public WebTestRunner {
   void SetShouldStayOnPageAfterHandlingBeforeUnload(bool value);
 
   // Causes WillSendRequest to clear certain headers.
+  // Note: This cannot be used to clear the request's `Referer` header, as this
+  // header is computed later given its referrer string member. To clear it, use
+  // SetWillSendRequestClearReferrer() below.
   void SetWillSendRequestClearHeader(const std::string& header);
+
+  // Causes WillSendRequest to clear the request's referrer string and set its
+  // referrer policy to the default.
+  void SetWillSendRequestClearReferrer();
 
   // Sets a flag that causes the test to be marked as completed when the
   // WebLocalFrameClient receives a LoadURLExternally() call.
@@ -496,6 +554,15 @@ class TestRunner : public WebTestRunner {
   // Simulates a user deleting a content index entry.
   void SimulateWebContentIndexDelete(const std::string& id);
 
+  // Returns the absolute path to a directory this test can write data in. This
+  // returns the path to a fresh empty directory every time this method is
+  // called. Additionally when this method is called any previously created
+  // directories will be deleted.
+  base::FilePath GetWritableDirectory();
+
+  // Sets the path that should be returned when the test shows a file dialog.
+  void SetFilePathForMockFileDialog(const base::FilePath& path);
+
   // Takes care of notifying the delegate after a change to web test runtime
   // flags.
   void OnWebTestRuntimeFlagsChanged();
@@ -544,6 +611,7 @@ class TestRunner : public WebTestRunner {
   bool sweep_horizontally_;
 
   std::set<std::string> http_headers_to_clear_;
+  bool clear_referrer_ = false;
 
   // WAV audio data is stored here.
   std::vector<unsigned char> audio_data_;

@@ -20,7 +20,9 @@ import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel.StateChangeReason;
 import org.chromium.chrome.browser.dom_distiller.ReaderModeManager;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.ui.widget.text.AccessibleTextView;
+import org.chromium.chrome.browser.tab.TabImpl;
+import org.chromium.chrome.browser.ui.messages.infobar.InfoBarCompactLayout;
+import org.chromium.components.browser_ui.widget.text.AccessibleTextView;
 
 /**
  * This is the InfoBar implementation of the Reader Mode UI. This is used in place of the
@@ -73,7 +75,7 @@ public class ReaderModeInfoBar extends InfoBar {
         iconView.setOnClickListener(mNavigateListener);
         iconView.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
         final int messagePadding = getContext().getResources().getDimensionPixelOffset(
-                R.dimen.reader_mode_infobar_text_padding);
+                R.dimen.infobar_compact_message_vertical_padding);
         prompt.setPadding(0, messagePadding, 0, messagePadding);
         layout.addContent(prompt, 1f);
     }
@@ -106,8 +108,8 @@ public class ReaderModeInfoBar extends InfoBar {
         if (getNativeInfoBarPtr() == 0) return null;
         Tab tab = ReaderModeInfoBarJni.get().getTab(getNativeInfoBarPtr(), ReaderModeInfoBar.this);
 
-        if (tab == null || tab.getActivity() == null) return null;
-        return tab.getActivity().getReaderModeManager();
+        if (tab == null || ((TabImpl) tab).getActivity() == null) return null;
+        return ((TabImpl) tab).getActivity().getReaderModeManager();
     }
 
     /**

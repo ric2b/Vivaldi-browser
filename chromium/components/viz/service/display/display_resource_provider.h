@@ -15,7 +15,6 @@
 
 #include "base/containers/flat_map.h"
 #include "base/containers/small_map.h"
-#include "base/macros.h"
 #include "base/threading/thread_checker.h"
 #include "base/trace_event/memory_dump_provider.h"
 #include "build/build_config.h"
@@ -40,7 +39,7 @@ class ColorSpace;
 namespace gpu {
 namespace gles2 {
 class GLES2Interface;
-}
+}  // namespace gles2
 }  // namespace gpu
 
 namespace viz {
@@ -74,6 +73,9 @@ class VIZ_SERVICE_EXPORT DisplayResourceProvider
                           SharedBitmapManager* shared_bitmap_manager,
                           bool enable_shared_images = true);
   ~DisplayResourceProvider() override;
+
+  DisplayResourceProvider(const DisplayResourceProvider&) = delete;
+  DisplayResourceProvider& operator=(const DisplayResourceProvider&) = delete;
 
   bool IsSoftware() const { return mode_ == kSoftware; }
   void DidLoseContextProvider() { lost_context_provider_ = true; }
@@ -137,6 +139,9 @@ class VIZ_SERVICE_EXPORT DisplayResourceProvider
                      ResourceId resource_id);
     ~ScopedReadLockGL();
 
+    ScopedReadLockGL(const ScopedReadLockGL&) = delete;
+    ScopedReadLockGL& operator=(const ScopedReadLockGL&) = delete;
+
     GLuint texture_id() const { return texture_id_; }
     GLenum target() const { return target_; }
     const gfx::Size& size() const { return size_; }
@@ -150,8 +155,6 @@ class VIZ_SERVICE_EXPORT DisplayResourceProvider
     GLenum target_ = GL_TEXTURE_2D;
     gfx::Size size_;
     gfx::ColorSpace color_space_;
-
-    DISALLOW_COPY_AND_ASSIGN(ScopedReadLockGL);
   };
 
   class VIZ_SERVICE_EXPORT ScopedSamplerGL {
@@ -165,6 +168,9 @@ class VIZ_SERVICE_EXPORT DisplayResourceProvider
                     GLenum filter);
     ~ScopedSamplerGL();
 
+    ScopedSamplerGL(const ScopedSamplerGL&) = delete;
+    ScopedSamplerGL& operator=(const ScopedSamplerGL&) = delete;
+
     GLuint texture_id() const { return resource_lock_.texture_id(); }
     GLenum target() const { return target_; }
     const gfx::ColorSpace& color_space() const {
@@ -175,8 +181,6 @@ class VIZ_SERVICE_EXPORT DisplayResourceProvider
     const ScopedReadLockGL resource_lock_;
     const GLenum unit_;
     const GLenum target_;
-
-    DISALLOW_COPY_AND_ASSIGN(ScopedSamplerGL);
   };
 
   class VIZ_SERVICE_EXPORT ScopedReadLockSkImage {
@@ -187,6 +191,10 @@ class VIZ_SERVICE_EXPORT DisplayResourceProvider
                           GrSurfaceOrigin origin = kTopLeft_GrSurfaceOrigin);
     ~ScopedReadLockSkImage();
 
+    ScopedReadLockSkImage(const ScopedReadLockSkImage&) = delete;
+    ScopedReadLockSkImage& operator=(const ScopedReadLockSkImage& other) =
+        delete;
+
     const SkImage* sk_image() const { return sk_image_.get(); }
     sk_sp<SkImage> TakeSkImage() { return std::move(sk_image_); }
 
@@ -196,8 +204,6 @@ class VIZ_SERVICE_EXPORT DisplayResourceProvider
     DisplayResourceProvider* const resource_provider_;
     const ResourceId resource_id_;
     sk_sp<SkImage> sk_image_;
-
-    DISALLOW_COPY_AND_ASSIGN(ScopedReadLockSkImage);
   };
 
  private:
@@ -213,13 +219,22 @@ class VIZ_SERVICE_EXPORT DisplayResourceProvider
                               ResourceId resource_id);
     ~ScopedReadLockSharedImage();
 
-    gpu::Mailbox mailbox() const;
-    gpu::SyncToken sync_token() const;
+    ScopedReadLockSharedImage(ScopedReadLockSharedImage&& other);
+    ScopedReadLockSharedImage& operator=(ScopedReadLockSharedImage&& other);
+
+    const gpu::Mailbox& mailbox() const {
+      DCHECK(resource_);
+      return resource_->transferable.mailbox_holder.mailbox;
+    }
+    const gpu::SyncToken& sync_token() const {
+      DCHECK(resource_);
+      return resource_->sync_token();
+    }
 
    private:
-    DisplayResourceProvider* const resource_provider_;
-    const ResourceId resource_id_;
-    ChildResource* const resource_;
+    DisplayResourceProvider* resource_provider_;
+    ResourceId resource_id_;
+    ChildResource* resource_;
   };
 
   // Maintains set of resources locked for external use by SkiaRenderer.
@@ -232,10 +247,14 @@ class VIZ_SERVICE_EXPORT DisplayResourceProvider
                           ExternalUseClient* client);
     ~LockSetForExternalUse();
 
+    LockSetForExternalUse(const LockSetForExternalUse&) = delete;
+    LockSetForExternalUse& operator=(const LockSetForExternalUse& other) =
+        delete;
+
     // Lock a resource for external use. The return value was created by
     // |client| at some point in the past.
     ExternalUseClient::ImageContext* LockResource(ResourceId resource_id,
-                                                  bool is_video_plane = false);
+                                                  bool is_video_plane);
 
     // Unlock all locked resources with a |sync_token|.  The |sync_token| should
     // be waited on before reusing the resource's backing to ensure that any
@@ -246,8 +265,6 @@ class VIZ_SERVICE_EXPORT DisplayResourceProvider
    private:
     DisplayResourceProvider* const resource_provider_;
     std::vector<std::pair<ResourceId, ChildResource*>> resources_;
-
-    DISALLOW_COPY_AND_ASSIGN(LockSetForExternalUse);
   };
 
   // All resources that are returned to children while an instance of this
@@ -260,13 +277,14 @@ class VIZ_SERVICE_EXPORT DisplayResourceProvider
 
    private:
     DisplayResourceProvider* const resource_provider_;
-
-    DISALLOW_COPY_AND_ASSIGN(ScopedBatchReturnResources);
   };
 
   class VIZ_SERVICE_EXPORT SynchronousFence : public ResourceFence {
    public:
     explicit SynchronousFence(gpu::gles2::GLES2Interface* gl);
+
+    SynchronousFence(const SynchronousFence&) = delete;
+    SynchronousFence& operator=(const SynchronousFence&) = delete;
 
     // ResourceFence implementation.
     void Set() override;
@@ -282,8 +300,6 @@ class VIZ_SERVICE_EXPORT DisplayResourceProvider
 
     gpu::gles2::GLES2Interface* gl_;
     bool has_synchronized_;
-
-    DISALLOW_COPY_AND_ASSIGN(SynchronousFence);
   };
 
   // Sets the current read fence. If a resource is locked for read
@@ -293,11 +309,8 @@ class VIZ_SERVICE_EXPORT DisplayResourceProvider
     current_read_lock_fence_ = fence;
   }
 
-  // Creates accounting for a child. Returns a child ID. |needs_sync_tokens|
-  // sets whether resources need sync points set on them when returned to this
-  // child.
-  int CreateChild(const ReturnCallback& return_callback,
-                  bool needs_sync_tokens);
+  // Creates accounting for a child. Returns a child ID.
+  int CreateChild(const ReturnCallback& return_callback);
 
   // Destroys accounting for the child, deleting all accounted resources.
   void DestroyChild(int child);
@@ -324,6 +337,9 @@ class VIZ_SERVICE_EXPORT DisplayResourceProvider
   // releasing any other resources back to the child.
   void DeclareUsedResourcesFromChild(int child,
                                      const ResourceIdSet& resources_from_child);
+
+  // Returns the mailbox corresponding to a resource id.
+  gpu::Mailbox GetMailbox(int resource_id);
 
  private:
   enum DeleteStyle {
@@ -368,7 +384,6 @@ class VIZ_SERVICE_EXPORT DisplayResourceProvider
     std::unordered_map<ResourceId, ResourceId> child_to_parent_map;
     ReturnCallback return_callback;
     bool marked_for_deletion = false;
-    bool needs_sync_tokens = true;
   };
 
   // The data structure used to track state of Gpu and Software-based
@@ -393,6 +408,11 @@ class VIZ_SERVICE_EXPORT DisplayResourceProvider
     // synchronized for use.
     bool ShouldWaitSyncToken() const {
       return synchronization_state_ == NEEDS_WAIT;
+    }
+
+    bool InUse() const {
+      return lock_for_read_count > 0 || locked_for_external_use ||
+             lock_for_overlay_count > 0;
     }
 
     void SetLocallyUsed();
@@ -458,6 +478,18 @@ class VIZ_SERVICE_EXPORT DisplayResourceProvider
     // resource. It is given from a child to the service, and waited on in order
     // to use the resource, and this is tracked by the |synchronization_state_|.
     gpu::SyncToken sync_token_;
+  };
+
+  // Class to do Scoped Begin/End read access on a batch of shared images.
+  class ScopedBatchReadAccess {
+   public:
+    explicit ScopedBatchReadAccess(gpu::gles2::GLES2Interface* gl);
+    ~ScopedBatchReadAccess();
+
+   private:
+    gpu::gles2::GLES2Interface* gl_ = nullptr;
+
+    DISALLOW_COPY_AND_ASSIGN(ScopedBatchReadAccess);
   };
 
   using ChildMap = std::unordered_map<int, Child>;
@@ -536,8 +568,7 @@ class VIZ_SERVICE_EXPORT DisplayResourceProvider
 #endif
 
   bool enable_shared_images_;
-
-  DISALLOW_COPY_AND_ASSIGN(DisplayResourceProvider);
+  std::unique_ptr<ScopedBatchReadAccess> scoped_batch_read_access_;
 };
 
 }  // namespace viz

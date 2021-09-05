@@ -56,7 +56,8 @@ cr.define('cr.samlPasswordChange', function() {
     if (url.host.match(/\.okta\.com$/)) {
       return PasswordChangePageProvider.OKTA;
     }
-    if (url.pathname.match('/password/chg/')) {
+    if (url.pathname.match('/password/chg/') ||
+        url.pathname.match('/pwdchange/')) {
       return PasswordChangePageProvider.PING;
     }
     return PasswordChangePageProvider.UNKNOWN;
@@ -76,12 +77,12 @@ cr.define('cr.samlPasswordChange', function() {
   }
 
   /**
-   * @param {Object} details The web-request details.
+   * @param {URL?} postUrl Where the password change request was POSTed.
+   * @param {URL?} redirectUrl Where the response redirected the browser.
    * @return {boolean} True if we detect that a password change was successful.
    */
-  function detectPasswordChangeSuccess(details) {
-    const url = safeParseUrl_(details.url);
-    if (!url) {
+  function detectPasswordChangeSuccess(postUrl, redirectUrl) {
+    if (!postUrl || !redirectUrl) {
       return false;
     }
 
@@ -90,20 +91,27 @@ cr.define('cr.samlPasswordChange', function() {
     // that an otherwise unsupported IdP can also send it as a success message.
     // TODO(https://crbug.com/930109): Consider removing this entirely, or,
     // using a more self-documenting parameter like 'passwordChanged=1'.
-    if (url.searchParams.get('status') == '0') {
+    if (redirectUrl.searchParams.get('status') == '0') {
       return true;
     }
 
-    const pageProvider = detectProvider_(url);
+    const pageProvider = detectProvider_(postUrl);
     // These heuristics work for the following SAML IdPs:
     if (pageProvider == PasswordChangePageProvider.ADFS) {
-      return url.searchParams.get('status') == '0';
+      return redirectUrl.searchParams.get('status') == '0';
     }
     if (pageProvider == PasswordChangePageProvider.AZURE) {
-      return url.searchParams.get('ReturnCode') == '0';
+      return redirectUrl.searchParams.get('ReturnCode') == '0';
+    }
+    if (pageProvider == PasswordChangePageProvider.PING) {
+      // The returnurl is always preserved until password change succeeds - then
+      // it is no longer needed.
+      return (!!postUrl.searchParams.get('returnurl') &&
+              !redirectUrl.searchParams.get('returnurl')) ||
+          redirectUrl.pathname.endsWith('Success');
     }
 
-    // We can't currently detect success for Okta or Ping just by inspecting the
+    // We can't currently detect success for Okta just by inspecting the
     // URL or even response headers. To inspect the response body, we need
     // to inject scripts onto their page (see okta_detect_success_injected.js).
 
@@ -163,11 +171,12 @@ cr.define('cr.samlPasswordChange', function() {
           this.samlHandler_, 'authPageLoaded',
           this.onAuthPageLoaded_.bind(this));
 
-      // Listen for completed main-frame requests to check for password-change
-      // success.
+      // Listen for main-frame redirects to check for success - we can mostly
+      // detect success by detecting we POSTed something to the password-change
+      // URL, and the response redirected us to a particular success URL.
       this.webviewEventManager_.addWebRequestEventListener(
-          this.webview_.request.onCompleted,
-          this.onCompleted_.bind(this),
+          this.webview_.request.onBeforeRedirect,
+          this.onBeforeRedirect_.bind(this),
           {urls: ['*://*/*'], types: ['main_frame']},
       );
 
@@ -179,6 +188,13 @@ cr.define('cr.samlPasswordChange', function() {
         all_frames: true,
         run_at: 'document_start'
       }]);
+
+      // Connect to the script running in Okta web pages once it loads.
+      this.webviewEventManager_.addWebRequestEventListener(
+          this.webview_.request.onCompleted,
+          this.onOktaCompleted_.bind(this),
+          {urls: ['*://*.okta.com/*'], types: ['main_frame']},
+      );
 
       // Okta-detect-success-inject script signals success by posting a message
       // that says "passwordChangeSuccess", which we listen for:
@@ -242,11 +258,33 @@ cr.define('cr.samlPasswordChange', function() {
 
     /**
      * Sends scraped password and resets the state.
+     * @param {bool} isOkta whether the page is Okta page.
      * @private
      */
-    onPasswordChangeSuccess_() {
-      const passwordsOnce = this.samlHandler_.getPasswordsScrapedTimes(1);
-      const passwordsTwice = this.samlHandler_.getPasswordsScrapedTimes(2);
+    onPasswordChangeSuccess_(isOkta) {
+      let passwordsOnce;
+      let passwordsTwice;
+      if (isOkta) {
+        passwordsOnce = this.samlHandler_.getPasswordsWithPropertyScrapedTimes(
+            1, 'oldPassword');
+        const newPasswords =
+            this.samlHandler_.getPasswordsWithPropertyScrapedTimes(
+                1, 'newPassword');
+        const verifyPasswords =
+            this.samlHandler_.getPasswordsWithPropertyScrapedTimes(
+                1, 'verifyPassword');
+        if (newPasswords.length == 1 && verifyPasswords.length == 1 &&
+            newPasswords[0] === verifyPasswords[0]) {
+          passwordsTwice = Array.from(newPasswords);
+        } else {
+          passwordsTwice = [];
+        }
+      } else {
+        passwordsOnce =
+            this.samlHandler_.getPasswordsWithPropertyScrapedTimes(1);
+        passwordsTwice =
+            this.samlHandler_.getPasswordsWithPropertyScrapedTimes(2);
+      }
 
       this.dispatchEvent(new CustomEvent('authCompleted', {
         detail: {
@@ -270,20 +308,28 @@ cr.define('cr.samlPasswordChange', function() {
      * @param {Object} details The web-request details.
      * @private
      */
-    onCompleted_(details) {
-      if (detectPasswordChangeSuccess(details)) {
-        this.onPasswordChangeSuccess_();
+    onBeforeRedirect_(details) {
+      if (details.method == 'POST' &&
+          detectPasswordChangeSuccess(
+              safeParseUrl_(details.url), safeParseUrl_(details.redirectUrl))) {
+        this.onPasswordChangeSuccess_(false /* isOkta != OKTA */);
       }
+    }
 
+    /**
+     * Invoked when loading completes on an Okta page.
+     * @param {Object} details The web-request details.
+     * @private
+     */
+    onOktaCompleted_(details) {
       // Okta_detect_success_injected.js needs to be contacted by the parent,
       // so that it can send messages back to the parent.
-      const pageProvider = detectProvider_(safeParseUrl_(details.url));
-      if (pageProvider == PasswordChangePageProvider.OKTA) {
-        // Using setTimeout gives the page time to finish initializing.
-        setTimeout(() => {
-          this.webview_.contentWindow.postMessage('connect', details.url);
-        }, 1000);
-      }
+      // Using setTimeout gives the page time to finish initializing.
+      // TODO: timeout value is chosen empirically, we need a better way
+      // to pass this to the injected code.
+      setTimeout(() => {
+        this.webview_.contentWindow.postMessage('connect', details.url);
+      }, 2000);
     }
 
     /**
@@ -295,7 +341,7 @@ cr.define('cr.samlPasswordChange', function() {
       if (event.data == 'passwordChangeSuccess') {
         const pageProvider = detectProvider_(safeParseUrl_(event.origin));
         if (pageProvider == PasswordChangePageProvider.OKTA) {
-          this.onPasswordChangeSuccess_();
+          this.onPasswordChangeSuccess_(true /* isOkta == OKTA */);
         }
       }
     }

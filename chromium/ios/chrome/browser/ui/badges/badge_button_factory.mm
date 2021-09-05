@@ -8,8 +8,8 @@
 #import "ios/chrome/browser/ui/badges/badge_button.h"
 #import "ios/chrome/browser/ui/badges/badge_constants.h"
 #import "ios/chrome/browser/ui/badges/badge_delegate.h"
-#import "ios/chrome/common/colors/dynamic_color_util.h"
-#import "ios/chrome/common/colors/semantic_color_names.h"
+#import "ios/chrome/common/ui/colors/dynamic_color_util.h"
+#import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -26,6 +26,10 @@
       break;
     case BadgeType::kBadgeTypePasswordUpdate:
       return [self passwordsUpdateBadgeButton];
+    case BadgeType::kBadgeTypeSaveCard:
+      return [self saveCardBadgeButton];
+    case BadgeType::kBadgeTypeTranslate:
+      return [self translateBadgeButton];
     case BadgeType::kBadgeTypeIncognito:
       return [self incognitoBadgeButton];
     case BadgeType::kBadgeTypeOverflow:
@@ -65,6 +69,34 @@
       kBadgeButtonUpdatePasswordAccessibilityIdentifier;
   button.accessibilityLabel =
       l10n_util::GetNSString(IDS_IOS_INFOBAR_BADGES_PASSWORD_HINT);
+  return button;
+}
+
+- (BadgeButton*)saveCardBadgeButton {
+  BadgeButton* button =
+      [self createButtonForType:BadgeType::kBadgeTypeSaveCard
+                     imageNamed:@"infobar_save_card_icon"
+                  renderingMode:UIImageRenderingModeAlwaysTemplate];
+  [button addTarget:self.delegate
+                action:@selector(saveCardBadgeButtonTapped:)
+      forControlEvents:UIControlEventTouchUpInside];
+  button.accessibilityIdentifier = kBadgeButtonSaveCardAccessibilityIdentifier;
+  button.accessibilityLabel =
+      l10n_util::GetNSString(IDS_IOS_AUTOFILL_SAVE_CARD_BADGE_HINT);
+  return button;
+}
+
+- (BadgeButton*)translateBadgeButton {
+  BadgeButton* button =
+      [self createButtonForType:BadgeType::kBadgeTypeTranslate
+                     imageNamed:@"infobar_translate_icon"
+                  renderingMode:UIImageRenderingModeAlwaysTemplate];
+  [button addTarget:self.delegate
+                action:@selector(translateBadgeButtonTapped:)
+      forControlEvents:UIControlEventTouchUpInside];
+  button.accessibilityIdentifier = kBadgeButtonTranslateAccessibilityIdentifier;
+  button.accessibilityLabel =
+      l10n_util::GetNSString(IDS_IOS_INFOBAR_BADGES_TRANSLATE_HINT);
   return button;
 }
 

@@ -8,14 +8,17 @@
 
 #include "base/bind.h"
 #include "base/strings/string_util.h"
+#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/extensions/chrome_extension_web_contents_observer.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/views/chrome_web_dialog_view.h"
-#include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/hats/hats_bubble_view.h"
-#include "chrome/browser/ui/views/location_bar/location_bar_view.h"
-#include "chrome/browser/ui/views/toolbar/toolbar_view.h"
+#include "chrome/browser/ui/webui/chrome_web_contents_handler.h"
 #include "chrome/grit/browser_resources.h"
+#include "components/constrained_window/constrained_window_views.h"
+#include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/performance_manager/embedder/performance_manager_registry.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
@@ -23,6 +26,7 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/template_expressions.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/views/controls/webview/web_dialog_view.h"
 #include "ui/views/widget/widget.h"
 #include "url/url_canon.h"
 #include "url/url_util.h"
@@ -81,8 +85,20 @@ HatsWebDialog::HatsWebDialog(Browser* browser, const std::string& site_id)
       browser_(browser),
       site_id_(site_id) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  DCHECK(
-      otr_profile_registration_->profile()->IsIndependentOffTheRecordProfile());
+  Profile* profile = off_the_record_profile();
+  DCHECK(profile->IsIndependentOffTheRecordProfile());
+
+  // As this is not a user-facing profile, force enable cookies for the
+  // resources loaded by HaTS.
+  auto* settings_map = HostContentSettingsMapFactory::GetForProfile(profile);
+  settings_map->SetContentSettingCustomScope(
+      ContentSettingsPattern::FromString("[*.]google.com"),
+      ContentSettingsPattern::Wildcard(), ContentSettingsType::COOKIES,
+      /* resource_identifier= */ std::string(), CONTENT_SETTING_ALLOW);
+  settings_map->SetContentSettingCustomScope(
+      ContentSettingsPattern::FromString("[*.]doubleclick.net"),
+      ContentSettingsPattern::Wildcard(), ContentSettingsType::COOKIES,
+      /* resource_identifier= */ std::string(), CONTENT_SETTING_ALLOW);
 }
 
 HatsWebDialog::~HatsWebDialog() {
@@ -123,7 +139,6 @@ std::string HatsWebDialog::GetDialogArgs() const {
 }
 
 void HatsWebDialog::OnDialogClosed(const std::string& json_retval) {
-  delete this;
 }
 
 void HatsWebDialog::OnCloseContents(content::WebContents* source,
@@ -161,7 +176,7 @@ void HatsWebDialog::OnWebContentsFinishedLoad() {
 }
 
 void HatsWebDialog::OnMainFrameResourceLoadComplete(
-    const content::mojom::ResourceLoadInfo& resource_load_info) {
+    const blink::mojom::ResourceLoadInfo& resource_load_info) {
   // Due to https://crbug.com/1011433, we don't always get called due to failed
   // loading for javascript resource. So, We monitor all the resource load,
   // and explicitly HaTS library code. We only claim |resource_loaded_| is true
@@ -170,7 +185,7 @@ void HatsWebDialog::OnMainFrameResourceLoadComplete(
   // TODO(weili): once the bug is fixed, we no longer need this check nor
   // |resource_loaded_|, remove them then.
   if (resource_load_info.net_error == net::Error::OK) {
-    if (resource_load_info.url.spec().find(kSurveyHost) == 0) {
+    if (resource_load_info.original_url.spec().find(kSurveyHost) == 0) {
       // The resource from survey host is loaded successfully.
       resource_loaded_ = true;
     }
@@ -179,6 +194,22 @@ void HatsWebDialog::OnMainFrameResourceLoadComplete(
     loading_timer_.Stop();
     preloading_widget_->Close();
   }
+}
+
+views::View* HatsWebDialog::GetContentsView() {
+  return webview_;
+}
+
+views::Widget* HatsWebDialog::GetWidget() {
+  return webview_->GetWidget();
+}
+
+const views::Widget* HatsWebDialog::GetWidget() const {
+  return webview_->GetWidget();
+}
+
+ui::ModalType HatsWebDialog::GetModalType() const {
+  return ui::MODAL_TYPE_WINDOW;
 }
 
 void HatsWebDialog::OnLoadTimedOut() {
@@ -198,21 +229,25 @@ const base::TimeDelta HatsWebDialog::ContentLoadingTimeout() const {
 
 void HatsWebDialog::CreateWebDialog(Browser* browser) {
   // Create a web dialog aligned to the bottom center of the location bar.
-  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
-  LocationBarView* location_bar = browser_view->GetLocationBarView();
-  DCHECK(location_bar);
-  gfx::Rect bounds(location_bar->bounds());
-  views::View::ConvertRectToScreen(browser_view->toolbar(), &bounds);
-  bounds = gfx::Rect(
-      bounds.x() +
-          std::max(0, bounds.width() / 2 - kDefaultHatsDialogWidth / 2),
-      bounds.bottom() - views::BubbleBorder::GetBorderAndShadowInsets().top(),
-      kDefaultHatsDialogWidth, kDefaultHatsDialogHeight);
-  gfx::NativeWindow native_window = chrome::CreateWebDialogWithBounds(
-      browser_view->GetWidget()->GetNativeView(), off_the_record_profile(),
-      this, bounds,
-      /*show=*/false);
-  preloading_widget_ = views::Widget::GetWidgetForNativeWindow(native_window);
+  DialogDelegate::SetButtons(ui::DIALOG_BUTTON_NONE);
+  webview_ =
+      new views::WebDialogView(off_the_record_profile(), this,
+                               std::make_unique<ChromeWebContentsHandler>(),
+                               /* use_dialog_frame= */ true);
+  webview_->SetPreferredSize(
+      gfx::Size(kDefaultHatsDialogWidth, kDefaultHatsDialogHeight));
+  preloading_widget_ = constrained_window::CreateBrowserModalDialogViews(
+      this, browser_->tab_strip_model()
+                ->GetActiveWebContents()
+                ->GetTopLevelNativeWindow());
+
+  // Observer is needed for ChromeVox extension to send messages between content
+  // and background scripts.
+  extensions::ChromeExtensionWebContentsObserver::CreateForWebContents(
+      webview_->web_contents());
+
+  performance_manager::PerformanceManagerRegistry::GetInstance()
+      ->CreatePageNodeForWebContents(webview_->web_contents());
 
   // Start the loading timer once it is created.
   loading_timer_.Start(FROM_HERE, ContentLoadingTimeout(),
@@ -228,8 +263,10 @@ void HatsWebDialog::OnOriginalProfileDestroyed(Profile* profile) {
 
 void HatsWebDialog::Show(views::Widget* widget, bool accept) {
   if (accept) {
-    if (widget)
+    if (widget) {
       widget->Show();
+      webview_->RequestFocus();
+    }
     return;
   }
 

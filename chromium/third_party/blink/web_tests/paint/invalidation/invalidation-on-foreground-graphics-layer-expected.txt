@@ -29,13 +29,21 @@
     {
       "name": "LayoutNGBlockFlow DIV (foreground) Layer",
       "bounds": [300, 300],
-      "paintInvalidations": [
-        {
-          "object": "LayoutNGBlockFlow DIV id='target'",
-          "rect": [100, 100, 200, 200],
-          "reason": "background"
-        }
+      "invalidations": [
+        [100, 100, 200, 200]
       ],
+      "transform": 1
+    },
+    {
+      "name": "ContentsLayer for Horizontal Scrollbar Layer",
+      "position": [0, 185],
+      "bounds": [185, 15],
+      "transform": 1
+    },
+    {
+      "name": "ContentsLayer for Vertical Scrollbar Layer",
+      "position": [185, 0],
+      "bounds": [15, 185],
       "transform": 1
     },
     {

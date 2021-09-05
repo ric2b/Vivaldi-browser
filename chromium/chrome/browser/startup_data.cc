@@ -5,9 +5,12 @@
 #include "chrome/browser/startup_data.h"
 
 #include "base/files/file_path.h"
+#include "base/task/thread_pool.h"
 #include "chrome/browser/metrics/chrome_feature_list_creator.h"
 #include "chrome/browser/prefs/profile_pref_store_manager.h"
 #include "chrome/common/channel_info.h"
+#include "components/metrics/delegating_provider.h"
+#include "components/metrics/entropy_state_provider.h"
 #include "components/metrics/field_trials_provider.h"
 #include "components/metrics/metrics_log.h"
 #include "components/metrics/persistent_system_profile.h"
@@ -27,7 +30,6 @@
 #include "chrome/browser/policy/schema_registry_service_builder.h"
 #include "chrome/browser/prefs/browser_prefs.h"
 #include "chrome/browser/prefs/chrome_pref_service_factory.h"
-#include "chrome/browser/prefs/in_process_service_factory_factory.h"
 #include "chrome/browser/profiles/chrome_browser_main_extra_parts_profiles.h"
 #include "chrome/browser/profiles/pref_service_builder_utils.h"
 #include "chrome/browser/profiles/profile_key.h"
@@ -46,8 +48,6 @@
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "content/public/browser/network_service_instance.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
-#include "services/preferences/public/cpp/in_process_service_factory.h"
-#include "services/preferences/public/mojom/preferences.mojom.h"
 #include "services/preferences/public/mojom/tracked_preference_validation_delegate.mojom.h"
 
 namespace {
@@ -76,11 +76,20 @@ void StartupData::RecordCoreSystemProfile() {
       chrome_feature_list_creator_->actual_locale(),
       metrics::GetAppPackageName(), &system_profile);
 
+  metrics::DelegatingProvider delegating_provider;
+
   // TODO(hanxi): Create SyntheticTrialRegistry and pass it to
   // |field_trial_provider|.
-  variations::FieldTrialsProvider field_trial_provider(nullptr,
-                                                       base::StringPiece());
-  field_trial_provider.ProvideSystemProfileMetricsWithLogCreationTime(
+  delegating_provider.RegisterMetricsProvider(
+      std::make_unique<variations::FieldTrialsProvider>(nullptr,
+                                                        base::StringPiece()));
+
+  // Persists low entropy source values.
+  delegating_provider.RegisterMetricsProvider(
+      std::make_unique<metrics::EntropyStateProvider>(
+          chrome_feature_list_creator_->local_state()));
+
+  delegating_provider.ProvideSystemProfileMetricsWithLogCreationTime(
       base::TimeTicks(), &system_profile);
 
   // TODO(crbug.com/965482): Records information from other providers.
@@ -159,9 +168,8 @@ void StartupData::CreateServicesInternal() {
   }
 
   scoped_refptr<base::SequencedTaskRunner> io_task_runner =
-      base::CreateSequencedTaskRunner(
-          {base::ThreadPool(), base::TaskShutdownBehavior::BLOCK_SHUTDOWN,
-           base::MayBlock()});
+      base::ThreadPool::CreateSequencedTaskRunner(
+          {base::TaskShutdownBehavior::BLOCK_SHUTDOWN, base::MayBlock()});
 
   policy::ChromeBrowserPolicyConnector* browser_policy_connector =
       chrome_feature_list_creator_->browser_policy_connector();

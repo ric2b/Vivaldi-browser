@@ -24,6 +24,7 @@
 
 #include "third_party/blink/renderer/core/html/forms/text_control_element.h"
 
+#include "third_party/blink/public/mojom/input/focus_type.mojom-blink.h"
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
 #include "third_party/blink/renderer/core/css/style_change_reason.h"
 #include "third_party/blink/renderer/core/dom/document.h"
@@ -63,8 +64,6 @@
 
 namespace blink {
 
-using namespace html_names;
-
 TextControlElement::TextControlElement(const QualifiedName& tag_name,
                                        Document& doc)
     : HTMLFormControlElementWithState(tag_name, doc),
@@ -84,7 +83,7 @@ TextControlElement::~TextControlElement() = default;
 
 void TextControlElement::DispatchFocusEvent(
     Element* old_focused_element,
-    WebFocusType type,
+    mojom::blink::FocusType type,
     InputDeviceCapabilities* source_capabilities) {
   if (SupportsPlaceholder())
     UpdatePlaceholderVisibility();
@@ -95,7 +94,7 @@ void TextControlElement::DispatchFocusEvent(
 
 void TextControlElement::DispatchBlurEvent(
     Element* new_focused_element,
-    WebFocusType type,
+    mojom::blink::FocusType type,
     InputDeviceCapabilities* source_capabilities) {
   if (SupportsPlaceholder())
     UpdatePlaceholderVisibility();
@@ -138,7 +137,8 @@ void TextControlElement::ForwardEvent(Event& event) {
 String TextControlElement::StrippedPlaceholder() const {
   // According to the HTML5 specification, we need to remove CR and LF from
   // the attribute value.
-  const AtomicString& attribute_value = FastGetAttribute(kPlaceholderAttr);
+  const AtomicString& attribute_value =
+      FastGetAttribute(html_names::kPlaceholderAttr);
   if (!attribute_value.Contains(kNewlineCharacter) &&
       !attribute_value.Contains(kCarriageReturnCharacter))
     return attribute_value;
@@ -160,7 +160,8 @@ static bool IsNotLineBreak(UChar ch) {
 }
 
 bool TextControlElement::IsPlaceholderEmpty() const {
-  const AtomicString& attribute_value = FastGetAttribute(kPlaceholderAttr);
+  const AtomicString& attribute_value =
+      FastGetAttribute(html_names::kPlaceholderAttr);
   return attribute_value.GetString().Find(IsNotLineBreak) == kNotFound;
 }
 
@@ -222,8 +223,8 @@ void TextControlElement::select() {
   setSelectionRangeForBinding(0, std::numeric_limits<unsigned>::max());
   // Avoid SelectionBehaviorOnFocus::Restore, which scrolls containers to show
   // the selection.
-  focus(
-      FocusParams(SelectionBehaviorOnFocus::kNone, kWebFocusTypeNone, nullptr));
+  focus(FocusParams(SelectionBehaviorOnFocus::kNone,
+                    mojom::blink::FocusType::kNone, nullptr));
   RestoreCachedSelection();
 }
 
@@ -246,7 +247,8 @@ void TextControlElement::ClearValueBeforeFirstUserEdit() {
   value_before_first_user_edit_ = String();
 }
 
-void TextControlElement::SetFocused(bool flag, WebFocusType focus_type) {
+void TextControlElement::SetFocused(bool flag,
+                                    mojom::blink::FocusType focus_type) {
   HTMLFormControlElementWithState::SetFocused(flag, focus_type);
 
   if (!flag)
@@ -360,7 +362,7 @@ static Position PositionForIndex(HTMLElement* inner_editor, unsigned index) {
   unsigned remaining_characters_to_move_forward = index;
   Node* last_br_or_text = inner_editor;
   for (Node& node : NodeTraversal::DescendantsOf(*inner_editor)) {
-    if (node.HasTagName(kBrTag)) {
+    if (node.HasTagName(html_names::kBrTag)) {
       if (remaining_characters_to_move_forward == 0)
         return Position::BeforeNode(node);
       --remaining_characters_to_move_forward;
@@ -409,7 +411,8 @@ unsigned TextControlElement::IndexForPosition(HTMLElement* inner_editor,
       else
         index += length;
       // Disregard the last auto added placeholder BrTag.
-    } else if (node->HasTagName(kBrTag) && node != inner_editor->lastChild()) {
+    } else if (node->HasTagName(html_names::kBrTag) &&
+               node != inner_editor->lastChild()) {
       ++index;
     }
   }
@@ -681,14 +684,14 @@ SelectionInDOMTree TextControlElement::Selection() const {
 
 int TextControlElement::maxLength() const {
   int value;
-  if (!ParseHTMLInteger(FastGetAttribute(kMaxlengthAttr), value))
+  if (!ParseHTMLInteger(FastGetAttribute(html_names::kMaxlengthAttr), value))
     return -1;
   return value >= 0 ? value : -1;
 }
 
 int TextControlElement::minLength() const {
   int value;
-  if (!ParseHTMLInteger(FastGetAttribute(kMinlengthAttr), value))
+  if (!ParseHTMLInteger(FastGetAttribute(html_names::kMinlengthAttr), value))
     return -1;
   return value >= 0 ? value : -1;
 }
@@ -707,7 +710,7 @@ void TextControlElement::setMaxLength(int new_value,
         ExceptionMessages::IndexExceedsMinimumBound("maxLength", new_value,
                                                     min));
   } else {
-    SetIntegralAttribute(kMaxlengthAttr, new_value);
+    SetIntegralAttribute(html_names::kMaxlengthAttr, new_value);
   }
 }
 
@@ -725,7 +728,7 @@ void TextControlElement::setMinLength(int new_value,
         ExceptionMessages::IndexExceedsMaximumBound("minLength", new_value,
                                                     max));
   } else {
-    SetIntegralAttribute(kMinlengthAttr, new_value);
+    SetIntegralAttribute(html_names::kMinlengthAttr, new_value);
   }
 }
 
@@ -762,11 +765,12 @@ void TextControlElement::ScheduleSelectEvent() {
 
 void TextControlElement::ParseAttribute(
     const AttributeModificationParams& params) {
-  if (params.name == kPlaceholderAttr) {
+  if (params.name == html_names::kPlaceholderAttr) {
     UpdatePlaceholderText();
     UpdatePlaceholderVisibility();
     UseCounter::Count(GetDocument(), WebFeature::kPlaceholderAttribute);
-  } else if (params.name == kReadonlyAttr || params.name == kDisabledAttr) {
+  } else if (params.name == html_names::kReadonlyAttr ||
+             params.name == html_names::kDisabledAttr) {
     DisabledOrReadonlyAttributeChanged(params.name);
     HTMLFormControlElementWithState::ParseAttribute(params);
   } else {
@@ -966,15 +970,15 @@ String TextControlElement::DirectionForFormData() const {
   for (const HTMLElement* element = this; element;
        element = Traversal<HTMLElement>::FirstAncestor(*element)) {
     const AtomicString& dir_attribute_value =
-        element->FastGetAttribute(kDirAttr);
+        element->FastGetAttribute(html_names::kDirAttr);
     if (dir_attribute_value.IsNull())
       continue;
 
-    if (DeprecatedEqualIgnoringCase(dir_attribute_value, "rtl") ||
-        DeprecatedEqualIgnoringCase(dir_attribute_value, "ltr"))
+    if (EqualIgnoringASCIICase(dir_attribute_value, "rtl") ||
+        EqualIgnoringASCIICase(dir_attribute_value, "ltr"))
       return dir_attribute_value;
 
-    if (DeprecatedEqualIgnoringCase(dir_attribute_value, "auto")) {
+    if (EqualIgnoringASCIICase(dir_attribute_value, "auto")) {
       bool is_auto;
       TextDirection text_direction =
           element->DirectionalityIfhasDirAutoAttribute(is_auto);

@@ -28,10 +28,9 @@
 #include "third_party/blink/renderer/core/html/forms/html_input_element.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 
 namespace blink {
-
-using namespace html_names;
 
 BaseTextInputType::BaseTextInputType(HTMLInputElement& element)
     : TextFieldInputType(element) {}
@@ -79,7 +78,8 @@ bool BaseTextInputType::TooShort(
 }
 
 bool BaseTextInputType::PatternMismatch(const String& value) const {
-  const AtomicString& raw_pattern = GetElement().FastGetAttribute(kPatternAttr);
+  const AtomicString& raw_pattern =
+      GetElement().FastGetAttribute(html_names::kPatternAttr);
   // Empty values can't be mismatched
   if (raw_pattern.IsNull() || value.IsEmpty())
     return false;
@@ -89,11 +89,12 @@ bool BaseTextInputType::PatternMismatch(const String& value) const {
                          ScriptRegexp::UTF16));
     if (!raw_regexp->IsValid()) {
       GetElement().GetDocument().AddConsoleMessage(
-          ConsoleMessage::Create(mojom::ConsoleMessageSource::kRendering,
-                                 mojom::ConsoleMessageLevel::kError,
-                                 "Pattern attribute value " + raw_pattern +
-                                     " is not a valid regular expression: " +
-                                     raw_regexp->ExceptionMessage()));
+          MakeGarbageCollected<ConsoleMessage>(
+              mojom::ConsoleMessageSource::kRendering,
+              mojom::ConsoleMessageLevel::kError,
+              "Pattern attribute value " + raw_pattern +
+                  " is not a valid regular expression: " +
+                  raw_regexp->ExceptionMessage()));
       regexp_.reset(raw_regexp.release());
       pattern_for_regexp_ = raw_pattern;
       return false;

@@ -30,15 +30,15 @@
 namespace blink {
 
 DOMMimeTypeArray::DOMMimeTypeArray(LocalFrame* frame)
-    : ContextLifecycleObserver(frame ? frame->GetDocument() : nullptr),
+    : ExecutionContextLifecycleObserver(frame ? frame->GetDocument() : nullptr),
       PluginsChangedObserver(frame ? frame->GetPage() : nullptr) {
   UpdatePluginData();
 }
 
-void DOMMimeTypeArray::Trace(blink::Visitor* visitor) {
+void DOMMimeTypeArray::Trace(Visitor* visitor) {
   visitor->Trace(dom_mime_types_);
   ScriptWrappable::Trace(visitor);
-  ContextLifecycleObserver::Trace(visitor);
+  ExecutionContextLifecycleObserver::Trace(visitor);
 }
 
 unsigned DOMMimeTypeArray::length() const {
@@ -49,8 +49,8 @@ DOMMimeType* DOMMimeTypeArray::item(unsigned index) {
   if (index >= dom_mime_types_.size())
     return nullptr;
   if (!dom_mime_types_[index]) {
-    dom_mime_types_[index] =
-        DOMMimeType::Create(GetFrame(), *GetPluginData()->Mimes()[index]);
+    dom_mime_types_[index] = MakeGarbageCollected<DOMMimeType>(
+        GetFrame(), *GetPluginData()->Mimes()[index]);
   }
 
   return dom_mime_types_[index];
@@ -120,7 +120,7 @@ void DOMMimeTypeArray::UpdatePluginData() {
   }
 }
 
-void DOMMimeTypeArray::ContextDestroyed(ExecutionContext*) {
+void DOMMimeTypeArray::ContextDestroyed() {
   dom_mime_types_.clear();
 }
 

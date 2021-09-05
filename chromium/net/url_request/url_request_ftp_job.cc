@@ -21,6 +21,7 @@
 #include "net/ftp/ftp_transaction_factory.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_transaction_factory.h"
+#include "net/proxy_resolution/proxy_resolution_request.h"
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_error_job.h"
@@ -100,8 +101,10 @@ void URLRequestFtpJob::Start() {
   } else {
     DCHECK_EQ(request_->context()->proxy_resolution_service(),
               proxy_resolution_service_);
+    // "Fine" to use an empty NetworkIsolationKey() because FTP is slated for
+    // removal.
     rv = proxy_resolution_service_->ResolveProxy(
-        request_->url(), "GET", &proxy_info_,
+        request_->url(), "GET", NetworkIsolationKey(), &proxy_info_,
         base::BindOnce(&URLRequestFtpJob::OnResolveProxyComplete,
                        base::Unretained(this)),
         &proxy_resolve_request_, request_->net_log());

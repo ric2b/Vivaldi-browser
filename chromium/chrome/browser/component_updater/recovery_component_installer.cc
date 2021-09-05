@@ -20,6 +20,7 @@
 #include "base/json/json_file_value_serializer.h"
 #include "base/logging.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "build/branding_buildflags.h"
 #include "content/public/browser/browser_task_traits.h"
 #if defined(OS_MACOSX)
@@ -233,18 +234,18 @@ void DoElevatedInstallRecoveryComponent(const base::FilePath& path) {
   base::Process process = base::Process::Open(pid);
 #endif
   // This task joins a process, hence .WithBaseSyncPrimitives().
-  base::PostTask(FROM_HERE,
-                 {base::ThreadPool(), base::WithBaseSyncPrimitives(),
-                  base::TaskPriority::BEST_EFFORT,
-                  base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
-                 base::BindOnce(&WaitForElevatedInstallToComplete,
-                                base::Passed(&process)));
+  base::ThreadPool::PostTask(
+      FROM_HERE,
+      {base::WithBaseSyncPrimitives(), base::TaskPriority::BEST_EFFORT,
+       base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
+      base::BindOnce(&WaitForElevatedInstallToComplete,
+                     base::Passed(&process)));
 }
 
 void ElevatedInstallRecoveryComponent(const base::FilePath& installer_path) {
-  base::PostTask(
+  base::ThreadPool::PostTask(
       FROM_HERE,
-      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::BEST_EFFORT,
+      {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
        base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
       base::BindOnce(&DoElevatedInstallRecoveryComponent, installer_path));
 }
@@ -269,6 +270,7 @@ class RecoveryComponentInstaller : public update_client::CrxInstaller {
 
   void Install(const base::FilePath& unpack_path,
                const std::string& public_key,
+               std::unique_ptr<InstallParams> install_params,
                Callback callback) override;
 
   bool GetInstalledFile(const std::string& file,
@@ -277,7 +279,7 @@ class RecoveryComponentInstaller : public update_client::CrxInstaller {
   bool Uninstall() override;
 
  private:
-  ~RecoveryComponentInstaller() override {}
+  ~RecoveryComponentInstaller() override = default;
 
   bool DoInstall(const base::FilePath& unpack_path);
 
@@ -376,10 +378,9 @@ bool RecoveryComponentInstaller::RunInstallCommand(
 
   // Let worker pool thread wait for us so we don't block Chrome shutdown.
   // This task joins a process, hence .WithBaseSyncPrimitives().
-  base::PostTask(
+  base::ThreadPool::PostTask(
       FROM_HERE,
-      {base::ThreadPool(), base::WithBaseSyncPrimitives(),
-       base::TaskPriority::BEST_EFFORT,
+      {base::WithBaseSyncPrimitives(), base::TaskPriority::BEST_EFFORT,
        base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
       base::BindOnce(&WaitForInstallToComplete, base::Passed(&process),
                      installer_folder, prefs_));
@@ -408,6 +409,7 @@ bool SetPosixExecutablePermission(const base::FilePath& path) {
 void RecoveryComponentInstaller::Install(
     const base::FilePath& unpack_path,
     const std::string& /*public_key*/,
+    std::unique_ptr<InstallParams> /*install_params*/,
     update_client::CrxInstaller::Callback callback) {
   auto result = update_client::InstallFunctionWrapper(
       base::BindOnce(&RecoveryComponentInstaller::DoInstall,
@@ -439,7 +441,7 @@ bool RecoveryComponentInstaller::DoInstall(
   if (!base::PathExists(path) && !base::CreateDirectory(path))
     return false;
   path = path.AppendASCII(version.GetString());
-  if (base::PathExists(path) && !base::DeleteFile(path, true))
+  if (base::PathExists(path) && !base::DeleteFileRecursively(path))
     return false;
   if (!base::Move(unpack_path, path)) {
     DVLOG(1) << "Recovery component move failed.";

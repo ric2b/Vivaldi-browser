@@ -143,16 +143,16 @@ class ShelfControllerPrefsTest : public AshTestBase {
 // Ensure shelf settings are updated on preference changes.
 TEST_F(ShelfControllerPrefsTest, ShelfRespectsPrefs) {
   Shelf* shelf = GetPrimaryShelf();
-  EXPECT_EQ(SHELF_ALIGNMENT_BOTTOM, shelf->alignment());
-  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_NEVER, shelf->auto_hide_behavior());
+  EXPECT_EQ(ShelfAlignment::kBottom, shelf->alignment());
+  EXPECT_EQ(ShelfAutoHideBehavior::kNever, shelf->auto_hide_behavior());
 
   PrefService* prefs =
       Shell::Get()->session_controller()->GetLastActiveUserPrefService();
   prefs->SetString(prefs::kShelfAlignmentLocal, "Left");
   prefs->SetString(prefs::kShelfAutoHideBehaviorLocal, "Always");
 
-  EXPECT_EQ(SHELF_ALIGNMENT_LEFT, shelf->alignment());
-  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS, shelf->auto_hide_behavior());
+  EXPECT_EQ(ShelfAlignment::kLeft, shelf->alignment());
+  EXPECT_EQ(ShelfAutoHideBehavior::kAlways, shelf->auto_hide_behavior());
 }
 
 // Ensure shelf settings are updated on per-display preference changes.
@@ -164,22 +164,22 @@ TEST_F(ShelfControllerPrefsTest, ShelfRespectsPerDisplayPrefs) {
   Shelf* shelf1 = GetShelfForDisplay(id1);
   Shelf* shelf2 = GetShelfForDisplay(id2);
 
-  EXPECT_EQ(SHELF_ALIGNMENT_BOTTOM, shelf1->alignment());
-  EXPECT_EQ(SHELF_ALIGNMENT_BOTTOM, shelf2->alignment());
-  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_NEVER, shelf1->auto_hide_behavior());
-  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_NEVER, shelf2->auto_hide_behavior());
+  EXPECT_EQ(ShelfAlignment::kBottom, shelf1->alignment());
+  EXPECT_EQ(ShelfAlignment::kBottom, shelf2->alignment());
+  EXPECT_EQ(ShelfAutoHideBehavior::kNever, shelf1->auto_hide_behavior());
+  EXPECT_EQ(ShelfAutoHideBehavior::kNever, shelf2->auto_hide_behavior());
 
   PrefService* prefs =
       Shell::Get()->session_controller()->GetLastActiveUserPrefService();
-  SetShelfAlignmentPref(prefs, id1, SHELF_ALIGNMENT_LEFT);
-  SetShelfAlignmentPref(prefs, id2, SHELF_ALIGNMENT_RIGHT);
-  SetShelfAutoHideBehaviorPref(prefs, id1, SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
-  SetShelfAutoHideBehaviorPref(prefs, id2, SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
+  SetShelfAlignmentPref(prefs, id1, ShelfAlignment::kLeft);
+  SetShelfAlignmentPref(prefs, id2, ShelfAlignment::kRight);
+  SetShelfAutoHideBehaviorPref(prefs, id1, ShelfAutoHideBehavior::kAlways);
+  SetShelfAutoHideBehaviorPref(prefs, id2, ShelfAutoHideBehavior::kAlways);
 
-  EXPECT_EQ(SHELF_ALIGNMENT_LEFT, shelf1->alignment());
-  EXPECT_EQ(SHELF_ALIGNMENT_RIGHT, shelf2->alignment());
-  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS, shelf1->auto_hide_behavior());
-  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS, shelf2->auto_hide_behavior());
+  EXPECT_EQ(ShelfAlignment::kLeft, shelf1->alignment());
+  EXPECT_EQ(ShelfAlignment::kRight, shelf2->alignment());
+  EXPECT_EQ(ShelfAutoHideBehavior::kAlways, shelf1->auto_hide_behavior());
+  EXPECT_EQ(ShelfAutoHideBehavior::kAlways, shelf2->auto_hide_behavior());
 }
 
 // Ensures that pre-Unified Mode per-display shelf settings don't prevent us
@@ -194,9 +194,9 @@ TEST_F(ShelfControllerPrefsTest, ShelfRespectsPerDisplayPrefsUnified) {
   PrefService* prefs =
       Shell::Get()->session_controller()->GetLastActiveUserPrefService();
   Shelf* shelf = GetShelfForDisplay(non_unified_primary_id);
-  EXPECT_EQ(SHELF_ALIGNMENT_BOTTOM, shelf->alignment());
-  SetShelfAlignmentPref(prefs, non_unified_primary_id, SHELF_ALIGNMENT_LEFT);
-  EXPECT_EQ(SHELF_ALIGNMENT_LEFT, shelf->alignment());
+  EXPECT_EQ(ShelfAlignment::kBottom, shelf->alignment());
+  SetShelfAlignmentPref(prefs, non_unified_primary_id, ShelfAlignment::kLeft);
+  EXPECT_EQ(ShelfAlignment::kLeft, shelf->alignment());
 
   // Switch to Unified Mode, and expect to be able to change the shelf
   // alignment.
@@ -206,18 +206,18 @@ TEST_F(ShelfControllerPrefsTest, ShelfRespectsPerDisplayPrefsUnified) {
   ASSERT_EQ(unified_id, GetPrimaryDisplay().id());
 
   shelf = GetShelfForDisplay(unified_id);
-  EXPECT_EQ(SHELF_ALIGNMENT_BOTTOM, shelf->alignment());
-  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_NEVER, shelf->auto_hide_behavior());
+  EXPECT_EQ(ShelfAlignment::kBottom, shelf->alignment());
+  EXPECT_EQ(ShelfAutoHideBehavior::kNever, shelf->auto_hide_behavior());
 
-  SetShelfAlignmentPref(prefs, unified_id, SHELF_ALIGNMENT_LEFT);
+  SetShelfAlignmentPref(prefs, unified_id, ShelfAlignment::kLeft);
   SetShelfAutoHideBehaviorPref(prefs, unified_id,
-                               SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
+                               ShelfAutoHideBehavior::kAlways);
 
-  EXPECT_EQ(SHELF_ALIGNMENT_LEFT, shelf->alignment());
-  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS, shelf->auto_hide_behavior());
+  EXPECT_EQ(ShelfAlignment::kLeft, shelf->alignment());
+  EXPECT_EQ(ShelfAutoHideBehavior::kAlways, shelf->auto_hide_behavior());
 
-  SetShelfAlignmentPref(prefs, unified_id, SHELF_ALIGNMENT_RIGHT);
-  EXPECT_EQ(SHELF_ALIGNMENT_RIGHT, shelf->alignment());
+  SetShelfAlignmentPref(prefs, unified_id, ShelfAlignment::kRight);
+  EXPECT_EQ(ShelfAlignment::kRight, shelf->alignment());
 }
 
 // Ensure shelf settings are correct after display swap at login screen, see
@@ -238,63 +238,63 @@ TEST_F(ShelfControllerPrefsTest,
   PrefService* prefs =
       Shell::Get()->session_controller()->GetLastActiveUserPrefService();
   // Check for the default shelf preferences.
-  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_NEVER,
+  EXPECT_EQ(ShelfAutoHideBehavior::kNever,
             GetShelfAutoHideBehaviorPref(prefs, internal_display_id));
-  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_NEVER,
+  EXPECT_EQ(ShelfAutoHideBehavior::kNever,
             GetShelfAutoHideBehaviorPref(prefs, external_display_id));
-  EXPECT_EQ(SHELF_ALIGNMENT_BOTTOM,
+  EXPECT_EQ(ShelfAlignment::kBottom,
             GetShelfAlignmentPref(prefs, internal_display_id));
-  EXPECT_EQ(SHELF_ALIGNMENT_BOTTOM,
+  EXPECT_EQ(ShelfAlignment::kBottom,
             GetShelfAlignmentPref(prefs, external_display_id));
 
   // Check the current state; shelves have locked alignments in the lock screen.
-  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_NEVER,
+  EXPECT_EQ(ShelfAutoHideBehavior::kNever,
             GetShelfForDisplay(internal_display_id)->auto_hide_behavior());
-  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_NEVER,
+  EXPECT_EQ(ShelfAutoHideBehavior::kNever,
             GetShelfForDisplay(external_display_id)->auto_hide_behavior());
-  EXPECT_EQ(SHELF_ALIGNMENT_BOTTOM_LOCKED,
+  EXPECT_EQ(ShelfAlignment::kBottomLocked,
             GetShelfForDisplay(internal_display_id)->alignment());
-  EXPECT_EQ(SHELF_ALIGNMENT_BOTTOM_LOCKED,
+  EXPECT_EQ(ShelfAlignment::kBottomLocked,
             GetShelfForDisplay(external_display_id)->alignment());
 
   // Set some shelf prefs to differentiate the two shelves, check state.
-  SetShelfAlignmentPref(prefs, internal_display_id, SHELF_ALIGNMENT_LEFT);
-  SetShelfAlignmentPref(prefs, external_display_id, SHELF_ALIGNMENT_RIGHT);
-  EXPECT_EQ(SHELF_ALIGNMENT_BOTTOM_LOCKED,
+  SetShelfAlignmentPref(prefs, internal_display_id, ShelfAlignment::kLeft);
+  SetShelfAlignmentPref(prefs, external_display_id, ShelfAlignment::kRight);
+  EXPECT_EQ(ShelfAlignment::kBottomLocked,
             GetShelfForDisplay(internal_display_id)->alignment());
-  EXPECT_EQ(SHELF_ALIGNMENT_BOTTOM_LOCKED,
+  EXPECT_EQ(ShelfAlignment::kBottomLocked,
             GetShelfForDisplay(external_display_id)->alignment());
 
   SetShelfAutoHideBehaviorPref(prefs, external_display_id,
-                               SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
-  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_NEVER,
+                               ShelfAutoHideBehavior::kAlways);
+  EXPECT_EQ(ShelfAutoHideBehavior::kNever,
             GetShelfForDisplay(internal_display_id)->auto_hide_behavior());
-  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS,
+  EXPECT_EQ(ShelfAutoHideBehavior::kAlways,
             GetShelfForDisplay(external_display_id)->auto_hide_behavior());
 
   // Simulate the external display becoming the primary display. The shelves are
   // swapped (each instance now has a different display id), check state.
   SwapPrimaryDisplay();
   base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(SHELF_ALIGNMENT_BOTTOM_LOCKED,
+  EXPECT_EQ(ShelfAlignment::kBottomLocked,
             GetShelfForDisplay(internal_display_id)->alignment());
-  EXPECT_EQ(SHELF_ALIGNMENT_BOTTOM_LOCKED,
+  EXPECT_EQ(ShelfAlignment::kBottomLocked,
             GetShelfForDisplay(external_display_id)->alignment());
-  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_NEVER,
+  EXPECT_EQ(ShelfAutoHideBehavior::kNever,
             GetShelfForDisplay(internal_display_id)->auto_hide_behavior());
-  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS,
+  EXPECT_EQ(ShelfAutoHideBehavior::kAlways,
             GetShelfForDisplay(external_display_id)->auto_hide_behavior());
 
   // After screen unlock the shelves should have the expected alignment values.
   GetSessionControllerClient()->UnlockScreen();
   base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(SHELF_ALIGNMENT_LEFT,
+  EXPECT_EQ(ShelfAlignment::kLeft,
             GetShelfForDisplay(internal_display_id)->alignment());
-  EXPECT_EQ(SHELF_ALIGNMENT_RIGHT,
+  EXPECT_EQ(ShelfAlignment::kRight,
             GetShelfForDisplay(external_display_id)->alignment());
-  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_NEVER,
+  EXPECT_EQ(ShelfAutoHideBehavior::kNever,
             GetShelfForDisplay(internal_display_id)->auto_hide_behavior());
-  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS,
+  EXPECT_EQ(ShelfAutoHideBehavior::kAlways,
             GetShelfForDisplay(external_display_id)->auto_hide_behavior());
 }
 
@@ -312,10 +312,10 @@ TEST_F(ShelfControllerPrefsTest,
   PrefService* prefs =
       Shell::Get()->session_controller()->GetLastActiveUserPrefService();
   // Set some shelf prefs to differentiate the two shelves.
-  SetShelfAlignmentPref(prefs, internal_display_id, SHELF_ALIGNMENT_LEFT);
-  SetShelfAlignmentPref(prefs, external_display_id, SHELF_ALIGNMENT_RIGHT);
+  SetShelfAlignmentPref(prefs, internal_display_id, ShelfAlignment::kLeft);
+  SetShelfAlignmentPref(prefs, external_display_id, ShelfAlignment::kRight);
   SetShelfAutoHideBehaviorPref(prefs, external_display_id,
-                               SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
+                               ShelfAutoHideBehavior::kAlways);
 
   // Unlock the screen.
   GetSessionControllerClient()->UnlockScreen();
@@ -325,13 +325,13 @@ TEST_F(ShelfControllerPrefsTest,
   // swapped (each instance now has a different display id), check state.
   SwapPrimaryDisplay();
   base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(SHELF_ALIGNMENT_LEFT,
+  EXPECT_EQ(ShelfAlignment::kLeft,
             GetShelfForDisplay(internal_display_id)->alignment());
-  EXPECT_EQ(SHELF_ALIGNMENT_RIGHT,
+  EXPECT_EQ(ShelfAlignment::kRight,
             GetShelfForDisplay(external_display_id)->alignment());
-  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_NEVER,
+  EXPECT_EQ(ShelfAutoHideBehavior::kNever,
             GetShelfForDisplay(internal_display_id)->auto_hide_behavior());
-  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS,
+  EXPECT_EQ(ShelfAutoHideBehavior::kAlways,
             GetShelfForDisplay(external_display_id)->auto_hide_behavior());
 }
 
@@ -339,30 +339,30 @@ TEST_F(ShelfControllerPrefsTest, ShelfSettingsInTabletMode) {
   Shelf* shelf = GetPrimaryShelf();
   PrefService* prefs =
       Shell::Get()->session_controller()->GetLastActiveUserPrefService();
-  SetShelfAlignmentPref(prefs, GetPrimaryDisplay().id(), SHELF_ALIGNMENT_LEFT);
+  SetShelfAlignmentPref(prefs, GetPrimaryDisplay().id(), ShelfAlignment::kLeft);
   SetShelfAutoHideBehaviorPref(prefs, GetPrimaryDisplay().id(),
-                               SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
-  ASSERT_EQ(SHELF_ALIGNMENT_LEFT, shelf->alignment());
-  ASSERT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS, shelf->auto_hide_behavior());
+                               ShelfAutoHideBehavior::kAlways);
+  ASSERT_EQ(ShelfAlignment::kLeft, shelf->alignment());
+  ASSERT_EQ(ShelfAutoHideBehavior::kAlways, shelf->auto_hide_behavior());
 
   // Verify after entering tablet mode, the shelf alignment is bottom and the
   // auto hide behavior has not changed.
   Shell::Get()->tablet_mode_controller()->SetEnabledForTest(true);
-  EXPECT_EQ(SHELF_ALIGNMENT_BOTTOM, shelf->alignment());
-  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS, shelf->auto_hide_behavior());
+  EXPECT_EQ(ShelfAlignment::kBottom, shelf->alignment());
+  EXPECT_EQ(ShelfAutoHideBehavior::kAlways, shelf->auto_hide_behavior());
 
   // Verify that screen rotation does not change alignment or auto-hide.
   display_manager()->SetDisplayRotation(
       display::Screen::GetScreen()->GetPrimaryDisplay().id(),
       display::Display::ROTATE_90, display::Display::RotationSource::ACTIVE);
-  EXPECT_EQ(SHELF_ALIGNMENT_BOTTOM, shelf->alignment());
-  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS, shelf->auto_hide_behavior());
+  EXPECT_EQ(ShelfAlignment::kBottom, shelf->alignment());
+  EXPECT_EQ(ShelfAutoHideBehavior::kAlways, shelf->auto_hide_behavior());
 
   // Verify after exiting tablet mode, the shelf alignment and auto hide
   // behavior get their stored pref values.
   Shell::Get()->tablet_mode_controller()->SetEnabledForTest(false);
-  EXPECT_EQ(SHELF_ALIGNMENT_LEFT, shelf->alignment());
-  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS, shelf->auto_hide_behavior());
+  EXPECT_EQ(ShelfAlignment::kLeft, shelf->alignment());
+  EXPECT_EQ(ShelfAutoHideBehavior::kAlways, shelf->auto_hide_behavior());
 }
 
 using ShelfControllerAppModeTest = NoSessionAshTestBase;
@@ -372,18 +372,18 @@ TEST_F(ShelfControllerAppModeTest, AutoHideBehavior) {
   SimulateKioskMode(user_manager::USER_TYPE_KIOSK_APP);
 
   Shelf* shelf = GetPrimaryShelf();
-  EXPECT_EQ(SHELF_AUTO_HIDE_ALWAYS_HIDDEN, shelf->auto_hide_behavior());
+  EXPECT_EQ(ShelfAutoHideBehavior::kAlwaysHidden, shelf->auto_hide_behavior());
 
   Shell::Get()->tablet_mode_controller()->SetEnabledForTest(true);
-  EXPECT_EQ(SHELF_AUTO_HIDE_ALWAYS_HIDDEN, shelf->auto_hide_behavior());
+  EXPECT_EQ(ShelfAutoHideBehavior::kAlwaysHidden, shelf->auto_hide_behavior());
 
   display_manager()->SetDisplayRotation(
       display::Screen::GetScreen()->GetPrimaryDisplay().id(),
       display::Display::ROTATE_90, display::Display::RotationSource::ACTIVE);
-  EXPECT_EQ(SHELF_AUTO_HIDE_ALWAYS_HIDDEN, shelf->auto_hide_behavior());
+  EXPECT_EQ(ShelfAutoHideBehavior::kAlwaysHidden, shelf->auto_hide_behavior());
 
   Shell::Get()->tablet_mode_controller()->SetEnabledForTest(false);
-  EXPECT_EQ(SHELF_AUTO_HIDE_ALWAYS_HIDDEN, shelf->auto_hide_behavior());
+  EXPECT_EQ(ShelfAutoHideBehavior::kAlwaysHidden, shelf->auto_hide_behavior());
 }
 
 }  // namespace

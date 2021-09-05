@@ -10,34 +10,20 @@
 #include "build/build_config.h"
 #include "third_party/blink/public/mojom/webauthn/authenticator.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/array_buffer_or_array_buffer_view.h"
-#include "third_party/blink/renderer/modules/credentialmanager/authenticator_selection_criteria.h"
-#include "third_party/blink/renderer/modules/credentialmanager/cable_authentication_data.h"
-#include "third_party/blink/renderer/modules/credentialmanager/cable_registration_data.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_authentication_extensions_client_inputs.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_authenticator_selection_criteria.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_cable_authentication_data.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_cable_registration_data.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_public_key_credential_creation_options.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_public_key_credential_descriptor.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_public_key_credential_parameters.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_public_key_credential_request_options.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_public_key_credential_rp_entity.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_public_key_credential_user_entity.h"
 #include "third_party/blink/renderer/modules/credentialmanager/credential.h"
 #include "third_party/blink/renderer/modules/credentialmanager/federated_credential.h"
 #include "third_party/blink/renderer/modules/credentialmanager/password_credential.h"
 #include "third_party/blink/renderer/modules/credentialmanager/public_key_credential.h"
-#include "third_party/blink/renderer/modules/credentialmanager/public_key_credential_creation_options.h"
-#include "third_party/blink/renderer/modules/credentialmanager/public_key_credential_descriptor.h"
-#include "third_party/blink/renderer/modules/credentialmanager/public_key_credential_parameters.h"
-#include "third_party/blink/renderer/modules/credentialmanager/public_key_credential_request_options.h"
-#include "third_party/blink/renderer/modules/credentialmanager/public_key_credential_rp_entity.h"
-#include "third_party/blink/renderer/modules/credentialmanager/public_key_credential_user_entity.h"
-
-namespace {
-// Time to wait for an authenticator to successfully complete an operation.
-constexpr base::TimeDelta kAdjustedTimeoutLower =
-    base::TimeDelta::FromSeconds(10);
-constexpr base::TimeDelta kAdjustedTimeoutUpper =
-    base::TimeDelta::FromMinutes(10);
-
-base::TimeDelta AdjustTimeout(uint32_t timeout) {
-  base::TimeDelta adjusted_timeout;
-  adjusted_timeout = base::TimeDelta::FromMilliseconds(timeout);
-  return std::max(kAdjustedTimeoutLower,
-                  std::min(kAdjustedTimeoutUpper, adjusted_timeout));
-}
-}  // namespace
 
 namespace mojo {
 
@@ -67,6 +53,20 @@ using blink::mojom::blink::PublicKeyCredentialParametersPtr;
 using blink::mojom::blink::PublicKeyCredentialRequestOptionsPtr;
 using blink::mojom::blink::PublicKeyCredentialType;
 using blink::mojom::blink::UserVerificationRequirement;
+
+namespace {
+
+static constexpr int kCoseEs256 = -7;
+static constexpr int kCoseRs256 = -257;
+
+PublicKeyCredentialParametersPtr CreatePublicKeyCredentialParameter(int alg) {
+  auto mojo_parameter = PublicKeyCredentialParameters::New();
+  mojo_parameter->type = PublicKeyCredentialType::PUBLIC_KEY;
+  mojo_parameter->algorithm_identifier = alg;
+  return mojo_parameter;
+}
+
+}  // namespace
 
 // static
 CredentialInfoPtr TypeConverter<CredentialInfoPtr, blink::Credential*>::Convert(
@@ -153,6 +153,12 @@ TypeConverter<CredentialManagerError, AuthenticatorStatus>::Convert(
     case blink::mojom::blink::AuthenticatorStatus::
         PROTECTION_POLICY_INCONSISTENT:
       return CredentialManagerError::PROTECTION_POLICY_INCONSISTENT;
+    case blink::mojom::blink::AuthenticatorStatus::OPAQUE_DOMAIN:
+      return CredentialManagerError::OPAQUE_DOMAIN;
+    case blink::mojom::blink::AuthenticatorStatus::INVALID_PROTOCOL:
+      return CredentialManagerError::INVALID_PROTOCOL;
+    case blink::mojom::blink::AuthenticatorStatus::BAD_RELYING_PARTY_ID:
+      return CredentialManagerError::BAD_RELYING_PARTY_ID;
     case blink::mojom::blink::AuthenticatorStatus::SUCCESS:
       NOTREACHED();
       break;
@@ -167,12 +173,12 @@ Vector<uint8_t> ConvertFixedSizeArray(
     const blink::ArrayBufferOrArrayBufferView& buffer,
     unsigned length) {
   if (buffer.IsArrayBuffer() &&
-      (buffer.GetAsArrayBuffer()->ByteLength() != length)) {
+      (buffer.GetAsArrayBuffer()->ByteLengthAsSizeT() != length)) {
     return Vector<uint8_t>();
   }
 
   if (buffer.IsArrayBufferView() &&
-      buffer.GetAsArrayBufferView().View()->byteLength() != length) {
+      buffer.GetAsArrayBufferView().View()->byteLengthAsSizeT() != length) {
     return Vector<uint8_t>();
   }
 
@@ -187,12 +193,13 @@ TypeConverter<Vector<uint8_t>, blink::ArrayBufferOrArrayBufferView>::Convert(
   Vector<uint8_t> vector;
   if (buffer.IsArrayBuffer()) {
     vector.Append(static_cast<uint8_t*>(buffer.GetAsArrayBuffer()->Data()),
-                  buffer.GetAsArrayBuffer()->ByteLength());
+                  buffer.GetAsArrayBuffer()->DeprecatedByteLengthAsUnsigned());
   } else {
     DCHECK(buffer.IsArrayBufferView());
-    vector.Append(static_cast<uint8_t*>(
-                      buffer.GetAsArrayBufferView().View()->BaseAddress()),
-                  buffer.GetAsArrayBufferView().View()->byteLength());
+    vector.Append(
+        static_cast<uint8_t*>(
+            buffer.GetAsArrayBufferView().View()->BaseAddress()),
+        buffer.GetAsArrayBufferView().View()->deprecatedByteLengthAsUnsigned());
   }
   return vector;
 }
@@ -398,26 +405,27 @@ TypeConverter<PublicKeyCredentialCreationOptionsPtr,
   }
   mojo_options->challenge = ConvertTo<Vector<uint8_t>>(options->challenge());
 
-  // Step 4 of https://w3c.github.io/webauthn/#createCredential
   if (options->hasTimeout()) {
-    mojo_options->adjusted_timeout = AdjustTimeout(options->timeout());
-  } else {
-    mojo_options->adjusted_timeout = kAdjustedTimeoutUpper;
+    mojo_options->timeout =
+        base::TimeDelta::FromMilliseconds(options->timeout());
   }
 
-  // Steps 8 and 9 of
-  // https://www.w3.org/TR/2017/WD-webauthn-20170505/#createCredential
+  // Steps 7 and 8 of https://w3c.github.io/webauthn/#sctn-createCredential
   Vector<PublicKeyCredentialParametersPtr> parameters;
-  for (auto& parameter : options->pubKeyCredParams()) {
-    PublicKeyCredentialParametersPtr normalized_parameter =
-        PublicKeyCredentialParameters::From(parameter.Get());
-    if (normalized_parameter) {
-      parameters.push_back(std::move(normalized_parameter));
+  if (options->pubKeyCredParams().size() == 0) {
+    parameters.push_back(CreatePublicKeyCredentialParameter(kCoseEs256));
+    parameters.push_back(CreatePublicKeyCredentialParameter(kCoseRs256));
+  } else {
+    for (auto& parameter : options->pubKeyCredParams()) {
+      PublicKeyCredentialParametersPtr normalized_parameter =
+          PublicKeyCredentialParameters::From(parameter.Get());
+      if (normalized_parameter) {
+        parameters.push_back(std::move(normalized_parameter));
+      }
     }
-  }
-
-  if (parameters.IsEmpty() && options->hasPubKeyCredParams()) {
-    return nullptr;
+    if (parameters.IsEmpty()) {
+      return nullptr;
+    }
   }
 
   mojo_options->public_key_parameters = std::move(parameters);
@@ -544,9 +552,8 @@ TypeConverter<PublicKeyCredentialRequestOptionsPtr,
   mojo_options->challenge = ConvertTo<Vector<uint8_t>>(options->challenge());
 
   if (options->hasTimeout()) {
-    mojo_options->adjusted_timeout = AdjustTimeout(options->timeout());
-  } else {
-    mojo_options->adjusted_timeout = kAdjustedTimeoutUpper;
+    mojo_options->timeout =
+        base::TimeDelta::FromMilliseconds(options->timeout());
   }
 
   mojo_options->relying_party_id = options->rpId();

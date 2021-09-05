@@ -5,6 +5,7 @@
 #include "components/download/public/common/stream_handle_input_stream.h"
 
 #include "base/bind.h"
+#include "base/task/post_task.h"
 #include "components/download/public/common/download_interrupt_reasons_utils.h"
 #include "mojo/public/c/system/types.h"
 
@@ -33,8 +34,7 @@ void StreamHandleInputStream::Initialize() {
       &StreamHandleInputStream::OnStreamCompleted, base::Unretained(this),
       mojom::NetworkRequestStatus::USER_CANCELED));
   handle_watcher_ = std::make_unique<mojo::SimpleWatcher>(
-      FROM_HERE, mojo::SimpleWatcher::ArmingPolicy::AUTOMATIC,
-      base::SequencedTaskRunnerHandle::Get());
+      FROM_HERE, mojo::SimpleWatcher::ArmingPolicy::AUTOMATIC);
 }
 
 bool StreamHandleInputStream::IsEmpty() {

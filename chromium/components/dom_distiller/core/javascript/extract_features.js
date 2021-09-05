@@ -4,17 +4,17 @@
 
 (function() {
 function hasOGArticle() {
-  var elems = document.head.querySelectorAll(
+  const elems = document.head.querySelectorAll(
       'meta[property="og:type"],meta[name="og:type"]');
-  for (var i in elems) {
-    if (elems[i].content && elems[i].content.toUpperCase() == 'ARTICLE') {
+  for (const i in elems) {
+    if (elems[i].content && elems[i].content.toUpperCase() === 'ARTICLE') {
       return true;
     }
   }
   return false;
 }
 
-var body = document.body;
+const body = document.body;
 if (!body) {
   return false;
 }
@@ -28,4 +28,4 @@ return JSON.stringify({
   'textContent': body.textContent,
   'innerHTML': body.innerHTML,
 });
-})()
+})();

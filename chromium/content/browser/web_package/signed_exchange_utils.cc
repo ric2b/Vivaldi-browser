@@ -22,12 +22,14 @@
 #include "content/public/common/content_switches.h"
 #include "net/http/http_util.h"
 #include "services/network/public/cpp/features.h"
-#include "services/network/public/cpp/resource_response.h"
+#include "services/network/public/mojom/url_response_head.mojom.h"
 
 namespace content {
 namespace signed_exchange_utils {
 
 namespace {
+constexpr char kContentTypeOptionsHeaderName[] = "x-content-type-options";
+constexpr char kNoSniffHeaderValue[] = "nosniff";
 base::Optional<base::Time> g_verification_time_for_testing;
 }  // namespace
 
@@ -46,22 +48,18 @@ bool IsSignedExchangeHandlingEnabled(BrowserContext* context) {
   if (!GetContentClient()->browser()->AllowSignedExchange(context))
     return false;
 
-  return base::FeatureList::IsEnabled(features::kSignedHTTPExchange) ||
-         base::CommandLine::ForCurrentProcess()->HasSwitch(
-             switches::kEnableExperimentalWebPlatformFeatures);
+  return base::FeatureList::IsEnabled(features::kSignedHTTPExchange);
 }
 
 bool IsSignedExchangeReportingForDistributorsEnabled() {
   return base::FeatureList::IsEnabled(network::features::kReporting) &&
-         (base::FeatureList::IsEnabled(
-              features::kSignedExchangeReportingForDistributors) ||
-          base::CommandLine::ForCurrentProcess()->HasSwitch(
-              switches::kEnableExperimentalWebPlatformFeatures));
+         base::FeatureList::IsEnabled(
+             features::kSignedExchangeReportingForDistributors);
 }
 
 bool ShouldHandleAsSignedHTTPExchange(
     const GURL& request_url,
-    const network::ResourceResponseHead& head) {
+    const network::mojom::URLResponseHead& head) {
   // Currently we don't support the signed exchange which is returned from a
   // service worker.
   // TODO(crbug/803774): Decide whether we should support it or not.
@@ -78,6 +76,13 @@ bool ShouldHandleAsSignedHTTPExchange(
     return false;
   }
   return true;
+}
+
+bool HasNoSniffHeader(const network::mojom::URLResponseHead& response) {
+  std::string content_type_options;
+  response.headers->EnumerateHeader(nullptr, kContentTypeOptionsHeaderName,
+                                    &content_type_options);
+  return base::LowerCaseEqualsASCII(content_type_options, kNoSniffHeaderValue);
 }
 
 base::Optional<SignedExchangeVersion> GetSignedExchangeVersion(
@@ -203,7 +208,7 @@ SignedExchangeLoadResult GetLoadResultFromSignatureVerifierResult(
 net::RedirectInfo CreateRedirectInfo(
     const GURL& new_url,
     const network::ResourceRequest& outer_request,
-    const network::ResourceResponseHead& outer_response,
+    const network::mojom::URLResponseHead& outer_response,
     bool is_fallback_redirect) {
   // https://wicg.github.io/webpackage/loading.html#mp-http-fetch
   // Step 3. Set actualResponse's status to 303. [spec text]
@@ -220,11 +225,11 @@ net::RedirectInfo CreateRedirectInfo(
       is_fallback_redirect);
 }
 
-network::ResourceResponseHead CreateRedirectResponseHead(
-    const network::ResourceResponseHead& outer_response,
+network::mojom::URLResponseHeadPtr CreateRedirectResponseHead(
+    const network::mojom::URLResponseHead& outer_response,
     bool is_fallback_redirect) {
-  network::ResourceResponseHead response_head;
-  response_head.encoded_data_length = 0;
+  auto response_head = network::mojom::URLResponseHead::New();
+  response_head->encoded_data_length = 0;
   std::string buf;
   std::string link_header;
   if (!is_fallback_redirect &&
@@ -239,14 +244,14 @@ network::ResourceResponseHead CreateRedirectResponseHead(
         "link: %s\r\n",
         303, "See Other", link_header.c_str());
   }
-  response_head.headers = base::MakeRefCounted<net::HttpResponseHeaders>(
+  response_head->headers = base::MakeRefCounted<net::HttpResponseHeaders>(
       net::HttpUtil::AssembleRawHeaders(buf));
-  response_head.encoded_data_length = 0;
-  response_head.request_start = outer_response.request_start;
-  response_head.response_start = outer_response.response_start;
-  response_head.request_time = outer_response.request_time;
-  response_head.response_time = outer_response.response_time;
-  response_head.load_timing = outer_response.load_timing;
+  response_head->encoded_data_length = 0;
+  response_head->request_start = outer_response.request_start;
+  response_head->response_start = outer_response.response_start;
+  response_head->request_time = outer_response.request_time;
+  response_head->response_time = outer_response.response_time;
+  response_head->load_timing = outer_response.load_timing;
   return response_head;
 }
 

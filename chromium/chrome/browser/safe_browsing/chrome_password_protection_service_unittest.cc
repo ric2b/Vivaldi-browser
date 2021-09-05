@@ -12,31 +12,31 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/scoped_feature_list.h"
-#include "chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_event_router_factory.h"
+#include "build/build_config.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
-#include "chrome/browser/safe_browsing/test_extension_event_observer.h"
 #include "chrome/browser/safe_browsing/ui_manager.h"
 #include "chrome/browser/signin/chrome_signin_client_factory.h"
 #include "chrome/browser/signin/identity_test_environment_profile_adaptor.h"
 #include "chrome/browser/signin/test_signin_client_builder.h"
 #include "chrome/browser/sync/user_event_service_factory.h"
-#include "chrome/common/extensions/api/safe_browsing_private.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/password_manager/core/browser/compromised_credentials_table.h"
 #include "components/password_manager/core/browser/hash_password_manager.h"
+#include "components/password_manager/core/browser/mock_password_store.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
-#include "components/password_manager/core/browser/test_password_store.h"
+#include "components/password_manager/core/common/password_manager_features.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
-#include "components/safe_browsing/common/utils.h"
-#include "components/safe_browsing/db/v4_protocol_manager_util.h"
-#include "components/safe_browsing/features.h"
-#include "components/safe_browsing/password_protection/password_protection_navigation_throttle.h"
-#include "components/safe_browsing/password_protection/password_protection_request.h"
-#include "components/safe_browsing/verdict_cache_manager.h"
+#include "components/safe_browsing/content/password_protection/password_protection_navigation_throttle.h"
+#include "components/safe_browsing/content/password_protection/password_protection_request.h"
+#include "components/safe_browsing/core/common/utils.h"
+#include "components/safe_browsing/core/db/v4_protocol_manager_util.h"
+#include "components/safe_browsing/core/features.h"
+#include "components/safe_browsing/core/verdict_cache_manager.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/sync/model/model_type_controller_delegate.h"
@@ -44,13 +44,20 @@
 #include "components/sync_user_events/fake_user_event_service.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/test/browser_task_environment.h"
 #include "content/public/test/mock_navigation_handle.h"
-#include "extensions/browser/test_event_router.h"
 #include "net/http/http_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/l10n/l10n_util.h"
+
+// All tests related to extension is disabled on Android, because enterprise
+// reporting extension is not supported.
+#if !defined(OS_ANDROID)
+#include "chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_event_router_factory.h"
+#include "chrome/browser/safe_browsing/test_extension_event_observer.h"
+#include "chrome/common/extensions/api/safe_browsing_private.h"
+#include "extensions/browser/test_event_router.h"
+#endif
 
 using sync_pb::UserEventSpecifics;
 using GaiaPasswordReuse = sync_pb::GaiaPasswordReuse;
@@ -64,10 +71,12 @@ using ::testing::_;
 using ::testing::Return;
 using ::testing::WithArg;
 
+#if !defined(OS_ANDROID)
 namespace OnPolicySpecifiedPasswordReuseDetected = extensions::api::
     safe_browsing_private::OnPolicySpecifiedPasswordReuseDetected;
 namespace OnPolicySpecifiedPasswordChanged =
     extensions::api::safe_browsing_private::OnPolicySpecifiedPasswordChanged;
+#endif
 
 class MockSecurityEventRecorder : public SecurityEventRecorder {
  public:
@@ -91,11 +100,13 @@ namespace safe_browsing {
 namespace {
 
 const char kPhishingURL[] = "http://phishing.com/";
-const char kPasswordReuseURL[] = "http://login.example.com/";
 const char kTestEmail[] = "foo@example.com";
-const char kTestGmail[] = "foo@gmail.com";
-const char kRedirectURL[] = "http://redirect.com";
 const char kUserName[] = "username";
+const char kRedirectURL[] = "http://redirect.com";
+#if !defined(OS_ANDROID)
+const char kPasswordReuseURL[] = "http://login.example.com/";
+const char kTestGmail[] = "foo@gmail.com";
+#endif
 
 BrowserContextKeyedServiceFactory::TestingFactory
 GetFakeUserEventServiceFactory() {
@@ -176,7 +187,7 @@ class MockChromePasswordProtectionService
   }
   void SetAccountInfo(const std::string& username) {
     AccountInfo account_info;
-    account_info.account_id = "account_id";
+    account_info.account_id = CoreAccountId("account_id");
     account_info.email = username;
     account_info.gaia = "gaia";
     account_info_ = account_info;
@@ -205,16 +216,20 @@ class ChromePasswordProtectionServiceTest
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();
 
-    // Use TestPasswordStore to remove a possible race. Normally the
+    // Use MockPasswordStore to remove a possible race. Normally the
     // PasswordStore does its database manipulation on the DB thread, which
     // creates a possible race during navigation. Specifically the
     // PasswordManager will ignore any forms in a page if the load from the
     // PasswordStore has not completed.
-    PasswordStoreFactory::GetInstance()->SetTestingFactory(
-        profile(),
-        base::BindRepeating(
-            &password_manager::BuildPasswordStore<
-                content::BrowserContext, password_manager::TestPasswordStore>));
+    password_store_ =
+        base::WrapRefCounted(static_cast<password_manager::MockPasswordStore*>(
+            PasswordStoreFactory::GetInstance()
+                ->SetTestingFactoryAndUse(
+                    profile(),
+                    base::BindRepeating(&password_manager::BuildPasswordStore<
+                                        content::BrowserContext,
+                                        password_manager::MockPasswordStore>))
+                .get()));
 
     profile()->GetPrefs()->SetBoolean(prefs::kSafeBrowsingEnabled, true);
     profile()->GetPrefs()->SetInteger(
@@ -234,12 +249,14 @@ class ChromePasswordProtectionServiceTest
         browser_sync::UserEventServiceFactory::GetInstance()
             ->SetTestingFactoryAndUse(browser_context(),
                                       GetFakeUserEventServiceFactory()));
+#if !defined(OS_ANDROID)
     test_event_router_ =
         extensions::CreateAndUseTestEventRouter(browser_context());
     extensions::SafeBrowsingPrivateEventRouterFactory::GetInstance()
         ->SetTestingFactory(
             browser_context(),
             base::BindRepeating(&BuildSafeBrowsingPrivateEventRouter));
+#endif
 
     identity_test_env_profile_adaptor_ =
         std::make_unique<IdentityTestEnvironmentProfileAdaptor>(profile());
@@ -255,6 +272,7 @@ class ChromePasswordProtectionServiceTest
     base::RunLoop().RunUntilIdle();
     service_.reset();
     request_ = nullptr;
+    password_store_->ShutdownOnUIThread();
     identity_test_env_profile_adaptor_.reset();
     cache_manager_.reset();
     content_setting_map_->ShutdownOnUIThread();
@@ -291,18 +309,19 @@ class ChromePasswordProtectionServiceTest
 
   void InitializeRequest(LoginReputationClientRequest::TriggerType trigger_type,
                          PasswordType reused_password_type) {
+    std::vector<password_manager::MatchingReusedCredential> credentials = {
+        {"somedomain.com"}};
     if (trigger_type == LoginReputationClientRequest::UNFAMILIAR_LOGIN_PAGE) {
       request_ = new PasswordProtectionRequest(
           web_contents(), GURL(kPhishingURL), GURL(), GURL(), kUserName,
-          PasswordType::PASSWORD_TYPE_UNKNOWN,
-          std::vector<std::string>({"somedomain.com"}), trigger_type, true,
+          PasswordType::PASSWORD_TYPE_UNKNOWN, credentials, trigger_type, true,
           service_.get(), 0);
     } else {
       ASSERT_EQ(LoginReputationClientRequest::PASSWORD_REUSE_EVENT,
                 trigger_type);
       request_ = new PasswordProtectionRequest(
           web_contents(), GURL(kPhishingURL), GURL(), GURL(), kUserName,
-          reused_password_type, std::vector<std::string>(), trigger_type,
+          reused_password_type, credentials, trigger_type,
           /* password_field_exists*/ true, service_.get(),
           /*request_timeout_in_ms=*/0);
     }
@@ -366,9 +385,12 @@ class ChromePasswordProtectionServiceTest
   std::unique_ptr<IdentityTestEnvironmentProfileAdaptor>
       identity_test_env_profile_adaptor_;
   MockSecurityEventRecorder* security_event_recorder_;
+  scoped_refptr<password_manager::MockPasswordStore> password_store_;
   // Owned by KeyedServiceFactory.
   syncer::FakeUserEventService* fake_user_event_service_;
+#if !defined(OS_ANDROID)
   extensions::TestEventRouter* test_event_router_;
+#endif
   std::unique_ptr<VerdictCacheManager> cache_manager_;
 };
 
@@ -377,7 +399,8 @@ TEST_F(ChromePasswordProtectionServiceTest,
   ReusedPasswordAccountType reused_password_type;
   reused_password_type.set_account_type(ReusedPasswordAccountType::UNKNOWN);
 
-  // Password field on focus pinging is enabled on !incognito && SBER.
+  // Password field on focus pinging is enabled on !incognito && (SBER ||
+  // enhanced protection).
   RequestOutcome reason;
   service_->ConfigService(false /*incognito*/, false /*SBER*/);
   EXPECT_FALSE(service_->IsPingingEnabled(
@@ -415,10 +438,14 @@ TEST_F(ChromePasswordProtectionServiceTest,
 
   RequestOutcome reason;
   service_->ConfigService(false /*incognito*/, false /*SBER*/);
+// kPasswordProtectionForSavedPasswords is disabled by default on Android.
+#if defined(OS_ANDROID)
   EXPECT_FALSE(service_->IsPingingEnabled(
+#else
+  EXPECT_TRUE(service_->IsPingingEnabled(
+#endif
       LoginReputationClientRequest::PASSWORD_REUSE_EVENT, reused_password_type,
       &reason));
-  EXPECT_EQ(RequestOutcome::DISABLED_DUE_TO_USER_POPULATION, reason);
 
   service_->ConfigService(false /*incognito*/, true /*SBER*/);
   EXPECT_TRUE(service_->IsPingingEnabled(
@@ -426,7 +453,12 @@ TEST_F(ChromePasswordProtectionServiceTest,
       &reason));
 
   service_->ConfigService(true /*incognito*/, false /*SBER*/);
+// kPasswordProtectionForSavedPasswords is disabled by default on Android.
+#if defined(OS_ANDROID)
   EXPECT_FALSE(service_->IsPingingEnabled(
+#else
+  EXPECT_TRUE(service_->IsPingingEnabled(
+#endif
       LoginReputationClientRequest::PASSWORD_REUSE_EVENT, reused_password_type,
       &reason));
 
@@ -456,7 +488,13 @@ TEST_F(ChromePasswordProtectionServiceTest,
 
   // Sync password entry pinging is enabled by default.
   service_->ConfigService(false /*incognito*/, false /*SBER*/);
+// Sync password pings are gated by SBER on Android, because warnings are
+// disabled.
+#if defined(OS_ANDROID)
+  EXPECT_FALSE(service_->IsPingingEnabled(
+#else
   EXPECT_TRUE(service_->IsPingingEnabled(
+#endif
       LoginReputationClientRequest::PASSWORD_REUSE_EVENT, reused_password_type,
       &reason));
 
@@ -466,7 +504,13 @@ TEST_F(ChromePasswordProtectionServiceTest,
       &reason));
 
   service_->ConfigService(true /*incognito*/, false /*SBER*/);
+// Sync password pings are gated by SBER on Android, because warnings are
+// disabled.
+#if defined(OS_ANDROID)
+  EXPECT_FALSE(service_->IsPingingEnabled(
+#else
   EXPECT_TRUE(service_->IsPingingEnabled(
+#endif
       LoginReputationClientRequest::PASSWORD_REUSE_EVENT, reused_password_type,
       &reason));
 
@@ -482,13 +526,25 @@ TEST_F(ChromePasswordProtectionServiceTest,
   profile()->GetPrefs()->SetInteger(prefs::kPasswordProtectionWarningTrigger,
                                     PASSWORD_PROTECTION_OFF);
   service_->ConfigService(false /*incognito*/, false /*SBER*/);
+// Sync password pings are gated by SBER on Android, because warnings are
+// disabled.
+#if defined(OS_ANDROID)
+  EXPECT_FALSE(service_->IsPingingEnabled(
+#else
   EXPECT_TRUE(service_->IsPingingEnabled(
+#endif
       LoginReputationClientRequest::PASSWORD_REUSE_EVENT, reused_password_type,
       &reason));
 
   profile()->GetPrefs()->SetInteger(prefs::kPasswordProtectionWarningTrigger,
                                     PASSWORD_REUSE);
+// Sync password pings are gated by SBER on Android, because warnings are
+// disabled.
+#if defined(OS_ANDROID)
+  EXPECT_FALSE(service_->IsPingingEnabled(
+#else
   EXPECT_TRUE(service_->IsPingingEnabled(
+#endif
       LoginReputationClientRequest::PASSWORD_REUSE_EVENT, reused_password_type,
       &reason));
 }
@@ -543,33 +599,40 @@ TEST_F(ChromePasswordProtectionServiceTest,
   EXPECT_EQ(RequestOutcome::MATCHED_ENTERPRISE_LOGIN_URL, reason);
 }
 
+TEST_F(ChromePasswordProtectionServiceTest,
+       VerifyPersistPhishedSavedPasswordCredential) {
+  service_->ConfigService(/*is_incognito=*/false,
+                          /*is_extended_reporting=*/true);
+  std::vector<password_manager::MatchingReusedCredential> credentials = {
+      {"http://example.com"}, {"http://2.example.com"}};
+
+  EXPECT_CALL(*password_store_, AddCompromisedCredentialsImpl(_)).Times(2);
+  service_->PersistPhishedSavedPasswordCredential(credentials);
+}
+
 TEST_F(ChromePasswordProtectionServiceTest, VerifyCanSendSamplePing) {
-  // If experiment is not enabled, do not send ping.
+  // Experiment is on by default.
   service_->ConfigService(/*is_incognito=*/false,
                           /*is_extended_reporting=*/true);
   service_->set_bypass_probability_for_tests(true);
+  EXPECT_TRUE(service_->CanSendSamplePing());
+
+  // If not SBER, do not send sample ping.
+  service_->ConfigService(/*is_incognito=*/false,
+                          /*is_extended_reporting=*/false);
   EXPECT_FALSE(service_->CanSendSamplePing());
 
-  {
-    base::test::ScopedFeatureList feature_list;
-    feature_list.InitAndEnableFeature(
-        safe_browsing::kSendSampledPingsForAllowlistDomains);
-    EXPECT_TRUE(service_->CanSendSamplePing());
+  // If incognito, do not send sample ping.
+  service_->ConfigService(/*is_incognito=*/true,
+                          /*is_extended_reporting=*/true);
+  EXPECT_FALSE(service_->CanSendSamplePing());
 
-    // If not SBER, do not send sample ping.
-    service_->ConfigService(/*is_incognito=*/false,
-                            /*is_extended_reporting=*/false);
-    EXPECT_FALSE(service_->CanSendSamplePing());
+  service_->ConfigService(/*is_incognito=*/true,
+                          /*is_extended_reporting=*/false);
+  EXPECT_FALSE(service_->CanSendSamplePing());
 
-    // If incognito, do not send sample ping.
-    service_->ConfigService(/*is_incognito=*/true,
-                            /*is_extended_reporting=*/true);
-    EXPECT_FALSE(service_->CanSendSamplePing());
-
-    service_->ConfigService(/*is_incognito=*/true,
-                            /*is_extended_reporting=*/false);
-    EXPECT_FALSE(service_->CanSendSamplePing());
-  }
+  service_->ConfigService(/*is_incognito=*/false,
+                          /*is_extended_reporting=*/false);
 }
 
 TEST_F(ChromePasswordProtectionServiceTest, VerifyGetOrganizationTypeGmail) {
@@ -715,7 +778,10 @@ TEST_F(ChromePasswordProtectionServiceTest,
       "verdict_token");
 }
 
-// Check that the PaswordCapturedEvent timer is set for 1 min if password
+// The following tests are disabled on Android, because password capture events
+// are not enabled on Android.
+#if !defined(OS_ANDROID)
+// Check that the PasswordCapturedEvent timer is set for 1 min if password
 // hash is saved and no timer pref is set yet.
 TEST_F(ChromePasswordProtectionServiceTest,
        VerifyPasswordCaptureEventScheduledOnStartup) {
@@ -823,6 +889,7 @@ TEST_F(ChromePasswordProtectionServiceTest,
   EXPECT_GT(29, cur_delay.InDays());
   EXPECT_LT(23, cur_delay.InDays());
 }
+#endif
 
 TEST_F(ChromePasswordProtectionServiceTest,
        VerifyPasswordReuseLookupUserEventRecorded) {
@@ -933,11 +1000,14 @@ TEST_F(ChromePasswordProtectionServiceTest,
   NavigateAndCommit(trigger_url);
   service_->SetIsSyncing(true);
   service_->SetIsAccountSignedIn(true);
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(
+      safe_browsing::kPasswordProtectionForSavedPasswords);
 
   // Simulate a on-going password reuse request that hasn't received
   // verdict yet.
   PrepareRequest(LoginReputationClientRequest::PASSWORD_REUSE_EVENT,
-                 PasswordType::PRIMARY_ACCOUNT_PASSWORD,
+                 PasswordType::SAVED_PASSWORD,
                  /*is_warning_showing=*/false);
 
   GURL redirect_url(kRedirectURL);
@@ -993,10 +1063,13 @@ TEST_F(ChromePasswordProtectionServiceTest,
   NavigateAndCommit(trigger_url);
   service_->SetIsSyncing(true);
   service_->SetIsAccountSignedIn(true);
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(
+      safe_browsing::kPasswordProtectionForSavedPasswords);
   // Simulate a on-going password reuse request that hasn't received
   // verdict yet.
   PrepareRequest(LoginReputationClientRequest::PASSWORD_REUSE_EVENT,
-                 PasswordType::PRIMARY_ACCOUNT_PASSWORD,
+                 PasswordType::SAVED_PASSWORD,
                  /*is_warning_showing=*/false);
 
   GURL redirect_url(kRedirectURL);
@@ -1052,6 +1125,9 @@ TEST_F(ChromePasswordProtectionServiceTest,
   EXPECT_EQ(0, GetSizeofUnhandledSyncPasswordReuses());
 }
 
+// The following tests are disabled on Android, because enterprise reporting
+// extension is not supported.
+#if !defined(OS_ANDROID)
 TEST_F(ChromePasswordProtectionServiceTest,
        VerifyOnPolicySpecifiedPasswordChangedEvent) {
   TestExtensionEventObserver event_observer(test_event_router_);
@@ -1167,6 +1243,7 @@ TEST_F(ChromePasswordProtectionServiceTest,
   EXPECT_EQ(1, test_event_router_->GetEventCount(
                    OnPolicySpecifiedPasswordReuseDetected::kEventName));
 }
+#endif
 
 TEST_F(ChromePasswordProtectionServiceTest, VerifyGetWarningDetailTextSaved) {
   base::string16 warning_text =
@@ -1177,7 +1254,159 @@ TEST_F(ChromePasswordProtectionServiceTest, VerifyGetWarningDetailTextSaved) {
   ReusedPasswordAccountType reused_password_type;
   reused_password_type.set_account_type(
       ReusedPasswordAccountType::SAVED_PASSWORD);
-  EXPECT_EQ(warning_text, service_->GetWarningDetailText(reused_password_type));
+  std::vector<size_t> placeholder_offsets;
+  EXPECT_EQ(warning_text, service_->GetWarningDetailText(reused_password_type,
+                                                         &placeholder_offsets));
+}
+
+TEST_F(ChromePasswordProtectionServiceTest,
+       VerifyGetWarningDetailTextSavedDomains) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeaturesAndParameters(
+      {{safe_browsing::kPasswordProtectionForSavedPasswords, {}},
+       {safe_browsing::kPasswordProtectionShowDomainsForSavedPasswords, {}}},
+      {});
+  ReusedPasswordAccountType reused_password_type;
+  reused_password_type.set_account_type(
+      ReusedPasswordAccountType::SAVED_PASSWORD);
+  std::vector<std::string> domains{"www.example.com"};
+  service_->set_saved_passwords_matching_domains(domains);
+  base::string16 warning_text = l10n_util::GetStringFUTF16(
+      IDS_PAGE_INFO_CHANGE_PASSWORD_DETAILS_SAVED_1_DOMAIN,
+      base::UTF8ToUTF16(domains[0]));
+  std::vector<size_t> placeholder_offsets;
+  EXPECT_EQ(warning_text, service_->GetWarningDetailText(reused_password_type,
+                                                         &placeholder_offsets));
+  // GetWarningDetailText shouldCall GetWarningDetailTextForSavedPasswords, so
+  // we can check to see if the placeholder offset values are the same.
+  // Hardcoding the offset in the expected value cannot be done as it's
+  // different for different OS.
+  std::vector<size_t> expected_placeholder_offsets;
+  service_->GetWarningDetailTextForSavedPasswords(
+      &expected_placeholder_offsets);
+  EXPECT_EQ(expected_placeholder_offsets, placeholder_offsets);
+
+  placeholder_offsets.clear();
+  domains.push_back("www.2.example.com");
+  service_->set_saved_passwords_matching_domains(domains);
+  warning_text = l10n_util::GetStringFUTF16(
+      IDS_PAGE_INFO_CHANGE_PASSWORD_DETAILS_SAVED_2_DOMAINS,
+      base::UTF8ToUTF16(domains[0]), base::UTF8ToUTF16(domains[1]));
+  EXPECT_EQ(warning_text, service_->GetWarningDetailText(reused_password_type,
+                                                         &placeholder_offsets));
+  expected_placeholder_offsets.clear();
+  service_->GetWarningDetailTextForSavedPasswords(
+      &expected_placeholder_offsets);
+  EXPECT_EQ(expected_placeholder_offsets, placeholder_offsets);
+
+  placeholder_offsets.clear();
+  domains.push_back("www.3.example.com");
+  service_->set_saved_passwords_matching_domains(domains);
+  warning_text = l10n_util::GetStringFUTF16(
+      IDS_PAGE_INFO_CHANGE_PASSWORD_DETAILS_SAVED_3_DOMAINS,
+      base::UTF8ToUTF16(domains[0]), base::UTF8ToUTF16(domains[1]),
+      base::UTF8ToUTF16(domains[2]));
+  EXPECT_EQ(warning_text, service_->GetWarningDetailText(reused_password_type,
+                                                         &placeholder_offsets));
+  expected_placeholder_offsets.clear();
+  service_->GetWarningDetailTextForSavedPasswords(
+      &expected_placeholder_offsets);
+  EXPECT_EQ(expected_placeholder_offsets, placeholder_offsets);
+
+  // Default domains should be prioritzed over other domains.
+  placeholder_offsets.clear();
+  domains.push_back("yahoo.com");
+  service_->set_saved_passwords_matching_domains(domains);
+  warning_text = l10n_util::GetStringFUTF16(
+      IDS_PAGE_INFO_CHANGE_PASSWORD_DETAILS_SAVED_3_DOMAINS,
+      base::UTF8ToUTF16("yahoo.com"), base::UTF8ToUTF16(domains[0]),
+      base::UTF8ToUTF16(domains[1]));
+  EXPECT_EQ(warning_text, service_->GetWarningDetailText(reused_password_type,
+                                                         &placeholder_offsets));
+  expected_placeholder_offsets.clear();
+  service_->GetWarningDetailTextForSavedPasswords(
+      &expected_placeholder_offsets);
+  EXPECT_EQ(expected_placeholder_offsets, placeholder_offsets);
+
+  // Matching domains that have a suffix of a default domains should be
+  // prioritzed over other non common spoofed domains.
+  placeholder_offsets.clear();
+  domains.push_back("login.amazon.com");
+  service_->set_saved_passwords_matching_domains(domains);
+  warning_text = l10n_util::GetStringFUTF16(
+      IDS_PAGE_INFO_CHANGE_PASSWORD_DETAILS_SAVED_3_DOMAINS,
+      base::UTF8ToUTF16("yahoo.com"), base::UTF8ToUTF16("login.amazon.com"),
+      base::UTF8ToUTF16(domains[0]));
+  EXPECT_EQ(warning_text, service_->GetWarningDetailText(reused_password_type,
+                                                         &placeholder_offsets));
+  expected_placeholder_offsets.clear();
+  service_->GetWarningDetailTextForSavedPasswords(
+      &expected_placeholder_offsets);
+  EXPECT_EQ(expected_placeholder_offsets, placeholder_offsets);
+}
+
+TEST_F(ChromePasswordProtectionServiceTest,
+       VerifyGetWarningDetailTextCheckSavedDomains) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeaturesAndParameters(
+      {{password_manager::features::kPasswordCheck, {}},
+       {safe_browsing::kPasswordProtectionForSavedPasswords, {}},
+       {safe_browsing::kPasswordProtectionShowDomainsForSavedPasswords, {}}},
+      {});
+  ReusedPasswordAccountType reused_password_type;
+  reused_password_type.set_account_type(
+      ReusedPasswordAccountType::SAVED_PASSWORD);
+  std::vector<std::string> domains{"www.example.com"};
+  service_->set_saved_passwords_matching_domains(domains);
+  base::string16 warning_text = l10n_util::GetStringFUTF16(
+      IDS_PAGE_INFO_CHECK_PASSWORD_DETAILS_SAVED_1_DOMAIN,
+      base::UTF8ToUTF16(domains[0]));
+  std::vector<size_t> placeholder_offsets;
+  EXPECT_EQ(warning_text, service_->GetWarningDetailText(reused_password_type,
+                                                         &placeholder_offsets));
+
+  placeholder_offsets.clear();
+  domains.push_back("www.2.example.com");
+  service_->set_saved_passwords_matching_domains(domains);
+  warning_text = l10n_util::GetStringFUTF16(
+      IDS_PAGE_INFO_CHECK_PASSWORD_DETAILS_SAVED_2_DOMAIN,
+      base::UTF8ToUTF16(domains[0]), base::UTF8ToUTF16(domains[1]));
+  EXPECT_EQ(warning_text, service_->GetWarningDetailText(reused_password_type,
+                                                         &placeholder_offsets));
+
+  placeholder_offsets.clear();
+  domains.push_back("www.3.example.com");
+  service_->set_saved_passwords_matching_domains(domains);
+  warning_text = l10n_util::GetStringFUTF16(
+      IDS_PAGE_INFO_CHECK_PASSWORD_DETAILS_SAVED_3_DOMAIN,
+      base::UTF8ToUTF16(domains[0]), base::UTF8ToUTF16(domains[1]),
+      base::UTF8ToUTF16(domains[2]));
+  EXPECT_EQ(warning_text, service_->GetWarningDetailText(reused_password_type,
+                                                         &placeholder_offsets));
+  // Default domains should be prioritzed over other domains.
+  placeholder_offsets.clear();
+  domains.push_back("amazon.com");
+  service_->set_saved_passwords_matching_domains(domains);
+  warning_text = l10n_util::GetStringFUTF16(
+      IDS_PAGE_INFO_CHECK_PASSWORD_DETAILS_SAVED_3_DOMAIN,
+      base::UTF8ToUTF16("amazon.com"), base::UTF8ToUTF16(domains[0]),
+      base::UTF8ToUTF16(domains[1]));
+  EXPECT_EQ(warning_text, service_->GetWarningDetailText(reused_password_type,
+                                                         &placeholder_offsets));
+}
+TEST_F(ChromePasswordProtectionServiceTest,
+       VerifyGetPlaceholdersForSavedPasswordWarningText) {
+  std::vector<std::string> domains{"www.example.com"};
+  domains.push_back("www.2.example.com");
+  domains.push_back("www.3.example.com");
+  domains.push_back("amazon.com");
+  service_->set_saved_passwords_matching_domains(domains);
+  // Default domains should be prioritzed over other domains.
+  std::vector<base::string16> expected_placeholders{
+      base::UTF8ToUTF16("amazon.com"), base::UTF8ToUTF16(domains[0]),
+      base::UTF8ToUTF16(domains[1])};
+  EXPECT_EQ(expected_placeholders,
+            service_->GetPlaceholdersForSavedPasswordWarningText());
 }
 
 TEST_F(ChromePasswordProtectionServiceTest,
@@ -1195,20 +1424,23 @@ TEST_F(ChromePasswordProtectionServiceTest,
   ReusedPasswordAccountType reused_password_type;
   reused_password_type.set_account_type(ReusedPasswordAccountType::GMAIL);
   reused_password_type.set_is_account_syncing(true);
-  EXPECT_EQ(warning_text_sync,
-            service_->GetWarningDetailText(reused_password_type));
+  std::vector<size_t> placeholder_offsets;
+  EXPECT_EQ(warning_text_sync, service_->GetWarningDetailText(
+                                   reused_password_type, &placeholder_offsets));
   reused_password_type.set_account_type(
       ReusedPasswordAccountType::NON_GAIA_ENTERPRISE);
   reused_password_type.set_is_account_syncing(false);
   EXPECT_EQ(generic_enterprise_warning_text,
-            service_->GetWarningDetailText(reused_password_type));
+            service_->GetWarningDetailText(reused_password_type,
+                                           &placeholder_offsets));
   {
     base::test::ScopedFeatureList feature_list;
     feature_list.InitAndEnableFeature(
         safe_browsing::kPasswordProtectionForSignedInUsers);
     reused_password_type.set_account_type(ReusedPasswordAccountType::GSUITE);
     EXPECT_EQ(warning_text_non_sync,
-              service_->GetWarningDetailText(reused_password_type));
+              service_->GetWarningDetailText(reused_password_type,
+                                             &placeholder_offsets));
   }
 
   reused_password_type.set_account_type(ReusedPasswordAccountType::GSUITE);
@@ -1216,11 +1448,13 @@ TEST_F(ChromePasswordProtectionServiceTest,
   CoreAccountInfo core_account_info = SetPrimaryAccount(kTestEmail);
   SetUpSyncAccount(std::string("example.com"), core_account_info);
   EXPECT_EQ(warning_text_with_org_name,
-            service_->GetWarningDetailText(reused_password_type));
+            service_->GetWarningDetailText(reused_password_type,
+                                           &placeholder_offsets));
   reused_password_type.set_account_type(
       ReusedPasswordAccountType::NON_GAIA_ENTERPRISE);
   EXPECT_EQ(generic_enterprise_warning_text,
-            service_->GetWarningDetailText(reused_password_type));
+            service_->GetWarningDetailText(reused_password_type,
+                                           &placeholder_offsets));
 }
 
 TEST_F(ChromePasswordProtectionServiceTest, VerifyGetWarningDetailTextGmail) {
@@ -1234,11 +1468,13 @@ TEST_F(ChromePasswordProtectionServiceTest, VerifyGetWarningDetailTextGmail) {
       safe_browsing::kPasswordProtectionForSignedInUsers);
   ReusedPasswordAccountType reused_password_type;
   reused_password_type.set_account_type(ReusedPasswordAccountType::GMAIL);
+  std::vector<size_t> placeholder_offsets;
   EXPECT_EQ(warning_text_non_sync,
-            service_->GetWarningDetailText(reused_password_type));
+            service_->GetWarningDetailText(reused_password_type,
+                                           &placeholder_offsets));
   reused_password_type.set_is_account_syncing(true);
-  EXPECT_EQ(warning_text_sync,
-            service_->GetWarningDetailText(reused_password_type));
+  EXPECT_EQ(warning_text_sync, service_->GetWarningDetailText(
+                                   reused_password_type, &placeholder_offsets));
 }
 
 TEST_F(ChromePasswordProtectionServiceTest, VerifyCanShowInterstitial) {

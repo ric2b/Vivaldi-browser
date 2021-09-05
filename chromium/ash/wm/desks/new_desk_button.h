@@ -14,7 +14,7 @@
 
 namespace ash {
 
-class DesksBarItemBorder;
+class WmHighlightItemBorder;
 
 // A button view that shows up in the top-right corner of the screen when
 // overview mode is on, which is used to create a new virtual desk.
@@ -32,6 +32,13 @@ class ASH_EXPORT NewDeskButton
 
   void SetLabelVisible(bool visible);
 
+  // Gets the minimum size of this view to properly lay out all its contents.
+  // |compact| is set to true for compact mode or false for default mode.
+  // The view containing this object can use the size returned from this
+  // function to decide its own proper size or layout in default or compact
+  // mode.
+  gfx::Size GetMinSize(bool compact) const;
+
   gfx::Size CalculatePreferredSize() const override;
   void Layout() override;
 
@@ -42,17 +49,14 @@ class ASH_EXPORT NewDeskButton
   std::unique_ptr<views::InkDropHighlight> CreateInkDropHighlight()
       const override;
   SkColor GetInkDropBaseColor() const override;
-  std::unique_ptr<views::InkDropMask> CreateInkDropMask() const override;
   std::unique_ptr<views::LabelButtonBorder> CreateDefaultBorder()
       const override;
 
   // OverviewHighlightController::OverviewHighlightableView:
   views::View* GetView() override;
-  gfx::Rect GetHighlightBoundsInScreen() override;
-  gfx::RoundedCornersF GetRoundedCornersRadii() const override;
   void MaybeActivateHighlightedView() override;
   void MaybeCloseHighlightedView() override;
-  bool OnViewHighlighted() override;
+  void OnViewHighlighted() override;
   void OnViewUnhighlighted() override;
 
   SkColor GetBackgroundColorForTesting() const { return background_color_; }
@@ -63,7 +67,7 @@ class ASH_EXPORT NewDeskButton
 
   // Owned by this View via `View::border_`. This is just a convenient pointer
   // to it.
-  DesksBarItemBorder* border_ptr_;
+  WmHighlightItemBorder* border_ptr_;
 
   SkColor background_color_;
 

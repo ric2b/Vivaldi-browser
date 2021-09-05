@@ -20,7 +20,7 @@
 
 #include "third_party/blink/renderer/core/svg/svg_number_list.h"
 
-#include "third_party/blink/renderer/core/svg/svg_animation_element.h"
+#include "third_party/blink/renderer/core/svg/svg_animate_element.h"
 #include "third_party/blink/renderer/core/svg/svg_parser_utilities.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
@@ -69,7 +69,7 @@ SVGParsingError SVGNumberList::SetValueAsString(const String& value) {
 }
 
 void SVGNumberList::Add(SVGPropertyBase* other, SVGElement* context_element) {
-  SVGNumberList* other_list = ToSVGNumberList(other);
+  auto* other_list = To<SVGNumberList>(other);
 
   if (length() != other_list->length())
     return;
@@ -79,25 +79,26 @@ void SVGNumberList::Add(SVGPropertyBase* other, SVGElement* context_element) {
 }
 
 void SVGNumberList::CalculateAnimatedValue(
-    SVGAnimationElement* animation_element,
+    const SVGAnimateElement& animation_element,
     float percentage,
     unsigned repeat_count,
     SVGPropertyBase* from_value,
     SVGPropertyBase* to_value,
     SVGPropertyBase* to_at_end_of_duration_value,
     SVGElement* context_element) {
-  SVGNumberList* from_list = ToSVGNumberList(from_value);
-  SVGNumberList* to_list = ToSVGNumberList(to_value);
-  SVGNumberList* to_at_end_of_duration_list =
-      ToSVGNumberList(to_at_end_of_duration_value);
+  auto* from_list = To<SVGNumberList>(from_value);
+  auto* to_list = To<SVGNumberList>(to_value);
+  auto* to_at_end_of_duration_list =
+      To<SVGNumberList>(to_at_end_of_duration_value);
 
   uint32_t from_list_size = from_list->length();
   uint32_t to_list_size = to_list->length();
   uint32_t to_at_end_of_duration_list_size =
       to_at_end_of_duration_list->length();
 
-  if (!AdjustFromToListValues(from_list, to_list, percentage,
-                              animation_element->GetAnimationMode()))
+  const bool is_to_animation =
+      animation_element.GetAnimationMode() == kToAnimation;
+  if (!AdjustFromToListValues(from_list, to_list, percentage, is_to_animation))
     return;
 
   for (uint32_t i = 0; i < to_list_size; ++i) {
@@ -108,9 +109,9 @@ void SVGNumberList::CalculateAnimatedValue(
                                     : 0;
 
     float animated = at(i)->Value();
-    animation_element->AnimateAdditiveNumber(percentage, repeat_count,
-                                             effective_from, effective_to,
-                                             effective_to_at_end, animated);
+    animation_element.AnimateAdditiveNumber(percentage, repeat_count,
+                                            effective_from, effective_to,
+                                            effective_to_at_end, animated);
     at(i)->SetValue(animated);
   }
 }

@@ -51,6 +51,7 @@ def _GetPathsToPrepend(input_api):
       chromium_src_dir, 'third_party', 'catapult', 'common', 'py_utils')
   android_pylib_dir = input_api.os_path.join(
       chromium_src_dir, 'build', 'android')
+  testing_dir = input_api.os_path.join(chromium_src_dir, 'testing')
   return [
       telemetry_dir,
       typ_dir,
@@ -59,6 +60,7 @@ def _GetPathsToPrepend(input_api):
       tracing_dir,
       py_utils_dir,
       android_pylib_dir,
+      testing_dir,
   ]
 
 
@@ -135,7 +137,7 @@ def _CheckShardMaps(input_api, output_api, block_on_failure):
   return _RunValidationScript(
       input_api,
       output_api,
-      'generate_perf_sharding',
+      'generate_perf_sharding.py',
       ['validate'],
       block_on_failure
   )

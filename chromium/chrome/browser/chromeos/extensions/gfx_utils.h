@@ -9,6 +9,8 @@
 #include <unordered_set>
 #include <vector>
 
+#include "chrome/browser/extensions/chrome_app_icon.h"
+
 namespace content {
 class BrowserContext;
 }
@@ -32,6 +34,11 @@ bool GetEquivalentInstalledArcApps(content::BrowserContext* context,
                                    const std::string& extension_id,
                                    std::unordered_set<std::string>* arc_apps);
 
+// Returns the equivalent app IDs that have been installed to the
+// Playstore app (identified by |arc_package_name|).
+const std::vector<std::string> GetEquivalentInstalledAppIds(
+    const std::string& arc_package_name);
+
 // Returns the equivalent Chrome extensions that have been installed to the
 // Playstore app (identified by |arc_package_name|). Returns an empty vector if
 // there is no such Chrome extension.
@@ -43,9 +50,12 @@ const std::vector<std::string> GetEquivalentInstalledExtensions(
 bool ShouldApplyChromeBadge(content::BrowserContext* context,
                             const std::string& extension_id);
 
-// Applies an additional badge in order to distinguish dual apps from Chrome
-// and Android side.
-void ApplyChromeBadge(gfx::ImageSkia* icon_out);
+// Returns whether to call ApplyChromeBadge.
+bool ShouldApplyChromeBadgeToWebApp(content::BrowserContext* context,
+                                    const std::string& web_app_id);
+
+// Applies an additional badge identified by |badge_type|.
+void ApplyBadge(gfx::ImageSkia* icon_out, ChromeAppIcon::Badge badge_type);
 
 }  // namespace util
 }  // namespace extensions

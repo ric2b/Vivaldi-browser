@@ -6,7 +6,7 @@
       "-root",
       "[CACHE]\\windows_sdk",
       "-ensure-file",
-      "chrome_internal/third_party/sdk/windows uploaded:2018-06-13",
+      "chrome_internal/third_party/sdk/windows uploaded:2019-09-06",
       "-json-output",
       "/path/to/tmp/json"
     ],
@@ -17,7 +17,7 @@
       "@@@STEP_LOG_LINE@json.output@  \"result\": {@@@",
       "@@@STEP_LOG_LINE@json.output@    \"\": [@@@",
       "@@@STEP_LOG_LINE@json.output@      {@@@",
-      "@@@STEP_LOG_LINE@json.output@        \"instance_id\": \"resolved-instance_id-of-uploaded:2018-06\", @@@",
+      "@@@STEP_LOG_LINE@json.output@        \"instance_id\": \"resolved-instance_id-of-uploaded:2019-09\", @@@",
       "@@@STEP_LOG_LINE@json.output@        \"package\": \"chrome_internal/third_party/sdk/windows\"@@@",
       "@@@STEP_LOG_LINE@json.output@      }@@@",
       "@@@STEP_LOG_LINE@json.output@    ]@@@",
@@ -101,8 +101,7 @@
     "name": "taskkill mspdbsrv"
   },
   {
-    "name": "$result",
-    "recipe_result": null,
-    "status_code": 0
+    "jsonResult": null,
+    "name": "$result"
   }
 ]

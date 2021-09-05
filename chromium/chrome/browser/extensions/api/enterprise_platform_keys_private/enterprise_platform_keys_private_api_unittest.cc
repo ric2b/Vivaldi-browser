@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/memory/ptr_util.h"
 #include "base/values.h"
 #include "chrome/browser/chromeos/attestation/mock_tpm_challenge_key.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
@@ -94,7 +95,8 @@ TEST_F(EPKPChallengeMachineKeyTest, ExtensionNotWhitelisted) {
   prefs_->Set(prefs::kAttestationExtensionWhitelist, empty_whitelist);
 
   EXPECT_EQ(
-      EPKPChallengeKey::kExtensionNotWhitelistedError,
+      chromeos::attestation::TpmChallengeKeyResult::
+          kExtensionNotWhitelistedErrorMsg,
       utils::RunFunctionAndReturnError(func_.get(), kFuncArgs, browser()));
 }
 
@@ -133,7 +135,8 @@ TEST_F(EPKPChallengeUserKeyTest, ExtensionNotWhitelisted) {
   prefs_->Set(prefs::kAttestationExtensionWhitelist, empty_whitelist);
 
   EXPECT_EQ(
-      EPKPChallengeKey::kExtensionNotWhitelistedError,
+      chromeos::attestation::TpmChallengeKeyResult::
+          kExtensionNotWhitelistedErrorMsg,
       utils::RunFunctionAndReturnError(func_.get(), kFuncArgs, browser()));
 }
 

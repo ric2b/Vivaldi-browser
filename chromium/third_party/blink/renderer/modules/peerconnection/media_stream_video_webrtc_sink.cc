@@ -2,23 +2,24 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "third_party/blink/public/web/modules/peerconnection/media_stream_video_webrtc_sink.h"
+#include "third_party/blink/renderer/modules/peerconnection/media_stream_video_webrtc_sink.h"
 
 #include <algorithm>
 #include <memory>
 
-#include "base/bind.h"
 #include "base/location.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/lock.h"
 #include "base/timer/timer.h"
 #include "media/base/limits.h"
-#include "third_party/blink/public/platform/modules/peerconnection/webrtc_video_track_source.h"
-#include "third_party/blink/public/web/modules/mediastream/media_stream_constraints_util.h"
 #include "third_party/blink/public/web/modules/mediastream/media_stream_video_track.h"
 #include "third_party/blink/public/web/modules/mediastream/web_media_stream_utils.h"
-#include "third_party/blink/public/web/modules/peerconnection/peer_connection_dependency_factory.h"
+#include "third_party/blink/renderer/modules/mediastream/media_stream_constraints_util.h"
+#include "third_party/blink/renderer/modules/peerconnection/peer_connection_dependency_factory.h"
+#include "third_party/blink/renderer/platform/peerconnection/webrtc_video_track_source.h"
+#include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
+#include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
 #include "third_party/blink/renderer/platform/wtf/thread_safe_ref_counted.h"
 #include "third_party/webrtc/api/video_track_source_proxy.h"
 
@@ -187,14 +188,15 @@ void MediaStreamVideoWebRtcSink::WebRtcVideoSourceAdapter::OnVideoFrameOnIO(
     scoped_refptr<media::VideoFrame> frame,
     base::TimeTicks estimated_capture_time) {
   DCHECK_CALLED_ON_VALID_THREAD(io_thread_checker_);
-  render_task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(&WebRtcVideoSourceAdapter::ResetRefreshTimerOnMainThread,
-                     this));
-  libjingle_worker_thread_->PostTask(
-      FROM_HERE,
-      base::BindOnce(&WebRtcVideoSourceAdapter::OnVideoFrameOnWorkerThread,
-                     this, std::move(frame)));
+  PostCrossThreadTask(
+      *render_task_runner_.get(), FROM_HERE,
+      CrossThreadBindOnce(
+          &WebRtcVideoSourceAdapter::ResetRefreshTimerOnMainThread,
+          WrapRefCounted(this)));
+  PostCrossThreadTask(
+      *libjingle_worker_thread_.get(), FROM_HERE,
+      CrossThreadBindOnce(&WebRtcVideoSourceAdapter::OnVideoFrameOnWorkerThread,
+                          WrapRefCounted(this), std::move(frame)));
 }
 
 void MediaStreamVideoWebRtcSink::WebRtcVideoSourceAdapter::
@@ -259,22 +261,25 @@ MediaStreamVideoWebRtcSink::MediaStreamVideoWebRtcSink(
   // PeerConnectionFactory::CreateVideoTrack doesn't do reference counting.
   video_source_proxy_ =
       factory->CreateVideoTrackSourceProxy(video_source_.get());
-  video_track_ = factory->CreateLocalVideoTrack(track.Id().Utf8(),
-                                                video_source_proxy_.get());
+  video_track_ =
+      factory->CreateLocalVideoTrack(track.Id(), video_source_proxy_.get());
 
   video_track_->set_content_hint(
       ContentHintTypeToWebRtcContentHint(track.ContentHint()));
   video_track_->set_enabled(track.IsEnabled());
 
   source_adapter_ = base::MakeRefCounted<WebRtcVideoSourceAdapter>(
-      factory->GetWebRtcWorkerThread(), video_source_.get(), refresh_interval,
-      base::Bind(&MediaStreamVideoWebRtcSink::RequestRefreshFrame,
-                 weak_factory_.GetWeakPtr()),
+      factory->GetWebRtcWorkerTaskRunner(), video_source_.get(),
+      refresh_interval,
+      ConvertToBaseRepeatingCallback(CrossThreadBindRepeating(
+          &MediaStreamVideoWebRtcSink::RequestRefreshFrame,
+          weak_factory_.GetWeakPtr())),
       std::move(task_runner));
 
   MediaStreamVideoSink::ConnectToTrack(
       track,
-      base::Bind(&WebRtcVideoSourceAdapter::OnVideoFrameOnIO, source_adapter_),
+      ConvertToBaseRepeatingCallback(CrossThreadBindRepeating(
+          &WebRtcVideoSourceAdapter::OnVideoFrameOnIO, source_adapter_)),
       false);
 
   DVLOG(3) << "MediaStreamVideoWebRtcSink ctor() : is_screencast "

@@ -59,7 +59,7 @@ CSSInterpolationTypesMap::CSSInterpolationTypesMap(
     const Document& document)
     : registry_(registry) {
   allow_all_animations_ = document.IsFeatureEnabled(
-      blink::mojom::FeaturePolicyFeature::kLayoutAnimations);
+      blink::mojom::blink::FeaturePolicyFeature::kLayoutAnimations);
 }
 
 static const PropertyRegistration* GetRegistration(
@@ -91,7 +91,7 @@ const InterpolationTypes& CSSInterpolationTypesMap::Get(
   // Custom property interpolation types may change over time so don't trust the
   // applicableTypesMap without checking the registry.
   if (registry_ && property.IsCSSCustomProperty()) {
-    const auto* registration = GetRegistration(registry_.Get(), property);
+    const auto* registration = GetRegistration(registry_, property);
     if (registration) {
       if (found_entry) {
         applicable_types_map.erase(entry);
@@ -351,7 +351,7 @@ const InterpolationTypes& CSSInterpolationTypesMap::Get(
             std::make_unique<CSSTransformInterpolationType>(used_property));
         break;
       case CSSPropertyID::kVariable:
-        DCHECK_EQ(GetRegistration(registry_.Get(), property), nullptr);
+        DCHECK_EQ(GetRegistration(registry_, property), nullptr);
         break;
       default:
         DCHECK(!css_property.IsInterpolable());

@@ -28,12 +28,14 @@ message NoteAttachment {
 message NotesSpecifics {
   enum VivaldiSpecialNotesType {
     NORMAL = 0;
+    // TRASH_NODE is probably not needed anymore
     TRASH_NODE = 1;
     SEPARATOR = 2;
   }
 
   optional string url = 1;
-  optional string subject = 2;
+  // Contains legacy title which is truncated and may contain escaped symbols.
+  optional string legacy_canonicalized_title = 2;
   optional string content = 3;
   // Corresponds to Notes_Entry::date_added() and is the internal value from
   // base::Time.
@@ -43,4 +45,10 @@ message NotesSpecifics {
   repeated NotesAttachmentDeprecated attachments_deprecated = 6  [deprecated=true];
   optional VivaldiSpecialNotesType special_node_type = 7;
   repeated NoteAttachment attachments = 8;
+  reserved 9;
+  reserved 10;
+  optional string guid = 11;
+  // Contains full title as is. |legacy_canonicalized_title| is a prefix of
+  // |full_title| with escaped symbols.
+  optional string full_title = 12;
 }

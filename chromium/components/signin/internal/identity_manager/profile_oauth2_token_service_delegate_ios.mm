@@ -22,7 +22,7 @@
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/signin/public/identity_manager/ios/device_accounts_provider.h"
 #include "google_apis/gaia/oauth2_access_token_fetcher.h"
-#include "net/url_request/url_request_status.h"
+#include "net/base/net_errors.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -59,8 +59,7 @@ GoogleServiceAuthError GetGoogleServiceAuthErrorFromNSError(
           GoogleServiceAuthError::SERVICE_UNAVAILABLE);
     case kAuthenticationErrorCategoryNetworkServerErrors:
       // Just set the connection error state to FAILED.
-      return GoogleServiceAuthError::FromConnectionError(
-          net::URLRequestStatus::FAILED);
+      return GoogleServiceAuthError::FromConnectionError(net::ERR_FAILED);
     case kAuthenticationErrorCategoryUserCancellationErrors:
       return GoogleServiceAuthError(GoogleServiceAuthError::REQUEST_CANCELED);
     case kAuthenticationErrorCategoryUnknownIdentityErrors:
@@ -207,7 +206,7 @@ void ProfileOAuth2TokenServiceIOSDelegate::ReloadCredentials() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   // Get the list of new account ids.
-  std::set<std::string> new_account_ids;
+  std::set<CoreAccountId> new_account_ids;
   for (const auto& new_account : provider_->GetAllAccounts()) {
     DCHECK(!new_account.gaia.empty());
     DCHECK(!new_account.email.empty());
@@ -216,7 +215,7 @@ void ProfileOAuth2TokenServiceIOSDelegate::ReloadCredentials() {
     // the GAIA ID is available if any client of this token service starts
     // a fetch access token operation when it receives a
     // |OnRefreshTokenAvailable| notification.
-    std::string account_id = account_tracker_service_->SeedAccountInfo(
+    CoreAccountId account_id = account_tracker_service_->SeedAccountInfo(
         AccountInfoFromDeviceAccount(new_account));
     new_account_ids.insert(account_id);
   }

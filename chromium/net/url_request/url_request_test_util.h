@@ -15,6 +15,7 @@
 
 #include "base/compiler_specific.h"
 #include "base/memory/ref_counted.h"
+#include "base/optional.h"
 #include "base/path_service.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string16.h"
@@ -36,7 +37,6 @@
 #include "net/http/http_network_layer.h"
 #include "net/http/http_network_session.h"
 #include "net/http/http_request_headers.h"
-#include "net/proxy_resolution/proxy_resolution_service.h"
 #include "net/ssl/ssl_config_service_defaults.h"
 #include "net/url_request/redirect_info.h"
 #include "net/url_request/url_request.h"
@@ -87,6 +87,14 @@ class TestURLRequestContext : public URLRequestContext {
   void set_create_default_http_user_agent_settings(bool value) {
     create_default_http_user_agent_settings_ = value;
   }
+
+  // Like CreateRequest, but also updates |site_for_cookies| to give the request
+  // a 1st-party context.
+  std::unique_ptr<URLRequest> CreateFirstPartyRequest(
+      const GURL& url,
+      RequestPriority priority,
+      URLRequest::Delegate* delegate,
+      NetworkTrafficAnnotationTag traffic_annotation) const;
 
  private:
   bool initialized_ = false;
@@ -188,6 +196,7 @@ class TestDelegate : public URLRequest::Delegate {
   bool certificate_errors_are_fatal() const {
     return certificate_errors_are_fatal_;
   }
+  int certificate_net_error() const { return certificate_net_error_; }
   bool auth_required_called() const { return auth_required_; }
   bool response_completed() const { return response_completed_; }
   int request_status() const { return request_status_; }
@@ -238,6 +247,7 @@ class TestDelegate : public URLRequest::Delegate {
   bool request_failed_ = false;
   bool have_certificate_errors_ = false;
   bool certificate_errors_are_fatal_ = false;
+  int certificate_net_error_ = 0;
   bool auth_required_ = false;
   std::string data_received_;
   bool response_completed_ = false;
@@ -280,8 +290,9 @@ class TestNetworkDelegate : public NetworkDelegateImpl {
     add_header_to_first_response_ = add_header_to_first_response;
   }
 
-  void set_allowed_unsafe_redirect_url(GURL allowed_unsafe_redirect_url) {
-    allowed_unsafe_redirect_url_ = allowed_unsafe_redirect_url;
+  void set_preserve_fragment_on_redirect_url(
+      const base::Optional<GURL>& preserve_fragment_on_redirect_url) {
+    preserve_fragment_on_redirect_url_ = preserve_fragment_on_redirect_url;
   }
 
   void set_cookie_options(int o) {cookie_options_bit_mask_ = o; }
@@ -304,19 +315,11 @@ class TestNetworkDelegate : public NetworkDelegateImpl {
     cancel_request_with_policy_violating_referrer_ = val;
   }
 
-  int before_send_headers_with_proxy_count() const {
-    return before_send_headers_with_proxy_count_;
-  }
   int before_start_transaction_count() const {
     return before_start_transaction_count_;
   }
 
   int headers_received_count() const { return headers_received_count_; }
-
-  // Last observed proxy in proxy header sent callback.
-  HostPortPair last_observed_proxy() {
-    return last_observed_proxy_;
-  }
 
   void set_before_start_transaction_fails() {
     before_start_transaction_fails_ = true;
@@ -330,17 +333,13 @@ class TestNetworkDelegate : public NetworkDelegateImpl {
   int OnBeforeStartTransaction(URLRequest* request,
                                CompletionOnceCallback callback,
                                HttpRequestHeaders* headers) override;
-  void OnBeforeSendHeaders(URLRequest* request,
-                           const ProxyInfo& proxy_info,
-                           const ProxyRetryInfoMap& proxy_retry_info,
-                           HttpRequestHeaders* headers) override;
   int OnHeadersReceived(
       URLRequest* request,
       CompletionOnceCallback callback,
       const HttpResponseHeaders* original_response_headers,
       scoped_refptr<HttpResponseHeaders>* override_response_headers,
       const IPEndPoint& endpoint,
-      GURL* allowed_unsafe_redirect_url) override;
+      base::Optional<GURL>* preserve_fragment_on_redirect_url) override;
   void OnBeforeRedirect(URLRequest* request, const GURL& new_location) override;
   void OnResponseStarted(URLRequest* request, int net_error) override;
   void OnCompleted(URLRequest* request, bool started, int net_error) override;
@@ -365,8 +364,9 @@ class TestNetworkDelegate : public NetworkDelegateImpl {
   int GetRequestId(URLRequest* request);
 
   GURL redirect_on_headers_received_url_;
-  // URL marked as safe for redirection at the onHeadersReceived stage.
-  GURL allowed_unsafe_redirect_url_;
+  // URL to mark as retaining its fragment if redirected to at the
+  // OnHeadersReceived() stage.
+  base::Optional<GURL> preserve_fragment_on_redirect_url_;
 
   int last_error_;
   int error_count_;
@@ -378,11 +378,8 @@ class TestNetworkDelegate : public NetworkDelegateImpl {
   int blocked_get_cookies_count_;
   int blocked_set_cookie_count_;
   int set_cookie_count_;
-  int before_send_headers_with_proxy_count_;
   int before_start_transaction_count_;
   int headers_received_count_;
-  // Last observed proxy in before proxy header sent callback.
-  HostPortPair last_observed_proxy_;
 
   // NetworkDelegate callbacks happen in a particular order (e.g.
   // OnBeforeURLRequest is always called before OnBeforeStartTransaction).

@@ -55,8 +55,9 @@ class GLOzoneEGLX11 : public GLOzoneEGL {
 
  protected:
   // GLOzoneEGL:
-  intptr_t GetNativeDisplay() override {
-    return reinterpret_cast<intptr_t>(gfx::GetXDisplay());
+  gl::EGLDisplayPlatform GetNativeDisplay() override {
+    return gl::EGLDisplayPlatform(
+        reinterpret_cast<EGLNativeDisplayType>(gfx::GetXDisplay()));
   }
 
   bool LoadGLES2Bindings(gl::GLImplementation implementation) override {
@@ -106,8 +107,8 @@ X11SurfaceFactory::CreateVulkanImplementation(bool allow_protected_memory,
 
 std::unique_ptr<SurfaceOzoneCanvas> X11SurfaceFactory::CreateCanvasForWidget(
     gfx::AcceleratedWidget widget,
-    base::TaskRunner* task_runner) {
-  return std::make_unique<X11CanvasSurface>(widget, task_runner);
+    scoped_refptr<base::SequencedTaskRunner> task_runner) {
+  return std::make_unique<X11CanvasSurface>(widget, std::move(task_runner));
 }
 
 }  // namespace ui

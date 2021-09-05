@@ -4,6 +4,7 @@
 
 #include "chrome/browser/web_applications/pending_app_registration_task.h"
 
+#include "base/bind_helpers.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/web_applications/components/pending_app_manager.h"
 #include "chrome/browser/web_applications/components/web_app_url_loader.h"
@@ -86,7 +87,9 @@ void PendingAppRegistrationTask::OnDidCheckHasServiceWorker(
 
   // No action is needed when the URL loads.
   // We wait for OnRegistrationCompleted (or registration timeout).
-  url_loader_->LoadUrl(launch_url(), web_contents_, base::DoNothing());
+  url_loader_->LoadUrl(launch_url(), web_contents_,
+                       WebAppUrlLoader::UrlComparison::kExact,
+                       base::DoNothing());
 }
 
 void PendingAppRegistrationTask::OnRegistrationTimeout() {

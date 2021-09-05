@@ -6,12 +6,13 @@ package org.chromium.chrome.browser;
 
 import android.content.Context;
 
+import androidx.annotation.VisibleForTesting;
+
 import com.google.android.gms.gcm.GcmNetworkManager;
 import com.google.android.gms.gcm.GcmTaskService;
 import com.google.android.gms.gcm.TaskParams;
 
 import org.chromium.base.Log;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.base.task.PostTask;
 import org.chromium.chrome.browser.background_sync.BackgroundSyncBackgroundTaskScheduler;
 import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
@@ -45,7 +46,7 @@ public class ChromeBackgroundService extends GcmTaskService {
 
                 case OfflinePageUtils.TASK_TAG:
                     // Offline pages are migrating to BackgroundTaskScheduler, therefore getting
-                    // a task through ChromeBackgroundSerivce should cause a rescheduling using
+                    // a task through ChromeBackgroundService should cause a rescheduling using
                     // the new component.
                     rescheduleOfflinePages();
                     break;
@@ -91,7 +92,7 @@ public class ChromeBackgroundService extends GcmTaskService {
     @VisibleForTesting
     protected void launchBrowser(Context context, String tag) {
         Log.i(TAG, "Launching browser");
-        ChromeBrowserInitializer.getInstance(this).handleSynchronousStartup();
+        ChromeBrowserInitializer.getInstance().handleSynchronousStartup();
     }
 
     @VisibleForTesting

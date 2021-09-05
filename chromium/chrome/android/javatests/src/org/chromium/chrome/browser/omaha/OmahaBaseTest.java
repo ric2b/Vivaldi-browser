@@ -169,20 +169,6 @@ public class OmahaBaseTest {
         int TIMES_OUT = 1;
     }
 
-    @IntDef({InstallEvent.SEND, InstallEvent.DONT_SEND})
-    @Retention(RetentionPolicy.SOURCE)
-    private @interface InstallEvent {
-        int SEND = 0;
-        int DONT_SEND = 1;
-    }
-
-    @IntDef({PostStatus.DUE, PostStatus.NOT_DUE})
-    @Retention(RetentionPolicy.SOURCE)
-    private @interface PostStatus {
-        int DUE = 0;
-        int NOT_DUE = 1;
-    }
-
     private AdvancedMockContext mContext;
     private MockOmahaDelegate mDelegate;
     private MockOmahaBase mOmahaBase;
@@ -636,7 +622,7 @@ public class OmahaBaseTest {
             String response = "";
             response += "<?xml version=\"1.0\" encoding=\"UTF-8\"?>";
             response += "<response protocol=\"3.0\" server=\"prod\">";
-            response += "<daystart elapsed_seconds=\"12345\"/>";
+            response += "<daystart elapsed_days=\"4088\" elapsed_seconds=\"12345\"/>";
             response += "<app appid=\"";
             response += (isOnTablet ? MockRequestGenerator.UUID_TABLET
                                     : MockRequestGenerator.UUID_PHONE);

@@ -167,53 +167,26 @@
         ]
       },
       {
-        "name": "upgradePartner",
+        "name": "updatePartners",
         "type": "function",
-        "description": "Copy of update from bookmarks.json, but to be used during partner upgrade",
+        "description": "Update default bookmarks",
         "parameters": [
           {
-            "type": "string",
-            "serialized_type": "int64",
-            "name": "id"
+            "name": "locale",
+            "type": "string"
           },
           {
-            "type": "object",
-            "name": "changes",
-            "properties": {
-              "title": {
-                "type": "string",
-                "optional": true
-              },
-              "url": {
-                "type": "string",
-                "optional": true
-              },
-              "nickname": {
-                "type": "string",
-                "optional": true
-              },
-              "description": {
-                "type": "string",
-                "optional": true
-              },
-              "thumbnail": {
-                "type": "string",
-                "optional": true
-              },
-              "speeddial": {
-                "type": "boolean",
-                "optional": true
-              }
-            }
-          },
-          {
-            "type": "function",
             "name": "callback",
-            "optional": true,
+            "type": "function",
             "parameters": [
               {
-                "name": "result",
-                "$ref": "BookmarkTreeNode"
+                "name": "ok",
+                "type": "boolean"
+              },
+              {
+                "name": "noVersion",
+                "type": "boolean",
+                "description": "The version is missing indicating perhaps an older setup."
               }
             ]
           }

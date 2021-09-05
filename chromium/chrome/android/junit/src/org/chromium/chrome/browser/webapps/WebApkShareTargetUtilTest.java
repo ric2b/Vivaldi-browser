@@ -79,7 +79,7 @@ public class WebApkShareTargetUtilTest {
             if (mParamFileAccepts != null) {
                 paramFileAccepts = mParamFileAccepts.toArray(new String[0][]);
             }
-            return new WebApkInfo.ShareTarget(mAction, mParamTitle, mParamText, null,
+            return new WebApkInfo.ShareTarget(mAction, mParamTitle, mParamText,
                     ShareTarget.METHOD_POST.equalsIgnoreCase(mMethod),
                     ShareTarget.ENCODING_TYPE_MULTIPART.equalsIgnoreCase(mEncodingType),
                     paramFileNames, paramFileAccepts);
@@ -508,13 +508,6 @@ public class WebApkShareTargetUtilTest {
 
     private WebApkShareTargetUtil.PostData computePostData(
             WebApkInfo.ShareTarget shareTarget, ShareData shareData) {
-        WebApkInfo.ShareData webApkShareData = new WebApkInfo.ShareData();
-        webApkShareData.subject = shareData.title;
-        webApkShareData.text = shareData.text;
-        if (shareData.uris != null) {
-            webApkShareData.files = new ArrayList(shareData.uris);
-        }
-
-        return WebApkShareTargetUtil.computePostData(shareTarget, webApkShareData);
+        return WebApkShareTargetUtil.computePostData(shareTarget, shareData);
     }
 }

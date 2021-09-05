@@ -12,13 +12,13 @@
 #include "third_party/blink/renderer/bindings/core/v8/native_value_traits_impl.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_array_buffer.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_testing.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_rtc_ice_gather_options.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_rtc_quic_transport_stats.h"
 #include "third_party/blink/renderer/core/dom/dom_high_res_time_stamp.h"
 #include "third_party/blink/renderer/core/typed_arrays/dom_array_buffer.h"
 #include "third_party/blink/renderer/modules/peerconnection/adapters/p2p_quic_transport.h"
 #include "third_party/blink/renderer/modules/peerconnection/adapters/p2p_quic_transport_stats.h"
 #include "third_party/blink/renderer/modules/peerconnection/adapters/test/mock_p2p_quic_packet_transport.h"
-#include "third_party/blink/renderer/modules/peerconnection/rtc_ice_gather_options.h"
 #include "third_party/blink/renderer/modules/peerconnection/rtc_ice_transport.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/webrtc/rtc_base/rtc_certificate_generator.h"
@@ -79,7 +79,7 @@ void FillDatagramBuffer(RTCQuicTransport* transport) {
 
 static base::span<uint8_t> SpanFromDOMArrayBuffer(DOMArrayBuffer* buffer) {
   return base::span<uint8_t>(static_cast<uint8_t*>(buffer->Data()),
-                             buffer->ByteLength());
+                             buffer->ByteLengthAsSizeT());
 }
 
 }  // namespace
@@ -444,7 +444,7 @@ TEST_F(RTCQuicTransportTest, ConnectPassesPreSharedKey) {
       CreateQuicTransport(scope, ice_transport, {}, std::move(mock_transport));
   DOMArrayBuffer* key = quic_transport->getKey();
   std::string pre_shared_key(static_cast<const char*>(key->Data()),
-                             key->ByteLength());
+                             key->ByteLengthAsSizeT());
 
   EXPECT_CALL(*mock_transport_ptr, MockStart(_))
       .WillOnce(
@@ -659,7 +659,7 @@ TEST_F(RTCQuicTransportTest, GetKeyReturnsValidKey) {
       CreateQuicTransport(scope, ice_transport, {}, std::move(mock_transport));
   auto* key = quic_transport->getKey();
 
-  EXPECT_GE(key->ByteLength(), 16u);
+  EXPECT_GE(key->ByteLengthAsSizeT(), 16u);
 }
 
 // Test that stats are converted correctly to the RTCQuicTransportStats

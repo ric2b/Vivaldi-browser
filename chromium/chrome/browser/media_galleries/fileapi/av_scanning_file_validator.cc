@@ -7,6 +7,7 @@
 #include <string>
 
 #include "base/callback.h"
+#include "base/task/thread_pool.h"
 #include "build/build_config.h"
 #include "content/public/browser/browser_thread.h"
 
@@ -43,17 +44,18 @@ AVScanningFileValidator::~AVScanningFileValidator() {}
 
 void AVScanningFileValidator::StartPostWriteValidation(
     const base::FilePath& dest_platform_path,
-    const ResultCallback& result_callback) {
+    ResultCallback result_callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
 
 #if defined(OS_WIN)
   base::PostTaskAndReplyWithResult(
-      base::CreateCOMSTATaskRunner({base::ThreadPool(), base::MayBlock(),
-                                    base::TaskPriority::USER_VISIBLE})
+      base::ThreadPool::CreateCOMSTATaskRunner(
+          {base::MayBlock(), base::TaskPriority::USER_VISIBLE})
           .get(),
-      FROM_HERE, base::Bind(&ScanFile, dest_platform_path), result_callback);
+      FROM_HERE, base::BindOnce(&ScanFile, dest_platform_path),
+      std::move(result_callback));
 #else
-  result_callback.Run(base::File::FILE_OK);
+  std::move(result_callback).Run(base::File::FILE_OK);
 #endif
 }
 

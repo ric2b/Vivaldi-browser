@@ -13,6 +13,7 @@
 #include "base/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "components/autofill_assistant/browser/access_token_fetcher.h"
+#include "components/autofill_assistant/browser/device_context.h"
 #include "components/autofill_assistant/browser/service.h"
 #include "components/autofill_assistant/browser/service.pb.h"
 #include "components/signin/public/identity_manager/access_token_fetcher.h"
@@ -43,7 +44,9 @@ class ServiceImpl : public Service {
               content::BrowserContext* context,
               AccessTokenFetcher* token_fetcher,
               const std::string& locale,
-              const std::string& country_code);
+              const std::string& country_code,
+              const DeviceContext& device_context,
+              const Client* client);
   ~ServiceImpl() override;
 
   // Get scripts for a given |url|, which should be a valid URL.
@@ -69,6 +72,8 @@ class ServiceImpl : public Service {
       ResponseCallback callback) override;
 
  private:
+  friend class ServiceImplTest;
+
   // Struct to store scripts and actions request.
   struct Loader {
     Loader();
@@ -98,11 +103,13 @@ class ServiceImpl : public Service {
   // in |loaders_|.
   void FetchAccessToken();
   void OnFetchAccessToken(bool success, const std::string& access_token);
+  std::string GetClientAccountHash() const;
 
   // Creates and fills a client context protobuf message.
   static ClientContextProto CreateClientContext(
       const std::string& locale,
-      const std::string& country_code);
+      const std::string& country_code,
+      const DeviceContext& device_context);
 
   content::BrowserContext* context_;
   GURL script_server_url_;
@@ -130,6 +137,8 @@ class ServiceImpl : public Service {
   // The client context is cached here to avoid having to recreate it for
   // every message.
   const ClientContextProto client_context_;
+
+  const Client* client_;
 
   base::WeakPtrFactory<ServiceImpl> weak_ptr_factory_;
 

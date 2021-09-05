@@ -15,10 +15,12 @@ import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
 import org.chromium.chrome.browser.offlinepages.RequestCoordinatorBridge;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tabmodel.TabLaunchType;
+import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.document.TabDelegate;
-import org.chromium.chrome.browser.widget.bottomsheet.BottomSheet.SheetState;
+import org.chromium.chrome.browser.ui.native_page.NativePageHost;
+import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetController;
+import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetController.SheetState;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.ui.mojom.WindowOpenDisposition;
 import org.chromium.ui.widget.Toast;
@@ -30,16 +32,18 @@ public class NativePageNavigationDelegateImpl implements NativePageNavigationDel
     private static final String TAG = "PageNavDelegate";
     private final Profile mProfile;
     private final TabModelSelector mTabModelSelector;
+    private final Tab mTab;
 
     protected final ChromeActivity mActivity;
     protected final NativePageHost mHost;
 
     public NativePageNavigationDelegateImpl(ChromeActivity activity, Profile profile,
-            NativePageHost host, TabModelSelector tabModelSelector) {
+            NativePageHost host, TabModelSelector tabModelSelector, Tab tab) {
         mActivity = activity;
         mProfile = profile;
         mHost = host;
         mTabModelSelector = tabModelSelector;
+        mTab = tab;
     }
 
     @Override
@@ -55,7 +59,7 @@ public class NativePageNavigationDelegateImpl implements NativePageNavigationDel
         switch (windowOpenDisposition) {
             case WindowOpenDisposition.CURRENT_TAB:
                 mHost.loadUrl(loadUrlParams, mTabModelSelector.isIncognitoSelected());
-                loadingTab = mHost.getActiveTab();
+                loadingTab = mTab;
                 break;
             case WindowOpenDisposition.NEW_BACKGROUND_TAB:
                 loadingTab = openUrlInNewTab(loadUrlParams);
@@ -83,14 +87,14 @@ public class NativePageNavigationDelegateImpl implements NativePageNavigationDel
 
     private Tab openUrlInNewTab(LoadUrlParams loadUrlParams) {
         Tab tab = mTabModelSelector.openNewTab(loadUrlParams,
-                TabLaunchType.FROM_LONGPRESS_BACKGROUND, mHost.getActiveTab(),
+                TabLaunchType.FROM_LONGPRESS_BACKGROUND, mTab,
                 /* incognito = */ false);
 
         // If animations are disabled in the DeviceClassManager, a toast is already displayed for
         // all tabs opened in the background.
         // TODO(twellington): Replace this with an animation.
-        if (mActivity.getBottomSheet() != null
-                && mActivity.getBottomSheet().getSheetState() == SheetState.FULL
+        BottomSheetController controller = mActivity.getBottomSheetController();
+        if (controller != null && controller.getSheetState() == SheetState.FULL
                 && DeviceClassManager.enableAnimations()) {
             Toast.makeText(mActivity, R.string.open_in_new_tab_toast, Toast.LENGTH_SHORT).show();
         }
@@ -99,9 +103,8 @@ public class NativePageNavigationDelegateImpl implements NativePageNavigationDel
     }
 
     private void saveUrlForOffline(String url) {
-        if (mHost.getActiveTab() != null) {
-            OfflinePageBridge.getForProfile(mProfile).scheduleDownload(
-                    mHost.getActiveTab().getWebContents(),
+        if (mTab != null) {
+            OfflinePageBridge.getForProfile(mProfile).scheduleDownload(mTab.getWebContents(),
                     OfflinePageBridge.NTP_SUGGESTIONS_NAMESPACE, url, DownloadUiActionFlags.ALL);
         } else {
             RequestCoordinatorBridge.getForProfile(mProfile).savePageLater(

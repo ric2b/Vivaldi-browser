@@ -12,7 +12,7 @@ There can be multiple owners of a benchmark, for example if there are multiple t
 ## How do I update the owner on a benchmark?
 
 ### Telemetry Benchmarks
-1. Open [`src/tools/perf/benchmarks/benchmark_name.py`](https://cs.chromium.org/chromium/src/tools/perf/benchmarks/), where `benchmark_name` is the part of the benchmark before the “.”, like `smoothness`  in `smoothness.top_25_smooth`.
+1. Open <benchmark_harness>.py under [`src/tools/perf/benchmarks/`](https://cs.chromium.org/chromium/src/tools/perf/benchmarks/). The <benchmark_harness> is the part of the benchmark name before the “.”. For example, when looking for 'blink_perf.paint', you need to open 'blink_perf.py'.
 1. Find the class for the benchmark. It has a `Name` method that should match the full name of the benchmark.
 1. Add a `benchmark.Info` decorator above the class.
 
@@ -34,7 +34,7 @@ There can be multiple owners of a benchmark, for example if there are multiple t
 
 ### C++ Perf Benchmarks
 1. Open [`src/tools/perf/core/perf_data_generator.py`](https://cs.chromium.org/chromium/src/tools/perf/core/perf_data_generator.py).
-1. Find the BenchmarkMetadata for the benchmark. It will be in a dictionary named `NON_TELEMETRY_BENCHMARKS` or `NON_WATERFALL_BENCHMARKS`.
+1. Find the BenchmarkMetadata for the benchmark. It will be in a dictionary named `GTEST_BENCHMARKS`.
 1. Update the email (first field of `BenchmarkMetadata`).
 1. Run `tools/perf/generate_perf_data` to update `tools/perf/benchmark.csv`.
 1. Upload `perf_data_generator.py` and `benchmark.csv` to a CL for review. Please add any previous owners to the review.

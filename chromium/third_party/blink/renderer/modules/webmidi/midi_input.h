@@ -43,13 +43,6 @@ class MIDIInput final : public MIDIPort {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static MIDIInput* Create(MIDIAccess*,
-                           const String& id,
-                           const String& manufacturer,
-                           const String& name,
-                           const String& version,
-                           midi::mojom::PortState);
-
   MIDIInput(MIDIAccess*,
             const String& id,
             const String& manufacturer,
@@ -71,7 +64,7 @@ class MIDIInput final : public MIDIPort {
                           size_t length,
                           base::TimeTicks time_stamp);
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  protected:
   void AddedEventListener(const AtomicString& event_type,

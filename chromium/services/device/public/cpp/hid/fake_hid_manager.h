@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/bindings/remote_set.h"
@@ -45,20 +46,25 @@ class FakeHidManager : public mojom::HidManager {
   void Bind(mojo::PendingReceiver<mojom::HidManager> receiver);
 
   // mojom::HidManager implementation:
-  void GetDevicesAndSetClient(mojom::HidManagerClientAssociatedPtrInfo client,
-                              GetDevicesCallback callback) override;
+  void GetDevicesAndSetClient(
+      mojo::PendingAssociatedRemote<mojom::HidManagerClient> client,
+      GetDevicesCallback callback) override;
   void GetDevices(GetDevicesCallback callback) override;
   void Connect(
       const std::string& device_guid,
       mojo::PendingRemote<mojom::HidConnectionClient> connection_client,
+      mojo::PendingRemote<mojom::HidConnectionWatcher> watcher,
       ConnectCallback callback) override;
 
-  mojom::HidDeviceInfoPtr CreateAndAddDevice(uint16_t vendor_id,
-                                             uint16_t product_id,
-                                             const std::string& product_name,
-                                             const std::string& serial_number,
-                                             mojom::HidBusType bus_type);
+  mojom::HidDeviceInfoPtr CreateAndAddDevice(
+      const std::string& physical_device_id,
+      uint16_t vendor_id,
+      uint16_t product_id,
+      const std::string& product_name,
+      const std::string& serial_number,
+      mojom::HidBusType bus_type);
   mojom::HidDeviceInfoPtr CreateAndAddDeviceWithTopLevelUsage(
+      const std::string& physical_device_id,
       uint16_t vendor_id,
       uint16_t product_id,
       const std::string& product_name,

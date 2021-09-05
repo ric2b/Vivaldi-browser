@@ -40,7 +40,7 @@ class GPU_IPC_SERVICE_EXPORT GLES2CommandBufferStub
   MemoryTracker* GetMemoryTracker() const override;
 
   // DecoderClient implementation.
-  void OnGpuSwitched() override;
+  void OnGpuSwitched(gl::GpuPreference active_gpu_heuristic) override;
 
 // ImageTransportSurfaceDelegate implementation:
 #if defined(OS_WIN)
@@ -53,6 +53,7 @@ class GPU_IPC_SERVICE_EXPORT GLES2CommandBufferStub
   const GpuPreferences& GetGpuPreferences() const override;
   void BufferPresented(const gfx::PresentationFeedback& feedback) override;
   viz::GpuVSyncCallback GetGpuVSyncCallback() override;
+  base::TimeDelta GetGpuBlockedTimeSinceLastSwap() override;
 
  private:
   bool HandleMessage(const IPC::Message& message) override;

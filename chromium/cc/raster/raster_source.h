@@ -38,6 +38,9 @@ class CC_EXPORT RasterSource : public base::RefCountedThreadSafe<RasterSource> {
     // If set to true, we should use LCD text.
     bool use_lcd_text = true;
 
+    // Specifies the sample count if MSAA is enabled for this tile.
+    int msaa_sample_count = 0;
+
     ImageProvider* image_provider = nullptr;
   };
 
@@ -102,9 +105,6 @@ class CC_EXPORT RasterSource : public base::RefCountedThreadSafe<RasterSource> {
 
   // Valid rectangle in which everything is recorded and can be rastered from.
   gfx::Rect RecordedViewport() const;
-
-  // Returns true if this raster source may try and draw text.
-  bool HasText() const;
 
   // Tracing functionality.
   void DidBeginTracing();

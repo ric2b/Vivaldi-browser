@@ -1,4 +1,37 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="el">
+<translation id="3830627370375585318">Επιτρέψτε στο Vivaldi να αποκτήσει πρόσβαση στο δίκτυο από τις ρυθμίσεις του τείχους προστασίας
+          ή του λογισμικού προστασίας από ιούς που διαθέτετε.</translation>
+<translation id="4200102020577305737">Μεταβείτε
+          στο μενού του Vivaldi &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          Ρυθμίσεις LAN
+          και αποεπιλέξτε τη "Χρήση διακομιστή μεσολάβησης για το LAN".</translation>
+<translation id="4932161901409251843">Μεταβείτε
+          στο μενού του Vivaldi &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          και βεβαιωθείτε ότι η διαμόρφωσή σας είναι ρυθμισμένη στην επιλογή
+          "χωρίς διακομιστή μεσολάβησης" ή "άμεση."</translation>
+<translation id="5248344925342018662">Βλέπετε μια ασφαλή σελίδα Vivaldi</translation>
+<translation id="7023871570427738255">Μεταβείτε
+        στο μενού του Vivaldi &gt;
+        <ph name="SETTINGS_TITLE" />
+        &gt;
+        <ph name="ADVANCED_TITLE" />
+        και αποεπιλέξτε "<ph name="NO_PREFETCH_DESCRIPTION" />".
+        Εάν με αυτόν τον τρόπο δεν επιλύεται το ζήτημά σας, συνιστούμε
+        να ενεργοποιήσετε ξανά αυτήν την επιλογή για βελτιωμένη απόδοση.</translation>
+<translation id="8187289872471304532">Μεταβείτε στο
+          Εφαρμογές &gt; Προτιμήσεις συστήματος &gt; Δίκτυο &gt; Για προχωρημένιυς &gt; Διακομιστές μεσολάβησης
+          και αποεπιλέξτε τυχόν διακομιστές μεσολάβησης που έχουν επιλεγεί.</translation>
 </translationbundle>

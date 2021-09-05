@@ -17,8 +17,8 @@ import "services/viz/public/mojom/gpu.mojom";
 // lifetime of this client.
 interface AudioStreamCreatorClient {
   StreamCreated(
-      media.mojom.AudioInputStream stream,
-      media.mojom.AudioInputStreamClient& client_request,
+      pending_remote<media.mojom.AudioInputStream> stream,
+      pending_receiver<media.mojom.AudioInputStreamClient> client_receiver,
       media.mojom.ReadOnlyAudioDataPipe data_pipe,
       bool initially_muted);
 };

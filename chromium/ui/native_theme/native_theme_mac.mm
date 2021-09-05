@@ -10,7 +10,6 @@
 #include "base/command_line.h"
 #include "base/mac/mac_util.h"
 #include "base/mac/scoped_block.h"
-#include "base/mac/sdk_forward_declarations.h"
 #include "base/macros.h"
 #import "skia/ext/skia_utils_mac.h"
 #include "ui/base/ui_base_features.h"
@@ -55,13 +54,13 @@ bool IsHighContrast() {
 @end
 
 @implementation NativeThemeEffectiveAppearanceObserver {
-  base::mac::ScopedBlock<void (^)()> handler_;
+  base::mac::ScopedBlock<void (^)()> _handler;
 }
 
 - (instancetype)initWithHandler:(void (^)())handler {
   self = [super init];
   if (self) {
-    handler_.reset([handler copy]);
+    _handler.reset([handler copy]);
     if (@available(macOS 10.14, *)) {
       [NSApp addObserver:self
               forKeyPath:@"effectiveAppearance"
@@ -83,7 +82,7 @@ bool IsHighContrast() {
                       ofObject:(id)object
                         change:(NSDictionary*)change
                        context:(void*)context {
-  handler_.get()();
+  _handler.get()();
 }
 
 @end
@@ -163,9 +162,22 @@ NativeTheme* NativeTheme::GetInstanceForNativeUi() {
   return NativeThemeMac::instance();
 }
 
+NativeTheme* NativeTheme::GetInstanceForDarkUI() {
+  static base::NoDestructor<NativeThemeMac> s_native_theme(false, true);
+  return s_native_theme.get();
+}
+
+// static
+bool NativeTheme::SystemDarkModeSupported() {
+  if (@available(macOS 10.14, *)) {
+    return true;
+  }
+  return false;
+}
+
 // static
 NativeThemeMac* NativeThemeMac::instance() {
-  static base::NoDestructor<NativeThemeMac> s_native_theme;
+  static base::NoDestructor<NativeThemeMac> s_native_theme(true, false);
   return s_native_theme.get();
 }
 
@@ -179,7 +191,10 @@ SkColor NativeThemeMac::ApplySystemControlTint(SkColor color) {
 SkColor NativeThemeMac::GetSystemColor(ColorId color_id,
                                        ColorScheme color_scheme) const {
   if (color_scheme == ColorScheme::kDefault)
-    color_scheme = GetSystemColorScheme();
+    color_scheme = GetDefaultSystemColorScheme();
+
+  if ((color_scheme == ColorScheme::kDark) != IsDarkMode())
+    return NativeTheme::GetSystemColor(color_id, color_scheme);
 
   // Empirically, currentAppearance is incorrect when switching
   // appearances. It's unclear exactly why right now, so work
@@ -235,11 +250,20 @@ SkColor NativeThemeMac::GetSystemColor(ColorId color_id,
           NSSystemColorToSkColor([NSColor keyboardFocusIndicatorColor]),
           0x66);
 
+    case kColorId_TableBackgroundAlternate:
+      if (@available(macOS 10.14, *)) {
+        return NSSystemColorToSkColor(
+            NSColor.alternatingContentBackgroundColors[1]);
+      }
+      return NSSystemColorToSkColor(
+          NSColor.controlAlternatingRowBackgroundColors[1]);
+
     default:
       break;
   }
 
-  return ApplySystemControlTint(GetAuraColor(color_id, this, color_scheme));
+  return ApplySystemControlTint(
+      NativeTheme::GetSystemColor(color_id, color_scheme));
 }
 
 void NativeThemeMac::PaintMenuPopupBackground(
@@ -275,15 +299,11 @@ void NativeThemeMac::PaintMenuItemBackground(
   }
 }
 
-bool NativeThemeMac::SystemDarkModeSupported() const {
-  if (@available(macOS 10.14, *)) {
-    return true;
-  }
-  return false;
-}
-
-NativeThemeMac::NativeThemeMac() {
-  InitializeDarkModeStateAndObserver();
+NativeThemeMac::NativeThemeMac(bool configure_web_instance,
+                               bool should_only_use_dark_colors)
+    : NativeThemeBase(should_only_use_dark_colors) {
+  if (!should_only_use_dark_colors)
+    InitializeDarkModeStateAndObserver();
 
   if (!IsForcedHighContrast()) {
     set_high_contrast(IsHighContrast());
@@ -300,14 +320,8 @@ NativeThemeMac::NativeThemeMac() {
                     }];
   }
 
-  // Add the web native theme as an observer to stay in sync with dark mode,
-  // high contrast, and preferred color scheme changes.
-  if (features::IsFormControlsRefreshEnabled()) {
-    color_scheme_observer_ =
-        std::make_unique<NativeTheme::ColorSchemeNativeThemeObserver>(
-            NativeTheme::GetInstanceForWeb());
-    AddObserver(color_scheme_observer_.get());
-  }
+  if (configure_web_instance)
+    ConfigureWebInstance();
 }
 
 NativeThemeMac::~NativeThemeMac() {
@@ -335,6 +349,25 @@ void NativeThemeMac::InitializeDarkModeStateAndObserver() {
         theme->set_preferred_color_scheme(CalculatePreferredColorScheme());
         theme->NotifyObservers();
       }]);
+}
+
+void NativeThemeMac::ConfigureWebInstance() {
+  if (!features::IsFormControlsRefreshEnabled())
+    return;
+
+  // For FormControlsRefresh, NativeThemeAura is used as web instance so we need
+  // to initialize its state.
+  NativeTheme* web_instance = NativeTheme::GetInstanceForWeb();
+  web_instance->set_use_dark_colors(IsDarkMode());
+  web_instance->set_preferred_color_scheme(CalculatePreferredColorScheme());
+  web_instance->set_high_contrast(IsHighContrast());
+
+  // Add the web native theme as an observer to stay in sync with dark mode,
+  // high contrast, and preferred color scheme changes.
+  color_scheme_observer_ =
+      std::make_unique<NativeTheme::ColorSchemeNativeThemeObserver>(
+          NativeTheme::GetInstanceForWeb());
+  AddObserver(color_scheme_observer_.get());
 }
 
 }  // namespace ui

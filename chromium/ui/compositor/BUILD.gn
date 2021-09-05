@@ -6,8 +6,17 @@ import("//build/config/jumbo.gni")
 import("//build/config/ui.gni")
 import("//testing/test.gni")
 
+# Reset sources_assignment_filter for the BUILD.gn file to prevent
+# regression during the migration of Chromium away from the feature.
+# See docs/no_sources_assignment_filter.md for more information.
+# TODO(crbug.com/1018739): remove this when migration is done.
+set_sources_assignment_filter([])
+
 jumbo_component("compositor") {
   sources = [
+    "animation_metrics_recorder.cc",
+    "animation_metrics_recorder.h",
+    "animation_metrics_reporter.h",
     "callback_layer_animation_observer.cc",
     "callback_layer_animation_observer.h",
     "canvas_painter.cc",
@@ -63,10 +72,6 @@ jumbo_component("compositor") {
     "paint_recorder.cc",
     "paint_recorder.h",
     "property_change_reason.h",
-    "recyclable_compositor_mac.cc",
-    "recyclable_compositor_mac.h",
-    "reflector.cc",
-    "reflector.h",
     "scoped_animation_duration_scale_mode.cc",
     "scoped_animation_duration_scale_mode.h",
     "scoped_layer_animation_settings.cc",
@@ -77,18 +82,22 @@ jumbo_component("compositor") {
     "transform_recorder.h",
   ]
 
+  if (is_mac) {
+    sources += [
+      "recyclable_compositor_mac.cc",
+      "recyclable_compositor_mac.h",
+    ]
+  }
+
   defines = [ "COMPOSITOR_IMPLEMENTATION" ]
 
-  public_deps = [
-    "//cc",
-  ]
+  public_deps = [ "//cc" ]
   deps = [
     "//base",
     "//base/third_party/dynamic_annotations",
     "//cc/animation",
     "//cc/paint",
     "//components/viz/host",
-    "//components/viz/service",
     "//gpu/command_buffer/common",
     "//skia",
     "//ui/base",
@@ -114,6 +123,8 @@ jumbo_component("compositor") {
 jumbo_static_library("test_support") {
   testonly = true
   sources = [
+    "test/direct_layer_tree_frame_sink.cc",
+    "test/direct_layer_tree_frame_sink.h",
     "test/draw_waiter_for_test.cc",
     "test/draw_waiter_for_test.h",
     "test/fake_context_factory.cc",
@@ -130,9 +141,6 @@ jumbo_static_library("test_support") {
     "test/multi_layer_animator_test_controller.h",
     "test/multi_layer_animator_test_controller_delegate.h",
     "test/test_compositor_host.h",
-    "test/test_compositor_host_android.cc",
-    "test/test_compositor_host_mac.mm",
-    "test/test_compositor_host_win.cc",
     "test/test_context_factories.cc",
     "test/test_context_factories.h",
     "test/test_layer_animation_delegate.cc",
@@ -147,9 +155,19 @@ jumbo_static_library("test_support") {
     "test/test_utils.h",
   ]
 
-  public_deps = [
-    ":compositor",
-  ]
+  if (is_android) {
+    sources += [ "test/test_compositor_host_android.cc" ]
+  }
+
+  if (is_mac) {
+    sources += [ "test/test_compositor_host_mac.mm" ]
+  }
+
+  if (is_win) {
+    sources += [ "test/test_compositor_host_win.cc" ]
+  }
+
+  public_deps = [ ":compositor" ]
   deps = [
     "//base/test:test_support",
     "//cc",
@@ -213,9 +231,7 @@ test("compositor_unittests") {
     "transform_animation_curve_adapter_unittest.cc",
   ]
 
-  data = [
-    "//ui/gfx/test/data/compositor/",
-  ]
+  data = [ "//ui/gfx/test/data/compositor/" ]
 
   deps = [
     ":compositor",
@@ -225,7 +241,6 @@ test("compositor_unittests") {
     "//cc",
     "//cc:test_support",
     "//components/viz/common",
-    "//components/viz/service",
     "//components/viz/test:test_support",
     "//mojo/core/embedder",
     "//skia",

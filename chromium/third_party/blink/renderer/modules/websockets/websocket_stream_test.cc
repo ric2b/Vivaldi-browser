@@ -15,14 +15,15 @@
 #include "third_party/blink/renderer/bindings/core/v8/script_value.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_testing.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_dom_exception.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_websocket_close_info.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_websocket_stream_options.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/modules/websockets/mock_websocket_channel.h"
 #include "third_party/blink/renderer/modules/websockets/websocket_channel.h"
 #include "third_party/blink/renderer/modules/websockets/websocket_channel_client.h"
-#include "third_party/blink/renderer/modules/websockets/websocket_close_info.h"
-#include "third_party/blink/renderer/modules/websockets/websocket_stream_options.h"
 #include "third_party/blink/renderer/platform/bindings/exception_code.h"
 #include "third_party/blink/renderer/platform/bindings/v8_binding.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 
 namespace blink {
 
@@ -37,7 +38,8 @@ typedef testing::StrictMock<testing::MockFunction<void(int)>>
 
 class WebSocketStreamTest : public ::testing::Test {
  public:
-  WebSocketStreamTest() : channel_(MockWebSocketChannel::Create()) {}
+  WebSocketStreamTest()
+      : channel_(MakeGarbageCollected<MockWebSocketChannel>()) {}
 
   void TearDown() override {
     testing::Mock::VerifyAndClear(channel_);

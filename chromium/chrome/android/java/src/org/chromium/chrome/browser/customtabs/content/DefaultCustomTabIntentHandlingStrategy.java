@@ -7,12 +7,12 @@ package org.chromium.chrome.browser.customtabs.content;
 import android.text.TextUtils;
 
 import org.chromium.chrome.browser.IntentHandler;
-import org.chromium.chrome.browser.customtabs.CustomTabIntentDataProvider;
+import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider;
 import org.chromium.chrome.browser.customtabs.CustomTabNavigationEventObserver;
 import org.chromium.chrome.browser.customtabs.CustomTabObserver;
 import org.chromium.chrome.browser.dependency_injection.ActivityScope;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.util.UrlUtilities;
+import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.content_public.browser.LoadUrlParams;
 
 import javax.inject.Inject;
@@ -42,7 +42,7 @@ public class DefaultCustomTabIntentHandlingStrategy implements CustomTabIntentHa
     }
 
     @Override
-    public void handleInitialIntent(CustomTabIntentDataProvider intentDataProvider) {
+    public void handleInitialIntent(BrowserServicesIntentDataProvider intentDataProvider) {
         if (mTabProvider.getInitialTabCreationMode() == TabCreationMode.HIDDEN) {
             handleInitialLoadForHiddedTab(intentDataProvider);
         } else {
@@ -52,7 +52,8 @@ public class DefaultCustomTabIntentHandlingStrategy implements CustomTabIntentHa
     }
 
     // The hidden tab case needs a bit of special treatment.
-    private void handleInitialLoadForHiddedTab(CustomTabIntentDataProvider intentDataProvider) {
+    private void handleInitialLoadForHiddedTab(
+            BrowserServicesIntentDataProvider intentDataProvider) {
         Tab tab = mTabProvider.getTab();
         if (tab == null) {
             throw new IllegalStateException("handleInitialIntent called before Tab created");
@@ -86,14 +87,23 @@ public class DefaultCustomTabIntentHandlingStrategy implements CustomTabIntentHa
     }
 
     @Override
-    public void handleNewIntent(CustomTabIntentDataProvider intentDataProvider) {
+    public void handleNewIntent(BrowserServicesIntentDataProvider intentDataProvider) {
         String url = intentDataProvider.getUrlToLoad();
         if (TextUtils.isEmpty(url)) return;
         LoadUrlParams params = new LoadUrlParams(url);
+
+        if (intentDataProvider.isWebApkActivity()) {
+            // The back stack should be cleared when a WebAPK receives a deep link intent. This is
+            // unnecessary for Trusted Web Activities and new-style WebAPKs because Trusted Web
+            // Activities and new-style WebAPKs are restarted when they receive an intent from a
+            // deep link.
+            params.setShouldClearHistoryList(true);
+        }
+
         mNavigationController.navigate(params, getTimestamp(intentDataProvider));
     }
 
-    private long getTimestamp(CustomTabIntentDataProvider intentDataProvider) {
+    private long getTimestamp(BrowserServicesIntentDataProvider intentDataProvider) {
         return IntentHandler.getTimestampFromIntent(intentDataProvider.getIntent());
     }
 }

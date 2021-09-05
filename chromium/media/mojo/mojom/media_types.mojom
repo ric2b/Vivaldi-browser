@@ -15,6 +15,8 @@ import "ui/gfx/mojom/color_space.mojom";
 // See media/base/audio_codecs.h for descriptions.
 [Native]
 enum AudioCodec;
+[Native]
+enum AudioCodecProfile;
 
 // See media/base/buffering_state.h for descriptions.
 [Native]
@@ -26,17 +28,17 @@ enum BufferingStateChangeReason;
 [Native]
 enum ChannelLayout;
 
-// See media/base/video_types.h for descriptions.
-[Native]
-enum ColorSpace;
-
 // See media/base/decode_status.h for descriptions.
 [Native]
 enum DecodeStatus;
 
-// See media/base/media_log_event.h for description.
+// See media/base/status_codes.h for descriptions.
 [Native]
-struct MediaLogEvent;
+enum StatusCode;
+
+// See media/base/media_log_record.h for description.
+[Native]
+struct MediaLogRecord;
 
 // See media/base/output_device_info.h for descriptions.
 [Native]
@@ -80,10 +82,6 @@ enum WaitingReason;
 [Native]
 enum WatchTimeKey;
 
-// See media/base/decrypt_config.h for descriptions.
-[Native]
-enum EncryptionMode;
-
 // See media/base/container_names.h for descriptions.
 [Native]
 enum MediaContainerName;
@@ -99,15 +97,9 @@ struct EncryptionPattern {
   uint32 skip_byte_block;
 };
 
-// This defines a mojo transport format for media::EncryptionScheme.
 // See media/base/encryption_scheme.h for description.
-struct EncryptionScheme {
-  [Native]
-  enum CipherMode;
-
-  CipherMode mode;
-  EncryptionPattern pattern;
-};
+[Native]
+enum EncryptionScheme;
 
 // This defines a mojo transport format for media::VideoColorSpace.
 // See media/base/video_color_space.h for description.
@@ -151,6 +143,7 @@ struct HDRMetadata {
 // See media/base/audio_decoder_config.h for descriptions.
 struct AudioDecoderConfig {
   AudioCodec codec;
+  AudioCodecProfile profile;
   SampleFormat sample_format;
   ChannelLayout channel_layout;
   int32 samples_per_second;
@@ -165,6 +158,7 @@ struct AudioDecoderConfig {
 struct VideoDecoderConfig {
   VideoCodec codec;
   VideoCodecProfile profile;
+  uint32 level;
   bool has_alpha;
   VideoTransformation transformation;
   gfx.mojom.Size coded_size;
@@ -183,7 +177,7 @@ struct SubsampleEntry;
 // This defines a mojo transport format for media::DecryptConfig.
 // See media/base/decrypt_config.h for descriptions.
 struct DecryptConfig {
-  EncryptionMode encryption_mode;
+  EncryptionScheme encryption_scheme;
   string key_id;
   string iv;
   array<SubsampleEntry> subsamples;
@@ -245,6 +239,22 @@ struct AudioBuffer {
   array<uint8> data;
 };
 
+// This defines a mojo transport format for an interleaved, signed
+// 16-bit audio buffer.
+struct AudioDataS16 {
+  // Number of channels.
+  int32 channel_count;
+
+  // Sample rate of the buffer.
+  int32 sample_rate;
+
+  // Number of frames in the buffer.
+  int32 frame_count;
+
+  // Channel data.
+  array<int16> data;
+};
+
 // This defines a mojo transport format for media::VideoFrame.
 struct VideoFrame {
   // Format of the frame.
@@ -292,18 +302,14 @@ struct SharedBufferVideoFrameData {
 
   // Stride and offsets for each plane. Offsets are relative to the start
   // of |frame_data|.
-  int32 y_stride;
-  int32 u_stride;
-  int32 v_stride;
-  uint64 y_offset;
-  uint64 u_offset;
-  uint64 v_offset;
+  array<int32> strides;
+  array<uint32> offsets;
 };
 
 // This defines video frame data stored in dmabuf.
 struct DmabufVideoFrameData {
   // Size depends on media::VideoFrame::NumPlanes with frame format.
-  array<handle> dmabuf_fds;
+  array<handle<platform>> dmabuf_fds;
 };
 
 struct GpuMemoryBufferVideoFrameData {
@@ -334,7 +340,9 @@ struct PredictionFeatures {
     // but we can't do that with native enums.
     VideoCodecProfile profile;
     gfx.mojom.Size video_size;
-    int32 frames_per_sec = 0;
+    // Frames per second may ultimately be a bucketed as an integer, but we want
+    // to do that as late as possible. Using a double avoids early truncation.
+    double frames_per_sec = 0;
     // Name of the key system used for EME playbacks.
     string key_system;
     // Indicates when CDM will use HW secure decoding for EME playbacks.
@@ -353,5 +361,14 @@ struct PredictionTargets {
 struct PipelineDecoderInfo {
   string decoder_name;
   bool is_platform_decoder = false;
-  bool is_decrypting_demuxer_stream = false;
+  bool has_decrypting_demuxer_stream = false;
+};
+
+// See media/base/status.h for descriptions.
+struct Status {
+  StatusCode code;
+  string? message;
+  array<mojo_base.mojom.Value> frames;
+  array<media.mojom.Status> causes;
+  mojo_base.mojom.Value? data;
 };

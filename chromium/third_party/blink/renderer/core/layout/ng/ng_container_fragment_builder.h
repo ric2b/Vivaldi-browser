@@ -88,10 +88,6 @@ class CORE_EXPORT NGContainerFragmentBuilder : public NGFragmentBuilder {
 
   const ChildrenVector& Children() const { return children_; }
 
-  // Returns offset for given child. DCHECK if child not found.
-  // Warning: Do not call unless necessary.
-  LogicalOffset GetChildOffset(const LayoutObject* child) const;
-
   // Builder has non-trivial OOF-positioned methods.
   // They are intended to be used by a layout algorithm like this:
   //
@@ -114,20 +110,26 @@ class CORE_EXPORT NGContainerFragmentBuilder : public NGFragmentBuilder {
   // NGOutOfFlowLayoutPart(container_style, builder).Run();
   //
   // See layout part for builder interaction.
-  //
-  // @param direction: default candidate direction is builder's direction.
-  // Pass in direction if candidates direction does not match.
-  void AddOutOfFlowChildCandidate(
+  void AddOutOfFlowChildCandidate(NGBlockNode,
+                                  const LogicalOffset& child_offset,
+                                  NGLogicalStaticPosition::InlineEdge =
+                                      NGLogicalStaticPosition::kInlineStart,
+                                  NGLogicalStaticPosition::BlockEdge =
+                                      NGLogicalStaticPosition::kBlockStart);
+
+  // This should only be used for inline-level OOF-positioned nodes.
+  // |inline_container_direction| is the current text direction for determining
+  // the correct static-position.
+  void AddOutOfFlowInlineChildCandidate(
       NGBlockNode,
       const LogicalOffset& child_offset,
-      base::Optional<TextDirection> container_direction = base::nullopt);
+      TextDirection inline_container_direction);
 
   void AddOutOfFlowDescendant(
       const NGLogicalOutOfFlowPositionedNode& descendant);
 
   void SwapOutOfFlowPositionedCandidates(
-      Vector<NGLogicalOutOfFlowPositionedNode>* candidates,
-      const LayoutObject* current_container);
+      Vector<NGLogicalOutOfFlowPositionedNode>* candidates);
 
   bool HasOutOfFlowPositionedCandidates() const {
     return !oof_positioned_candidates_.IsEmpty();
@@ -140,9 +142,7 @@ class CORE_EXPORT NGContainerFragmentBuilder : public NGFragmentBuilder {
   // position OOF candidates yet, (as a containing box may be split over
   // multiple lines), instead we bubble all the descendants up to the parent
   // block layout algorithm, to perform the final OOF layout and positioning.
-  void MoveOutOfFlowDescendantCandidatesToDescendants() {
-    SwapOutOfFlowPositionedCandidates(&oof_positioned_descendants_, nullptr);
-  }
+  void MoveOutOfFlowDescendantCandidatesToDescendants();
 
   void SetIsSelfCollapsing() { is_self_collapsing_ = true; }
 
@@ -179,8 +179,9 @@ class CORE_EXPORT NGContainerFragmentBuilder : public NGFragmentBuilder {
 #endif
 
  protected:
-  friend class NGPhysicalContainerFragment;
+  friend class NGInlineLayoutStateStack;
   friend class NGLayoutResult;
+  friend class NGPhysicalContainerFragment;
 
   NGContainerFragmentBuilder(NGLayoutInputNode node,
                              scoped_refptr<const ComputedStyle> style,
@@ -192,6 +193,10 @@ class CORE_EXPORT NGContainerFragmentBuilder : public NGFragmentBuilder {
         space_(space) {
     layout_object_ = node.GetLayoutBox();
   }
+
+  void PropagateChildData(const NGPhysicalContainerFragment& child,
+                          const LogicalOffset& child_offset,
+                          const LayoutInline* inline_container = nullptr);
 
   void AddChildInternal(scoped_refptr<const NGPhysicalFragment>,
                         const LogicalOffset&);
@@ -226,12 +231,14 @@ class CORE_EXPORT NGContainerFragmentBuilder : public NGFragmentBuilder {
   bool is_pushed_by_floats_ = false;
   bool is_legacy_layout_root_ = false;
 
-  bool has_floating_descendants_ = false;
+  bool has_floating_descendants_for_paint_ = false;
   bool has_orthogonal_flow_roots_ = false;
   bool has_descendant_that_depends_on_percentage_block_size_ = false;
   bool has_block_fragmentation_ = false;
   bool is_fragmentation_context_root_ = false;
   bool may_have_descendant_above_block_start_ = false;
+
+  bool has_oof_candidate_that_needs_block_offset_adjustment_ = false;
 };
 
 }  // namespace blink

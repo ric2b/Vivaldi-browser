@@ -6,10 +6,10 @@ package org.chromium.chrome.browser.ntp;
 
 import androidx.annotation.Nullable;
 
-import org.chromium.chrome.browser.native_page.NativePage;
 import org.chromium.chrome.browser.omnibox.LocationBar.OmniboxFocusReason;
-import org.chromium.chrome.browser.omnibox.LocationBarVoiceRecognitionHandler;
 import org.chromium.chrome.browser.omnibox.UrlFocusChangeListener;
+import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionHandler;
+import org.chromium.chrome.browser.ui.native_page.NativePage;
 
 /**
  * Handles user interaction with the fakebox (the URL bar in the NTP and tasks surface).
@@ -37,10 +37,10 @@ public interface FakeboxDelegate {
     boolean isCurrentPage(NativePage nativePage);
 
     /**
-     * Get the {@link LocationBarVoiceRecognitionHandler}.
-     * @return the {@link LocationBarVoiceRecognitionHandler}
+     * Get the {@link VoiceRecognitionHandler}.
+     * @return the {@link VoiceRecognitionHandler}
      */
-    LocationBarVoiceRecognitionHandler getLocationBarVoiceRecognitionHandler();
+    VoiceRecognitionHandler getVoiceRecognitionHandler();
 
     /**
      * Adds a URL focus change listener that will be notified when the URL gains or loses focus.

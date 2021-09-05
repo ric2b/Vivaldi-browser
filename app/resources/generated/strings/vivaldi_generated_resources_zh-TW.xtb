@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="zh-TW">
 <translation id="1017280919048282932">新增至字典(&amp;A)</translation>
+<translation id="1029317248976101138">縮放</translation>
 <translation id="1031362278801463162">正在載入預覽畫面</translation>
 <translation id="1047431265488717055">複製連結文字(&amp;X)</translation>
 <translation id="1049795001945932310">語言設定(&amp;L)</translation>
@@ -19,7 +20,7 @@
 <translation id="1221825588892235038">僅限選取的內容</translation>
 <translation id="1244303850296295656">延伸套件錯誤</translation>
 <translation id="1274977772557788323">Adobe Flash Player 儲存設定</translation>
-<translation id="1297175357211070620">目標裝置</translation>
+<translation id="1297175357211070620">印表機</translation>
 <translation id="1303101771013849280">HTML 書籤檔案</translation>
 <translation id="1380436189840894976">無論如何都要離開無痕模式嗎？</translation>
 <translation id="1430915738399379752">列印</translation>
@@ -54,6 +55,7 @@
 <translation id="1886996562706621347">允許網站要求成為通訊協定的預設處理常式 (建議)</translation>
 <translation id="1901303067676059328">選取全部(&amp;A)</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
+<translation id="1936931585862840749">使用數字指定列印份數 (1 至 <ph name="MAX_COPIES" />)。</translation>
 <translation id="1963227389609234879">全部移除</translation>
 <translation id="1994173015038366702">網站 URL</translation>
 <translation id="2019718679933488176">在新分頁中開啟音訊(&amp;O)</translation>
@@ -63,10 +65,9 @@
 <translation id="2114326799768592691">重新載入頁框(&amp;F)</translation>
 <translation id="2142328300403846845">以其他身分開啟連結</translation>
 <translation id="2148892889047469596">投放分頁</translation>
-<translation id="2150139952286079145">搜尋目的地</translation>
+<translation id="2150139952286079145">搜尋印表機</translation>
 <translation id="215753907730220065">結束全螢幕</translation>
 <translation id="2177950615300672361">無痕分頁：<ph name="TAB_NAME" /></translation>
-<translation id="218070003709087997">使用數字指定列印份數 (1 至 999)。</translation>
 <translation id="219008588003277019">原生用戶端模組：<ph name="NEXE_NAME" /></translation>
 <translation id="220138918934036434">隱藏按鈕</translation>
 <translation id="2218515861914035131">以純文字貼上</translation>
@@ -78,11 +79,9 @@
 <translation id="2282146716419988068">GPU 處理程式</translation>
 <translation id="2301382460326681002">延伸套件根目錄無效。</translation>
 <translation id="2318143611928805047">紙張大小</translation>
-<translation id="2318923050469484167">目前的無痕模式工作階段 (<ph name="EMBEDDING" />)</translation>
 <translation id="2322193970951063277">頁首及頁尾</translation>
 <translation id="2326931316514688470">重新載入應用程式(&amp;R)</translation>
 <translation id="2327492829706409234">啟用應用程式</translation>
-<translation id="2344028582131185878">自動下載</translation>
 <translation id="2348176352564285430">應用程式：<ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">選取延伸套件目錄。</translation>
 <translation id="2379281330731083556">使用系統對話方塊進行列印... <ph name="SHORTCUT_KEY" /></translation>
@@ -95,12 +94,12 @@
 <translation id="2470702053775288986">已停用不支援的延伸套件</translation>
 <translation id="2476578072172137802">站點設定</translation>
 <translation id="2482878487686419369">通知</translation>
+<translation id="2498539833203011245">最小化</translation>
 <translation id="2509495747794740764">縮放比例必須為介於 10 和 200 之間的數字。</translation>
 <translation id="253557089021624350">Keepalive 數量</translation>
 <translation id="2546283357679194313">Cookie 及網站資料</translation>
 <translation id="2550212893339833758">Swap 記憶體</translation>
 <translation id="2553440850688409052">隱藏這個外掛程式</translation>
-<translation id="2580924999637585241">總計：<ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="26224892172169984">不允許任何網站處理通訊協定</translation>
 <translation id="2662876636500006917">Chrome 線上應用程式商店</translation>
 <translation id="2678063897982469759">重新啟用</translation>
@@ -120,7 +119,6 @@
 <translation id="2932883381142163287">檢舉濫用情形</translation>
 <translation id="2941112035454246133">低</translation>
 <translation id="2972581237482394796">重做(&amp;R)</translation>
-<translation id="299483336428448530">由您的家長安裝。</translation>
 <translation id="3003623123441819449">CSS 快取</translation>
 <translation id="3008272652534848354">重設權限</translation>
 <translation id="3012631534724231212">（內聯頁框）</translation>
@@ -193,7 +191,7 @@
 <translation id="3955193568934677022">允許網站播放受保護的內容 (建議)</translation>
 <translation id="3979395879372752341">已延伸套件功能：<ph name="EXTENSION_NAME" /></translation>
 <translation id="4021279097213088397">–</translation>
-<translation id="4022426551683927403">新增到字典(&amp;A)</translation>
+<translation id="4022426551683927403">新增至字典(&amp;A)</translation>
 <translation id="407520071244661467">縮放比例</translation>
 <translation id="4079140982534148664">使用進階拼字檢查</translation>
 <translation id="4087089424473531098">已建立以下延伸套件：
@@ -274,7 +272,6 @@
 <translation id="5425042808445046667">繼續下載</translation>
 <translation id="5427459444770871191">順時針旋轉(&amp;C)</translation>
 <translation id="5431318178759467895">顏色</translation>
-<translation id="5472133193607270166">啟用後網站將無法根據你在各網站的瀏覽活動傳送個性化廣告。部分網站可能無法正常運作。</translation>
 <translation id="5483785310822538350">撤銷檔案和裝置存取權限</translation>
 <translation id="5485102783864353244">新增應用程式</translation>
 <translation id="5486561344817861625">模擬瀏覽器重新啟動</translation>
@@ -302,7 +299,6 @@
 <translation id="5804241973901381774">權限</translation>
 <translation id="5828633471261496623">正在列印...</translation>
 <translation id="583281660410589416">未知</translation>
-<translation id="5838456317242088717">目前的無痕模式工作階段</translation>
 <translation id="5860491529813859533">開啟</translation>
 <translation id="5867841422488265304">搜尋或輸入網址</translation>
 <translation id="5908769186679515905">禁止網站執行 Flash</translation>
@@ -322,7 +318,6 @@
 <translation id="6147020289383635445">列印預覽失敗。</translation>
 <translation id="6156863943908443225">腳本快取</translation>
 <translation id="6169666352732958425">無法投放桌面。</translation>
-<translation id="6196640612572343990">封鎖第三方 Cookie</translation>
 <translation id="6196854373336333322">您的代理設定已受到延伸套件「<ph name="EXTENSION_NAME" />」控制，該延伸套件可變更、中斷、或監視您在網路上的行為。如果您不確定這項變更的發生原因，建議您停用該延伸套件。</translation>
 <translation id="6206311232642889873">複製圖片(&amp;Y)</translation>
 <translation id="6239558157302047471">重新載入頁框(&amp;F)</translation>
@@ -335,6 +330,7 @@
 <translation id="6295158916970320988">全部站點</translation>
 <translation id="6295855836753816081">正在儲存...</translation>
 <translation id="6308937455967653460">另存連結(&amp;K)...</translation>
+<translation id="6315493146179903667">全部移至最上層</translation>
 <translation id="6326855256003666642">Keepalive 數量</translation>
 <translation id="6374469231428023295">再試一次</translation>
 <translation id="6385543213911723544">網站可以儲存及讀取 Cookie 資料</translation>
@@ -352,7 +348,7 @@
 <translation id="6639554308659482635">SQLite 記憶體</translation>
 <translation id="6686817083349815241">儲存你的密碼</translation>
 <translation id="6691936601825168937">下一頁(&amp;F)</translation>
-<translation id="6723354935081862304">透過 Google 文件和其他雲端目的地進行列印。如要透過 Google 雲端列印進行列印，請先<ph name="BEGIN_LINK" />登入<ph name="END_LINK" />。</translation>
+<translation id="6723354935081862304">透過 Google 文件和其他雲端印表機進行列印。如要透過 Google 雲端列印進行列印，請先<ph name="BEGIN_LINK" />登入<ph name="END_LINK" />。</translation>
 <translation id="6798954102094737107">外掛程式：<ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">保留變更</translation>
 <translation id="6817174620439930047">每當有網站要使用系統專用訊息存取 MIDI 裝置時詢問我 (建議)</translation>
@@ -380,6 +376,7 @@
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">顯示控制介面(&amp;C)</translation>
 <translation id="7311079019872751559">無沙箱防護的外掛程式存取行為</translation>
+<translation id="73174032666024687"><ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="7385854874724088939">準備列印時出現錯誤，請檢查您的印表機，然後再試一次。</translation>
 <translation id="7412226954991670867">GPU 記憶體</translation>
 <translation id="7421925624202799674">檢視網頁原始碼(&amp;V)</translation>
@@ -414,7 +411,7 @@
 <translation id="7849264908733290972">在新分頁開啟圖片(&amp;I)</translation>
 <translation id="7857949311770343000">這是您想要的新分頁嗎？</translation>
 <translation id="786073089922909430">服務：<ph name="ARC_PROCESS_NAME" /></translation>
-<translation id="7885253890047913815">最近用過的印表機</translation>
+<translation id="7885253890047913815">最近使用過的印表機</translation>
 <translation id="7898627924844766532">固定在工具列上</translation>
 <translation id="7903925330883316394">公用程式：<ph name="UTILITY_TYPE" /></translation>
 <translation id="7938594894617528435">目前離線</translation>
@@ -437,7 +434,8 @@
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8137559199583651773">管理延伸套件</translation>
 <translation id="8180239481735238521">個頁面</translation>
-<translation id="8212008074015601248">{NUM_DOWNLOAD,plural, =1{正在執行一項下載作業}other{正在執行多項下載作業}}</translation>
+<translation id="8212008074015601248">{NUM_DOWNLOAD,plural,
+	=1{正在執行一項下載作業}other{正在執行多項下載作業}}</translation>
 <translation id="8230134520748321204">要儲存 <ph name="ORIGIN" /> 的密碼嗎？</translation>
 <translation id="8261378640211443080">這個延伸套件未列在 <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> 中，可能在您不知情的情況下加入瀏覽器。</translation>
 <translation id="8270242299912238708">PDF 檔案</translation>
@@ -451,7 +449,7 @@
 <translation id="8512476990829870887">終止過程</translation>
 <translation id="8523493869875972733">保留變更</translation>
 <translation id="8546306075665861288">圖片快取</translation>
-<translation id="8569682776816196752">找不到目的地</translation>
+<translation id="8569682776816196752">找不到印表機</translation>
 <translation id="857943718398505171">已允許 (建議)</translation>
 <translation id="8584280235376696778">在新分頁開啟影片(&amp;O)</translation>
 <translation id="8605428685123651449">SQLite 記憶體</translation>
@@ -466,7 +464,7 @@
 <translation id="8774934320277480003">上邊界</translation>
 <translation id="8783093612333542422">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; 想要與您共用印表機 &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt;。</translation>
 <translation id="8798099450830957504">預設</translation>
-<translation id="8800004011501252845">顯示以下地址的目的地：</translation>
+<translation id="8800004011501252845">顯示以下帳號的印表機</translation>
 <translation id="8808478386290700967">線上應用程式商店</translation>
 <translation id="8813811964357448561">張</translation>
 <translation id="8823514049557262177">複製連結文字(&amp;X)</translation>

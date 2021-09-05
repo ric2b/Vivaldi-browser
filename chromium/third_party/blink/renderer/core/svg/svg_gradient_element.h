@@ -64,11 +64,7 @@ class SVGGradientElement : public SVGElement, public SVGURIReference {
   const SVGGradientElement* ReferencedElement() const;
   void CollectCommonAttributes(GradientAttributes&) const;
 
-  const AttrNameToTrustedType& GetCheckedAttributeTypes() const override {
-    return SVGURIReference::GetCheckedAttributeTypes();
-  }
-
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  protected:
   SVGGradientElement(const QualifiedName&, Document&);

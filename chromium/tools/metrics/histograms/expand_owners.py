@@ -229,6 +229,8 @@ def _MakeOwners(document, path, emails_with_dom_elements):
   owner_elements = []
   # TODO(crbug.com/987709): An OWNERS file API would be ideal.
   emails_from_owners_file = _ExtractEmailAddressesFromOWNERS(path)
+  if not emails_from_owners_file:
+    raise Error('No emails could be derived from {}.'.format(path))
 
   # A list is used to respect the order of email addresses in the OWNERS file.
   deduped_emails_from_owners_file = []
@@ -303,9 +305,10 @@ def ExpandHistogramsOWNERS(histograms):
     Error: Raised if the OWNERS file with the given path does not exist.
   """
   email_pattern = re.compile(_EMAIL_PATTERN)
+  iter_matches = extract_histograms.IterElementsWithTag
 
-  for histogram in histograms.getElementsByTagName('histogram'):
-    owners = histogram.getElementsByTagName('owner')
+  for histogram in iter_matches(histograms, 'histogram'):
+    owners = [owner for owner in iter_matches(histogram, 'owner', 1)]
 
     # owner is a DOM Element with a single child, which is a DOM Text Node.
     emails_with_dom_elements = set([
@@ -316,12 +319,10 @@ def ExpandHistogramsOWNERS(histograms):
     # component is a DOM Element with a single child, which is a DOM Text Node.
     components_with_dom_elements = set([
       extract_histograms.NormalizeString(component.childNodes[0].data)
-      for component in histogram.getElementsByTagName('component')])
+      for component in iter_matches(histogram, 'component', 1)])
 
-    for index in range(len(owners)):
-      owner = owners[index]
+    for index, owner in enumerate(owners):
       owner_text = owner.childNodes[0].data
-
       name = histogram.getAttribute('name')
       if _IsEmailOrPlaceholder(index == 0, owner_text, name):
         continue
@@ -333,7 +334,7 @@ def ExpandHistogramsOWNERS(histograms):
       owners_to_add = _MakeOwners(
         owner.ownerDocument, path, emails_with_dom_elements)
       if not owners_to_add:
-        raise Error('No emails could be derived from {}.'.format(path))
+        continue
 
       _UpdateHistogramOwners(histogram, owner, owners_to_add)
 

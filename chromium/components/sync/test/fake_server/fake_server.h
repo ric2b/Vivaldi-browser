@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "base/files/scoped_temp_dir.h"
+#include "base/location.h"
 #include "base/observer_list.h"
 #include "base/optional.h"
 #include "base/threading/thread_checker.h"
@@ -27,6 +28,7 @@
 #include "components/sync/protocol/client_commands.pb.h"
 #include "components/sync/protocol/sync.pb.h"
 #include "net/http/http_status_code.h"
+#include "testing/gmock/include/gmock/gmock.h"
 
 namespace fake_server {
 
@@ -96,7 +98,11 @@ class FakeServer : public syncer::LoopbackServer::ObserverForTests {
   std::string GetTopLevelPermanentItemId(syncer::ModelType model_type);
 
   // Returns all keystore keys from the server.
-  const std::vector<std::string>& GetKeystoreKeys() const;
+  const std::vector<std::vector<uint8_t>>& GetKeystoreKeys() const;
+
+  // Triggers the keystore key rotation events on the server side: generating
+  // new keystore key and touching the Nigori node.
+  void TriggerKeystoreKeyRotation();
 
   // Adds |entity| to the server's collection of entities. This method makes no
   // guarantees that the added entity will result in successful server
@@ -106,7 +112,18 @@ class FakeServer : public syncer::LoopbackServer::ObserverForTests {
   // Sets the Wallet card and address data to be served in following GetUpdates
   // requests (any further GetUpdates response will be empty, indicating no
   // change, if the client already has received |wallet_entities|).
-  void SetWalletData(const std::vector<sync_pb::SyncEntity>& wallet_entities);
+  //
+  // The returned value represents the timestamp of the write, such that any
+  // progress marker greater or equal to this timestamp must have processed the
+  // changes. See GetWalletProgressMarkerTimestamp() below.
+  base::Time SetWalletData(
+      const std::vector<sync_pb::SyncEntity>& wallet_entities);
+
+  // Allows the caller to know the wallet timestamp corresponding to
+  // |progress_marker| as annotated by the FakeServer during the GetUpdates
+  // request that returned the progress marker.
+  static base::Time GetWalletProgressMarkerTimestamp(
+      const sync_pb::DataTypeProgressMarker& progress_marker);
 
   // Modifies the entity on the server with the given |id|. The entity's
   // EntitySpecifics are replaced with |updated_specifics| and its version is
@@ -167,6 +184,10 @@ class FakeServer : public syncer::LoopbackServer::ObserverForTests {
   // triggered error alternating was successful.
   bool EnableAlternatingTriggeredErrors();
 
+  // If called, all subsequent GetUpdatesResponses won't contain
+  // encryption_keys.
+  void DisallowSendingEncryptionKeys();
+
   // Adds |observer| to FakeServer's observer list. This should be called
   // before the Profile associated with |observer| is connected to the server.
   void AddObserver(Observer* observer);
@@ -193,6 +214,8 @@ class FakeServer : public syncer::LoopbackServer::ObserverForTests {
 
   const std::set<std::string>& GetCommittedHistoryURLs() const;
 
+  std::string GetStoreBirthday() const;
+
   // Returns the current FakeServer as a WeakPtr.
   base::WeakPtr<FakeServer> AsWeakPtr();
 
@@ -206,16 +229,25 @@ class FakeServer : public syncer::LoopbackServer::ObserverForTests {
       syncer::LoopbackServer::ResponseTypeProvider response_type_override);
 
  private:
+  // Analogous to HandleCommand() but deals with parsed protos.
+  net::HttpStatusCode HandleParsedCommand(
+      const sync_pb::ClientToServerMessage& message,
+      sync_pb::ClientToServerResponse* response);
+
   // Returns whether a triggered error should be sent for the request.
   bool ShouldSendTriggeredError() const;
   bool HasTriggeredError() const;
-  net::HttpStatusCode SendToLoopbackServer(const std::string& request,
-                                           std::string* response);
-  void InjectClientCommand(std::string* response);
-  void HandleWalletRequest(
-      const sync_pb::ClientToServerMessage& request,
-      const sync_pb::DataTypeProgressMarker& old_wallet_marker,
-      std::string* response_string);
+  net::HttpStatusCode SendToLoopbackServer(
+      const sync_pb::ClientToServerMessage& message,
+      sync_pb::ClientToServerResponse* response);
+
+  // Logs a string that is meant to be shown in case the running test fails.
+  void LogForTestFailure(const base::Location& location,
+                         const std::string& title,
+                         const std::string& body);
+
+  // List used to implement LogForTestFailure().
+  std::vector<std::unique_ptr<testing::ScopedTrace>> gtest_scoped_traces_;
 
   // If set, the server will return HTTP errors.
   base::Optional<net::HttpStatusCode> http_error_status_code_;
@@ -244,6 +276,10 @@ class FakeServer : public syncer::LoopbackServer::ObserverForTests {
   // lifetime.
   bool alternate_triggered_errors_;
   int request_counter_;
+
+  // If set to true all |this| will clear |encryption_keys| in all
+  // GetUpdateResponse's.
+  bool disallow_sending_encryption_keys_;
 
   // Client command to be included in every response.
   sync_pb::ClientCommand client_command_;

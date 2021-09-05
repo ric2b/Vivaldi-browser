@@ -28,6 +28,9 @@ class MEDIA_EXPORT KeySystems {
  public:
   static KeySystems* GetInstance();
 
+  // Refreshes the list of available key systems if it may be out of date.
+  virtual void UpdateIfNeeded() = 0;
+
   // Returns whether |key_system| is a supported key system.
   virtual bool IsSupportedKeySystem(const std::string& key_system) const = 0;
 
@@ -42,7 +45,7 @@ class MEDIA_EXPORT KeySystems {
   // Returns the configuration rule for supporting |encryption_scheme|.
   virtual EmeConfigRule GetEncryptionSchemeConfigRule(
       const std::string& key_system,
-      EncryptionMode encryption_scheme) const = 0;
+      EncryptionScheme encryption_scheme) const = 0;
 
   // Returns the configuration rule for supporting a container and a list of
   // codecs.

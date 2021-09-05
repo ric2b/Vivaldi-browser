@@ -14,7 +14,7 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.ChromeSwitches;
+import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
@@ -39,7 +39,8 @@ public class ConnectionInfoPopupTest {
     public void testShow() throws InterruptedException {
         mActivityTestRule.startMainActivityOnBlankPage();
         TestThreadUtils.runOnUiThreadBlocking(
-                () -> ConnectionInfoPopup.show(mActivityTestRule.getActivity(),
-                                mActivityTestRule.getActivity().getActivityTab()));
+                ()
+                        -> ConnectionInfoPopup.show(mActivityTestRule.getActivity(),
+                                mActivityTestRule.getActivity().getActivityTab().getWebContents()));
     }
 }

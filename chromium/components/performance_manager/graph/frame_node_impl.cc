@@ -20,8 +20,7 @@ constexpr char FrameNodeImpl::kDefaultPriorityReason[] =
 
 using PriorityAndReason = frame_priority::PriorityAndReason;
 
-FrameNodeImpl::FrameNodeImpl(GraphImpl* graph,
-                             ProcessNodeImpl* process_node,
+FrameNodeImpl::FrameNodeImpl(ProcessNodeImpl* process_node,
                              PageNodeImpl* page_node,
                              FrameNodeImpl* parent_frame_node,
                              int frame_tree_node_id,
@@ -29,8 +28,7 @@ FrameNodeImpl::FrameNodeImpl(GraphImpl* graph,
                              const base::UnguessableToken& dev_tools_token,
                              int32_t browsing_instance_id,
                              int32_t site_instance_id)
-    : TypedNodeBase(graph),
-      parent_frame_node_(parent_frame_node),
+    : parent_frame_node_(parent_frame_node),
       page_node_(page_node),
       process_node_(process_node),
       frame_tree_node_id_(frame_tree_node_id),
@@ -88,6 +86,11 @@ void FrameNodeImpl::OnNonPersistentNotificationCreated() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   for (auto* observer : GetObservers())
     observer->OnNonPersistentNotificationCreated(this);
+}
+
+void FrameNodeImpl::SetHadFormInteraction() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  document_.had_form_interaction.SetAndMaybeNotify(this, true);
 }
 
 bool FrameNodeImpl::IsMainFrame() const {
@@ -185,6 +188,11 @@ const base::flat_set<WorkerNodeImpl*>& FrameNodeImpl::child_worker_nodes()
 
 const PriorityAndReason& FrameNodeImpl::priority_and_reason() const {
   return priority_and_reason_.value();
+}
+
+bool FrameNodeImpl::had_form_interaction() const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  return document_.had_form_interaction.value();
 }
 
 void FrameNodeImpl::SetIsCurrent(bool is_current) {
@@ -386,6 +394,11 @@ const PriorityAndReason& FrameNodeImpl::GetPriorityAndReason() const {
   return priority_and_reason();
 }
 
+bool FrameNodeImpl::HadFormInteraction() const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  return had_form_interaction();
+}
+
 void FrameNodeImpl::AddChildFrame(FrameNodeImpl* child_frame_node) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(child_frame_node);
@@ -410,7 +423,7 @@ void FrameNodeImpl::RemoveChildFrame(FrameNodeImpl* child_frame_node) {
   DCHECK_EQ(1u, removed);
 }
 
-void FrameNodeImpl::JoinGraph() {
+void FrameNodeImpl::OnJoiningGraph() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   // Enable querying this node using process and frame routing ids.
@@ -422,13 +435,10 @@ void FrameNodeImpl::JoinGraph() {
     parent_frame_node_->AddChildFrame(this);
   page_node_->AddFrame(this);
   process_node_->AddFrame(this);
-
-  NodeBase::JoinGraph();
 }
 
-void FrameNodeImpl::LeaveGraph() {
+void FrameNodeImpl::OnBeforeLeavingGraph() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  NodeBase::LeaveGraph();
 
   DCHECK(child_frame_nodes_.empty());
 
@@ -481,7 +491,8 @@ void FrameNodeImpl::DocumentProperties::Reset(FrameNodeImpl* frame_node,
   // Network is busy on navigation.
   network_almost_idle.SetAndMaybeNotify(frame_node, false);
   origin_trial_freeze_policy.SetAndMaybeNotify(
-      frame_node, mojom::InterventionPolicy::kUnknown);
+      frame_node, mojom::InterventionPolicy::kDefault);
+  had_form_interaction.SetAndMaybeNotify(frame_node, false);
 }
 
 }  // namespace performance_manager

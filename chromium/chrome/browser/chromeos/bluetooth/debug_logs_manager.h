@@ -6,12 +6,13 @@
 #define CHROME_BROWSER_CHROMEOS_BLUETOOTH_DEBUG_LOGS_MANAGER_H_
 
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "chrome/browser/ui/webui/bluetooth_internals/bluetooth_internals.mojom.h"
-#include "mojo/public/cpp/bindings/binding_set.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/receiver_set.h"
 
-namespace user_manager {
-class User;
-}  // namespace user_manager
+class PrefService;
+class PrefRegistrySimple;
 
 namespace chromeos {
 
@@ -24,7 +25,8 @@ namespace bluetooth {
 // state of debug logs and handles the user enabling/disabling them.
 class DebugLogsManager : public mojom::DebugLogsChangeHandler {
  public:
-  explicit DebugLogsManager(const user_manager::User* primary_user);
+  DebugLogsManager(const std::string& primary_user_email,
+                   PrefService* pref_service);
   ~DebugLogsManager() override;
 
   // State for capturing debug Bluetooth logs; logs are only captured when
@@ -37,20 +39,31 @@ class DebugLogsManager : public mojom::DebugLogsChangeHandler {
     kSupportedAndEnabled
   };
 
+  static void RegisterPrefs(PrefRegistrySimple* registry);
+
   DebugLogsState GetDebugLogsState() const;
 
-  // Generates an InterfacePtr bound to this object.
-  mojom::DebugLogsChangeHandlerPtr GenerateInterfacePtr();
-
- private:
   // mojom::DebugLogsManager:
   void ChangeDebugLogsState(bool should_debug_logs_be_enabled) override;
 
-  bool AreDebugLogsSupported() const;
+  // Generates an PendingRemote bound to this object.
+  mojo::PendingRemote<mojom::DebugLogsChangeHandler> GenerateRemote();
 
-  const user_manager::User* primary_user_ = nullptr;
-  bool are_debug_logs_enabled_ = false;
-  mojo::BindingSet<mojom::DebugLogsChangeHandler> bindings_;
+ private:
+  bool AreDebugLogsSupported() const;
+  void SetVerboseLogsEnable(bool enable);
+  void SendDBusVerboseLogsMessage(bool enable, int num_completed_attempts);
+  void OnVerboseLogsEnableSuccess(bool enable);
+  void OnVerboseLogsEnableError(const bool enable,
+                                const int num_completed_attempts,
+                                const std::string& error_name,
+                                const std::string& error_message);
+
+  const std::string primary_user_email_;
+  PrefService* pref_service_ = nullptr;
+  mojo::ReceiverSet<mojom::DebugLogsChangeHandler> receivers_;
+
+  base::WeakPtrFactory<DebugLogsManager> weak_ptr_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(DebugLogsManager);
 };

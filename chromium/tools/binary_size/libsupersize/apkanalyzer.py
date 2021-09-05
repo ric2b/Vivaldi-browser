@@ -29,20 +29,25 @@ def _ParseJarInfoFile(file_name):
   return source_map
 
 
-def _RunApkAnalyzer(apk_path, mapping_path, output_directory):
-  args = [path_util.GetApkAnalyzerPath(output_directory), 'dex', 'packages',
-          apk_path]
+def _RunApkAnalyzer(apk_path, mapping_path):
+  args = [path_util.GetApkAnalyzerPath(), 'dex', 'packages', apk_path]
   if mapping_path and os.path.exists(mapping_path):
     args.extend(['--proguard-mappings', mapping_path])
-  output = subprocess.check_output(args)
+  env = os.environ.copy()
+  env['JAVA_HOME'] = path_util.GetJavaHome()
+  output = subprocess.check_output(args, env=env).decode('ascii')
   data = []
   for line in output.splitlines():
-    vals = line.split()
-    # We want to name these columns so we know exactly which is which.
-    # pylint: disable=unused-variable
-    node_type, state, defined_methods, referenced_methods, size, name = (
-        vals[0], vals[1], vals[2], vals[3], vals[4], vals[5:])
-    data.append((node_type, ' '.join(name), int(size)))
+    try:
+      vals = line.split()
+      # We want to name these columns so we know exactly which is which.
+      # pylint: disable=unused-variable
+      node_type, state, defined_methods, referenced_methods, size, name = (
+          vals[0], vals[1], vals[2], vals[3], vals[4], vals[5:])
+      data.append((node_type, ' '.join(name), int(size)))
+    except Exception:
+      logging.error('Problem line was: %s', line)
+      raise
   return data
 
 
@@ -130,15 +135,14 @@ def UndoHierarchicalSizing(data):
   return nodes
 
 
-def CreateDexSymbols(apk_path, mapping_path, size_info_prefix,
-                     output_directory):
+def CreateDexSymbols(apk_path, mapping_path, size_info_prefix):
   source_map = _ParseJarInfoFile(size_info_prefix + '.jar.info')
 
-  nodes = _RunApkAnalyzer(apk_path, mapping_path, output_directory)
+  nodes = _RunApkAnalyzer(apk_path, mapping_path)
   nodes = UndoHierarchicalSizing(nodes)
 
   dex_expected_size = _ExpectedDexTotalSize(apk_path)
-  total_node_size = sum(map(lambda x: x[2], nodes))
+  total_node_size = sum([x[2] for x in nodes])
   # TODO(agrieve): Figure out why this log is triggering for
   #     ChromeModernPublic.apk (https://crbug.com/851535).
   # Reporting: dex_expected_size=6546088 total_node_size=6559549

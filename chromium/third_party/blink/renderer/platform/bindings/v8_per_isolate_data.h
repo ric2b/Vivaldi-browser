@@ -28,6 +28,7 @@
 
 #include <memory>
 
+#include "base/containers/span.h"
 #include "base/macros.h"
 #include "gin/public/gin_embedders.h"
 #include "gin/public/isolate_holder.h"
@@ -106,7 +107,7 @@ class PLATFORM_EXPORT V8PerIsolateData {
    public:
     virtual ~GarbageCollectedData() = default;
     virtual void WillBeDestroyed() {}
-    virtual void Trace(blink::Visitor*) {}
+    virtual void Trace(Visitor*) {}
   };
 
   static v8::Isolate* Initialize(scoped_refptr<base::SingleThreadTaskRunner>,
@@ -182,10 +183,9 @@ class PLATFORM_EXPORT V8PerIsolateData {
   // yet exist, it is created from the given array of strings. Once created,
   // these live for as long as the isolate, so this is appropriate only for a
   // compile-time list of related names, such as IDL dictionary keys.
-  const v8::Eternal<v8::Name>* FindOrCreateEternalNameCache(
+  const base::span<const v8::Eternal<v8::Name>> FindOrCreateEternalNameCache(
       const void* lookup_key,
-      const char* const names[],
-      size_t count);
+      const base::span<const char* const>& names);
 
   bool HasInstance(const WrapperTypeInfo* untrusted, v8::Local<v8::Value>);
   v8::Local<v8::Object> FindInstanceInPrototypeChain(const WrapperTypeInfo*,

@@ -9,8 +9,11 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind_test_util.h"
+#include "base/test/mock_callback.h"
+#include "build/build_config.h"
 #include "components/password_manager/core/browser/password_store_sync.h"
 #include "components/sync/base/client_tag_hash.h"
 #include "components/sync/model/data_batch.h"
@@ -233,8 +236,8 @@ class PasswordSyncBridgeTest : public testing::Test {
         .WillByDefault(Invoke(&fake_db_, &FakeDatabase::RemoveLogin));
 
     bridge_ = std::make_unique<PasswordSyncBridge>(
-        mock_processor_.CreateForwardingProcessor(),
-        &mock_password_store_sync_);
+        mock_processor_.CreateForwardingProcessor(), &mock_password_store_sync_,
+        sync_enabled_or_disabled_cb_.Get());
 
     // It's the responsibility of the PasswordStoreSync to inform the bridge
     // about changes in the password store. The bridge notifies the
@@ -258,12 +261,12 @@ class PasswordSyncBridgeTest : public testing::Test {
   }
 
   // Creates an EntityData around a copy of the given specifics.
-  std::unique_ptr<syncer::EntityData> SpecificsToEntity(
+  syncer::EntityData SpecificsToEntity(
       const sync_pb::PasswordSpecifics& specifics) {
-    auto data = std::make_unique<syncer::EntityData>();
-    *data->specifics.mutable_password() = specifics;
-    data->client_tag_hash = syncer::ClientTagHash::FromUnhashed(
-        syncer::PASSWORDS, bridge()->GetClientTag(*data));
+    syncer::EntityData data;
+    *data.specifics.mutable_password() = specifics;
+    data.client_tag_hash = syncer::ClientTagHash::FromUnhashed(
+        syncer::PASSWORDS, bridge()->GetClientTag(data));
     return data;
   }
 
@@ -303,11 +306,16 @@ class PasswordSyncBridgeTest : public testing::Test {
     return &mock_password_store_sync_;
   }
 
+  base::MockRepeatingClosure* mock_sync_enabled_or_disabled_cb() {
+    return &sync_enabled_or_disabled_cb_;
+  }
+
  private:
   FakeDatabase fake_db_;
   testing::NiceMock<syncer::MockModelTypeChangeProcessor> mock_processor_;
   testing::NiceMock<MockSyncMetadataStore> mock_sync_metadata_store_sync_;
   testing::NiceMock<MockPasswordStoreSync> mock_password_store_sync_;
+  testing::NiceMock<base::MockRepeatingClosure> sync_enabled_or_disabled_cb_;
   std::unique_ptr<PasswordSyncBridge> bridge_;
 };
 
@@ -430,7 +438,7 @@ TEST_F(PasswordSyncBridgeTest,
 
   EXPECT_CALL(mock_processor(),
               UntrackEntityForClientTagHash(
-                  SpecificsToEntity(specifics)->client_tag_hash));
+                  SpecificsToEntity(specifics).client_tag_hash));
 
   syncer::EntityChangeList entity_change_list;
   entity_change_list.push_back(syncer::EntityChange::CreateAdd(
@@ -666,6 +674,24 @@ TEST_F(PasswordSyncBridgeTest,
   EXPECT_FALSE(error);
 }
 
+// This tests that if reading sync metadata from the store fails,
+// metadata should be deleted and Sync starts without error.
+TEST_F(
+    PasswordSyncBridgeTest,
+    ShouldMergeSyncRemoteAndLocalPasswordsWithoutErrorWhenMetadataReadFails) {
+  // Simulate a failed GetAllSyncMetadata() by returning a nullptr.
+  ON_CALL(*mock_sync_metadata_store_sync(), GetAllSyncMetadata())
+      .WillByDefault(testing::ReturnNull());
+
+  EXPECT_CALL(*mock_sync_metadata_store_sync(), DeleteAllSyncMetadata());
+  EXPECT_CALL(mock_processor(), ModelReadyToSync(MetadataBatchContains(
+                                    /*state=*/syncer::HasNotInitialSyncDone(),
+                                    /*entities=*/testing::SizeIs(0))));
+  auto bridge = std::make_unique<PasswordSyncBridge>(
+      mock_processor().CreateForwardingProcessor(), mock_password_store_sync(),
+      base::DoNothing());
+}
+
 // This tests that if reading logins from the store fails,
 // ShouldMergeSync() would return an error without crashing.
 TEST_F(PasswordSyncBridgeTest,
@@ -726,7 +752,7 @@ TEST_F(PasswordSyncBridgeTest,
 
   EXPECT_CALL(mock_processor(),
               UntrackEntityForClientTagHash(
-                  SpecificsToEntity(specifics)->client_tag_hash));
+                  SpecificsToEntity(specifics).client_tag_hash));
 
   syncer::EntityChangeList entity_change_list;
   entity_change_list.push_back(syncer::EntityChange::CreateAdd(
@@ -780,9 +806,10 @@ TEST_F(PasswordSyncBridgeTest,
                                     /*entities=*/testing::SizeIs(1))));
 
   PasswordSyncBridge bridge(mock_processor().CreateForwardingProcessor(),
-                            mock_password_store_sync());
+                            mock_password_store_sync(), base::DoNothing());
 }
 
+#if defined(OS_MACOSX) && !defined(OS_IOS)
 // Tests that in case ReadAllLogins() during initial merge returns encryption
 // service failure, the bridge would try to do a DB clean up.
 TEST_F(PasswordSyncBridgeTest, ShouldDeleteUndecryptableLoginsDuringMerge) {
@@ -800,10 +827,71 @@ TEST_F(PasswordSyncBridgeTest, ShouldDeleteUndecryptableLoginsDuringMerge) {
       bridge()->MergeSyncData(bridge()->CreateMetadataChangeList(), {});
   EXPECT_FALSE(error);
 }
+#endif
 
 TEST_F(PasswordSyncBridgeTest,
        ShouldDeleteSyncMetadataWhenApplyStopSyncChanges) {
   EXPECT_CALL(*mock_sync_metadata_store_sync(), DeleteAllSyncMetadata());
+  bridge()->ApplyStopSyncChanges(bridge()->CreateMetadataChangeList());
+}
+
+TEST_F(PasswordSyncBridgeTest, ShouldNotifyOnSyncEnable) {
+  ON_CALL(*mock_password_store_sync(), IsAccountStore())
+      .WillByDefault(Return(true));
+
+  // New password data becoming available because sync was newly enabled should
+  // trigger the callback.
+  EXPECT_CALL(*mock_sync_enabled_or_disabled_cb(), Run());
+
+  syncer::EntityChangeList initial_entity_data;
+  initial_entity_data.push_back(syncer::EntityChange::CreateAdd(
+      /*storage_key=*/"",
+      SpecificsToEntity(CreateSpecificsWithSignonRealm(kSignonRealm1))));
+
+  base::Optional<syncer::ModelError> error = bridge()->MergeSyncData(
+      bridge()->CreateMetadataChangeList(), std::move(initial_entity_data));
+  ASSERT_FALSE(error);
+}
+
+TEST_F(PasswordSyncBridgeTest, ShouldNotNotifyOnSyncChange) {
+  ON_CALL(*mock_password_store_sync(), IsAccountStore())
+      .WillByDefault(Return(true));
+
+  // New password data becoming available due to an incoming sync change should
+  // *not* trigger the callback. This is mainly for performance reasons: In
+  // practice, this callback will cause all PasswordFormManagers to re-query
+  // from the password store, which can be expensive.
+  EXPECT_CALL(*mock_sync_enabled_or_disabled_cb(), Run()).Times(0);
+
+  syncer::EntityChangeList entity_changes;
+  entity_changes.push_back(syncer::EntityChange::CreateAdd(
+      /*storage_key=*/"",
+      SpecificsToEntity(CreateSpecificsWithSignonRealm(kSignonRealm1))));
+
+  base::Optional<syncer::ModelError> error = bridge()->ApplySyncChanges(
+      bridge()->CreateMetadataChangeList(), std::move(entity_changes));
+  ASSERT_FALSE(error);
+}
+
+TEST_F(PasswordSyncBridgeTest, ShouldNotifyOnSyncDisableIfAccountStore) {
+  ON_CALL(*mock_password_store_sync(), IsAccountStore())
+      .WillByDefault(Return(true));
+
+  // The account password store gets cleared when sync is disabled, so this
+  // should trigger the callback.
+  EXPECT_CALL(*mock_sync_enabled_or_disabled_cb(), Run());
+
+  bridge()->ApplyStopSyncChanges(bridge()->CreateMetadataChangeList());
+}
+
+TEST_F(PasswordSyncBridgeTest, ShouldNotNotifyOnSyncDisableIfProfileStore) {
+  ON_CALL(*mock_password_store_sync(), IsAccountStore())
+      .WillByDefault(Return(false));
+
+  // The profile password store does *not* get cleared when sync is disabled, so
+  // this should *not* trigger the callback.
+  EXPECT_CALL(*mock_sync_enabled_or_disabled_cb(), Run()).Times(0);
+
   bridge()->ApplyStopSyncChanges(bridge()->CreateMetadataChangeList());
 }
 

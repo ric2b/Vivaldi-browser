@@ -82,9 +82,7 @@ SearchResultView::SearchResultView(SearchResultListView* list_view,
   set_notify_enter_exit_on_child(true);
 }
 
-SearchResultView::~SearchResultView() {
-  ClearResult();
-}
+SearchResultView::~SearchResultView() = default;
 
 void SearchResultView::OnResultChanged() {
   OnMetadataChanged();
@@ -112,7 +110,8 @@ void SearchResultView::UpdateDetailsText() {
 }
 
 void SearchResultView::CreateTitleRenderText() {
-  auto render_text = gfx::RenderText::CreateHarfBuzzInstance();
+  std::unique_ptr<gfx::RenderText> render_text =
+      gfx::RenderText::CreateRenderText();
   render_text->SetText(result()->title());
   ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
   render_text->SetFontList(
@@ -142,7 +141,8 @@ void SearchResultView::CreateDetailsRenderText() {
     details_text_.reset();
     return;
   }
-  auto render_text = gfx::RenderText::CreateHarfBuzzInstance();
+  std::unique_ptr<gfx::RenderText> render_text =
+      gfx::RenderText::CreateRenderText();
   render_text->SetText(result()->details());
   ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
   render_text->SetFontList(rb.GetFontList(ui::ResourceBundle::BaseFont));
@@ -158,7 +158,7 @@ void SearchResultView::CreateDetailsRenderText() {
 void SearchResultView::OnQueryRemovalAccepted(bool accepted, int event_flags) {
   if (accepted) {
     list_view_->SearchResultActionActivated(
-        this, ash::OmniBoxZeroStateAction::kRemoveSuggestion, event_flags);
+        this, OmniBoxZeroStateAction::kRemoveSuggestion, event_flags);
   }
 
   if (confirm_remove_by_long_press_) {
@@ -227,11 +227,12 @@ bool SearchResultView::OnKeyPressed(const ui::KeyEvent& event) {
   switch (event.key_code()) {
     case ui::VKEY_RETURN:
       if (actions_view()->HasSelectedAction()) {
-        OnSearchResultActionActivated(static_cast<ash::OmniBoxZeroStateAction>(
+        OnSearchResultActionActivated(static_cast<OmniBoxZeroStateAction>(
                                           actions_view()->GetSelectedAction()),
                                       event.flags());
       } else {
-        list_view_->SearchResultActivated(this, event.flags());
+        list_view_->SearchResultActivated(this, event.flags(),
+                                          false /* by_button_press */);
       }
       return true;
     case ui::VKEY_UP:
@@ -242,8 +243,8 @@ bool SearchResultView::OnKeyPressed(const ui::KeyEvent& event) {
     case ui::VKEY_DELETE:
     case ui::VKEY_BROWSER_BACK:
       // Allows alt+(back or delete) to trigger the 'remove result' dialog.
-      OnSearchResultActionActivated(
-          ash::OmniBoxZeroStateAction::kRemoveSuggestion, event.flags());
+      OnSearchResultActionActivated(OmniBoxZeroStateAction::kRemoveSuggestion,
+                                    event.flags());
       return true;
     default:
       return false;
@@ -331,12 +332,12 @@ void SearchResultView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   if (!GetVisible())
     return;
 
-  // This is a work around to deal with the nested button case(append and remove
+  // Mark the result is a list item in the list of search results.
+  // Also avoids an issue with the nested button case(append and remove
   // button are child button of SearchResultView), which is not supported by
   // ChromeVox. see details in crbug.com/924776.
-  // We change the role of the parent view SearchResultView to kGenericContainer
-  // i.e., not a kButton anymore.
-  node_data->role = ax::mojom::Role::kGenericContainer;
+  node_data->role = ax::mojom::Role::kListBoxOption;
+  node_data->AddBoolAttribute(ax::mojom::BoolAttribute::kSelected, selected());
   node_data->AddState(ax::mojom::State::kFocusable);
   node_data->SetDefaultActionVerb(ax::mojom::DefaultActionVerb::kClick);
   node_data->SetName(GetAccessibleName());
@@ -350,13 +351,13 @@ void SearchResultView::OnGestureEvent(ui::GestureEvent* event) {
   switch (event->type()) {
     case ui::ET_GESTURE_LONG_PRESS:
       if (actions_view()->IsValidActionIndex(
-              ash::OmniBoxZeroStateAction::kRemoveSuggestion)) {
+              OmniBoxZeroStateAction::kRemoveSuggestion)) {
         ScrollRectToVisible(GetLocalBounds());
         NotifyAccessibilityEvent(ax::mojom::Event::kSelection, true);
         SetSelected(true, base::nullopt);
         confirm_remove_by_long_press_ = true;
-        OnSearchResultActionActivated(
-            ash::OmniBoxZeroStateAction::kRemoveSuggestion, event->flags());
+        OnSearchResultActionActivated(OmniBoxZeroStateAction::kRemoveSuggestion,
+                                      event->flags());
         event->SetHandled();
       }
       break;
@@ -370,7 +371,8 @@ void SearchResultView::OnGestureEvent(ui::GestureEvent* event) {
 void SearchResultView::ButtonPressed(views::Button* sender,
                                      const ui::Event& event) {
   DCHECK(sender == this);
-  list_view_->SearchResultActivated(this, event.flags());
+  list_view_->SearchResultActivated(this, event.flags(),
+                                    true /* by_button_press */);
 }
 
 void SearchResultView::OnMetadataChanged() {
@@ -420,10 +422,9 @@ void SearchResultView::OnSearchResultActionActivated(size_t index,
   DCHECK_LT(index, result()->actions().size());
 
   if (result()->is_omnibox_search()) {
-    ash::OmniBoxZeroStateAction button_action =
-        ash::GetOmniBoxZeroStateAction(index);
+    OmniBoxZeroStateAction button_action = GetOmniBoxZeroStateAction(index);
 
-    if (button_action == ash::OmniBoxZeroStateAction::kRemoveSuggestion) {
+    if (button_action == OmniBoxZeroStateAction::kRemoveSuggestion) {
       RecordZeroStateSearchResultUserActionHistogram(
           ZeroStateSearchResultUserActionType::kRemoveResult);
       RemoveQueryConfirmationDialog* dialog = new RemoveQueryConfirmationDialog(
@@ -433,20 +434,12 @@ void SearchResultView::OnSearchResultActionActivated(size_t index,
           event_flags, list_view_->app_list_main_view()->contents_view());
 
       dialog->Show(GetWidget()->GetNativeWindow());
-    } else if (button_action ==
-               ash::OmniBoxZeroStateAction::kAppendSuggestion) {
+    } else if (button_action == OmniBoxZeroStateAction::kAppendSuggestion) {
       RecordZeroStateSearchResultUserActionHistogram(
           ZeroStateSearchResultUserActionType::kAppendResult);
       list_view_->SearchResultActionActivated(this, index, event_flags);
     }
   }
-}
-
-void SearchResultView::OnSearchResultActionsUnSelected() {
-  // If the selection has changed to default result action, announce the
-  // selection change to a11y stack.
-  if (selected())
-    NotifyAccessibilityEvent(ax::mojom::Event::kSelection, true);
 }
 
 bool SearchResultView::IsSearchResultHoveredOrSelected() {
@@ -482,8 +475,8 @@ void SearchResultView::OnGetContextMenu(
     return;
 
   AppLaunchedMetricParams metric_params = {
-      ash::AppListLaunchedFrom::kLaunchedFromSearchBox,
-      ash::AppListLaunchType::kSearchResult};
+      AppListLaunchedFrom::kLaunchedFromSearchBox,
+      AppListLaunchType::kSearchResult};
   view_delegate_->GetAppLaunchedMetricParams(&metric_params);
 
   context_menu_ = std::make_unique<AppListMenuModelAdapter>(

@@ -60,10 +60,10 @@ class LayoutNGBlockFlowMixin : public LayoutNGMixin<Base> {
   void SetPaintFragment(const NGBlockBreakToken*,
                         scoped_refptr<const NGPhysicalFragment>) final;
 
+  using LayoutNGMixin<Base>::CurrentFragment;
+
  protected:
   void StyleDidChange(StyleDifference, const ComputedStyle* old_style) override;
-
-  const NGPhysicalBoxFragment* CurrentFragment() const final;
 
   void AddLayoutOverflowFromChildren() final;
 
@@ -71,9 +71,7 @@ class LayoutNGBlockFlowMixin : public LayoutNGMixin<Base> {
                        const PhysicalOffset& additional_offset,
                        NGOutlineType) const final;
 
-  bool PaintedOutputOfObjectHasNoEffectRegardlessOfSize() const final;
-
-  base::Optional<LayoutUnit> FragmentBaseline(NGBaselineAlgorithmType) const;
+  base::Optional<LayoutUnit> FragmentBaseline() const;
 
   void DirtyLinesFromChangedChild(LayoutObject* child,
                                   MarkingBehavior marking_behavior) final;
@@ -89,7 +87,7 @@ class LayoutNGBlockFlowMixin : public LayoutNGMixin<Base> {
 
  private:
   void AddScrollingOverflowFromChildren();
-  void UpdateMargins(const NGConstraintSpace& space);
+  void UpdateMargins();
 };
 
 // If you edit these export templates, also update templates in

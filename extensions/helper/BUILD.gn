@@ -3,6 +3,7 @@ import("//build/config/jumbo.gni")
 static_library("app_helper") {
   deps = [
     "//content/public/browser:browser",
+    "//components/services/filesystem/public/mojom",
   ]
   sources = [
     "../helper/vivaldi_app_helper.cc",
@@ -10,8 +11,9 @@ static_library("app_helper") {
   ]
 }
 
-jumbo_static_library("helper") {
+static_library("helper") {
   deps = [
+    #"//content/browser",
     "//content/public/browser:browser",
   ]
   sources = [

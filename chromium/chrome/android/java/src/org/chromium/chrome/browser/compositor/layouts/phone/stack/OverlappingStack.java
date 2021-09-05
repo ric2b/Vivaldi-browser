@@ -7,13 +7,13 @@ package org.chromium.chrome.browser.compositor.layouts.phone.stack;
 import android.content.Context;
 import android.content.res.Resources;
 
+import org.chromium.base.MathUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.compositor.layouts.Layout.Orientation;
 import org.chromium.chrome.browser.compositor.layouts.components.LayoutTab;
 import org.chromium.chrome.browser.compositor.layouts.eventfilter.ScrollDirection;
 import org.chromium.chrome.browser.compositor.layouts.phone.StackLayoutBase;
 import org.chromium.chrome.browser.compositor.layouts.phone.stack.StackAnimation.OverviewAnimationType;
-import org.chromium.chrome.browser.util.MathUtils;
 import org.chromium.ui.base.LocalizationUtils;
 
 /**
@@ -396,7 +396,11 @@ public class OverlappingStack extends Stack {
             }
 
             // The beginning, size, and clipped size of the current tab.
-            float tabOffset, tabSize, tabClippedSize, borderAdjustmentSize, insetBorderPadding;
+            float tabOffset;
+            float tabSize;
+            float tabClippedSize;
+            float borderAdjustmentSize;
+            float insetBorderPadding;
             if (portrait) {
                 // portrait LTR & RTL
                 tabOffset = layoutTab.getY();

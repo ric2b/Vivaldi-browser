@@ -9,14 +9,11 @@
 #include "base/callback.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
-#include "chrome/browser/notifications/notification_permission_context.h"
-#include "chrome/browser/permissions/permission_request_manager.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/resource_coordinator/local_site_characteristics_data_impl.h"
 #include "chrome/browser/resource_coordinator/local_site_characteristics_data_reader.h"
@@ -31,7 +28,6 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/network_session_configurator/common/network_switches.h"
-#include "content/public/browser/notification_service.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
 #include "content/public/test/web_contents_tester.h"
@@ -54,23 +50,10 @@ using WebContentsTester = content::WebContentsTester;
 constexpr char kTestPage[] =
     "/resource_coordinator/site_characteristics_test_page.html";
 
-// Returns the longest feature observation window.
-base::TimeDelta GetLongestObservationWindow() {
-  const SiteCharacteristicsDatabaseParams& params =
-      GetStaticSiteCharacteristicsDatabaseParams();
-  return std::max({params.favicon_update_observation_window,
-                   params.title_update_observation_window,
-                   params.audio_usage_observation_window,
-                   params.notifications_usage_observation_window});
-}
-
-// Returns the longest grace period.
-base::TimeDelta GetLongestGracePeriod() {
-  const SiteCharacteristicsDatabaseParams& params =
-      GetStaticSiteCharacteristicsDatabaseParams();
-  return std::max({params.title_or_favicon_change_post_load_grace_period,
-                   params.feature_usage_post_background_grace_period});
-}
+constexpr base::TimeDelta kObservationWindowLength =
+    base::TimeDelta::FromHours(2);
+constexpr base::TimeDelta kLongestGracePeriod =
+    base::TimeDelta::FromSeconds(20);
 
 // Returns the LocalSiteCharacteristicsDataImpl that backs |reader|.
 internal::LocalSiteCharacteristicsDataImpl* GetImplFromReader(
@@ -96,8 +79,6 @@ class LocalSiteCharacteristicsDatabaseTest : public InProcessBrowserTest {
 
   void SetUp() override {
     test_clock_.Advance(base::TimeDelta::FromSeconds(1));
-    scoped_feature_list_.InitAndEnableFeature(
-        features::kSiteCharacteristicsDatabase);
     InProcessBrowserTest::SetUp();
   }
 
@@ -202,11 +183,6 @@ class LocalSiteCharacteristicsDatabaseTest : public InProcessBrowserTest {
     ExecuteScriptInMainFrame("ChangeFavicon()");
   }
 
-  void TriggerNonPersistentNotificationInActiveWebContents() {
-    ExecuteScriptInMainFrame(
-        "DisplayAndCloseNonPersistentNotification('foo');");
-  }
-
   // By default a tab has to play audio while being visible if it wants to be
   // able to play audio in background (see
   // ChromeContentRendererClient::DeferMediaLoad). This makes the current active
@@ -226,24 +202,11 @@ class LocalSiteCharacteristicsDatabaseTest : public InProcessBrowserTest {
     // Background the tab and reload it so the audio will stop playing if it's
     // still playing.
     GetActiveWebContents()->WasHidden();
-    test_clock_.Advance(GetStaticSiteCharacteristicsDatabaseParams()
-                            .feature_usage_post_background_grace_period);
-  }
-
-  // Ensure that the current tab is allowed to display non-persistent
-  // notifications.
-  void AllowBackgroundNotificationInActiveTab() {
-    content::WebContents* web_contents = GetActiveWebContents();
-    NotificationPermissionContext::UpdatePermission(
-        browser()->profile(), web_contents->GetLastCommittedURL(),
-        CONTENT_SETTING_ALLOW);
-
-    ExecuteScriptInMainFrame("RequestNotificationsPermission();");
+    test_clock_.Advance(kLongestGracePeriod);
   }
 
   void ExpireTitleOrFaviconGracePeriod() {
-    test_clock_.Advance(GetStaticSiteCharacteristicsDatabaseParams()
-                            .title_or_favicon_change_post_load_grace_period);
+    test_clock_.Advance(kLongestGracePeriod);
   }
 
   base::SimpleTestTickClock& test_clock() { return test_clock_; }
@@ -290,13 +253,13 @@ void LocalSiteCharacteristicsDatabaseTest::TestFeatureUsageDetectionImpl(
   // Navigate to the test url and background it.
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), test_url, WindowOpenDisposition::CURRENT_TAB,
-      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
   GetActiveWebContents()->WasHidden();
   WaitForTransitionToLoaded(GetActiveWebContents());
 
   // If needed, wait for all feature observation windows to expire.
   if (wait_for_observation_window_to_expire) {
-    test_clock_.Advance(GetLongestObservationWindow());
+    test_clock_.Advance(kObservationWindowLength);
     EXPECT_EQ(performance_manager::SiteFeatureUsage::kSiteFeatureNotInUse,
               (reader.get()->*feature_detection_method)());
   }
@@ -329,7 +292,7 @@ void LocalSiteCharacteristicsDatabaseTest::TestFeatureUsageDetectionImpl(
 
   // Advance the clock, make sure that the feature usage status doesn't
   // change.
-  test_clock_.Advance(GetLongestObservationWindow());
+  test_clock_.Advance(kObservationWindowLength);
 
   EXPECT_EQ(performance_manager::SiteFeatureUsage::kSiteFeatureInUse,
             (reader.get()->*feature_detection_method)());
@@ -341,7 +304,7 @@ IN_PROC_BROWSER_TEST_F(LocalSiteCharacteristicsDatabaseTest, NoFeatureUsed) {
 
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), test_url, WindowOpenDisposition::NEW_BACKGROUND_TAB,
-      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
 
   content::WebContents* contents =
       browser()->tab_strip_model()->GetWebContentsAt(1);
@@ -356,10 +319,8 @@ IN_PROC_BROWSER_TEST_F(LocalSiteCharacteristicsDatabaseTest, NoFeatureUsed) {
             reader->UpdatesTitleInBackground());
   EXPECT_EQ(performance_manager::SiteFeatureUsage::kSiteFeatureUsageUnknown,
             reader->UsesAudioInBackground());
-  EXPECT_EQ(performance_manager::SiteFeatureUsage::kSiteFeatureUsageUnknown,
-            reader->UsesNotificationsInBackground());
 
-  test_clock().Advance(GetLongestObservationWindow());
+  test_clock().Advance(kObservationWindowLength);
 
   EXPECT_EQ(performance_manager::SiteFeatureUsage::kSiteFeatureNotInUse,
             reader->UpdatesFaviconInBackground());
@@ -367,8 +328,6 @@ IN_PROC_BROWSER_TEST_F(LocalSiteCharacteristicsDatabaseTest, NoFeatureUsed) {
             reader->UpdatesTitleInBackground());
   EXPECT_EQ(performance_manager::SiteFeatureUsage::kSiteFeatureNotInUse,
             reader->UsesAudioInBackground());
-  EXPECT_EQ(performance_manager::SiteFeatureUsage::kSiteFeatureNotInUse,
-            reader->UsesNotificationsInBackground());
 }
 
 // Test that use features while in foreground, this shouldn't be recorded.
@@ -378,14 +337,13 @@ IN_PROC_BROWSER_TEST_F(LocalSiteCharacteristicsDatabaseTest,
 
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), test_url, WindowOpenDisposition::CURRENT_TAB,
-      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
 
   GetActiveWebContents()->WasShown();
 
   ChangeTitleOfActiveWebContents();
   ChangeFaviconOfActiveWebContents();
   PlayAudioInActiveWebContents();
-  // TODO(sebmarchand): Also trigger a background notification once.
 
   auto reader =
       GetReaderForOrigin(browser()->profile(), url::Origin::Create(test_url));
@@ -396,15 +354,13 @@ IN_PROC_BROWSER_TEST_F(LocalSiteCharacteristicsDatabaseTest,
 
   // Advance the clock while the tab is still in foreground and make sure that
   // the state hasn't changed.
-  test_clock().Advance(GetLongestObservationWindow());
+  test_clock().Advance(kObservationWindowLength);
   EXPECT_EQ(performance_manager::SiteFeatureUsage::kSiteFeatureUsageUnknown,
             reader->UpdatesFaviconInBackground());
   EXPECT_EQ(performance_manager::SiteFeatureUsage::kSiteFeatureUsageUnknown,
             reader->UpdatesTitleInBackground());
   EXPECT_EQ(performance_manager::SiteFeatureUsage::kSiteFeatureUsageUnknown,
             reader->UsesAudioInBackground());
-  EXPECT_EQ(performance_manager::SiteFeatureUsage::kSiteFeatureUsageUnknown,
-            reader->UsesNotificationsInBackground());
 }
 
 // Test that the audio feature usage in background gets detected properly.
@@ -419,25 +375,6 @@ IN_PROC_BROWSER_TEST_F(LocalSiteCharacteristicsDatabaseTest,
           base::Unretained(this)),
       base::BindRepeating(&LocalSiteCharacteristicsDatabaseTest::
                               AllowBackgroundAudioInActiveTab,
-                          base::Unretained(this)));
-}
-
-// Test that the notification feature usage in background gets detected
-// properly.
-// TODO(sebmarchand): Figure out how to trigger a non-persistent notification in
-// this test.
-IN_PROC_BROWSER_TEST_F(LocalSiteCharacteristicsDatabaseTest,
-                       DISABLED_NotificationFeatureUsage) {
-  TestFeatureUsageDetection(
-      &SiteCharacteristicsDataReader::UsesNotificationsInBackground,
-      internal::LocalSiteCharacteristicsDataImpl::TrackedBackgroundFeatures::
-          kNotificationUsageUsage,
-      base::BindRepeating(
-          &LocalSiteCharacteristicsDatabaseTest::
-              TriggerNonPersistentNotificationInActiveWebContents,
-          base::Unretained(this)),
-      base::BindRepeating(&LocalSiteCharacteristicsDatabaseTest::
-                              AllowBackgroundNotificationInActiveTab,
                           base::Unretained(this)));
 }
 
@@ -493,7 +430,7 @@ IN_PROC_BROWSER_TEST_F(LocalSiteCharacteristicsDatabaseTest,
         browser(), test_url,
         i == 0 ? WindowOpenDisposition::CURRENT_TAB
                : WindowOpenDisposition::NEW_FOREGROUND_TAB,
-        ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+        ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
     content::WebContents* contents =
         browser()->tab_strip_model()->GetWebContentsAt(i);
     WaitForTransitionToLoaded(contents);
@@ -545,11 +482,11 @@ IN_PROC_BROWSER_TEST_F(LocalSiteCharacteristicsDatabaseTest,
   // Navigate to the test url and background it.
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), test_url, WindowOpenDisposition::CURRENT_TAB,
-      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
   WaitForTransitionToLoaded(GetActiveWebContents());
   GetActiveWebContents()->WasHidden();
 
-  test_clock().Advance(GetLongestGracePeriod());
+  test_clock().Advance(kLongestGracePeriod);
 
   base::RunLoop run_loop;
   GetImplFromReader(reader.get())
@@ -592,11 +529,11 @@ IN_PROC_BROWSER_TEST_F(LocalSiteCharacteristicsDatabaseTest, PRE_ClearHistory) {
   // Navigate to the test url and background it.
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), test_url, WindowOpenDisposition::CURRENT_TAB,
-      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
   WaitForTransitionToLoaded(GetActiveWebContents());
   GetActiveWebContents()->WasHidden();
 
-  test_clock().Advance(GetLongestGracePeriod());
+  test_clock().Advance(kLongestGracePeriod);
 
   base::RunLoop run_loop;
   GetImplFromReader(reader.get())
@@ -614,7 +551,7 @@ IN_PROC_BROWSER_TEST_F(LocalSiteCharacteristicsDatabaseTest, PRE_ClearHistory) {
 
   HistoryServiceFactory::GetForProfile(browser()->profile(),
                                        ServiceAccessType::IMPLICIT_ACCESS)
-      ->DeleteURL(test_url);
+      ->DeleteURLs({test_url});
   // The history gets cleared asynchronously.
   while (reader->UpdatesTitleInBackground() !=
          performance_manager::SiteFeatureUsage::kSiteFeatureUsageUnknown) {
@@ -650,7 +587,7 @@ IN_PROC_BROWSER_TEST_F(LocalSiteCharacteristicsDatabaseTest,
   // Navigate to the test url and background it.
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), test_url, WindowOpenDisposition::CURRENT_TAB,
-      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
   WaitForTransitionToLoaded(GetActiveWebContents());
   GetActiveWebContents()->WasHidden();
 

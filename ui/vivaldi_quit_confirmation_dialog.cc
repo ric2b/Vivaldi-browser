@@ -62,6 +62,8 @@ VivaldiQuitConfirmationDialog::VivaldiQuitConfirmationDialog(
 
   label_->SetText(delegate_->GetBodyText());
 
+  checkbox_ = DialogDelegate::SetExtraView(CreateExtraView());
+
   views::Widget* widget = new views::Widget;
   views::Widget::InitParams params =
       GetDialogWidgetInitParams(this, window, view, gfx::Rect());
@@ -72,12 +74,11 @@ VivaldiQuitConfirmationDialog::VivaldiQuitConfirmationDialog(
 VivaldiQuitConfirmationDialog::~VivaldiQuitConfirmationDialog() {
 }
 
-std::unique_ptr<views::View> VivaldiQuitConfirmationDialog::CreateExtraView() {
+std::unique_ptr<views::Checkbox> VivaldiQuitConfirmationDialog::CreateExtraView() {
   auto checkbox = std::make_unique<views::Checkbox>(
-      l10n_util::GetStringUTF16(IDS_EXIT_CONFIRMATION_DONOTSHOW));
+    l10n_util::GetStringUTF16(IDS_EXIT_CONFIRMATION_DONOTSHOW));
   checkbox->SetHorizontalAlignment(gfx::ALIGN_LEFT);
 
-  checkbox_ = checkbox.get();
   return checkbox;
 }
 
@@ -89,14 +90,6 @@ bool VivaldiQuitConfirmationDialog::Accept() {
 bool VivaldiQuitConfirmationDialog::Cancel() {
   std::move(quit_callback_).Run(false);
   return true;
-}
-
-base::string16 VivaldiQuitConfirmationDialog::GetDialogButtonLabel(
-  ui::DialogButton button) const {
-  if (button == ui::DIALOG_BUTTON_OK) {
-    return l10n_util::GetStringUTF16(IDS_CONFIRM_MESSAGEBOX_YES_BUTTON_LABEL);
-  }
-  return views::DialogDelegateView::GetDialogButtonLabel(button);
 }
 
 ui::ModalType VivaldiQuitConfirmationDialog::GetModalType() const {

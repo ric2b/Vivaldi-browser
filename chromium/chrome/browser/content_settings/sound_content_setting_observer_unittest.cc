@@ -15,7 +15,6 @@
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/ukm/content/source_url_recorder.h"
 #include "components/ukm/test_ukm_recorder.h"
-#include "content/public/test/test_service_manager_context.h"
 #include "content/public/test/web_contents_tester.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -44,9 +43,6 @@ class SoundContentSettingObserverTest : public ChromeRenderViewHostTestHarness {
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();
 
-    test_service_manager_context_ =
-        std::make_unique<content::TestServiceManagerContext>();
-
     RecentlyAudibleHelper::CreateForWebContents(web_contents());
     SoundContentSettingObserver::CreateForWebContents(web_contents());
     ukm::InitializeSourceUrlRecorderForWebContents(web_contents());
@@ -57,22 +53,16 @@ class SoundContentSettingObserverTest : public ChromeRenderViewHostTestHarness {
     NavigateAndCommit(GURL(kURL1));
   }
 
-  void TearDown() override {
-    // Must be reset before browser thread teardown.
-    test_service_manager_context_.reset();
-    ChromeRenderViewHostTestHarness::TearDown();
-  }
-
  protected:
   void ChangeSoundContentSettingTo(ContentSetting setting) {
     GURL url = web_contents()->GetLastCommittedURL();
     host_content_settings_map_->SetContentSettingDefaultScope(
-        url, url, CONTENT_SETTINGS_TYPE_SOUND, std::string(), setting);
+        url, url, ContentSettingsType::SOUND, std::string(), setting);
   }
 
   void ChangeDefaultSoundContentSettingTo(ContentSetting setting) {
     host_content_settings_map_->SetDefaultContentSetting(
-        CONTENT_SETTINGS_TYPE_SOUND, setting);
+        ContentSettingsType::SOUND, setting);
   }
 
   void SimulateAudioStarting() {
@@ -109,11 +99,6 @@ class SoundContentSettingObserverTest : public ChromeRenderViewHostTestHarness {
  private:
   HostContentSettingsMap* host_content_settings_map_;
   std::unique_ptr<ukm::TestUkmRecorder> test_ukm_recorder_;
-
-  // WebContentsImpl accesses the system Connector, so make sure the Service
-  // Manager is initialized.
-  std::unique_ptr<content::TestServiceManagerContext>
-      test_service_manager_context_;
 
   DISALLOW_COPY_AND_ASSIGN(SoundContentSettingObserverTest);
 };
@@ -194,17 +179,6 @@ TEST_F(SoundContentSettingObserverTest, DontUnmuteWhenMutedByExtension) {
   EXPECT_TRUE(web_contents()->IsAudioMuted());
 
   // Navigating to a new URL should not unmute the tab muted by an extension.
-  NavigateAndCommit(GURL(kURL2));
-  EXPECT_TRUE(web_contents()->IsAudioMuted());
-}
-
-TEST_F(SoundContentSettingObserverTest, DontUnmuteWhenMutedForMediaCapture) {
-  EXPECT_FALSE(web_contents()->IsAudioMuted());
-
-  SetMuteStateForReason(true, TabMutedReason::MEDIA_CAPTURE);
-  EXPECT_TRUE(web_contents()->IsAudioMuted());
-
-  // Navigating to a new URL should not unmute the tab muted for media capture.
   NavigateAndCommit(GURL(kURL2));
   EXPECT_TRUE(web_contents()->IsAudioMuted());
 }

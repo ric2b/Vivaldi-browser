@@ -8,6 +8,7 @@
 
 #include "base/threading/thread_checker.h"
 #include "chromecast/graphics/cast_window_manager.h"
+#include "chromecast/ui/mojom/ui_service.mojom.h"
 #include "ui/aura/window.h"
 #include "ui/gfx/canvas.h"
 #include "ui/views/layout/layout_provider.h"
@@ -67,6 +68,8 @@ class RoundedWindowCornersAura : public RoundedWindowCorners {
   explicit RoundedWindowCornersAura(CastWindowManager* window_manager);
   ~RoundedWindowCornersAura() override;
 
+  void SetEnabled(bool enable) override;
+  bool IsEnabled() const override;
   void SetColorInversion(bool enable) override;
 
  private:
@@ -93,25 +96,39 @@ RoundedWindowCornersAura::RoundedWindowCornersAura(
   add_view(kCornerRadius, false, true);
   add_view(kCornerRadius, true, true);
 
-  widget_.reset(new views::Widget);
+  widget_ = std::make_unique<views::Widget>();
   views::Widget::InitParams params(views::Widget::InitParams::TYPE_POPUP);
   params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   params.context = window_manager->GetRootWindow();
-  params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
+  params.opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;
   params.bounds = window_manager->GetRootWindow()->GetBoundsInRootWindow();
   params.accept_events = false;
   widget_->Init(std::move(params));
   widget_->SetContentsView(main_view.release());
   widget_->GetNativeWindow()->SetName("RoundCorners");
 
-  window_manager->SetWindowId(widget_->GetNativeView(),
-                              CastWindowManager::CORNERS_OVERLAY);
+  window_manager->SetZOrder(widget_->GetNativeView(),
+                            mojom::ZOrder::CORNERS_OVERLAY);
 
-  widget_->Show();
+  // Remain hidden until explicitly shown. Rounded corners are only needed for
+  // specific circumstances such as webviews.
+  widget_->Hide();
 }
 
 RoundedWindowCornersAura::~RoundedWindowCornersAura() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+}
+
+void RoundedWindowCornersAura::SetEnabled(bool enable) {
+  if (enable) {
+    widget_->Show();
+  } else {
+    widget_->Hide();
+  }
+}
+
+bool RoundedWindowCornersAura::IsEnabled() const {
+  return widget_->IsVisible();
 }
 
 void RoundedWindowCornersAura::SetColorInversion(bool enable) {

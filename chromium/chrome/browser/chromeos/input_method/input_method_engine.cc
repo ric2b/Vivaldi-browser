@@ -40,9 +40,10 @@ namespace chromeos {
 
 namespace {
 
-const char kErrorNotActive[] = "IME is not active";
-const char kErrorWrongContext[] = "Context is not active";
-const char kCandidateNotFound[] = "Candidate not found";
+const char kErrorNotActive[] = "IME is not active.";
+const char kErrorWrongContext[] = "Context is not active.";
+const char kCandidateNotFound[] = "Candidate not found.";
+const char kSuggestionNotFound[] = "Suggestion not found.";
 
 // The default entry number of a page in CandidateWindowProperty.
 const int kDefaultPageSize = 9;
@@ -208,7 +209,8 @@ bool InputMethodEngine::SetCursorPosition(int context_id,
   std::map<int, int>::const_iterator position =
       candidate_indexes_.find(candidate_id);
   if (position == candidate_indexes_.end()) {
-    *error = kCandidateNotFound;
+    *error = base::StringPrintf("%s candidate id = %d", kCandidateNotFound,
+                                candidate_id);
     return false;
   }
 
@@ -220,15 +222,80 @@ bool InputMethodEngine::SetCursorPosition(int context_id,
   return true;
 }
 
+bool InputMethodEngine::SetSuggestion(int context_id,
+                                      const base::string16& text,
+                                      std::string* error) {
+  if (!IsActive()) {
+    *error = kErrorNotActive;
+    return false;
+  }
+  if (context_id != context_id_ || context_id_ == -1) {
+    *error = kErrorWrongContext;
+    return false;
+  }
+
+  IMESuggestionWindowHandlerInterface* sw_handler =
+      ui::IMEBridge::Get()->GetSuggestionWindowHandler();
+  if (sw_handler)
+    sw_handler->Show(text);
+  return true;
+}
+
+bool InputMethodEngine::DismissSuggestion(int context_id, std::string* error) {
+  if (!IsActive()) {
+    *error = kErrorNotActive;
+    return false;
+  }
+  if (context_id != context_id_ || context_id_ == -1) {
+    *error = kErrorWrongContext;
+    return false;
+  }
+
+  IMESuggestionWindowHandlerInterface* sw_handler =
+      ui::IMEBridge::Get()->GetSuggestionWindowHandler();
+  if (sw_handler)
+    sw_handler->Hide();
+  return true;
+}
+
+bool InputMethodEngine::AcceptSuggestion(int context_id, std::string* error) {
+  if (!IsActive()) {
+    *error = kErrorNotActive;
+    return false;
+  }
+  if (context_id != context_id_ || context_id_ == -1) {
+    *error = kErrorWrongContext;
+    return false;
+  }
+
+  IMESuggestionWindowHandlerInterface* sw_handler =
+      ui::IMEBridge::Get()->GetSuggestionWindowHandler();
+  if (sw_handler) {
+    base::string16 suggestion_text = sw_handler->GetText();
+    if (suggestion_text.empty()) {
+      *error = kSuggestionNotFound;
+      return false;
+    }
+    CommitText(context_id_, (base::UTF16ToUTF8(suggestion_text)).c_str(),
+               error);
+    sw_handler->Hide();
+  }
+  return true;
+}
+
 bool InputMethodEngine::SetMenuItems(
-    const std::vector<input_method::InputMethodManager::MenuItem>& items) {
-  return UpdateMenuItems(items);
+    const std::vector<input_method::InputMethodManager::MenuItem>& items,
+    std::string* error) {
+  return UpdateMenuItems(items, error);
 }
 
 bool InputMethodEngine::UpdateMenuItems(
-    const std::vector<input_method::InputMethodManager::MenuItem>& items) {
-  if (!IsActive())
+    const std::vector<input_method::InputMethodManager::MenuItem>& items,
+    std::string* error) {
+  if (!IsActive()) {
+    *error = kErrorNotActive;
     return false;
+  }
 
   ui::ime::InputMethodMenuItemList menu_item_list;
   for (const auto& item : items) {
@@ -273,6 +340,14 @@ bool InputMethodEngine::SetCompositionRange(
   return input_context->SetCompositionRange(before, after, text_spans);
 }
 
+bool InputMethodEngine::SetSelectionRange(uint32_t start, uint32_t end) {
+  ui::IMEInputContextHandlerInterface* input_context =
+      ui::IMEBridge::Get()->GetInputContextHandler();
+  if (!input_context)
+    return false;
+  return input_context->SetSelectionRange(start, end);
+}
+
 void InputMethodEngine::CommitTextToInputContext(int context_id,
                                                  const std::string& text) {
   ui::IMEInputContextHandlerInterface* input_context =
@@ -292,7 +367,8 @@ void InputMethodEngine::CommitTextToInputContext(int context_id,
 }
 
 bool InputMethodEngine::SendKeyEvent(ui::KeyEvent* event,
-                                     const std::string& code) {
+                                     const std::string& code,
+                                     std::string* error) {
   DCHECK(event);
   if (event->key_code() == ui::VKEY_UNKNOWN)
     event->set_key_code(ui::DomKeycodeToKeyboardCode(code));
@@ -311,7 +387,15 @@ bool InputMethodEngine::SendKeyEvent(ui::KeyEvent* event,
     input_context->SendKeyEvent(event);
     return true;
   }
+
+  *error = kErrorWrongContext;
   return false;
+}
+
+bool InputMethodEngine::IsValidKeyEvent(const ui::KeyEvent* ui_event) {
+  // TODO(CRBUG/1070517): Update this check to verify that this KeyEvent should
+  // be allowed on this page, instead of assuming that it should be allowed.
+  return true;
 }
 
 void InputMethodEngine::EnableInputView() {

@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-'use strict';
+import {isRTL} from 'chrome://resources/js/util.m.js';
 
 /** Idle time in ms before the UI is hidden. */
 const HIDE_TIMEOUT = 2000;
@@ -46,7 +46,7 @@ function isMouseNearSideToolbar(e, window, reverse) {
 }
 
 /** Responsible for co-ordinating between multiple toolbar elements. */
-class ToolbarManager {
+export class ToolbarManager {
   /**
    * @param {!Window} window The window containing the UI.
    * @param {?ViewerPdfToolbarElement} toolbar
@@ -84,12 +84,12 @@ class ToolbarManager {
     this.lastMovementTimestamp = null;
 
     /** @private {boolean} */
-    this.reverseSideToolbar_ = false;
+    this.isPrintPreview_ = zoomToolbar.isPrintPreview;
 
     this.window_.addEventListener('resize', this.resizeDropdowns_.bind(this));
     this.resizeDropdowns_();
 
-    if (zoomToolbar.isPrintPreview()) {
+    if (this.isPrintPreview_) {
       this.zoomToolbar_.addEventListener('keyboard-navigation-active', e => {
         this.keyboardNavigationActive = e.detail;
       });
@@ -100,7 +100,7 @@ class ToolbarManager {
   handleMouseMove(e) {
     this.isMouseNearTopToolbar_ = !!this.toolbar_ && isMouseNearTopToolbar(e);
     this.isMouseNearSideToolbar_ =
-        isMouseNearSideToolbar(e, this.window_, this.reverseSideToolbar_);
+        isMouseNearSideToolbar(e, this.window_, this.isPrintPreview_);
 
     this.keyboardNavigationActive = false;
     const touchInteractionActive =
@@ -144,7 +144,7 @@ class ToolbarManager {
    * @private
    */
   isHighVelocityMouseMove_(e) {
-    if (e.type == 'mousemove') {
+    if (e.type === 'mousemove') {
       if (this.lastMovementTimestamp == null) {
         this.lastMovementTimestamp = this.getCurrentTimestamp_();
       } else {
@@ -154,7 +154,7 @@ class ToolbarManager {
         const interval = newTime - this.lastMovementTimestamp;
         this.lastMovementTimestamp = newTime;
 
-        if (interval != 0) {
+        if (interval !== 0) {
           return movement / interval > SHOW_VELOCITY;
         }
       }
@@ -219,8 +219,8 @@ class ToolbarManager {
 
     // Remove focus to make any visible tooltips disappear -- otherwise they'll
     // still be visible on screen when the toolbar is off screen.
-    if ((this.toolbar_ && document.activeElement == this.toolbar_) ||
-        document.activeElement == this.zoomToolbar_) {
+    if ((this.toolbar_ && document.activeElement === this.toolbar_) ||
+        document.activeElement === this.zoomToolbar_) {
       document.activeElement.blur();
     }
 
@@ -274,11 +274,6 @@ class ToolbarManager {
     this.sideToolbarAllowedOnlyTimer_ = this.window_.setTimeout(() => {
       this.sideToolbarAllowedOnlyTimer_ = null;
     }, FORCE_HIDE_TIMEOUT);
-  }
-
-  /** Reverse the position of the side toolbar. */
-  reverseSideToolbar() {
-    this.reverseSideToolbar_ = true;
   }
 
   /**

@@ -64,6 +64,7 @@ class CC_EXPORT PictureLayerImpl
   void RecreateTileResources() override;
   Region GetInvalidationRegionForDebugging() override;
   gfx::Rect GetEnclosingRectInTargetSpace() const override;
+  gfx::ContentColorUsage GetContentColorUsage() const override;
 
   // PictureLayerTilingClient overrides.
   std::unique_ptr<Tile> CreateTile(const Tile::CreateInfo& info) override;
@@ -104,6 +105,8 @@ class CC_EXPORT PictureLayerImpl
 
   void SetUseTransformedRasterization(bool use);
 
+  void SetDirectlyCompositedImageSize(base::Optional<gfx::Size>);
+
   size_t GPUMemoryUsageInBytes() const override;
 
   void RunMicroBenchmark(MicroBenchmarkImpl* benchmark) override;
@@ -118,10 +121,6 @@ class CC_EXPORT PictureLayerImpl
 
   // Used for benchmarking
   RasterSource* GetRasterSource() const { return raster_source_.get(); }
-
-  void set_is_directly_composited_image(bool is_directly_composited_image) {
-    is_directly_composited_image_ = is_directly_composited_image;
-  }
 
   // This enum is the return value of the InvalidateRegionForImages() call. The
   // possible values represent the fact that there are no images on this layer
@@ -174,6 +173,7 @@ class CC_EXPORT PictureLayerImpl
   float MaximumContentsScale() const;
   void UpdateViewportRectForTilePriorityInContentSpace();
   PictureLayerImpl* GetRecycledTwinLayer() const;
+  float GetDirectlyCompositedImageRasterScale() const;
 
   void SanityCheckTilingState() const;
 
@@ -188,8 +188,6 @@ class CC_EXPORT PictureLayerImpl
 
   void RegisterAnimatedImages();
   void UnregisterAnimatedImages();
-
-  std::unique_ptr<base::DictionaryValue> LayerAsJson() const override;
 
   // Set the collection of PaintWorkletInput as well as their PaintImageId that
   // are part of this layer.
@@ -230,8 +228,9 @@ class CC_EXPORT PictureLayerImpl
 
   bool nearest_neighbor_ : 1;
   bool use_transformed_rasterization_ : 1;
-  bool is_directly_composited_image_ : 1;
   bool can_use_lcd_text_ : 1;
+
+  base::Optional<gfx::Size> directly_composited_image_size_;
 
   // Use this instead of |visible_layer_rect()| for tiling calculations. This
   // takes external viewport and transform for tile priority into account.

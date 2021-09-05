@@ -15,16 +15,15 @@ etc., where each group organizes related histograms.
 
 ## Coding (Emitting to Histograms)
 
-Generally you should be using the
+Prefer the helper functions defined in
 [histogram_functions.h](https://cs.chromium.org/chromium/src/base/metrics/histogram_functions.h).
-You can also use the macros in
-[histogram_macros.h](https://cs.chromium.org/chromium/src/base/metrics/histogram_macros.h).
-The macros are best used in code where efficiency matters--when the histogram is
-emitted frequently (i.e., on any regular basis resulting in more than about ten
-calls per hour) or on a critical path.  The macros cache a pointer to the
-histogram object for efficiency, though this comes at the cost of increased
-binary size. (130 bytes/macro sounds small but could and does easily add up.)
-If efficiency isn't a concern, prefer the histogram_functions.h methods.
+These functions take a lock and perform a map lookup, but the overhead is
+generally insignificant. However, when recording metrics on the critical path
+(e.g. called in a loop or logged multiple times per second), use the macros in
+[histogram_macros.h](https://cs.chromium.org/chromium/src/base/metrics/histogram_macros.h)
+instead. These macros cache a pointer to the histogram object for efficiency,
+though this comes at the cost of increased binary size: 130 bytes/macro usage
+sounds small but quickly adds up.
 
 ### Don't Use the Same Histogram Logging Call in Multiple Places
 
@@ -38,7 +37,7 @@ not the other.)
 ### Use Fixed Strings When Using Histogram Macros
 
 When using histogram macros (calls such as `UMA_HISTOGRAM_ENUMERATION`), you're
-not allow to construct your string dynamically so that it can vary at a
+not allowed to construct your string dynamically so that it can vary at a
 callsite.  At a given callsite (preferably you have only one), the string
 should be the same every time the macro is called.  If you need to use dynamic
 names, use the functions in histogram_functions.h instead of the macros.
@@ -262,16 +261,20 @@ UMA_HISTOGRAM_PERCENTAGE macro provided in
 You can also easily emit any ratio as a linear histogram (for equally
 sized buckets).
 
-For such histograms, you should think carefully about _when_ the values are
-emitted.  Normally, you should emit values periodically at a set time interval,
-such as every 5 minutes.  Conversely, we strongly discourage emitting values
-based on event triggers.  For example, we do not recommend recording a ratio
-at the end of a video playback.
+For such histograms, you want each value recorded to cover approximately
+the same span of time.  This typically means emitting values periodically
+at a set time interval, such as every 5 minutes.  We do not recommend
+recording a ratio at the end of a video playback, as lengths of videos
+vary greatly.
 
-Why?  You typically cannot make decisions based on histograms whose values are
-recorded in response to an event, because such metrics can conflate heavy usage
-with light usage.  It's easier to reason about metrics that route around this
-source of bias.
+It is okay to emit at the end of an animation sequence when what's being
+animated is fixed / known.  In this case, each value will represent
+roughly the same span of time.
+
+Why?  You typically cannot make decisions based on histograms whose
+values are recorded in response to an event that varies in length,
+because such metrics can conflate heavy usage with light usage.  It's
+easier to reason about metrics that route around this source of bias.
 
 Many developers have been bitten by this.  For example, it was previously common
 to emit an actions-per-minute ratio whenever Chrome was backgrounded.
@@ -345,20 +348,27 @@ encouraged and enforced by Chrome metrics team through reviews.
 
 #### How to choose expiry for histograms
 
-For new histograms if it is used for launching a project for which the timeline
-is known then pick an expiry based on your project timeline. Otherwise, we
-recommend choosing 3-6 months.
+If you are adding a histogram that will be used to evaluate a feature launch,
+set an expiry date consistent with the expected feature launch date. Otherwise,
+we recommend choosing 3-6 months.
 
-For already existing histograms here are different scenarios:
+Here are some guidelines for common scenarios:
 
-*   Owner moved to different project - find new owner
-*   Owner doesn’t use it, team doesn’t use it - remove
-*   Not in use now, but maybe useful in the far future - remove
-*   Not in use now, but maybe useful in the near future - pick 3 months or 2
-    milestone ahead
-*   Actively in use now, useful for short term - pick 3-6 month or appropriate
-    number of milestones ahead
-*   Actively in use, seems useful for indefinite time - pick 1 year or more
+*   If the listed owner moved to different project, find a new owner.
+*   If neither the owner nor the team uses the histogram, remove it.
+*   If the histogram is not in use now, but might be useful in the far future,
+    remove it.
+*   If the histogram is not in use now, but might be useful in the near
+    future, pick ~3 months or ~2 milestones ahead.
+*   If the histogram is actively in use now and useful for a short term, pick
+    3-6 month or 2-4 milestones ahead.
+*   If the histogram is actively in use and seems useful for an indefinite time,
+    pick 1 year.
+
+We also have a tool that automatically extends expiry dates. The 80% more
+frequently accessed histograms are pushed out every Tuesday, to 6 months from
+the date of the run. Googlers can view the [design
+doc](https://docs.google.com/document/d/1IEAeBF9UnYQMDfyh2gdvE7WlUKsfIXIZUw7qNoU89A4).
 
 ### Expired histogram notifier
 

@@ -10,7 +10,6 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/test/task_environment.h"
 #include "base/values.h"
@@ -72,7 +71,7 @@ class FakeMultipartUploadRequest : public MultipartUploadRequestBase {
       const std::string& content_type,
       int64_t content_length,
       const base::FilePath& local_file_path,
-      const FileResourceCallback& callback,
+      FileResourceCallback callback,
       const google_apis::ProgressCallback& progress_callback,
       const GURL& url,
       std::string* upload_content_type,
@@ -82,7 +81,7 @@ class FakeMultipartUploadRequest : public MultipartUploadRequestBase {
                                    content_type,
                                    content_length,
                                    local_file_path,
-                                   callback,
+                                   std::move(callback),
                                    progress_callback),
         url_(url),
         upload_content_type_(upload_content_type),
@@ -138,7 +137,7 @@ class BaseRequestsTest : public testing::Test {
     params->process_id = network::mojom::kBrowserProcessId;
     params->is_corb_enabled = false;
     network_context_->CreateURLLoaderFactory(
-        mojo::MakeRequest(&url_loader_factory_), std::move(params));
+        url_loader_factory_.BindNewPipeAndPassReceiver(), std::move(params));
     test_shared_loader_factory_ =
         base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
             url_loader_factory_.get());
@@ -178,7 +177,7 @@ class BaseRequestsTest : public testing::Test {
   std::unique_ptr<network::mojom::NetworkService> network_service_;
   std::unique_ptr<network::mojom::NetworkServiceClient> network_service_client_;
   mojo::Remote<network::mojom::NetworkContext> network_context_;
-  network::mojom::URLLoaderFactoryPtr url_loader_factory_;
+  mojo::Remote<network::mojom::URLLoaderFactory> url_loader_factory_;
   scoped_refptr<network::WeakWrapperSharedURLLoaderFactory>
       test_shared_loader_factory_;
   std::unique_ptr<RequestSender> sender_;

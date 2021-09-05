@@ -25,7 +25,6 @@ class FakeMultiDeviceSetup : public MultiDeviceSetupBase {
   FakeMultiDeviceSetup();
   ~FakeMultiDeviceSetup() override;
 
-  void BindHandle(mojo::ScopedMessagePipeHandle handle);
   void FlushForTesting();
 
   bool HasAtLeastOneHostStatusObserver();
@@ -94,7 +93,9 @@ class FakeMultiDeviceSetup : public MultiDeviceSetupBase {
   void AddFeatureStateObserver(
       mojo::PendingRemote<mojom::FeatureStateObserver> observer) override;
   void GetEligibleHostDevices(GetEligibleHostDevicesCallback callback) override;
-  void SetHostDevice(const std::string& host_device_id,
+  void GetEligibleActiveHostDevices(
+      GetEligibleActiveHostDevicesCallback callback) override;
+  void SetHostDevice(const std::string& host_instance_id_or_legacy_device_id,
                      const std::string& auth_token,
                      SetHostDeviceCallback callback) override;
   void RemoveHostDevice() override;
@@ -111,7 +112,7 @@ class FakeMultiDeviceSetup : public MultiDeviceSetupBase {
 
   // MultiDeviceSetupBase:
   void SetHostDeviceWithoutAuthToken(
-      const std::string& host_device_id,
+      const std::string& host_instance_id_or_legacy_device_id,
       mojom::PrivilegedHostDeviceSetter::SetHostDeviceCallback callback)
       override;
 
@@ -120,6 +121,8 @@ class FakeMultiDeviceSetup : public MultiDeviceSetupBase {
   mojo::RemoteSet<mojom::FeatureStateObserver> feature_state_observers_;
 
   std::vector<GetEligibleHostDevicesCallback> get_eligible_hosts_args_;
+  std::vector<GetEligibleActiveHostDevicesCallback>
+      get_eligible_active_hosts_args_;
   std::vector<std::tuple<std::string, std::string, SetHostDeviceCallback>>
       set_host_args_;
   size_t num_remove_host_calls_ = 0u;

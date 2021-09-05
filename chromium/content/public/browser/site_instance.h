@@ -153,6 +153,9 @@ class CONTENT_EXPORT SiteInstance : public base::RefCounted<SiteInstance> {
   // assignment.
   virtual bool IsSameSiteWithURL(const GURL& url) = 0;
 
+  // Returns true if this object is used for a <webview> guest.
+  virtual bool IsGuest() = 0;
+
   // Factory method to create a new SiteInstance.  This will create a new
   // new BrowsingInstance, so it should only be used when creating a new tab
   // from scratch (or similar circumstances).
@@ -169,6 +172,13 @@ class CONTENT_EXPORT SiteInstance : public base::RefCounted<SiteInstance> {
   static scoped_refptr<SiteInstance> CreateForURL(
       content::BrowserContext* browser_context,
       const GURL& url);
+
+  // Factory method to create a SiteInstance for a <webview> guest in a new
+  // BrowsingInstance.
+  // TODO(734722): Replace this method once SecurityPrincipal is available.
+  static scoped_refptr<SiteInstance> CreateForGuest(
+      content::BrowserContext* browser_context,
+      const GURL& guest_site_url);
 
   // Determine if a URL should "use up" a site.  URLs such as about:blank or
   // chrome-native:// leave the site unassigned.

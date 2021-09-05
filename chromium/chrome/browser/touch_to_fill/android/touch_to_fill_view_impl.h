@@ -26,18 +26,11 @@ class TouchToFillViewImpl : public TouchToFillView {
   void Show(
       const GURL& url,
       IsOriginSecure is_origin_secure,
-      base::span<const password_manager::CredentialPair> credentials) override;
+      base::span<const password_manager::UiCredential> credentials) override;
   void OnCredentialSelected(
-      const password_manager::CredentialPair& credential) override;
+      const password_manager::UiCredential& credential) override;
   void OnDismiss() override;
 
-  // Called from Java via JNI:
-  void FetchFavicon(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jstring>& j_credential_origin,
-      const base::android::JavaParamRef<jstring>& j_frame_origin,
-      jint desized_size_in_pixel,
-      const base::android::JavaParamRef<jobject>& j_callback);
   void OnCredentialSelected(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& credential);
@@ -45,8 +38,14 @@ class TouchToFillViewImpl : public TouchToFillView {
   void OnDismiss(JNIEnv* env);
 
  private:
+  // Returns either the fully initialized java counterpart of this bridge or
+  // a is_null() reference if the creation failed. By using this method, the
+  // bridge will try to recreate the java object if it failed previously (e.g.
+  // because there was no native window available).
+  base::android::ScopedJavaGlobalRef<jobject> GetOrCreateJavaObject();
+
   TouchToFillController* controller_ = nullptr;
-  base::android::ScopedJavaGlobalRef<jobject> java_object_;
+  base::android::ScopedJavaGlobalRef<jobject> java_object_internal_;
 };
 
 #endif  // CHROME_BROWSER_TOUCH_TO_FILL_ANDROID_TOUCH_TO_FILL_VIEW_IMPL_H_

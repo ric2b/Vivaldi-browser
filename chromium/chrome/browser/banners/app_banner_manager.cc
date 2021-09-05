@@ -15,14 +15,11 @@
 #include "base/time/time.h"
 #include "chrome/browser/banners/app_banner_metrics.h"
 #include "chrome/browser/banners/app_banner_settings_helper.h"
-#include "chrome/browser/browser_process.h"
 #include "chrome/browser/engagement/site_engagement_service.h"
 #include "chrome/browser/installable/installable_metrics.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
-#include "components/rappor/public/rappor_utils.h"
-#include "components/rappor/rappor_service_impl.h"
 #include "content/public/browser/back_forward_cache.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
@@ -202,16 +199,6 @@ void AppBannerManager::RemoveObserver(Observer* observer) {
   observer_list_.RemoveObserver(observer);
 }
 
-void AppBannerManager::MigrateObserverListForTesting(
-    content::WebContents* web_contents) {
-  AppBannerManager* existing_manager = FromWebContents(web_contents);
-  for (Observer& observer : existing_manager->observer_list_)
-    observer.OnAppBannerManagerChanged(this);
-  DCHECK(existing_manager->observer_list_.begin() ==
-         existing_manager->observer_list_.end())
-      << "Old observer list must be empty after transfer to test instance.";
-}
-
 bool AppBannerManager::IsPromptAvailableForTesting() const {
   return receiver_.is_bound();
 }
@@ -295,6 +282,10 @@ bool AppBannerManager::HasSufficientEngagement() const {
 bool AppBannerManager::ShouldBypassEngagementChecks() const {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
       switches::kBypassAppBannerEngagementChecks);
+}
+
+bool AppBannerManager::IsExternallyInstalledWebApp() {
+  return false;
 }
 
 bool AppBannerManager::IsWebAppConsideredInstalled() {
@@ -399,7 +390,7 @@ void AppBannerManager::OnDidPerformInstallableWebAppCheck(
   SendBannerPromptRequest();
 }
 
-void AppBannerManager::RecordDidShowBanner(const std::string& event_name) {
+void AppBannerManager::RecordDidShowBanner() {
   content::WebContents* contents = web_contents();
   DCHECK(contents);
 
@@ -407,9 +398,6 @@ void AppBannerManager::RecordDidShowBanner(const std::string& event_name) {
       contents, validated_url_, GetAppIdentifier(),
       AppBannerSettingsHelper::APP_BANNER_EVENT_DID_SHOW,
       GetCurrentTime());
-  rappor::SampleDomainAndRegistryFromGURL(g_browser_process->rappor_service(),
-                                          event_name,
-                                          contents->GetLastCommittedURL());
 }
 
 void AppBannerManager::ReportStatus(InstallableStatusCode code) {

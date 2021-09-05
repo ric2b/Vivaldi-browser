@@ -15,7 +15,7 @@
 #include "components/infobars/core/infobar_manager.h"
 #include "components/send_tab_to_self/send_tab_to_self_model.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#include "ios/chrome/browser/infobars/infobar.h"
+#include "ios/chrome/browser/infobars/infobar_ios.h"
 #include "ios/chrome/browser/infobars/infobar_manager_impl.h"
 #import "ios/chrome/browser/infobars/infobar_utils.h"
 #include "ios/chrome/browser/send_tab_to_self/ios_send_tab_to_self_infobar_delegate.h"
@@ -31,7 +31,7 @@
 namespace send_tab_to_self {
 
 SendTabToSelfClientServiceIOS::SendTabToSelfClientServiceIOS(
-    ios::ChromeBrowserState* browser_state,
+    ChromeBrowserState* browser_state,
     SendTabToSelfModel* model)
     : model_(model), browser_state_(browser_state) {
   model_->AddObserver(this);
@@ -117,7 +117,7 @@ void SendTabToSelfClientServiceIOS::WebStateActivatedAt(
     web::WebState* old_web_state,
     web::WebState* new_web_state,
     int active_index,
-    int reason) {
+    ActiveWebStateChangeReason reason) {
   DCHECK(entry_);
 
   // This can happen if the user close the last tab in the tab picker.

@@ -1,15 +1,12 @@
 <div id="tpm-error-message" class="step faded hidden" hidden>
-  <div class="step-contents">
-    <div class="error-header">
-      <img alt class="error-icon" src="chrome://theme/IDR_FATAL_ERROR">
-      <div id="tpm-error-title" class="error-title"
-          i18n-content="errorTpmFailureTitle"></div>
+  <oobe-dialog id="tpm-error-dialog" role="dialog" has-buttons
+      title-key="errorTpmFailureTitle" subtitle-key="errorTpmFailureReboot">
+    <iron-icon slot="oobe-icon" icon="cr:warning" class="warning">
+    </iron-icon>
+    <div slot="bottom-buttons" class="layout horizontal end-justified">
+      <oobe-text-button id="tpm-restart-button" inverse
+          text-key="errorTpmFailureRebootButton">
+      </oobe-text-button>
     </div>
-    <div class="error-body">
-      <div id="tmp-error-reboot-text" class="error-message-paragraph"
-          i18n-content="errorTpmFailureReboot"></div>
-      <div id="tpm-error-message-controls"
-          class="error-message-paragraph"></div>
-    </div>
-  </div>
+  </oobe-dialog>
 </div>

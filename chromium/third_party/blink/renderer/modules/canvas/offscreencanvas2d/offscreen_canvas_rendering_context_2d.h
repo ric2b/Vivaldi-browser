@@ -12,7 +12,6 @@
 #include "third_party/blink/renderer/core/html/canvas/canvas_rendering_context.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_rendering_context_factory.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.h"
-#include "third_party/blink/renderer/platform/graphics/paint/paint_recorder.h"
 
 namespace blink {
 
@@ -63,7 +62,8 @@ class MODULES_EXPORT OffscreenCanvasRenderingContext2D final
   bool IsComposited() const override { return false; }
   bool IsAccelerated() const override;
   void SetOffscreenCanvasGetContextResult(OffscreenRenderingContext&) final;
-  void SetIsHidden(bool) final { NOTREACHED(); }
+  void SetIsInHiddenPage(bool) final { NOTREACHED(); }
+  void SetIsBeingDisplayed(bool) final { NOTREACHED(); }
   void Stop() final { NOTREACHED(); }
   void SetCanvasGetContextResult(RenderingContext&) final {}
   void ClearRect(double x, double y, double width, double height) override {
@@ -99,10 +99,15 @@ class MODULES_EXPORT OffscreenCanvasRenderingContext2D final
   CanvasResourceProvider* GetOrCreateCanvasResourceProvider() const;
   CanvasResourceProvider* GetCanvasResourceProvider() const;
 
+  // Offscreen canvas doesn't have any notion of image orientation.
+  RespectImageOrientationEnum RespectImageOrientation() const final {
+    return kRespectImageOrientation;
+  }
+
   bool ParseColorOrCurrentColor(Color&, const String& color_string) const final;
 
-  cc::PaintCanvas* DrawingCanvas() const final;
-  cc::PaintCanvas* ExistingDrawingCanvas() const final;
+  cc::PaintCanvas* GetOrCreatePaintCanvas() final;
+  cc::PaintCanvas* GetPaintCanvas() const final;
 
   void DidDraw() final;
   void DidDraw(const SkIRect& dirty_rect) final;
@@ -111,19 +116,16 @@ class MODULES_EXPORT OffscreenCanvasRenderingContext2D final
   sk_sp<PaintFilter> StateGetFilter() final;
   void SnapshotStateForFilter() final;
 
-  void ValidateStateStack() const final;
+  void ValidateStateStackWithCanvas(const cc::PaintCanvas*) const final;
 
   bool HasAlpha() const final { return CreationAttributes().alpha; }
   bool isContextLost() const override;
 
   ImageBitmap* TransferToImageBitmap(ScriptState*) final;
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
   bool PushFrame() override;
-
-  bool HasRecordedDrawCommands() { return have_recorded_draw_commands_; }
-  bool IsDeferralEnabled() const final { return is_deferral_enabled_; }
 
  protected:
   CanvasColorParams ColorParams() const override;
@@ -132,12 +134,9 @@ class MODULES_EXPORT OffscreenCanvasRenderingContext2D final
                    size_t row_bytes,
                    int x,
                    int y) override;
+  void WillOverwriteCanvas() override;
 
  private:
-  void StartRecording();
-  bool is_deferral_enabled_;
-  std::unique_ptr<PaintRecorder> recorder_;
-  bool have_recorded_draw_commands_;
   void FinalizeFrame() final;
   void FlushRecording();
 
@@ -162,12 +161,6 @@ class MODULES_EXPORT OffscreenCanvasRenderingContext2D final
   std::mt19937 random_generator_;
   std::bernoulli_distribution bernoulli_distribution_;
 };
-
-DEFINE_TYPE_CASTS(OffscreenCanvasRenderingContext2D,
-                  CanvasRenderingContext,
-                  context,
-                  context->Is2d() && context->Host(),
-                  context.Is2d() && context.Host());
 
 }  // namespace blink
 

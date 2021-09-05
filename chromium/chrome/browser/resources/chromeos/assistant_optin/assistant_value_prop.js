@@ -14,7 +14,7 @@
 Polymer({
   is: 'assistant-value-prop',
 
-  behaviors: [OobeDialogHostBehavior],
+  behaviors: [OobeI18nBehavior, OobeDialogHostBehavior],
 
   properties: {
     /**
@@ -26,24 +26,17 @@ Polymer({
     },
 
     /**
-     * System locale.
-     */
-    locale: {
-      type: String,
-    },
-
-    /**
      * Default url for locale en_us.
      */
     defaultUrl: {
       type: String,
-      value: function() {
+      value() {
         return this.urlTemplate_.replace('$', 'en_us');
       }
     },
   },
 
-  setUrlTemplateForTesting: function(url) {
+  setUrlTemplateForTesting(url) {
     this.urlTemplate_ = url;
   },
 
@@ -130,7 +123,7 @@ Polymer({
    *
    * @private
    */
-  onSkipTap_: function() {
+  onSkipTap_() {
     if (this.buttonsDisabled) {
       return;
     }
@@ -145,7 +138,7 @@ Polymer({
    *
    * @private
    */
-  onNextTap_: function() {
+  onNextTap_() {
     if (this.buttonsDisabled) {
       return;
     }
@@ -159,27 +152,32 @@ Polymer({
    * Sets learn more content text and shows it as overlay dialog.
    * @param {string} content HTML formatted text to show.
    */
-  showLearnMoreOverlay: function(title, additionalInfo) {
+  showLearnMoreOverlay(title, additionalInfo) {
     this.$['overlay-title-text'].innerHTML =
         this.sanitizer_.sanitizeHtml(title);
     this.$['overlay-additional-info-text'].innerHTML =
         this.sanitizer_.sanitizeHtml(additionalInfo);
+    this.$['learn-more-overlay'].setTitleAriaLabel(title);
 
-    var overlay = this.$['learn-more-overlay'];
-    overlay.hidden = false;
+    this.$['learn-more-overlay'].showModal();
+    this.$['overlay-close-button'].focus();
   },
 
   /**
    * Hides overlay dialog.
    */
-  hideOverlay: function() {
-    this.$['learn-more-overlay'].hidden = true;
+  hideOverlay() {
+    this.$['learn-more-overlay'].close();
+    if (this.lastFocusedElement) {
+      this.lastFocusedElement.focus();
+      this.lastFocusedElement = null;
+    }
   },
 
   /**
    * Reloads value prop webview.
    */
-  reloadPage: function() {
+  reloadPage() {
     this.fire('loading');
 
     if (this.initialized_) {
@@ -192,7 +190,8 @@ Polymer({
 
     this.loadingError_ = false;
     this.headerReceived_ = false;
-    this.valuePropView_.src = this.urlTemplate_.replace('$', this.locale);
+    let locale = this.locale.replace('-', '_').toLowerCase();
+    this.valuePropView_.src = this.urlTemplate_.replace('$', locale);
 
     this.buttonsDisabled = true;
   },
@@ -200,7 +199,7 @@ Polymer({
   /**
    * Handles event when value prop webview cannot be loaded.
    */
-  onWebViewErrorOccurred: function(details) {
+  onWebViewErrorOccurred(details) {
     this.fire('error');
     this.loadingError_ = true;
   },
@@ -208,7 +207,7 @@ Polymer({
   /**
    * Handles event when value prop webview is loaded.
    */
-  onWebViewContentLoad: function(details) {
+  onWebViewContentLoad(details) {
     if (details == null) {
       return;
     }
@@ -231,7 +230,7 @@ Polymer({
   /**
    * Handles event when webview request headers received.
    */
-  onWebViewHeadersReceived: function(details) {
+  onWebViewHeadersReceived(details) {
     if (details == null) {
       return;
     }
@@ -251,7 +250,7 @@ Polymer({
   /**
    * Reload the page with the given consent string text data.
    */
-  reloadContent: function(data) {
+  reloadContent(data) {
     this.$['value-prop-dialog'].setAttribute(
         'aria-label', data['valuePropTitle']);
     this.$['user-image'].src = data['valuePropUserImage'];
@@ -272,7 +271,7 @@ Polymer({
   /**
    * Add a setting zippy with the provided data.
    */
-  addSettingZippy: function(zippy_data) {
+  addSettingZippy(zippy_data) {
     if (this.settingZippyLoaded_) {
       if (this.webViewLoaded_ && this.consentStringLoaded_) {
         this.onPageLoaded();
@@ -286,27 +285,29 @@ Polymer({
       zippy.setAttribute(
           'icon-src',
           'data:text/html;charset=utf-8,' +
-              encodeURIComponent(zippy.getWrappedIcon(data['iconUri'])));
+              encodeURIComponent(
+                  zippy.getWrappedIcon(data['iconUri'], data['title'])));
       zippy.setAttribute('hide-line', true);
       zippy.setAttribute('popup-style', true);
 
       var title = document.createElement('div');
-      title.className = 'zippy-title';
+      title.slot = 'title';
       title.innerHTML = this.sanitizer_.sanitizeHtml(data['title']);
       zippy.appendChild(title);
 
       var description = document.createElement('div');
-      description.className = 'zippy-description';
+      description.slot = 'content';
       description.innerHTML = this.sanitizer_.sanitizeHtml(data['description']);
       description.innerHTML += '&ensp;';
 
       var learnMoreLink = document.createElement('a');
-      learnMoreLink.className = 'learn-more-link';
+      learnMoreLink.slot = 'content';
       learnMoreLink.textContent = data['popupLink'];
       learnMoreLink.setAttribute('href', 'javascript:void(0)');
-      learnMoreLink.onclick = function(title, additionalInfo) {
+      learnMoreLink.onclick = function(title, additionalInfo, focus) {
+        this.lastFocusedElement = focus;
         this.showLearnMoreOverlay(title, additionalInfo);
-      }.bind(this, data['title'], data['additionalInfo']);
+      }.bind(this, data['title'], data['additionalInfo'], learnMoreLink);
 
       description.appendChild(learnMoreLink);
       zippy.appendChild(description);
@@ -323,7 +324,7 @@ Polymer({
   /**
    * Handles event when all the page content has been loaded.
    */
-  onPageLoaded: function() {
+  onPageLoaded() {
     this.fire('loaded');
 
     this.buttonsDisabled = false;
@@ -338,14 +339,12 @@ Polymer({
   /**
    * Signal from host to show the screen.
    */
-  onShow: function() {
+  onShow() {
     var requestFilter = {urls: ['<all_urls>'], types: ['main_frame']};
 
     this.$['overlay-close-button'].addEventListener(
         'click', this.hideOverlay.bind(this));
     this.valuePropView_ = this.$['value-prop-view'];
-    this.locale =
-        loadTimeData.getString('locale').replace('-', '_').toLowerCase();
 
     if (!this.initialized_) {
       this.valuePropView_.request.onErrorOccurred.addListener(

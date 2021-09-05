@@ -1,0 +1,84 @@
+// Copyright 2018 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#include "sync/notes/note_local_changes_builder.h"
+
+#include <memory>
+#include <string>
+#include <utility>
+
+#include "base/strings/utf_string_conversions.h"
+#include "components/sync/base/time.h"
+#include "components/sync/protocol/notes_model_metadata.pb.h"
+#include "notes/note_node.h"
+#include "sync/notes/note_specifics_conversions.h"
+#include "sync/notes/synced_note_tracker.h"
+
+namespace sync_notes {
+
+NoteLocalChangesBuilder::NoteLocalChangesBuilder(
+    SyncedNoteTracker* const note_tracker,
+    vivaldi::NotesModel* notes_model)
+    : note_tracker_(note_tracker), notes_model_(notes_model) {
+  DCHECK(note_tracker);
+  DCHECK(notes_model);
+}
+
+syncer::CommitRequestDataList NoteLocalChangesBuilder::BuildCommitRequests(
+    size_t max_entries) const {
+  DCHECK(note_tracker_);
+  const std::vector<const SyncedNoteTracker::Entity*>
+      entities_with_local_changes =
+          note_tracker_->GetEntitiesWithLocalChanges(max_entries);
+  DCHECK_LE(entities_with_local_changes.size(), max_entries);
+
+  syncer::CommitRequestDataList commit_requests;
+  for (const SyncedNoteTracker::Entity* entity : entities_with_local_changes) {
+    DCHECK(entity);
+    DCHECK(entity->IsUnsynced());
+    const sync_pb::EntityMetadata* metadata = entity->metadata();
+
+    auto data = std::make_unique<syncer::EntityData>();
+    data->id = metadata->server_id();
+    data->creation_time = syncer::ProtoTimeToTime(metadata->creation_time());
+    data->modification_time =
+        syncer::ProtoTimeToTime(metadata->modification_time());
+    if (!metadata->is_deleted()) {
+      const vivaldi::NoteNode* node = entity->note_node();
+      DCHECK(node);
+      const vivaldi::NoteNode* parent = node->parent();
+      const SyncedNoteTracker::Entity* parent_entity =
+          note_tracker_->GetEntityForNoteNode(parent);
+      DCHECK(parent_entity);
+      data->parent_id = parent_entity->metadata()->server_id();
+      data->is_folder = node->is_folder();
+      data->unique_position = metadata->unique_position();
+      // Assign specifics only for the non-deletion case. In case of deletion,
+      // EntityData should contain empty specifics to indicate deletion.
+      // TODO(crbug.com/978430): has_final_guid() should be enough below
+      // assuming that all codepaths that populate the final GUID make sure the
+      // local model has the appropriate GUID too (and update if needed).
+      data->specifics = CreateSpecificsFromNoteNode(
+          node, notes_model_, entity->final_guid_matches(node->guid()));
+      // TODO(crbug.com/1058376): check after finishing if we need to use full
+      // title instead of legacy canonicalized one.
+      data->name = data->specifics.notes().legacy_canonicalized_title();
+    }
+
+    auto request = std::make_unique<syncer::CommitRequestData>();
+    request->entity = std::move(data);
+    request->sequence_number = metadata->sequence_number();
+    request->base_version = metadata->server_version();
+    // Specifics hash has been computed in the tracker when this entity has been
+    // added/updated.
+    request->specifics_hash = metadata->specifics_hash();
+
+    note_tracker_->MarkCommitMayHaveStarted(entity);
+
+    commit_requests.push_back(std::move(request));
+  }
+  return commit_requests;
+}
+
+}  // namespace sync_notes

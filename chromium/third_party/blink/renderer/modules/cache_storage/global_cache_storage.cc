@@ -43,7 +43,8 @@ class GlobalCacheStorageImpl final
   CacheStorage* Caches(T& fetching_scope, ExceptionState& exception_state) {
     ExecutionContext* context = fetching_scope.GetExecutionContext();
     if (!context->GetSecurityOrigin()->CanAccessCacheStorage()) {
-      if (context->GetSecurityContext().IsSandboxed(WebSandboxFlags::kOrigin)) {
+      if (context->GetSecurityContext().IsSandboxed(
+              mojom::blink::WebSandboxFlags::kOrigin)) {
         exception_state.ThrowSecurityError(
             "Cache storage is disabled because the context is sandboxed and "
             "lacks the 'allow-same-origin' flag.");
@@ -62,10 +63,11 @@ class GlobalCacheStorageImpl final
     }
 
     if (!caches_) {
-      if (!context->GetInterfaceProvider()) {
+      if (&context->GetBrowserInterfaceBroker() ==
+          &GetEmptyBrowserInterfaceBroker()) {
         exception_state.ThrowSecurityError(
-            "Cache storage isn't available on detached context. No interface "
-            "provider.");
+            "Cache storage isn't available on detached context. No browser "
+            "interface broker.");
         return nullptr;
       }
       caches_ = MakeGarbageCollected<CacheStorage>(
@@ -74,7 +76,7 @@ class GlobalCacheStorageImpl final
     return caches_;
   }
 
-  void Trace(blink::Visitor* visitor) override {
+  void Trace(Visitor* visitor) override {
     visitor->Trace(caches_);
     Supplement<T>::Trace(visitor);
   }

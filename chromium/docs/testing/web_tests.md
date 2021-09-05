@@ -13,6 +13,12 @@ Note that we changed the term "layout tests" to "web tests".
 Please assume these terms mean the identical stuff. We also call it as
 "WebKit tests" and "WebKit layout tests".
 
+["Web platform tests"](./web_platform_tests.md) (WPT) are the preferred form of
+web tests and are located at
+[web_tests/external/wpt](/third_party/blink/web_tests/external/wpt).
+Tests that should work across browsers go there. Other directories are for
+Chrome-specific tests only.
+
 [TOC]
 
 ## Running Web Tests
@@ -68,11 +74,12 @@ python third_party/blink/tools/run_web_tests.py -t android --android
 
 Tests marked as `[ Skip ]` in
 [TestExpectations](../../third_party/blink/web_tests/TestExpectations)
-won't be run at all, generally because they cause some intractable tool error.
+won't be run by default, generally because they cause some intractable tool error.
 To force one of them to be run, either rename that file or specify the skipped
-test as the only one on the command line (see below). Read the
-[Web Test Expectations documentation](./web_test_expectations.md) to learn
-more about TestExpectations and related files.
+test on the command line (see below) or in a file specified with --test-list
+(however, --skip=always can make the tests marked as `[ Skip ]` always skipped).
+Read the [Web Test Expectations documentation](./web_test_expectations.md) to
+learn more about TestExpectations and related files.
 
 *** promo
 Currently only the tests listed in
@@ -220,37 +227,70 @@ There are two ways to run web tests with additional command-line arguments:
   `web_tests/FlagExpectations/blocking-repaint`, if this file exists. The
   suppressions in this file override the main TestExpectations file.
 
+  It will also look for baselines in `web_tests/flag-specific/blocking-repaint`.
+  The baselines in this directory override the fallback baselines.
+
+  By default, name of the expectation file name under
+  `web_tests/FlagExpectations` and name of the baseline directory under
+  `web_tests/flag-specific` uses the first flag of --additional-driver-flag
+  with leading '-'s stripped.
+
+  You can also customize the name in `web_tests/FlagSpecificConfig` when
+  the name is too long or when we need to match multiple additional args:
+
+  ```json
+  {
+    "name": "short-name",
+    "args": ["--blocking-repaint", "--another-flag"]
+  }
+  ```
+
+  When at least `--additional-driver-flag=--blocking-repaint` and
+  `--additional-driver-flag=--another-flag` are specified, `short-name` will
+  be used as name of the flag specific expectation file and the baseline directory.
+
+  With the config, you can also use `--flag-specific=short-name` as a shortcut
+  of `--additional-driver-flag=--blocking-repaint --additional-driver-flag=--another-flag`.
+
 * Using a *virtual test suite* defined in
   [web_tests/VirtualTestSuites](../../third_party/blink/web_tests/VirtualTestSuites).
-  A virtual test suite runs a subset of web tests under a specific path with
-  additional flags. For example, you could test a (hypothetical) new mode for
+  A virtual test suite runs a subset of web tests with additional flags, with
+  `virtual/<prefix>/...` in their paths. The tests can be virtual tests that
+  map to real base tests (directories or files) whose paths match any of the
+  specified bases, or any real tests under `web_tests/virtual/<prefix>/`
+  directory. For example, you could test a (hypothetical) new mode for
   repainting using the following virtual test suite:
 
   ```json
   {
     "prefix": "blocking_repaint",
-    "base": "fast/repaint",
-    "args": ["--blocking-repaint"],
+    "bases": ["compositing", "fast/repaint"],
+    "args": ["--blocking-repaint"]
   }
   ```
 
   This will create new "virtual" tests of the form
+  `virtual/blocking_repaint/compositing/...` and
   `virtual/blocking_repaint/fast/repaint/...` which correspond to the files
-  under `web_tests/fast/repaint` and pass `--blocking-repaint` to
-  content_shell when they are run.
+  under `web_tests/compositing` and `web_tests/fast/repaint`, respectively,
+  and pass `--blocking-repaint` to `content_shell` when they are run.
 
-  These virtual tests exist in addition to the original `fast/repaint/...`
-  tests. They can have their own expectations in TestExpectations, and their own
-  baselines.  The test harness will use the non-virtual baselines as a fallback.
-  However, the non-virtual expectations are not inherited: if
-  `fast/repaint/foo.html` is marked `[ Fail ]`, the test harness still expects
+  These virtual tests exist in addition to the original `compositing/...` and
+  `fast/repaint/...` tests. They can have their own expectations in
+  `web_tests/TestExpectations`, and their own baselines. The test harness will
+  use the non-virtual baselines as a fallback. However, the non-virtual
+  expectations are not inherited: if `fast/repaint/foo.html` is marked
+  `[ Fail ]`, the test harness still expects
   `virtual/blocking_repaint/fast/repaint/foo.html` to pass. If you expect the
   virtual test to also fail, it needs its own suppression.
 
-  The "prefix" value does not have to be unique. This is useful if you want to
-  run multiple directories with the same flags (but see the notes below about
-  performance). Using the same prefix for different sets of flags is not
-  recommended.
+  This will also let any real tests under `web_tests/virtual/blocking_repaint`
+  directory run with the `--blocking-repaint` flag.
+
+  The "prefix" value should be unique. Multiple directories with the same flags
+  should be listed in the same "bases" list. The "bases" list can be empty,
+  in case that we just want to run the real tests under `virtual/<prefix>`
+  with the flags without creating any virtual tests.
 
 For flags whose implementation is still in progress, virtual test suites and
 flag-specific expectations represent two alternative strategies for testing.
@@ -273,7 +313,10 @@ Consider the following when choosing between them:
   architectural changes that potentially impact all of the tests.
 
 * Note that using wildcards in virtual test path names (e.g.
-  `virtual/blocking_repaint/fast/repaint/*`) is not supported.
+  `virtual/blocking_repaint/fast/repaint/*`) is not supported, but you can
+  still use `virtual/blocking_repaint` to run all real and virtual tests
+  in the suite or `virtual/blocking_repaint/fast/repaint/dir` to run real
+  or virtual tests in the suite under a specific directory.
 
 ## Tracking Test Failures
 
@@ -543,11 +586,6 @@ files. You can follow the steps below for easier review.
 
 3. Request review of the CL and tell the reviewer to compare the patch sets that
    were uploaded in step 1 and step 2 to see the differences of the rebaselines.
-
-## web-platform-tests
-
-In addition to web tests developed and run just by the Blink team, there is
-also a shared test suite, see [web-platform-tests](./web_platform_tests.md).
 
 ## Known Issues
 

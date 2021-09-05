@@ -10,26 +10,12 @@
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/navigator.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
-#include "third_party/blink/renderer/modules/vr/navigator_vr.h"
-#include "third_party/blink/renderer/modules/xr/xr.h"
+#include "third_party/blink/renderer/modules/xr/xr_system.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 
 namespace blink {
 
 const char NavigatorXR::kSupplementName[] = "NavigatorXR";
-
-bool NavigatorXR::HasWebXrBeenUsed(Document& document) {
-  if (!document.GetFrame())
-    return false;
-  Navigator& navigator = *document.GetFrame()->DomWindow()->navigator();
-
-  NavigatorXR* supplement = Supplement<Navigator>::From<NavigatorXR>(navigator);
-  if (!supplement) {
-    // No supplement means WebXR has not been used.
-    return false;
-  }
-
-  return NavigatorXR::From(navigator).did_use_webxr_;
-}
 
 NavigatorXR* NavigatorXR::From(Document& document) {
   if (!document.GetFrame())
@@ -47,7 +33,7 @@ NavigatorXR& NavigatorXR::From(Navigator& navigator) {
   return *supplement;
 }
 
-XR* NavigatorXR::xr(Navigator& navigator) {
+XRSystem* NavigatorXR::xr(Navigator& navigator) {
   // Always return null when the navigator is detached.
   if (!navigator.GetFrame()) {
     return nullptr;
@@ -56,7 +42,7 @@ XR* NavigatorXR::xr(Navigator& navigator) {
   return NavigatorXR::From(navigator).xr();
 }
 
-XR* NavigatorXR::xr() {
+XRSystem* NavigatorXR::xr() {
   auto* document = GetDocument();
 
   // Always return null when the navigator is detached.
@@ -72,16 +58,10 @@ XR* NavigatorXR::xr() {
   }
 
   if (!xr_) {
-    if (NavigatorVR::HasWebVrBeenUsed(*document)) {
-      document->AddConsoleMessage(ConsoleMessage::Create(
-          mojom::ConsoleMessageSource::kOther,
-          mojom::ConsoleMessageLevel::kError,
-          "Cannot use navigator.xr if WebVR is already in use."));
-      return nullptr;
-    }
-    did_use_webxr_ = true;
-    xr_ = XR::Create(*document->GetFrame(), document->UkmSourceID());
+    xr_ = MakeGarbageCollected<XRSystem>(*document->GetFrame(),
+                                         document->UkmSourceID());
   }
+
   return xr_;
 }
 
@@ -92,7 +72,7 @@ Document* NavigatorXR::GetDocument() {
   return GetSupplementable()->GetFrame()->GetDocument();
 }
 
-void NavigatorXR::Trace(blink::Visitor* visitor) {
+void NavigatorXR::Trace(Visitor* visitor) {
   visitor->Trace(xr_);
   Supplement<Navigator>::Trace(visitor);
 }

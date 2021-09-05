@@ -6,12 +6,12 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_OFFSCREENCANVAS_OFFSCREEN_CANVAS_H_
 
 #include <memory>
+
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/core/dom/dom_node_ids.h"
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_rendering_context_host.h"
 #include "third_party/blink/renderer/core/html/canvas/html_canvas_element.h"
-#include "third_party/blink/renderer/core/html/canvas/image_encode_options.h"
 #include "third_party/blink/renderer/core/imagebitmap/image_bitmap_source.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
@@ -63,6 +63,7 @@ class CORE_EXPORT OffscreenCanvas final
 
   // CanvasResourceDispatcherClient
   bool BeginFrame() override;
+  void SetFilterQualityInResource(SkFilterQuality filter_quality) override;
 
   // API Methods
   ImageBitmap* transferToImageBitmap(ScriptState*, ExceptionState&);
@@ -91,12 +92,8 @@ class CORE_EXPORT OffscreenCanvas final
   void SetDisableReadingFromCanvasTrue() {
     disable_reading_from_canvas_ = true;
   }
-  void SetNeedsMatrixClipRestore() override {
-    needs_matrix_clip_restore_ = true;
-  }
 
   CanvasResourceProvider* GetOrCreateResourceProvider();
-  void DiscardResourceProvider() override;
 
   void SetFrameSinkId(uint32_t client_id, uint32_t sink_id) {
     client_id_ = client_id;
@@ -158,14 +155,16 @@ class CORE_EXPORT OffscreenCanvas final
   ScriptPromise CreateImageBitmap(ScriptState*,
                                   EventTarget&,
                                   base::Optional<IntRect>,
-                                  const ImageBitmapOptions*) final;
+                                  const ImageBitmapOptions*,
+                                  ExceptionState&) final;
 
   // CanvasImageSource implementation
   scoped_refptr<Image> GetSourceImageForCanvas(SourceImageStatus*,
                                                AccelerationHint,
                                                const FloatSize&) final;
   bool WouldTaintOrigin() const final { return !origin_clean_; }
-  FloatSize ElementSize(const FloatSize& default_object_size) const final {
+  FloatSize ElementSize(const FloatSize& default_object_size,
+                        const RespectImageOrientationEnum) const final {
     return FloatSize(width(), height());
   }
   bool IsOpaque() const final;
@@ -181,7 +180,7 @@ class CORE_EXPORT OffscreenCanvas final
 
   FontSelector* GetFontSelector() override;
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
   class ScopedInsideWorkerRAF {
     STACK_ALLOCATED();

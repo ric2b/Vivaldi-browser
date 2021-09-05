@@ -8,8 +8,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <string>
+
 #include "base/memory/scoped_refptr.h"
-#include "base/strings/string16.h"
 #include "sandbox/win/src/sandbox_types.h"
 #include "sandbox/win/src/security_level.h"
 
@@ -153,7 +154,7 @@ class TargetPolicy {
   // Returns the name of the alternate desktop used. If an alternate window
   // station is specified, the name is prepended by the window station name,
   // followed by a backslash.
-  virtual base::string16 GetAlternateDesktop() const = 0;
+  virtual std::wstring GetAlternateDesktop() const = 0;
 
   // Precreates the desktop and window station, if any.
   virtual ResultCode CreateAlternateDesktop(bool alternate_winstation) = 0;
@@ -251,6 +252,10 @@ class TargetPolicy {
   // resources.
   virtual void SetLockdownDefaultDacl() = 0;
 
+  // Adds a restricting random SID to the restricted SIDs list as well as
+  // the default DACL.
+  virtual void AddRestrictingRandomSid() = 0;
+
   // Enable OPM API redirection when in Win32k lockdown.
   virtual void SetEnableOPMRedirection() = 0;
   // Enable OPM API emulation when in Win32k lockdown.
@@ -270,6 +275,9 @@ class TargetPolicy {
   // lockdown tokens. The token the caller passes must remain valid for the
   // lifetime of the policy object.
   virtual void SetEffectiveToken(HANDLE token) = 0;
+
+  // Returns the size of policy memory used at process start.
+  virtual size_t GetPolicyGlobalSize() const = 0;
 
  protected:
   ~TargetPolicy() {}

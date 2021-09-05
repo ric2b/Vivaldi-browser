@@ -82,7 +82,7 @@ def _MatchSymbols(before, after, key_func, padding_by_section_name):
                 len(delta_symbols), len(after))
 
   unmatched_before = []
-  for syms in before_symbols_by_key.itervalues():
+  for syms in before_symbols_by_key.values():
     unmatched_before.extend(syms)
   return delta_symbols, unmatched_before, unmatched_after
 
@@ -108,12 +108,12 @@ def _DiffSymbolGroups(before, after):
     all_deltas.append(models.DeltaSymbol(before_sym, None))
 
   # Create a DeltaSymbol to represent the zero'd out padding of matched symbols.
-  for section_name, padding in padding_by_section_name.iteritems():
+  for section_name, padding in padding_by_section_name.items():
     if padding != 0:
-      after_sym = models.Symbol(
-          section_name,
-          padding,
-          name="Overhead: aggregate padding of diff'ed symbols")
+      after_sym = models.Symbol(section_name, padding)
+      # This is after _NormalizeNames() is called, so set |full_name|,
+      # |template_name|, and |name|.
+      after_sym.SetName("Overhead: aggregate padding of diff'ed symbols")
       after_sym.padding = padding
       all_deltas.append(models.DeltaSymbol(None, after_sym))
 
@@ -124,9 +124,11 @@ def Diff(before, after, sort=False):
   """Diffs two SizeInfo objects. Returns a DeltaSizeInfo."""
   assert isinstance(before, models.SizeInfo)
   assert isinstance(after, models.SizeInfo)
-  section_sizes = {k: after.section_sizes.get(k, 0) - v
-                   for k, v in before.section_sizes.iteritems()}
-  for k, v in after.section_sizes.iteritems():
+  section_sizes = {
+      k: after.section_sizes.get(k, 0) - v
+      for k, v in before.section_sizes.items()
+  }
+  for k, v in after.section_sizes.items():
     if k not in section_sizes:
       section_sizes[k] = v
 

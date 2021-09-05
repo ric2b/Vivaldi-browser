@@ -22,10 +22,10 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/media/webrtc/webrtc_event_log_manager.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/webui/localized_string.h"
+#include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/common/url_constants.h"
-#include "chrome/grit/browser_resources.h"
 #include "chrome/grit/generated_resources.h"
+#include "chrome/grit/webrtc_logs_resources.h"
 #include "components/prefs/pref_service.h"
 #include "components/upload_list/upload_list.h"
 #include "components/version_info/version_info.h"
@@ -35,6 +35,7 @@
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/browser/web_ui_message_handler.h"
+#include "ui/base/webui/web_ui_util.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/settings/cros_settings.h"
@@ -49,7 +50,7 @@ content::WebUIDataSource* CreateWebRtcLogsUIHTMLSource() {
   content::WebUIDataSource* source =
       content::WebUIDataSource::Create(chrome::kChromeUIWebRtcLogsHost);
 
-  static constexpr LocalizedString kStrings[] = {
+  static constexpr webui::LocalizedString kStrings[] = {
       {"webrtcLogsTitle", IDS_WEBRTC_LOGS_TITLE},
       {"webrtcTextLogCountFormat",
        IDS_WEBRTC_TEXT_LOGS_LOG_COUNT_BANNER_FORMAT},
@@ -73,7 +74,7 @@ content::WebUIDataSource* CreateWebRtcLogsUIHTMLSource() {
       {"noTextLogsMessage", IDS_WEBRTC_LOGS_NO_TEXT_LOGS_MESSAGE},
       {"noEventLogsMessage", IDS_WEBRTC_LOGS_NO_EVENT_LOGS_MESSAGE},
   };
-  AddLocalizedStringsBulk(source, kStrings, base::size(kStrings));
+  AddLocalizedStringsBulk(source, kStrings);
 
   source->UseStringsJs();
   source->AddResourcePath("webrtc_logs.js", IDR_WEBRTC_LOGS_JS);

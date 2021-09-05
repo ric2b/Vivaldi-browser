@@ -21,17 +21,20 @@
 #include "net/dns/host_cache.h"
 #include "net/dns/host_resolver_manager.h"
 #include "net/dns/mapped_host_resolver.h"
+#include "net/dns/resolve_context.h"
 
 namespace net {
 
 namespace {
 
-class FailingRequestImpl : public HostResolver::ResolveHostRequest {
+class FailingRequestImpl : public HostResolver::ResolveHostRequest,
+                           public HostResolver::ProbeRequest {
  public:
   explicit FailingRequestImpl(int error) : error_(error) {}
   ~FailingRequestImpl() override = default;
 
   int Start(CompletionOnceCallback callback) override { return error_; }
+  int Start() override { return error_; }
 
   const base::Optional<AddressList>& GetAddressResults() const override {
     static base::NoDestructor<base::Optional<AddressList>> nullopt_result;
@@ -50,6 +53,15 @@ class FailingRequestImpl : public HostResolver::ResolveHostRequest {
     static const base::NoDestructor<base::Optional<std::vector<HostPortPair>>>
         nullopt_result;
     return *nullopt_result;
+  }
+
+  const base::Optional<EsniContent>& GetEsniResults() const override {
+    static const base::NoDestructor<base::Optional<EsniContent>> nullopt_result;
+    return *nullopt_result;
+  }
+
+  ResolveErrorInfo GetResolveErrorInfo() const override {
+    return ResolveErrorInfo(error_);
   }
 
   const base::Optional<HostCache::EntryStaleness>& GetStaleInfo()
@@ -93,6 +105,22 @@ HostResolver::ResolveHostParameters::ResolveHostParameters(
     const ResolveHostParameters& other) = default;
 
 HostResolver::~HostResolver() = default;
+
+std::unique_ptr<HostResolver::ResolveHostRequest> HostResolver::CreateRequest(
+    const HostPortPair& host,
+    const NetLogWithSource& net_log,
+    const base::Optional<ResolveHostParameters>& optional_parameters) {
+  return CreateRequest(host, NetworkIsolationKey(), net_log,
+                       optional_parameters);
+}
+
+std::unique_ptr<HostResolver::ProbeRequest>
+HostResolver::CreateDohProbeRequest() {
+  // Should be overridden in any HostResolver implementation where this method
+  // may be called.
+  NOTREACHED();
+  return nullptr;
+}
 
 std::unique_ptr<HostResolver::MdnsListener> HostResolver::CreateMdnsListener(
     const HostPortPair& host,
@@ -138,9 +166,11 @@ std::unique_ptr<HostResolver> HostResolver::CreateResolver(
     bool enable_caching) {
   DCHECK(manager);
 
-  auto cache = enable_caching ? HostCache::CreateDefaultCache() : nullptr;
-  auto resolver =
-      std::make_unique<ContextHostResolver>(manager, std::move(cache));
+  auto resolve_context = std::make_unique<ResolveContext>(
+      nullptr /* url_request_context */, enable_caching);
+
+  auto resolver = std::make_unique<ContextHostResolver>(
+      manager, std::move(resolve_context));
 
   if (host_mapping_rules.empty())
     return resolver;
@@ -174,13 +204,14 @@ HostResolver::CreateStandaloneContextResolver(
     NetLog* net_log,
     base::Optional<ManagerOptions> options,
     bool enable_caching) {
-  auto cache = enable_caching ? HostCache::CreateDefaultCache() : nullptr;
+  auto resolve_context = std::make_unique<ResolveContext>(
+      nullptr /* url_request_context */, enable_caching);
 
   return std::make_unique<ContextHostResolver>(
       std::make_unique<HostResolverManager>(
           std::move(options).value_or(ManagerOptions()),
           NetworkChangeNotifier::GetSystemDnsConfigNotifier(), net_log),
-      std::move(cache));
+      std::move(resolve_context));
 }
 
 // static
@@ -213,11 +244,31 @@ HostResolverFlags HostResolver::ParametersToHostResolverFlags(
   return flags;
 }
 
+// static
+int HostResolver::SquashErrorCode(int error) {
+  // TODO(crbug.com/1040686): Once InProcessBrowserTests do not use
+  // ERR_NOT_IMPLEMENTED to simulate DNS failures, it should be ok to squash
+  // ERR_NOT_IMPLEMENTED.
+  // TODO(crbug.com/1043281): Consider squashing ERR_INTERNET_DISCONNECTED.
+  if (error == OK || error == ERR_IO_PENDING || error == ERR_NOT_IMPLEMENTED ||
+      error == ERR_INTERNET_DISCONNECTED || error == ERR_NAME_NOT_RESOLVED) {
+    return error;
+  } else {
+    return ERR_NAME_NOT_RESOLVED;
+  }
+}
+
 HostResolver::HostResolver() = default;
 
 // static
 std::unique_ptr<HostResolver::ResolveHostRequest>
 HostResolver::CreateFailingRequest(int error) {
+  return std::make_unique<FailingRequestImpl>(error);
+}
+
+// static
+std::unique_ptr<HostResolver::ProbeRequest>
+HostResolver::CreateFailingProbeRequest(int error) {
   return std::make_unique<FailingRequestImpl>(error);
 }
 

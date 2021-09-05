@@ -19,9 +19,8 @@
 #include "chrome/browser/android/vr/arcore_device/arcore_java_utils.h"
 #include "chrome/browser/android/vr/arcore_device/arcore_session_utils.h"
 #include "chrome/browser/android/vr/mailbox_to_surface_bridge.h"
-#include "chrome/browser/permissions/permission_manager.h"
-#include "chrome/browser/permissions/permission_result.h"
 #include "chrome/browser/permissions/permission_update_infobar_delegate_android.h"
+#include "content/public/browser/render_frame_host.h"
 #include "ui/display/display.h"
 
 using base::android::JavaRef;
@@ -38,13 +37,7 @@ mojom::VRDisplayInfoPtr CreateVRDisplayInfo(mojom::XRDeviceId device_id,
                                             const gfx::Size& frame_size) {
   mojom::VRDisplayInfoPtr device = mojom::VRDisplayInfo::New();
   device->id = device_id;
-  device->display_name = "ARCore VR Device";
   device->webxr_default_framebuffer_scale = 1.0;
-  device->capabilities = mojom::VRDisplayCapabilities::New();
-  device->capabilities->has_position = true;
-  device->capabilities->has_external_display = false;
-  device->capabilities->can_present = false;
-  device->capabilities->can_provide_environment_integration = true;
   device->left_eye = mojom::VREyeParameters::New();
   device->right_eye = nullptr;
   mojom::VREyeParametersPtr& left_eye = device->left_eye;
@@ -135,8 +128,17 @@ void ArCoreDevice::RequestSession(
   session_state_->pending_request_session_callback_ = std::move(callback);
 
   bool use_dom_overlay = base::Contains(
-      options->enabled_features,
-      device::mojom::XRSessionFeature::DOM_OVERLAY_FOR_HANDHELD_AR);
+      options->enabled_features, device::mojom::XRSessionFeature::DOM_OVERLAY);
+
+  if (use_dom_overlay) {
+    // Tell RenderFrameHostImpl that we're setting up the WebXR DOM Overlay,
+    // it checks for this in EnterFullscreen via HasSeenRecentXrOverlaySetup().
+    content::RenderFrameHost* render_frame_host =
+        content::RenderFrameHost::FromID(options->render_process_id,
+                                         options->render_frame_id);
+    DCHECK(render_frame_host);
+    render_frame_host->SetIsXrOverlaySetup();
+  }
 
   // mailbox_bridge_ is either supplied from the constructor, or recreated in
   // OnSessionEnded().
@@ -180,9 +182,12 @@ void ArCoreDevice::OnDrawingSurfaceReady(gfx::AcceleratedWidget window,
   RequestArCoreGlInitialization(window, rotation, frame_size);
 }
 
-void ArCoreDevice::OnDrawingSurfaceTouch(bool touching,
+void ArCoreDevice::OnDrawingSurfaceTouch(bool is_primary,
+                                         bool touching,
+                                         int32_t pointer_id,
                                          const gfx::PointF& location) {
-  DVLOG(2) << __func__ << ": touching=" << touching;
+  DVLOG(2) << __func__ << ": pointer_id=" << pointer_id
+           << " is_primary=" << is_primary << " touching=" << touching;
 
   if (!session_state_->is_arcore_gl_initialized_ ||
       !session_state_->arcore_gl_thread_)
@@ -190,8 +195,8 @@ void ArCoreDevice::OnDrawingSurfaceTouch(bool touching,
 
   PostTaskToGlThread(base::BindOnce(
       &ArCoreGl::OnScreenTouch,
-      session_state_->arcore_gl_thread_->GetArCoreGl()->GetWeakPtr(), touching,
-      location));
+      session_state_->arcore_gl_thread_->GetArCoreGl()->GetWeakPtr(),
+      is_primary, touching, pointer_id, location));
 }
 
 void ArCoreDevice::OnDrawingSurfaceDestroyed() {
@@ -200,6 +205,13 @@ void ArCoreDevice::OnDrawingSurfaceDestroyed() {
   CallDeferredRequestSessionCallback(/*success=*/false);
 
   OnSessionEnded();
+}
+
+void ArCoreDevice::ShutdownSession(
+    mojom::XRRuntime::ShutdownSessionCallback on_completed) {
+  DVLOG(2) << __func__;
+  OnDrawingSurfaceDestroyed();
+  std::move(on_completed).Run();
 }
 
 void ArCoreDevice::OnSessionEnded() {

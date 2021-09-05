@@ -14,22 +14,19 @@ static_library("sync_preferences") {
     "pref_service_syncable_factory.cc",
     "pref_service_syncable_factory.h",
     "pref_service_syncable_observer.h",
-    "synced_pref_change_registrar.cc",
-    "synced_pref_change_registrar.h",
     "synced_pref_observer.h",
   ]
 
   deps = [
     "//base",
+    "//components/policy/core/browser",
     "//components/pref_registry",
     "//components/prefs",
     "//components/sync",
-    "//services/preferences/public/cpp",
-    "//services/preferences/public/cpp:service_main",
   ]
 
-  if (!is_ios) {
-    deps += [ "//components/policy/core/browser" ]
+  if (is_chromeos) {
+    deps += [ "//chromeos/constants" ]
   }
 }
 
@@ -69,4 +66,8 @@ source_set("unit_tests") {
     "//components/sync:test_support_model",
     "//testing/gtest",
   ]
+
+  if (is_chromeos) {
+    deps += [ "//chromeos/constants" ]
+  }
 }

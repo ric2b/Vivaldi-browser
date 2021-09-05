@@ -456,19 +456,26 @@ test.util.sync.unload = contentWindow => {
 };
 
 /**
- * Obtains the path which is shown in the breadcrumb.
+ * Returns the path shown in the location line breadcrumb.
  *
  * @param {Window} contentWindow Window to be tested.
- * @return {string} Path which is shown in the breadcrumb.
+ * @return {string} The breadcrumb path.
  */
 test.util.sync.getBreadcrumbPath = contentWindow => {
   const breadcrumb =
       contentWindow.document.querySelector('#location-breadcrumbs');
-  const paths = breadcrumb.querySelectorAll('.breadcrumb-path');
-
   let path = '';
-  for (let i = 0; i < paths.length; i++) {
-    path += '/' + paths[i].textContent;
+
+  if (util.isFilesNg()) {
+    const crumbs = breadcrumb.querySelector('bread-crumb');
+    if (crumbs) {
+      path = '/' + crumbs.path;
+    }
+  } else {
+    const paths = breadcrumb.querySelectorAll('.breadcrumb-path');
+    for (let i = 0; i < paths.length; i++) {
+      path += '/' + paths[i].textContent;
+    }
   }
   return path;
 };
@@ -490,6 +497,31 @@ test.util.async.getPreferences = callback => {
 test.util.sync.overrideFormat = contentWindow => {
   contentWindow.chrome.fileManagerPrivate.formatVolume =
       (volumeId, filesystem, volumeLabel) => {};
+};
+
+/**
+ * Run a contentWindow.requestAnimationFrame() cycle and resolve the callback
+ * when that requestAnimationFrame completes.
+ * @param {Window} contentWindow Window to be tested.
+ * @param {function(boolean)} callback Completion callback.
+ */
+test.util.async.requestAnimationFrame = (contentWindow, callback) => {
+  contentWindow.requestAnimationFrame(() => {
+    callback(true);
+  });
+};
+
+/**
+ * Set the window text direction to RTL and wait for the window to redraw.
+ * @param {Window} contentWindow Window to be tested.
+ * @param {function(boolean)} callback Completion callback.
+ */
+test.util.async.renderWindowTextDirectionRTL = (contentWindow, callback) => {
+  contentWindow.document.documentElement.setAttribute('dir', 'rtl');
+  contentWindow.document.body.setAttribute('dir', 'rtl');
+  contentWindow.requestAnimationFrame(() => {
+    callback(true);
+  });
 };
 
 // Register the test utils.

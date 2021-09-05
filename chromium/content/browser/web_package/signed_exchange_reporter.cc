@@ -9,7 +9,6 @@
 
 #include "base/callback.h"
 #include "base/memory/ptr_util.h"
-#include "base/task/post_task.h"
 #include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/web_package/signed_exchange_utils.h"
 #include "content/public/browser/browser_context.h"
@@ -20,8 +19,8 @@
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "net/base/ip_endpoint.h"
-#include "services/network/public/cpp/resource_response_info.h"
 #include "services/network/public/mojom/network_context.mojom.h"
+#include "services/network/public/mojom/url_response_head.mojom.h"
 #include "url/origin.h"
 
 namespace content {
@@ -118,8 +117,8 @@ bool ShouldDowngradeReport(const char* result_string,
   return false;
 }
 
-void ReportResultOnUI(int frame_tree_node_id,
-                      network::mojom::SignedExchangeReportPtr report) {
+void ReportResult(int frame_tree_node_id,
+                  network::mojom::SignedExchangeReportPtr report) {
   FrameTreeNode* frame_tree_node =
       FrameTreeNode::GloballyFindByID(frame_tree_node_id);
   if (!frame_tree_node)
@@ -144,7 +143,7 @@ void ReportResultOnUI(int frame_tree_node_id,
 std::unique_ptr<SignedExchangeReporter> SignedExchangeReporter::MaybeCreate(
     const GURL& outer_url,
     const std::string& referrer,
-    const network::ResourceResponseHead& response,
+    const network::mojom::URLResponseHead& response,
     int frame_tree_node_id) {
   if (!signed_exchange_utils::
           IsSignedExchangeReportingForDistributorsEnabled()) {
@@ -157,7 +156,7 @@ std::unique_ptr<SignedExchangeReporter> SignedExchangeReporter::MaybeCreate(
 SignedExchangeReporter::SignedExchangeReporter(
     const GURL& outer_url,
     const std::string& referrer,
-    const network::ResourceResponseHead& response,
+    const network::mojom::URLResponseHead& response,
     int frame_tree_node_id)
     : report_(network::mojom::SignedExchangeReport::New()),
       request_start_(response.load_timing.request_start),
@@ -212,9 +211,7 @@ void SignedExchangeReporter::ReportResultAndFinish(
     report_->elapsed_time = base::TimeTicks::Now() - request_start_;
   }
 
-  base::PostTask(FROM_HERE, {BrowserThread::UI},
-                 base::BindOnce(&ReportResultOnUI, frame_tree_node_id_,
-                                std::move(report_)));
+  ReportResult(frame_tree_node_id_, std::move(report_));
 }
 
 }  // namespace content

@@ -34,11 +34,11 @@ namespace chrome_pdf {
 
 namespace {
 
-constexpr double k45DegreesInRadians = base::kPiDouble / 4;
-constexpr double k90DegreesInRadians = base::kPiDouble / 2;
-constexpr double k180DegreesInRadians = base::kPiDouble;
-constexpr double k270DegreesInRadians = 3 * base::kPiDouble / 2;
-constexpr double k360DegreesInRadians = 2 * base::kPiDouble;
+constexpr float k45DegreesInRadians = base::kPiFloat / 4;
+constexpr float k90DegreesInRadians = base::kPiFloat / 2;
+constexpr float k180DegreesInRadians = base::kPiFloat;
+constexpr float k270DegreesInRadians = 3 * base::kPiFloat / 2;
+constexpr float k360DegreesInRadians = 2 * base::kPiFloat;
 
 PDFiumPage::IsValidLinkFunction g_is_valid_link_func_for_testing = nullptr;
 
@@ -107,7 +107,7 @@ int GetFirstNonUnicodeWhiteSpaceCharIndex(FPDF_TEXTPAGE text_page,
   return i;
 }
 
-PP_PrivateDirection GetDirectionFromAngle(double angle) {
+PP_PrivateDirection GetDirectionFromAngle(float angle) {
   // Rotating the angle by 45 degrees to simplify the conditions statements.
   // It's like if we rotated the whole cartesian coordinate system like below.
   //   X                   X
@@ -122,7 +122,7 @@ PP_PrivateDirection GetDirectionFromAngle(double angle) {
   //     X      II       X
   //   X                   X
 
-  angle = fmod(angle + k45DegreesInRadians, k360DegreesInRadians);
+  angle = fmodf(angle + k45DegreesInRadians, k360DegreesInRadians);
   // Quadrant I.
   if (angle >= 0 && angle <= k90DegreesInRadians)
     return PP_PRIVATEDIRECTION_LTR;
@@ -136,10 +136,10 @@ PP_PrivateDirection GetDirectionFromAngle(double angle) {
   return PP_PRIVATEDIRECTION_BTT;
 }
 
-double GetDistanceBetweenPoints(const pp::FloatPoint& p1,
-                                const pp::FloatPoint& p2) {
+float GetDistanceBetweenPoints(const pp::FloatPoint& p1,
+                               const pp::FloatPoint& p2) {
   pp::FloatPoint dist_vector = p1 - p2;
-  return sqrt(pow(dist_vector.x(), 2) + pow(dist_vector.y(), 2));
+  return sqrtf(powf(dist_vector.x(), 2) + powf(dist_vector.y(), 2));
 }
 
 void AddCharSizeToAverageCharSize(pp::FloatSize new_size,
@@ -156,32 +156,49 @@ void AddCharSizeToAverageCharSize(pp::FloatSize new_size,
   }
 }
 
-double GetRotatedCharWidth(double angle, const pp::FloatSize& size) {
-  return abs(cos(angle) * size.width()) + abs(sin(angle) * size.height());
+float GetRotatedCharWidth(float angle, const pp::FloatSize& size) {
+  return fabsf(cosf(angle) * size.width()) + fabsf(sinf(angle) * size.height());
 }
 
-double GetAngleOfVector(const pp::FloatPoint& v) {
-  double angle = atan2(v.y(), v.x());
+float GetAngleOfVector(const pp::FloatPoint& v) {
+  float angle = atan2f(v.y(), v.x());
   if (angle < 0)
     angle += k360DegreesInRadians;
   return angle;
 }
 
-double GetAngleDifference(double a, double b) {
+float GetAngleDifference(float a, float b) {
   // This is either the difference or (360 - difference).
-  double x = fmod(fabs(b - a), k360DegreesInRadians);
+  float x = fmodf(fabsf(b - a), k360DegreesInRadians);
   return x > k180DegreesInRadians ? k360DegreesInRadians - x : x;
 }
 
-bool DoubleEquals(double d1, double d2) {
+bool FloatEquals(float f1, float f2) {
   // The idea behind this is to use this fraction of the larger of the
   // two numbers as the limit of the difference.  This breaks down near
   // zero, so we reuse this as the minimum absolute size we will use
   // for the base of the scale too.
-  static const float epsilon_scale = 0.00001f;
-  return fabs(d1 - d2) <
-         epsilon_scale *
-             std::fmax(std::fmax(std::fabs(d1), std::fabs(d2)), epsilon_scale);
+  static constexpr float kEpsilonScale = 0.00001f;
+  return fabsf(f1 - f2) <
+         kEpsilonScale * fmaxf(fmaxf(fabsf(f1), fabsf(f2)), kEpsilonScale);
+}
+
+using GetFormFieldPropertyFunction =
+    base::RepeatingCallback<unsigned long(unsigned short* buffer,
+                                          unsigned long buflen)>;
+
+// Helper method to fetch string properties of form fields.
+std::string GetFormFieldProperty(GetFormFieldPropertyFunction function) {
+  base::string16 data;
+  size_t buffer_size = function.Run(nullptr, 0);
+  if (buffer_size > 0) {
+    PDFiumAPIStringBufferSizeInBytesAdapter<base::string16> api_string_adapter(
+        &data, buffer_size, true);
+    api_string_adapter.Close(function.Run(
+        reinterpret_cast<unsigned short*>(api_string_adapter.GetData()),
+        buffer_size));
+  }
+  return base::UTF16ToUTF8(data);
 }
 
 }  // namespace
@@ -266,10 +283,95 @@ void PDFiumPage::CalculatePageObjectTextRunBreaks() {
       }
     }
   }
+
+  PopulateAnnotations();
+  for (const auto& highlight : highlights_) {
+    if (highlight.start_char_index >= 0 &&
+        highlight.start_char_index < chars_count) {
+      page_object_text_run_breaks_.insert(highlight.start_char_index);
+      int next_text_run_break_index =
+          highlight.start_char_index + highlight.char_count;
+      // Don't insert a break if the highlight is at the end of the page text.
+      if (next_text_run_break_index < chars_count) {
+        page_object_text_run_breaks_.insert(next_text_run_break_index);
+      }
+    }
+  }
 }
 
-base::Optional<PP_PrivateAccessibilityTextRunInfo> PDFiumPage::GetTextRunInfo(
-    int start_char_index) {
+void PDFiumPage::CalculateTextRunStyleInfo(
+    int char_index,
+    pp::PDF::PrivateAccessibilityTextStyleInfo* style_info) {
+  FPDF_TEXTPAGE text_page = GetTextPage();
+  style_info->font_size = FPDFText_GetFontSize(text_page, char_index);
+
+  int flags = 0;
+  size_t buffer_size =
+      FPDFText_GetFontInfo(text_page, char_index, nullptr, 0, &flags);
+  if (buffer_size > 0) {
+    PDFiumAPIStringBufferAdapter<std::string> api_string_adapter(
+        &style_info->font_name, buffer_size, true);
+    void* data = api_string_adapter.GetData();
+    size_t bytes_written =
+        FPDFText_GetFontInfo(text_page, char_index, data, buffer_size, nullptr);
+    // Trim the null character.
+    api_string_adapter.Close(bytes_written);
+  }
+
+  style_info->font_weight = FPDFText_GetFontWeight(text_page, char_index);
+  // As defined in PDF 1.7 table 5.20.
+  constexpr int kFlagItalic = (1 << 6);
+  // Bold text is considered bold when greater than or equal to 700.
+  constexpr int kStandardBoldValue = 700;
+  style_info->is_italic = (flags & kFlagItalic);
+  style_info->is_bold = style_info->font_weight >= kStandardBoldValue;
+  unsigned int fill_r;
+  unsigned int fill_g;
+  unsigned int fill_b;
+  unsigned int fill_a;
+  if (FPDFText_GetFillColor(text_page, char_index, &fill_r, &fill_g, &fill_b,
+                            &fill_a)) {
+    style_info->fill_color = MakeARGB(fill_a, fill_r, fill_g, fill_b);
+  } else {
+    style_info->fill_color = MakeARGB(0xff, 0, 0, 0);
+  }
+
+  unsigned int stroke_r;
+  unsigned int stroke_g;
+  unsigned int stroke_b;
+  unsigned int stroke_a;
+  if (FPDFText_GetStrokeColor(text_page, char_index, &stroke_r, &stroke_g,
+                              &stroke_b, &stroke_a)) {
+    style_info->stroke_color = MakeARGB(stroke_a, stroke_r, stroke_g, stroke_b);
+  } else {
+    style_info->stroke_color = MakeARGB(0xff, 0, 0, 0);
+  }
+
+  int render_mode = FPDFText_GetTextRenderMode(text_page, char_index);
+  if (render_mode < 0 || render_mode > PP_TEXTRENDERINGMODE_LAST) {
+    style_info->render_mode = PP_TEXTRENDERINGMODE_UNKNOWN;
+  } else {
+    style_info->render_mode = static_cast<PP_TextRenderingMode>(render_mode);
+  }
+}
+
+bool PDFiumPage::AreTextStyleEqual(
+    int char_index,
+    const pp::PDF::PrivateAccessibilityTextStyleInfo& style) {
+  pp::PDF::PrivateAccessibilityTextStyleInfo char_style;
+  CalculateTextRunStyleInfo(char_index, &char_style);
+  return char_style.font_name == style.font_name &&
+         char_style.font_weight == style.font_weight &&
+         char_style.render_mode == style.render_mode &&
+         FloatEquals(char_style.font_size, style.font_size) &&
+         char_style.fill_color == style.fill_color &&
+         char_style.stroke_color == style.stroke_color &&
+         char_style.is_italic == style.is_italic &&
+         char_style.is_bold == style.is_bold;
+}
+
+base::Optional<pp::PDF::PrivateAccessibilityTextRunInfo>
+PDFiumPage::GetTextRunInfo(int start_char_index) {
   FPDF_PAGE page = GetPage();
   FPDF_TEXTPAGE text_page = GetTextPage();
   int chars_count = FPDFText_CountChars(text_page);
@@ -282,21 +384,24 @@ base::Optional<PP_PrivateAccessibilityTextRunInfo> PDFiumPage::GetTextRunInfo(
   // Check to see if GetFirstNonUnicodeWhiteSpaceCharIndex() iterated through
   // all the characters.
   if (actual_start_char_index >= chars_count) {
-    // If so, |text_run_info->len| needs to take the number of characters
+    // If so, |info.len| needs to take the number of characters
     // iterated into account.
     DCHECK_GT(actual_start_char_index, start_char_index);
-    PP_PrivateAccessibilityTextRunInfo info;
+    pp::PDF::PrivateAccessibilityTextRunInfo info;
     info.len = chars_count - start_char_index;
-    info.font_size = 0;
     info.bounds = pp::FloatRect();
     info.direction = PP_PRIVATEDIRECTION_NONE;
     return info;
   }
   int char_index = actual_start_char_index;
 
+  // Set text run's style info from the first character of the text run.
+  pp::PDF::PrivateAccessibilityTextRunInfo info;
+  CalculateTextRunStyleInfo(char_index, &info.style);
+
   pp::FloatRect start_char_rect =
       GetFloatCharRectInPixels(page, text_page, char_index);
-  double text_run_font_size = FPDFText_GetFontSize(text_page, char_index);
+  float text_run_font_size = info.style.font_size;
 
   // Heuristic: Initialize the average character size to one-third of the font
   // size to avoid having the first few characters misrepresent the average.
@@ -323,7 +428,7 @@ base::Optional<PP_PrivateAccessibilityTextRunInfo> PDFiumPage::GetTextRunInfo(
 
   // The angle of the vector starting at the first character center-point and
   // ending at the current last character center-point.
-  double text_run_angle = 0;
+  float text_run_angle = 0;
 
   CalculatePageObjectTextRunBreaks();
   const auto breakpoint_iter =
@@ -345,9 +450,9 @@ base::Optional<PP_PrivateAccessibilityTextRunInfo> PDFiumPage::GetTextRunInfo(
         GetFloatCharRectInPixels(page, text_page, char_index);
 
     if (!base::IsUnicodeWhitespace(character)) {
-      // Heuristic: End the text run if different font size is encountered.
-      double font_size = FPDFText_GetFontSize(text_page, char_index);
-      if (!DoubleEquals(font_size, text_run_font_size))
+      // Heuristic: End the text run if the text style of the current character
+      // is different from the text run's style.
+      if (!AreTextStyleEqual(char_index, info.style))
         break;
 
       // Heuristic: End text run if character isn't going in the same direction.
@@ -358,8 +463,8 @@ base::Optional<PP_PrivateAccessibilityTextRunInfo> PDFiumPage::GetTextRunInfo(
       // Heuristic: End the text run if the difference between the text run
       // angle and the angle between the center-points of the previous and
       // current characters is greater than 90 degrees.
-      double current_angle = GetAngleOfVector(char_rect.CenterPoint() -
-                                              prev_char_rect.CenterPoint());
+      float current_angle = GetAngleOfVector(char_rect.CenterPoint() -
+                                             prev_char_rect.CenterPoint());
       if (start_char_rect != prev_char_rect) {
         text_run_angle = GetAngleOfVector(prev_char_rect.CenterPoint() -
                                           start_char_rect.CenterPoint());
@@ -375,15 +480,15 @@ base::Optional<PP_PrivateAccessibilityTextRunInfo> PDFiumPage::GetTextRunInfo(
       AddCharSizeToAverageCharSize(char_rect.Floatsize(), &avg_char_size,
                                    &non_whitespace_chars_count);
 
-      double avg_char_width = GetRotatedCharWidth(current_angle, avg_char_size);
+      float avg_char_width = GetRotatedCharWidth(current_angle, avg_char_size);
 
-      double distance =
+      float distance =
           GetDistanceBetweenPoints(char_rect.CenterPoint(),
                                    prev_char_rect.CenterPoint()) -
           GetRotatedCharWidth(current_angle, char_rect.Floatsize()) / 2 -
           GetRotatedCharWidth(current_angle, prev_char_rect.Floatsize()) / 2;
 
-      if (distance > 2.5 * avg_char_width)
+      if (distance > 2.5f * avg_char_width)
         break;
 
       text_run_bounds = text_run_bounds.Union(char_rect);
@@ -407,9 +512,8 @@ base::Optional<PP_PrivateAccessibilityTextRunInfo> PDFiumPage::GetTextRunInfo(
     text_run_font_size = estimated_font_size;
   }
 
-  PP_PrivateAccessibilityTextRunInfo info;
   info.len = char_index - start_char_index;
-  info.font_size = text_run_font_size;
+  info.style.font_size = text_run_font_size;
   info.bounds = text_run_bounds;
   // Infer text direction from first and last character of the text run. We
   // can't base our decision on the character direction, since a character of a
@@ -432,55 +536,94 @@ pp::FloatRect PDFiumPage::GetCharBounds(int char_index) {
   return GetFloatCharRectInPixels(page, text_page, char_index);
 }
 
-uint32_t PDFiumPage::GetLinkCount() {
+std::vector<PDFEngine::AccessibilityLinkInfo> PDFiumPage::GetLinkInfo() {
+  std::vector<PDFEngine::AccessibilityLinkInfo> link_info;
   if (!available_)
-    return 0;
+    return link_info;
+
   CalculateLinks();
-  return links_.size();
+
+  link_info.reserve(links_.size());
+  for (const Link& link : links_) {
+    PDFEngine::AccessibilityLinkInfo cur_info;
+    cur_info.url = link.target.url;
+    cur_info.start_char_index = link.start_char_index;
+    cur_info.char_count = link.char_count;
+
+    pp::Rect link_rect;
+    for (const auto& rect : link.bounding_rects)
+      link_rect = link_rect.Union(rect);
+    cur_info.bounds = pp::FloatRect(link_rect.x(), link_rect.y(),
+                                    link_rect.width(), link_rect.height());
+
+    link_info.push_back(std::move(cur_info));
+  }
+  return link_info;
 }
 
-bool PDFiumPage::GetLinkInfo(uint32_t link_index,
-                             std::string* out_url,
-                             int* out_start_char_index,
-                             int* out_char_count,
-                             pp::FloatRect* out_bounds) {
-  uint32_t link_count = GetLinkCount();
-  if (link_count == 0 || link_index >= link_count)
-    return false;
-
-  const Link& link = links_[link_index];
-  *out_url = link.target.url;
-  *out_start_char_index = link.start_char_index;
-  *out_char_count = link.char_count;
-  pp::Rect link_rect;
-  for (const auto& rect : link.bounding_rects)
-    link_rect = link_rect.Union(rect);
-
-  *out_bounds = pp::FloatRect(link_rect.x(), link_rect.y(), link_rect.width(),
-                              link_rect.height());
-  return true;
-}
-
-uint32_t PDFiumPage::GetImageCount() {
+std::vector<PDFEngine::AccessibilityImageInfo> PDFiumPage::GetImageInfo() {
+  std::vector<PDFEngine::AccessibilityImageInfo> image_info;
   if (!available_)
-    return 0;
+    return image_info;
+
   CalculateImages();
-  return images_.size();
+
+  image_info.reserve(images_.size());
+  for (const Image& image : images_) {
+    PDFEngine::AccessibilityImageInfo cur_info;
+    cur_info.alt_text = image.alt_text;
+    cur_info.bounds = pp::FloatRect(
+        image.bounding_rect.x(), image.bounding_rect.y(),
+        image.bounding_rect.width(), image.bounding_rect.height());
+    image_info.push_back(std::move(cur_info));
+  }
+  return image_info;
 }
 
-bool PDFiumPage::GetImageInfo(uint32_t image_index,
-                              std::string* out_alt_text,
-                              pp::FloatRect* out_bounds) {
-  uint32_t image_count = GetImageCount();
-  if (image_index >= image_count)
-    return false;
+std::vector<PDFEngine::AccessibilityHighlightInfo>
+PDFiumPage::GetHighlightInfo() {
+  std::vector<PDFEngine::AccessibilityHighlightInfo> highlight_info;
+  if (!available_)
+    return highlight_info;
 
-  const Image& image_info = images_[image_index];
-  *out_alt_text = image_info.alt_text;
-  *out_bounds = pp::FloatRect(
-      image_info.bounding_rect.x(), image_info.bounding_rect.y(),
-      image_info.bounding_rect.width(), image_info.bounding_rect.height());
-  return true;
+  PopulateAnnotations();
+
+  highlight_info.reserve(highlights_.size());
+  for (const Highlight& highlight : highlights_) {
+    PDFEngine::AccessibilityHighlightInfo cur_info;
+    cur_info.start_char_index = highlight.start_char_index;
+    cur_info.char_count = highlight.char_count;
+    cur_info.bounds = pp::FloatRect(
+        highlight.bounding_rect.x(), highlight.bounding_rect.y(),
+        highlight.bounding_rect.width(), highlight.bounding_rect.height());
+    cur_info.color = highlight.color;
+    highlight_info.push_back(std::move(cur_info));
+  }
+  return highlight_info;
+}
+
+std::vector<PDFEngine::AccessibilityTextFieldInfo>
+PDFiumPage::GetTextFieldInfo() {
+  std::vector<PDFEngine::AccessibilityTextFieldInfo> text_field_info;
+  if (!available_)
+    return text_field_info;
+
+  PopulateAnnotations();
+
+  text_field_info.reserve(text_fields_.size());
+  for (const TextField& text_field : text_fields_) {
+    PDFEngine::AccessibilityTextFieldInfo cur_info;
+    cur_info.name = text_field.name;
+    cur_info.value = text_field.value;
+    cur_info.is_read_only = !!(text_field.flags & FPDF_FORMFLAG_READONLY);
+    cur_info.is_required = !!(text_field.flags & FPDF_FORMFLAG_REQUIRED);
+    cur_info.is_password = !!(text_field.flags & FPDF_FORMFLAG_TEXT_PASSWORD);
+    cur_info.bounds = pp::FloatRect(
+        text_field.bounding_rect.x(), text_field.bounding_rect.y(),
+        text_field.bounding_rect.width(), text_field.bounding_rect.height());
+    text_field_info.push_back(std::move(cur_info));
+  }
+  return text_field_info;
 }
 
 PDFiumPage::Area PDFiumPage::GetLinkTargetAtIndex(int link_index,
@@ -584,10 +727,14 @@ int PDFiumPage::GetCharCount() {
   return FPDFText_CountChars(GetTextPage());
 }
 
+bool PDFiumPage::IsCharIndexInBounds(int index) {
+  return index >= 0 && index < GetCharCount();
+}
+
 PDFiumPage::Area PDFiumPage::GetLinkTarget(FPDF_LINK link, LinkTarget* target) {
-  FPDF_DEST dest = FPDFLink_GetDest(engine_->doc(), link);
-  if (dest)
-    return GetDestinationTarget(dest, target);
+  FPDF_DEST dest_link = FPDFLink_GetDest(engine_->doc(), link);
+  if (dest_link)
+    return GetDestinationTarget(dest_link, target);
 
   FPDF_ACTION action = FPDFLink_GetAction(link);
   if (!action)
@@ -595,9 +742,9 @@ PDFiumPage::Area PDFiumPage::GetLinkTarget(FPDF_LINK link, LinkTarget* target) {
 
   switch (FPDFAction_GetType(action)) {
     case PDFACTION_GOTO: {
-      FPDF_DEST dest = FPDFAction_GetDest(engine_->doc(), action);
-      if (dest)
-        return GetDestinationTarget(dest, target);
+      FPDF_DEST dest_action = FPDFAction_GetDest(engine_->doc(), action);
+      if (dest_action)
+        return GetDestinationTarget(dest_action, target);
       // TODO(crbug.com/55776): We don't fully support all types of the
       // in-document links.
       return NONSELECTABLE_AREA;
@@ -936,6 +1083,100 @@ void PDFiumPage::PopulateImageAltTextForStructElement(
   }
 }
 
+void PDFiumPage::PopulateAnnotations() {
+  if (calculated_annotations_)
+    return;
+
+  FPDF_PAGE page = GetPage();
+  if (!page)
+    return;
+
+  int annotation_count = FPDFPage_GetAnnotCount(page);
+  for (int i = 0; i < annotation_count; ++i) {
+    ScopedFPDFAnnotation annot(FPDFPage_GetAnnot(page, i));
+    DCHECK(annot);
+    FPDF_ANNOTATION_SUBTYPE subtype = FPDFAnnot_GetSubtype(annot.get());
+
+    switch (subtype) {
+      case FPDF_ANNOT_HIGHLIGHT: {
+        PopulateHighlight(annot.get());
+        break;
+      }
+      case FPDF_ANNOT_WIDGET: {
+        // TODO(crbug.com/1030242): Populate other types of form fields too.
+        if (FPDFAnnot_GetFormFieldType(engine_->form(), annot.get()) ==
+            FPDF_FORMFIELD_TEXTFIELD) {
+          PopulateTextField(annot.get());
+        }
+        break;
+      }
+      default:
+        break;
+    }
+  }
+  calculated_annotations_ = true;
+}
+
+void PDFiumPage::PopulateHighlight(FPDF_ANNOTATION annot) {
+  DCHECK(annot);
+  DCHECK_EQ(FPDFAnnot_GetSubtype(annot), FPDF_ANNOT_HIGHLIGHT);
+
+  FS_RECTF rect;
+  if (!FPDFAnnot_GetRect(annot, &rect))
+    return;
+
+  Highlight highlight;
+  // We use the bounding box of the highlight as the bounding rect.
+  highlight.bounding_rect =
+      PageToScreen(pp::Point(), 1.0, rect.left, rect.top, rect.right,
+                   rect.bottom, PageOrientation::kOriginal);
+  GetUnderlyingTextRangeForRect(
+      pp::FloatRect(rect.left, rect.bottom, std::abs(rect.right - rect.left),
+                    std::abs(rect.bottom - rect.top)),
+      &highlight.start_char_index, &highlight.char_count);
+
+  // Retrieve the color of the highlight.
+  unsigned int color_r;
+  unsigned int color_g;
+  unsigned int color_b;
+  unsigned int color_a;
+  FPDF_PAGEOBJECT page_object = FPDFAnnot_GetObject(annot, 0);
+  if (FPDFPageObj_GetFillColor(page_object, &color_r, &color_g, &color_b,
+                               &color_a)) {
+    highlight.color = MakeARGB(color_a, color_r, color_g, color_b);
+  } else {
+    // Set the same default color as in pdfium. See calls to
+    // GetColorStringWithDefault() in CPVT_GenerateAP::Generate*AP() in
+    // pdfium.
+    highlight.color = MakeARGB(255, 255, 255, 0);
+  }
+
+  highlights_.push_back(std::move(highlight));
+}
+
+void PDFiumPage::PopulateTextField(FPDF_ANNOTATION annot) {
+  DCHECK(annot);
+  FPDF_FORMHANDLE form_handle = engine_->form();
+  DCHECK_EQ(FPDFAnnot_GetFormFieldType(form_handle, annot),
+            FPDF_FORMFIELD_TEXTFIELD);
+
+  FS_RECTF rect;
+  if (!FPDFAnnot_GetRect(annot, &rect))
+    return;
+
+  TextField text_field;
+  // We use the bounding box of the text field as the bounding rect.
+  text_field.bounding_rect =
+      PageToScreen(pp::Point(), 1.0, rect.left, rect.top, rect.right,
+                   rect.bottom, PageOrientation::kOriginal);
+  text_field.value = GetFormFieldProperty(
+      base::BindRepeating(FPDFAnnot_GetFormFieldValue, form_handle, annot));
+  text_field.name = GetFormFieldProperty(
+      base::BindRepeating(FPDFAnnot_GetFormFieldName, form_handle, annot));
+  text_field.flags = FPDFAnnot_GetFormFieldFlags(form_handle, annot);
+  text_fields_.push_back(std::move(text_field));
+}
+
 bool PDFiumPage::GetUnderlyingTextRangeForRect(const pp::FloatRect& rect,
                                                int* start_index,
                                                int* char_len) {
@@ -1038,27 +1279,6 @@ pp::Rect PDFiumPage::PageToScreen(const pp::Point& offset,
                   new_size_y.ValueOrDie());
 }
 
-const PDFEngine::PageFeatures* PDFiumPage::GetPageFeatures() {
-  // If page_features_ is cached, return the cached features.
-  if (page_features_.IsInitialized())
-    return &page_features_;
-
-  FPDF_PAGE page = GetPage();
-  if (!page)
-    return nullptr;
-
-  // Initialize and cache page_features_.
-  page_features_.index = index_;
-  int annotation_count = FPDFPage_GetAnnotCount(page);
-  for (int i = 0; i < annotation_count; ++i) {
-    ScopedFPDFAnnotation annotation(FPDFPage_GetAnnot(page, i));
-    FPDF_ANNOTATION_SUBTYPE subtype = FPDFAnnot_GetSubtype(annotation.get());
-    page_features_.annotation_types.insert(subtype);
-  }
-
-  return &page_features_;
-}
-
 PDFiumPage::ScopedUnloadPreventer::ScopedUnloadPreventer(PDFiumPage* page)
     : page_(page) {
   page_->preventing_unload_count_++;
@@ -1079,6 +1299,18 @@ PDFiumPage::Image::Image() = default;
 PDFiumPage::Image::Image(const Image& that) = default;
 
 PDFiumPage::Image::~Image() = default;
+
+PDFiumPage::Highlight::Highlight() = default;
+
+PDFiumPage::Highlight::Highlight(const Highlight& that) = default;
+
+PDFiumPage::Highlight::~Highlight() = default;
+
+PDFiumPage::TextField::TextField() = default;
+
+PDFiumPage::TextField::TextField(const TextField& that) = default;
+
+PDFiumPage::TextField::~TextField() = default;
 
 int ToPDFiumRotation(PageOrientation orientation) {
   // Could static_cast<int>(orientation), but using an exhaustive switch will

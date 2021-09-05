@@ -7,30 +7,17 @@
 
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/mojom/cursor.mojom-shared.h"
+#include "ui/base/mojom/cursor_type.mojom-shared.h"
 
 namespace mojo {
 
 template <>
-struct EnumTraits<ui::mojom::CursorType, ui::CursorType> {
-  static ui::mojom::CursorType ToMojom(ui::CursorType input);
-  static bool FromMojom(ui::mojom::CursorType input, ui::CursorType* out);
-};
-
-template <>
-struct EnumTraits<ui::mojom::CursorSize, ui::CursorSize> {
-  static ui::mojom::CursorSize ToMojom(ui::CursorSize input);
-  static bool FromMojom(ui::mojom::CursorSize input, ui::CursorSize* out);
-};
-
-template <>
 struct StructTraits<ui::mojom::CursorDataView, ui::Cursor> {
-  static ui::CursorType native_type(const ui::Cursor& c) {
-    return c.native_type();
-  }
+  static ui::mojom::CursorType type(const ui::Cursor& c) { return c.type(); }
   static gfx::Point hotspot(const ui::Cursor& c);
   static SkBitmap bitmap(const ui::Cursor& c);
-  static float device_scale_factor(const ui::Cursor& c) {
-    return c.device_scale_factor();
+  static float image_scale_factor(const ui::Cursor& c) {
+    return c.image_scale_factor();
   }
   static bool Read(ui::mojom::CursorDataView data, ui::Cursor* out);
 };

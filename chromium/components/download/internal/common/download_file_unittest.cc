@@ -258,6 +258,8 @@ class DownloadFileTest : public testing::Test {
     base::WeakPtrFactory<DownloadFileTest> weak_ptr_factory(this);
     DownloadInterruptReason result = DOWNLOAD_INTERRUPT_REASON_NONE;
     base::RunLoop loop_runner;
+    download_file_->SetTaskRunnerForTesting(
+        base::SequencedTaskRunnerHandle::Get());
     download_file_->Initialize(
         base::BindRepeating(&DownloadFileTest::SetInterruptReasonCallback,
                             weak_ptr_factory.GetWeakPtr(),
@@ -395,16 +397,17 @@ class DownloadFileTest : public testing::Test {
   void InvokeRenameMethod(
       DownloadFileRenameMethodType method,
       const base::FilePath& full_path,
-      const DownloadFile::RenameCompletionCallback& completion_callback) {
+      DownloadFile::RenameCompletionCallback completion_callback) {
     switch (method) {
       case RENAME_AND_UNIQUIFY:
-        download_file_->RenameAndUniquify(full_path, completion_callback);
+        download_file_->RenameAndUniquify(full_path,
+                                          std::move(completion_callback));
         break;
 
       case RENAME_AND_ANNOTATE:
         download_file_->RenameAndAnnotate(
             full_path, "12345678-ABCD-1234-DCBA-123456789ABC", GURL(), GURL(),
-            mojo::NullRemote(), completion_callback);
+            mojo::NullRemote(), std::move(completion_callback));
         break;
     }
   }
@@ -416,10 +419,10 @@ class DownloadFileTest : public testing::Test {
     DownloadInterruptReason result_reason(DOWNLOAD_INTERRUPT_REASON_NONE);
     base::FilePath result_path;
     base::RunLoop loop_runner;
-    DownloadFile::RenameCompletionCallback completion_callback =
-        base::Bind(&DownloadFileTest::SetRenameResult, base::Unretained(this),
-                   loop_runner.QuitClosure(), &result_reason, result_path_p);
-    InvokeRenameMethod(method, full_path, completion_callback);
+    DownloadFile::RenameCompletionCallback completion_callback = base::BindOnce(
+        &DownloadFileTest::SetRenameResult, base::Unretained(this),
+        loop_runner.QuitClosure(), &result_reason, result_path_p);
+    InvokeRenameMethod(method, full_path, std::move(completion_callback));
     loop_runner.Run();
     return result_reason;
   }

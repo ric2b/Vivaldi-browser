@@ -71,7 +71,6 @@ class SerializedScriptValue;
 class SourceLocation;
 class StyleMedia;
 class TrustedTypePolicyFactory;
-class USVStringOrTrustedURL;
 class V8FrameRequestCallback;
 class V8IdleRequestCallback;
 class V8VoidFunction;
@@ -84,6 +83,7 @@ enum PageTransitionEventPersistence {
 // Note: if you're thinking of returning something DOM-related by reference,
 // please ping dcheng@chromium.org first. You probably don't want to do that.
 class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
+                                         public ExecutionContext,
                                          public Supplementable<LocalDOMWindow> {
   USING_GARBAGE_COLLECTED_MIXIN(LocalDOMWindow);
   USING_PRE_FINALIZER(LocalDOMWindow, Dispose);
@@ -97,9 +97,7 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
     virtual void DidRemoveAllEventListeners(LocalDOMWindow*) = 0;
   };
 
-  static Document* CreateDocument(const String& mime_type,
-                                  const DocumentInit&,
-                                  bool force_xhtml);
+  static Document* CreateDocument(const DocumentInit&, bool force_xhtml);
 
   static LocalDOMWindow* From(const ScriptState*);
 
@@ -108,11 +106,64 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
 
   LocalFrame* GetFrame() const { return To<LocalFrame>(DOMWindow::GetFrame()); }
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
-  Document* InstallNewDocument(const String& mime_type,
-                               const DocumentInit&,
-                               bool force_xhtml);
+  // ExecutionContext overrides:
+  // TODO(crbug.com/1029822): Most of these just call in to Document, but should
+  // move entirely here.
+  bool IsDocument() const final { return true; }
+  bool IsContextThread() const final;
+  bool ShouldInstallV8Extensions() const final;
+  ContentSecurityPolicy* GetContentSecurityPolicyForWorld() final;
+  const KURL& Url() const final;
+  const KURL& BaseURL() const final;
+  KURL CompleteURL(const String&) const final;
+  void DisableEval(const String& error_message) final;
+  LocalDOMWindow* ExecutingWindow() const final {
+    // TODO(crbug.com/1029822): This const_cast is gross.
+    return const_cast<LocalDOMWindow*>(this);
+  }
+  String UserAgent() const final;
+  HttpsState GetHttpsState() const final;
+  ResourceFetcher* Fetcher() const final;
+  SecurityContext& GetSecurityContext() final;
+  const SecurityContext& GetSecurityContext() const final;
+  bool CanExecuteScripts(ReasonForCallingCanExecuteScripts) final;
+  void ExceptionThrown(ErrorEvent*) final;
+  EventTarget* ErrorEventTarget() final { return this; }
+  String OutgoingReferrer() const final;
+  network::mojom::ReferrerPolicy GetReferrerPolicy() const final;
+  CoreProbeSink* GetProbeSink() final;
+  BrowserInterfaceBrokerProxy& GetBrowserInterfaceBroker() final;
+  FrameOrWorkerScheduler* GetScheduler() final;
+  scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunner(TaskType) final;
+  TrustedTypePolicyFactory* GetTrustedTypes() const final {
+    return trustedTypes();
+  }
+  void CountPotentialFeaturePolicyViolation(
+      mojom::blink::FeaturePolicyFeature) const final;
+  void ReportFeaturePolicyViolation(
+      mojom::blink::FeaturePolicyFeature,
+      mojom::blink::PolicyDisposition,
+      const String& message = g_empty_string,
+      // If source_file is set to empty string,
+      // current JS file would be used as source_file instead.
+      const String& source_file = g_empty_string) const final;
+  void ReportDocumentPolicyViolation(
+      mojom::blink::DocumentPolicyFeature,
+      mojom::blink::PolicyDisposition,
+      const String& message = g_empty_string,
+      // If source_file is set to empty string,
+      // current JS file would be used as source_file instead.
+      const String& source_file = g_empty_string) const final;
+
+  void AddConsoleMessageImpl(ConsoleMessage*, bool discard_duplicates) final;
+
+  // UseCounter orverrides:
+  void CountUse(mojom::WebFeature feature) final;
+  void CountDeprecation(mojom::WebFeature feature) final;
+
+  Document* InstallNewDocument(const DocumentInit&, bool force_xhtml);
 
   // EventTarget overrides:
   ExecutionContext* GetExecutionContext() const override;
@@ -229,6 +280,10 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   // https://html.spec.whatwg.org/C/#windoworworkerglobalscope-mixin
   void queueMicrotask(V8VoidFunction*);
 
+  // https://wicg.github.io/origin-policy/#monkeypatch-html-windoworworkerglobalscope
+  const Vector<String>& originPolicyIds() const;
+  void SetOriginPolicyIds(const Vector<String>&);
+
   // Idle callback extensions
   int requestIdleCallback(V8IdleRequestCallback*, const IdleRequestOptions*);
   void cancelIdleCallback(int id);
@@ -249,12 +304,6 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
 
   DEFINE_ATTRIBUTE_EVENT_LISTENER(search, kSearch)
 
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(webkitanimationstart, kWebkitAnimationStart)
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(webkitanimationiteration,
-                                  kWebkitAnimationIteration)
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(webkitanimationend, kWebkitAnimationEnd)
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(webkittransitionend, kWebkitTransitionEnd)
-
   DEFINE_ATTRIBUTE_EVENT_LISTENER(orientationchange, kOrientationchange)
 
   void RegisterEventListenerObserver(EventListenerObserver*);
@@ -265,7 +314,7 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   Element* frameElement() const;
 
   DOMWindow* open(v8::Isolate*,
-                  const USVStringOrTrustedURL& string_or_url,
+                  const String& url_string,
                   const AtomicString& target,
                   const String& features,
                   ExceptionState&);
@@ -277,12 +326,14 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   void DispatchPostMessage(
       MessageEvent* event,
       scoped_refptr<const SecurityOrigin> intended_target_origin,
-      std::unique_ptr<SourceLocation> location);
+      std::unique_ptr<SourceLocation> location,
+      const base::UnguessableToken& source_agent_cluster_id);
 
   void DispatchMessageEventWithOriginCheck(
       const SecurityOrigin* intended_target_origin,
-      Event*,
-      std::unique_ptr<SourceLocation>);
+      MessageEvent*,
+      std::unique_ptr<SourceLocation>,
+      const base::UnguessableToken& source_agent_cluster_id);
 
   // Events
   // EventTarget API
@@ -299,7 +350,7 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
 
   void EnqueueWindowEvent(Event&, TaskType);
   void EnqueueDocumentEvent(Event&, TaskType);
-  void EnqueuePageshowEvent(PageTransitionEventPersistence);
+  void EnqueueNonPersistedPageshowEvent();
   void EnqueueHashchangeEvent(const String& old_url, const String& new_url);
   void EnqueuePopstateEvent(scoped_refptr<SerializedScriptValue>);
   void DispatchWindowLoadEvent();
@@ -310,11 +361,7 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
 
   TrustedTypePolicyFactory* trustedTypes() const;
 
-  void DispatchPageshowEvent(PageTransitionEventPersistence persistence) {
-    DispatchEvent(
-        *PageTransitionEvent::Create(event_type_names::kPageshow, persistence),
-        document_.Get());
-  }
+  void DispatchPersistedPageshowEvent(base::TimeTicks navigation_start);
 
   void DispatchPagehideEvent(PageTransitionEventPersistence persistence) {
     DispatchEvent(
@@ -377,6 +424,8 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   String status_;
   String default_status_;
 
+  Vector<String> origin_policy_ids_;
+
   mutable Member<ApplicationCache> application_cache_;
 
   scoped_refptr<SerializedScriptValue> pending_state_object_;
@@ -384,10 +433,22 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   HeapHashSet<WeakMember<EventListenerObserver>> event_listener_observers_;
 
   mutable Member<TrustedTypePolicyFactory> trusted_types_;
+
+  // A dummy scheduler to return when the window is detached.
+  // All operations on it result in no-op, but due to this it's safe to
+  // use the returned value of GetScheduler() without additional checks.
+  // A task posted to a task runner obtained from one of its task runners
+  // will be forwarded to the default task runner.
+  // TODO(altimin): We should be able to remove it after we complete
+  // frame:document lifetime refactoring.
+  std::unique_ptr<FrameOrWorkerScheduler> detached_scheduler_;
 };
 
 template <>
 struct DowncastTraits<LocalDOMWindow> {
+  static bool AllowFrom(const ExecutionContext& context) {
+    return context.IsDocument();
+  }
   static bool AllowFrom(const DOMWindow& window) {
     return window.IsLocalDOMWindow();
   }

@@ -2,6 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
+
+import {beforeNextRender, html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
 const colors = [
   // row 1
   {name: 'annotationColorBlack', color: '#000000'},
@@ -55,6 +59,8 @@ const sizes = [
 Polymer({
   is: 'viewer-pen-options',
 
+  _template: html`{__html_template__}`,
+
   properties: {
     expanded_: {
       type: Boolean,
@@ -85,23 +91,23 @@ Polymer({
   expandAnimations_: null,
 
   /** @param {Event} e */
-  sizeChanged_: function(e) {
+  sizeChanged_(e) {
     this.selectedSize = Number(e.target.value);
   },
 
   /** @param {Event} e */
-  colorChanged_: function(e) {
+  colorChanged_(e) {
     this.selectedColor = e.target.value;
   },
 
   /** @private */
-  toggleExpanded_: function() {
+  toggleExpanded_() {
     this.expanded_ = !this.expanded_;
     this.updateExpandedState_();
   },
 
   /** @private */
-  updateExpandedStateAndFinishAnimations_: function() {
+  updateExpandedStateAndFinishAnimations_() {
     this.updateExpandedState_();
     for (const animation of /** @type {!Array<!Animation>} */ (
              this.expandAnimations_)) {
@@ -110,8 +116,8 @@ Polymer({
   },
 
   /** @override */
-  attached: function() {
-    Polymer.RenderStatus.beforeNextRender(this, () => {
+  attached() {
+    beforeNextRender(this, () => {
       this.updateExpandedStateAndFinishAnimations_();
     });
   },
@@ -120,27 +126,42 @@ Polymer({
    * Updates the state of the UI to reflect the current value of `expanded`.
    * Starts or reverses animations and enables/disable controls.
    */
-  updateExpandedState_: function() {
+  updateExpandedState_() {
     const colors = this.$.colors;
     if (!this.expandAnimations_) {
       const separator = this.$.separator;
       const expand = this.$.expand;
       this.expandAnimations_ = [
-        colors.animate({height: ['32px', '188px']}, {
-          easing: 'ease-in-out',
-          duration: 250,
-          fill: 'both',
-        }),
-        separator.animate({opacity: [0, 1]}, {
-          easing: 'ease-in-out',
-          duration: 250,
-          fill: 'both',
-        }),
-        expand.animate({transform: ['rotate(0deg)', 'rotate(180deg)']}, {
-          easing: 'ease-in-out',
-          duration: 250,
-          fill: 'forwards',
-        }),
+        colors.animate(
+            [
+              {height: '32px'},
+              {height: '188px'},
+            ],
+            {
+              easing: 'ease-in-out',
+              duration: 250,
+              fill: 'both',
+            }),
+        separator.animate(
+            [
+              {opacity: 0},
+              {opacity: 1},
+            ],
+            {
+              easing: 'ease-in-out',
+              duration: 250,
+              fill: 'both',
+            }),
+        expand.animate(
+            [
+              {transform: 'rotate(0deg)'},
+              {transform: 'rotate(180deg)'},
+            ],
+            {
+              easing: 'ease-in-out',
+              duration: 250,
+              fill: 'forwards',
+            }),
       ];
     }
     for (const animation of this.expandAnimations_) {
@@ -169,8 +190,8 @@ Polymer({
    * @param {*} a
    * @param {*} b
    */
-  equal_: function(a, b) {
-    return a == b;
+  equal_(a, b) {
+    return a === b;
   },
 
   /**
@@ -180,7 +201,7 @@ Polymer({
    * @param {string} name
    * @return {string}
    */
-  lookup_: function(strings, name) {
+  lookup_(strings, name) {
     return strings ? strings[name] : '';
   },
 

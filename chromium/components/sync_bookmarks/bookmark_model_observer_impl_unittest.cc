@@ -15,7 +15,9 @@
 #include "components/bookmarks/test/test_bookmark_client.h"
 #include "components/sync/base/time.h"
 #include "components/sync/base/unique_position.h"
+#include "components/sync/driver/sync_driver_switches.h"
 #include "components/sync_bookmarks/synced_bookmark_tracker.h"
+#include "components/undo/bookmark_undo_service.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -24,6 +26,8 @@ namespace sync_bookmarks {
 namespace {
 
 using testing::Eq;
+using testing::IsEmpty;
+using testing::IsNull;
 using testing::Ne;
 using testing::NiceMock;
 using testing::NotNull;
@@ -40,36 +44,39 @@ const size_t kMaxEntries = 1000;
 class BookmarkModelObserverImplTest : public testing::Test {
  public:
   BookmarkModelObserverImplTest()
-      : bookmark_tracker_(std::vector<NodeMetadataPair>(),
-                          std::make_unique<sync_pb::ModelTypeState>()),
+      : bookmark_tracker_(
+            SyncedBookmarkTracker::CreateEmpty(sync_pb::ModelTypeState())),
         observer_(nudge_for_commit_closure_.Get(),
                   /*on_bookmark_model_being_deleted_closure=*/base::DoNothing(),
-                  &bookmark_tracker_),
+                  bookmark_tracker_.get()),
         bookmark_model_(bookmarks::TestBookmarkClient::CreateModel()) {
     bookmark_model_->AddObserver(&observer_);
     sync_pb::EntitySpecifics specifics;
-    specifics.mutable_bookmark()->set_title(kBookmarkBarTag);
-    bookmark_tracker_.Add(
-        /*sync_id=*/kBookmarkBarId,
+    specifics.mutable_bookmark()->set_legacy_canonicalized_title(
+        kBookmarkBarTag);
+    bookmark_tracker_->Add(
         /*bookmark_node=*/bookmark_model()->bookmark_bar_node(),
+        /*sync_id=*/kBookmarkBarId,
         /*server_version=*/0, /*creation_time=*/base::Time::Now(),
         syncer::UniquePosition::InitialPosition(
             syncer::UniquePosition::RandomSuffix())
             .ToProto(),
         specifics);
-    specifics.mutable_bookmark()->set_title(kOtherBookmarksTag);
-    bookmark_tracker_.Add(
-        /*sync_id=*/kOtherBookmarksId,
+    specifics.mutable_bookmark()->set_legacy_canonicalized_title(
+        kOtherBookmarksTag);
+    bookmark_tracker_->Add(
         /*bookmark_node=*/bookmark_model()->other_node(),
+        /*sync_id=*/kOtherBookmarksId,
         /*server_version=*/0, /*creation_time=*/base::Time::Now(),
         syncer::UniquePosition::InitialPosition(
             syncer::UniquePosition::RandomSuffix())
             .ToProto(),
         specifics);
-    specifics.mutable_bookmark()->set_title(kMobileBookmarksTag);
-    bookmark_tracker_.Add(
-        /*sync_id=*/kMobileBookmarksId,
+    specifics.mutable_bookmark()->set_legacy_canonicalized_title(
+        kMobileBookmarksTag);
+    bookmark_tracker_->Add(
         /*bookmark_node=*/bookmark_model()->mobile_node(),
+        /*sync_id=*/kMobileBookmarksId,
         /*server_version=*/0, /*creation_time=*/base::Time::Now(),
         syncer::UniquePosition::InitialPosition(
             syncer::UniquePosition::RandomSuffix())
@@ -86,9 +93,9 @@ class BookmarkModelObserverImplTest : public testing::Test {
          bookmark_tracker()->GetEntitiesWithLocalChanges(kMaxEntries)) {
       const std::string id = entity->metadata()->server_id();
       // Don't simulate change in id for simplicity.
-      bookmark_tracker()->UpdateUponCommitResponse(id, id,
-                                                   /*acked_sequence_number=*/1,
-                                                   /*server_version=*/1);
+      bookmark_tracker()->UpdateUponCommitResponse(entity, id,
+                                                   /*server_version=*/1,
+                                                   /*acked_sequence_number=*/1);
     }
   }
 
@@ -101,7 +108,7 @@ class BookmarkModelObserverImplTest : public testing::Test {
   }
 
   bookmarks::BookmarkModel* bookmark_model() { return bookmark_model_.get(); }
-  SyncedBookmarkTracker* bookmark_tracker() { return &bookmark_tracker_; }
+  SyncedBookmarkTracker* bookmark_tracker() { return bookmark_tracker_.get(); }
   BookmarkModelObserverImpl* observer() { return &observer_; }
   base::MockCallback<base::RepeatingClosure>* nudge_for_commit_closure() {
     return &nudge_for_commit_closure_;
@@ -110,7 +117,7 @@ class BookmarkModelObserverImplTest : public testing::Test {
  private:
   NiceMock<base::MockCallback<base::RepeatingClosure>>
       nudge_for_commit_closure_;
-  SyncedBookmarkTracker bookmark_tracker_;
+  std::unique_ptr<SyncedBookmarkTracker> bookmark_tracker_;
   BookmarkModelObserverImpl observer_;
   std::unique_ptr<bookmarks::BookmarkModel> bookmark_model_;
 };
@@ -133,12 +140,8 @@ TEST_F(BookmarkModelObserverImplTest,
       bookmark_tracker()->GetEntitiesWithLocalChanges(kMaxEntries);
   ASSERT_THAT(local_changes.size(), 1U);
   EXPECT_THAT(local_changes[0]->bookmark_node(), Eq(bookmark_node));
-  // TODO(crbug.com/978430): Consider using |node->guid()| instead of generating
-  // new random GUIDs as the temporary server ID, and then reinstate the
-  // following expectation. However, currently that can lead to crashes due to
-  // duplicate server IDs, see crbug.com/1004205.
-  // EXPECT_THAT(local_changes[0]->metadata()->server_id(),
-  //             Eq(bookmark_node->guid()));
+  EXPECT_THAT(local_changes[0]->metadata()->server_id(),
+              Eq(bookmark_node->guid()));
 }
 
 TEST_F(BookmarkModelObserverImplTest,
@@ -404,23 +407,22 @@ TEST_F(BookmarkModelObserverImplTest,
 
   // Node should be tracked now.
   ASSERT_THAT(bookmark_tracker()->TrackedEntitiesCountForTest(), 4U);
-  const std::string id = bookmark_tracker()
-                             ->GetEntityForBookmarkNode(folder_node)
-                             ->metadata()
-                             ->server_id();
+  const SyncedBookmarkTracker::Entity* entity =
+      bookmark_tracker()->GetEntityForBookmarkNode(folder_node);
+  const std::string id = entity->metadata()->server_id();
   ASSERT_THAT(
       bookmark_tracker()->GetEntitiesWithLocalChanges(kMaxEntries).size(), 1U);
 
-  bookmark_tracker()->MarkCommitMayHaveStarted(id);
+  bookmark_tracker()->MarkCommitMayHaveStarted(entity);
 
   // Remove the folder.
   bookmark_model()->Remove(folder_node);
 
   // Simulate a commit response for the first commit request (the creation).
   // Don't simulate change in id for simplicity.
-  bookmark_tracker()->UpdateUponCommitResponse(id, id,
-                                               /*acked_sequence_number=*/1,
-                                               /*server_version=*/1);
+  bookmark_tracker()->UpdateUponCommitResponse(entity, id,
+                                               /*server_version=*/1,
+                                               /*acked_sequence_number=*/1);
 
   // There should still be one local change (the deletion).
   EXPECT_THAT(
@@ -430,9 +432,9 @@ TEST_F(BookmarkModelObserverImplTest,
   EXPECT_THAT(bookmark_tracker()->TrackedEntitiesCountForTest(), 4U);
 
   // Commit the deletion.
-  bookmark_tracker()->UpdateUponCommitResponse(id, id,
-                                               /*acked_sequence_number=*/2,
-                                               /*server_version=*/2);
+  bookmark_tracker()->UpdateUponCommitResponse(entity, id,
+                                               /*server_version=*/2,
+                                               /*acked_sequence_number=*/2);
   // Entity should have been dropped.
   EXPECT_THAT(bookmark_tracker()->TrackedEntitiesCountForTest(), 3U);
 }
@@ -504,41 +506,39 @@ TEST_F(BookmarkModelObserverImplTest, ShouldPositionSiblings) {
 }
 
 TEST_F(BookmarkModelObserverImplTest, ShouldNotSyncUnsyncableBookmarks) {
-  auto owned_managed_node = std::make_unique<bookmarks::BookmarkPermanentNode>(
-      100, bookmarks::BookmarkNode::FOLDER);
-  bookmarks::BookmarkPermanentNode* managed_node = owned_managed_node.get();
   auto client = std::make_unique<bookmarks::TestBookmarkClient>();
-  client->SetManagedNodeToLoad(std::move(owned_managed_node));
+  bookmarks::BookmarkNode* managed_node = client->EnableManagedNode();
 
   std::unique_ptr<bookmarks::BookmarkModel> model =
       bookmarks::TestBookmarkClient::CreateModelWithClient(std::move(client));
 
-  SyncedBookmarkTracker bookmark_tracker(
-      std::vector<NodeMetadataPair>(),
-      std::make_unique<sync_pb::ModelTypeState>());
+  std::unique_ptr<SyncedBookmarkTracker> bookmark_tracker =
+      SyncedBookmarkTracker::CreateEmpty(sync_pb::ModelTypeState());
   sync_pb::EntitySpecifics specifics;
-  specifics.mutable_bookmark()->set_title(kBookmarkBarTag);
-  bookmark_tracker.Add(
-      /*sync_id=*/kBookmarkBarId,
+  specifics.mutable_bookmark()->set_legacy_canonicalized_title(kBookmarkBarTag);
+  bookmark_tracker->Add(
       /*bookmark_node=*/model->bookmark_bar_node(),
+      /*sync_id=*/kBookmarkBarId,
       /*server_version=*/0, /*creation_time=*/base::Time::Now(),
       syncer::UniquePosition::InitialPosition(
           syncer::UniquePosition::RandomSuffix())
           .ToProto(),
       specifics);
-  specifics.mutable_bookmark()->set_title(kOtherBookmarksTag);
-  bookmark_tracker.Add(
-      /*sync_id=*/kOtherBookmarksId,
+  specifics.mutable_bookmark()->set_legacy_canonicalized_title(
+      kOtherBookmarksTag);
+  bookmark_tracker->Add(
       /*bookmark_node=*/model->other_node(),
+      /*sync_id=*/kOtherBookmarksId,
       /*server_version=*/0, /*creation_time=*/base::Time::Now(),
       syncer::UniquePosition::InitialPosition(
           syncer::UniquePosition::RandomSuffix())
           .ToProto(),
       specifics);
-  specifics.mutable_bookmark()->set_title(kMobileBookmarksTag);
-  bookmark_tracker.Add(
-      /*sync_id=*/kMobileBookmarksId,
+  specifics.mutable_bookmark()->set_legacy_canonicalized_title(
+      kMobileBookmarksTag);
+  bookmark_tracker->Add(
       /*bookmark_node=*/model->mobile_node(),
+      /*sync_id=*/kMobileBookmarksId,
       /*server_version=*/0, /*creation_time=*/base::Time::Now(),
       syncer::UniquePosition::InitialPosition(
           syncer::UniquePosition::RandomSuffix())
@@ -547,7 +547,7 @@ TEST_F(BookmarkModelObserverImplTest, ShouldNotSyncUnsyncableBookmarks) {
   BookmarkModelObserverImpl observer(
       nudge_for_commit_closure()->Get(),
       /*on_bookmark_model_being_deleted_closure=*/base::DoNothing(),
-      &bookmark_tracker);
+      bookmark_tracker.get());
 
   model->AddObserver(&observer);
 
@@ -558,14 +558,14 @@ TEST_F(BookmarkModelObserverImplTest, ShouldNotSyncUnsyncableBookmarks) {
       model->AddURL(/*parent=*/managed_node, /*index=*/0,
                     base::ASCIIToUTF16("Title"), GURL("http://www.url.com"));
   // Only permanent folders should be tracked.
-  EXPECT_THAT(bookmark_tracker.TrackedEntitiesCountForTest(), 3U);
+  EXPECT_THAT(bookmark_tracker->TrackedEntitiesCountForTest(), 3U);
 
   EXPECT_CALL(*nudge_for_commit_closure(), Run()).Times(0);
   // In the TestBookmarkClient, descendants of managed nodes shouldn't be
   // synced.
   model->SetTitle(unsyncable_node, base::ASCIIToUTF16("NewTitle"));
   // Only permanent folders should be tracked.
-  EXPECT_THAT(bookmark_tracker.TrackedEntitiesCountForTest(), 3U);
+  EXPECT_THAT(bookmark_tracker->TrackedEntitiesCountForTest(), 3U);
 
   EXPECT_CALL(*nudge_for_commit_closure(), Run()).Times(0);
   // In the TestBookmarkClient, descendants of managed nodes shouldn't be
@@ -573,26 +573,25 @@ TEST_F(BookmarkModelObserverImplTest, ShouldNotSyncUnsyncableBookmarks) {
   model->Remove(unsyncable_node);
 
   // Only permanent folders should be tracked.
-  EXPECT_THAT(bookmark_tracker.TrackedEntitiesCountForTest(), 3U);
+  EXPECT_THAT(bookmark_tracker->TrackedEntitiesCountForTest(), 3U);
   model->RemoveObserver(&observer);
 }
 
 TEST_F(BookmarkModelObserverImplTest, ShouldAddChildrenInArbitraryOrder) {
-  SyncedBookmarkTracker bookmark_tracker(
-      std::vector<NodeMetadataPair>(),
-      std::make_unique<sync_pb::ModelTypeState>());
+  std::unique_ptr<SyncedBookmarkTracker> bookmark_tracker =
+      SyncedBookmarkTracker::CreateEmpty(sync_pb::ModelTypeState());
   BookmarkModelObserverImpl observer(
       /*nudge_for_commit_closure=*/base::DoNothing(),
       /*on_bookmark_model_being_deleted_closure=*/base::DoNothing(),
-      &bookmark_tracker);
+      bookmark_tracker.get());
   const bookmarks::BookmarkNode* bookmark_bar_node =
       bookmark_model()->bookmark_bar_node();
   // Add the bookmark bar to the tracker.
   sync_pb::EntitySpecifics specifics;
-  specifics.mutable_bookmark()->set_title(kBookmarkBarTag);
-  bookmark_tracker.Add(
-      /*sync_id=*/kBookmarkBarId,
+  specifics.mutable_bookmark()->set_legacy_canonicalized_title(kBookmarkBarTag);
+  bookmark_tracker->Add(
       /*bookmark_node=*/bookmark_model()->bookmark_bar_node(),
+      /*sync_id=*/kBookmarkBarId,
       /*server_version=*/0, /*creation_time=*/base::Time::Now(),
       syncer::UniquePosition::InitialPosition(
           syncer::UniquePosition::RandomSuffix())
@@ -622,7 +621,7 @@ TEST_F(BookmarkModelObserverImplTest, ShouldAddChildrenInArbitraryOrder) {
   observer.BookmarkNodeAdded(bookmark_model(), bookmark_bar_node, 3);
   observer.BookmarkNodeAdded(bookmark_model(), bookmark_bar_node, 1);
 
-  ASSERT_THAT(bookmark_tracker.TrackedEntitiesCountForTest(), 6U);
+  ASSERT_THAT(bookmark_tracker->TrackedEntitiesCountForTest(), 6U);
 
   // Check that position information match the children order.
   EXPECT_TRUE(PositionOf(nodes[0]).LessThan(PositionOf(nodes[1])));
@@ -633,19 +632,64 @@ TEST_F(BookmarkModelObserverImplTest, ShouldAddChildrenInArbitraryOrder) {
 
 TEST_F(BookmarkModelObserverImplTest,
        ShouldCallOnBookmarkModelBeingDeletedClosure) {
-  SyncedBookmarkTracker bookmark_tracker(
-      std::vector<NodeMetadataPair>(),
-      std::make_unique<sync_pb::ModelTypeState>());
+  std::unique_ptr<SyncedBookmarkTracker> bookmark_tracker =
+      SyncedBookmarkTracker::CreateEmpty(sync_pb::ModelTypeState());
 
   NiceMock<base::MockCallback<base::OnceClosure>>
       on_bookmark_model_being_deleted_closure_mock;
 
   BookmarkModelObserverImpl observer(
       /*nudge_for_commit_closure=*/base::DoNothing(),
-      on_bookmark_model_being_deleted_closure_mock.Get(), &bookmark_tracker);
+      on_bookmark_model_being_deleted_closure_mock.Get(),
+      bookmark_tracker.get());
 
   EXPECT_CALL(on_bookmark_model_being_deleted_closure_mock, Run());
   observer.BookmarkModelBeingDeleted(/*model=*/nullptr);
+}
+
+TEST_F(BookmarkModelObserverImplTest,
+       ShouldAddRestoredBookmarkWhenTombstoneCommitMayHaveStarted) {
+  const bookmarks::BookmarkNode* bookmark_bar_node =
+      bookmark_model()->bookmark_bar_node();
+  const bookmarks::BookmarkNode* folder = bookmark_model()->AddFolder(
+      bookmark_bar_node, 0, base::UTF8ToUTF16("Title"));
+  // Check that the bookmark was added by observer.
+  const SyncedBookmarkTracker::Entity* folder_entity =
+      bookmark_tracker()->GetEntityForBookmarkNode(folder);
+  ASSERT_THAT(folder_entity, NotNull());
+  ASSERT_TRUE(folder_entity->IsUnsynced());
+  SimulateCommitResponseForAllLocalChanges();
+  ASSERT_FALSE(folder_entity->IsUnsynced());
+
+  // Now delete the entity and restore it with the same bookmark node.
+  BookmarkUndoService undo_service;
+  undo_service.Start(bookmark_model());
+  bookmark_model()->Remove(folder);
+
+  // The removed bookmark must be saved in the undo service.
+  ASSERT_EQ(undo_service.undo_manager()->undo_count(), 1u);
+  ASSERT_THAT(bookmark_tracker()->GetEntityForBookmarkNode(folder), IsNull());
+
+  // Check that the entity is a tombstone now.
+  const std::vector<const SyncedBookmarkTracker::Entity*> local_changes =
+      bookmark_tracker()->GetEntitiesWithLocalChanges(/*max_entries=*/2);
+  ASSERT_EQ(local_changes.size(), 1u);
+  ASSERT_EQ(local_changes.front(), folder_entity);
+  ASSERT_TRUE(local_changes.front()->metadata()->is_deleted());
+  ASSERT_EQ(bookmark_tracker()->GetTombstoneEntityForGuid(folder->guid()),
+            folder_entity);
+
+  // Restore the removed bookmark.
+  undo_service.undo_manager()->Undo();
+  undo_service.Shutdown();
+
+  EXPECT_EQ(folder_entity,
+            bookmark_tracker()->GetEntityForBookmarkNode(folder));
+  EXPECT_TRUE(folder_entity->IsUnsynced());
+  EXPECT_FALSE(folder_entity->metadata()->is_deleted());
+  EXPECT_THAT(bookmark_tracker()->GetTombstoneEntityForGuid(folder->guid()),
+              IsNull());
+  EXPECT_EQ(folder_entity->bookmark_node(), folder);
 }
 
 }  // namespace

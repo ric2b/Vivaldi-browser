@@ -34,10 +34,9 @@ namespace attestation {
 
 namespace {
 
-void StatusCallbackSuccess(
-    const policy::CloudPolicyClient::StatusCallback& callback) {
-  base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                base::BindOnce(callback, true));
+void StatusCallbackSuccess(policy::CloudPolicyClient::StatusCallback callback) {
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(std::move(callback), true));
 }
 
 // A FakeCryptohomeClient that can hold call until told to flush them all.
@@ -88,10 +87,7 @@ class EnrollmentPolicyObserverTest : public DeviceSettingsTestBase {
 
     policy_client_.SetDMToken("fake_dm_token");
 
-    std::vector<uint8_t> eid;
-    EXPECT_TRUE(base::HexStringToBytes(kEnrollmentId, &eid));
-    enrollment_id_.assign(reinterpret_cast<const char*>(eid.data()),
-                          eid.size());
+    EXPECT_TRUE(base::HexStringToString(kEnrollmentId, &enrollment_id_));
 
     // Destroy the DeviceSettingsTestBase fake client and replace it.
     CryptohomeClient::Shutdown();

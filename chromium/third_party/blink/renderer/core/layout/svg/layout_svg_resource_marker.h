@@ -26,6 +26,8 @@
 
 namespace blink {
 
+struct MarkerPosition;
+
 class LayoutSVGResourceMarker final : public LayoutSVGResourceContainer {
  public:
   explicit LayoutSVGResourceMarker(SVGMarkerElement*);
@@ -33,14 +35,13 @@ class LayoutSVGResourceMarker final : public LayoutSVGResourceContainer {
 
   const char* GetName() const override { return "LayoutSVGResourceMarker"; }
 
-  void RemoveAllClientsFromCache(bool mark_for_invalidation = true) override;
+  void RemoveAllClientsFromCache() override;
 
   // Calculates marker boundaries, mapped to the target element's coordinate
   // space.
   FloatRect MarkerBoundaries(
       const AffineTransform& marker_transformation) const;
-  AffineTransform MarkerTransformation(const FloatPoint& origin,
-                                       float angle,
+  AffineTransform MarkerTransformation(const MarkerPosition&,
                                        float stroke_width) const;
 
   AffineTransform LocalToSVGParentTransform() const final {

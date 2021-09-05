@@ -32,12 +32,24 @@ cast_source_set("prefs") {
     "//base",
     "//chromecast:chromecast_buildflags",
     "//chromecast/base",
+    "//components/cdm/browser",
     "//components/prefs",
   ]
+}
 
-  if (is_android) {
-    deps += [ "//components/cdm/browser" ]
-  }
+cast_source_set("feature_list") {
+  sources = [
+    "cast_feature_list_creator.cc",
+    "cast_feature_list_creator.h",
+  ]
+  deps = [
+    ":prefs",
+    "//base",
+    "//chromecast/base",
+    "//chromecast/browser/metrics",
+    "//components/prefs",
+    "//components/proxy_config",
+  ]
 }
 
 cast_source_set("browser") {
@@ -50,18 +62,19 @@ cast_source_set("browser") {
     "bluetooth/cast_bluetooth_chooser.h",
     "cast_browser_context.cc",
     "cast_browser_context.h",
+    "cast_browser_interface_binders.cc",
+    "cast_browser_interface_binders.h",
     "cast_browser_main_parts.cc",
     "cast_browser_main_parts.h",
     "cast_browser_process.cc",
     "cast_browser_process.h",
     "cast_content_browser_client.cc",
     "cast_content_browser_client.h",
+    "cast_content_browser_client_receiver_bindings.cc",
     "cast_content_gesture_handler.cc",
     "cast_content_gesture_handler.h",
     "cast_download_manager_delegate.cc",
     "cast_download_manager_delegate.h",
-    "cast_feature_list_creator.cc",
-    "cast_feature_list_creator.h",
     "cast_http_user_agent_settings.cc",
     "cast_http_user_agent_settings.h",
     "cast_media_blocker.cc",
@@ -70,10 +83,6 @@ cast_source_set("browser") {
     "cast_navigation_ui_data.h",
     "cast_network_contexts.cc",
     "cast_network_contexts.h",
-    "cast_network_delegate.cc",
-    "cast_network_delegate.h",
-    "cast_network_request_interceptor.cc",
-    "cast_network_request_interceptor.h",
     "cast_overlay_manifests.cc",
     "cast_overlay_manifests.h",
     "cast_permission_manager.cc",
@@ -88,8 +97,8 @@ cast_source_set("browser") {
     "cast_system_memory_pressure_evaluator_adjuster.h",
     "cast_web_contents_impl.cc",
     "cast_web_contents_impl.h",
-    "cast_web_contents_manager.cc",
-    "cast_web_contents_manager.h",
+    "cast_web_service.cc",
+    "cast_web_service.h",
     "cast_web_view_default.cc",
     "cast_web_view_default.h",
     "cast_web_view_factory.cc",
@@ -116,6 +125,8 @@ cast_source_set("browser") {
     "renderer_prelauncher.h",
     "service/cast_service_simple.cc",
     "service/cast_service_simple.h",
+    "service_connector.cc",
+    "service_connector.h",
     "tts/tts_controller.h",
     "tts/tts_controller_impl.cc",
     "tts/tts_controller_impl.h",
@@ -123,19 +134,17 @@ cast_source_set("browser") {
     "tts/tts_platform.h",
     "tts/tts_platform_stub.cc",
     "tts/tts_platform_stub.h",
-    "url_request_context_factory.cc",
-    "url_request_context_factory.h",
   ]
 
   if (chromecast_branding == "public") {
     sources += [
       "cast_browser_main_parts_simple.cc",
       "cast_content_browser_client_simple.cc",
-      "cast_network_request_interceptor_simple.cc",
     ]
   }
 
   public_deps = [
+    ":feature_list",
     ":prefs",
     ":public",
     "//chromecast/browser/metrics",
@@ -165,10 +174,14 @@ cast_source_set("browser") {
     "//chromecast/graphics",
     "//chromecast/media",
     "//chromecast/media:libcast_media",
+    "//chromecast/media/base:media_codec_support",
     "//chromecast/media/base:video_plane_controller",
     "//chromecast/media/service",
+    "//chromecast/media/service/mojom",
     "//chromecast/net",
+    "//chromecast/net:connectivity_checker",
     "//chromecast/service",
+    "//components/cdm/browser",
     "//components/download/public/common:public",
     "//components/metrics",
     "//components/metrics:gpu",
@@ -193,9 +206,9 @@ cast_source_set("browser") {
     "//gpu",
     "//ipc",
     "//media",
-    "//media/mojo/services:media_manifest",
     "//net",
     "//services/media_session/public/mojom",
+    "//services/network/public/mojom",
     "//services/service_manager/public/cpp",
     "//ui/base",
     "//ui/compositor",
@@ -210,10 +223,10 @@ cast_source_set("browser") {
       "android/cast_content_window_android.cc",
       "android/cast_content_window_android.h",
       "android/cast_metrics_helper_android.cc",
+      "android/cast_web_service_android.cc",
     ]
     deps += [
       ":jni_headers",
-      "//components/cdm/browser",
       "//components/embedder_support/android:view",
     ]
   } else {
@@ -245,16 +258,32 @@ cast_source_set("browser") {
     sources += [
       "cast_content_window_aura.cc",
       "cast_content_window_aura.h",
+      "cast_web_service_aura.cc",
     ]
 
-    deps += [ "//ui/views:views" ]
+    deps += [
+      "//chromecast/ui:media_control_ui",
+      "//ui/views:views",
+    ]
+
+    if (!is_fuchsia) {
+      sources += [
+        "devtools/cast_ui_devtools.cc",
+        "devtools/cast_ui_devtools.h",
+      ]
+
+      deps += [
+        "//components/ui_devtools",
+        "//components/ui_devtools/views",
+      ]
+    }
   }
 
   if (!is_fuchsia) {
     # TODO(crbug.com/753619): Enable crash reporting on Fuchsia.
     deps += [
-      "//components/crash/content/app",
       "//components/crash/content/browser",
+      "//components/crash/core/app",
     ]
 
     # TODO(crbug.com/933142): Fuchsia needs its own methods to bridge with heap
@@ -272,10 +301,7 @@ cast_source_set("browser") {
   }
 
   if (enable_mojo_media) {
-    deps += [
-      "//media/mojo/mojom:constants",
-      "//media/mojo/services",
-    ]
+    deps += [ "//media/mojo/services" ]
   }
 
   if (enable_external_mojo_services) {
@@ -376,28 +402,40 @@ cast_source_set("browser") {
     ]
   }
 
-  if (enable_cast_wayland_server) {
+  if (is_linux && use_ozone) {
     sources += [
       "exo/cast_wm_helper.cc",
       "exo/cast_wm_helper.h",
       "exo/wayland_server_controller.cc",
       "exo/wayland_server_controller.h",
+      "webview/cast_app_controller.cc",
+      "webview/cast_app_controller.h",
+      "webview/cast_app_rpc_instance.cc",
+      "webview/cast_app_rpc_instance.h",
+      "webview/js_channel_service.cc",
+      "webview/js_channel_service.h",
+      "webview/platform_views_grpc_service.cc",
+      "webview/platform_views_grpc_service.h",
+      "webview/platform_views_rpc_instance.cc",
+      "webview/platform_views_rpc_instance.h",
+      "webview/web_content_controller.cc",
+      "webview/web_content_controller.h",
       "webview/webview_controller.cc",
       "webview/webview_controller.h",
-      "webview/webview_grpc_service.cc",
-      "webview/webview_grpc_service.h",
-      "webview/webview_layout_manager.cc",
-      "webview/webview_layout_manager.h",
       "webview/webview_navigation_throttle.cc",
       "webview/webview_navigation_throttle.h",
+      "webview/webview_rpc_instance.cc",
+      "webview/webview_rpc_instance.h",
       "webview/webview_window_manager.cc",
       "webview/webview_window_manager.h",
     ]
     configs += [ "//third_party/grpc:grpc_config" ]
     deps += [
+      ":web_contents_provider",
       "//chromecast/browser/webview/proto",
       "//components/exo",
       "//components/exo/wayland",
+      "//content/public/browser",
       "//services/viz/privileged/mojom/compositing",
       "//ui/display/manager",
     ]
@@ -409,7 +447,6 @@ cast_source_set("browser") {
     deps += [
       "//chromecast/internal/shell/browser:cast_content_browser_internal_manifest_overlay",
       "//chromecast/internal/shell/browser:cast_content_packaged_services_internal_manifest_overlay",
-      "//chromecast/internal/shell/browser:cast_content_renderer_internal_manifest_overlay",
     ]
 
     defines = [ "USE_INTERNAL_OVERLAY_MANIFESTS=1" ]
@@ -437,6 +474,8 @@ cast_source_set("public") {
   deps = [
     "//base",
     "//chromecast/graphics",
+    "//chromecast/ui:back_gesture_router",
+    "//chromecast/ui/mojom",
     "//content/public/common",
     "//ui/events",
     "//url",
@@ -556,8 +595,12 @@ if (is_android) {
   }
 
   java_cpp_enum("java_enums") {
-    sources = [
-      "cast_content_window.h",
-    ]
+    sources = [ "cast_content_window.h" ]
   }
+}
+
+cast_source_set("web_contents_provider") {
+  sources = [ "webview/web_contents_provider.h" ]
+
+  deps = [ "//content/public/browser" ]
 }

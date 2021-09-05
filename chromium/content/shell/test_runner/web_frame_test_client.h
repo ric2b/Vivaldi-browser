@@ -25,25 +25,18 @@ class WebViewTestProxy;
 // RenderFrameImpl).
 class WebFrameTestClient : public blink::WebLocalFrameClient {
  public:
-  // Caller has to ensure that all arguments (|delegate|,
-  // |web_view_test_proxy| and so forth) live longer than |this|.
-  WebFrameTestClient(WebTestDelegate* delegate,
-                     WebViewTestProxy* web_view_test_proxy,
+  // Caller has to ensure that all arguments (|web_view_test_proxy| and so
+  // forth) live longer than |this|.
+  WebFrameTestClient(WebViewTestProxy* web_view_test_proxy,
                      WebFrameTestProxy* web_frame_test_proxy);
 
-  ~WebFrameTestClient() override;
+  ~WebFrameTestClient() override = default;
   bool ShouldContinueNavigation(blink::WebNavigationInfo* info);
 
-  static void PrintFrameDescription(WebTestDelegate* delegate,
-                                    blink::WebLocalFrame* frame);
+  static std::string PrintFrameDescription(WebTestDelegate* delegate,
+                                           blink::WebLocalFrame* frame);
 
   // WebLocalFrameClient overrides needed by WebFrameTestProxy.
-  void RunModalAlertDialog(const blink::WebString& message) override;
-  bool RunModalConfirmDialog(const blink::WebString& message) override;
-  bool RunModalPromptDialog(const blink::WebString& message,
-                            const blink::WebString& default_value,
-                            blink::WebString* actual_value) override;
-  bool RunModalBeforeUnloadDialog(bool is_reload) override;
   void PostAccessibilityEvent(const blink::WebAXObject& object,
                               ax::mojom::Event event,
                               ax::mojom::EventFrom event_from) override;
@@ -58,14 +51,6 @@ class WebFrameTestClient : public blink::WebLocalFrameClient {
                               const blink::WebString& source_name,
                               unsigned source_line,
                               const blink::WebString& stack_trace) override;
-  void DownloadURL(const blink::WebURLRequest& request,
-                   network::mojom::RedirectMode cross_origin_redirect_behavior,
-                   mojo::ScopedMessagePipeHandle blob_url_token) override;
-  void DidReceiveTitle(const blink::WebString& title,
-                       blink::WebTextDirection direction) override;
-  void DidChangeIcon(blink::WebIconURL::Type icon_type) override;
-  void DidFailLoad(const blink::WebURLError& error,
-                   blink::WebHistoryCommitType commit_type) override;
   void DidStartLoading() override;
   void DidStopLoading() override;
   void DidDispatchPingLoader(const blink::WebURL& url) override;
@@ -78,11 +63,12 @@ class WebFrameTestClient : public blink::WebLocalFrameClient {
 
  private:
   TestRunner* test_runner();
+  WebTestDelegate* delegate();
+
   void HandleWebAccessibilityEvent(const blink::WebAXObject& obj,
                                    const char* event_name);
 
   // Borrowed pointers to other parts of web tests state.
-  WebTestDelegate* delegate_;
   WebViewTestProxy* web_view_test_proxy_;
   WebFrameTestProxy* web_frame_test_proxy_;
 

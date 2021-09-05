@@ -35,12 +35,12 @@
 #include "net/base/url_util.h"
 #include "net/http/http_request_headers.h"
 #include "net/log/net_log.h"
+#include "net/proxy_resolution/configured_proxy_resolution_service.h"
 #include "net/proxy_resolution/proxy_config.h"
 #include "net/proxy_resolution/proxy_config_service.h"
 #include "net/proxy_resolution/proxy_config_service_fixed.h"
 #include "net/proxy_resolution/proxy_config_with_annotation.h"
 #include "net/proxy_resolution/proxy_info.h"
-#include "net/proxy_resolution/proxy_resolution_service.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
@@ -96,8 +96,11 @@ class ConnectTestingEventInterface : public WebSocketEventInterface {
   // Implementation of WebSocketEventInterface.
   void OnCreateURLRequest(URLRequest* request) override {}
 
-  void OnAddChannelResponse(const std::string& selected_subprotocol,
-                            const std::string& extensions) override;
+  void OnAddChannelResponse(
+      std::unique_ptr<WebSocketHandshakeResponseInfo> response,
+      const std::string& selected_subprotocol,
+      const std::string& extensions,
+      int64_t send_flow_control_quota) override;
 
   void OnDataFrame(bool fin,
                    WebSocketMessageType type,
@@ -117,9 +120,6 @@ class ConnectTestingEventInterface : public WebSocketEventInterface {
 
   void OnStartOpeningHandshake(
       std::unique_ptr<WebSocketHandshakeRequestInfo> request) override;
-
-  void OnFinishOpeningHandshake(
-      std::unique_ptr<WebSocketHandshakeResponseInfo> response) override;
 
   void OnSSLCertificateError(
       std::unique_ptr<SSLErrorCallbacks> ssl_error_callbacks,
@@ -167,8 +167,10 @@ std::string ConnectTestingEventInterface::extensions() const {
 }
 
 void ConnectTestingEventInterface::OnAddChannelResponse(
+    std::unique_ptr<WebSocketHandshakeResponseInfo> response,
     const std::string& selected_subprotocol,
-    const std::string& extensions) {
+    const std::string& extensions,
+    int64_t send_flow_control_quota) {
   selected_subprotocol_ = selected_subprotocol;
   extensions_ = extensions;
   QuitNestedEventLoop();
@@ -195,9 +197,6 @@ void ConnectTestingEventInterface::OnFailChannel(const std::string& message) {
 
 void ConnectTestingEventInterface::OnStartOpeningHandshake(
     std::unique_ptr<WebSocketHandshakeRequestInfo> request) {}
-
-void ConnectTestingEventInterface::OnFinishOpeningHandshake(
-    std::unique_ptr<WebSocketHandshakeResponseInfo> response) {}
 
 void ConnectTestingEventInterface::OnSSLCertificateError(
     std::unique_ptr<SSLErrorCallbacks> ssl_error_callbacks,
@@ -251,10 +250,10 @@ class TestProxyDelegateWithProxyInfo : public ProxyDelegate {
 
   void OnFallback(const ProxyServer& bad_proxy, int net_error) override {}
 
-  void OnBeforeHttp1TunnelRequest(const ProxyServer& proxy_server,
-                                  HttpRequestHeaders* extra_headers) override {}
+  void OnBeforeTunnelRequest(const ProxyServer& proxy_server,
+                             HttpRequestHeaders* extra_headers) override {}
 
-  Error OnHttp1TunnelHeadersReceived(
+  Error OnTunnelHeadersReceived(
       const ProxyServer& proxy_server,
       const HttpResponseHeaders& response_headers) override {
     return OK;
@@ -292,12 +291,15 @@ class WebSocketEndToEndTest : public TestWithTaskEnvironment {
       InitialiseContext();
     }
     url::Origin origin = url::Origin::Create(GURL("http://localhost"));
-    GURL site_for_cookies("http://localhost/");
+    net::SiteForCookies site_for_cookies =
+        net::SiteForCookies::FromOrigin(origin);
+    net::NetworkIsolationKey network_isolation_key(origin, origin);
     event_interface_ = new ConnectTestingEventInterface();
     channel_ = std::make_unique<WebSocketChannel>(
         base::WrapUnique(event_interface_), &context_);
     channel_->SendAddChannelRequest(GURL(socket_url), sub_protocols_, origin,
-                                    site_for_cookies, HttpRequestHeaders());
+                                    site_for_cookies, network_isolation_key,
+                                    HttpRequestHeaders());
     event_interface_->WaitForResponse();
     return !event_interface_->failed();
   }
@@ -334,8 +336,8 @@ TEST_F(WebSocketEndToEndTest, DISABLED_HttpsProxyUnauthedFails) {
   std::string proxy_config =
       "https=" + proxy_server.host_port_pair().ToString();
   std::unique_ptr<ProxyResolutionService> proxy_resolution_service(
-      ProxyResolutionService::CreateFixed(proxy_config,
-                                          TRAFFIC_ANNOTATION_FOR_TESTS));
+      ConfiguredProxyResolutionService::CreateFixed(
+          proxy_config, TRAFFIC_ANNOTATION_FOR_TESTS));
   ASSERT_TRUE(proxy_resolution_service);
   context_.set_proxy_resolution_service(proxy_resolution_service.get());
   EXPECT_FALSE(ConnectAndWait(ws_server.GetURL(kEchoServer)));
@@ -369,7 +371,7 @@ TEST_F(WebSocketEndToEndTest, MAYBE_HttpsWssProxyUnauthedFails) {
   proxy_config.proxy_rules().bypass_rules.AddRulesToSubtractImplicit();
 
   std::unique_ptr<ProxyResolutionService> proxy_resolution_service(
-      ProxyResolutionService::CreateFixed(ProxyConfigWithAnnotation(
+      ConfiguredProxyResolutionService::CreateFixed(ProxyConfigWithAnnotation(
           proxy_config, TRAFFIC_ANNOTATION_FOR_TESTS)));
   ASSERT_TRUE(proxy_resolution_service);
   context_.set_proxy_resolution_service(proxy_resolution_service.get());
@@ -396,7 +398,7 @@ TEST_F(WebSocketEndToEndTest, MAYBE_HttpsProxyUsed) {
   proxy_config.proxy_rules().bypass_rules.AddRulesToSubtractImplicit();
 
   std::unique_ptr<ProxyResolutionService> proxy_resolution_service(
-      ProxyResolutionService::CreateFixed(ProxyConfigWithAnnotation(
+      ConfiguredProxyResolutionService::CreateFixed(ProxyConfigWithAnnotation(
           proxy_config, TRAFFIC_ANNOTATION_FOR_TESTS)));
   context_.set_proxy_resolution_service(proxy_resolution_service.get());
   InitialiseContext();
@@ -461,10 +463,10 @@ TEST_F(WebSocketEndToEndTest, MAYBE_ProxyPacUsed) {
   proxy_config.set_pac_mandatory(true);
   auto proxy_config_service = std::make_unique<ProxyConfigServiceFixed>(
       ProxyConfigWithAnnotation(proxy_config, TRAFFIC_ANNOTATION_FOR_TESTS));
-  NetLog net_log;
   std::unique_ptr<ProxyResolutionService> proxy_resolution_service(
-      ProxyResolutionService::CreateUsingSystemProxyResolver(
-          std::move(proxy_config_service), &net_log));
+      ConfiguredProxyResolutionService::CreateUsingSystemProxyResolver(
+          std::move(proxy_config_service), /*quick_check_enabled=*/true,
+          NetLog::Get()));
   ASSERT_EQ(ws_server.host_port_pair().host(), "127.0.0.1");
   context_.set_proxy_resolution_service(proxy_resolution_service.get());
   InitialiseContext();

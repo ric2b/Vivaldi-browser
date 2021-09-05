@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "base/memory/scoped_refptr.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_piece.h"
 #include "build/build_config.h"
@@ -20,16 +21,13 @@
 #include "url/url_util.h"
 
 namespace base {
-class RefCountedMemory;
 class DictionaryValue;
+class RefCountedMemory;
+class SequencedTaskRunner;
 }
 
 namespace blink {
 class OriginTrialPolicy;
-}
-
-namespace IPC {
-class Message;
 }
 
 namespace gfx {
@@ -43,6 +41,10 @@ struct GPUInfo;
 namespace media {
 struct CdmHostFilePath;
 class MediaDrmBridgeClient;
+}
+
+namespace mojo {
+class BinderMap;
 }
 
 namespace content {
@@ -147,9 +149,6 @@ class CONTENT_EXPORT ContentClient {
 
   virtual void AddAdditionalSchemes(Schemes* schemes) {}
 
-  // Returns whether the given message should be sent in a swapped out renderer.
-  virtual bool CanSendWhileSwappedOut(const IPC::Message* message);
-
   // Returns a string resource given its id.
   virtual base::string16 GetLocalizedString(int message_id);
 
@@ -200,10 +199,11 @@ class CONTENT_EXPORT ContentClient {
 #endif  // OS_ANDROID
 
   // Allows the embedder to handle incoming interface binding requests from
-  // the browser process to any type of child process.
-  virtual void BindChildProcessInterface(
-      const std::string& interface_name,
-      mojo::ScopedMessagePipeHandle* receiving_handle);
+  // the browser process to any type of child process. This is called once
+  // in each child process during that process's initialization.
+  virtual void ExposeInterfacesToBrowser(
+      scoped_refptr<base::SequencedTaskRunner> io_task_runner,
+      mojo::BinderMap* binders);
 
  private:
   friend class ContentClientInitializer;  // To set these pointers.

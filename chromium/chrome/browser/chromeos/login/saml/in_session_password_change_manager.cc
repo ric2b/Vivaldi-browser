@@ -204,9 +204,21 @@ InSessionPasswordChangeManager::~InSessionPasswordChangeManager() {
   // Remove |this| as a SessionActivationObserver.
   auto* session_controller = ash::SessionController::Get();
   if (session_controller) {
-    session_controller->AddSessionActivationObserverForAccountId(
+    session_controller->RemoveSessionActivationObserverForAccountId(
         primary_user_->GetAccountId(), this);
   }
+}
+
+// static
+void InSessionPasswordChangeManager::SetForTesting(
+    InSessionPasswordChangeManager* instance) {
+  CHECK(!g_test_instance);
+  g_test_instance = instance;
+}
+
+// static
+void InSessionPasswordChangeManager::ResetForTesting() {
+  g_test_instance = nullptr;
 }
 
 void InSessionPasswordChangeManager::MaybeShowExpiryNotification() {
@@ -414,18 +426,6 @@ InSessionPasswordChangeManager* InSessionPasswordChangeManager::GetNullable() {
   return g_test_instance ? g_test_instance
                          : g_browser_process->platform_part()
                                ->in_session_password_change_manager();
-}
-
-// static
-void InSessionPasswordChangeManager::SetForTesting(
-    InSessionPasswordChangeManager* instance) {
-  CHECK(!g_test_instance);
-  g_test_instance = instance;
-}
-
-// static
-void InSessionPasswordChangeManager::ResetForTesting() {
-  g_test_instance = nullptr;
 }
 
 void InSessionPasswordChangeManager::NotifyObservers(Event event) {

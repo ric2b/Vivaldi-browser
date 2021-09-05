@@ -7,17 +7,16 @@ package org.chromium.chrome.browser.explore_sites;
 import android.content.Context;
 import android.text.format.DateUtils;
 
+import androidx.annotation.VisibleForTesting;
+
 import org.chromium.base.ContextUtils;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.UsedByReflection;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.DeviceConditions;
-import org.chromium.chrome.browser.background_task_scheduler.NativeBackgroundTask;
-import org.chromium.chrome.browser.background_task_scheduler.NativeBackgroundTask.StartBeforeNativeResult;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.components.background_task_scheduler.BackgroundTask.TaskFinishedCallback;
 import org.chromium.components.background_task_scheduler.BackgroundTaskSchedulerFactory;
+import org.chromium.components.background_task_scheduler.NativeBackgroundTask;
 import org.chromium.components.background_task_scheduler.TaskIds;
 import org.chromium.components.background_task_scheduler.TaskInfo;
 import org.chromium.components.background_task_scheduler.TaskParameters;
@@ -43,7 +42,7 @@ public class ExploreSitesBackgroundTask extends NativeBackgroundTask {
 
     @VisibleForTesting
     protected Profile getProfile() {
-        if (mProfile == null) mProfile = Profile.getLastUsedProfile();
+        if (mProfile == null) mProfile = Profile.getLastUsedRegularProfile();
         return mProfile;
     }
 

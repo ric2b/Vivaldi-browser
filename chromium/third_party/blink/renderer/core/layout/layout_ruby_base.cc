@@ -65,9 +65,9 @@ void LayoutRubyBase::MoveChildren(LayoutRubyBase* to_base,
   else
     MoveBlockChildren(to_base, before_child);
 
-  SetNeedsLayoutAndPrefWidthsRecalcAndFullPaintInvalidation(
+  SetNeedsLayoutAndIntrinsicWidthsRecalcAndFullPaintInvalidation(
       layout_invalidation_reason::kUnknown);
-  to_base->SetNeedsLayoutAndPrefWidthsRecalcAndFullPaintInvalidation(
+  to_base->SetNeedsLayoutAndIntrinsicWidthsRecalcAndFullPaintInvalidation(
       layout_invalidation_reason::kUnknown);
 }
 
@@ -152,7 +152,7 @@ void LayoutRubyBase::AdjustInlineDirectionLineBounds(
     unsigned expansion_opportunity_count,
     LayoutUnit& logical_left,
     LayoutUnit& logical_width) const {
-  int max_preferred_logical_width = MaxPreferredLogicalWidth().ToInt();
+  int max_preferred_logical_width = PreferredLogicalWidths().max_size.ToInt();
   if (max_preferred_logical_width >= logical_width)
     return;
 

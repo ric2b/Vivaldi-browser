@@ -1,0 +1,47 @@
+<!doctype HTML>
+<html>
+<meta charset="utf8">
+<title>Subtree Visibility: accessibility focus</title>
+<link rel="author" title="Rakina Zata Amni" href="mailto:rakina@chromium.org">
+<link rel="help" href="https://github.com/WICG/display-locking">
+<link rel="match" href="container-ref.html">
+<meta name="assert" content="subtree-visibility auto subtrees are exposed by accessibility focus">
+
+<script src="/resources/testharness.js"></script>
+<script src="/resources/testharnessreport.js"></script>
+
+<div id="hidden" style="subtree-visibility: auto">
+  foo
+  <div id="child" tabindex="0">
+    bar
+  </div>
+</div>
+
+<script>
+function axElementById(id) {
+  return accessibilityController.accessibleElementById(id);
+}
+
+async_test(async(t) => {
+  t.step(() => {
+    let axChild = axElementById("child");
+    assert_false(Boolean(axChild.backgroundColor), "Background color after activation");
+  });
+
+  axElementById("child").takeFocus();  // Use accessibility to set the focus.
+
+  // Wait for a few frames for the ax tree to be refreshed.
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+-     requestAnimationFrame(() => {
+  -     t.step(() => {
+          let axChild = axElementById("child");
+          assert_equals(axChild.backgroundColor, 0xFFFFFFFF, "Background color after activation");
+        });
+        t.done();
+      });
+    });
+  });
+}, "Accessiblility focus causes activatable hidden tree to activate, and thus accessibility details such as background color become available");
+
+</script>

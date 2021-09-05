@@ -20,6 +20,10 @@ Polymer({
     },
   },
 
+  hostAttributes: {
+    'role': 'alert',
+  },
+
   observers: ['resetAutoHide_(duration, open)'],
 
   /** @private {number|null} */
@@ -29,13 +33,13 @@ Polymer({
    * Cancels existing auto-hide, and sets up new auto-hide.
    * @private
    */
-  resetAutoHide_: function() {
-    if (this.hideTimeoutId_ != null) {
+  resetAutoHide_() {
+    if (this.hideTimeoutId_ !== null) {
       window.clearTimeout(this.hideTimeoutId_);
       this.hideTimeoutId_ = null;
     }
 
-    if (this.open && this.duration != 0) {
+    if (this.open && this.duration !== 0) {
       this.hideTimeoutId_ = window.setTimeout(() => {
         this.open = false;
       }, this.duration);
@@ -54,13 +58,13 @@ Polymer({
    * is updated to that value.
    * @param {number=} duration
    */
-  show: function(duration) {
+  show(duration) {
     // |this.resetAutoHide_| is called whenever |this.duration| or |this.open|
     // is changed. If neither is changed, we will still need to reset auto-hide.
     let shouldResetAutoHide = true;
 
-    if (typeof(duration) != 'undefined' && duration >= 0 &&
-        this.duration != duration) {
+    if (typeof (duration) !== 'undefined' && duration >= 0 &&
+        this.duration !== duration) {
       this.duration = duration;
       shouldResetAutoHide = false;
     }
@@ -78,7 +82,7 @@ Polymer({
   /**
    * Hides the toast.
    */
-  hide: function() {
+  hide() {
     this.open = false;
   },
 });

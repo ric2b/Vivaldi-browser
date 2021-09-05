@@ -3,12 +3,15 @@
 <translationbundle lang="cs">
 <translation id="1033008476608128425">Listnany (Krajina 3)</translation>
 <translation id="1118377629180821201">Vesnička (Krajina 12)</translation>
+<translation id="1158503667684816647">Již nezobrazovat potvrzení</translation>
 <translation id="1276145862619442150">Rychlé přístupy</translation>
 <translation id="1281950884873973195">Kočka (Zvířena 6)</translation>
 <translation id="1411638389238344450">Odeslat odkaz poštou</translation>
 <translation id="1454726940098520109">Již nezobrazovat</translation>
+<translation id="1462666970065907900">Opravdu chcete uzavřít toto okno?</translation>
 <translation id="1657174850639146440">Týpek (Příšerka 9)</translation>
 <translation id="1676595396635191120">Nové soukromé okno</translation>
+<translation id="1728549374069268714">Vložit a přejít</translation>
 <translation id="1756026472674246267">Otevřít odkaz v novém listu</translation>
 <translation id="1759842336958782510">Google Chrome</translation>
 <translation id="1769904678986817931">Vlastnosti obrázku…</translation>
@@ -42,7 +45,6 @@
 <translation id="3542768452570884558">Otevřít odkaz v novém okně</translation>
 <translation id="3588820906588687999">Otevřít obrázek v novém listu</translation>
 <translation id="3601066750251199488">Mimozemšťan (Příšerka 3)</translation>
-<translation id="366643050267431920">Přidat jako událost</translation>
 <translation id="3732157130969736834">Přidat odkaz do záložek</translation>
 <translation id="3732388226447288666">Liška ryšavá (Zvířena 2)</translation>
 <translation id="3732439195215136813">Koala (Zvířena 5)</translation>
@@ -55,6 +57,7 @@
 <translation id="4074744496918018786">Otevřít obrázek v soukromém okně</translation>
 <translation id="4324492550286218827">Městečko (Krajina 2)</translation>
 <translation id="4406101500523955324">Otevřít v soukromém okně</translation>
+<translation id="4420816922321010053">Opravdu chcete ukončit Vivaldi?</translation>
 <translation id="443008484043213881">Nástroje</translation>
 <translation id="4456211719108566931">Hromádka neštěstí… (Příšerka 6)</translation>
 <translation id="4512900838580567989">Otevřít odkaz v novém listu na pozadí</translation>
@@ -64,7 +67,6 @@
 <translation id="4636708767492582204">Odeslat poštou</translation>
 <translation id="4677434526832593569">Vlk (Zvířena 8)</translation>
 <translation id="4881695831933465202">Otevřít</translation>
-<translation id="4973311370126107785">Spouštění JavaScriptu skrze AppleScript je vypnuto. Pro zapnutí přejděte z lišty menu do Nástroje &gt; Povolit JavaScript z Apple Events.</translation>
 <translation id="5014281392052865061">Importovaný rychlý přístup</translation>
 <translation id="5092656712000637858">Přidat stránku jako webový panel</translation>
 <translation id="5177818338935286353">Pomelka (Příšerka 7)</translation>
@@ -73,6 +75,7 @@
 <translation id="5305569355661722298">Potvrzení zavření okna</translation>
 <translation id="5388358297987318779">Otevřít obrázek v současném listu</translation>
 <translation id="5416008465899576639">Je dostupná nová verze prohlížeče Vivaldi.</translation>
+<translation id="5497042274492038489">Potvrďte uzavření okna</translation>
 <translation id="5594602170491763400">„Smějící se bestie“ (Příšerka 5)</translation>
 <translation id="5615637589913244581">Opera verze 15+ (Beta)</translation>
 <translation id="5648110075441906505">Otevřít obrázek v novém okně</translation>
@@ -87,6 +90,7 @@
 <translation id="6438786710866753178">Jehličnany (Krajina 4)</translation>
 <translation id="6477028720702061455">Vyberte složku s profilem Opery</translation>
 <translation id="6510706699590490869">&amp;Aktualizovat Vivaldi</translation>
+<translation id="6538338088414940408">Otevřít odkaz v listu na pozadí</translation>
 <translation id="6551219277044048123">Přidat jako &amp;vyhledávač…</translation>
 <translation id="6630781781151951863">Tropy (Krajina 18)</translation>
 <translation id="6804831687363620480">Je nám líto, ale nemůžeme získat nastavení prohlížeče Opera 15+, běží-li zrovna. K importování těchto nastavení do Vivaldi, uložte vše potřebné a ukončete všechna okna Opery 15+. Pak klepněte na Pokračovat.</translation>
@@ -97,6 +101,8 @@
 <translation id="7496505986576158197">Prohlížeč Vivaldi mohl vzniknout díky <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> open source projektu a dalšímu <ph name="BEGIN_LINK_OSS" />otevřenému softwaru<ph name="END_LINK_OSS" />.</translation>
 <translation id="7715497554424665066">&amp;Odložit aktualizaci</translation>
 <translation id="7724603315864178912">Vyjmout</translation>
+<translation id="7793738202466490491">Přidat jako událost kalendáře</translation>
+<translation id="7865983598101744945">Potvrďte ukončení</translation>
 <translation id="7957213167373139414">Můj kalendář</translation>
 <translation id="8027581147000338959">Otevřít v novém okně</translation>
 <translation id="8099620695029051217">Kopírovat adresu stránky</translation>
@@ -105,7 +111,9 @@
 <translation id="8331671104904436324">Otevřít v listu na pozadí</translation>
 <translation id="8373293945112511707">Vodopád (Krajina 1)</translation>
 <translation id="8427094907586191051">Savana (Krajina 17)</translation>
+<translation id="8446668873108041390">Vykonávání JavaScriptu skrze AppleScript je vypnuto. JavaScript z Apple událostí můžete povolit v Nastavení → Soukromí → Apple události.</translation>
 <translation id="8539196077526389150">Louka (Krajina 13)</translation>
+<translation id="8624587806981488221">&amp;Znovu načíst obrázek</translation>
 <translation id="864444594187862076">Opera verze 15+ (Developer)</translation>
 <translation id="8651348004684669199">Přidat aktivní list</translation>
 <translation id="8669345741879513971">Zaskočené prasítko (Příšerka 10)</translation>

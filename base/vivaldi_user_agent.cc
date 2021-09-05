@@ -21,10 +21,6 @@ const base::StringPiece g_vivaldi_whitelisted_domains[] = {
 // TODO: deduce this automatically at compile time.
 constexpr size_t kMaxWhitelistedDomainLength = 20;
 
-// We need to consider only the host suffix of this length. Extra byte accounts
-// for the dot after the longest domain.
-constexpr size_t kMaxHostSuffixToCheck = kMaxWhitelistedDomainLength + 1;
-
 bool g_user_agent_switch_checked = false;
 bool g_user_agent_switch_present = false;
 

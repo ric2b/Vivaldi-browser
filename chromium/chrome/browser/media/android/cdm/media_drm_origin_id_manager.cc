@@ -156,23 +156,19 @@ base::UnguessableToken TakeFirstOriginId(PrefService* const pref_service) {
   auto* origin_id_dict = update.Get();
   DCHECK(origin_id_dict->is_dict());
 
-  base::Value* origin_ids =
-      origin_id_dict->FindKeyOfType(kOriginIds, base::Value::Type::LIST);
+  base::Value* origin_ids = origin_id_dict->FindListKey(kOriginIds);
   if (!origin_ids)
     return base::UnguessableToken::Null();
 
-  auto& origin_ids_list = origin_ids->GetList();
-  if (origin_ids_list.empty())
+  if (origin_ids->GetList().empty())
     return base::UnguessableToken::Null();
 
   base::UnguessableToken result;
-  auto first_entry = origin_ids_list.begin();
+  auto first_entry = origin_ids->GetList().begin();
   if (!base::GetValueAsUnguessableToken(*first_entry, &result))
     return base::UnguessableToken::Null();
 
-  // Update the setting with the value removed.
-  origin_ids_list.erase(first_entry);
-  origin_id_dict->SetKey(kOriginIds, base::Value(origin_ids_list));
+  origin_ids->EraseListIter(first_entry);
   return result;
 }
 
@@ -182,18 +178,10 @@ void AddOriginId(base::Value* origin_id_dict,
   DCHECK(origin_id_dict);
   DCHECK(origin_id_dict->is_dict());
 
-  base::Value* origin_ids =
-      origin_id_dict->FindKeyOfType(kOriginIds, base::Value::Type::LIST);
-  if (!origin_ids) {
-    base::Value::ListStorage list;
-    list.push_back(base::CreateUnguessableTokenValue(origin_id));
-    origin_id_dict->SetKey(kOriginIds, base::Value(list));
-    return;
-  }
-
-  auto& origin_ids_list = origin_ids->GetList();
-  origin_ids_list.push_back(base::CreateUnguessableTokenValue(origin_id));
-  origin_id_dict->SetKey(kOriginIds, base::Value(origin_ids_list));
+  base::Value* origin_ids = origin_id_dict->FindListKey(kOriginIds);
+  if (!origin_ids)
+    origin_ids = origin_id_dict->SetKey(kOriginIds, base::ListValue());
+  origin_ids->Append(base::CreateUnguessableTokenValue(origin_id));
 }
 
 // Helper class that creates a new origin ID and provisions it for both L1
@@ -208,18 +196,26 @@ class MediaDrmProvisionHelper {
   MediaDrmProvisionHelper() {
     DVLOG(1) << __func__;
     DCHECK(media::MediaDrmBridge::IsPerOriginProvisioningSupported());
-
-    create_fetcher_cb_ =
-        base::BindRepeating(&content::CreateProvisionFetcher,
-                            g_browser_process->system_network_context_manager()
-                                ->GetSharedURLLoaderFactory());
   }
 
   void Provision(ProvisionedOriginIdCB callback) {
     DVLOG(1) << __func__;
 
+    auto* network_context_manager =
+        g_browser_process->system_network_context_manager();
+    if (!network_context_manager) {
+      // system_network_context_manager() returns nullptr in unit tests.
+      DLOG(WARNING) << "Failed to provision origin ID as no "
+                       "system_network_context_manager";
+      std::move(callback).Run(false, base::nullopt);
+      return;
+    }
+
     complete_callback_ = std::move(callback);
     origin_id_ = base::UnguessableToken::Create();
+    create_fetcher_cb_ = base::BindRepeating(
+        &content::CreateProvisionFetcher,
+        network_context_manager->GetSharedURLLoaderFactory());
 
     // Try provisioning for L3 first.
     media_drm_bridge_ = media::MediaDrmBridge::CreateWithoutSessionSupport(

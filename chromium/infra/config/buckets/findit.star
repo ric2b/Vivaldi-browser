@@ -16,13 +16,11 @@ luci.bucket(
     ],
 )
 
-luci.recipe.defaults.cipd_package.set(
-    'infra/recipe_bundles/chromium.googlesource.com/chromium/tools/build')
-
 defaults.auto_builder_dimension.set(False)
 defaults.bucket.set('findit')
 defaults.build_numbers.set(True)
-defaults.builderless.set(False)
+defaults.builderless.set(True)
+defaults.ssd.set(True)
 defaults.configure_kitchen.set(True)
 defaults.execution_timeout.set(8 * time.hour)
 defaults.pool.set('luci.chromium.findit')
@@ -44,7 +42,7 @@ defaults.caches.set([
 # longer overridable with Buildbucket V2
 builder(
     name = 'findit-rerun',
-    executable = luci.recipe(name = 'findit/chromium/single_revision'),
+    executable = 'recipe:findit/chromium/single_revision',
 )
 
 # Dimensionless trybot for findit.
@@ -60,15 +58,16 @@ builder(
     # Findit app specifies these for each build it schedules. The reason why
     # we specify them here is to pass validation of the buildbucket config.
     # Also, to illustrate the typical use case of this bucket.
-    executable = luci.recipe(name = 'findit/chromium/compile'),
+    executable = 'recipe:findit/chromium/compile',
 )
 
 builder(
     name = 'linux_chromium_bot_db_exporter',
-    executable = luci.recipe(name = 'findit/chromium/export_bot_db'),
+    executable = 'recipe:findit/chromium/export_bot_db',
     os = os.LINUX_DEFAULT,
     properties = {
         'gs_bucket': 'findit-for-me',
         'gs_object': 'bot_db.json',
     },
+    schedule = '0 0,6,12,18 * * *',
 )

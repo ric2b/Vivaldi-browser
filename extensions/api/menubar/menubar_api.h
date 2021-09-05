@@ -11,14 +11,18 @@ namespace content {
 class BrowserContext;
 }
 
+class CommandUpdater;
+
 namespace extensions {
 
 class MenubarAPI {
  public:
-  static void SendOnActivated(content::BrowserContext* browser_context,
-                              int window_id,
-                              int command_id,
-                              const std::string& parameter = "");
+  static void UpdateCommandEnabled(CommandUpdater* command_updater);
+  static bool GetIsEnabledWithNoWindows(int id, bool* enabled);
+  static bool HandleActionById(content::BrowserContext* browser_context,
+                               int window_id,
+                               int command_id,
+                               const std::string& parameter = "");
 };
 
 class MenubarSetupFunction : public ExtensionFunction {

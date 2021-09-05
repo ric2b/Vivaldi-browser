@@ -14,7 +14,6 @@
 #include "base/strings/string16.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "chrome/common/common_param_traits_macros.h"
 #include "chrome/common/importer/imported_bookmark_entry.h"
 #include "chrome/common/importer/importer_autofill_form_data_entry.h"
 #include "chrome/common/importer/importer_data_types.h"
@@ -69,7 +68,6 @@ IPC_STRUCT_TRAITS_BEGIN(ImportedBookmarkEntry)
   IPC_STRUCT_TRAITS_MEMBER(thumbnail)
   IPC_STRUCT_TRAITS_MEMBER(speeddial)
   IPC_STRUCT_TRAITS_MEMBER(description)
-  IPC_STRUCT_TRAITS_MEMBER(visited_time)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(favicon_base::FaviconUsageData)

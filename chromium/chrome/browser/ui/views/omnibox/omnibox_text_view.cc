@@ -17,7 +17,6 @@
 #include "chrome/browser/ui/views/chrome_typography.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/common/omnibox_features.h"
-#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_palette.h"
@@ -95,10 +94,11 @@ void ApplyTextStyleForType(SuggestionAnswer::TextStyle text_style,
       style = {gfx::kGoogleRed600};
       break;
     case SuggestionAnswer::TextStyle::SUPERIOR:
-      style = {part_color, .baseline = gfx::SUPERIOR};
+      style = {.color = part_color, .baseline = gfx::SUPERIOR};
       break;
     case SuggestionAnswer::TextStyle::BOLD:
-      style = {part_color, .baseline = gfx::NORMAL_BASELINE,
+      style = {.color = part_color,
+               .baseline = gfx::NORMAL_BASELINE,
                .weight = gfx::Font::Weight::BOLD};
       break;
     case SuggestionAnswer::TextStyle::NORMAL:
@@ -150,6 +150,8 @@ void OmniboxTextView::OnPaint(gfx::Canvas* canvas) {
 }
 
 void OmniboxTextView::ApplyTextColor(OmniboxPart part) {
+  if (text().empty())
+    return;
   render_text_->SetColor(result_view_->GetColor(part));
   SchedulePaint();
 }
@@ -204,8 +206,7 @@ void OmniboxTextView::SetText(const SuggestionAnswer::ImageLine& line,
   if (!line.text_fields().empty()) {
     constexpr int kMaxDisplayLines = 3;
     const SuggestionAnswer::TextField& first_field = line.text_fields().front();
-    if (first_field.has_num_lines() && first_field.num_lines() > 1 &&
-        render_text_->MultilineSupported()) {
+    if (first_field.has_num_lines() && first_field.num_lines() > 1) {
       render_text_->SetMultiline(true);
       render_text_->SetMaxLines(
           std::min(kMaxDisplayLines, first_field.num_lines()));
@@ -236,6 +237,10 @@ int OmniboxTextView::GetLineHeight() const {
 }
 
 void OmniboxTextView::ReapplyStyling() {
+  // No work required if there are no preexisting styles.
+  if (!cached_classifications_)
+    return;
+
   const size_t text_length = text().length();
   for (size_t i = 0; i < cached_classifications_->size(); ++i) {
     const size_t text_start = (*cached_classifications_)[i].offset;
@@ -268,7 +273,8 @@ void OmniboxTextView::ReapplyStyling() {
 
 std::unique_ptr<gfx::RenderText> OmniboxTextView::CreateRenderText(
     const base::string16& text) const {
-  auto render_text = gfx::RenderText::CreateHarfBuzzInstance();
+  std::unique_ptr<gfx::RenderText> render_text =
+      gfx::RenderText::CreateRenderText();
   render_text->SetDisplayRect(gfx::Rect(gfx::Size(INT_MAX, 0)));
   render_text->SetCursorEnabled(false);
   render_text->SetElideBehavior(gfx::ELIDE_TAIL);

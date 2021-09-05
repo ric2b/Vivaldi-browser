@@ -11,6 +11,14 @@ using device::mojom::blink::SensorType;
 
 namespace blink {
 
+base::Optional<Vector<double>> OrientationSensor::quaternion() {
+  reading_dirty_ = false;
+  if (!hasReading())
+    return base::nullopt;
+  const auto& quat = GetReading().orientation_quat;
+  return Vector<double>({quat.x, quat.y, quat.z, quat.w});
+}
+
 Vector<double> OrientationSensor::quaternion(bool& is_null) {
   reading_dirty_ = false;
   INIT_IS_NULL_AND_RETURN(is_null, Vector<double>());
@@ -69,7 +77,7 @@ void DoPopulateMatrix(DOMMatrix* target_matrix,
 
 template <typename T>
 bool CheckBufferLength(T* buffer) {
-  return buffer->length() >= 16;
+  return buffer->lengthAsSizeT() >= 16;
 }
 
 template <>
@@ -119,7 +127,7 @@ OrientationSensor::OrientationSensor(
     const SpatialSensorOptions* options,
     ExceptionState& exception_state,
     device::mojom::blink::SensorType type,
-    const Vector<mojom::FeaturePolicyFeature>& features)
+    const Vector<mojom::blink::FeaturePolicyFeature>& features)
     : Sensor(execution_context, options, exception_state, type, features),
       reading_dirty_(true) {}
 
@@ -128,7 +136,7 @@ void OrientationSensor::OnSensorReadingChanged() {
   Sensor::OnSensorReadingChanged();
 }
 
-void OrientationSensor::Trace(blink::Visitor* visitor) {
+void OrientationSensor::Trace(Visitor* visitor) {
   Sensor::Trace(visitor);
 }
 

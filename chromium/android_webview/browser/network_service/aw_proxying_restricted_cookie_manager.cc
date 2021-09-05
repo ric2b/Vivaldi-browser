@@ -4,6 +4,11 @@
 
 #include "android_webview/browser/network_service/aw_proxying_restricted_cookie_manager.h"
 
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "android_webview/browser/aw_cookie_access_policy.h"
 #include "base/memory/ptr_util.h"
 #include "base/task/post_task.h"
@@ -21,7 +26,7 @@ class AwProxyingRestrictedCookieManagerListener
  public:
   AwProxyingRestrictedCookieManagerListener(
       const GURL& url,
-      const GURL& site_for_cookies,
+      const net::SiteForCookies& site_for_cookies,
       base::WeakPtr<AwProxyingRestrictedCookieManager>
           aw_restricted_cookie_manager,
       mojo::PendingRemote<network::mojom::CookieChangeListener> client_listener)
@@ -38,7 +43,7 @@ class AwProxyingRestrictedCookieManagerListener
 
  private:
   const GURL url_;
-  const GURL site_for_cookies_;
+  const net::SiteForCookies site_for_cookies_;
   base::WeakPtr<AwProxyingRestrictedCookieManager>
       aw_restricted_cookie_manager_;
   mojo::Remote<network::mojom::CookieChangeListener> client_listener_;
@@ -67,7 +72,7 @@ AwProxyingRestrictedCookieManager::~AwProxyingRestrictedCookieManager() {
 
 void AwProxyingRestrictedCookieManager::GetAllForUrl(
     const GURL& url,
-    const GURL& site_for_cookies,
+    const net::SiteForCookies& site_for_cookies,
     const url::Origin& top_frame_origin,
     network::mojom::CookieManagerGetOptionsPtr options,
     GetAllForUrlCallback callback) {
@@ -85,7 +90,7 @@ void AwProxyingRestrictedCookieManager::GetAllForUrl(
 void AwProxyingRestrictedCookieManager::SetCanonicalCookie(
     const net::CanonicalCookie& cookie,
     const GURL& url,
-    const GURL& site_for_cookies,
+    const net::SiteForCookies& site_for_cookies,
     const url::Origin& top_frame_origin,
     SetCanonicalCookieCallback callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
@@ -100,7 +105,7 @@ void AwProxyingRestrictedCookieManager::SetCanonicalCookie(
 
 void AwProxyingRestrictedCookieManager::AddChangeListener(
     const GURL& url,
-    const GURL& site_for_cookies,
+    const net::SiteForCookies& site_for_cookies,
     const url::Origin& top_frame_origin,
     mojo::PendingRemote<network::mojom::CookieChangeListener> listener,
     AddChangeListenerCallback callback) {
@@ -124,7 +129,7 @@ void AwProxyingRestrictedCookieManager::AddChangeListener(
 
 void AwProxyingRestrictedCookieManager::SetCookieFromString(
     const GURL& url,
-    const GURL& site_for_cookies,
+    const net::SiteForCookies& site_for_cookies,
     const url::Origin& top_frame_origin,
     const std::string& cookie,
     SetCookieFromStringCallback callback) {
@@ -140,7 +145,7 @@ void AwProxyingRestrictedCookieManager::SetCookieFromString(
 
 void AwProxyingRestrictedCookieManager::GetCookiesString(
     const GURL& url,
-    const GURL& site_for_cookies,
+    const net::SiteForCookies& site_for_cookies,
     const url::Origin& top_frame_origin,
     GetCookiesStringCallback callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
@@ -155,7 +160,7 @@ void AwProxyingRestrictedCookieManager::GetCookiesString(
 
 void AwProxyingRestrictedCookieManager::CookiesEnabledFor(
     const GURL& url,
-    const GURL& site_for_cookies,
+    const net::SiteForCookies& site_for_cookies,
     const url::Origin& top_frame_origin,
     CookiesEnabledForCallback callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
@@ -191,7 +196,7 @@ void AwProxyingRestrictedCookieManager::CreateAndBindOnIoThread(
 
 bool AwProxyingRestrictedCookieManager::AllowCookies(
     const GURL& url,
-    const GURL& site_for_cookies) const {
+    const net::SiteForCookies& site_for_cookies) const {
   if (is_service_worker_) {
     // Service worker cookies are always first-party, so only need to check
     // the global toggle.

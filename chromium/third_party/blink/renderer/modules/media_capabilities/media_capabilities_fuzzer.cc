@@ -4,11 +4,15 @@
 
 #include "testing/libfuzzer/proto/lpm_interface.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_audio_configuration.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_key_system_track_configuration.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_media_capabilities_key_system_configuration.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_media_decoding_configuration.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/testing/dummy_page_holder.h"
 #include "third_party/blink/renderer/modules/media_capabilities/fuzzer_media_configuration.pb.h"
 #include "third_party/blink/renderer/modules/media_capabilities/media_capabilities.h"
-#include "third_party/blink/renderer/modules/media_capabilities/media_decoding_configuration.h"
+#include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/bindings/v8_per_isolate_data.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
@@ -66,7 +70,7 @@ MediaDecodingConfiguration* MakeConfiguration(
     config->video()->setWidth(proto.video().width());
     config->video()->setHeight(proto.video().height());
     config->video()->setBitrate(proto.video().bitrate());
-    config->video()->setFramerate(proto.video().framerate().c_str());
+    config->video()->setFramerate(proto.video().framerate());
   }
 
   if (proto.has_audio()) {
@@ -92,10 +96,6 @@ MediaDecodingConfiguration* MakeConfiguration(
         String::FromUTF8(proto.key_system_config().key_system().c_str()));
     config->keySystemConfiguration()->setInitDataType(
         String::FromUTF8(proto.key_system_config().init_data_type().c_str()));
-    config->keySystemConfiguration()->setAudioRobustness(
-        String::FromUTF8(proto.key_system_config().audio_robustness().c_str()));
-    config->keySystemConfiguration()->setVideoRobustness(
-        String::FromUTF8(proto.key_system_config().video_robustness().c_str()));
     config->keySystemConfiguration()->setDistinctiveIdentifier(
         MediaKeysRequirementToString(
             proto.key_system_config().distinctive_identifier()));
@@ -104,6 +104,25 @@ MediaDecodingConfiguration* MakeConfiguration(
             proto.key_system_config().persistent_state()));
     config->keySystemConfiguration()->setSessionTypes(
         MediaSessionTypeToVector(proto.key_system_config().session_types()));
+
+    if (proto.key_system_config().has_key_system_audio_config()) {
+      config->keySystemConfiguration()->setAudio(
+          KeySystemTrackConfiguration::Create());
+      config->keySystemConfiguration()->audio()->setRobustness(
+          String::FromUTF8(proto.key_system_config()
+                               .key_system_audio_config()
+                               .robustness()
+                               .c_str()));
+    }
+    if (proto.key_system_config().has_key_system_video_config()) {
+      config->keySystemConfiguration()->setVideo(
+          KeySystemTrackConfiguration::Create());
+      config->keySystemConfiguration()->video()->setRobustness(
+          String::FromUTF8(proto.key_system_config()
+                               .key_system_video_config()
+                               .robustness()
+                               .c_str()));
+    }
   }
   return config;
 }
@@ -123,7 +142,8 @@ DEFINE_TEXT_PROTO_FUZZER(const mc_fuzzer::MediaDecodingConfigProto& proto) {
   ScriptState::Scope scope(script_state);
 
   auto* media_capabilities = MakeGarbageCollected<MediaCapabilities>();
-  media_capabilities->decodingInfo(script_state, config);
+  media_capabilities->decodingInfo(script_state, config,
+                                   IGNORE_EXCEPTION_FOR_TESTING);
 
   // Request a V8 GC. Oilpan will be invoked by the GC epilogue.
   //

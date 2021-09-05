@@ -27,6 +27,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_TRANSFORMS_MATRIX_3D_TRANSFORM_OPERATION_H_
 
 #include "third_party/blink/renderer/platform/transforms/transform_operation.h"
+#include "third_party/blink/renderer/platform/wtf/casting.h"
 
 namespace blink {
 
@@ -63,6 +64,9 @@ class PLATFORM_EXPORT Matrix3DTransformOperation final
     transform.Multiply(TransformationMatrix(matrix_));
   }
 
+  scoped_refptr<TransformOperation> Accumulate(
+      const TransformOperation& other) override;
+
   scoped_refptr<TransformOperation> Blend(
       const TransformOperation* from,
       double progress,
@@ -78,7 +82,13 @@ class PLATFORM_EXPORT Matrix3DTransformOperation final
   TransformationMatrix matrix_;
 };
 
-DEFINE_TRANSFORM_TYPE_CASTS(Matrix3DTransformOperation);
+template <>
+struct DowncastTraits<Matrix3DTransformOperation> {
+  static bool AllowFrom(const TransformOperation& transform) {
+    return Matrix3DTransformOperation::IsMatchingOperationType(
+        transform.GetType());
+  }
+};
 
 }  // namespace blink
 

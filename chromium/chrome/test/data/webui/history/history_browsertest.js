@@ -9,236 +9,273 @@
 GEN_INCLUDE(['//chrome/test/data/webui/polymer_browser_test_base.js']);
 GEN('#include "base/command_line.h"');
 GEN('#include "chrome/test/data/webui/history_ui_browsertest.h"');
+GEN('#include "services/network/public/cpp/features.h"');
 
-function HistoryBrowserTest() {}
-
-HistoryBrowserTest.prototype = {
-  __proto__: PolymerTest.prototype,
-
-  browsePreload: 'chrome://history',
+const HistoryBrowserTest = class extends PolymerTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://history/';
+  }
 
   /** @override */
-  runAccessibilityChecks: false,
-
-  extraLibraries: [
-    ...PolymerTest.prototype.extraLibraries,
-    '../test_util.js',
-    'test_util.js',
-  ],
+  get extraLibraries() {
+    return [
+      '//third_party/mocha/mocha.js',
+      '//chrome/test/data/webui/mocha_adapter.js',
+    ];
+  }
 
   /** @override */
-  setUp: function() {
-    PolymerTest.prototype.setUp.call(this);
-
-    suiteSetup(function() {
-      // Wait for the top-level app element to be upgraded.
-      return waitForAppUpgrade()
-          .then(function() {
-            return history.ensureLazyLoaded();
-          })
-          .then(function() {
-            $('history-app').queryState_.queryingDisabled = true;
-          });
-    });
-  },
+  get featureList() {
+    return {enabled: ['network::features::kOutOfBlinkCors']};
+  }
 };
 
-function HistoryBrowserServiceTest() {}
-
-HistoryBrowserServiceTest.prototype = {
-  __proto__: HistoryBrowserTest.prototype,
-
-  extraLibraries: HistoryBrowserTest.prototype.extraLibraries.concat([
-    'browser_service_test.js',
-  ]),
-};
-
-TEST_F('HistoryBrowserServiceTest', 'All', function() {
-  mocha.run();
-});
-
-function HistoryDrawerTest() {}
-
-HistoryDrawerTest.prototype = {
-  __proto__: HistoryBrowserTest.prototype,
-
-  extraLibraries: HistoryBrowserTest.prototype.extraLibraries.concat([
-    'history_drawer_test.js',
-  ]),
+// eslint-disable-next-line no-var
+var HistoryDrawerTest = class extends HistoryBrowserTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://history/test_loader.html?module=history/history_drawer_test.js';
+  }
 };
 
 TEST_F('HistoryDrawerTest', 'All', function() {
   mocha.run();
 });
 
-function HistoryItemTest() {}
-
-HistoryItemTest.prototype = {
-  __proto__: HistoryBrowserTest.prototype,
-
-  extraLibraries: HistoryBrowserTest.prototype.extraLibraries.concat([
-    'history_item_test.js',
-  ]),
+// eslint-disable-next-line no-var
+var HistoryItemTest = class extends HistoryBrowserTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://history/test_loader.html?module=history/history_item_test.js';
+  }
 };
 
 TEST_F('HistoryItemTest', 'All', function() {
   mocha.run();
 });
 
-function HistoryListTest() {}
-
-HistoryListTest.prototype = {
-  __proto__: HistoryBrowserTest.prototype,
-
-  extraLibraries: HistoryBrowserTest.prototype.extraLibraries.concat([
-    'history_list_test.js',
-  ]),
+// eslint-disable-next-line no-var
+var HistoryLinkClickTest = class extends HistoryBrowserTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://history/test_loader.html?module=history/link_click_test.js';
+  }
 };
 
-// Times out on debug builders because the History page can take several seconds
-// to load in a Debug build. See https://crbug.com/669227.
-GEN('#if !defined(NDEBUG)');
-GEN('#define MAYBE_All DISABLED_All');
-GEN('#else');
-GEN('#define MAYBE_All All');
-GEN('#endif');
-
-TEST_F('HistoryListTest', 'MAYBE_All', function() {
+TEST_F('HistoryLinkClickTest', 'All', function() {
   mocha.run();
 });
 
-function HistoryMetricsTest() {}
+// eslint-disable-next-line no-var
+var HistoryListTest = class extends HistoryBrowserTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://history/test_loader.html?module=history/history_list_test.js';
+  }
 
-HistoryMetricsTest.prototype = {
-  __proto__: HistoryBrowserTest.prototype,
+  /** @override */
+  get suiteName() {
+    return history_list_test.suiteName;
+  }
 
-  extraLibraries: HistoryBrowserTest.prototype.extraLibraries.concat([
-    'history_metrics_test.js',
-  ]),
+  /** @param {string} testName The name of the test to run. */
+  runMochaTest(testName) {
+    runMochaTest(this.suiteName, testName);
+  }
+};
+
+TEST_F('HistoryListTest', 'DeletingSingleItem', function() {
+  this.runMochaTest(history_list_test.TestNames.DeletingSingleItem);
+});
+
+TEST_F('HistoryListTest', 'CancellingSelectionOfMultipleItems', function() {
+  this.runMochaTest(
+      history_list_test.TestNames.CancellingSelectionOfMultipleItems);
+});
+
+TEST_F(
+    'HistoryListTest', 'SelectionOfMultipleItemsUsingShiftClick', function() {
+      this.runMochaTest(
+          history_list_test.TestNames.SelectionOfMultipleItemsUsingShiftClick);
+    });
+
+TEST_F('HistoryListTest', 'DisablingCtrlAOnSyncedTabsPage', function() {
+  this.runMochaTest(history_list_test.TestNames.DisablingCtrlAOnSyncedTabsPage);
+});
+
+TEST_F('HistoryListTest', 'SettingFirstAndLastItems', function() {
+  this.runMochaTest(history_list_test.TestNames.SettingFirstAndLastItems);
+});
+
+TEST_F('HistoryListTest', 'UpdatingHistoryResults', function() {
+  this.runMochaTest(history_list_test.TestNames.UpdatingHistoryResults);
+});
+
+TEST_F('HistoryListTest', 'DeletingMultipleItemsFromView', function() {
+  this.runMochaTest(history_list_test.TestNames.DeletingMultipleItemsFromView);
+});
+
+TEST_F(
+    'HistoryListTest', 'SearchResultsDisplayWithCorrectItemTitle', function() {
+      this.runMochaTest(
+          history_list_test.TestNames.SearchResultsDisplayWithCorrectItemTitle);
+    });
+
+TEST_F(
+    'HistoryListTest', 'CorrectDisplayMessageWhenNoHistoryAvailable',
+    function() {
+      this.runMochaTest(history_list_test.TestNames
+                            .CorrectDisplayMessageWhenNoHistoryAvailable);
+    });
+
+TEST_F(
+    'HistoryListTest', 'MoreFromThisSiteSendsAndSetsCorrectData', function() {
+      this.runMochaTest(
+          history_list_test.TestNames.MoreFromThisSiteSendsAndSetsCorrectData);
+    });
+
+TEST_F('HistoryListTest', 'ChangingSearchDeselectsItems', function() {
+  this.runMochaTest(history_list_test.TestNames.ChangingSearchDeselectsItems);
+});
+
+TEST_F('HistoryListTest', 'DeleteItemsEndToEnd', function() {
+  this.runMochaTest(history_list_test.TestNames.DeleteItemsEndToEnd);
+});
+
+TEST_F('HistoryListTest', 'DeleteViaMenuButton', function() {
+  this.runMochaTest(history_list_test.TestNames.DeleteViaMenuButton);
+});
+
+TEST_F('HistoryListTest', 'DeleteDisabledWhilePending', function() {
+  this.runMochaTest(history_list_test.TestNames.DeleteDisabledWhilePending);
+});
+
+TEST_F('HistoryListTest', 'DeletingItemsUsingShortcuts', function() {
+  this.runMochaTest(history_list_test.TestNames.DeletingItemsUsingShortcuts);
+});
+
+TEST_F('HistoryListTest', 'DeleteDialogClosedOnBackNavigation', function() {
+  this.runMochaTest(
+      history_list_test.TestNames.DeleteDialogClosedOnBackNavigation);
+});
+
+TEST_F('HistoryListTest', 'ClickingFileUrlSendsMessageToChrome', function() {
+  this.runMochaTest(
+      history_list_test.TestNames.ClickingFileUrlSendsMessageToChrome);
+});
+
+TEST_F(
+    'HistoryListTest', 'DeleteHistoryResultsInQueryHistoryEvent', function() {
+      this.runMochaTest(
+          history_list_test.TestNames.DeleteHistoryResultsInQueryHistoryEvent);
+    });
+
+// eslint-disable-next-line no-var
+var HistoryMetricsTest = class extends HistoryBrowserTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://history/test_loader.html?module=history/history_metrics_test.js';
+  }
 };
 
 TEST_F('HistoryMetricsTest', 'All', function() {
   mocha.run();
 });
 
-function HistoryOverflowMenuTest() {}
-
-HistoryOverflowMenuTest.prototype = {
-  __proto__: HistoryBrowserTest.prototype,
-
-  extraLibraries: HistoryBrowserTest.prototype.extraLibraries.concat([
-    'history_overflow_menu_test.js',
-  ]),
+// eslint-disable-next-line no-var
+var HistoryOverflowMenuTest = class extends HistoryBrowserTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://history/test_loader.html?module=history/history_overflow_menu_test.js';
+  }
 };
 
 TEST_F('HistoryOverflowMenuTest', 'All', function() {
   mocha.run();
 });
 
-function HistoryRoutingTest() {}
-
-HistoryRoutingTest.prototype = {
-  __proto__: HistoryBrowserTest.prototype,
-
-  extraLibraries: HistoryBrowserTest.prototype.extraLibraries.concat([
-    'history_routing_test.js',
-  ]),
+// eslint-disable-next-line no-var
+var HistoryRoutingTest = class extends HistoryBrowserTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://history/test_loader.html?module=history/history_routing_test.js';
+  }
 };
 
 TEST_F('HistoryRoutingTest', 'All', function() {
-  history.history_routing_test.registerTests();
   mocha.run();
 });
 
-function HistoryRoutingWithQueryParamTest() {}
-
-HistoryRoutingWithQueryParamTest.prototype = {
-  __proto__: HistoryRoutingTest.prototype,
-
-  browsePreload: 'chrome://history/?q=query',
-
+// eslint-disable-next-line no-var
+var HistoryRoutingWithQueryParamTest = class extends HistoryBrowserTest {
   /** @override */
-  setUp: function() {
-    PolymerTest.prototype.setUp.call(this);
-    // This message handler needs to be registered before the test since the
-    // query can happen immediately after the element is upgraded. However,
-    // since there may be a delay as well, the test might check the global var
-    // too early as well. In this case the test will have overtaken the
-    // callback.
-    registerMessageCallback('queryHistory', this, function(info) {
-      window.historyQueryInfo = info;
-    });
-
-    suiteSetup(function() {
-      // Wait for the top-level app element to be upgraded.
-      return waitForAppUpgrade().then(function() {
-        history.ensureLazyLoaded();
-      });
-    });
-  },
+  get browsePreload() {
+    return 'chrome://history/test_loader.html?module=history/history_routing_with_query_param_test.js';
+  }
 };
 
 TEST_F('HistoryRoutingWithQueryParamTest', 'All', function() {
-  history.history_routing_test_with_query_param.registerTests();
   mocha.run();
 });
 
-function HistorySyncedTabsTest() {}
-
-HistorySyncedTabsTest.prototype = {
-  __proto__: HistoryBrowserTest.prototype,
-
-  extraLibraries: HistoryBrowserTest.prototype.extraLibraries.concat([
-    'history_synced_tabs_test.js',
-  ]),
+// eslint-disable-next-line no-var
+var HistorySyncedTabsTest = class extends HistoryBrowserTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://history/test_loader.html?module=history/history_synced_tabs_test.js';
+  }
 };
 
 TEST_F('HistorySyncedTabsTest', 'All', function() {
   mocha.run();
 });
 
-function HistorySupervisedUserTest() {}
+// eslint-disable-next-line no-var
+var HistorySupervisedUserTest = class extends HistoryBrowserTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://history/test_loader.html?module=history/history_supervised_user_test.js';
+  }
 
-HistorySupervisedUserTest.prototype = {
-  __proto__: HistoryBrowserTest.prototype,
+  get typedefCppFixture() {
+    return 'HistoryUIBrowserTest';
+  }
 
-  typedefCppFixture: 'HistoryUIBrowserTest',
-
-  testGenPreamble: function() {
+  /** @override */
+  testGenPreamble() {
     GEN('  SetDeleteAllowed(false);');
-  },
-
-  extraLibraries: HistoryBrowserTest.prototype.extraLibraries.concat([
-    'history_supervised_user_test.js',
-  ]),
+  }
 };
 
-TEST_F('HistorySupervisedUserTest', 'All', function() {
+GEN('#if defined(OS_MACOSX)');
+GEN('#define MAYBE_AllSupervised DISABLED_All');
+GEN('#else');
+GEN('#define MAYBE_AllSupervised All');
+GEN('#endif');
+
+TEST_F('HistorySupervisedUserTest', 'MAYBE_AllSupervised', function() {
   mocha.run();
 });
 
-function HistoryToolbarTest() {}
-
-HistoryToolbarTest.prototype = {
-  __proto__: HistoryBrowserTest.prototype,
-
-  extraLibraries: HistoryBrowserTest.prototype.extraLibraries.concat([
-    'history_toolbar_test.js',
-  ]),
+// eslint-disable-next-line no-var
+var HistoryToolbarTest = class extends HistoryBrowserTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://history/test_loader.html?module=history/history_toolbar_test.js';
+  }
 };
 
 TEST_F('HistoryToolbarTest', 'All', function() {
   mocha.run();
 });
 
-function HistorySearchedLabelTest() {}
-
-HistorySearchedLabelTest.prototype = {
-  __proto__: HistoryBrowserTest.prototype,
-
-  extraLibraries: HistoryBrowserTest.prototype.extraLibraries.concat([
-    'searched_label_test.js',
-  ]),
+// eslint-disable-next-line no-var
+var HistorySearchedLabelTest = class extends HistoryBrowserTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://history/test_loader.html?module=history/searched_label_test.js';
+  }
 };
 
 TEST_F('HistorySearchedLabelTest', 'All', function() {

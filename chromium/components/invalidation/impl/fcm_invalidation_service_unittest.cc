@@ -22,18 +22,15 @@
 #include "components/invalidation/impl/fcm_invalidation_listener.h"
 #include "components/invalidation/impl/fcm_network_handler.h"
 #include "components/invalidation/impl/fcm_sync_network_channel.h"
-#include "components/invalidation/impl/gcm_invalidation_bridge.h"
 #include "components/invalidation/impl/invalidation_prefs.h"
 #include "components/invalidation/impl/invalidation_service_test_template.h"
-#include "components/invalidation/impl/invalidation_state_tracker.h"
-#include "components/invalidation/impl/invalidator.h"
 #include "components/invalidation/impl/profile_identity_provider.h"
 #include "components/invalidation/public/topic_invalidation_map.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/signin/public/identity_manager/identity_test_environment.h"
 #include "net/url_request/url_request_context_getter.h"
-#include "services/data_decoder/public/cpp/testing_json_parser.h"
+#include "services/data_decoder/public/cpp/test_support/in_process_data_decoder.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/test/test_url_loader_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -42,7 +39,6 @@
 using instance_id::InstanceID;
 using instance_id::InstanceIDDriver;
 using testing::_;
-using testing::StrictMock;
 
 namespace invalidation {
 
@@ -52,6 +48,10 @@ class TestFCMSyncNetworkChannel : public syncer::FCMSyncNetworkChannel {
  public:
   void StartListening() override {}
   void StopListening() override {}
+
+  void RequestDetailedStatus(
+      const base::RepeatingCallback<void(const base::DictionaryValue&)>&
+          callback) override {}
 };
 
 // TODO: Make FCMInvalidationListener class abstract and explicitly make all the
@@ -91,41 +91,26 @@ class MockInstanceID : public InstanceID {
   MockInstanceID() : InstanceID("app_id", /*gcm_driver=*/nullptr) {}
   ~MockInstanceID() override = default;
 
-  MOCK_METHOD1(GetID, void(const GetIDCallback& callback));
-  MOCK_METHOD1(GetCreationTime, void(const GetCreationTimeCallback& callback));
-  void GetToken(const std::string& authorized_entity,
-                const std::string& scope,
-                const std::map<std::string, std::string>& options,
-                std::set<Flags> flags,
-                GetTokenCallback callback) override {
-    GetToken_(authorized_entity, scope, options, std::move(flags), callback);
-  }
-  MOCK_METHOD5(GetToken_,
+  MOCK_METHOD1(GetID, void(GetIDCallback callback));
+  MOCK_METHOD1(GetCreationTime, void(GetCreationTimeCallback callback));
+  MOCK_METHOD6(GetToken,
                void(const std::string& authorized_entity,
                     const std::string& scope,
+                    base::TimeDelta time_to_live,
                     const std::map<std::string, std::string>& options,
                     std::set<Flags> flags,
-                    GetTokenCallback& callback));
+                    GetTokenCallback callback));
   MOCK_METHOD4(ValidateToken,
                void(const std::string& authorized_entity,
                     const std::string& scope,
                     const std::string& token,
-                    const ValidateTokenCallback& callback));
+                    ValidateTokenCallback callback));
 
- protected:
-  void DeleteTokenImpl(const std::string& authorized_entity,
-                       const std::string& scope,
-                       DeleteTokenCallback callback) override {
-    DeleteTokenImpl_(authorized_entity, scope, callback);
-  }
-  MOCK_METHOD3(DeleteTokenImpl_,
+  MOCK_METHOD3(DeleteTokenImpl,
                void(const std::string& authorized_entity,
                     const std::string& scope,
-                    DeleteTokenCallback& callback));
-  void DeleteIDImpl(DeleteIDCallback callback) override {
-    DeleteIDImpl_(callback);
-  }
-  MOCK_METHOD1(DeleteIDImpl_, void(DeleteIDCallback& callback));
+                    DeleteTokenCallback callback));
+  MOCK_METHOD1(DeleteIDImpl, void(DeleteIDCallback callback));
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockInstanceID);
@@ -169,19 +154,24 @@ class FCMInvalidationServiceTestDelegate {
     identity_provider_ = std::make_unique<ProfileIdentityProvider>(
         identity_test_env_.identity_manager());
 
-    mock_instance_id_driver_ = std::make_unique<MockInstanceIDDriver>();
-    mock_instance_id_ = std::make_unique<MockInstanceID>();
-    EXPECT_CALL(*mock_instance_id_driver_, GetInstanceID(kApplicationName))
-        .WillRepeatedly(testing::Return(mock_instance_id_.get()));
+    mock_instance_id_driver_ =
+        std::make_unique<testing::NiceMock<MockInstanceIDDriver>>();
+    mock_instance_id_ = std::make_unique<testing::NiceMock<MockInstanceID>>();
+    ON_CALL(*mock_instance_id_driver_, GetInstanceID(kApplicationName))
+        .WillByDefault(testing::Return(mock_instance_id_.get()));
+    ON_CALL(*mock_instance_id_, GetID(_))
+        .WillByDefault(testing::WithArg<0>(
+            testing::Invoke([](InstanceID::GetIDCallback callback) {
+              std::move(callback).Run("FakeIID");
+            })));
 
     invalidation_service_ = std::make_unique<FCMInvalidationService>(
         identity_provider_.get(),
         base::BindRepeating(&syncer::FCMNetworkHandler::Create,
                             gcm_driver_.get(), mock_instance_id_driver_.get()),
-        base::BindRepeating(
-            &syncer::PerUserTopicRegistrationManager::Create,
-            identity_provider_.get(), &pref_service_, &url_loader_factory_,
-            base::BindRepeating(&data_decoder::SafeJsonParser::Parse, nullptr)),
+        base::BindRepeating(&syncer::PerUserTopicSubscriptionManager::Create,
+                            identity_provider_.get(), &pref_service_,
+                            &url_loader_factory_),
         mock_instance_id_driver_.get(), &pref_service_);
   }
 
@@ -191,7 +181,7 @@ class FCMInvalidationServiceTestDelegate {
     invalidation_service_->InitForTest(base::WrapUnique(fake_listener_));
   }
 
-  InvalidationService* GetInvalidationService() {
+  FCMInvalidationService* GetInvalidationService() {
     return invalidation_service_.get();
   }
 
@@ -202,13 +192,12 @@ class FCMInvalidationServiceTestDelegate {
   }
 
   void TriggerOnIncomingInvalidation(
-      const syncer::ObjectIdInvalidationMap& invalidation_map) {
-    fake_listener_->EmitSavedInvalidationsForTest(
-        ConvertObjectIdInvalidationMapToTopicInvalidationMap(invalidation_map));
+      const syncer::TopicInvalidationMap& invalidation_map) {
+    fake_listener_->EmitSavedInvalidationsForTest(invalidation_map);
   }
 
   base::test::TaskEnvironment task_environment_;
-  data_decoder::TestingJsonParser::ScopedFactoryOverride factory_override_;
+  data_decoder::test::InProcessDataDecoder in_process_data_decoder_;
   std::unique_ptr<gcm::GCMDriver> gcm_driver_;
   std::unique_ptr<MockInstanceIDDriver> mock_instance_id_driver_;
   std::unique_ptr<MockInstanceID> mock_instance_id_;
@@ -226,6 +215,30 @@ class FCMInvalidationServiceTestDelegate {
 INSTANTIATE_TYPED_TEST_SUITE_P(FCMInvalidationServiceTest,
                                InvalidationServiceTest,
                                FCMInvalidationServiceTestDelegate);
+
+TEST(FCMInvalidationServiceTest, ClearsInstanceIDOnSignout) {
+  // Set up an invalidation service and make sure it generated a client ID (aka
+  // InstanceID).
+  auto delegate = std::make_unique<FCMInvalidationServiceTestDelegate>();
+  delegate->CreateInvalidationService();
+  FCMInvalidationService* invalidation_service =
+      delegate->GetInvalidationService();
+  ASSERT_FALSE(invalidation_service->GetInvalidatorClientId().empty());
+
+  // Remove the active account (in practice, this means disabling
+  // Sync-the-feature, or just signing out of the content are if only
+  // Sync-the-transport was running). This should trigger deleting the
+  // InstanceID.
+  EXPECT_CALL(*delegate->mock_instance_id_, DeleteIDImpl(_));
+  invalidation_service->OnActiveAccountLogout();
+
+  // Also the cached InstanceID (aka ClientID) in the invalidation service
+  // should be gone. (Right now, the invalidation service clears its cache
+  // immediately. In the future, it might be changed to first wait for the
+  // asynchronous DeleteID operation to complete, in which case this test will
+  // have to be updated.)
+  EXPECT_TRUE(invalidation_service->GetInvalidatorClientId().empty());
+}
 
 namespace internal {
 

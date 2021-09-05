@@ -8,6 +8,7 @@
 #include "platform_media/gpu/decoders/mac/avf_data_buffer_queue.h"
 
 #include "base/bind.h"
+#include "common/platform_media_pipeline_types.h"
 #include "media/base/data_buffer.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -17,8 +18,10 @@ namespace {
 const base::TimeDelta kCapacity = base::TimeDelta::FromMicroseconds(16);
 
 scoped_refptr<DataBuffer> CreateBuffer(const base::TimeDelta& timestamp,
-                                              const base::TimeDelta& duration) {
+                                       const base::TimeDelta& duration) {
   scoped_refptr<DataBuffer> buffer(new DataBuffer(1));
+  buffer->set_data_size(1);
+  buffer->writable_data()[0] = 42;
   buffer->set_timestamp(timestamp);
   buffer->set_duration(duration);
   return buffer;
@@ -27,30 +30,45 @@ scoped_refptr<DataBuffer> CreateBuffer(const base::TimeDelta& timestamp,
 class AVFDataBufferQueueTest : public testing::Test {
  public:
   AVFDataBufferQueueTest()
-      : queue_(AVFDataBufferQueue::Type(),
+      : queue_(PlatformMediaDataType::PLATFORM_MEDIA_VIDEO,
                kCapacity,
                base::Bind(&AVFDataBufferQueueTest::CapacityAvailable,
                           base::Unretained(this)),
                base::Bind(&AVFDataBufferQueueTest::CapacityDepleted,
                           base::Unretained(this))),
         capacity_available_(false),
-        capacity_depleted_(false) {}
+        capacity_depleted_(false) {
+    ipc_buffer_.Init(PlatformMediaDataType::PLATFORM_MEDIA_AUDIO);
+    ipc_buffer_.set_reply_cb(
+        base::Bind(&AVFDataBufferQueueTest::OnRead, base::Unretained(this)));
+  }
 
  protected:
-  AVFDataBufferQueue::ReadCB read_cb() {
-    return base::Bind(&AVFDataBufferQueueTest::OnRead, base::Unretained(this));
+  IPCDecodingBuffer start_read() {
+    CHECK(ipc_buffer_);
+    ipc_buffer_.set_status(MediaDataStatus::kMediaError);
+    last_read_status_.reset();
+    return std::move(ipc_buffer_);
   }
 
   AVFDataBufferQueue queue_;
+  IPCDecodingBuffer ipc_buffer_;
   bool capacity_available_;
   bool capacity_depleted_;
-  scoped_refptr<DataBuffer> last_buffer_read_;
+  base::Optional<MediaDataStatus> last_read_status_;
 
  private:
   void CapacityAvailable() { capacity_available_ = true; }
   void CapacityDepleted() { capacity_depleted_ = true; }
-  void OnRead(const scoped_refptr<DataBuffer>& buffer) {
-    last_buffer_read_ = buffer;
+  void OnRead(IPCDecodingBuffer ipc_buffer) {
+    ASSERT_TRUE(ipc_buffer);
+    ASSERT_FALSE(ipc_buffer_);
+    last_read_status_ = ipc_buffer.status();
+    if (*last_read_status_ == MediaDataStatus::kOk) {
+      ASSERT_EQ(ipc_buffer.data_size(), 1);
+      ASSERT_EQ(ipc_buffer.GetDataForTests()[0], 42);
+    }
+    ipc_buffer_ = std::move(ipc_buffer);
   }
 };
 
@@ -74,14 +92,12 @@ TEST_F(AVFDataBufferQueueTest, FreeCapacity) {
   ASSERT_FALSE(queue_.HasAvailableCapacity());
   capacity_available_ = false;
 
-  last_buffer_read_ = NULL;
-  queue_.Read(read_cb());
-  ASSERT_FALSE(last_buffer_read_.get() == NULL);
+  queue_.Read(start_read());
+  ASSERT_EQ(last_read_status_, MediaDataStatus::kOk);
   EXPECT_FALSE(capacity_available_);
 
-  last_buffer_read_ = NULL;
-  queue_.Read(read_cb());
-  EXPECT_FALSE(last_buffer_read_.get() == NULL);
+  queue_.Read(start_read());
+  ASSERT_EQ(last_read_status_, MediaDataStatus::kOk);
   EXPECT_TRUE(capacity_available_);
 }
 
@@ -91,70 +107,59 @@ TEST_F(AVFDataBufferQueueTest, CatchUpMode) {
 
   queue_.BufferReady(CreateBuffer(base::TimeDelta(), kCapacity / 2));
 
-  last_buffer_read_ = NULL;
-  queue_.Read(read_cb());
-  ASSERT_TRUE(last_buffer_read_.get() == NULL);
+  queue_.Read(start_read());
+  ASSERT_FALSE(last_read_status_);
 
   queue_.BufferReady(CreateBuffer(kCapacity / 2, kCapacity / 2));
 
-  ASSERT_TRUE(last_buffer_read_.get() == NULL);
+  ASSERT_FALSE(last_read_status_);
 
   // But when we enter the "catching-up" mode, we want all the buffers it's
   // got, NOW!
 
   queue_.BufferReady(CreateBuffer(kCapacity, kCapacity / 2));
 
-  ASSERT_FALSE(last_buffer_read_.get() == NULL);
+  ASSERT_EQ(last_read_status_, MediaDataStatus::kOk);
 
-  last_buffer_read_ = NULL;
-  queue_.Read(read_cb());
-  ASSERT_FALSE(last_buffer_read_.get() == NULL);
+  queue_.Read(start_read());
+  ASSERT_EQ(last_read_status_, MediaDataStatus::kOk);
 
-  last_buffer_read_ = NULL;
-  queue_.Read(read_cb());
-  ASSERT_FALSE(last_buffer_read_.get() == NULL);
+  queue_.Read(start_read());
+  ASSERT_EQ(last_read_status_, MediaDataStatus::kOk);
 
   // An empty queue should take the time to collect some buffers again before
   // it resumes returning them.
 
   queue_.BufferReady(CreateBuffer(3 * kCapacity / 2, kCapacity / 2));
 
-  last_buffer_read_ = NULL;
-  queue_.Read(read_cb());
-  ASSERT_TRUE(last_buffer_read_.get() == NULL);
+  queue_.Read(start_read());
+  ASSERT_FALSE(last_read_status_);
 }
 
 TEST_F(AVFDataBufferQueueTest, Flush) {
   queue_.BufferReady(CreateBuffer(base::TimeDelta(), kCapacity));
   queue_.Flush();
 
-  last_buffer_read_ = NULL;
-  queue_.Read(read_cb());
-  EXPECT_TRUE(last_buffer_read_.get() == NULL);
+  queue_.Read(start_read());
+  ASSERT_FALSE(last_read_status_);
 }
 
 TEST_F(AVFDataBufferQueueTest, EndOfStream) {
   queue_.BufferReady(CreateBuffer(base::TimeDelta(), kCapacity));
 
-  last_buffer_read_ = NULL;
-  queue_.Read(read_cb());
-  ASSERT_TRUE(last_buffer_read_.get() == NULL);
+  queue_.Read(start_read());
+  ASSERT_FALSE(last_read_status_);
 
   queue_.SetEndOfStream();
 
-  ASSERT_FALSE(last_buffer_read_.get() == NULL);
-  EXPECT_FALSE(last_buffer_read_->end_of_stream());
+  ASSERT_EQ(last_read_status_, MediaDataStatus::kOk);
 
-  last_buffer_read_ = NULL;
-  queue_.Read(read_cb());
-  ASSERT_FALSE(last_buffer_read_.get() == NULL);
-  EXPECT_TRUE(last_buffer_read_->end_of_stream());
+  queue_.Read(start_read());
+  ASSERT_EQ(last_read_status_, MediaDataStatus::kEOS);
 
   // All further reads should return the EOS buffer, too.
-  last_buffer_read_ = NULL;
-  queue_.Read(read_cb());
-  ASSERT_FALSE(last_buffer_read_.get() == NULL);
-  EXPECT_TRUE(last_buffer_read_->end_of_stream());
+  queue_.Read(start_read());
+  ASSERT_EQ(last_read_status_, MediaDataStatus::kEOS);
 }
 
 }  // namespace

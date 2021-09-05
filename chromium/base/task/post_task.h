@@ -28,13 +28,24 @@ namespace base {
 
 // This is the interface to post tasks.
 //
+// Note: A migration is in-progress away from this API and in favor of explicit
+// API-as-a-destination. thread_pool.h is now preferred to the
+// base::ThreadPool() to post to the thread pool
+//
 // To post a simple one-off task with default traits:
 //     PostTask(FROM_HERE, BindOnce(...));
+// modern equivalent:
+//     ThreadPool::PostTask(FROM_HERE, BindOnce(...));
 //
 // To post a high priority one-off task to respond to a user interaction:
 //     PostTask(
 //         FROM_HERE,
 //         {ThreadPool(), TaskPriority::USER_BLOCKING},
+//         BindOnce(...));
+// modern equivalent:
+//     ThreadPool::PostTask(
+//         FROM_HERE,
+//         {TaskPriority::USER_BLOCKING},
 //         BindOnce(...));
 //
 // To post tasks that must run in sequence with default traits:
@@ -42,11 +53,22 @@ namespace base {
 //         CreateSequencedTaskRunner({ThreadPool()});
 //     task_runner->PostTask(FROM_HERE, BindOnce(...));
 //     task_runner->PostTask(FROM_HERE, BindOnce(...));
+// modern equivalent:
+//     scoped_refptr<SequencedTaskRunner> task_runner =
+//         ThreadPool::CreateSequencedTaskRunner({});
+//     task_runner->PostTask(FROM_HERE, BindOnce(...));
+//     task_runner->PostTask(FROM_HERE, BindOnce(...));
 //
 // To post tasks that may block, must run in sequence and can be skipped on
 // shutdown:
 //     scoped_refptr<SequencedTaskRunner> task_runner =
-//         CreateSequencedTaskRunner(
+//         CreateSequencedTaskRunner({ThreadPool(), MayBlock(),
+//                                   TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
+//     task_runner->PostTask(FROM_HERE, BindOnce(...));
+//     task_runner->PostTask(FROM_HERE, BindOnce(...));
+// modern equivalent:
+//     scoped_refptr<SequencedTaskRunner> task_runner =
+//         ThreadPool::CreateSequencedTaskRunner(
 //             {MayBlock(), TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
 //     task_runner->PostTask(FROM_HERE, BindOnce(...));
 //     task_runner->PostTask(FROM_HERE, BindOnce(...));
@@ -62,8 +84,7 @@ namespace base {
 // Tasks posted with only traits defined in base/task/task_traits.h run on
 // threads owned by the registered ThreadPoolInstance (i.e. not on the main
 // thread). An embedder (e.g. Chrome) can define additional traits to make tasks
-// run on threads of their choosing. TODO(https://crbug.com/863341): Make this a
-// reality.
+// run on threads of their choosing.
 //
 // Tasks posted with the same traits will be scheduled in the order they were
 // posted. IMPORTANT: Please note however that, unless the traits imply a
@@ -85,33 +106,16 @@ inline bool PostTask(OnceClosure task,
   return PostTask(from_here, std::move(task));
 }
 
-// Equivalent to calling PostDelayedTask with default TaskTraits.
-//
-// Use PostDelayedTask to specify a BEST_EFFORT priority if the task doesn't
-// have to run as soon as |delay| expires.
-BASE_EXPORT bool PostDelayedTask(const Location& from_here,
-                                 OnceClosure task,
-                                 TimeDelta delay);
-
 // Equivalent to calling PostTaskAndReply with default TaskTraits.
 BASE_EXPORT bool PostTaskAndReply(const Location& from_here,
                                   OnceClosure task,
                                   OnceClosure reply);
 
 // Equivalent to calling PostTaskAndReplyWithResult with default TaskTraits.
-//
-// Though RepeatingCallback is convertible to OnceCallback, we need a
-// CallbackType template since we can not use template deduction and object
-// conversion at once on the overload resolution.
-// TODO(crbug.com/714018): Update all callers of the RepeatingCallback version
-// to use OnceCallback and remove the CallbackType template.
-template <template <typename> class CallbackType,
-          typename TaskReturnType,
-          typename ReplyArgType,
-          typename = EnableIfIsBaseCallback<CallbackType>>
+template <typename TaskReturnType, typename ReplyArgType>
 bool PostTaskAndReplyWithResult(const Location& from_here,
-                                CallbackType<TaskReturnType()> task,
-                                CallbackType<void(ReplyArgType)> reply) {
+                                OnceCallback<TaskReturnType()> task,
+                                OnceCallback<void(ReplyArgType)> reply) {
   return PostTaskAndReplyWithResult(from_here, {ThreadPool()}, std::move(task),
                                     std::move(reply));
 }
@@ -148,20 +152,11 @@ BASE_EXPORT bool PostTaskAndReply(const Location& from_here,
 // or thread and same TaskTraits if applicable) when |task| completes. Returns
 // false if the task definitely won't run because of current shutdown state. Can
 // only be called when SequencedTaskRunnerHandle::IsSet().
-//
-// Though RepeatingCallback is convertible to OnceCallback, we need a
-// CallbackType template since we can not use template deduction and object
-// conversion at once on the overload resolution.
-// TODO(crbug.com/714018): Update all callers of the RepeatingCallback version
-// to use OnceCallback and remove the CallbackType template.
-template <template <typename> class CallbackType,
-          typename TaskReturnType,
-          typename ReplyArgType,
-          typename = EnableIfIsBaseCallback<CallbackType>>
+template <typename TaskReturnType, typename ReplyArgType>
 bool PostTaskAndReplyWithResult(const Location& from_here,
                                 const TaskTraits& traits,
-                                CallbackType<TaskReturnType()> task,
-                                CallbackType<void(ReplyArgType)> reply) {
+                                OnceCallback<TaskReturnType()> task,
+                                OnceCallback<void(ReplyArgType)> reply) {
   auto* result = new std::unique_ptr<TaskReturnType>();
   return PostTaskAndReply(
       from_here, traits,
@@ -189,6 +184,8 @@ BASE_EXPORT scoped_refptr<SequencedTaskRunner> CreateSequencedTaskRunner(
 //
 // |traits| requirements:
 // - base::ThreadPool() must be specified.
+//     Note: Prefer the explicit (thread_pool.h) version of this API while we
+//     migrate this one to it.
 // - Extension traits (e.g. BrowserThread) cannot be specified.
 // - base::ThreadPolicy must be specified if the priority of the task runner
 //   will ever be increased from BEST_EFFORT.
@@ -231,6 +228,37 @@ BASE_EXPORT scoped_refptr<SingleThreadTaskRunner> CreateCOMSTATaskRunner(
     SingleThreadTaskRunnerThreadMode thread_mode =
         SingleThreadTaskRunnerThreadMode::SHARED);
 #endif  // defined(OS_WIN)
+
+// Helpers to send a Delete/ReleaseSoon to a new SequencedTaskRunner created
+// from |traits|. The semantics match base::PostTask in that the deletion is
+// guaranteed to be scheduled in order with other tasks using the same |traits|.
+//
+// Prefer using an existing SequencedTaskRunner's Delete/ReleaseSoon over this
+// to encode execution order requirements when possible.
+//
+// Note: base::ThreadPool is not a valid destination as it'd result in a one-off
+// parallel task which is generally ill-suited for deletion. Use an existing
+// SequencedTaskRunner's DeleteSoon to post a safely ordered deletion.
+template <class T>
+bool DeleteSoon(const Location& from_here,
+                const TaskTraits& traits,
+                const T* object) {
+  DCHECK(!traits.use_thread_pool());
+  return CreateSequencedTaskRunner(traits)->DeleteSoon(from_here, object);
+}
+template <class T>
+bool DeleteSoon(const Location& from_here,
+                const TaskTraits& traits,
+                std::unique_ptr<T> object) {
+  return DeleteSoon(from_here, traits, object.release());
+}
+template <class T>
+void ReleaseSoon(const Location& from_here,
+                 const TaskTraits& traits,
+                 scoped_refptr<T>&& object) {
+  DCHECK(!traits.use_thread_pool());
+  CreateSequencedTaskRunner(traits)->ReleaseSoon(from_here, std::move(object));
+}
 
 }  // namespace base
 

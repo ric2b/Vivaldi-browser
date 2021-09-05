@@ -20,6 +20,7 @@
 #include "net/base/load_flags.h"
 #include "net/base/load_timing_info.h"
 #include "net/base/net_errors.h"
+#include "net/base/network_isolation_key.h"
 #include "net/cert/x509_certificate.h"
 #include "net/disk_cache/disk_cache.h"
 #include "net/http/http_cache.h"
@@ -174,6 +175,12 @@ MockHttpRequest::MockHttpRequest(const MockTransaction& t) {
   method = t.method;
   extra_headers.AddHeadersFromString(t.request_headers);
   load_flags = t.load_flags;
+  url::Origin origin = url::Origin::Create(url);
+  network_isolation_key = NetworkIsolationKey(origin, origin);
+}
+
+std::string MockHttpRequest::CacheKey() {
+  return HttpCache::GenerateCacheKeyForTest(this);
 }
 
 //-----------------------------------------------------------------------------
@@ -524,9 +531,6 @@ void MockNetworkTransaction::SetBeforeNetworkStartCallback(
     const BeforeNetworkStartCallback& callback) {
   before_network_start_callback_ = callback;
 }
-
-void MockNetworkTransaction::SetBeforeHeadersSentCallback(
-    const BeforeHeadersSentCallback& callback) {}
 
 int MockNetworkTransaction::ResumeNetworkStart() {
   DCHECK(!resume_start_callback_.is_null());

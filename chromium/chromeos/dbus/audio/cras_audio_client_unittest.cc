@@ -94,6 +94,8 @@ class MockObserver : public CrasAudioClient::Observer {
   MOCK_METHOD2(OutputNodeVolumeChanged, void(uint64_t node_id, int volume));
   MOCK_METHOD2(HotwordTriggered, void(uint64_t tv_sec, uint64_t tv_nsec));
   MOCK_METHOD0(NumberOfActiveStreamsChanged, void());
+  MOCK_METHOD2(BluetoothBatteryChanged,
+               void(const std::string& address, uint32_t level));
 };
 
 // Expect the reader to be empty.
@@ -159,6 +161,68 @@ void ExpectUint64AndBoolArguments(uint64_t expected_uint64,
   bool value2;
   ASSERT_TRUE(reader->PopBool(&value2));
   EXPECT_EQ(expected_bool, value2);
+  EXPECT_FALSE(reader->HasMoreData());
+}
+
+// Expect the reader to have a string.
+void ExpectStringArgument(std::string expected_string,
+                          dbus::MessageReader* reader) {
+  std::string value;
+  ASSERT_TRUE(reader->PopString(&value));
+  EXPECT_EQ(expected_string, value);
+  EXPECT_FALSE(reader->HasMoreData());
+}
+
+// Expect the reader to have a int64_t.
+void ExpectInt64Argument(int64_t expected_int64, dbus::MessageReader* reader) {
+  int64_t value;
+  ASSERT_TRUE(reader->PopInt64(&value));
+  EXPECT_EQ(expected_int64, value);
+  EXPECT_FALSE(reader->HasMoreData());
+}
+
+// Expect the reader to have an array of dictionary of string and variant
+// string.
+void ExpectArrayOfDictOfStringAndVariantStringArguments(
+    const std::map<std::string, std::string>& expected_dict,
+    dbus::MessageReader* reader) {
+  dbus::MessageReader array_reader(nullptr);
+  ASSERT_TRUE(reader->PopArray(&array_reader));
+
+  dbus::MessageReader dict_entry_reader(nullptr);
+  for (auto& entry : expected_dict) {
+    EXPECT_TRUE(array_reader.HasMoreData());
+    ASSERT_TRUE(array_reader.PopDictEntry(&dict_entry_reader));
+
+    std::string key, value;
+    ASSERT_TRUE(dict_entry_reader.PopString(&key));
+    EXPECT_EQ(entry.first, key);
+    ASSERT_TRUE(dict_entry_reader.PopVariantOfString(&value));
+    EXPECT_EQ(entry.second, value);
+  }
+  EXPECT_FALSE(reader->HasMoreData());
+}
+
+// Expect the reader to have an array of dictionary of string and variant
+// int64.
+void ExpectArrayOfDictOfStringAndVariantInt64Arguments(
+    const std::map<std::string, int64_t>& expected_dict,
+    dbus::MessageReader* reader) {
+  dbus::MessageReader array_reader(nullptr);
+  ASSERT_TRUE(reader->PopArray(&array_reader));
+
+  dbus::MessageReader dict_entry_reader(nullptr);
+  for (auto& entry : expected_dict) {
+    EXPECT_TRUE(array_reader.HasMoreData());
+    ASSERT_TRUE(array_reader.PopDictEntry(&dict_entry_reader));
+
+    std::string key;
+    int64_t value;
+    ASSERT_TRUE(dict_entry_reader.PopString(&key));
+    EXPECT_EQ(entry.first, key);
+    ASSERT_TRUE(dict_entry_reader.PopVariantOfInt64(&value));
+    EXPECT_EQ(entry.second, value);
+  }
   EXPECT_FALSE(reader->HasMoreData());
 }
 
@@ -349,6 +413,15 @@ class CrasAudioClientTest : public testing::Test {
         .WillRepeatedly(
             Invoke(this, &CrasAudioClientTest::OnNumberOfActiveStreamsChanged));
 
+    // Set an expectation so mock_cras_proxy's monitoring
+    // BluetoothBatteryChanged ConnectToSignal will use
+    // OnBluetoothBatteryChanged() to run the callback.
+    EXPECT_CALL(*mock_cras_proxy_.get(),
+                DoConnectToSignal(interface_name_,
+                                  cras::kBluetoothBatteryChanged, _, _))
+        .WillRepeatedly(
+            Invoke(this, &CrasAudioClientTest::OnBluetoothBatteryChanged));
+
     // Set an expectation so mock_bus's GetObjectProxy() for the given
     // service name and the object path will return mock_cras_proxy_.
     EXPECT_CALL(*mock_bus_.get(),
@@ -372,8 +445,8 @@ class CrasAudioClientTest : public testing::Test {
 
  protected:
   // A callback to intercept and check the method call arguments.
-  typedef base::Callback<void(dbus::MessageReader* reader)>
-      ArgumentCheckCallback;
+  using ArgumentCheckCallback =
+      base::RepeatingCallback<void(dbus::MessageReader* reader)>;
 
   // Sets expectations for called method name and arguments, and sets response.
   void PrepareForMethodCall(const std::string& method_name,
@@ -432,6 +505,12 @@ class CrasAudioClientTest : public testing::Test {
     number_of_active_streams_changed_handler_.Run(signal);
   }
 
+  // Send Bluetooth battery changed signal to the tested client.
+  void SendBluetoothBatteryChangedSignal(dbus::Signal* signal) {
+    ASSERT_FALSE(bluetooth_battery_changed_handler_.is_null());
+    bluetooth_battery_changed_handler_.Run(signal);
+  }
+
   CrasAudioClient* client() { return CrasAudioClient::Get(); }
 
   // The interface name.
@@ -459,6 +538,8 @@ class CrasAudioClientTest : public testing::Test {
   dbus::ObjectProxy::SignalCallback hotword_triggered_handler_;
   // The NumberOfActiveStreamsChanged signal handler given by the tested client.
   dbus::ObjectProxy::SignalCallback number_of_active_streams_changed_handler_;
+  // The BluetoothBatteryChanged signal handler given by the tested client.
+  dbus::ObjectProxy::SignalCallback bluetooth_battery_changed_handler_;
   // The name of the method which is expected to be called.
   std::string expected_method_name_;
   // The response which the mock cras proxy returns.
@@ -573,6 +654,20 @@ class CrasAudioClientTest : public testing::Test {
       const dbus::ObjectProxy::SignalCallback& signal_callback,
       dbus::ObjectProxy::OnConnectedCallback* on_connected_callback) {
     number_of_active_streams_changed_handler_ = signal_callback;
+    const bool success = true;
+    task_environment_.GetMainThreadTaskRunner()->PostTask(
+        FROM_HERE, base::BindOnce(std::move(*on_connected_callback),
+                                  interface_name, signal_name, success));
+  }
+
+  // Checks the requested interface name and signal name.
+  // Used to implement the mock cras proxy.
+  void OnBluetoothBatteryChanged(
+      const std::string& interface_name,
+      const std::string& signal_name,
+      const dbus::ObjectProxy::SignalCallback& signal_callback,
+      dbus::ObjectProxy::OnConnectedCallback* on_connected_callback) {
+    bluetooth_battery_changed_handler_ = signal_callback;
     const bool success = true;
     task_environment_.GetMainThreadTaskRunner()->PostTask(
         FROM_HERE, base::BindOnce(std::move(*on_connected_callback),
@@ -709,6 +804,31 @@ TEST_F(CrasAudioClientTest, NumberOfActiveStreamsChanged) {
   base::RunLoop().RunUntilIdle();
 }
 
+TEST_F(CrasAudioClientTest, BluetoothBatteryChanged) {
+  const std::string address = "11:22:33:44:55:66";
+  const uint32_t level = 82;
+  dbus::Signal signal(cras::kCrasControlInterface,
+                      cras::kBluetoothBatteryChanged);
+  dbus::MessageWriter writer(&signal);
+  writer.AppendString(address);
+  writer.AppendUint32(level);
+  MockObserver observer;
+  EXPECT_CALL(observer, BluetoothBatteryChanged(address, level)).Times(1);
+
+  client()->AddObserver(&observer);
+
+  SendBluetoothBatteryChangedSignal(&signal);
+
+  client()->RemoveObserver(&observer);
+
+  EXPECT_CALL(observer, BluetoothBatteryChanged(_, _)).Times(0);
+
+  // Run the signal callback again and make sure the observer isn't called.
+  SendBluetoothBatteryChangedSignal(&signal);
+
+  base::RunLoop().RunUntilIdle();
+}
+
 TEST_F(CrasAudioClientTest, NodesChanged) {
   // Create a signal.
   dbus::Signal signal(cras::kCrasControlInterface, cras::kNodesChanged);
@@ -829,7 +949,7 @@ TEST_F(CrasAudioClientTest, GetNodes) {
   WriteNodesToResponse(expected_node_list, &writer);
 
   // Set expectations.
-  PrepareForMethodCall(cras::kGetNodes, base::Bind(&ExpectNoArgument),
+  PrepareForMethodCall(cras::kGetNodes, base::BindRepeating(&ExpectNoArgument),
                        response.get());
   // Call method.
   bool called = false;
@@ -850,7 +970,7 @@ TEST_F(CrasAudioClientTest, GetNodesV2) {
   WriteNodesToResponse(expected_node_list, &writer);
 
   // Set expectations.
-  PrepareForMethodCall(cras::kGetNodes, base::Bind(&ExpectNoArgument),
+  PrepareForMethodCall(cras::kGetNodes, base::BindRepeating(&ExpectNoArgument),
                        response.get());
 
   // Call method.
@@ -871,7 +991,7 @@ TEST_F(CrasAudioClientTest, SetOutputNodeVolume) {
   // Set expectations.
   PrepareForMethodCall(
       cras::kSetOutputNodeVolume,
-      base::Bind(&ExpectUint64AndInt32Arguments, kNodeId, kVolume),
+      base::BindRepeating(&ExpectUint64AndInt32Arguments, kNodeId, kVolume),
       response.get());
   // Call method.
   client()->SetOutputNodeVolume(kNodeId, kVolume);
@@ -886,7 +1006,7 @@ TEST_F(CrasAudioClientTest, SetOutputUserMute) {
 
   // Set expectations.
   PrepareForMethodCall(cras::kSetOutputUserMute,
-                       base::Bind(&ExpectBoolArgument, kUserMuteOn),
+                       base::BindRepeating(&ExpectBoolArgument, kUserMuteOn),
                        response.get());
   // Call method.
   client()->SetOutputUserMute(kUserMuteOn);
@@ -903,7 +1023,7 @@ TEST_F(CrasAudioClientTest, SetInputNodeGain) {
   // Set expectations.
   PrepareForMethodCall(
       cras::kSetInputNodeGain,
-      base::Bind(&ExpectUint64AndInt32Arguments, kNodeId, kInputGain),
+      base::BindRepeating(&ExpectUint64AndInt32Arguments, kNodeId, kInputGain),
       response.get());
   // Call method.
   client()->SetInputNodeGain(kNodeId, kInputGain);
@@ -918,7 +1038,7 @@ TEST_F(CrasAudioClientTest, SetInputMute) {
 
   // Set expectations.
   PrepareForMethodCall(cras::kSetInputMute,
-                       base::Bind(&ExpectBoolArgument, kInputMuteOn),
+                       base::BindRepeating(&ExpectBoolArgument, kInputMuteOn),
                        response.get());
   // Call method.
   client()->SetInputMute(kInputMuteOn);
@@ -933,7 +1053,7 @@ TEST_F(CrasAudioClientTest, SetActiveOutputNode) {
 
   // Set expectations.
   PrepareForMethodCall(cras::kSetActiveOutputNode,
-                       base::Bind(&ExpectUint64Argument, kNodeId),
+                       base::BindRepeating(&ExpectUint64Argument, kNodeId),
                        response.get());
   // Call method.
   client()->SetActiveOutputNode(kNodeId);
@@ -948,7 +1068,7 @@ TEST_F(CrasAudioClientTest, SetActiveInputNode) {
 
   // Set expectations.
   PrepareForMethodCall(cras::kSetActiveInputNode,
-                       base::Bind(&ExpectUint64Argument, kNodeId),
+                       base::BindRepeating(&ExpectUint64Argument, kNodeId),
                        response.get());
   // Call method.
   client()->SetActiveInputNode(kNodeId);
@@ -963,7 +1083,7 @@ TEST_F(CrasAudioClientTest, AddActiveInputNode) {
 
   // Set expectations.
   PrepareForMethodCall(cras::kAddActiveInputNode,
-                       base::Bind(&ExpectUint64Argument, kNodeId),
+                       base::BindRepeating(&ExpectUint64Argument, kNodeId),
                        response.get());
   // Call method.
   client()->AddActiveInputNode(kNodeId);
@@ -978,7 +1098,7 @@ TEST_F(CrasAudioClientTest, RemoveActiveInputNode) {
 
   // Set expectations.
   PrepareForMethodCall(cras::kRemoveActiveInputNode,
-                       base::Bind(&ExpectUint64Argument, kNodeId),
+                       base::BindRepeating(&ExpectUint64Argument, kNodeId),
                        response.get());
   // Call method.
   client()->RemoveActiveInputNode(kNodeId);
@@ -993,7 +1113,7 @@ TEST_F(CrasAudioClientTest, AddActiveOutputNode) {
 
   // Set expectations.
   PrepareForMethodCall(cras::kAddActiveOutputNode,
-                       base::Bind(&ExpectUint64Argument, kNodeId),
+                       base::BindRepeating(&ExpectUint64Argument, kNodeId),
                        response.get());
   // Call method.
   client()->AddActiveOutputNode(kNodeId);
@@ -1008,7 +1128,7 @@ TEST_F(CrasAudioClientTest, RemoveActiveOutputNode) {
 
   // Set expectations.
   PrepareForMethodCall(cras::kRemoveActiveOutputNode,
-                       base::Bind(&ExpectUint64Argument, kNodeId),
+                       base::BindRepeating(&ExpectUint64Argument, kNodeId),
                        response.get());
   // Call method.
   client()->RemoveActiveOutputNode(kNodeId);
@@ -1025,7 +1145,7 @@ TEST_F(CrasAudioClientTest, SwapLeftRight) {
   // Set expectations.
   PrepareForMethodCall(
       cras::kSwapLeftRight,
-      base::Bind(&ExpectUint64AndBoolArguments, kNodeId, kSwap),
+      base::BindRepeating(&ExpectUint64AndBoolArguments, kNodeId, kSwap),
       response.get());
   // Call method.
   client()->SwapLeftRight(kNodeId, kSwap);
@@ -1042,11 +1162,101 @@ TEST_F(CrasAudioClientTest, SetGlobalOutputChannelRemix) {
   // Set expectations.
   PrepareForMethodCall(
       cras::kSetGlobalOutputChannelRemix,
-      base::Bind(&ExpectInt32AndArrayOfDoublesArguments, kChannels, kMixer),
+      base::BindRepeating(&ExpectInt32AndArrayOfDoublesArguments, kChannels,
+                          kMixer),
       response.get());
 
   // Call method.
   client()->SetGlobalOutputChannelRemix(kChannels, kMixer);
+  // Run the message loop.
+  base::RunLoop().RunUntilIdle();
+}
+
+TEST_F(CrasAudioClientTest, SetPlayerPlaybackStatus) {
+  const std::string kStatus = "paused";
+  // Create response.
+  std::unique_ptr<dbus::Response> response(dbus::Response::CreateEmpty());
+
+  // Set expectations.
+  PrepareForMethodCall(cras::kSetPlayerPlaybackStatus,
+                       base::BindRepeating(&ExpectStringArgument, kStatus),
+                       response.get());
+
+  // Call method.
+  client()->SetPlayerPlaybackStatus(kStatus);
+  // Run the message loop.
+  base::RunLoop().RunUntilIdle();
+}
+
+TEST_F(CrasAudioClientTest, SetPlayerIdentity) {
+  const std::string kIdentity = "Chrome Player";
+  // Create response.
+  std::unique_ptr<dbus::Response> response(dbus::Response::CreateEmpty());
+
+  // Set expectations.
+  PrepareForMethodCall(cras::kSetPlayerIdentity,
+                       base::BindRepeating(&ExpectStringArgument, kIdentity),
+                       response.get());
+
+  // Call method.
+  client()->SetPlayerIdentity(kIdentity);
+  // Run the message loop.
+  base::RunLoop().RunUntilIdle();
+}
+
+TEST_F(CrasAudioClientTest, SetPlayerPosition) {
+  const int64_t kPosition = 2020224;
+  // Create response.
+  std::unique_ptr<dbus::Response> response(dbus::Response::CreateEmpty());
+
+  // Set expectations.
+  PrepareForMethodCall(cras::kSetPlayerPosition,
+                       base::BindRepeating(&ExpectInt64Argument, kPosition),
+                       response.get());
+
+  // Call method.
+  client()->SetPlayerPosition(kPosition);
+  // Run the message loop.
+  base::RunLoop().RunUntilIdle();
+}
+
+TEST_F(CrasAudioClientTest, SetPlayerDuration) {
+  const int64_t kDuration = 20200302;
+  const std::map<std::string, int64_t> kMetadata = {{"length", kDuration}};
+  // Create response.
+  std::unique_ptr<dbus::Response> response(dbus::Response::CreateEmpty());
+
+  // Set expectations.
+  PrepareForMethodCall(
+      cras::kSetPlayerMetadata,
+      base::BindRepeating(&ExpectArrayOfDictOfStringAndVariantInt64Arguments,
+                          kMetadata),
+      response.get());
+
+  // Call method.
+  client()->SetPlayerDuration(kDuration);
+  // Run the message loop.
+  base::RunLoop().RunUntilIdle();
+}
+
+TEST_F(CrasAudioClientTest, SetPlayerMetadata) {
+  const std::string kTitle = "Chrome Metadata Title";
+  const std::string kAlbum = "Chrome Metadata Album";
+  const std::string kArtist = "Chrome Metadata Artist";
+  const std::map<std::string, std::string> kMetadata = {
+      {"title", kTitle}, {"album", kAlbum}, {"artist", kArtist}};
+  // Create response.
+  std::unique_ptr<dbus::Response> response(dbus::Response::CreateEmpty());
+
+  // Set expectations.
+  PrepareForMethodCall(
+      cras::kSetPlayerMetadata,
+      base::BindRepeating(&ExpectArrayOfDictOfStringAndVariantStringArguments,
+                          kMetadata),
+      response.get());
+
+  // Call method.
+  client()->SetPlayerMetadata(kMetadata);
   // Run the message loop.
   base::RunLoop().RunUntilIdle();
 }

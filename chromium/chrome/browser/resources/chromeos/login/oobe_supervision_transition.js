@@ -10,7 +10,7 @@
 Polymer({
   is: 'supervision-transition-md',
 
-  behaviors: [I18nBehavior, OobeDialogHostBehavior],
+  behaviors: [OobeI18nBehavior, OobeDialogHostBehavior],
 
   properties: {
     /**
@@ -19,26 +19,25 @@ Polymer({
     isRemovingSupervision_: Boolean,
   },
 
-  setIsRemovingSupervision: function(is_removing_supervision) {
+  setIsRemovingSupervision(is_removing_supervision) {
     this.isRemovingSupervision_ = is_removing_supervision;
   },
 
   /** @override */
-  attached: function() {
+  attached() {
     cr.addWebUIListener(
         'supervision-transition-failed',
         this.showSupervisionTransitionFailedScreen_.bind(this));
   },
 
   /** @private */
-  getDialogA11yTitle_: function(isRemovingSupervision, locale) {
-    return isRemovingSupervision ?
-        this.i18nDynamic(locale, 'removingSupervisionTitle') :
-        this.i18nDynamic(locale, 'addingSupervisionTitle');
+  getDialogA11yTitle_(locale, isRemovingSupervision) {
+    return isRemovingSupervision ? this.i18n('removingSupervisionTitle') :
+                                   this.i18n('addingSupervisionTitle');
   },
 
   /** @private */
-  showSupervisionTransitionFailedScreen_: function() {
+  showSupervisionTransitionFailedScreen_() {
     this.$.supervisionTransitionDialog.hidden = true;
     this.$.supervisionTransitionErrorDialog.hidden = false;
     this.$.supervisionTransitionErrorDialog.show();
@@ -50,7 +49,7 @@ Polymer({
    *
    * @private
    */
-  onAcceptAndContinue_: function() {
+  onAcceptAndContinue_() {
     chrome.send('finishSupervisionTransition');
   },
 });

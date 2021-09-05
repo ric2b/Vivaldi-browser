@@ -7,9 +7,11 @@
 #include <memory>
 #include <utility>
 
+#include "base/metrics/histogram_macros.h"
 #include "base/optional.h"
 #include "services/network/public/mojom/fetch_api.mojom-blink.h"
 #include "third_party/blink/public/common/cache_storage/cache_storage_utils.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/cache_storage/cache_storage.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/callback_promise_adapter.h"
 #include "third_party/blink/renderer/bindings/core/v8/idl_types.h"
@@ -18,13 +20,13 @@
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_code_cache.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_request_init.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_response.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/fetch/body_stream_buffer.h"
 #include "third_party/blink/renderer/core/fetch/fetch_data_loader.h"
 #include "third_party/blink/renderer/core/fetch/request.h"
-#include "third_party/blink/renderer/core/fetch/request_init.h"
 #include "third_party/blink/renderer/core/fetch/response.h"
 #include "third_party/blink/renderer/core/frame/deprecation.h"
 #include "third_party/blink/renderer/core/html/parser/text_resource_decoder.h"
@@ -39,7 +41,6 @@
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/bindings/v8_throw_exception.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
-#include "third_party/blink/renderer/platform/instrumentation/histogram.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/traced_value.h"
 #include "third_party/blink/renderer/platform/loader/fetch/cached_metadata.h"
@@ -75,6 +76,42 @@ bool HasJavascriptMimeType(const Response* response) {
   return MIMETypeRegistry::IsSupportedJavaScriptMIMEType(mime_type);
 }
 
+enum class CodeCachePolicy {
+  // Use the default policy.  Currently that policy generates full code cache
+  // when a script is stored during service worker install.
+  kAuto,
+  // Do not generate code cache when putting a script in cache_storage.
+  kNone,
+};
+
+CodeCachePolicy GetCodeCachePolicy(ExecutionContext* context,
+                                   const Response* response) {
+  DCHECK(context);
+  if (!RuntimeEnabledFeatures::CacheStorageCodeCacheHintEnabled(context))
+    return CodeCachePolicy::kAuto;
+
+  // It's important we don't look at the header hint for opaque responses since
+  // it could leak cross-origin information.
+  if (response->GetResponse()->GetType() ==
+      network::mojom::FetchResponseType::kOpaque) {
+    return CodeCachePolicy::kAuto;
+  }
+
+  String header_name(
+      features::kCacheStorageCodeCacheHintHeaderName.Get().data());
+  String header_value;
+  if (!response->InternalHeaderList()->Get(header_name, header_value))
+    return CodeCachePolicy::kAuto;
+
+  // Count the hint usage regardless of its value.
+  context->CountUse(mojom::WebFeature::kCacheStorageCodeCacheHint);
+
+  if (header_value.LowerASCII() == "none")
+    return CodeCachePolicy::kNone;
+
+  return CodeCachePolicy::kAuto;
+}
+
 bool ShouldGenerateV8CodeCache(ScriptState* script_state,
                                const Response* response) {
   ExecutionContext* context = ExecutionContext::From(script_state);
@@ -82,14 +119,20 @@ bool ShouldGenerateV8CodeCache(ScriptState* script_state,
   if (!global_scope)
     return false;
 
-  if (!global_scope->IsInstalling())
+  if (!response->InternalBodyBuffer())
     return false;
 
   if (!HasJavascriptMimeType(response))
     return false;
 
-  if (!response->InternalBodyBuffer())
+  auto policy = GetCodeCachePolicy(context, response);
+  if (policy == CodeCachePolicy::kNone)
     return false;
+
+  DCHECK_EQ(policy, CodeCachePolicy::kAuto);
+  if (!global_scope->IsInstalling())
+    return false;
+
   return true;
 }
 
@@ -170,7 +213,7 @@ class Cache::FetchResolvedForAdd final : public ScriptFunction {
     return ScriptValue(GetScriptState()->GetIsolate(), put_promise.V8Value());
   }
 
-  void Trace(blink::Visitor* visitor) override {
+  void Trace(Visitor* visitor) override {
     visitor->Trace(cache_);
     visitor->Trace(requests_);
     ScriptFunction::Trace(visitor);
@@ -255,8 +298,8 @@ class Cache::BarrierCallbackForPut final
                   message.Append(": ");
                   message.Append(error->message);
                 }
-                resolver->Reject(CacheStorageError::CreateException(
-                    error->value, message.ToString()));
+                RejectCacheStorageWithError(resolver, error->value,
+                                            message.ToString());
               }
             },
             method_name_, WrapPersistent(resolver_.Get()),
@@ -283,7 +326,7 @@ class Cache::BarrierCallbackForPut final
         MakeGarbageCollected<DOMException>(DOMExceptionCode::kAbortError));
   }
 
-  virtual void Trace(blink::Visitor* visitor) {
+  virtual void Trace(Visitor* visitor) {
     visitor->Trace(cache_);
     visitor->Trace(resolver_);
   }
@@ -348,7 +391,7 @@ class Cache::BlobHandleCallbackForPut final
                            Response* response)
       : index_(index), barrier_callback_(barrier_callback) {
     fetch_api_request_ = request->CreateFetchAPIRequest();
-    fetch_api_response_ = response->PopulateFetchAPIResponse();
+    fetch_api_response_ = response->PopulateFetchAPIResponse(request->url());
   }
   ~BlobHandleCallbackForPut() override = default;
 
@@ -369,7 +412,7 @@ class Cache::BlobHandleCallbackForPut final
 
   void Abort() override { barrier_callback_->Abort(); }
 
-  void Trace(blink::Visitor* visitor) override {
+  void Trace(Visitor* visitor) override {
     visitor->Trace(barrier_callback_);
     FetchDataLoader::Client::Trace(visitor);
   }
@@ -400,8 +443,12 @@ class Cache::CodeCacheHandleCallbackForPut final
         mime_type_(response->InternalMIMEType()),
         trace_id_(trace_id) {
     fetch_api_request_ = request->CreateFetchAPIRequest();
-    fetch_api_response_ = response->PopulateFetchAPIResponse();
+    fetch_api_response_ = response->PopulateFetchAPIResponse(request->url());
     url_ = fetch_api_request_->url;
+    opaque_mode_ = fetch_api_response_->response_type ==
+                           network::mojom::FetchResponseType::kOpaque
+                       ? V8CodeCache::OpaqueMode::kOpaque
+                       : V8CodeCache::OpaqueMode::kNotOpaque;
   }
   ~CodeCacheHandleCallbackForPut() override = default;
 
@@ -420,9 +467,10 @@ class Cache::CodeCacheHandleCallbackForPut final
 
     auto blob_data = std::make_unique<BlobData>();
     blob_data->SetContentType(mime_type_);
-    blob_data->AppendBytes(array_buffer->Data(), array_buffer->ByteLength());
+    blob_data->AppendBytes(array_buffer->Data(),
+                           array_buffer->ByteLengthAsSizeT());
     batch_operation->response->blob = BlobDataHandle::Create(
-        std::move(blob_data), array_buffer->ByteLength());
+        std::move(blob_data), array_buffer->ByteLengthAsSizeT());
 
     scoped_refptr<CachedMetadata> cached_metadata =
         GenerateFullCodeCache(array_buffer);
@@ -447,7 +495,7 @@ class Cache::CodeCacheHandleCallbackForPut final
 
   void Abort() override { barrier_callback_->Abort(); }
 
-  void Trace(blink::Visitor* visitor) override {
+  void Trace(Visitor* visitor) override {
     visitor->Trace(script_state_);
     visitor->Trace(barrier_callback_);
     FetchDataLoader::Client::Trace(visitor);
@@ -477,12 +525,12 @@ class Cache::CodeCacheHandleCallbackForPut final
     // See crbug.com/743311.
     std::unique_ptr<TextResourceDecoder> text_decoder =
         std::make_unique<TextResourceDecoder>(
-            TextResourceDecoderOptions::CreateAlwaysUseUTF8ForText());
+            TextResourceDecoderOptions::CreateUTF8Decode());
 
     return V8CodeCache::GenerateFullCodeCache(
         script_state_,
         text_decoder->Decode(static_cast<const char*>(array_buffer->Data()),
-                             array_buffer->ByteLength()),
+                             array_buffer->ByteLengthAsSizeT()),
         url_, text_decoder->Encoding(), opaque_mode_);
   }
 
@@ -630,7 +678,7 @@ Cache::Cache(GlobalFetch::ScopedFetcher* fetcher,
   cache_remote_.Bind(std::move(cache_pending_remote), std::move(task_runner));
 }
 
-void Cache::Trace(blink::Visitor* visitor) {
+void Cache::Trace(Visitor* visitor) {
   visitor->Trace(scoped_fetcher_);
   visitor->Trace(blob_client_list_);
   ScriptWrappable::Trace(visitor);
@@ -695,8 +743,7 @@ ScriptPromise Cache::MatchImpl(ScriptState* script_state,
                   resolver->Resolve();
                   break;
                 default:
-                  resolver->Reject(
-                      CacheStorageError::CreateException(result->get_status()));
+                  RejectCacheStorageWithError(resolver, result->get_status());
                   break;
               }
             } else {
@@ -776,8 +823,7 @@ ScriptPromise Cache::MatchAllImpl(ScriptState* script_state,
                   "CacheStorage", "Cache::MatchAllImpl::Callback",
                   TRACE_ID_GLOBAL(trace_id), TRACE_EVENT_FLAG_FLOW_IN, "status",
                   CacheStorageTracedValue(result->get_status()));
-              resolver->Reject(
-                  CacheStorageError::CreateException(result->get_status()));
+              RejectCacheStorageWithError(resolver, result->get_status());
             } else {
               TRACE_EVENT_WITH_FLOW1(
                   "CacheStorage", "Cache::MatchAllImpl::Callback",
@@ -816,18 +862,15 @@ ScriptPromise Cache::AddAllImpl(ScriptState* script_state,
   promises.resize(requests.size());
   for (wtf_size_t i = 0; i < requests.size(); ++i) {
     if (!requests[i]->url().ProtocolIsInHTTPFamily()) {
-      return ScriptPromise::Reject(script_state,
-                                   V8ThrowException::CreateTypeError(
-                                       script_state->GetIsolate(),
-                                       "Add/AddAll does not support schemes "
-                                       "other than \"http\" or \"https\""));
+      exception_state.ThrowTypeError(
+          "Add/AddAll does not support schemes "
+          "other than \"http\" or \"https\"");
+      return ScriptPromise();
     }
     if (requests[i]->method() != http_names::kGET) {
-      return ScriptPromise::Reject(
-          script_state,
-          V8ThrowException::CreateTypeError(
-              script_state->GetIsolate(),
-              "Add/AddAll only supports the GET request method."));
+      exception_state.ThrowTypeError(
+          "Add/AddAll only supports the GET request method.");
+      return ScriptPromise();
     }
     request_infos[i].SetRequest(requests[i]);
 
@@ -895,8 +938,8 @@ ScriptPromise Cache::DeleteImpl(ScriptState* script_state,
                     message.Append("Cache.delete(): ");
                     message.Append(error->message);
                   }
-                  resolver->Reject(CacheStorageError::CreateException(
-                      error->value, message.ToString()));
+                  RejectCacheStorageWithError(resolver, error->value,
+                                              message.ToString());
                   break;
               }
             } else {
@@ -995,7 +1038,8 @@ ScriptPromise Cache::PutImpl(ScriptState* script_state,
         mojom::blink::BatchOperation::New();
     batch_operation->operation_type = mojom::blink::OperationType::kPut;
     batch_operation->request = requests[i]->CreateFetchAPIRequest();
-    batch_operation->response = responses[i]->PopulateFetchAPIResponse();
+    batch_operation->response =
+        responses[i]->PopulateFetchAPIResponse(requests[i]->url());
     barrier_callback->OnSuccess(i, std::move(batch_operation));
   }
 
@@ -1046,8 +1090,7 @@ ScriptPromise Cache::KeysImpl(ScriptState* script_state,
                   "CacheStorage", "Cache::KeysImpl::Callback",
                   TRACE_ID_GLOBAL(trace_id), TRACE_EVENT_FLAG_FLOW_IN, "status",
                   CacheStorageTracedValue(result->get_status()));
-              resolver->Reject(
-                  CacheStorageError::CreateException(result->get_status()));
+              RejectCacheStorageWithError(resolver, result->get_status());
             } else {
               TRACE_EVENT_WITH_FLOW1(
                   "CacheStorage", "Cache::KeysImpl::Callback",

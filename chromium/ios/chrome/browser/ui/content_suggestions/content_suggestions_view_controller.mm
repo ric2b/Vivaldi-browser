@@ -16,6 +16,7 @@
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_updater.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_utils.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_commands.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_constants.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_header_synchronizing.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_layout.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_metrics_recording.h"
@@ -27,9 +28,9 @@
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_utils.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
-#import "ios/chrome/common/colors/UIColor+cr_semantic_colors.h"
-#import "ios/chrome/common/colors/semantic_color_names.h"
-#import "ios/chrome/common/ui_util/constraints_ui_util.h"
+#import "ios/chrome/common/ui/colors/UIColor+cr_semantic_colors.h"
+#import "ios/chrome/common/ui/colors/semantic_color_names.h"
+#import "ios/chrome/common/ui/util/constraints_ui_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -200,10 +201,6 @@ NSString* const kContentSuggestionsMostVisitedAccessibilityIdentifierPrefix =
   }
 }
 
-+ (NSString*)collectionAccessibilityIdentifier {
-  return @"ContentSuggestionsCollectionIdentifier";
-}
-
 #pragma mark - UIViewController
 
 - (void)viewDidLoad {
@@ -215,7 +212,7 @@ NSString* const kContentSuggestionsMostVisitedAccessibilityIdentifierPrefix =
   self.collectionView.contentInsetAdjustmentBehavior =
       UIScrollViewContentInsetAdjustmentNever;
   self.collectionView.accessibilityIdentifier =
-      [[self class] collectionAccessibilityIdentifier];
+      kContentSuggestionsCollectionIdentifier;
   _collectionUpdater.collectionViewController = self;
 
   self.collectionView.delegate = self;
@@ -318,6 +315,12 @@ NSString* const kContentSuggestionsMostVisitedAccessibilityIdentifierPrefix =
 
 - (void)viewSafeAreaInsetsDidChange {
   [super viewSafeAreaInsetsDidChange];
+
+  // Only get the bottom safe area inset.
+  UIEdgeInsets insets = UIEdgeInsetsZero;
+  insets.bottom = self.view.safeAreaInsets.bottom;
+  self.collectionView.contentInset = insets;
+
   [self.headerSynchronizer
       updateFakeOmniboxOnNewWidth:self.collectionView.bounds.size.width];
   [self.headerSynchronizer updateConstraints];
@@ -401,19 +404,6 @@ NSString* const kContentSuggestionsMostVisitedAccessibilityIdentifierPrefix =
   CGSize size = [super collectionView:collectionView
                                layout:collectionViewLayout
                sizeForItemAtIndexPath:indexPath];
-
-  // No need to add extra spacing if kOptionalArticleThumbnail is enabled,
-  // because each cell already has spacing at top and bottom for separators.
-  if (base::FeatureList::IsEnabled(kOptionalArticleThumbnail)) {
-    return size;
-  }
-
-  // Special case for last item to add extra spacing before the footer.
-  if ([self.collectionUpdater isContentSuggestionsSection:indexPath.section] &&
-      indexPath.row ==
-          [self.collectionView numberOfItemsInSection:indexPath.section] - 1) {
-    size.height += [ContentSuggestionsCell standardSpacing];
-  }
   return size;
 }
 
@@ -528,21 +518,9 @@ NSString* const kContentSuggestionsMostVisitedAccessibilityIdentifierPrefix =
 
 - (BOOL)collectionView:(UICollectionView*)collectionView
     shouldHideItemSeparatorAtIndexPath:(NSIndexPath*)indexPath {
-  // If kOptionalArticleThumbnail is enabled, show separators for all cells in
-  // content suggestion sections.
-  if (base::FeatureList::IsEnabled(kOptionalArticleThumbnail)) {
-    return !
-        [self.collectionUpdater isContentSuggestionsSection:indexPath.section];
-  }
-  // Special case, show a seperator between the last regular item and the
-  // footer.
-  if (![self.collectionUpdater
-          shouldUseCustomStyleForSection:indexPath.section] &&
-      indexPath.row ==
-          [self.collectionView numberOfItemsInSection:indexPath.section] - 1) {
-    return NO;
-  }
-  return YES;
+  // Show separators for all cells in content suggestion sections.
+  return !
+      [self.collectionUpdater isContentSuggestionsSection:indexPath.section];
 }
 
 - (BOOL)collectionView:(UICollectionView*)collectionView

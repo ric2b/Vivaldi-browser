@@ -30,6 +30,7 @@
 
 #include "third_party/blink/renderer/core/html/forms/week_input_type.h"
 
+#include "third_party/blink/public/strings/grit/blink_strings.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/html/forms/date_time_fields_state.h"
 #include "third_party/blink/renderer/core/html/forms/html_input_element.h"
@@ -40,8 +41,6 @@
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
 namespace blink {
-
-using namespace html_names;
 
 static const int kWeekDefaultStepBase =
     -259200000;  // The first day of 1970-W01.
@@ -105,11 +104,13 @@ void WeekInputType::SetupLayoutParameters(
     const DateComponents&) const {
   layout_parameters.date_time_format = GetLocale().WeekFormatInLDML();
   layout_parameters.fallback_date_time_format = "yyyy-'W'ww";
-  if (!ParseToDateComponents(GetElement().FastGetAttribute(kMinAttr),
-                             &layout_parameters.minimum))
+  if (!ParseToDateComponents(
+          GetElement().FastGetAttribute(html_names::kMinAttr),
+          &layout_parameters.minimum))
     layout_parameters.minimum = DateComponents();
-  if (!ParseToDateComponents(GetElement().FastGetAttribute(kMaxAttr),
-                             &layout_parameters.maximum))
+  if (!ParseToDateComponents(
+          GetElement().FastGetAttribute(html_names::kMaxAttr),
+          &layout_parameters.maximum))
     layout_parameters.maximum = DateComponents();
   layout_parameters.placeholder_for_year = "----";
 }
@@ -123,6 +124,10 @@ bool WeekInputType::IsValidFormat(bool has_year,
                                   bool has_minute,
                                   bool has_second) const {
   return has_year && has_week;
+}
+
+String WeekInputType::AriaRoleForPickerIndicator() const {
+  return GetLocale().QueryString(IDS_AX_CALENDAR_SHOW_WEEK_PICKER);
 }
 
 }  // namespace blink

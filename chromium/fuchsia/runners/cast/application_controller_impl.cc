@@ -9,13 +9,12 @@
 
 ApplicationControllerImpl::ApplicationControllerImpl(
     fuchsia::web::Frame* frame,
-    fidl::InterfaceHandle<chromium::cast::ApplicationControllerReceiver>
-        receiver)
+    fidl::InterfaceHandle<chromium::cast::ApplicationContext> context)
     : binding_(this), frame_(frame) {
-  DCHECK(receiver);
+  DCHECK(context);
   DCHECK(frame_);
 
-  receiver.Bind()->SetApplicationController(binding_.NewBinding());
+  context.Bind()->SetApplicationController(binding_.NewBinding());
 
   binding_.set_error_handler([](zx_status_t status) {
     if (status != ZX_ERR_PEER_CLOSED && status != ZX_ERR_CANCELED) {
@@ -27,5 +26,8 @@ ApplicationControllerImpl::ApplicationControllerImpl(
 ApplicationControllerImpl::~ApplicationControllerImpl() = default;
 
 void ApplicationControllerImpl::SetTouchInputEnabled(bool enable) {
-  frame_->SetEnableInput(enable);
+  frame_->ConfigureInputTypes(fuchsia::web::InputTypes::GESTURE_TAP |
+                                  fuchsia::web::InputTypes::GESTURE_DRAG,
+                              (enable ? fuchsia::web::AllowInputState::ALLOW
+                                      : fuchsia::web::AllowInputState::DENY));
 }

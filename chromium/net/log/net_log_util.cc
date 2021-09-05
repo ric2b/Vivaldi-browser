@@ -19,6 +19,9 @@
 #include "net/base/address_family.h"
 #include "net/base/load_states.h"
 #include "net/base/net_errors.h"
+#include "net/cert/cert_verifier.h"
+#include "net/cert/internal/simple_path_builder_delegate.h"
+#include "net/cert/internal/trust_store.h"
 #include "net/disk_cache/disk_cache.h"
 #include "net/dns/host_cache.h"
 #include "net/dns/host_resolver.h"
@@ -88,19 +91,6 @@ const short kNetErrors[] = {
 #undef NET_ERROR
 };
 
-const char* NetInfoSourceToString(NetInfoSource source) {
-  switch (source) {
-#define NET_INFO_SOURCE(label, string, value) \
-  case NET_INFO_##label:                      \
-    return string;
-#include "net/base/net_info_source_list.h"
-#undef NET_INFO_SOURCE
-    case NET_INFO_ALL_SOURCES:
-      return "All";
-  }
-  return "?";
-}
-
 // Returns the disk cache backend for |context| if there is one, or NULL.
 // Despite the name, can return an in memory "disk cache".
 disk_cache::Backend* GetDiskCacheBackend(URLRequestContext* context) {
@@ -133,6 +123,19 @@ bool RequestCreatedBefore(const URLRequest* request1,
 
 }  // namespace
 
+const char* NetInfoSourceToString(NetInfoSource source) {
+  switch (source) {
+#define NET_INFO_SOURCE(label, string, value) \
+  case NET_INFO_##label:                      \
+    return string;
+#include "net/base/net_info_source_list.h"
+#undef NET_INFO_SOURCE
+    case NET_INFO_ALL_SOURCES:
+      return "All";
+  }
+  return "?";
+}
+
 std::unique_ptr<base::DictionaryValue> GetNetConstants() {
   std::unique_ptr<base::DictionaryValue> constants_dict(
       new base::DictionaryValue());
@@ -153,6 +156,59 @@ std::unique_ptr<base::DictionaryValue> GetNetConstants() {
       dict->SetInteger(flag.name, flag.constant);
 
     constants_dict->Set("certStatusFlag", std::move(dict));
+  }
+
+  // Add a dictionary with information about the relationship between
+  // CertVerifier::VerifyFlags and their symbolic names.
+  {
+    std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
+
+    dict->SetInteger("VERIFY_DISABLE_NETWORK_FETCHES",
+                     CertVerifier::VERIFY_DISABLE_NETWORK_FETCHES);
+
+    static_assert(CertVerifier::VERIFY_FLAGS_LAST == (1 << 0),
+                  "Update with new flags");
+
+    constants_dict->Set("certVerifierFlags", std::move(dict));
+  }
+
+  {
+    std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
+
+    dict->SetInteger(
+        "kStrong",
+        static_cast<int>(SimplePathBuilderDelegate::DigestPolicy::kStrong));
+    dict->SetInteger(
+        "kWeakAllowSha1",
+        static_cast<int>(
+            SimplePathBuilderDelegate::DigestPolicy::kWeakAllowSha1));
+
+    static_assert(SimplePathBuilderDelegate::DigestPolicy::kMaxValue ==
+                      SimplePathBuilderDelegate::DigestPolicy::kWeakAllowSha1,
+                  "Update with new flags");
+
+    constants_dict->Set("certPathBuilderDigestPolicy", std::move(dict));
+  }
+
+  {
+    std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
+
+    dict->SetInteger("DISTRUSTED",
+                     static_cast<int>(CertificateTrustType::DISTRUSTED));
+    dict->SetInteger("UNSPECIFIED",
+                     static_cast<int>(CertificateTrustType::UNSPECIFIED));
+    dict->SetInteger("TRUSTED_ANCHOR",
+                     static_cast<int>(CertificateTrustType::TRUSTED_ANCHOR));
+    dict->SetInteger(
+        "TRUSTED_ANCHOR_WITH_CONSTRAINTS",
+        static_cast<int>(
+            CertificateTrustType::TRUSTED_ANCHOR_WITH_CONSTRAINTS));
+
+    static_assert(CertificateTrustType::LAST ==
+                      CertificateTrustType::TRUSTED_ANCHOR_WITH_CONSTRAINTS,
+                  "Update with new flags");
+
+    constants_dict->Set("certificateTrustType", std::move(dict));
   }
 
   // Add a dictionary with information about the relationship between load flag
@@ -242,12 +298,6 @@ std::unique_ptr<base::DictionaryValue> GetNetConstants() {
   // their symbolic names.
   constants_dict->SetKey("logSourceType", NetLog::GetSourceTypesAsValue());
 
-  // TODO(eroman): This is here for compatibility in loading new log files with
-  // older builds of Chrome. Safe to remove this once M45 is on the stable
-  // channel.
-  constants_dict->Set("logLevelType",
-                      std::make_unique<base::DictionaryValue>());
-
   // Information about the relationship between address family enums and
   // their symbolic names.
   {
@@ -309,49 +359,8 @@ NET_EXPORT std::unique_ptr<base::DictionaryValue> GetNetInfo(
   // May only be called on the context's thread.
   context->AssertCalledOnValidThread();
 
-  std::unique_ptr<base::DictionaryValue> net_info_dict(
-      new base::DictionaryValue());
-
-  // TODO(mmenke):  The code for most of these sources should probably be moved
-  // into the sources themselves.
-  if (info_sources & NET_INFO_PROXY_SETTINGS) {
-    ProxyResolutionService* proxy_resolution_service =
-        context->proxy_resolution_service();
-
-    std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
-    if (proxy_resolution_service->fetched_config())
-      dict->SetKey(
-          "original",
-          proxy_resolution_service->fetched_config()->value().ToValue());
-    if (proxy_resolution_service->config())
-      dict->SetKey("effective",
-                   proxy_resolution_service->config()->value().ToValue());
-
-    net_info_dict->Set(NetInfoSourceToString(NET_INFO_PROXY_SETTINGS),
-                       std::move(dict));
-  }
-
-  if (info_sources & NET_INFO_BAD_PROXIES) {
-    const ProxyRetryInfoMap& bad_proxies_map =
-        context->proxy_resolution_service()->proxy_retry_info();
-
-    auto list = std::make_unique<base::ListValue>();
-
-    for (auto it = bad_proxies_map.begin(); it != bad_proxies_map.end(); ++it) {
-      const std::string& proxy_uri = it->first;
-      const ProxyRetryInfo& retry_info = it->second;
-
-      auto dict = std::make_unique<base::DictionaryValue>();
-      dict->SetString("proxy_uri", proxy_uri);
-      dict->SetString("bad_until",
-                      NetLog::TickCountToString(retry_info.bad_until));
-
-      list->Append(std::move(dict));
-    }
-
-    net_info_dict->Set(NetInfoSourceToString(NET_INFO_BAD_PROXIES),
-                       std::move(list));
-  }
+  std::unique_ptr<base::DictionaryValue> net_info_dict =
+      context->proxy_resolution_service()->GetProxyNetLogValues(info_sources);
 
   if (info_sources & NET_INFO_HOST_RESOLVER) {
     HostResolver* host_resolver = context->host_resolver();

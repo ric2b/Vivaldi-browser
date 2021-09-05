@@ -52,10 +52,6 @@ class SendTabToSelfBubbleViewImpl : public SendTabToSelfBubbleView,
   base::string16 GetWindowTitle() const override;
   void WindowClosing() override;
 
-  // views::DialogDelegate:
-  int GetDialogButtons() const override;
-  bool Close() override;
-
   // views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 

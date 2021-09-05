@@ -39,6 +39,10 @@
   flex: 1;
 }
 
+.flex-grow {
+  flex: 1 0 auto; /* flex-grow flex-shrink flex-basis */
+}
+
 /* alignment in cross axis */
 
 .layout.start {
@@ -115,10 +119,4 @@
   position: absolute;
   right: 0;
   top: 0;
-}
-
-.oobe-illustration {
-  max-height: -webkit-fill-available;
-  max-width: -webkit-fill-available;
-  object-fit: contain;
 }

@@ -11,6 +11,7 @@
 
 #include "base/bind.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/win/windows_version.h"
 #include "chrome/browser/ui/views/native_widget_factory.h"
 #include "chrome/browser/win/app_icon.h"
@@ -124,7 +125,7 @@ views::NativeWidget* ChromeViewsDelegate::CreateNativeWidget(
           ? NativeWidgetType::NATIVE_WIDGET_AURA
           : NativeWidgetType::DESKTOP_NATIVE_WIDGET_AURA;
 
-  if (params->shadow_type == views::Widget::InitParams::SHADOW_TYPE_DROP &&
+  if (params->shadow_type == views::Widget::InitParams::ShadowType::kDrop &&
       params->shadow_elevation.has_value()) {
     // If the window defines an elevation based shadow in the Widget
     // initialization parameters, force the use of a non toplevel window,
@@ -137,7 +138,8 @@ views::NativeWidget* ChromeViewsDelegate::CreateNativeWidget(
     // because it was disabled at the command line), anything that requires
     // transparency will be broken with a toplevel window, so force the use of
     // a non toplevel window.
-    if (params->opacity == views::Widget::InitParams::TRANSLUCENT_WINDOW &&
+    if (params->opacity ==
+            views::Widget::InitParams::WindowOpacity::kTranslucent &&
         !params->force_software_compositing)
       native_widget_type = NativeWidgetType::NATIVE_WIDGET_AURA;
   } else {
@@ -171,10 +173,8 @@ int ChromeViewsDelegate::GetAppbarAutohideEdges(HMONITOR monitor,
   if (monitor && !in_autohide_edges_callback_) {
     // TODO(robliao): Annotate this task with .WithCOM() once supported.
     // https://crbug.com/662122
-    base::PostTaskAndReplyWithResult(
-        FROM_HERE,
-        {base::ThreadPool(), base::MayBlock(),
-         base::TaskPriority::USER_BLOCKING},
+    base::ThreadPool::PostTaskAndReplyWithResult(
+        FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_BLOCKING},
         base::BindOnce(&GetAppbarAutohideEdgesOnWorkerThread, monitor),
         base::BindOnce(&ChromeViewsDelegate::OnGotAppbarAutohideEdges,
                        weak_factory_.GetWeakPtr(), std::move(callback), monitor,

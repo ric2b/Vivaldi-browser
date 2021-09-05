@@ -49,7 +49,7 @@ Polymer({
   worker_: null,
 
   /** @override */
-  attached: function() {
+  attached() {
     // CORS blocks loading worker script from a different origin but
     // loading scripts as blob and then instantiating it as web worker
     // is possible.
@@ -63,7 +63,7 @@ Polymer({
   },
 
   /** @override */
-  detached: function() {
+  detached() {
     if (this.resizeObserver_) {
       this.resizeObserver_.disconnect();
     }
@@ -77,9 +77,11 @@ Polymer({
    * Controls the animation based on the value of |shouldPlay|.
    * @param {boolean} shouldPlay Will play the animation if true else pauses it.
    */
-  setPlay: function(shouldPlay) {
+  setPlay(shouldPlay) {
     if (this.isAnimationLoaded_) {
       this.worker_.postMessage({control: {play: shouldPlay}});
+    } else {
+      this.autoplay = shouldPlay;
     }
   },
 
@@ -87,7 +89,7 @@ Polymer({
    * Initializes all the members of this polymer element.
    * @private
    */
-  initialize_: function() {
+  initialize_() {
     // Generate an offscreen canvas.
     this.canvasElement_ =
         /** @type {HTMLCanvasElement} */ (this.$.canvas);
@@ -112,7 +114,7 @@ Polymer({
    * @return {Object} Size of the canvas draw buffer
    * @private
    */
-  getCanvasDrawBufferSize_: function() {
+  getCanvasDrawBufferSize_() {
     const canvasElement = this.$.canvas;
     const devicePixelRatio = window.devicePixelRatio;
     const clientRect = canvasElement.getBoundingClientRect();
@@ -130,10 +132,10 @@ Polymer({
    * @return {boolean}
    * @private
    */
-  isValidUrl_: function(maybeValidUrl) {
+  isValidUrl_(maybeValidUrl) {
     const url = new URL(maybeValidUrl, document.location.href);
     return url.protocol === 'chrome:' ||
-        (url.protocol == 'data:' &&
+        (url.protocol === 'data:' &&
          url.pathname.startsWith('application/json;'));
   },
 
@@ -147,14 +149,14 @@ Polymer({
    *     when a successful response is received.
    * @private
    */
-  sendXmlHttpRequest_: function(url, responseType, successCallback) {
+  sendXmlHttpRequest_(url, responseType, successCallback) {
     assert(this.isValidUrl_(url), 'Invalid scheme or data url used.');
     const xhr = new XMLHttpRequest();
     xhr.open('GET', url, true);
     xhr.responseType = responseType;
     xhr.send();
     xhr.onreadystatechange = function() {
-      if (xhr.readyState == 4 && xhr.status == 200) {
+      if (xhr.readyState === 4 && xhr.status === 200) {
         successCallback(xhr.response);
       }
     };
@@ -165,7 +167,7 @@ Polymer({
    * canvas worker of the new canvas size.
    * @private
    */
-  onCanvasElementResized_: function() {
+  onCanvasElementResized_() {
     if (this.isAnimationLoaded_) {
       this.worker_.postMessage({drawSize: this.getCanvasDrawBufferSize_()});
     }
@@ -177,7 +179,7 @@ Polymer({
    * played.
    * @private
    */
-  initAnimation_: function(animationData) {
+  initAnimation_(animationData) {
     this.worker_.postMessage(
         {
           canvas: this.offscreenCanvas_,
@@ -193,15 +195,15 @@ Polymer({
    * @param {Event} event Event sent by the web worker.
    * @private
    */
-  onMessage_: function(event) {
-    if (event.data.name == 'initialized' && event.data.success) {
+  onMessage_(event) {
+    if (event.data.name === 'initialized' && event.data.success) {
       this.isAnimationLoaded_ = true;
       this.fire('cr-lottie-initialized');
-    } else if (event.data.name == 'playing') {
+    } else if (event.data.name === 'playing') {
       this.fire('cr-lottie-playing');
-    } else if (event.data.name == 'paused') {
+    } else if (event.data.name === 'paused') {
       this.fire('cr-lottie-paused');
-    } else if (event.data.name == 'resized') {
+    } else if (event.data.name === 'resized') {
       this.fire('cr-lottie-resized', event.data.size);
     }
   },

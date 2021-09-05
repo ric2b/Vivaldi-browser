@@ -180,7 +180,6 @@ PaletteTray::PaletteTray(Shelf* shelf)
       scoped_session_observer_(this) {
   PaletteTool::RegisterToolInstances(palette_tool_manager_.get());
 
-  SetInkDropMode(InkDropMode::ON);
   SetLayoutManager(std::make_unique<views::FillLayout>());
   icon_ = new views::ImageView();
   icon_->set_tooltip_text(
@@ -205,18 +204,17 @@ PaletteTray::~PaletteTray() {
 
 // static
 void PaletteTray::RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
-  registry->RegisterBooleanPref(prefs::kHasSeenStylus, false,
-                                PrefRegistry::PUBLIC);
+  registry->RegisterBooleanPref(prefs::kHasSeenStylus, false);
 }
 
 // static
 void PaletteTray::RegisterProfilePrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(
       prefs::kEnableStylusTools, true,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF | PrefRegistry::PUBLIC);
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
   registry->RegisterBooleanPref(
       prefs::kLaunchPaletteOnEjectEvent, true,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF | PrefRegistry::PUBLIC);
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
 }
 
 bool PaletteTray::ContainsPointInScreen(const gfx::Point& point) {
@@ -560,7 +558,7 @@ void PaletteTray::OnPaletteEnabledPrefChanged() {
       prefs::kEnableStylusTools);
 
   if (!is_palette_enabled_) {
-    SetVisible(false);
+    SetVisiblePreferred(false);
     palette_tool_manager_->DisableActiveTool(PaletteGroup::MODE);
   } else {
     UpdateIconVisibility();
@@ -593,9 +591,13 @@ bool PaletteTray::HasSeenStylus() {
 }
 
 void PaletteTray::UpdateIconVisibility() {
-  SetVisible(HasSeenStylus() && is_palette_enabled_ &&
-             stylus_utils::HasStylusInput() && ShouldShowOnDisplay(this) &&
-             palette_utils::IsInUserSession());
+  bool visible_preferred = HasSeenStylus() && is_palette_enabled_ &&
+                           stylus_utils::HasStylusInput() &&
+                           ShouldShowOnDisplay(this) &&
+                           palette_utils::IsInUserSession();
+  SetVisiblePreferred(visible_preferred);
+  if (visible_preferred)
+    UpdateLayout();
 }
 
 }  // namespace ash

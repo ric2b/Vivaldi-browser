@@ -58,9 +58,8 @@ D3D11VP9Accelerator::~D3D11VP9Accelerator() {}
 
 void D3D11VP9Accelerator::RecordFailure(const std::string& fail_type,
                                         const std::string& reason) {
-  media_log_->AddEvent(media_log_->CreateStringEvent(
-      MediaLogEvent::MEDIA_ERROR_LOG_ENTRY, "error",
-      std::string("DX11VP9Failure(") + fail_type + ")=" + reason));
+  MEDIA_LOG(ERROR, media_log_)
+      << "DX11VP9Failure(" << fail_type << ")=" << reason;
 }
 
 scoped_refptr<VP9Picture> D3D11VP9Accelerator::CreateVP9Picture() {
@@ -128,8 +127,10 @@ void D3D11VP9Accelerator::CopyFrameParams(const D3D11VP9Picture& pic,
   COPY_PARAM(frame_context_idx);
   COPY_PARAM(allow_high_precision_mv);
 
-  // extra_plane, BitDepthMinus8Luma, and BitDepthMinus8Chroma are initialized
-  // at 0 already.
+  // extra_plane is initialized to zero.
+
+  pic_params->BitDepthMinus8Luma = pic_params->BitDepthMinus8Chroma =
+      pic.frame_hdr->bit_depth - 8;
 
   pic_params->CurrPic.Index7Bits = pic.level();
   pic_params->frame_type = !pic.frame_hdr->IsKeyframe();
@@ -350,7 +351,7 @@ bool D3D11VP9Accelerator::SubmitDecode(
     const Vp9SegmentationParams& segmentation_params,
     const Vp9LoopFilterParams& loop_filter_params,
     const Vp9ReferenceFrameVector& reference_frames,
-    const base::Closure& on_finished_cb) {
+    base::OnceClosure on_finished_cb) {
   D3D11VP9Picture* pic = static_cast<D3D11VP9Picture*>(picture.get());
 
   if (!BeginFrame(*pic))
@@ -371,14 +372,13 @@ bool D3D11VP9Accelerator::SubmitDecode(
   RETURN_ON_HR_FAILURE(DecoderEndFrame,
                        video_context_->DecoderEndFrame(video_decoder_.Get()));
   if (on_finished_cb)
-    on_finished_cb.Run();
+    std::move(on_finished_cb).Run();
   return true;
 }
 
 bool D3D11VP9Accelerator::OutputPicture(scoped_refptr<VP9Picture> picture) {
   D3D11VP9Picture* pic = static_cast<D3D11VP9Picture*>(picture.get());
-  client_->OutputResult(picture.get(), pic->picture_buffer());
-  return true;
+  return client_->OutputResult(picture.get(), pic->picture_buffer());
 }
 
 bool D3D11VP9Accelerator::IsFrameContextRequired() const {

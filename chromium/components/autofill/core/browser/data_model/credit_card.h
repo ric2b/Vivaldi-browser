@@ -60,17 +60,6 @@ class CreditCard : public AutofillDataModel {
     OK,
   };
 
-  // The type of the card. Local cards are all CARD_TYPE_UNKNOWN. Server cards
-  // may have a more specific type.
-  // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chrome.browser.autofill
-  // GENERATED_JAVA_CLASS_NAME_OVERRIDE: CardType
-  enum CardType : int {
-    CARD_TYPE_UNKNOWN,
-    CARD_TYPE_CREDIT,
-    CARD_TYPE_DEBIT,
-    CARD_TYPE_PREPAID,
-  };
-
   CreditCard(const std::string& guid, const std::string& origin);
 
   // Creates a server card.  The type must be MASKED_SERVER_CARD or
@@ -143,12 +132,8 @@ class CreditCard : public AutofillDataModel {
   const std::string& server_id() const { return server_id_; }
   void set_server_id(const std::string& server_id) { server_id_ = server_id; }
 
-  const sync_pb::CloudTokenData& cloud_token_data() const {
-    return cloud_token_data_;
-  }
-  void set_cloud_token_data(const sync_pb::CloudTokenData& cloud_token_data) {
-    cloud_token_data_ = cloud_token_data;
-  }
+  const base::string16& nickname() const { return nickname_; }
+  void set_nickname(const base::string16& nickname) { nickname_ = nickname; }
 
   // For use in STL containers.
   void operator=(const CreditCard& credit_card);
@@ -185,11 +170,6 @@ class CreditCard : public AutofillDataModel {
   RecordType record_type() const { return record_type_; }
   void set_record_type(RecordType rt) { record_type_ = rt; }
 
-  // Whether this is a credit, debit, or prepaid card. Known only for server
-  // cards. All local cards are CARD_TYPE_UNKNOWN.
-  CardType card_type() const { return card_type_; }
-  void set_card_type(CardType card_type) { card_type_ = card_type; }
-
   // Returns true if there are no values (field types) set.
   bool IsEmpty(const std::string& app_locale) const;
 
@@ -216,13 +196,6 @@ class CreditCard : public AutofillDataModel {
   // Logs the number of days since the card was last used and records its use.
   void RecordAndLogUse();
 
-  // Converts a string representation of a month (such as "February" or "feb."
-  // or "2") into a numeric value in [1, 12]. Returns true on successful
-  // conversion or false if a month was not recognized.
-  static bool ConvertMonth(const base::string16& month,
-                           const std::string& app_locale,
-                           int* num);
-
   // Returns whether the card is expired based on |current_time|.
   bool IsExpired(const base::Time& current_time) const;
 
@@ -241,7 +214,8 @@ class CreditCard : public AutofillDataModel {
 
   // Sets |expiration_year_| to the integer conversion of |text|. Will handle
   // 4-digit year or 2-digit year (eventually converted to 4-digit year).
-  void SetExpirationYearFromString(const base::string16& text);
+  // Returns whether the operation was successful.
+  bool SetExpirationYearFromString(const base::string16& text);
 
   // Sets |expiration_year_| and |expiration_month_| to the integer conversion
   // of |text|. Will handle mmyy, mmyyyy, mm-yyyy and mm-yy as well as single
@@ -263,10 +237,6 @@ class CreditCard : public AutofillDataModel {
   base::string16 ObfuscatedLastFourDigits() const;
   // A label for this card formatted as 'IssuerNetwork - ****2345'.
   base::string16 NetworkAndLastFourDigits() const;
-  // A label for this card formatted as 'BankName' - ****2345' if bank name
-  // experiment turned on and bank name available; otherwise, formatted as
-  // 'IssuerNetwork - ****2345'.
-  base::string16 NetworkOrBankNameAndLastFourDigits() const;
   // A label for this card formatted as
   // 'BankName/Netowrk' - ****2345, expires on MM/YY' if bank name
   // experiment turned on and bank name available; otherwise, formatted as
@@ -286,7 +256,7 @@ class CreditCard : public AutofillDataModel {
   // Formatted expiration date (e.g., 05/2020).
   base::string16 ExpirationDateForDisplay() const;
   // Expiration functions.
-  base::string16 ExpirationMonthAsString() const;
+  base::string16 Expiration2DigitMonthAsString() const;
   base::string16 Expiration4DigitYearAsString() const;
 
   // Whether the cardholder name was created from separate first name and last
@@ -314,19 +284,11 @@ class CreditCard : public AutofillDataModel {
   // The issuer network of the card to fill in to the page, e.g. 'Mastercard'.
   base::string16 NetworkForFill() const;
 
-  // The month and year are zero if not present.
-  int Expiration4DigitYear() const { return expiration_year_; }
-  int Expiration2DigitYear() const { return expiration_year_ % 100; }
-
-  // A label for this card formatted as 'BankName - 2345'.
-  base::string16 BankNameAndLastFourDigits() const;
-
   // Sets the name_on_card_ value based on the saved name parts.
   void SetNameOnCardFromSeparateParts();
 
   // See enum definition above.
   RecordType record_type_;
-  CardType card_type_;
 
   // The card number. For MASKED_SERVER_CARDs, this number will just contain the
   // last four digits of the card number.
@@ -339,6 +301,7 @@ class CreditCard : public AutofillDataModel {
   // below.
   std::string network_;
 
+  // bank_name is no longer actively used but remains for legacy reasons.
   // The issuer bank name of the card.
   std::string bank_name_;
 
@@ -365,6 +328,9 @@ class CreditCard : public AutofillDataModel {
 
   // Info of tokenizized credit card if available.
   sync_pb::CloudTokenData cloud_token_data_;
+
+  // The nickname of the card. May be empty when nickname is not set.
+  base::string16 nickname_;
 };
 
 // So we can compare CreditCards with EXPECT_EQ().

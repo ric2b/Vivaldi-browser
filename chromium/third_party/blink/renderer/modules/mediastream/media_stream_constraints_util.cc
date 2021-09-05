@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "third_party/blink/public/web/modules/mediastream/media_stream_constraints_util.h"
+#include "third_party/blink/renderer/modules/mediastream/media_stream_constraints_util.h"
 
 #include <algorithm>
 #include <limits>
@@ -10,7 +10,7 @@
 
 #include "third_party/blink/public/common/mediastream/media_stream_request.h"
 #include "third_party/blink/public/platform/web_string.h"
-#include "third_party/blink/public/web/modules/mediastream/media_stream_constraints_util_sets.h"
+#include "third_party/blink/renderer/modules/mediastream/media_stream_constraints_util_sets.h"
 #include "third_party/blink/renderer/modules/mediastream/media_stream_constraints_util_video_device.h"
 
 namespace blink {
@@ -18,7 +18,7 @@ namespace blink {
 namespace {
 
 template <typename P, typename T>
-bool ScanConstraintsForExactValue(const WebMediaConstraints& constraints,
+bool ScanConstraintsForExactValue(const MediaConstraints& constraints,
                                   P picker,
                                   T* value) {
   if (constraints.IsNull())
@@ -40,7 +40,7 @@ bool ScanConstraintsForExactValue(const WebMediaConstraints& constraints,
 }
 
 template <typename P, typename T>
-bool ScanConstraintsForMaxValue(const WebMediaConstraints& constraints,
+bool ScanConstraintsForMaxValue(const MediaConstraints& constraints,
                                 P picker,
                                 T* value) {
   if (constraints.IsNull())
@@ -69,7 +69,7 @@ bool ScanConstraintsForMaxValue(const WebMediaConstraints& constraints,
 }
 
 template <typename P, typename T>
-bool ScanConstraintsForMinValue(const WebMediaConstraints& constraints,
+bool ScanConstraintsForMinValue(const MediaConstraints& constraints,
                                 P picker,
                                 T* value) {
   if (constraints.IsNull())
@@ -154,12 +154,14 @@ AudioCaptureSettings::AudioCaptureSettings(
     const base::Optional<int>& requested_buffer_size,
     bool disable_local_echo,
     bool enable_automatic_output_device_selection,
+    ProcessingType processing_type,
     const AudioProcessingProperties& audio_processing_properties)
     : failed_constraint_name_(nullptr),
       device_id_(std::move(device_id)),
       requested_buffer_size_(requested_buffer_size),
       disable_local_echo_(disable_local_echo),
       render_to_associated_sink_(enable_automatic_output_device_selection),
+      processing_type_(processing_type),
       audio_processing_properties_(audio_processing_properties) {}
 
 AudioCaptureSettings::AudioCaptureSettings(const AudioCaptureSettings& other) =
@@ -172,42 +174,42 @@ AudioCaptureSettings& AudioCaptureSettings::operator=(
     AudioCaptureSettings&& other) = default;
 
 bool GetConstraintValueAsBoolean(
-    const WebMediaConstraints& constraints,
-    const BooleanConstraint WebMediaTrackConstraintSet::*picker,
+    const MediaConstraints& constraints,
+    const BooleanConstraint MediaTrackConstraintSetPlatform::*picker,
     bool* value) {
   return ScanConstraintsForExactValue(constraints, picker, value);
 }
 
 bool GetConstraintValueAsInteger(
-    const WebMediaConstraints& constraints,
-    const LongConstraint WebMediaTrackConstraintSet::*picker,
+    const MediaConstraints& constraints,
+    const LongConstraint MediaTrackConstraintSetPlatform::*picker,
     int* value) {
   return ScanConstraintsForExactValue(constraints, picker, value);
 }
 
 bool GetConstraintMinAsInteger(
-    const WebMediaConstraints& constraints,
-    const LongConstraint WebMediaTrackConstraintSet::*picker,
+    const MediaConstraints& constraints,
+    const LongConstraint MediaTrackConstraintSetPlatform::*picker,
     int* value) {
   return ScanConstraintsForMinValue(constraints, picker, value);
 }
 
 bool GetConstraintMaxAsInteger(
-    const WebMediaConstraints& constraints,
-    const LongConstraint WebMediaTrackConstraintSet::*picker,
+    const MediaConstraints& constraints,
+    const LongConstraint MediaTrackConstraintSetPlatform::*picker,
     int* value) {
   return ScanConstraintsForMaxValue(constraints, picker, value);
 }
 
 bool GetConstraintValueAsDouble(
-    const WebMediaConstraints& constraints,
-    const DoubleConstraint WebMediaTrackConstraintSet::*picker,
+    const MediaConstraints& constraints,
+    const DoubleConstraint MediaTrackConstraintSetPlatform::*picker,
     double* value) {
   return ScanConstraintsForExactValue(constraints, picker, value);
 }
 
 VideoTrackAdapterSettings SelectVideoTrackAdapterSettings(
-    const WebMediaTrackConstraintSet& basic_constraint_set,
+    const MediaTrackConstraintSetPlatform& basic_constraint_set,
     const media_constraints::ResolutionSet& resolution_set,
     const media_constraints::NumericRangeSet<double>& frame_rate_set,
     const media::VideoCaptureFormat& source_format,
@@ -265,7 +267,9 @@ double StringConstraintFitnessDistance(const WebString& value,
     return 0.0;
 
   for (auto& ideal_value : constraint.Ideal()) {
-    if (value == ideal_value)
+    // TODO(crbug.com/787254): Remove the explicit conversion to WebString when
+    // this method operates solely over WTF::String.
+    if (value == WebString(ideal_value))
       return 0.0;
   }
 

@@ -63,7 +63,7 @@ class GLRendererCopierPixelTest
           std::tuple<GLenum, bool, CopyOutputResult::Format, bool, bool>> {
  public:
   void SetUp() override {
-    SetUpGLWithoutRenderer(false /* flipped_output_surface */);
+    SetUpGLWithoutRenderer(gfx::SurfaceOrigin::kBottomLeft);
 
     texture_deleter_ =
         std::make_unique<TextureDeleter>(base::ThreadTaskRunnerHandle::Get());
@@ -315,7 +315,7 @@ TEST_P(GLRendererCopierPixelTest, ExecutesCopyRequest) {
 // GLRendererCopier will encounter, which will cause it to follow different
 // workflows.
 INSTANTIATE_TEST_SUITE_P(
-    ,
+    All,
     GLRendererCopierPixelTest,
     testing::Combine(
         // Source framebuffer GL format.

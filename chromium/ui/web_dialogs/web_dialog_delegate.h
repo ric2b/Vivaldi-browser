@@ -10,7 +10,7 @@
 
 #include "base/strings/string16.h"
 #include "content/public/browser/web_contents_delegate.h"
-#include "content/public/common/resource_load_info.mojom.h"
+#include "third_party/blink/public/mojom/loader/resource_load_info.mojom.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/web_dialogs/web_dialogs_export.h"
@@ -19,7 +19,6 @@ class GURL;
 
 namespace content {
 class RenderFrameHost;
-class RenderViewHost;
 class WebContents;
 class WebUI;
 class WebUIMessageHandler;
@@ -88,9 +87,7 @@ class WEB_DIALOGS_EXPORT WebDialogDelegate {
 
   // A callback to notify the delegate that a web dialog has been shown.
   // |webui| is the WebUI with which the dialog is associated.
-  // |render_view_host| is the RenderViewHost for the shown dialog.
-  virtual void OnDialogShown(content::WebUI* webui,
-                             content::RenderViewHost* render_view_host) {}
+  virtual void OnDialogShown(content::WebUI* webui) {}
 
   // A callback to notify the delegate that the window is requesting to be
   // closed.  If this returns true, the dialog is closed, otherwise the
@@ -119,9 +116,17 @@ class WEB_DIALOGS_EXPORT WebDialogDelegate {
   virtual void OnCloseContents(content::WebContents* source,
                                bool* out_close_dialog) = 0;
 
+  // Returns true if escape should immediately close the dialog. Default is
+  // true.
+  virtual bool ShouldCloseDialogOnEscape() const;
+
   // A callback to allow the delegate to dictate that the window should not
   // have a title bar.  This is useful when presenting branded interfaces.
   virtual bool ShouldShowDialogTitle() const = 0;
+
+  // A callback to allow the delegate to center title text. Default is
+  // false.
+  virtual bool ShouldCenterDialogTitleText() const;
 
   // Returns true if the dialog should show a close button in the title bar.
   // Default implementation returns true.
@@ -156,7 +161,7 @@ class WEB_DIALOGS_EXPORT WebDialogDelegate {
 
   virtual void OnWebContentsFinishedLoad() {}
   virtual void OnMainFrameResourceLoadComplete(
-      const content::mojom::ResourceLoadInfo& resource_load_info) {}
+      const blink::mojom::ResourceLoadInfo& resource_load_info) {}
 
   virtual ~WebDialogDelegate() {}
 };

@@ -29,13 +29,11 @@
 
 namespace blink {
 
-using namespace html_names;
-
 HTMLBRElement::HTMLBRElement(Document& document)
-    : HTMLElement(kBrTag, document) {}
+    : HTMLElement(html_names::kBrTag, document) {}
 
 bool HTMLBRElement::IsPresentationAttribute(const QualifiedName& name) const {
-  if (name == kClearAttr)
+  if (name == html_names::kClearAttr)
     return true;
   return HTMLElement::IsPresentationAttribute(name);
 }
@@ -44,12 +42,12 @@ void HTMLBRElement::CollectStyleForPresentationAttribute(
     const QualifiedName& name,
     const AtomicString& value,
     MutableCSSPropertyValueSet* style) {
-  if (name == kClearAttr) {
+  if (name == html_names::kClearAttr) {
     // If the string is empty, then don't add the clear property.
     // <br clear> and <br clear=""> are just treated like <br> by Gecko, Mac IE,
     // etc. -dwh
     if (!value.IsEmpty()) {
-      if (DeprecatedEqualIgnoringCase(value, "all")) {
+      if (EqualIgnoringASCIICase(value, "all")) {
         AddPropertyToPresentationAttributeStyle(style, CSSPropertyID::kClear,
                                                 CSSValueID::kBoth);
       } else {
@@ -64,9 +62,9 @@ void HTMLBRElement::CollectStyleForPresentationAttribute(
 
 LayoutObject* HTMLBRElement::CreateLayoutObject(const ComputedStyle& style,
                                                 LegacyLayout legacy) {
-  if (style.HasContent())
-    return LayoutObject::CreateObject(this, style, legacy);
-  return new LayoutBR(this);
+  if (style.ContentBehavesAsNormal())
+    return new LayoutBR(this);
+  return LayoutObject::CreateObject(this, style, legacy);
 }
 
 }  // namespace blink

@@ -37,22 +37,22 @@
 #include "cc/metrics/begin_main_frame_metrics.h"
 #include "cc/paint/element_id.h"
 #include "cc/trees/layer_tree_host_client.h"
+#include "third_party/blink/public/common/input/web_menu_source_type.h"
+#include "third_party/blink/public/common/metrics/document_update_reason.h"
 #include "third_party/blink/public/platform/web_common.h"
-#include "third_party/blink/public/platform/web_float_size.h"
 #include "third_party/blink/public/platform/web_input_event_result.h"
-#include "third_party/blink/public/platform/web_menu_source_type.h"
-#include "third_party/blink/public/platform/web_point.h"
 #include "third_party/blink/public/platform/web_rect.h"
 #include "third_party/blink/public/platform/web_size.h"
 #include "third_party/blink/public/platform/web_text_input_info.h"
 #include "third_party/blink/public/web/web_hit_test_result.h"
 #include "third_party/blink/public/web/web_ime_text_span.h"
+#include "third_party/blink/public/web/web_lifecycle_update.h"
 #include "third_party/blink/public/web/web_range.h"
-#include "third_party/blink/public/web/web_text_direction.h"
 
 namespace cc {
 struct ApplyViewportChangesArgs;
 class AnimationHost;
+class LayerTreeHost;
 }
 
 namespace gfx {
@@ -64,10 +64,18 @@ class WebCoalescedInputEvent;
 
 class WebWidget {
  public:
-  // Called during set up of the WebWidget to declare the AnimationHost for
+  // Called during set up of the WebWidget to declare the layer compositor for
   // the widget to use. This does not pass ownership, but the caller must keep
-  // the pointer valid until Close() is called.
-  virtual void SetAnimationHost(cc::AnimationHost*) = 0;
+  // the pointers valid until Close() is called.
+  virtual void SetCompositorHosts(cc::LayerTreeHost*, cc::AnimationHost*) = 0;
+
+  // Adjust the compositor visible state. This does method does not get called
+  // if this widget does not composite.
+  virtual void SetCompositorVisible(bool visible) = 0;
+
+  // Update the visual state of the page. Updating the document
+  // lifecycle.
+  virtual void UpdateVisualState() = 0;
 
   // This method closes and deletes the WebWidget.
   virtual void Close() {}
@@ -82,15 +90,10 @@ class WebWidget {
   virtual void DidEnterFullscreen() {}
   virtual void DidExitFullscreen() {}
 
-  // TODO(crbug.com/704763): Remove the need for this.
-  virtual void SetSuppressFrameRequestsWorkaroundFor704763Only(bool) {}
-
   // Called to update imperative animation state. This should be called before
   // paint, although the client can rate-limit these calls.
-  // |last_frame_time| is in seconds. |record_main_frame_metrics| is true when
-  // UMA and UKM metrics should be emitted for animation work.
-  virtual void BeginFrame(base::TimeTicks last_frame_time,
-                          bool record_main_frame_metrics) {}
+  // |last_frame_time| is in seconds.
+  virtual void BeginFrame(base::TimeTicks last_frame_time) {}
 
   // Called after UpdateAllLifecyclePhases has run in response to a BeginFrame.
   virtual void DidBeginFrame() {}
@@ -102,7 +105,9 @@ class WebWidget {
 
   // Called when a main frame time metric should be emitted, along with
   // any metrics that depend upon the main frame total time.
-  virtual void RecordEndOfFrameMetrics(base::TimeTicks frame_begin_time) {}
+  virtual void RecordEndOfFrameMetrics(
+      base::TimeTicks frame_begin_time,
+      cc::ActiveFrameSequenceTrackers trackers) {}
 
   // Return metrics information for the stages of BeginMainFrame. This is
   // ultimately implemented by Blink's LocalFrameUKMAggregator. It must be a
@@ -115,14 +120,6 @@ class WebWidget {
     return nullptr;
   }
 
-  // Methods called to mark the beginning and end of input processing work
-  // before rAF scripts are executed. Only called when gathering main frame
-  // UMA and UKM. That is, when RecordStartOfFrameMetrics has been called, and
-  // before RecordEndOfFrameMetrics has been called. Only implement if the
-  // rAF input update will be called as part of a layer tree view main frame
-  // update.
-  virtual void BeginRafAlignedInput() {}
-  virtual void EndRafAlignedInput() {}
 
   // Methods called to mark the beginning and end of the
   // LayerTreeHost::UpdateLayers method. Only called when gathering main frame
@@ -136,28 +133,27 @@ class WebWidget {
   // UMA and UKM. That is, when RecordStartOfFrameMetrics has been called, and
   // before RecordEndOfFrameMetrics has been called.
   virtual void BeginCommitCompositorFrame() {}
-  virtual void EndCommitCompositorFrame() {}
+  virtual void EndCommitCompositorFrame(base::TimeTicks) {}
+
+  virtual void WillBeginCompositorFrame() {}
 
   // Called to run through the entire set of document lifecycle phases needed
   // to render a frame of the web widget. This MUST be called before Paint,
   // and it may result in calls to WebViewClient::DidInvalidateRect (for
   // non-composited WebViews).
-  // |LifecycleUpdateReason| must be used to indicate the source of the
+  // |reason| must be used to indicate the source of the
   // update for the purposes of metrics gathering.
-  enum class LifecycleUpdate { kLayout, kPrePaint, kAll };
-  // This must be kept coordinated with DocumentLifecycle::LifecycleUpdateReason
-  enum class LifecycleUpdateReason { kBeginMainFrame, kTest, kOther };
-  virtual void UpdateAllLifecyclePhases(LifecycleUpdateReason reason) {
-    UpdateLifecycle(LifecycleUpdate::kAll, reason);
+  virtual void UpdateAllLifecyclePhases(DocumentUpdateReason reason) {
+    UpdateLifecycle(WebLifecycleUpdate::kAll, reason);
   }
 
   // UpdateLifecycle is used to update to a specific lifestyle phase, as given
   // by |LifecycleUpdate|. To update all lifecycle phases, use
   // UpdateAllLifecyclePhases.
-  // |LifecycleUpdateReason| must be used to indicate the source of the
+  // |reason| must be used to indicate the source of the
   // update for the purposes of metrics gathering.
-  virtual void UpdateLifecycle(LifecycleUpdate requested_update,
-                               LifecycleUpdateReason reason) {}
+  virtual void UpdateLifecycle(WebLifecycleUpdate requested_update,
+                               DocumentUpdateReason reason) {}
 
   // Called to inform the WebWidget of a change in theme.
   // Implementors that cache rendered copies of widgets need to re-render
@@ -208,16 +204,6 @@ class WebWidget {
   virtual bool SelectionBounds(WebRect& anchor, WebRect& focus) const {
     return false;
   }
-
-  // Returns true if the WebWidget is currently animating a GestureFling.
-  virtual bool IsFlinging() const { return false; }
-
-  // Returns true if the WebWidget uses GPU accelerated compositing
-  // to render its contents.
-  virtual bool IsAcceleratedCompositingActive() const { return false; }
-
-  // Returns true if the WebWidget created is of type PepperWidget.
-  virtual bool IsPepperWidget() const { return false; }
 
   // Calling WebWidgetClient::requestPointerLock() will result in one
   // return call to didAcquirePointerLock() or didNotAcquirePointerLock().

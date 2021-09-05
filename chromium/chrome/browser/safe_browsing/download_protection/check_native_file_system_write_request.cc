@@ -14,12 +14,11 @@
 #include "chrome/browser/safe_browsing/download_protection/download_feedback_service.h"
 #include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
 #include "chrome/browser/safe_browsing/download_protection/download_protection_util.h"
-#include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/common/safe_browsing/download_type_util.h"
-#include "chrome/common/safe_browsing/file_type_policies.h"
-#include "components/safe_browsing/common/utils.h"
-#include "components/safe_browsing/features.h"
-#include "components/safe_browsing/proto/csd.pb.h"
+#include "components/safe_browsing/core/common/utils.h"
+#include "components/safe_browsing/core/features.h"
+#include "components/safe_browsing/core/file_type_policies.h"
+#include "components/safe_browsing/core/proto/csd.pb.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/download_item_utils.h"
 #include "content/public/browser/navigation_entry.h"
@@ -65,7 +64,8 @@ CheckNativeFileSystemWriteRequest::CheckNativeFileSystemWriteRequest(
                                      item->target_file_path,
                                      item->full_path,
                                      TabUrlsFromWebContents(item->web_contents),
-                                     item->size,
+                                     "application/octet-stream",
+                                     item->sha256_hash,
                                      item->browser_context,
                                      std::move(callback),
                                      service,
@@ -91,8 +91,8 @@ bool CheckNativeFileSystemWriteRequest::IsSupportedDownload(
   return true;
 }
 
-content::BrowserContext*
-CheckNativeFileSystemWriteRequest::GetBrowserContext() {
+content::BrowserContext* CheckNativeFileSystemWriteRequest::GetBrowserContext()
+    const {
   return item_->browser_context;
 }
 
@@ -151,11 +151,6 @@ void CheckNativeFileSystemWriteRequest::MaybeStorePingsForDownload(
   // TODO(https://crbug.com/996797): Integrate with DownloadFeedbackService.
 }
 
-bool CheckNativeFileSystemWriteRequest::ShouldReturnAsynchronousVerdict(
-    DownloadCheckResultReason reason) {
-  return false;
-}
-
 bool CheckNativeFileSystemWriteRequest::ShouldUploadBinary(
     DownloadCheckResultReason reason) {
   return false;
@@ -163,6 +158,11 @@ bool CheckNativeFileSystemWriteRequest::ShouldUploadBinary(
 
 void CheckNativeFileSystemWriteRequest::UploadBinary(
     DownloadCheckResultReason reason) {}
+
+bool CheckNativeFileSystemWriteRequest::ShouldPromptForDeepScanning(
+    DownloadCheckResultReason reason) const {
+  return false;
+}
 
 void CheckNativeFileSystemWriteRequest::NotifyRequestFinished(
     DownloadCheckResult result,

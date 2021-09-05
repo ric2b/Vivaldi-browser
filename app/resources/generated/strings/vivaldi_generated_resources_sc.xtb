@@ -34,7 +34,6 @@
 <translation id="2087822576218954668">Imprenta: <ph name="PRINT_NAME" /></translation>
 <translation id="2150139952286079145">Sèbera sas destinatziones</translation>
 <translation id="2177950615300672361">Ischeda privada: <ph name="TAB_NAME" /></translation>
-<translation id="218070003709087997">Imprea unu numeru pro nàrrere cantas sunt sas copias de imprentare (dae 1 ae 999).</translation>
 <translation id="219008588003277019">Native Client module: <ph name="NEXE_NAME" /></translation>
 <translation id="2249605167705922988">e.g. 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Permiti sos identificadores de contenutos protetos (podet dare chi as a depere istudiare e aviare s'elaboradore)</translation>
@@ -43,10 +42,8 @@
 <translation id="2282146716419988068">Protzessu GPU</translation>
 <translation id="2301382460326681002">Su tretu de sa cartella de estratzione no balet.</translation>
 <translation id="2318143611928805047">Mànnaria de su paperi</translation>
-<translation id="2318923050469484167">Sessione privada de como (<ph name="EMBEDDING" />)</translation>
 <translation id="2322193970951063277">Intestatzione e pes de sa pàgina</translation>
 <translation id="2327492829706409234">Ativa s'aplicu</translation>
-<translation id="2344028582131185878">Iscarrigamentos automaticos</translation>
 <translation id="2348176352564285430">Aplicu: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">Sèbera sa cartella de estratzione.</translation>
 <translation id="2379281330731083556">Imprenta impreande su programa predefinidu de su sistema... <ph name="SHORTCUT_KEY" /></translation>
@@ -60,7 +57,6 @@
 <translation id="2482878487686419369">Avisos</translation>
 <translation id="2509495747794740764">Su valore de s'iscala depet èssere unu nùmeru intre 10 e 200.</translation>
 <translation id="2546283357679194313">Pistocus e datos de su giassu web</translation>
-<translation id="2580924999637585241">Totale: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="26224892172169984">No permites a giassu web perunu de gestire sos protocollos</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Torra a àtivare</translation>
@@ -74,7 +70,6 @@
 <translation id="2932883381142163287">Sinnala</translation>
 <translation id="2941112035454246133">Bassu</translation>
 <translation id="2972581237482394796">Torre-lu a comente fut</translation>
-<translation id="299483336428448530">Est bistadu assetiadu dae mama o babu tuo.</translation>
 <translation id="3012631534724231212">(iframe)</translation>
 <translation id="3013291976881901233">Dispositivos MIDI</translation>
 <translation id="3036546437875325427">Ativa Flash</translation>
@@ -189,7 +184,6 @@
 <translation id="5804241973901381774">Ordines</translation>
 <translation id="5828633471261496623">Imprentande...</translation>
 <translation id="583281660410589416">No si connoschet</translation>
-<translation id="5838456317242088717">Sessione privada de como</translation>
 <translation id="5908769186679515905">No permites a zassu web perunu de impreare Flash</translation>
 <translation id="5956585768868398362">Est custa sa pàgina pro sas chircas chi t'ispetasti?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> peak)</translation>
@@ -201,7 +195,6 @@
 <translation id="6101226222197207147">Aplicu nou agiuntu (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">S'atacadura a internet tua est cuntrollada</translation>
 <translation id="6147020289383635445">No soe resurtadu a carrigare s'anteprima.</translation>
-<translation id="6196640612572343990">Fìrma cookies de àteros zassos web</translation>
 <translation id="6247802389331535091">Sistema: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="6248988683584659830">Assetios pro sa chirca</translation>
 <translation id="6268252012308737255">Aberi-lu cun <ph name="APP" /></translation>

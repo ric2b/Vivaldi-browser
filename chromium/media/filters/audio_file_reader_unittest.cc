@@ -142,7 +142,7 @@ class AudioFileReaderTest : public testing::Test {
 
  protected:
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  IPCFactory::ScopedDisableForTesting ipc_audio_decoder_disabler_;
+  IPCAudioDecoder::ScopedDisableForTesting ipc_audio_decoder_disabler_;
 #endif
   scoped_refptr<DecoderBuffer> data_;
   std::unique_ptr<InMemoryUrlProtocol> protocol_;

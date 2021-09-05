@@ -44,23 +44,22 @@ class ServiceWorkerRegisterJob : public ServiceWorkerRegisterJobBase {
                                   ServiceWorkerRegistration* registration)>
       RegistrationCallback;
 
-  enum class UpdateCheckType {
-    kMainScriptDuringStartWorker,  // Only check main script.
-    kAllScriptsBeforeStartWorker,  // Check all scripts.
-  };
-
   // For registration jobs.
   CONTENT_EXPORT ServiceWorkerRegisterJob(
       ServiceWorkerContextCore* context,
       const GURL& script_url,
-      const blink::mojom::ServiceWorkerRegistrationOptions& options);
+      const blink::mojom::ServiceWorkerRegistrationOptions& options,
+      blink::mojom::FetchClientSettingsObjectPtr
+          outside_fetch_client_settings_object);
 
   // For update jobs.
   CONTENT_EXPORT ServiceWorkerRegisterJob(
       ServiceWorkerContextCore* context,
       ServiceWorkerRegistration* registration,
       bool force_bypass_cache,
-      bool skip_script_comparison);
+      bool skip_script_comparison,
+      blink::mojom::FetchClientSettingsObjectPtr
+          outside_fetch_client_settings_object);
   ~ServiceWorkerRegisterJob() override;
 
   // Registers a callback to be called when the promise would resolve (whether
@@ -102,7 +101,7 @@ class ServiceWorkerRegisterJob : public ServiceWorkerRegisterJobBase {
 
   void set_registration(scoped_refptr<ServiceWorkerRegistration> registration);
   ServiceWorkerRegistration* registration() const;
-  void set_new_version(ServiceWorkerVersion* version);
+  void set_new_version(scoped_refptr<ServiceWorkerVersion> version);
   ServiceWorkerVersion* new_version();
 
   void SetPhase(Phase phase);
@@ -116,26 +115,19 @@ class ServiceWorkerRegisterJob : public ServiceWorkerRegisterJobBase {
       scoped_refptr<ServiceWorkerRegistration> registration);
 
   bool IsUpdateCheckNeeded() const;
-
-  // Trigger the UpdateCheckType::kAllScriptsBeforeStartWorker type check if
-  // ServiceWorkerImportedScriptUpdateCheck is enabled.
-  void TriggerUpdateCheckInBrowser(
+  void TriggerUpdateCheck(
       scoped_refptr<network::SharedURLLoaderFactory> loader_factory);
 
-  // When ServiceWorkerImportedScriptUpdateCheck is enabled, returns
-  // UpdateCheckType::kAllScriptsBeforeStartWorker, otherwise, returns
-  // UpdateCheckType::kMainScriptDuringStartWorker.
-  UpdateCheckType GetUpdateCheckType() const;
-
-  // This method is only called when ServiceWorkerImportedScriptUpdateCheck is
-  // enabled. Refer ServiceWorkerUpdateChecker::UpdateStatusCallback for the
-  // meaning of the parameters.
+  // Refer ServiceWorkerUpdateChecker::UpdateStatusCallback for the meaning of
+  // the parameters.
   void OnUpdateCheckFinished(
       ServiceWorkerSingleScriptUpdateChecker::Result result,
       std::unique_ptr<ServiceWorkerSingleScriptUpdateChecker::FailureInfo>
           failure_info);
 
   void RegisterAndContinue();
+  void ContinueWithNewRegistration(
+      scoped_refptr<ServiceWorkerRegistration> new_registration);
   void ContinueWithUninstallingRegistration(
       scoped_refptr<ServiceWorkerRegistration> existing_registration,
       blink::ServiceWorkerStatusCode status);
@@ -144,19 +136,17 @@ class ServiceWorkerRegisterJob : public ServiceWorkerRegisterJobBase {
       blink::ServiceWorkerStatusCode status);
   void UpdateAndContinue();
 
-  // Starts a service worker for [[Update]].
-  // For Non-ServiceWorkerImportedScriptUpdateCheck: it includes byte-for-byte
-  // checking for main script.
-  // For ServiceWorkerImportedScriptUpdateCheck: the script comparison has
-  // finished at this point. It starts install phase.
-  void StartWorkerForUpdate();
+  // Creates a new ServiceWorkerVersion for [[Update]].
+  void CreateNewVersionForUpdate();
+  // Starts a service worker for [[Update]]. The script comparison has finished
+  // at this point. It starts install phase.
+  void StartWorkerForUpdate(scoped_refptr<ServiceWorkerVersion> version);
   void OnStartWorkerFinished(blink::ServiceWorkerStatusCode status);
   void OnStoreRegistrationComplete(blink::ServiceWorkerStatusCode status);
   void InstallAndContinue();
   void DispatchInstallEvent(blink::ServiceWorkerStatusCode start_worker_status);
   void OnInstallFinished(int request_id,
-                         blink::mojom::ServiceWorkerEventStatus event_status,
-                         bool has_fetch_handler);
+                         blink::mojom::ServiceWorkerEventStatus event_status);
   void OnInstallFailed(blink::ServiceWorkerStatusCode status);
   void Complete(blink::ServiceWorkerStatusCode status);
   void Complete(blink::ServiceWorkerStatusCode status,
@@ -178,8 +168,6 @@ class ServiceWorkerRegisterJob : public ServiceWorkerRegisterJobBase {
   ServiceWorkerContextCore* const context_;
 
   std::unique_ptr<ServiceWorkerUpdateChecker> update_checker_;
-  std::map<GURL, ServiceWorkerUpdateChecker::ComparedScriptInfo>
-      compared_script_info_map_;
 
   RegistrationJobType job_type_;
   const GURL scope_;
@@ -189,6 +177,11 @@ class ServiceWorkerRegisterJob : public ServiceWorkerRegisterJobBase {
   blink::mojom::ScriptType worker_script_type_ =
       blink::mojom::ScriptType::kClassic;
   const blink::mojom::ServiceWorkerUpdateViaCache update_via_cache_;
+  // "A job has a client (a service worker client). It is initially null."
+  // https://w3c.github.io/ServiceWorker/#dfn-job-client
+  // This fetch client settings object roughly corresponds to the job's client.
+  blink::mojom::FetchClientSettingsObjectPtr
+      outside_fetch_client_settings_object_;
   std::vector<RegistrationCallback> callbacks_;
   Phase phase_;
   bool is_shutting_down_;

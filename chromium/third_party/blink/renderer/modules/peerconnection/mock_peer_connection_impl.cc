@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "third_party/blink/public/web/modules/peerconnection/mock_peer_connection_impl.h"
+#include "third_party/blink/renderer/modules/peerconnection/mock_peer_connection_impl.h"
 
 #include <stddef.h>
 
@@ -11,9 +11,9 @@
 
 #include "base/logging.h"
 #include "base/stl_util.h"
-#include "third_party/blink/public/platform/modules/peerconnection/webrtc_util.h"
-#include "third_party/blink/public/web/modules/peerconnection/mock_data_channel_impl.h"
-#include "third_party/blink/public/web/modules/peerconnection/mock_peer_connection_dependency_factory.h"
+#include "third_party/blink/renderer/modules/peerconnection/mock_data_channel_impl.h"
+#include "third_party/blink/renderer/modules/peerconnection/mock_peer_connection_dependency_factory.h"
+#include "third_party/blink/renderer/platform/peerconnection/webrtc_util.h"
 #include "third_party/webrtc/api/rtp_receiver_interface.h"
 #include "third_party/webrtc/rtc_base/ref_counted_object.h"
 
@@ -248,7 +248,17 @@ FakeRtpTransceiver::FakeRtpTransceiver(
       direction_(direction),
       current_direction_(blink::ToAbslOptional(current_direction)) {}
 
-FakeRtpTransceiver::~FakeRtpTransceiver() {}
+FakeRtpTransceiver::~FakeRtpTransceiver() = default;
+
+void FakeRtpTransceiver::ReplaceWith(const FakeRtpTransceiver& other) {
+  media_type_ = other.media_type_;
+  sender_ = other.sender_;
+  receiver_ = other.receiver_;
+  mid_ = other.mid_;
+  stopped_ = other.stopped_;
+  direction_ = other.direction_;
+  current_direction_ = other.current_direction_;
+}
 
 cricket::MediaType FakeRtpTransceiver::media_type() const {
   return media_type_;
@@ -521,6 +531,15 @@ bool MockPeerConnectionImpl::AddIceCandidate(
   sdp_mid_ = candidate->sdp_mid();
   sdp_mline_index_ = candidate->sdp_mline_index();
   return candidate->ToString(&ice_sdp_);
+}
+
+void MockPeerConnectionImpl::AddIceCandidate(
+    std::unique_ptr<webrtc::IceCandidateInterface> candidate,
+    std::function<void(webrtc::RTCError)> callback) {
+  bool result = AddIceCandidate(candidate.get());
+  callback(result
+               ? webrtc::RTCError::OK()
+               : webrtc::RTCError(webrtc::RTCErrorType::UNSUPPORTED_OPERATION));
 }
 
 webrtc::RTCError MockPeerConnectionImpl::SetBitrate(

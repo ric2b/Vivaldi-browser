@@ -38,13 +38,14 @@ class VivaldiDataSourcesAPI
   static constexpr int kStartpageImagePathCustom_Index = 1;
   static const char* kDataMappingPrefs[kDataMappingPrefsCount];
 
-  // /local-image/id and /thumbnail/id urls
+  // /local-image/id, /notes-attachment/id and /thumbnail/id urls
   enum UrlKind {
     PATH_MAPPING_URL = 0,
     THUMBNAIL_URL = 1,
+    NOTES_ATTACHMENT_URL = 2,
   };
 
-  static constexpr int kUrlKindCount = 2;
+  static constexpr int kUrlKindCount = 3;
 
   // Return an index of data mapping preference or -1 if the preference
   // does not hold a data mapping.
@@ -108,6 +109,9 @@ class VivaldiDataSourcesAPI
   friend class VivaldiDataSourcesAPIHolder;
 
   ~VivaldiDataSourcesAPI();
+
+  scoped_refptr<base::RefCountedMemory> GetDataForNoteAttachment(
+    const std::string& path);
 
   static scoped_refptr<base::RefCountedMemory> ReadFileOnFileThread(
       const base::FilePath& file_path);

@@ -45,7 +45,6 @@
 #include "components/sync/syncable/directory_cryptographer.h"
 #include "components/sync/syncable/mutable_entry.h"
 #include "components/sync/syncable/nigori_util.h"
-#include "components/sync/syncable/syncable_delete_journal.h"
 #include "components/sync/syncable/syncable_read_transaction.h"
 #include "components/sync/syncable/syncable_util.h"
 #include "components/sync/syncable/syncable_write_transaction.h"
@@ -256,8 +255,7 @@ class SyncerTest : public testing::Test,
 
   void SetUp() override {
     test_user_share_.SetUp();
-    mock_server_ = std::make_unique<MockConnectionManager>(
-        directory(), &cancelation_signal_);
+    mock_server_ = std::make_unique<MockConnectionManager>(directory());
     debug_info_getter_ = std::make_unique<MockDebugInfoGetter>();
     workers_.push_back(
         scoped_refptr<ModelSafeWorker>(new FakeModelWorker(GROUP_PASSIVE)));
@@ -640,7 +638,7 @@ TEST_F(SyncerTest, GetCommitIdsFiltersUnreadyEntries) {
   KeyParams other_params = {KeyDerivationParams::CreateForPbkdf2(), "foobar2"};
   sync_pb::EntitySpecifics bookmark, encrypted_bookmark;
   bookmark.mutable_bookmark()->set_url("url");
-  bookmark.mutable_bookmark()->set_title("title");
+  bookmark.mutable_bookmark()->set_legacy_canonicalized_title("title");
   AddDefaultFieldValue(BOOKMARKS, &encrypted_bookmark);
   mock_server_->AddUpdateDirectory(1, 0, "A", 10, 10, foreign_cache_guid(),
                                    "-1");
@@ -752,7 +750,7 @@ TEST_F(SyncerTest, GetCommitIdsFiltersUnreadyEntries) {
 
 TEST_F(SyncerTest, GetUpdatesPartialThrottled) {
   sync_pb::EntitySpecifics bookmark, pref;
-  bookmark.mutable_bookmark()->set_title("title");
+  bookmark.mutable_bookmark()->set_legacy_canonicalized_title("title");
   pref.mutable_preference()->set_name("name");
   AddDefaultFieldValue(BOOKMARKS, &bookmark);
   AddDefaultFieldValue(PREFERENCES, &pref);
@@ -833,7 +831,7 @@ TEST_F(SyncerTest, GetUpdatesPartialThrottled) {
 
 TEST_F(SyncerTest, GetUpdatesPartialFailure) {
   sync_pb::EntitySpecifics bookmark, pref;
-  bookmark.mutable_bookmark()->set_title("title");
+  bookmark.mutable_bookmark()->set_legacy_canonicalized_title("title");
   pref.mutable_preference()->set_name("name");
   AddDefaultFieldValue(BOOKMARKS, &bookmark);
   AddDefaultFieldValue(PREFERENCES, &pref);
@@ -1016,10 +1014,11 @@ TEST_F(SyncerTest, EncryptionAwareConflicts) {
   DirectoryCryptographer other_cryptographer;
   other_cryptographer.AddKey(key_params);
   sync_pb::EntitySpecifics bookmark, encrypted_bookmark, modified_bookmark;
-  bookmark.mutable_bookmark()->set_title("title");
+  bookmark.mutable_bookmark()->set_legacy_canonicalized_title("title");
   other_cryptographer.Encrypt(bookmark, encrypted_bookmark.mutable_encrypted());
   AddDefaultFieldValue(BOOKMARKS, &encrypted_bookmark);
-  modified_bookmark.mutable_bookmark()->set_title("title2");
+  modified_bookmark.mutable_bookmark()->set_legacy_canonicalized_title(
+      "title2");
   other_cryptographer.Encrypt(modified_bookmark,
                               modified_bookmark.mutable_encrypted());
   sync_pb::EntitySpecifics pref, encrypted_pref, modified_pref;
@@ -1319,50 +1318,6 @@ TEST_F(SyncerTest, TestPurgeWhileUnapplied) {
     syncable::ReadTransaction rt(FROM_HERE, directory());
     Entry entry(&rt, GET_BY_ID, parent_id_);
     ASSERT_FALSE(entry.good());
-  }
-}
-
-TEST_F(SyncerTest, TestPurgeWithJournal) {
-  {
-    directory()->SetDownloadProgress(BOOKMARKS,
-                                     syncable::BuildProgress(BOOKMARKS));
-    syncable::WriteTransaction wtrans(FROM_HERE, UNITTEST, directory());
-    MutableEntry parent(&wtrans, syncable::CREATE, BOOKMARKS, wtrans.root_id(),
-                        "Pete");
-    ASSERT_TRUE(parent.good());
-    parent.PutIsDir(true);
-    parent.PutSpecifics(DefaultBookmarkSpecifics());
-    parent.PutBaseVersion(1);
-    parent.PutId(parent_id_);
-    MutableEntry child(&wtrans, syncable::CREATE, BOOKMARKS, parent_id_,
-                       "Pete");
-    ASSERT_TRUE(child.good());
-    child.PutId(child_id_);
-    child.PutBaseVersion(1);
-    WriteTestDataToEntry(&wtrans, &child);
-
-    MutableEntry parent2(&wtrans, syncable::CREATE, PREFERENCES,
-                         wtrans.root_id(), "Tim");
-    ASSERT_TRUE(parent2.good());
-    parent2.PutIsDir(true);
-    parent2.PutSpecifics(DefaultPreferencesSpecifics());
-    parent2.PutBaseVersion(1);
-    parent2.PutId(TestIdFactory::MakeServer("Tim"));
-  }
-
-  directory()->PurgeEntriesWithTypeIn(ModelTypeSet(PREFERENCES, BOOKMARKS),
-                                      ModelTypeSet(BOOKMARKS), ModelTypeSet());
-  {
-    // Verify bookmark nodes are saved in delete journal but not preference
-    // node.
-    syncable::ReadTransaction rt(FROM_HERE, directory());
-    syncable::DeleteJournal* delete_journal = directory()->delete_journal();
-    EXPECT_EQ(2u, delete_journal->GetDeleteJournalSize(&rt));
-    syncable::EntryKernelSet journal_entries;
-    directory()->delete_journal()->GetDeleteJournals(&rt, BOOKMARKS,
-                                                     &journal_entries);
-    EXPECT_EQ(parent_id_, (*journal_entries.begin())->ref(syncable::ID));
-    EXPECT_EQ(child_id_, (*journal_entries.rbegin())->ref(syncable::ID));
   }
 }
 
@@ -2417,10 +2372,13 @@ TEST_F(EntryCreatedInNewFolderTest, EntryCreatedInNewFolderMidSync) {
     entry.PutSpecifics(DefaultBookmarkSpecifics());
   }
 
-  mock_server_->SetMidCommitCallback(base::Bind(
+  mock_server_->SetMidCommitCallback(base::BindOnce(
       &EntryCreatedInNewFolderTest::CreateFolderInBob, base::Unretained(this)));
   EXPECT_TRUE(SyncShareNudge());
-  // We loop until no unsynced handles remain, so we will commit both ids.
+
+  mock_server_->SetMidCommitCallback(base::DoNothing());
+  EXPECT_TRUE(SyncShareNudge());
+
   EXPECT_EQ(2u, mock_server_->committed_ids().size());
   {
     syncable::ReadTransaction trans(FROM_HERE, directory());
@@ -5148,11 +5106,14 @@ TEST_F(SyncerBookmarksTest, CreateThenDeleteDuringCommit) {
   ExpectUnsyncedCreation();
 
   // In the middle of the initial creation commit, perform a deletion.
-  // This should trigger performing two consecutive commit cycles, resulting
-  // in the bookmark being both deleted and synced.
   mock_server_->SetMidCommitCallback(
-      base::Bind(&SyncerBookmarksTest::Delete, base::Unretained(this)));
+      base::BindOnce(&SyncerBookmarksTest::Delete, base::Unretained(this)));
 
+  // Commits creation.
+  EXPECT_TRUE(SyncShareNudge());
+
+  // Commits deletion.
+  mock_server_->SetMidCommitCallback(base::DoNothing());
   EXPECT_TRUE(SyncShareNudge());
   ExpectSyncedAndDeleted();
 }
@@ -5164,9 +5125,14 @@ TEST_F(SyncerBookmarksTest, CreateThenUpdateAndDeleteDuringCommit) {
   // In the middle of the initial creation commit, perform an updated followed
   // by a deletion. This should trigger performing two consecutive commit
   // cycles, resulting in the bookmark being both deleted and synced.
-  mock_server_->SetMidCommitCallback(base::Bind(
+  mock_server_->SetMidCommitCallback(base::BindOnce(
       &SyncerBookmarksTest::UpdateAndDelete, base::Unretained(this)));
 
+  // Commits creation.
+  EXPECT_TRUE(SyncShareNudge());
+
+  // Commits update and deletion.
+  mock_server_->SetMidCommitCallback(base::DoNothing());
   EXPECT_TRUE(SyncShareNudge());
   ExpectSyncedAndDeleted();
 }
@@ -5342,15 +5308,19 @@ TEST_F(SyncerUndeletionTest, UndeleteDuringCommit) {
   Delete();
   ExpectUnsyncedDeletion();
   mock_server_->SetMidCommitCallback(
-      base::Bind(&SyncerUndeletionTest::Undelete, base::Unretained(this)));
+      base::BindOnce(&SyncerUndeletionTest::Undelete, base::Unretained(this)));
+
+  // Commits deletion.
+  EXPECT_TRUE(SyncShareNudge());
+  sync_pb::SyncEntity deletion_update =
+      *mock_server_->AddUpdateFromLastCommit();
+
+  // Commits undeletion.
+  mock_server_->SetMidCommitCallback(base::DoNothing());
   EXPECT_TRUE(SyncShareNudge());
 
-  // We will continue to commit until all nodes are synced, so we expect
-  // that both the delete and following undelete were committed.  We haven't
-  // downloaded any updates, though, so the SERVER fields will be the same
-  // as they were at the start of the cycle.
   EXPECT_EQ(0, cycle_->status_controller().TotalNumConflictingItems());
-  EXPECT_EQ(1, mock_server_->GetAndClearNumGetUpdatesRequests());
+  EXPECT_EQ(2, mock_server_->GetAndClearNumGetUpdatesRequests());
 
   {
     syncable::ReadTransaction trans(FROM_HERE, directory());
@@ -5369,10 +5339,9 @@ TEST_F(SyncerUndeletionTest, UndeleteDuringCommit) {
   // the server.  The undeletion should prevail again and be committed.
   // None of this should trigger any conflict detection -- it is perfectly
   // normal to recieve updates from our own commits.
-  mock_server_->SetMidCommitCallback(base::Closure());
-  sync_pb::SyncEntity* update = mock_server_->AddUpdateFromLastCommit();
-  update->set_originator_cache_guid(local_cache_guid());
-  update->set_originator_client_item_id(local_id_.GetServerId());
+  deletion_update.set_originator_cache_guid(local_cache_guid());
+  deletion_update.set_originator_client_item_id(local_id_.GetServerId());
+  *mock_server_->AddUpdateFromLastCommit() = deletion_update;
 
   EXPECT_TRUE(SyncShareNudge());
   EXPECT_EQ(0, cycle_->status_controller().TotalNumConflictingItems());

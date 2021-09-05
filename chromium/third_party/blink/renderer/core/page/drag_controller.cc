@@ -33,8 +33,6 @@
 #include "third_party/blink/public/platform/web_common.h"
 #include "third_party/blink/public/platform/web_drag_data.h"
 #include "third_party/blink/public/platform/web_drag_operation.h"
-#include "third_party/blink/public/platform/web_image.h"
-#include "third_party/blink/public/platform/web_point.h"
 #include "third_party/blink/public/platform/web_screen_info.h"
 #include "third_party/blink/renderer/core/clipboard/data_object.h"
 #include "third_party/blink/renderer/core/clipboard/data_transfer.h"
@@ -46,7 +44,6 @@
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/dom/text.h"
-#include "third_party/blink/renderer/core/dom/user_gesture_indicator.h"
 #include "third_party/blink/renderer/core/editing/commands/drag_and_drop_command.h"
 #include "third_party/blink/renderer/core/editing/drag_caret.h"
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
@@ -65,6 +62,7 @@
 #include "third_party/blink/renderer/core/html/forms/html_input_element.h"
 #include "third_party/blink/renderer/core/html/html_anchor_element.h"
 #include "third_party/blink/renderer/core/html/html_plugin_element.h"
+#include "third_party/blink/renderer/core/html/plugin_document.h"
 #include "third_party/blink/renderer/core/input/event_handler.h"
 #include "third_party/blink/renderer/core/input_type_names.h"
 #include "third_party/blink/renderer/core/layout/hit_test_request.h"
@@ -141,7 +139,8 @@ static DataTransfer* CreateDraggingDataTransfer(DataTransferAccessPolicy policy,
 }
 
 DragController::DragController(Page* page)
-    : ContextLifecycleObserver(nullptr),
+    : ExecutionContextLifecycleObserver(
+          static_cast<ExecutionContext*>(nullptr)),
       page_(page),
       document_under_mouse_(nullptr),
       drag_initiator_(nullptr),
@@ -239,10 +238,8 @@ void DragController::PerformDrag(DragData* drag_data, LocalFrame& local_root) {
   DCHECK(drag_data);
   document_under_mouse_ = local_root.DocumentAtPoint(
       PhysicalOffset::FromFloatPointRound(drag_data->ClientPosition()));
-  std::unique_ptr<UserGestureIndicator> gesture =
-      LocalFrame::NotifyUserActivation(
-          document_under_mouse_ ? document_under_mouse_->GetFrame() : nullptr,
-          UserGestureToken::kNewGesture);
+  LocalFrame::NotifyUserActivation(
+      document_under_mouse_ ? document_under_mouse_->GetFrame() : nullptr);
   if ((drag_destination_action_ & kDragDestinationActionDHTML) &&
       document_is_handling_drag_) {
     bool prevented_default = false;
@@ -263,9 +260,10 @@ void DragController::PerformDrag(DragData* drag_data, LocalFrame& local_root) {
             PhysicalOffset::FromFloatPointRound(drag_data->ClientPosition())));
         const HitTestResult result =
             event_handler.HitTestResultAtLocation(location);
+        auto* html_plugin_element =
+            DynamicTo<HTMLPlugInElement>(result.InnerNode());
         prevented_default |=
-            IsHTMLPlugInElement(*result.InnerNode()) &&
-            ToHTMLPlugInElement(result.InnerNode())->CanProcessDrag();
+            html_plugin_element && html_plugin_element->CanProcessDrag();
       }
 
       // Invalidate clipboard here for security.
@@ -302,8 +300,8 @@ void DragController::PerformDrag(DragData* drag_data, LocalFrame& local_root) {
       // the drag as the initiator of the navigation below.
       resource_request.SetRequestorOrigin(SecurityOrigin::CreateUniqueOpaque());
 
-      page_->MainFrame()->Navigate(FrameLoadRequest(nullptr, resource_request),
-                                   WebFrameLoadType::kStandard);
+      FrameLoadRequest request(nullptr, resource_request);
+      page_->MainFrame()->Navigate(request, WebFrameLoadType::kStandard);
     }
 
     // TODO(bokan): This case happens when we end a URL drag inside a guest
@@ -353,9 +351,10 @@ DragOperation DragController::DragEnteredOrUpdated(DragData* drag_data,
 static HTMLInputElement* AsFileInput(Node* node) {
   DCHECK(node);
   for (; node; node = node->OwnerShadowHost()) {
-    if (IsHTMLInputElement(*node) &&
-        ToHTMLInputElement(node)->type() == input_type_names::kFile)
-      return ToHTMLInputElement(node);
+    auto* html_input_element = DynamicTo<HTMLInputElement>(node);
+    if (html_input_element &&
+        html_input_element->type() == input_type_names::kFile)
+      return html_input_element;
   }
   return nullptr;
 }
@@ -469,8 +468,8 @@ DragOperation DragController::OperationForLoad(DragData* drag_data,
   Document* doc = local_root.DocumentAtPoint(
       PhysicalOffset::FromFloatPointRound(drag_data->ClientPosition()));
 
-  if (doc &&
-      (did_initiate_drag_ || doc->IsPluginDocument() || HasEditableStyle(*doc)))
+  if (doc && (did_initiate_drag_ || IsA<PluginDocument>(doc) ||
+              HasEditableStyle(*doc)))
     return kDragOperationNone;
   return GetDragOperation(drag_data);
 }
@@ -486,7 +485,7 @@ static bool SetSelectionToDragCaret(LocalFrame* frame,
   // TODO(editing-dev): The use of
   // UpdateStyleAndLayout
   // needs to be audited.  See http://crbug.com/590369 for more details.
-  frame->GetDocument()->UpdateStyleAndLayout();
+  frame->GetDocument()->UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
   if (!frame->Selection().ComputeVisibleSelectionInDOMTree().IsNone()) {
     return frame->Selection()
         .ComputeVisibleSelectionInDOMTree()
@@ -502,7 +501,7 @@ static bool SetSelectionToDragCaret(LocalFrame* frame,
   // TODO(editing-dev): The use of
   // UpdateStyleAndLayout
   // needs to be audited.  See http://crbug.com/590369 for more details.
-  frame->GetDocument()->UpdateStyleAndLayout();
+  frame->GetDocument()->UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
   const VisibleSelection& visible_selection =
       frame->Selection().ComputeVisibleSelectionInDOMTree();
   range = CreateRange(visible_selection.ToNormalizedEphemeralRange());
@@ -579,7 +578,7 @@ bool DragController::ConcludeEditDrag(DragData* drag_data) {
         .CaretPosition()
         .GetPosition()
         .GetDocument()
-        ->UpdateStyleAndLayout();
+        ->UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
   }
 
   const PositionWithAffinity& caret_position =
@@ -721,8 +720,7 @@ bool DragController::CanProcessDrag(DragData* drag_data,
   if (drag_data->ContainsFiles() && AsFileInput(result.InnerNode()))
     return true;
 
-  if (IsHTMLPlugInElement(*result.InnerNode())) {
-    HTMLPlugInElement* plugin = ToHTMLPlugInElement(result.InnerNode());
+  if (auto* plugin = DynamicTo<HTMLPlugInElement>(result.InnerNode())) {
     if (!plugin->CanProcessDrag() && !HasEditableStyle(*result.InnerNode()))
       return false;
   } else if (!HasEditableStyle(*result.InnerNode())) {
@@ -998,7 +996,7 @@ bool DragController::PopulateDragDataTransfer(LocalFrame* src,
 
   // Observe context related to source to allow dropping drag_state_ when the
   // Document goes away.
-  SetContext(src->GetDocument());
+  SetExecutionContext(src->GetDocument()->ToExecutionContext());
 
   return true;
 }
@@ -1062,10 +1060,10 @@ static std::unique_ptr<DragImage> DragImageForImage(
   // Substitute an appropriately-sized SVGImageForContainer, to ensure dragged
   // SVG images scale seamlessly.
   scoped_refptr<SVGImageForContainer> svg_image;
-  if (image->IsSVGImage()) {
+  if (auto* svg_img = DynamicTo<SVGImage>(image)) {
     KURL url = element->GetDocument().CompleteURL(element->ImageSourceURL());
     svg_image = SVGImageForContainer::Create(
-        ToSVGImage(image), FloatSize(image_element_size_in_pixels), 1, url);
+        svg_img, FloatSize(image_element_size_in_pixels), 1, url);
     image = svg_image.get();
   }
 
@@ -1075,25 +1073,17 @@ static std::unique_ptr<DragImage> DragImageForImage(
       interpolation_quality = kInterpolationNone;
   }
 
-  RespectImageOrientationEnum should_respect_image_orientation =
+  RespectImageOrientationEnum respect_image_orientation =
       LayoutObject::ShouldRespectImageOrientation(element->GetLayoutObject());
-  ImageOrientation orientation;
 
-  if (should_respect_image_orientation == kRespectImageOrientation &&
-      image->IsBitmapImage())
-    orientation = ToBitmapImage(image)->CurrentFrameOrientation();
-
-  IntSize image_size = orientation.UsesWidthAsHeight()
-                           ? image->Size().TransposedSize()
-                           : image->Size();
-
+  IntSize image_size = image->Size(respect_image_orientation);
   FloatSize image_scale =
       DragImage::ClampedImageScale(image_size, image_element_size_in_pixels,
                                    MaxDragImageSize(device_scale_factor));
 
   if (image_size.Area() <= kMaxOriginalImageArea &&
       (drag_image = DragImage::Create(
-           image, should_respect_image_orientation, device_scale_factor,
+           image, respect_image_orientation, device_scale_factor,
            interpolation_quality, kDragImageAlpha, image_scale))) {
     IntSize original_size = image_element_size_in_pixels;
     origin = image_element_location;
@@ -1152,12 +1142,13 @@ std::unique_ptr<DragImage> DragController::DragImageForSelection(
   if (!frame.Selection().ComputeVisibleSelectionInDOMTreeDeprecated().IsRange())
     return nullptr;
 
-  frame.View()->UpdateAllLifecyclePhasesExceptPaint();
+  frame.View()->UpdateAllLifecyclePhasesExceptPaint(
+      DocumentUpdateReason::kDragImage);
   DCHECK(frame.GetDocument()->IsActive());
 
   FloatRect painting_rect = ClippedSelection(frame);
   GlobalPaintFlags paint_flags =
-      kGlobalPaintSelectionOnly | kGlobalPaintFlattenCompositingLayers;
+      kGlobalPaintSelectionDragImageOnly | kGlobalPaintFlattenCompositingLayers;
 
   PaintRecordBuilder builder;
   frame.View()->PaintContentsOutsideOfLifecycle(
@@ -1167,7 +1158,7 @@ std::unique_ptr<DragImage> DragController::DragImageForSelection(
   PropertyTreeState property_tree_state =
       frame.View()->GetLayoutView()->FirstFragment().LocalBorderBoxProperties();
   return DataTransfer::CreateDragImageForFrame(
-      frame, opacity, kDoNotRespectImageOrientation, painting_rect.Size(),
+      frame, opacity, kRespectImageOrientation, painting_rect.Size(),
       painting_rect.Location(), builder, property_tree_state);
 }
 
@@ -1310,7 +1301,7 @@ void DragController::DoSystemDrag(DragImage* image,
                                   bool for_link) {
   did_initiate_drag_ = true;
   drag_initiator_ = frame->GetDocument();
-  SetContext(drag_initiator_);
+  SetExecutionContext(drag_initiator_->ToExecutionContext());
 
   // TODO(pdr): |drag_location| and |event_pos| should be passed in as
   // FloatPoints and we should calculate these adjusted values in floating
@@ -1367,17 +1358,17 @@ DragState& DragController::GetDragState() {
   return *drag_state_;
 }
 
-void DragController::ContextDestroyed(ExecutionContext*) {
+void DragController::ContextDestroyed() {
   drag_state_ = nullptr;
 }
 
-void DragController::Trace(blink::Visitor* visitor) {
+void DragController::Trace(Visitor* visitor) {
   visitor->Trace(page_);
   visitor->Trace(document_under_mouse_);
   visitor->Trace(drag_initiator_);
   visitor->Trace(drag_state_);
   visitor->Trace(file_input_element_under_mouse_);
-  ContextLifecycleObserver::Trace(visitor);
+  ExecutionContextLifecycleObserver::Trace(visitor);
 }
 
 }  // namespace blink

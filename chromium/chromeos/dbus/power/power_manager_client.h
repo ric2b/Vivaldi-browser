@@ -82,6 +82,9 @@ class COMPONENT_EXPORT(DBUS_POWER) PowerManagerClient {
     virtual void ScreenBrightnessChanged(
         const power_manager::BacklightBrightnessChange& change) {}
 
+    // Called when the ambient light changed.
+    virtual void AmbientColorChanged(const int32_t color_temperature) {}
+
     // Called when the keyboard brightness is changed.
     virtual void KeyboardBrightnessChanged(
         const power_manager::BacklightBrightnessChange& change) {}
@@ -133,6 +136,12 @@ class COMPONENT_EXPORT(DBUS_POWER) PowerManagerClient {
     // from within this method.  UnblockSuspend() must be called once the
     // observer is ready for suspend.
     virtual void DarkSuspendImminent() {}
+
+    // Called when the browser is about to request shutdown. Shutdown is
+    // deferred until all observers' implementations of this method have
+    // finished running.
+    virtual void ShutdownRequested(
+        power_manager::RequestShutdownReason reason) {}
 
     // Called when the power button is pressed or released.
     virtual void PowerButtonEventReceived(bool down,

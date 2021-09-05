@@ -14,23 +14,21 @@ void MarkingVerifier::VerifyObject(HeapObjectHeader* header) {
   if (header->IsFree() || !header->IsMarked())
     return;
 
-  const GCInfo* info =
-      GCInfoTable::Get().GCInfoFromIndex(header->GcInfoIndex());
+  const GCInfo& info = GCInfo::From(header->GcInfoIndex());
   const bool can_verify =
-      !info->has_v_table || blink::VTableInitialized(header->Payload());
+      !info.has_v_table || blink::VTableInitialized(header->Payload());
   if (can_verify) {
-    CHECK(header->IsValid());
     parent_ = header;
-    info->trace(this, header->Payload());
+    info.trace(this, header->Payload());
   }
 }
 
-void MarkingVerifier::Visit(void* object, TraceDescriptor desc) {
+void MarkingVerifier::Visit(const void* object, TraceDescriptor desc) {
   VerifyChild(object, desc.base_object_payload);
 }
 
-void MarkingVerifier::VisitWeak(void* object,
-                                void* object_weak_ref,
+void MarkingVerifier::VisitWeak(const void* object,
+                                const void* object_weak_ref,
                                 TraceDescriptor desc,
                                 WeakCallback callback) {
   // Weak objects should have been cleared at this point. As a consequence, all
@@ -39,8 +37,8 @@ void MarkingVerifier::VisitWeak(void* object,
   VerifyChild(object, desc.base_object_payload);
 }
 
-void MarkingVerifier::VisitBackingStoreStrongly(void* object,
-                                                void**,
+void MarkingVerifier::VisitBackingStoreStrongly(const void* object,
+                                                const void* const*,
                                                 TraceDescriptor desc) {
   if (!object)
     return;
@@ -51,11 +49,12 @@ void MarkingVerifier::VisitBackingStoreStrongly(void* object,
   VerifyChild(object, desc.base_object_payload);
 }
 
-void MarkingVerifier::VisitBackingStoreWeakly(void* object,
-                                              void**,
-                                              TraceDescriptor desc,
+void MarkingVerifier::VisitBackingStoreWeakly(const void* object,
+                                              const void* const*,
+                                              TraceDescriptor strong_desc,
+                                              TraceDescriptor weak_desc,
                                               WeakCallback,
-                                              void*) {
+                                              const void*) {
   if (!object)
     return;
 
@@ -64,10 +63,11 @@ void MarkingVerifier::VisitBackingStoreWeakly(void* object,
   // treated strongly when found through stack scanning. The verification
   // here only makes sure that the backing itself is properly marked. Weak
   // backing stores found through
-  VerifyChild(object, desc.base_object_payload);
+  VerifyChild(object, weak_desc.base_object_payload);
 }
 
-void MarkingVerifier::VerifyChild(void* object, void* base_object_payload) {
+void MarkingVerifier::VerifyChild(const void* object,
+                                  const void* base_object_payload) {
   CHECK(object);
   // Verification may check objects that are currently under construction and
   // would require vtable access to figure out their headers. A nullptr in
@@ -82,15 +82,10 @@ void MarkingVerifier::VerifyChild(void* object, void* base_object_payload) {
   // ones.
   CHECK(child_header);
   if (!child_header->IsMarked()) {
-    // Pre-finalizers may allocate. In that case the newly allocated objects
-    // reside on a page that is not scheduled for sweeping.
-    if (PageFromObject(child_header->Payload())->HasBeenSwept())
-      return;
-
+    CHECK(!PageFromObject(child_header->Payload())->HasBeenSwept());
     LOG(FATAL) << "MarkingVerifier: Encountered unmarked object. " << std::endl
                << std::endl
-               << "Hint (use v8_enable_raw_heap_snapshots for better naming): "
-               << std::endl
+               << "Hint: " << std::endl
                << parent_->Name() << std::endl
                << "\\-> " << child_header->Name() << std::endl;
   }

@@ -15,10 +15,7 @@
 #include "components/viz/service/display_embedder/skia_output_device.h"
 #include "gpu/command_buffer/common/mailbox.h"
 
-class GrContext;
-
 namespace gl {
-class GLContext;
 class GLImage;
 class GLSurface;
 }  // namespace gl
@@ -29,6 +26,7 @@ class GpuFence;
 
 namespace gpu {
 class MailboxManager;
+class SharedContextState;
 
 namespace gles2 {
 class FeatureInfo;
@@ -41,14 +39,14 @@ class SkiaOutputDeviceGL final : public SkiaOutputDevice {
  public:
   SkiaOutputDeviceGL(
       gpu::MailboxManager* mailbox_manager,
+      gpu::SharedContextState* context_state,
       scoped_refptr<gl::GLSurface> gl_surface,
       scoped_refptr<gpu::gles2::FeatureInfo> feature_info,
-      const DidSwapBufferCompleteCallback& did_swap_buffer_complete_callback);
+      gpu::MemoryTracker* memory_tracker,
+      DidSwapBufferCompleteCallback did_swap_buffer_complete_callback);
   ~SkiaOutputDeviceGL() override;
 
-  void Initialize(GrContext* gr_context, gl::GLContext* gl_context);
   bool supports_alpha() {
-    DCHECK(gr_context_);
     return supports_alpha_;
   }
 
@@ -56,42 +54,49 @@ class SkiaOutputDeviceGL final : public SkiaOutputDevice {
   bool Reshape(const gfx::Size& size,
                float device_scale_factor,
                const gfx::ColorSpace& color_space,
-               bool has_alpha,
+               gfx::BufferFormat format,
                gfx::OverlayTransform transform) override;
   void SwapBuffers(BufferPresentedCallback feedback,
                    std::vector<ui::LatencyInfo> latency_info) override;
   void PostSubBuffer(const gfx::Rect& rect,
                      BufferPresentedCallback feedback,
                      std::vector<ui::LatencyInfo> latency_info) override;
+  void CommitOverlayPlanes(BufferPresentedCallback feedback,
+                           std::vector<ui::LatencyInfo> latency_info) override;
   void SetDrawRectangle(const gfx::Rect& draw_rectangle) override;
   void SetGpuVSyncEnabled(bool enabled) override;
+#if defined(OS_WIN)
   void SetEnableDCLayers(bool enable) override;
-  void ScheduleDCLayers(std::vector<DCLayerOverlay> dc_layers) override;
+  void ScheduleOverlays(SkiaOutputSurface::OverlayList overlays) override;
+#endif
   void EnsureBackbuffer() override;
   void DiscardBackbuffer() override;
-  SkSurface* BeginPaint() override;
-  void EndPaint(const GrBackendSemaphore& semaphore) override;
+  SkSurface* BeginPaint(
+      std::vector<GrBackendSemaphore>* end_semaphores) override;
+  void EndPaint() override;
 
  private:
-  scoped_refptr<gl::GLImage> GetGLImageForMailbox(const gpu::Mailbox& mailbox);
-
-  gpu::MailboxManager* const mailbox_manager_;
-
-  scoped_refptr<gl::GLSurface> gl_surface_;
-  GrContext* gr_context_ = nullptr;
-
-  sk_sp<SkSurface> sk_surface_;
-
-  bool supports_alpha_ = false;
-
-  base::WeakPtrFactory<SkiaOutputDeviceGL> weak_ptr_factory_{this};
-
   // Used as callback for SwapBuffersAsync and PostSubBufferAsync to finish
   // operation
   void DoFinishSwapBuffers(const gfx::Size& size,
                            std::vector<ui::LatencyInfo> latency_info,
                            gfx::SwapResult result,
                            std::unique_ptr<gfx::GpuFence>);
+
+  scoped_refptr<gl::GLImage> GetGLImageForMailbox(const gpu::Mailbox& mailbox);
+
+  gpu::MailboxManager* const mailbox_manager_;
+
+  gpu::SharedContextState* const context_state_;
+  scoped_refptr<gl::GLSurface> gl_surface_;
+  const bool supports_async_swap_;
+
+  sk_sp<SkSurface> sk_surface_;
+
+  bool supports_alpha_ = false;
+  uint64_t backbuffer_estimated_size_ = 0;
+
+  base::WeakPtrFactory<SkiaOutputDeviceGL> weak_ptr_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(SkiaOutputDeviceGL);
 };

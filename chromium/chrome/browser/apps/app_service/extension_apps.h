@@ -5,17 +5,26 @@
 #ifndef CHROME_BROWSER_APPS_APP_SERVICE_EXTENSION_APPS_H_
 #define CHROME_BROWSER_APPS_APP_SERVICE_EXTENSION_APPS_H_
 
+#include <map>
+#include <memory>
 #include <string>
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observer.h"
 #include "chrome/browser/apps/app_service/app_icon_factory.h"
+#include "chrome/browser/apps/app_service/app_launch_params.h"
 #include "chrome/browser/apps/app_service/icon_key_util.h"
+#include "chrome/browser/apps/app_service/paused_apps.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
+#include "chrome/browser/ui/web_applications/web_app_launch_manager.h"
+#include "chrome/services/app_service/public/cpp/instance.h"
+#include "chrome/services/app_service/public/cpp/instance_registry.h"
 #include "chrome/services/app_service/public/mojom/app_service.mojom.h"
 #include "components/content_settings/core/browser/content_settings_observer.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/prefs/pref_change_registrar.h"
+#include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_prefs_observer.h"
 #include "extensions/browser/extension_registry.h"
@@ -28,6 +37,7 @@
 class Profile;
 
 namespace extensions {
+class AppWindow;
 class ExtensionSet;
 }
 
@@ -42,6 +52,7 @@ class ExtensionAppsEnableFlow;
 //
 // See chrome/services/app_service/README.md.
 class ExtensionApps : public apps::mojom::Publisher,
+                      public extensions::AppWindowRegistry::Observer,
                       public extensions::ExtensionPrefsObserver,
                       public extensions::ExtensionRegistryObserver,
                       public content_settings::Observer,
@@ -49,8 +60,13 @@ class ExtensionApps : public apps::mojom::Publisher,
  public:
   ExtensionApps(const mojo::Remote<apps::mojom::AppService>& app_service,
                 Profile* profile,
-                apps::mojom::AppType app_type);
+                apps::mojom::AppType app_type,
+                apps::InstanceRegistry* instance_registry);
   ~ExtensionApps() override;
+
+  // Record uninstall dialog action for Web apps and Chrome apps.
+  static void RecordUninstallCanceledAction(Profile* profile,
+                                            const std::string& app_id);
 
   void FlushMojoCallsForTesting();
 
@@ -78,23 +94,45 @@ class ExtensionApps : public apps::mojom::Publisher,
               int32_t event_flags,
               apps::mojom::LaunchSource launch_source,
               int64_t display_id) override;
+  void LaunchAppWithFiles(const std::string& app_id,
+                          apps::mojom::LaunchContainer container,
+                          int32_t event_flags,
+                          apps::mojom::LaunchSource launch_source,
+                          apps::mojom::FilePathsPtr file_paths) override;
   void LaunchAppWithIntent(const std::string& app_id,
                            apps::mojom::IntentPtr intent,
                            apps::mojom::LaunchSource launch_source,
                            int64_t display_id) override;
   void SetPermission(const std::string& app_id,
                      apps::mojom::PermissionPtr permission) override;
-  void PromptUninstall(const std::string& app_id) override;
   void Uninstall(const std::string& app_id,
                  bool clear_site_data,
                  bool report_abuse) override;
+  void PauseApp(const std::string& app_id) override;
+  void UnpauseApps(const std::string& app_id) override;
+  void GetMenuModel(const std::string& app_id,
+                    apps::mojom::MenuType menu_type,
+                    int64_t display_id,
+                    GetMenuModelCallback callback) override;
   void OpenNativeSettings(const std::string& app_id) override;
+  void OnPreferredAppSet(
+      const std::string& app_id,
+      apps::mojom::IntentFilterPtr intent_filter,
+      apps::mojom::IntentPtr intent,
+      apps::mojom::ReplacedAppPreferencesPtr replaced_app_preferences) override;
 
   // content_settings::Observer overrides.
   void OnContentSettingChanged(const ContentSettingsPattern& primary_pattern,
                                const ContentSettingsPattern& secondary_pattern,
                                ContentSettingsType content_type,
                                const std::string& resource_identifier) override;
+
+  // Overridden from AppWindowRegistry::Observer:
+  void OnAppWindowAdded(extensions::AppWindow* app_window) override;
+  void OnAppWindowShown(extensions::AppWindow* app_window,
+                        bool was_hidden) override;
+  void OnAppWindowHidden(extensions::AppWindow* app_window) override;
+  void OnAppWindowRemoved(extensions::AppWindow* app_window) override;
 
   // extensions::ExtensionPrefsObserver overrides.
   void OnExtensionLastLaunchTimeChanged(
@@ -116,6 +154,9 @@ class ExtensionApps : public apps::mojom::Publisher,
                               const extensions::Extension* extension,
                               extensions::UninstallReason reason) override;
 
+  // Function called when SystemWebAppManager::on_apps_synchronized() runs.
+  void OnSystemWebAppsInstalled();
+
   // ArcAppListPrefs::Observer overrides.
   void OnPackageInstalled(
       const arc::mojom::ArcPackageInfo& package_info) override;
@@ -128,11 +169,9 @@ class ExtensionApps : public apps::mojom::Publisher,
 
   // Checks if extension is disabled and if enable flow should be started.
   // Returns true if extension enable flow is started or there is already one
-  // running.
+  // running, and run |callback| to launch the app.
   bool RunExtensionEnableFlow(const std::string& app_id,
-                              int32_t event_flags,
-                              apps::mojom::LaunchSource launch_source,
-                              int64_t display_id);
+                              base::OnceClosure callback);
 
   static bool IsBlacklisted(const std::string& app_id);
 
@@ -141,6 +180,12 @@ class ExtensionApps : public apps::mojom::Publisher,
                               Profile* profile);
   static bool ShouldShow(const extensions::Extension* extension,
                          Profile* profile);
+
+  // Handles profile prefs kHideWebStoreIcon changes.
+  void OnHideWebStoreIconPrefChanged();
+
+  // Update the show_in_xxx fields for the App structure.
+  void UpdateShowInFields(const std::string& app_id);
 
   void PopulatePermissions(const extensions::Extension* extension,
                            std::vector<mojom::PermissionPtr>* target);
@@ -153,7 +198,8 @@ class ExtensionApps : public apps::mojom::Publisher,
                      std::vector<apps::mojom::AppPtr>* apps_out);
 
   // Calculate the icon effects for the extension.
-  IconEffects GetIconEffects(const extensions::Extension* extension);
+  IconEffects GetIconEffects(const extensions::Extension* extension,
+                             bool paused);
 
   // Get the equivalent Chrome app from |arc_package_name| and set the Chrome
   // app badge on the icon effects for the equivalent Chrome apps. If the
@@ -161,10 +207,20 @@ class ExtensionApps : public apps::mojom::Publisher,
   // remove the Chrome app badge.
   void ApplyChromeBadge(const std::string& arc_package_name);
 
+  void SetIconEffect(const std::string& app_id);
+
+  bool ShouldRecordAppWindowActivity(extensions::AppWindow* app_window);
+  void RegisterInstance(extensions::AppWindow* app_window, InstanceState state);
+
+  void GetMenuModelForChromeBrowserApp(apps::mojom::MenuType menu_type,
+                                       GetMenuModelCallback callback);
+
+  void LaunchImpl(const AppLaunchParams& params);
+
   mojo::Receiver<apps::mojom::Publisher> receiver_{this};
   mojo::RemoteSet<apps::mojom::Subscriber> subscribers_;
 
-  Profile* profile_;
+  Profile* const profile_;
 
   ScopedObserver<extensions::ExtensionPrefs, extensions::ExtensionPrefsObserver>
       prefs_observer_{this};
@@ -176,12 +232,30 @@ class ExtensionApps : public apps::mojom::Publisher,
 
   apps_util::IncrementingIconKeyFactory icon_key_factory_;
 
-  apps::mojom::AppType app_type_;
+  const apps::mojom::AppType app_type_;
+
+  apps::InstanceRegistry* instance_registry_;
+  ScopedObserver<extensions::AppWindowRegistry,
+                 extensions::AppWindowRegistry::Observer>
+      app_window_registry_{this};
 
   using EnableFlowPtr = std::unique_ptr<ExtensionAppsEnableFlow>;
   std::map<std::string, EnableFlowPtr> enable_flow_map_;
 
+  PausedApps paused_apps_;
+
+  std::map<extensions::AppWindow*, aura::Window*> app_window_to_aura_window_;
+
   ArcAppListPrefs* arc_prefs_ = nullptr;
+
+  // app_service_ is owned by the object that owns this object.
+  apps::mojom::AppService* app_service_;
+
+  // Registrar used to monitor the profile prefs.
+  PrefChangeRegistrar profile_pref_change_registrar_;
+
+  // TODO(crbug.com/1061843): Remove web_app_launch_manager_ when BMO launches.
+  std::unique_ptr<web_app::WebAppLaunchManager> web_app_launch_manager_;
 
   base::WeakPtrFactory<ExtensionApps> weak_factory_{this};
 

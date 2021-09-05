@@ -29,6 +29,7 @@
 <translation id="1243314992276662751">Tải lên</translation>
 <translation id="1249250836236328755">Thể loại</translation>
 <translation id="1278813325885878377">Bàn phím QWERTY dành cho tiếng Hungary</translation>
+<translation id="1293556467332435079">Tệp</translation>
 <translation id="1297922636971898492">Google Drive hiện không khả dụng. Quá trình tải lên sẽ tự động khởi động lại khi Google Drive hoạt động trở lại.</translation>
 <translation id="1307931752636661898">Không thể xem tệp Linux</translation>
 <translation id="1310751437842832374">Chuyển ngữ (mausam → ନମସ୍ତେ)</translation>
@@ -80,6 +81,7 @@
 <translation id="1847880352285315359">Đã lưu</translation>
 <translation id="1864756863218646478">Không thể tìm thấy tệp.</translation>
 <translation id="1921986354447415460">Bàn phím tiếng Thổ Nhĩ Kỳ-F</translation>
+<translation id="1924372192547904021">Đã định dạng <ph name="DRIVE_NAME" /></translation>
 <translation id="1931134289871235022">Tiếng Slovak</translation>
 <translation id="1933345018156373194">Không di chuyển được, lỗi ngoài mong đợi: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="1936717151811561466">Tiếng Phần Lan</translation>
@@ -163,6 +165,7 @@
 <translation id="2942290791863759244">Bàn phím tiếng Đức NEO 2</translation>
 <translation id="2943400156390503548">Trang trình bày</translation>
 <translation id="2943503720238418293">Hãy sử dụng tên ngắn hơn</translation>
+<translation id="2949781154072577687">Đang định dạng <ph name="DRIVE_NAME" />...</translation>
 <translation id="2951236788251446349">Sứa</translation>
 <translation id="2963783323012015985">Bàn phím tiếng Thổ Nhĩ Kỳ</translation>
 <translation id="2966459079597787514">Bàn phím tiếng Thụy Điển</translation>
@@ -275,6 +278,7 @@
 <translation id="4336032328163998280">Thao tác sao chép không thành công. <ph name="ERROR_MESSAGE" /></translation>
 <translation id="4364327530094270451">Quả dưa</translation>
 <translation id="4372884569765913867">1x1</translation>
+<translation id="4394214039309501350">Đường liên kết ngoài</translation>
 <translation id="4425149324548788773">Drive của tôi</translation>
 <translation id="4465830120256509958">Bàn phím tiếng Braxin</translation>
 <translation id="4470564870223067757">Hangul 2 bộ</translation>
@@ -505,6 +509,7 @@
 <translation id="6878261347041253038">Bàn phím Devanagari (Ngữ âm)</translation>
 <translation id="6885780034956018177">Ốc sên</translation>
 <translation id="6896758677409633944">Sao chép</translation>
+<translation id="6898028766943174120">Các thư mục con khác...</translation>
 <translation id="691516599546977041">Không thể lưu vào <ph name="FOLDER_NAME" />. Ảnh đã chỉnh sửa sẽ được lưu vào thư mục Tệp đã tải xuống.</translation>
 <translation id="6915678159055240887">Chromebox</translation>
 <translation id="6918340160281024199">Workman Hoa Kỳ</translation>
@@ -517,6 +522,7 @@
 <translation id="696203921837389374">Bật đồng bộ hóa qua dữ liệu di động</translation>
 <translation id="6965382102122355670">OK</translation>
 <translation id="6970230597523682626">Tiếng Bungary</translation>
+<translation id="6973630695168034713">Thư mục</translation>
 <translation id="6978611942794658017">Tệp này dành cho PC sử dụng phần mềm Windows. Tệp này không tương thích với thiết bị chạy Chrome OS của bạn. Vui lòng tìm kiếm ứng dụng thay thế phù hợp trong Cửa hàng Chrome trực tuyến.</translation>
 <translation id="6979158407327259162">Google Drive</translation>
 <translation id="6990081529015358884">Bạn đã hết dung lượng lưu trữ</translation>
@@ -564,9 +570,11 @@
 <translation id="7589661784326793847">Xin đợi một chút</translation>
 <translation id="7603724359189955920">Lưới</translation>
 <translation id="7627790789328695202">Rất tiếc, <ph name="FILE_NAME" /> đã tồn tại. Hãy đổi tên tệp và thử lại.</translation>
+<translation id="7628656427739290098">Đã hoàn tất <ph name="PERCENT" />%.</translation>
 <translation id="7649070708921625228">Trợ giúp</translation>
 <translation id="7654209398114106148">Đang di chuyển <ph name="NUMBER_OF_ITEMS" /> mục...</translation>
 <translation id="7658239707568436148">Hủy</translation>
+<translation id="7695430100978772476">Không định dạng được <ph name="DRIVE_NAME" /></translation>
 <translation id="770015031906360009">Tiếng Hy Lạp</translation>
 <translation id="7706319470528945664">Bàn phím tiếng Bồ Đào Nha</translation>
 <translation id="7711920809702896782">Thông tin về tệp hình ảnh</translation>

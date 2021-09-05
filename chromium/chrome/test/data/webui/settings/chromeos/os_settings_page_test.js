@@ -67,10 +67,10 @@ suite('OSSettingsPage', function() {
   test('Basic sections', function() {
     const sectionNames = [
       'internet', 'bluetooth', 'multidevice', 'people', 'device',
-      'personalization', 'search', 'apps'
+      'personalization', 'osSearch', 'apps'
     ];
 
-    for (let name of sectionNames) {
+    for (const name of sectionNames) {
       const section = settingsPage.shadowRoot.querySelector(
           `settings-section[section=${name}]`);
       assertTrue(!!section, 'Did not find ' + name);
@@ -85,9 +85,9 @@ suite('OSSettingsPage', function() {
     await test_util.flushTasks();
 
     const sectionNames =
-        ['privacy', 'languages', 'files', 'reset', 'dateTime', 'a11y'];
+        ['privacy', 'languages', 'files', 'osReset', 'dateTime', 'a11y'];
 
-    for (let name of sectionNames) {
+    for (const name of sectionNames) {
       const section = settingsPage.shadowRoot.querySelector(
           `settings-section[section=${name}]`);
       assertTrue(!!section, 'Did not find ' + name);
@@ -105,17 +105,17 @@ suite('OSSettingsPage', function() {
     await test_util.flushTasks();
 
     const hiddenSections = ['multidevice', 'people', 'personalization'];
-    for (let name of hiddenSections) {
+    for (const name of hiddenSections) {
       const section = settingsPage.shadowRoot.querySelector(
           `settings-section[section=${name}]`);
       assertFalse(!!section, 'Found unexpected section ' + name);
     }
 
     const visibleSections = [
-      'internet', 'bluetooth', 'device', 'search', 'apps', 'privacy',
-      'languages', 'files', 'reset', 'dateTime', 'a11y'
+      'internet', 'bluetooth', 'device', 'osSearch', 'apps', 'privacy',
+      'languages', 'files', 'osReset', 'dateTime', 'a11y'
     ];
-    for (let name of visibleSections) {
+    for (const name of visibleSections) {
       const section = settingsPage.shadowRoot.querySelector(
           `settings-section[section=${name}]`);
       assertTrue(!!section, 'Expected section ' + name);

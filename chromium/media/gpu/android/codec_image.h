@@ -90,6 +90,7 @@ class MEDIA_GPU_EXPORT CodecImage
                     const std::string& dump_name) override;
   std::unique_ptr<base::android::ScopedHardwareBufferFenceSync>
   GetAHardwareBuffer() override;
+  gfx::Rect GetCropRect() override;
   // gpu::gles2::GLStreamTextureMatrix implementation
   void GetTextureMatrix(float xform[16]) override;
   // Currently this API is implemented by the NotifyOverlayPromotion, since this
@@ -114,7 +115,7 @@ class MEDIA_GPU_EXPORT CodecImage
   bool IsUsingGpuMemory() const override;
   void UpdateAndBindTexImage() override;
   bool HasTextureOwner() const override;
-  gpu::gles2::Texture* GetTexture() const override;
+  gpu::TextureBase* GetTextureBase() const override;
   void NotifyOverlayPromotion(bool promotion, const gfx::Rect& bounds) override;
   // Renders this image to the overlay. Returns true if the buffer is in the
   // overlay front buffer. Returns false if the buffer was invalidated.
@@ -170,6 +171,8 @@ class MEDIA_GPU_EXPORT CodecImage
   ~CodecImage() override;
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(CodecImageTest, RenderAfterUnusedDoesntCrash);
+
   // The lifecycle phases of an image.
   // The only possible transitions are from left to right. Both
   // kInFrontBuffer and kInvalidated are terminal.

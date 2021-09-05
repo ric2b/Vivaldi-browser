@@ -14,6 +14,9 @@ import org.chromium.ui.modelutil.PropertyModel;
 /* package */ class PaymentHandlerViewBinder {
     /* package */ static void bind(
             PropertyModel model, PaymentHandlerView view, PropertyKey propertyKey) {
-        // TODO(maxlg): bind model properties to view after adding view widgets.
+        if (PaymentHandlerProperties.CONTENT_VISIBLE_HEIGHT_PX == propertyKey) {
+            view.onContentVisibleHeightChanged(
+                    model.get(PaymentHandlerProperties.CONTENT_VISIBLE_HEIGHT_PX));
+        }
     }
 }

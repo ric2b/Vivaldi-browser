@@ -61,6 +61,14 @@ compiler_sources = [
 #   A string to prepend to generated bundle class names, so that multiple
 #   bundle rules can be used without conflicting.  Only used with one of
 #   the cpp-bundle generators.
+#
+# root [optional]
+#   base directory of the source json file(s)
+#   defaults to "//"
+#
+# target_prefix [optional]
+#   subdir below root_gen_dir that is the base directory for the generated
+#   output files, defaults to empty string (no subdir)
 template("generated_json_strings") {
   assert(defined(invoker.sources),
          "\"sources\" must be defined for the $target_name template.")
@@ -68,6 +76,8 @@ template("generated_json_strings") {
          "\"root_namespace\" must be defined for the $target_name template.")
   assert(defined(invoker.bundle_name),
          "\"bundle_name\" must be defined for bundles")
+  assert(!defined(invoker.root) || defined(invoker.target_prefix),
+         "\"target_prefix\" is required when \"root\" is specified")
 
   schema_include_rules = ""
   if (defined(invoker.schema_include_rules)) {
@@ -160,6 +170,14 @@ template("generated_json_strings") {
 #   used as the root path when looking for {schema}/{schema}_api.h headers
 #   when generating API registration bundles. Such headers, if found, are
 #   automatically included by the generated code.
+#
+# root [optional]
+#   base directory of the source json file(s)
+#   defaults to "//"
+#
+# target_prefix [optional]
+#   subdir below root_gen_dir that is the base directory for the generated
+#   output files, defaults to empty string (no subdir)
 template("function_registration") {
   assert(defined(invoker.sources),
          "\"sources\" must be defined for the $target_name template.")
@@ -169,6 +187,8 @@ template("function_registration") {
          "\"bundle_name\" must be defined for bundle registrations")
   assert(defined(invoker.impl_dir),
          "\"impl_dir\" must be defined for the $target_name template.")
+  assert(!defined(invoker.root) || defined(invoker.target_prefix),
+         "\"target_prefix\" is required when \"root\" is specified")
 
   schema_include_rules = ""
   if (defined(invoker.schema_include_rules)) {
@@ -201,7 +221,7 @@ template("function_registration") {
   }
 
   # Child directory inside the generated file tree.
-  gen_child_dir = get_path_info(invoker.impl_dir+"/", "gen_dir")
+  gen_child_dir = get_path_info(invoker.impl_dir + "/", "gen_dir")
 
   bundle_generator_registration_name =
       target_name + "_bundle_generator_registration"
@@ -250,11 +270,21 @@ template("function_registration") {
 }
 
 # Generates the C++ types for the given APIs.
+#
+# root [optional]
+#   base directory of the source json file(s)
+#   defaults to "//"
+#
+# target_prefix [optional]
+#   subdir below root_gen_dir that is the base directory for the generated
+#   output files, defaults to empty string (no subdir)
 template("generated_types") {
   assert(defined(invoker.sources),
          "\"sources\" must be defined for the $target_name template.")
   assert(defined(invoker.root_namespace),
          "\"root_namespace\" must be defined for the $target_name template.")
+  assert(!defined(invoker.root) || defined(invoker.target_prefix),
+         "\"target_prefix\" is required when \"root\" is specified")
 
   schema_include_rules = ""
   if (defined(invoker.schema_include_rules)) {

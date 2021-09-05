@@ -33,16 +33,18 @@ class TextInputClientMacHelper {
 
   void WaitForStringFromRange(RenderWidgetHost* rwh, const gfx::Range& range) {
     GetStringFromRangeForRenderWidget(
-        rwh, range, base::Bind(&TextInputClientMacHelper::OnResult,
-                               base::Unretained(this)));
+        rwh, range,
+        base::BindOnce(&TextInputClientMacHelper::OnResult,
+                       base::Unretained(this)));
     loop_runner_ = new MessageLoopRunner();
     loop_runner_->Run();
   }
 
   void WaitForStringAtPoint(RenderWidgetHost* rwh, const gfx::Point& point) {
     GetStringAtPointForRenderWidget(
-        rwh, point, base::Bind(&TextInputClientMacHelper::OnResult,
-                               base::Unretained(this)));
+        rwh, point,
+        base::BindOnce(&TextInputClientMacHelper::OnResult,
+                       base::Unretained(this)));
     loop_runner_ = new MessageLoopRunner();
     loop_runner_->Run();
   }
@@ -173,8 +175,7 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessMacBrowserTest,
       blink::WebInputEvent::kMouseWheel, blink::WebInputEvent::kNoModifiers,
       blink::WebInputEvent::GetStaticTimeStampForTests());
   scroll_event.SetPositionInWidget(1, 1);
-  scroll_event.delta_units =
-      ui::input_types::ScrollGranularity::kScrollByPrecisePixel;
+  scroll_event.delta_units = ui::ScrollGranularity::kScrollByPrecisePixel;
   scroll_event.delta_x = 0.0f;
 
   // Have the RWHVCF process a sequence of touchpad scroll events that contain

@@ -21,9 +21,9 @@ namespace chromeos {
 class AccountManagerFactory;
 class ChromeSessionManager;
 class ChromeUserManager;
-class KerberosCredentialsManager;
 class InSessionPasswordChangeManager;
 class ProfileHelper;
+class SchedulerConfigurationManager;
 class TimeZoneResolver;
 
 namespace system {
@@ -65,6 +65,9 @@ class BrowserProcessPlatformPart : public BrowserProcessPlatformPartBase {
   void InitializeCrosComponentManager();
   void ShutdownCrosComponentManager();
 
+  void InitializeSchedulerConfigurationManager();
+  void ShutdownSchedulerConfigurationManager();
+
   // Initializes all services that need the primary profile. Gets called as soon
   // as the primary profile is available, which implies that the primary user
   // has logged in. The services are shut down automatically when the primary
@@ -74,10 +77,6 @@ class BrowserProcessPlatformPart : public BrowserProcessPlatformPartBase {
   // a BrowserContextKeyedService and restricting service creation to the
   // primary profile.
   void InitializePrimaryProfileServices(Profile* primary_profile);
-
-  // Disable the offline interstitial easter egg if the device is enterprise
-  // enrolled.
-  void DisableDinoEasterEggIfEnrolled();
 
   // Used to register a KeepAlive when Ash is initialized, and release it
   // when until Chrome starts exiting. Ensure we stay running the whole time.
@@ -100,6 +99,10 @@ class BrowserProcessPlatformPart : public BrowserProcessPlatformPartBase {
 
   chromeos::ChromeUserManager* user_manager() {
     return chrome_user_manager_.get();
+  }
+
+  chromeos::SchedulerConfigurationManager* scheduler_configuration_manager() {
+    return scheduler_configuration_manager_.get();
   }
 
   chromeos::system::DeviceDisablingManager* device_disabling_manager() {
@@ -167,14 +170,14 @@ class BrowserProcessPlatformPart : public BrowserProcessPlatformPartBase {
 
   std::unique_ptr<chromeos::AccountManagerFactory> account_manager_factory_;
 
-  std::unique_ptr<chromeos::KerberosCredentialsManager>
-      kerberos_credentials_manager_;
-
   std::unique_ptr<chromeos::InSessionPasswordChangeManager>
       in_session_password_change_manager_;
 
   std::unique_ptr<KeyedServiceShutdownNotifier::Subscription>
       primary_profile_shutdown_subscription_;
+
+  std::unique_ptr<chromeos::SchedulerConfigurationManager>
+      scheduler_configuration_manager_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

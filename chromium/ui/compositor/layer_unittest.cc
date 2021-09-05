@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -21,14 +22,15 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/bind_test_util.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "cc/animation/animation.h"
 #include "cc/animation/animation_events.h"
 #include "cc/animation/animation_host.h"
 #include "cc/animation/keyframe_effect.h"
-#include "cc/animation/single_keyframe_effect_animation.h"
 #include "cc/layers/layer.h"
 #include "cc/layers/mirror_layer.h"
 #include "cc/test/pixel_comparator.h"
@@ -62,12 +64,6 @@
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/interpolated_transform.h"
 #include "ui/gfx/skia_util.h"
-
-#if defined(OS_WIN)
-#include <windows.h>
-
-#include "base/win/windows_version.h"
-#endif
 
 using cc::MatchesPNGFile;
 using cc::WritePNGFile;
@@ -108,35 +104,6 @@ class ColoredLayer : public Layer, public LayerDelegate {
   SkColor color_;
 };
 
-// Layer delegate for painting text with fade effect on canvas.
-class DrawFadedStringLayerDelegate : public LayerDelegate {
- public:
-  DrawFadedStringLayerDelegate(SkColor back_color, const gfx::Size& layer_size)
-      : background_color_(back_color), layer_size_(layer_size) {}
-
-  ~DrawFadedStringLayerDelegate() override {}
-
-  // Overridden from LayerDelegate:
-  void OnPaintLayer(const ui::PaintContext& context) override {
-    ui::PaintRecorder recorder(context, layer_size_);
-    gfx::Rect bounds(layer_size_);
-    recorder.canvas()->DrawColor(background_color_);
-    const base::string16 text = base::ASCIIToUTF16("Tests!");
-    recorder.canvas()->DrawFadedString(text, font_list_, SK_ColorRED, bounds,
-                                       0);
-  }
-
-  void OnDeviceScaleFactorChanged(float old_device_scale_factor,
-                                  float new_device_scale_factor) override {}
-
- private:
-  const SkColor background_color_;
-  const gfx::FontList font_list_;
-  const gfx::Size layer_size_;
-
-  DISALLOW_COPY_AND_ASSIGN(DrawFadedStringLayerDelegate);
-};
-
 // Param specifies whether to use SkiaRenderer or not
 class LayerWithRealCompositorTest : public testing::TestWithParam<bool> {
  public:
@@ -162,8 +129,7 @@ class LayerWithRealCompositorTest : public testing::TestWithParam<bool> {
 
     const gfx::Rect host_bounds(10, 10, 500, 500);
     compositor_host_.reset(TestCompositorHost::Create(
-        host_bounds, context_factories_->GetContextFactory(),
-        context_factories_->GetContextFactoryPrivate()));
+        host_bounds, context_factories_->GetContextFactory()));
     compositor_host_->Show();
   }
 
@@ -192,15 +158,6 @@ class LayerWithRealCompositorTest : public testing::TestWithParam<bool> {
   std::unique_ptr<Layer> CreateNoTextureLayer(const gfx::Rect& bounds) {
     std::unique_ptr<Layer> layer = CreateLayer(LAYER_NOT_DRAWN);
     layer->SetBounds(bounds);
-    return layer;
-  }
-
-  std::unique_ptr<Layer> CreateDrawFadedStringLayerDelegate(
-      const gfx::Rect& bounds,
-      DrawFadedStringLayerDelegate* delegate) {
-    auto layer = std::make_unique<Layer>(LAYER_TEXTURED);
-    layer->SetBounds(bounds);
-    layer->set_delegate(delegate);
     return layer;
   }
 
@@ -350,9 +307,9 @@ class TestLayerDelegate : public LayerDelegate {
 // LayerDelegate that verifies that a layer was asked to update its canvas.
 class DrawTreeLayerDelegate : public LayerDelegate {
  public:
-  DrawTreeLayerDelegate(const gfx::Rect& layer_bounds)
+  explicit DrawTreeLayerDelegate(const gfx::Rect& layer_bounds)
       : painted_(false), layer_bounds_(layer_bounds) {}
-  ~DrawTreeLayerDelegate() override {}
+  ~DrawTreeLayerDelegate() override = default;
 
   void Reset() {
     painted_ = false;
@@ -467,20 +424,29 @@ class TestCompositorAnimationObserver : public CompositorAnimationObserver {
   DISALLOW_COPY_AND_ASSIGN(TestCompositorAnimationObserver);
 };
 
-#if defined(OS_WIN)
-bool IsFontsSmoothingEnabled() {
-  BOOL antialiasing = TRUE;
-  BOOL result = SystemParametersInfo(SPI_GETFONTSMOOTHING, 0, &antialiasing, 0);
-  if (result == FALSE) {
-    ADD_FAILURE() << "Failed to retrieve font aliasing configuration.";
+// An animation observer that invokes a callback when the animation ends.
+class TestCallbackAnimationObserver : public ImplicitAnimationObserver {
+ public:
+  TestCallbackAnimationObserver() = default;
+
+  void SetCallback(base::OnceClosure callback) {
+    callback_ = std::move(callback);
   }
-  return antialiasing;
-}
-#endif
+
+  // ui::ImplicitAnimationObserver overrides:
+  void OnImplicitAnimationsCompleted() override {}
+  void OnLayerAnimationEnded(LayerAnimationSequence* sequence) override {
+    if (callback_)
+      std::move(callback_).Run();
+  }
+
+ private:
+  base::OnceClosure callback_;
+};
 
 }  // namespace
 
-INSTANTIATE_TEST_SUITE_P(, LayerWithRealCompositorTest, ::testing::Bool());
+INSTANTIATE_TEST_SUITE_P(All, LayerWithRealCompositorTest, ::testing::Bool());
 
 TEST_P(LayerWithRealCompositorTest, Draw) {
   std::unique_ptr<Layer> layer =
@@ -525,8 +491,7 @@ class LayerWithDelegateTest : public testing::Test {
 
     const gfx::Rect host_bounds(1000, 1000);
     compositor_host_.reset(TestCompositorHost::Create(
-        host_bounds, context_factories_->GetContextFactory(),
-        context_factories_->GetContextFactoryPrivate()));
+        host_bounds, context_factories_->GetContextFactory()));
     compositor_host_->Show();
   }
 
@@ -1022,24 +987,6 @@ class LayerWithNullDelegateTest : public LayerWithDelegateTest {
   DISALLOW_COPY_AND_ASSIGN(LayerWithNullDelegateTest);
 };
 
-TEST_F(LayerWithNullDelegateTest, EscapedDebugNames) {
-  std::unique_ptr<Layer> layer = CreateLayer(LAYER_NOT_DRAWN);
-  std::string name = "\"\'\\/\b\f\n\r\t\n";
-  layer->set_name(name);
-  std::unique_ptr<base::trace_event::ConvertableToTraceFormat> debug_info =
-      layer->TakeDebugInfo(layer->cc_layer_for_testing());
-  EXPECT_TRUE(debug_info.get());
-  std::string json;
-  debug_info->AppendAsTraceFormat(&json);
-  base::JSONReader json_reader;
-  base::Optional<base::Value> debug_info_value = json_reader.ReadToValue(json);
-  ASSERT_TRUE(debug_info_value.has_value());
-  ASSERT_TRUE(debug_info_value->is_dict());
-  const std::string* roundtrip = debug_info_value->FindStringKey("layer_name");
-  ASSERT_TRUE(roundtrip);
-  EXPECT_EQ(name, *roundtrip);
-}
-
 TEST_F(LayerWithNullDelegateTest, SwitchLayerPreservesCCLayerState) {
   std::unique_ptr<Layer> l1 = CreateLayer(LAYER_SOLID_COLOR);
   l1->SetFillsBoundsOpaquely(true);
@@ -1325,9 +1272,9 @@ TEST_F(LayerWithNullDelegateTest, Stacking) {
   auto l1 = std::make_unique<Layer>(LAYER_TEXTURED);
   auto l2 = std::make_unique<Layer>(LAYER_TEXTURED);
   auto l3 = std::make_unique<Layer>(LAYER_TEXTURED);
-  l1->set_name("1");
-  l2->set_name("2");
-  l3->set_name("3");
+  l1->SetName("1");
+  l2->SetName("2");
+  l3->SetName("3");
   root->Add(l3.get());
   root->Add(l2.get());
   root->Add(l1.get());
@@ -1993,57 +1940,6 @@ TEST_P(LayerWithRealCompositorTest, BackgroundBlurChangeDeviceScale) {
   EXPECT_TRUE(MatchesPNGFile(bitmap, ref_img2, fuzzy_comparator));
 }
 
-// It is really hard to write pixel test on text rendering,
-// due to different font appearance.
-// So we choose to check result only on Windows.
-// See https://codereview.chromium.org/1634103003/#msg41
-#if defined(OS_WIN)
-TEST_P(LayerWithRealCompositorTest, CanvasDrawFadedString) {
-  ASSERT_TRUE(IsFontsSmoothingEnabled())
-      << "The test requires that fonts smoothing (anti-aliasing) is activated. "
-         "If this assert is failing you need to manually activate the flag in "
-         "your system fonts settings.";
-
-  viz::ParentLocalSurfaceIdAllocator allocator;
-  allocator.GenerateId();
-  gfx::Size size(50, 50);
-  GetCompositor()->SetScaleAndSize(
-      1.0f, size, allocator.GetCurrentLocalSurfaceIdAllocation());
-  DrawFadedStringLayerDelegate delegate(SK_ColorBLUE, size);
-  std::unique_ptr<Layer> layer =
-      CreateDrawFadedStringLayerDelegate(gfx::Rect(size), &delegate);
-  DrawTree(layer.get());
-
-  SkBitmap bitmap;
-  ReadPixels(&bitmap);
-  ASSERT_FALSE(bitmap.empty());
-
-  std::string filename;
-  if (base::win::GetVersion() < base::win::Version::WIN10) {
-    filename = "string_faded_win7.png";
-  } else {
-    filename = "string_faded_win10.png";
-  }
-  base::FilePath ref_img = test_data_dir().AppendASCII(filename);
-  // WritePNGFile(bitmap, ref_img, true);
-
-  float percentage_pixels_large_error = 8.0f;  // 200px / (50*50)
-  float percentage_pixels_small_error = 0.0f;
-  float average_error_allowed_in_bad_pixels = 80.f;
-  int large_error_allowed = 255;
-  int small_error_allowed = 0;
-
-  EXPECT_TRUE(MatchesPNGFile(bitmap, ref_img,
-                             cc::FuzzyPixelComparator(
-                                 true,
-                                 percentage_pixels_large_error,
-                                 percentage_pixels_small_error,
-                                 average_error_allowed_in_bad_pixels,
-                                 large_error_allowed,
-                                 small_error_allowed)));
-}
-#endif  // defined(OS_WIN)
-
 // Opacity is rendered correctly.
 // Checks that modifying the hierarchy correctly affects final composite.
 TEST_P(LayerWithRealCompositorTest, Opacity) {
@@ -2660,42 +2556,23 @@ TEST_P(LayerWithRealCompositorTest, SwitchCCLayerMasksToBounds) {
   EXPECT_TRUE(l1->cc_layer_for_testing()->masks_to_bounds());
 }
 
-// An animation observer that deletes the layer when the animation ends.
-class TestAnimationObserver : public ImplicitAnimationObserver {
- public:
-  TestAnimationObserver() = default;
-
-  Layer* layer() const { return layer_.get(); }
-
-  void SetLayer(std::unique_ptr<Layer> layer) { layer_ = std::move(layer); }
-
-  // ui::ImplicitAnimationObserver overrides:
-  void OnImplicitAnimationsCompleted() override {}
-
- protected:
-  void OnLayerAnimationEnded(LayerAnimationSequence* sequence) override {
-    layer_.reset();
-  }
-
- private:
-  std::unique_ptr<Layer> layer_;
-
-  DISALLOW_COPY_AND_ASSIGN(TestAnimationObserver);
-};
-
 // Triggerring a OnDeviceScaleFactorChanged while a layer is undergoing
-// transform animation, may cause a crash. This is because the layer may be
-// deleted by the animation observer leading to a seg fault.
-TEST_P(LayerWithRealCompositorTest, DeletingLayerDuringScaleFactorChange) {
-  TestAnimationObserver animation_observer;
+// transform animation, may cause a crash. This is because an animation observer
+// may mutate the tree, e.g. deleting a layer, changing ancestor z-order etc,
+// which breaks the tree traversal and might lead to a use-after-free seg fault.
+TEST_P(LayerWithRealCompositorTest, TreeMutationDuringScaleFactorChange) {
+  TestCallbackAnimationObserver animation_observer;
 
   std::unique_ptr<Layer> root = CreateLayer(LAYER_SOLID_COLOR);
-  animation_observer.SetLayer(CreateLayer(LAYER_SOLID_COLOR));
-
-  Layer* layer_to_delete = animation_observer.layer();
-
   GetCompositor()->SetRootLayer(root.get());
-  root->Add(layer_to_delete);
+
+  // Tests scenarios that |layer_to_delete| is deleted when animation ends.
+
+  std::unique_ptr<Layer> layer_to_delete = CreateLayer(LAYER_SOLID_COLOR);
+  animation_observer.SetCallback(
+      base::BindLambdaForTesting([&]() { layer_to_delete.reset(); }));
+
+  root->Add(layer_to_delete.get());
 
   EXPECT_EQ(gfx::Transform(), layer_to_delete->GetTargetTransform());
 
@@ -2715,13 +2592,16 @@ TEST_P(LayerWithRealCompositorTest, DeletingLayerDuringScaleFactorChange) {
 
   // This call should not crash.
   root->OnDeviceScaleFactorChanged(2.f);
+  // |layer_to_delete| should be gone.
+  EXPECT_FALSE(layer_to_delete);
 
-  animation_observer.SetLayer(CreateLayer(LAYER_SOLID_COLOR));
-  layer_to_delete = animation_observer.layer();
+  layer_to_delete = CreateLayer(LAYER_SOLID_COLOR);
+  animation_observer.SetCallback(
+      base::BindLambdaForTesting([&]() { layer_to_delete.reset(); }));
 
   std::unique_ptr<Layer> child = CreateLayer(LAYER_SOLID_COLOR);
 
-  root->Add(layer_to_delete);
+  root->Add(layer_to_delete.get());
   layer_to_delete->Add(child.get());
 
   long_duration_animation =
@@ -2736,13 +2616,16 @@ TEST_P(LayerWithRealCompositorTest, DeletingLayerDuringScaleFactorChange) {
 
   // This call should not crash.
   root->OnDeviceScaleFactorChanged(1.5f);
+  // |layer_to_delete| should be gone.
+  EXPECT_FALSE(layer_to_delete);
 
-  animation_observer.SetLayer(CreateLayer(LAYER_SOLID_COLOR));
-  layer_to_delete = animation_observer.layer();
+  layer_to_delete = CreateLayer(LAYER_SOLID_COLOR);
+  animation_observer.SetCallback(
+      base::BindLambdaForTesting([&]() { layer_to_delete.reset(); }));
 
   std::unique_ptr<Layer> child2 = CreateLayer(LAYER_SOLID_COLOR);
 
-  root->Add(layer_to_delete);
+  root->Add(layer_to_delete.get());
   layer_to_delete->Add(child.get());
   layer_to_delete->Add(child2.get());
 
@@ -2758,6 +2641,29 @@ TEST_P(LayerWithRealCompositorTest, DeletingLayerDuringScaleFactorChange) {
 
   // This call should not crash.
   root->OnDeviceScaleFactorChanged(2.f);
+  // |layer_to_delete| should be gone.
+  EXPECT_FALSE(layer_to_delete);
+
+  // Tests scenarios that the tree is changed when animation ends.
+
+  root->Add(child.get());
+  root->Add(child2.get());
+
+  animation_observer.SetCallback(base::BindLambdaForTesting(
+      [&]() { root->StackChildrenAtBottom({child2.get()}); }));
+
+  long_duration_animation =
+      std::make_unique<ui::ScopedAnimationDurationScaleMode>(
+          ui::ScopedAnimationDurationScaleMode::SLOW_DURATION);
+  {
+    ui::ScopedLayerAnimationSettings animation(child->GetAnimator());
+    animation.AddObserver(&animation_observer);
+    animation.SetTransitionDuration(base::TimeDelta::FromMilliseconds(1000));
+    child->SetTransform(transform);
+  }
+
+  // This call should not crash.
+  root->OnDeviceScaleFactorChanged(1.5f);
 }
 
 // Tests that the animators in the layer tree is added to the
@@ -3249,17 +3155,6 @@ TEST_P(LayerWithRealCompositorTest, CompositorAnimationObserverTest) {
   EXPECT_FALSE(animation_observer.shutdown());
   ResetCompositor();
   EXPECT_TRUE(animation_observer.shutdown());
-}
-
-TEST(LayerDebugInfoTest, LayerNameDoesNotClobber) {
-  Layer layer(LAYER_NOT_DRAWN);
-  layer.set_name("foo");
-  std::unique_ptr<base::trace_event::ConvertableToTraceFormat> debug_info =
-      layer.TakeDebugInfo(nullptr);
-  std::string trace_format("bar,");
-  debug_info->AppendAsTraceFormat(&trace_format);
-  std::string expected("bar,{\"layer_name\":\"foo\"}");
-  EXPECT_EQ(expected, trace_format);
 }
 
 }  // namespace ui

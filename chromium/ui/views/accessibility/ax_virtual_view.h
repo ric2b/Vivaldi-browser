@@ -8,11 +8,9 @@
 #include <stdint.h>
 
 #include <memory>
-#include <string>
 #include <vector>
 
 #include "base/callback_forward.h"
-#include "base/macros.h"
 #include "base/strings/string16.h"
 #include "ui/accessibility/ax_enums.mojom-forward.h"
 #include "ui/accessibility/ax_node_data.h"
@@ -58,6 +56,8 @@ class VIEWS_EXPORT AXVirtualView : public ui::AXPlatformNodeDelegateBase {
   static AXVirtualView* GetFromId(int32_t id);
 
   AXVirtualView();
+  AXVirtualView(const AXVirtualView&) = delete;
+  AXVirtualView& operator=(const AXVirtualView&) = delete;
   ~AXVirtualView() override;
 
   //
@@ -72,6 +72,10 @@ class VIEWS_EXPORT AXVirtualView : public ui::AXPlatformNodeDelegateBase {
   // Moves |view| to the specified |index|. A negative value for |index| moves
   // |view| to the end.
   void ReorderChildView(AXVirtualView* view, int index);
+
+  // Removes this virtual view from its parent, which could either be a virtual
+  // or a real view. Hands ownership of this view back to the caller.
+  std::unique_ptr<AXVirtualView> RemoveFromParentView();
 
   // Removes |view| from this virtual view. The view's parent will change to
   // nullptr. Hands ownership back to the caller.
@@ -119,12 +123,18 @@ class VIEWS_EXPORT AXVirtualView : public ui::AXPlatformNodeDelegateBase {
   // via a callback. This should be used for attributes that change often and
   // would be queried every time a client accesses this view's AXNodeData.
   void SetPopulateDataCallback(
-      base::RepeatingCallback<void(const View&, ui::AXNodeData*)> callback);
+      base::RepeatingCallback<void(ui::AXNodeData*)> callback);
   void UnsetPopulateDataCallback();
 
-  // ui::AXPlatformNodeDelegate
+  // ui::AXPlatformNodeDelegate. Note that
+  // - Some of these functions have Mac-specific implementations in
+  //   ax_virtual_view_mac.mm.
+  // - GetChildCount(), ChildAtIndex(), and GetParent() are used by assistive
+  //   technologies to access the unignored accessibility tree, which doesn't
+  //   necessarily reflect the internal descendant tree. (An ignored node means
+  //   that the node should not be exposed to the platform.)
   const ui::AXNodeData& GetData() const override;
-  int GetChildCount() override;
+  int GetChildCount() const override;
   gfx::NativeViewAccessible ChildAtIndex(int index) override;
   gfx::NativeViewAccessible GetNSWindow() override;
   gfx::NativeViewAccessible GetNativeViewAccessible() override;
@@ -133,7 +143,9 @@ class VIEWS_EXPORT AXVirtualView : public ui::AXPlatformNodeDelegateBase {
       const ui::AXCoordinateSystem coordinate_system,
       const ui::AXClippingBehavior clipping_behavior,
       ui::AXOffscreenResult* offscreen_result) const override;
-  gfx::NativeViewAccessible HitTestSync(int x, int y) override;
+  gfx::NativeViewAccessible HitTestSync(
+      int screen_physical_pixel_x,
+      int screen_physical_pixel_y) const override;
   gfx::NativeViewAccessible GetFocus() override;
   ui::AXPlatformNode* GetFromNodeID(int32_t id) override;
   bool AccessibilityPerformAction(const ui::AXActionData& data) override;
@@ -147,6 +159,10 @@ class VIEWS_EXPORT AXVirtualView : public ui::AXPlatformNodeDelegateBase {
 
   // Gets or creates a wrapper suitable for use with tree sources.
   AXVirtualViewWrapper* GetOrCreateWrapper(views::AXAuraObjCache* cache);
+
+  // Returns true if this node is ignored and should be hidden from the
+  // accessibility tree. This does not impact the node's descendants.
+  bool IsIgnored() const;
 
   // Handle a request from assistive technology to perform an action on this
   // virtual view. Returns true on success, but note that the success/failure is
@@ -184,13 +200,11 @@ class VIEWS_EXPORT AXVirtualView : public ui::AXPlatformNodeDelegateBase {
 
   ui::AXUniqueId unique_id_;
   ui::AXNodeData custom_data_;
-  base::RepeatingCallback<void(const View&, ui::AXNodeData*)>
-      populate_data_callback_;
+  base::RepeatingCallback<void(ui::AXNodeData*)> populate_data_callback_;
 
   std::unique_ptr<AXVirtualViewWrapper> wrapper_;
 
   friend class ViewAccessibility;
-  DISALLOW_COPY_AND_ASSIGN(AXVirtualView);
 };
 
 }  // namespace views

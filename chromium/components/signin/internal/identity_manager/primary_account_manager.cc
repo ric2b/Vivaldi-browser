@@ -107,8 +107,9 @@ void PrimaryAccountManager::Initialize(PrefService* local_state) {
 
   bool consented =
       client_->GetPrefs()->GetBoolean(prefs::kGoogleServicesConsentedToSync);
+  CoreAccountId account_id = CoreAccountId::FromString(pref_account_id);
   CoreAccountInfo account_info =
-      account_tracker_service_->GetAccountInfo(CoreAccountId(pref_account_id));
+      account_tracker_service_->GetAccountInfo(account_id);
   if (consented) {
     DCHECK(!account_info.account_id.empty());
     // First reset the state, because SetAuthenticatedAccountInfo can only be
@@ -180,7 +181,7 @@ void PrimaryAccountManager::SetAuthenticatedAccountInfo(
         client_->GetPrefs()->GetBoolean(prefs::kGoogleServicesConsentedToSync);
 
     DCHECK(pref_account_id.empty() || !consented_to_sync ||
-           pref_account_id == account_info.account_id.id)
+           pref_account_id == account_info.account_id.ToString())
         << "account_id=" << account_info.account_id
         << " pref_account_id=" << pref_account_id;
   }
@@ -192,7 +193,7 @@ void PrimaryAccountManager::SetAuthenticatedAccountInfo(
   // user is signed in the corresponding preferences should match. Doing it here
   // as opposed to on signin allows us to catch the upgrade scenario.
   client_->GetPrefs()->SetString(prefs::kGoogleServicesLastAccountId,
-                                 account_info.account_id.id);
+                                 account_info.account_id.ToString());
   client_->GetPrefs()->SetString(prefs::kGoogleServicesLastUsername,
                                  account_info.email);
 
@@ -207,7 +208,7 @@ void PrimaryAccountManager::SetPrimaryAccountInternal(
   primary_account_info_ = account_info;
 
   PrefService* prefs = client_->GetPrefs();
-  const std::string& account_id = primary_account_info_.account_id.id;
+  const std::string& account_id = primary_account_info_.account_id.ToString();
   if (account_id.empty()) {
     DCHECK(!consented_to_sync);
     prefs->ClearPref(prefs::kGoogleServicesAccountId);
@@ -288,18 +289,32 @@ void PrimaryAccountManager::SignOutAndKeepAllAccounts(
   StartSignOut(signout_source_metric, signout_delete_metric,
                RemoveAccountsOption::kKeepAllAccounts);
 }
+#endif  // !defined(OS_CHROMEOS)
+
+#if defined(OS_CHROMEOS)
+void PrimaryAccountManager::RevokeSyncConsent() {
+  DCHECK(IsAuthenticated());
+  // TODO(https://crbug.com/1046746): Don't record metrics here.
+  StartSignOut(signin_metrics::ProfileSignout::USER_CLICKED_SIGNOUT_SETTINGS,
+               signin_metrics::SignoutDelete::KEEPING,
+               RemoveAccountsOption::kKeepAllAccounts,
+               /*assert_signout_allowed=*/true);
+}
+#endif  // defined(OS_CHROMEOS)
 
 void PrimaryAccountManager::StartSignOut(
     signin_metrics::ProfileSignout signout_source_metric,
     signin_metrics::SignoutDelete signout_delete_metric,
-    RemoveAccountsOption remove_option) {
+    RemoveAccountsOption remove_option,
+    bool assert_signout_allowed) {
   VLOG(1) << "StartSignOut: " << static_cast<int>(signout_source_metric) << ", "
           << static_cast<int>(signout_delete_metric) << ", "
           << static_cast<int>(remove_option);
   client_->PreSignOut(
       base::BindOnce(&PrimaryAccountManager::OnSignoutDecisionReached,
                      base::Unretained(this), signout_source_metric,
-                     signout_delete_metric, remove_option),
+                     signout_delete_metric, remove_option,
+                     assert_signout_allowed),
       signout_source_metric);
 }
 
@@ -307,8 +322,11 @@ void PrimaryAccountManager::OnSignoutDecisionReached(
     signin_metrics::ProfileSignout signout_source_metric,
     signin_metrics::SignoutDelete signout_delete_metric,
     RemoveAccountsOption remove_option,
+    bool assert_signout_allowed,
     SigninClient::SignoutDecision signout_decision) {
   DCHECK(IsInitialized());
+  if (assert_signout_allowed)
+    DCHECK_EQ(SigninClient::SignoutDecision::ALLOW_SIGNOUT, signout_decision);
 
   VLOG(1) << "OnSignoutDecisionReached: "
           << (signout_decision == SigninClient::SignoutDecision::ALLOW_SIGNOUT);
@@ -326,12 +344,13 @@ void PrimaryAccountManager::OnSignoutDecisionReached(
 
   const CoreAccountInfo account_info = GetAuthenticatedAccountInfo();
   client_->GetPrefs()->ClearPref(prefs::kGoogleServicesHostedDomain);
-  SetPrimaryAccountInternal(CoreAccountInfo(), /*consented_to_sync=*/false);
+  SetPrimaryAccountInternal(account_info, /*consented_to_sync=*/false);
 
   // Revoke all tokens before sending signed_out notification, because there
   // may be components that don't listen for token service events when the
   // profile is not connected to an account.
   switch (remove_option) {
+#if !defined(OS_CHROMEOS)
     case RemoveAccountsOption::kRemoveAllAccounts:
       VLOG(0) << "Revoking all refresh tokens on server. Reason: sign out";
       token_service_->RevokeAllCredentials(
@@ -345,17 +364,17 @@ void PrimaryAccountManager::OnSignoutDecisionReached(
             signin_metrics::SourceForRefreshTokenOperation::
                 kPrimaryAccountManager_ClearAccount);
       break;
+#endif
     case RemoveAccountsOption::kKeepAllAccounts:
       // Do nothing.
       break;
   }
 
-  for (Observer& observer : observers_) {
+  for (Observer& observer : observers_)
     observer.GoogleSignedOut(account_info);
-    observer.UnconsentedPrimaryAccountChanged(primary_account_info());
-  }
 }
 
+#if !defined(OS_CHROMEOS)
 void PrimaryAccountManager::OnRefreshTokensLoaded() {
   token_service_->RemoveObserver(this);
 

@@ -12,8 +12,9 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/network/public/mojom/fetch_api.mojom-blink-forward.h"
 #include "services/network/public/mojom/referrer_policy.mojom-blink-forward.h"
+#include "services/network/public/mojom/trust_tokens.mojom-blink.h"
 #include "services/network/public/mojom/url_loader_factory.mojom-blink.h"
-#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink-forward.h"
+#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/renderer/core/fetch/body_stream_buffer.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
@@ -37,7 +38,6 @@ class CORE_EXPORT FetchRequestData final
   enum Tainting { kBasicTainting, kCorsTainting, kOpaqueTainting };
   enum class ForServiceWorkerFetchEvent { kFalse, kTrue };
 
-  static FetchRequestData* Create();
   static FetchRequestData* Create(ScriptState*,
                                   const mojom::blink::FetchAPIRequest&,
                                   ForServiceWorkerFetchEvent);
@@ -53,6 +53,12 @@ class CORE_EXPORT FetchRequestData final
   const KURL& Url() const { return url_; }
   mojom::RequestContextType Context() const { return context_; }
   void SetContext(mojom::RequestContextType context) { context_ = context; }
+  network::mojom::RequestDestination Destination() const {
+    return destination_;
+  }
+  void SetDestination(network::mojom::RequestDestination destination) {
+    destination_ = destination;
+  }
   scoped_refptr<const SecurityOrigin> Origin() const { return origin_; }
   void SetOrigin(scoped_refptr<const SecurityOrigin> origin) {
     origin_ = std::move(origin);
@@ -119,7 +125,17 @@ class CORE_EXPORT FetchRequestData final
   const base::UnguessableToken& WindowId() const { return window_id_; }
   void SetWindowId(const base::UnguessableToken& id) { window_id_ = id; }
 
-  void Trace(blink::Visitor*);
+  const base::Optional<network::mojom::blink::TrustTokenParams>&
+  TrustTokenParams() const {
+    return trust_token_params_;
+  }
+  void SetTrustTokenParams(
+      base::Optional<network::mojom::blink::TrustTokenParams>
+          trust_token_params) {
+    trust_token_params_ = std::move(trust_token_params);
+  }
+
+  void Trace(Visitor*);
 
  private:
   FetchRequestData* CloneExceptBody();
@@ -129,6 +145,7 @@ class CORE_EXPORT FetchRequestData final
   Member<FetchHeaderList> header_list_;
   // FIXME: Support m_skipServiceWorkerFlag;
   mojom::RequestContextType context_;
+  network::mojom::RequestDestination destination_;
   scoped_refptr<const SecurityOrigin> origin_;
   scoped_refptr<const SecurityOrigin> isolated_world_origin_;
   // FIXME: Support m_forceOriginHeaderFlag;
@@ -144,6 +161,7 @@ class CORE_EXPORT FetchRequestData final
   mojom::FetchCacheMode cache_mode_;
   network::mojom::RedirectMode redirect_;
   mojom::FetchImportanceMode importance_;
+  base::Optional<network::mojom::blink::TrustTokenParams> trust_token_params_;
   // FIXME: Support m_useURLCredentialsFlag;
   // FIXME: Support m_redirectCount;
   Tainting response_tainting_;

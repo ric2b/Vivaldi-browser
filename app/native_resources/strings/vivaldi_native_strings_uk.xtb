@@ -45,7 +45,6 @@
 <translation id="3542768452570884558">Відкрити посилання у новому вікні</translation>
 <translation id="3588820906588687999">Відкрити зображення в новій вкладці</translation>
 <translation id="3601066750251199488">Монстр 3</translation>
-<translation id="366643050267431920">Додати як подію</translation>
 <translation id="3732157130969736834">Помістити посилання в закладки</translation>
 <translation id="3732388226447288666">Тварина 2</translation>
 <translation id="3732439195215136813">Тварина 5</translation>
@@ -68,7 +67,6 @@
 <translation id="4636708767492582204">Надіслати по пошті</translation>
 <translation id="4677434526832593569">Тварина 8</translation>
 <translation id="4881695831933465202">Відкрити</translation>
-<translation id="4973311370126107785">Виконання JavaScript через AppleScript вимкнено. Для увімкнення перейдіть в меню, оберіть Tools &gt; Allow JavaScript з Apple Events.</translation>
 <translation id="5014281392052865061">Імпортована Експрес-панель</translation>
 <translation id="5092656712000637858">Додати сторінку на веб-панель</translation>
 <translation id="5177818338935286353">Монстр 7</translation>
@@ -89,6 +87,7 @@
 <translation id="6229528619562190452">Натисніть тут, щоб оновити Vivaldi.</translation>
 <translation id="6234173136417926046">Встановити фоном Експрес-панелі</translation>
 <translation id="630690498669249215">Файл закладок Opera</translation>
+<translation id="6339818817272922368">Локальний обліковий запис</translation>
 <translation id="6438786710866753178">Краєвид 4</translation>
 <translation id="6477028720702061455">Виберіть папку профілю Opera для імпорту</translation>
 <translation id="6510706699590490869">Оновити Vivaldi</translation>
@@ -103,6 +102,7 @@
 <translation id="7496505986576158197">Vivaldi створено за використання проекта <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> з відкритим кодом та іншого <ph name="BEGIN_LINK_OSS" />програмного забезпечення з відкритим кодом<ph name="END_LINK_OSS" />.</translation>
 <translation id="7715497554424665066">Ігнорувати оновлення</translation>
 <translation id="7724603315864178912">Вирізати</translation>
+<translation id="7793738202466490491">Додати у ролі події календаря</translation>
 <translation id="7865983598101744945">Підтвердіть вихід</translation>
 <translation id="7957213167373139414">Мій календар</translation>
 <translation id="8027581147000338959">Відкрити у новому вікні</translation>
@@ -112,6 +112,7 @@
 <translation id="8331671104904436324">Відкрити у фоновій вкладці</translation>
 <translation id="8373293945112511707">Краєвид 1</translation>
 <translation id="8427094907586191051">Краєвид 17</translation>
+<translation id="8446668873108041390">Виконання JavaScript через AppleScript відключено. У налаштуваннях Settings &gt; Privacy &gt; Apple Events ви можете дозволити JavaScript з Apple Events.</translation>
 <translation id="8539196077526389150">Краєвид 13</translation>
 <translation id="8624587806981488221">&amp;Перезавантажити зображення</translation>
 <translation id="864444594187862076">Opera 15+ (Developer)</translation>

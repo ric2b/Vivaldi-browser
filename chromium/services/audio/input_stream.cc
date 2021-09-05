@@ -10,6 +10,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/strings/strcat.h"
+#include "base/strings/stringprintf.h"
 #include "base/trace_event/trace_event.h"
 #include "media/audio/audio_manager.h"
 #include "media/base/audio_parameters.h"
@@ -24,7 +25,33 @@ namespace audio {
 
 namespace {
 const int kMaxInputChannels = 3;
+
+const char* ErrorCodeToString(InputController::ErrorCode error) {
+  switch (error) {
+    case (InputController::STREAM_CREATE_ERROR):
+      return "STREAM_CREATE_ERROR";
+    case (InputController::STREAM_OPEN_ERROR):
+      return "STREAM_OPEN_ERROR";
+    case (InputController::STREAM_ERROR):
+      return "STREAM_ERROR";
+    default:
+      NOTREACHED();
+  }
+  return "UNKNOWN_ERROR";
 }
+
+std::string GetCtorLogString(const std::string& device_id,
+                             const media::AudioParameters& params,
+                             bool enable_agc) {
+  std::string str = base::StringPrintf("Ctor(");
+  base::StringAppendF(&str, "{device_id=%s}, ", device_id.c_str());
+  base::StringAppendF(&str, "{params=[%s]}, ",
+                      params.AsHumanReadableString().c_str());
+  base::StringAppendF(&str, "{enable_agc=%d})", enable_agc);
+  return str;
+}
+
+}  // namespace
 
 InputStream::InputStream(
     CreatedCallback created_callback,
@@ -67,6 +94,7 @@ InputStream::InputStream(
   TRACE_EVENT_NESTABLE_ASYNC_BEGIN2("audio", "InputStream", this, "device id",
                                     device_id, "params",
                                     params.AsHumanReadableString());
+  SendLogMessage("%s", GetCtorLogString(device_id, params, enable_agc).c_str());
 
   // |this| owns these objects, so unretained is safe.
   base::RepeatingClosure error_handler = base::BindRepeating(
@@ -103,6 +131,7 @@ InputStream::InputStream(
 
 InputStream::~InputStream() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(owning_sequence_);
+  SendLogMessage("Dtor()");
 
   if (log_)
     log_->OnClosed();
@@ -137,17 +166,15 @@ void InputStream::SetOutputDeviceForAec(const std::string& output_device_id) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(owning_sequence_);
   DCHECK(controller_);
   controller_->SetOutputDeviceForAec(output_device_id);
-  if (log_) {
-    log_->OnLogMessage(
-        base::StrCat({"SetOutputDeviceForAec: ", output_device_id}));
-  }
+  SendLogMessage("%s({output_device_id=%s})", __func__,
+                 output_device_id.c_str());
 }
 
 void InputStream::Record() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(owning_sequence_);
   DCHECK(controller_);
   TRACE_EVENT_NESTABLE_ASYNC_INSTANT0("audio", "Record", this);
-
+  SendLogMessage("%s()", __func__);
   controller_->Record();
   if (observer_)
     observer_->DidStartRecording();
@@ -176,6 +203,8 @@ void InputStream::OnCreated(bool initially_muted) {
   TRACE_EVENT_NESTABLE_ASYNC_INSTANT1("audio", "Created", this,
                                       "initially muted", initially_muted);
   DCHECK_CALLED_ON_VALID_SEQUENCE(owning_sequence_);
+  SendLogMessage("%s({muted=%s})", __func__,
+                 initially_muted ? "true" : "false");
 
   base::ReadOnlySharedMemoryRegion shared_memory_region =
       writer_->TakeSharedMemoryRegion();
@@ -184,8 +213,7 @@ void InputStream::OnCreated(bool initially_muted) {
     return;
   }
 
-  mojo::ScopedHandle socket_handle =
-      mojo::WrapPlatformFile(foreign_socket_.Release());
+  mojo::PlatformHandle socket_handle(foreign_socket_.Take());
   DCHECK(socket_handle.is_valid());
 
   std::move(created_callback_)
@@ -201,13 +229,15 @@ void InputStream::OnError(InputController::ErrorCode error_code) {
   client_->OnError();
   if (log_)
     log_->OnError();
+  SendLogMessage("%s({error_code=%s})", __func__,
+                 ErrorCodeToString(error_code));
   OnStreamError(true);
 }
 
 void InputStream::OnLog(base::StringPiece message) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(owning_sequence_);
   if (log_)
-    log_->OnLogMessage(message.as_string());
+    log_->OnLogMessage(message.as_string() + " [id=" + id_.ToString() + "]");
 }
 
 void InputStream::OnMuted(bool is_muted) {
@@ -226,6 +256,10 @@ void InputStream::OnStreamError(bool signalPlatformError) {
         std::string());
   }
 
+  if (signalPlatformError) {
+    SendLogMessage("%s()", __func__);
+  }
+
   // Defer callback so we're not destructed while in the constructor.
   base::SequencedTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
@@ -237,6 +271,17 @@ void InputStream::CallDeleter() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(owning_sequence_);
 
   std::move(delete_callback_).Run(this);
+}
+
+void InputStream::SendLogMessage(const char* format, ...) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(owning_sequence_);
+  if (!log_)
+    return;
+  va_list args;
+  va_start(args, format);
+  log_->OnLogMessage("audio::IS::" + base::StringPrintV(format, args) +
+                     base::StringPrintf(" [id=%s]", id_.ToString().c_str()));
+  va_end(args);
 }
 
 }  // namespace audio

@@ -2,9 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "third_party/blink/public/web/modules/peerconnection/transceiver_state_surfacer.h"
+#include "third_party/blink/renderer/modules/peerconnection/transceiver_state_surfacer.h"
 
-#include "third_party/blink/public/platform/modules/peerconnection/webrtc_util.h"
+#include "third_party/blink/renderer/platform/peerconnection/webrtc_util.h"
 #include "third_party/webrtc/api/rtp_transceiver_interface.h"
 #include "third_party/webrtc/api/sctp_transport_interface.h"
 

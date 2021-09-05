@@ -4,6 +4,8 @@
 
 #include "ui/views/examples/throbber_example.h"
 
+#include <memory>
+
 #include "base/macros.h"
 #include "ui/views/controls/throbber.h"
 #include "ui/views/layout/fill_layout.h"
@@ -28,8 +30,7 @@ class ThrobberView : public View {
 
   void Layout() override {
     int diameter = 16;
-    throbber_->SetBounds((width() - diameter) / 2,
-                         (height() - diameter) / 2,
+    throbber_->SetBounds((width() - diameter) / 2, (height() - diameter) / 2,
                          diameter, diameter);
     SizeToPreferredSize();
   }
@@ -56,8 +57,7 @@ class ThrobberView : public View {
 
 }  // namespace
 
-ThrobberExample::ThrobberExample() : ExampleBase("Throbber") {
-}
+ThrobberExample::ThrobberExample() : ExampleBase("Throbber") {}
 
 ThrobberExample::~ThrobberExample() = default;
 

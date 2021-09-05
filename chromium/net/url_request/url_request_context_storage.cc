@@ -18,8 +18,8 @@
 #include "net/http/http_auth_handler_factory.h"
 #include "net/http/http_server_properties.h"
 #include "net/http/http_transaction_factory.h"
-#include "net/log/net_log.h"
 #include "net/proxy_resolution/proxy_resolution_service.h"
+#include "net/quic/quic_context.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_job_factory.h"
 #include "net/url_request/url_request_throttler_manager.h"
@@ -42,11 +42,6 @@ URLRequestContextStorage::URLRequestContextStorage(URLRequestContext* context)
 }
 
 URLRequestContextStorage::~URLRequestContextStorage() = default;
-
-void URLRequestContextStorage::set_net_log(std::unique_ptr<NetLog> net_log) {
-  context_->set_net_log(net_log.get());
-  net_log_ = std::move(net_log);
-}
 
 void URLRequestContextStorage::set_host_resolver(
     std::unique_ptr<HostResolver> host_resolver) {
@@ -141,6 +136,12 @@ void URLRequestContextStorage::set_throttler_manager(
     std::unique_ptr<URLRequestThrottlerManager> throttler_manager) {
   context_->set_throttler_manager(throttler_manager.get());
   throttler_manager_ = std::move(throttler_manager);
+}
+
+void URLRequestContextStorage::set_quic_context(
+    std::unique_ptr<QuicContext> quic_context) {
+  context_->set_quic_context(quic_context.get());
+  quic_context_ = std::move(quic_context);
 }
 
 void URLRequestContextStorage::set_http_user_agent_settings(

@@ -41,6 +41,11 @@ void VideoPainter::PaintReplaced(const PaintInfo& paint_info,
   PhysicalRect content_box_rect = layout_video_.PhysicalContentBoxRect();
   content_box_rect.Move(paint_offset);
 
+  if (context.IsPaintingPreview()) {
+    context.SetURLForRect(layout_video_.GetDocument().Url(),
+                          snapped_replaced_rect);
+  }
+
   // Since we may have changed the location of the replaced content, we need to
   // notify PaintArtifactCompositor.
   if (layout_video_.GetFrameView())
@@ -59,7 +64,8 @@ void VideoPainter::PaintReplaced(const PaintInfo& paint_info,
       layer->SetBounds(gfx::Size(snapped_replaced_rect.Size()));
       layer->SetIsDrawable(true);
       layer->SetHitTestable(true);
-      RecordForeignLayer(context, DisplayItem::kForeignLayerVideo, layer,
+      RecordForeignLayer(context, layout_video_,
+                         DisplayItem::kForeignLayerVideo, layer,
                          FloatPoint(snapped_replaced_rect.Location()));
       return;
     }

@@ -18,18 +18,21 @@ extern const base::Feature kResamplingScrollEvents;
 COMPONENT_EXPORT(BLINK_FEATURES)
 extern const base::Feature kFilteringScrollPrediction;
 
+// Enables changing the influence of acceleration based on change of direction.
+COMPONENT_EXPORT(BLINK_FEATURES)
+extern const base::Feature kKalmanHeuristics;
+
+// Enables discarding the prediction if the predicted direction is opposite from
+// the current direction.
+COMPONENT_EXPORT(BLINK_FEATURES)
+extern const base::Feature kKalmanDirectionCutOff;
+
 // This feature allows native ET_MOUSE_EXIT events to be passed
 // through to blink as mouse leave events. Traditionally these events were
 // converted to mouse move events due to a number of inconsistencies on
 // the native platforms. crbug.com/450631
 COMPONENT_EXPORT(BLINK_FEATURES)
 extern const base::Feature kSendMouseLeaveEvents;
-
-// When enabled, this feature prevents Blink from changing the hover state and
-// dispatching mouse enter/exit events for elements under the mouse after the
-// layout under the mouse cursor is changed or the page is scrolled.
-COMPONENT_EXPORT(BLINK_FEATURES)
-extern const base::Feature kUpdateHoverAtBeginFrame;
 
 // Enables handling touch events in compositor using impl side touch action
 // knowledge.

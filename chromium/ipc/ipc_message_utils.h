@@ -27,7 +27,6 @@
 #include "base/format_macros.h"
 #include "base/memory/platform_shared_memory_region.h"
 #include "base/memory/read_only_shared_memory_region.h"
-#include "base/memory/shared_memory_handle.h"
 #include "base/memory/unsafe_shared_memory_region.h"
 #include "base/memory/writable_shared_memory_region.h"
 #include "base/numerics/safe_conversions.h"
@@ -609,6 +608,18 @@ struct COMPONENT_EXPORT(IPC) ParamTraits<base::ScopedFD> {
 
 #endif  // defined(OS_POSIX) || defined(OS_FUCHSIA)
 
+#if defined(OS_WIN)
+template <>
+struct COMPONENT_EXPORT(IPC) ParamTraits<base::win::ScopedHandle> {
+  using param_type = base::win::ScopedHandle;
+  static void Write(base::Pickle* m, const param_type& p);
+  static bool Read(const base::Pickle* m,
+                   base::PickleIterator* iter,
+                   param_type* r);
+  static void Log(const param_type& p, std::string* l);
+};
+#endif
+
 #if defined(OS_FUCHSIA)
 template <>
 struct COMPONENT_EXPORT(IPC) ParamTraits<zx::vmo> {
@@ -630,16 +641,6 @@ struct COMPONENT_EXPORT(IPC) ParamTraits<zx::channel> {
   static void Log(const param_type& p, std::string* l);
 };
 #endif  // defined(OS_FUCHSIA)
-
-template <>
-struct COMPONENT_EXPORT(IPC) ParamTraits<base::SharedMemoryHandle> {
-  typedef base::SharedMemoryHandle param_type;
-  static void Write(base::Pickle* m, const param_type& p);
-  static bool Read(const base::Pickle* m,
-                   base::PickleIterator* iter,
-                   param_type* r);
-  static void Log(const param_type& p, std::string* l);
-};
 
 #if defined(OS_ANDROID)
 template <>
@@ -1083,7 +1084,7 @@ struct ParamTraits<util::StrongAlias<TagType, UnderlyingType>> {
     UnderlyingType value;
     if (!ReadParam(m, iter, &value))
       return false;
-    *r = param_type::StrongAlias(value);
+    *r = param_type(value);
     return true;
   }
   static void Log(const param_type& p, std::string* l) {

@@ -3,6 +3,7 @@ import platform
 import socket
 from abc import ABCMeta, abstractmethod
 from copy import deepcopy
+from six import iteritems
 
 from ..wptcommandline import require_arg  # noqa: F401
 
@@ -48,6 +49,14 @@ def maybe_add_args(required_args, current_args):
             if required_arg not in current_args:
                 current_args.append(required_arg)
     return current_args
+
+
+def certificate_domain_list(list_of_domains, certificate_file):
+    """Build a list of domains where certificate_file should be used"""
+    cert_list = []
+    for domain in list_of_domains:
+        cert_list.append({"host": domain, "certificateFile": certificate_file})
+    return cert_list
 
 
 def get_free_port():
@@ -139,10 +148,6 @@ class Browser(object):
         """Boolean indicating whether the browser process is still running"""
         pass
 
-    def setup_ssl(self, hosts):
-        """Return a certificate to use for tests requiring ssl that will be trusted by the browser"""
-        raise NotImplementedError("ssl testing not supported")
-
     def cleanup(self):
         """Browser-specific cleanup that is run after the testrun is finished"""
         pass
@@ -191,5 +196,5 @@ class ExecutorBrowser(object):
     up the browser from the runner process.
     """
     def __init__(self, **kwargs):
-        for k, v in kwargs.iteritems():
+        for k, v in iteritems(kwargs):
             setattr(self, k, v)

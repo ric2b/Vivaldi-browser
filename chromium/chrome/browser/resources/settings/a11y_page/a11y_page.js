@@ -31,6 +31,16 @@ Polymer({
     },
 
     /**
+     * Returns true if the 'LiveCaption' media switch is enabled.
+     */
+    enableLiveCaption_: {
+      type: Boolean,
+      value: function() {
+        return loadTimeData.getBoolean('enableLiveCaption');
+      },
+    },
+
+    /**
      * Whether to show accessibility labels settings.
      */
     showAccessibilityLabelsSetting_: {
@@ -41,40 +51,12 @@ Polymer({
     /** @private {!Map<string, string>} */
     focusConfig_: {
       type: Object,
-      value: function() {
+      value() {
         const map = new Map();
         if (settings.routes.CAPTIONS) {
           map.set(settings.routes.CAPTIONS.path, '#captions');
         }
-        // <if expr="chromeos">
-        if (settings.routes.MANAGE_ACCESSIBILITY) {
-          map.set(
-              settings.routes.MANAGE_ACCESSIBILITY.path, '#subpage-trigger');
-        }
-        // </if>
         return map;
-      },
-    },
-
-    /**
-     * Whether to show the link to caption settings.
-     * @private {boolean}
-     */
-    showCaptionSettings_: {
-      type: Boolean,
-      value: function() {
-        return loadTimeData.getBoolean('enableCaptionSettings');
-      },
-    },
-
-    /**
-     * Whether to show OS settings.
-     * @private {boolean}
-     */
-    showOsSettings_: {
-      type: Boolean,
-      value: function() {
-        return loadTimeData.getBoolean('showOSSettings');
       },
     },
 
@@ -84,7 +66,7 @@ Polymer({
      */
     captionSettingsOpensExternally_: {
       type: Boolean,
-      value: function() {
+      value() {
         let opensExternally = false;
         // <if expr="is_macosx">
         opensExternally = true;
@@ -100,7 +82,7 @@ Polymer({
   },
 
   /** @override */
-  ready: function() {
+  ready() {
     this.addWebUIListener(
         'screen-reader-state-changed',
         this.onScreenReaderStateChanged_.bind(this));
@@ -111,14 +93,14 @@ Polymer({
    * @private
    * @param {boolean} hasScreenReader Whether a screen reader is enabled.
    */
-  onScreenReaderStateChanged_: function(hasScreenReader) {
+  onScreenReaderStateChanged_(hasScreenReader) {
     // TODO(katie): Remove showExperimentalA11yLabels flag before launch.
     this.showAccessibilityLabelsSetting_ = hasScreenReader &&
         loadTimeData.getBoolean('showExperimentalA11yLabels');
   },
 
   /** @private */
-  onToggleAccessibilityImageLabels_: function() {
+  onToggleAccessibilityImageLabels_() {
     const a11yImageLabelsOn = this.$.a11yImageLabels.checked;
     if (a11yImageLabelsOn) {
       chrome.send('confirmA11yImageLabels');
@@ -130,24 +112,19 @@ Polymer({
 
   // <if expr="chromeos">
   /** @private */
-  onManageAccessibilityFeaturesTap_: function() {
-    settings.navigateTo(settings.routes.MANAGE_ACCESSIBILITY);
-  },
-
-  /** @private */
-  onManageSystemAccessibilityFeaturesTap_: function() {
+  onManageSystemAccessibilityFeaturesTap_() {
     window.location.href = 'chrome://os-settings/manageAccessibility';
   },
   // </if>
 
   /** private */
-  onMoreFeaturesLinkClick_: function() {
+  onMoreFeaturesLinkClick_() {
     window.open(
         'https://chrome.google.com/webstore/category/collection/accessibility');
   },
 
   /** @private */
-  onCaptionsClick_: function() {
+  onCaptionsClick_() {
     // Open the system captions dialog for Mac.
     // <if expr="is_macosx">
     settings.CaptionsBrowserProxyImpl.getInstance().openSystemCaptionsDialog();
@@ -160,14 +137,14 @@ Polymer({
       settings.CaptionsBrowserProxyImpl.getInstance()
           .openSystemCaptionsDialog();
     } else {
-      settings.navigateTo(settings.routes.CAPTIONS);
+      settings.Router.getInstance().navigateTo(settings.routes.CAPTIONS);
     }
     // </if>
 
-    // Navigate to the caption settings page for ChromeOS and Linux as they
-    // do not have system caption settings.
-    // <if expr="chromeos or is_linux">
-    settings.navigateTo(settings.routes.CAPTIONS);
+    // Navigate to the caption settings page for Linux as they do not have
+    // system caption settings.
+    // <if expr="is_linux">
+    settings.Router.getInstance().navigateTo(settings.routes.CAPTIONS);
     // </if>
   },
 });

@@ -12,6 +12,7 @@
 #include <map>
 #include <memory>
 #include <set>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -34,6 +35,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 #include "components/autofill/core/browser/autocomplete_history_manager.h"
@@ -268,7 +270,8 @@ AutofillField* FindFirstFieldWithValue(const FormStructure& form_structure,
 }
 
 // Heuristically identifies all possible credit card verification fields.
-AutofillField* HeuristicallyFindCVCField(const FormStructure& form_structure) {
+AutofillField* HeuristicallyFindCVCFieldForUpload(
+    const FormStructure& form_structure) {
   // Stores a pointer to the explicitly found expiration year.
   bool found_explicit_expiration_year_field = false;
 
@@ -333,7 +336,7 @@ AutofillField* HeuristicallyFindCVCField(const FormStructure& form_structure) {
 // Iff the CVC of the credit card is known, find the first field with this
 // value (also set |properties_mask| to |KNOWN_VALUE|). Otherwise, heuristically
 // search for the CVC field if any.
-AutofillField* GetBestPossibleCVCField(
+AutofillField* GetBestPossibleCVCFieldForUpload(
     const FormStructure& form_structure,
     base::string16 last_unlocked_credit_card_cvc) {
   if (!last_unlocked_credit_card_cvc.empty()) {
@@ -344,7 +347,7 @@ AutofillField* GetBestPossibleCVCField(
     return result;
   }
 
-  return HeuristicallyFindCVCField(form_structure);
+  return HeuristicallyFindCVCFieldForUpload(form_structure);
 }
 
 // Some autofill types are detected based on values and not based on form
@@ -357,6 +360,39 @@ bool ContainsAutofillableValue(const autofill::FormStructure& form) {
                               IsUPIVirtualPaymentAddress(field->value);
                      });
 }
+
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
+// Retrieves all valid credit card candidates for virtual card selection. A
+// valid candidate must have exactly one cloud token.
+std::vector<CreditCard*> GetVirtualCardCandidates(
+    PersonalDataManager* personal_data_manager) {
+  DCHECK(personal_data_manager);
+  std::vector<CreditCard*> candidates =
+      personal_data_manager->GetServerCreditCards();
+  const std::vector<CreditCardCloudTokenData*> cloud_token_data =
+      personal_data_manager->GetCreditCardCloudTokenData();
+
+  // Constructs map.
+  std::unordered_map<std::string, int> id_count;
+  for (CreditCardCloudTokenData* data : cloud_token_data) {
+    const auto& iterator = id_count.find(data->masked_card_id);
+    if (iterator == id_count.end())
+      id_count.emplace(data->masked_card_id, 1);
+    else
+      iterator->second += 1;
+  }
+
+  // Remove the card from the vector that either has multiple cloud token data
+  // or has no cloud token data.
+  base::EraseIf(candidates, [&](const auto& card) {
+    const auto& iterator = id_count.find(card->server_id());
+    return iterator == id_count.end() || iterator->second > 1;
+  });
+
+  // Returns the remaining valid cards.
+  return candidates;
+}
+#endif
 
 }  // namespace
 
@@ -524,17 +560,45 @@ void AutofillManager::RefetchCardsAndUpdatePopup(
       /*autoselect_first_suggestion=*/false, should_display_gpay_logo);
 }
 
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
+void AutofillManager::FetchVirtualCardCandidates() {
+  const std::vector<CreditCard*>& candidates =
+      GetVirtualCardCandidates(personal_data_);
+  // Make sure the |candidates| is not empty, otherwise the check in
+  // ShouldShowVirtualCardOption() should fail.
+  DCHECK(!candidates.empty());
+
+  client_->OfferVirtualCardOptions(
+      candidates,
+      base::BindOnce(&AutofillManager::OnVirtualCardCandidateSelected,
+                     weak_ptr_factory_.GetWeakPtr()));
+}
+
+void AutofillManager::OnVirtualCardCandidateSelected(
+    const std::string& selected_card_id) {
+  // TODO(crbug.com/1020740): Implement this and the following flow in a
+  // separate CL. The following flow will be sending a request to Payments
+  // to fetched the up-to-date cloud token data for the selected card and fill
+  // the information in the form.
+}
+#endif
+
 bool AutofillManager::ShouldParseForms(const std::vector<FormData>& forms,
                                        const base::TimeTicks timestamp) {
-  bool enabled = IsAutofillEnabled();
+  bool autofill_enabled = IsAutofillEnabled();
   sync_state_ = personal_data_ ? personal_data_->GetSyncSigninState()
                                : AutofillSyncSigninState::kNumSyncStates;
   if (!has_logged_autofill_enabled_) {
-    AutofillMetrics::LogIsAutofillEnabledAtPageLoad(enabled, sync_state_);
+    AutofillMetrics::LogIsAutofillEnabledAtPageLoad(autofill_enabled,
+                                                    sync_state_);
+    AutofillMetrics::LogIsAutofillProfileEnabledAtPageLoad(
+        IsAutofillProfileEnabled(), sync_state_);
+    AutofillMetrics::LogIsAutofillCreditCardEnabledAtPageLoad(
+        IsAutofillCreditCardEnabled(), sync_state_);
     has_logged_autofill_enabled_ = true;
   }
 
-  return enabled;
+  return autofill_enabled;
 }
 
 void AutofillManager::OnFormSubmittedImpl(const FormData& form,
@@ -570,10 +634,10 @@ void AutofillManager::OnFormSubmittedImpl(const FormData& form,
   autocomplete_history_manager_->OnWillSubmitForm(
       form_for_autocomplete, client_->IsAutocompleteEnabled());
 
-  if (IsProfileAutofillEnabled()) {
+  if (IsAutofillProfileEnabled()) {
     address_form_event_logger_->OnWillSubmitForm(sync_state_, *submitted_form);
   }
-  if (IsCreditCardAutofillEnabled()) {
+  if (IsAutofillCreditCardEnabled()) {
     credit_card_form_event_logger_->OnWillSubmitForm(sync_state_,
                                                      *submitted_form);
   }
@@ -591,11 +655,11 @@ void AutofillManager::OnFormSubmittedImpl(const FormData& form,
 
   submitted_form->set_submission_source(source);
 
-  if (IsProfileAutofillEnabled()) {
+  if (IsAutofillProfileEnabled()) {
     address_form_event_logger_->OnFormSubmitted(/*force_logging=*/false,
                                                 sync_state_, *submitted_form);
   }
-  if (IsCreditCardAutofillEnabled()) {
+  if (IsAutofillCreditCardEnabled()) {
     credit_card_form_event_logger_->OnFormSubmitted(
         enable_ablation_logging_, sync_state_, *submitted_form);
   }
@@ -608,8 +672,8 @@ void AutofillManager::OnFormSubmittedImpl(const FormData& form,
   // Update Personal Data with the form's submitted data.
   // Also triggers offering local/upload credit card save, if applicable.
   client_->GetFormDataImporter()->ImportFormData(*submitted_form,
-                                                 IsProfileAutofillEnabled(),
-                                                 IsCreditCardAutofillEnabled());
+                                                 IsAutofillProfileEnabled(),
+                                                 IsAutofillCreditCardEnabled());
 }
 
 bool AutofillManager::MaybeStartVoteUploadProcess(
@@ -658,7 +722,7 @@ bool AutofillManager::MaybeStartVoteUploadProcess(
   // so that we can safely pass the address to the first callback regardless of
   // the (undefined) order in which the callback parameters are computed.
   FormStructure* raw_form = form_structure.get();
-  base::PostTaskAndReply(
+  base::ThreadPool::PostTaskAndReply(
       FROM_HERE,
       // If the priority is BEST_EFFORT, the task can be preempted, which is
       // thought to cause high memory usage (as memory is retained by the task
@@ -668,7 +732,7 @@ bool AutofillManager::MaybeStartVoteUploadProcess(
       // USER_VISIBLE instead of BEST_EFFORT fixes memory usage. Consider
       // keeping BEST_EFFORT priority, but manually enforcing a limit on the
       // number of outstanding tasks. https://crbug.com/974249
-      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::BindOnce(&AutofillManager::DeterminePossibleFieldTypesForUpload,
                      copied_profiles, copied_credit_cards,
                      last_unlocked_credit_card_cvc_, app_locale_, raw_form),
@@ -1137,7 +1201,7 @@ void AutofillManager::OnHidePopup() {
     return;
 
   autocomplete_history_manager_->CancelPendingQueries(this);
-  client_->HideAutofillPopup();
+  client_->HideAutofillPopup(PopupHidingReason::kRendererEvent);
 }
 
 bool AutofillManager::GetDeletionConfirmationText(const base::string16& value,
@@ -1215,6 +1279,18 @@ void AutofillManager::RemoveAutocompleteEntry(const base::string16& name,
 
 void AutofillManager::OnAutocompleteEntrySelected(const base::string16& value) {
   autocomplete_history_manager_->OnAutocompleteEntrySelected(value);
+}
+
+void AutofillManager::OnUserHideSuggestions(const FormData& form,
+                                            const FormFieldData& field) {
+  FormStructure* form_structure = nullptr;
+  AutofillField* autofill_field = nullptr;
+  if (!GetCachedFormAndField(form, field, &form_structure, &autofill_field))
+    return;
+
+  auto* logger = GetEventFormLogger(autofill_field->Type().group());
+  if (logger)
+    logger->OnUserHideSuggestions(*form_structure, *autofill_field);
 }
 
 bool AutofillManager::ShouldClearPreviewedForm() {
@@ -1343,15 +1419,15 @@ void AutofillManager::OnDidEndTextFieldEditing() {
 }
 
 bool AutofillManager::IsAutofillEnabled() const {
-  return ::autofill::prefs::IsAutofillEnabled(client_->GetPrefs());
+  return IsAutofillProfileEnabled() || IsAutofillCreditCardEnabled();
 }
 
-bool AutofillManager::IsProfileAutofillEnabled() const {
-  return ::autofill::prefs::IsProfileAutofillEnabled(client_->GetPrefs());
+bool AutofillManager::IsAutofillProfileEnabled() const {
+  return ::autofill::prefs::IsAutofillProfileEnabled(client_->GetPrefs());
 }
 
-bool AutofillManager::IsCreditCardAutofillEnabled() const {
-  return ::autofill::prefs::IsCreditCardAutofillEnabled(client_->GetPrefs());
+bool AutofillManager::IsAutofillCreditCardEnabled() const {
+  return ::autofill::prefs::IsAutofillCreditCardEnabled(client_->GetPrefs());
 }
 
 // static
@@ -1375,9 +1451,6 @@ void AutofillManager::OnSuggestionsReturned(
     int query_id,
     bool autoselect_first_suggestion,
     const std::vector<Suggestion>& suggestions) {
-  external_delegate_->OnAutofillAvailabilityEvent(
-      !suggestions.empty() ? mojom::AutofillState::kAutocompleteAvailable
-                           : mojom::AutofillState::kNoSuggestions);
   external_delegate_->OnSuggestionsReturned(query_id, suggestions,
                                             autoselect_first_suggestion);
 }
@@ -1441,7 +1514,7 @@ void AutofillManager::Reset() {
       new AutofillMetrics::FormInteractionsUkmLogger(
           client_->GetUkmRecorder(), client_->GetUkmSourceId()));
   address_form_event_logger_.reset(new AddressFormEventLogger(
-      driver()->IsInMainFrame(), form_interactions_ukm_logger_.get()));
+      driver()->IsInMainFrame(), form_interactions_ukm_logger_.get(), client_));
   credit_card_form_event_logger_.reset(new CreditCardFormEventLogger(
       driver()->IsInMainFrame(), form_interactions_ukm_logger_.get(),
       personal_data_, client_));
@@ -1489,7 +1562,8 @@ AutofillManager::AutofillManager(
               client->GetUkmSourceId())),
       address_form_event_logger_(std::make_unique<AddressFormEventLogger>(
           driver->IsInMainFrame(),
-          form_interactions_ukm_logger_.get())),
+          form_interactions_ukm_logger_.get(),
+          client_)),
       credit_card_form_event_logger_(
           std::make_unique<CreditCardFormEventLogger>(
               driver->IsInMainFrame(),
@@ -1803,6 +1877,8 @@ void AutofillManager::OnFormsParsed(
   // Setup the url for metrics that we will collect for this form.
   form_interactions_ukm_logger_->OnFormsParsed(client_->GetUkmSourceId());
 
+  driver()->HandleParsedForms(form_structures);
+
   std::vector<FormStructure*> non_queryable_forms;
   std::vector<FormStructure*> queryable_forms;
   std::set<FormType> form_types;
@@ -2029,8 +2105,8 @@ void AutofillManager::DeterminePossibleFieldTypesForUpload(
   }
 
   // As CVCs are not stored, run special heuristics to detect CVC-like values.
-  AutofillField* cvc_field =
-      GetBestPossibleCVCField(*submitted_form, last_unlocked_credit_card_cvc);
+  AutofillField* cvc_field = GetBestPossibleCVCFieldForUpload(
+      *submitted_form, last_unlocked_credit_card_cvc);
   if (cvc_field) {
     ServerFieldTypeSet possible_types = cvc_field->possible_types();
     possible_types.erase(UNKNOWN_TYPE);
@@ -2354,11 +2430,25 @@ void AutofillManager::GetAvailableSuggestions(
                                          *context->focused_field);
   }
 
+  // Returns early if no suggestion is available or suggestions are not for
+  // cards.
+  if (suggestions->empty() || !context->is_filling_credit_card)
+    return;
+
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
+  // This section adds the "Use a virtual card number" option in the autofill
+  // dropdown menu, if applicable.
+  if (ShouldShowVirtualCardOption(context->form_structure)) {
+    suggestions->emplace_back(l10n_util::GetStringUTF16(
+        IDS_AUTOFILL_CLOUD_TOKEN_DROPDOWN_OPTION_LABEL));
+    suggestions->back().frontend_id = POPUP_ITEM_ID_USE_VIRTUAL_CARD;
+  }
+#endif
+
   // Don't provide credit card suggestions for non-secure pages, but do provide
   // them for secure pages with passive mixed content (see implementation of
   // IsContextSecure).
-  if (!suggestions->empty() && context->is_filling_credit_card &&
-      !context->is_context_secure) {
+  if (!context->is_context_secure) {
     // Replace the suggestion content with a warning message explaining why
     // Autofill is disabled for a website. The string is different if the
     // credit card autofill HTTP warning experiment is enabled.
@@ -2369,6 +2459,46 @@ void AutofillManager::GetAvailableSuggestions(
     suggestions->assign(1, warning_suggestion);
   }
 }
+
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
+// TODO(crbug.com/1020740): Add metrics logging.
+bool AutofillManager::ShouldShowVirtualCardOption(
+    FormStructure* form_structure) {
+  // If experiment is disabled, return false.
+  if (!base::FeatureList::IsEnabled(features::kAutofillEnableVirtualCard))
+    return false;
+
+  // If credit card upload is disabled, return false.
+  if (!IsAutofillCreditCardEnabled())
+    return false;
+
+  // If merchant is not whitelisted, return false.
+  std::vector<std::string> whitelist =
+      client_->GetMerchantWhitelistForVirtualCards();
+  if (std::find(whitelist.begin(), whitelist.end(),
+                form_structure->source_url().spec()) == whitelist.end()) {
+    return false;
+  }
+
+  // If no credit card candidate has related cloud token data available, return
+  // false.
+  if (GetVirtualCardCandidates(personal_data_).empty())
+    return false;
+
+  // If card number field or expiration date field is not detected, return
+  // false.
+  if (!form_structure->IsCompleteCreditCardForm())
+    return false;
+
+  // If CVC field is detected, then all requirements are met, otherwise return
+  // false.
+  for (auto& field : *form_structure) {
+    if (field->Type().GetStorableType() == CREDIT_CARD_VERIFICATION_CODE)
+      return true;
+  }
+  return false;
+}
+#endif
 
 FormEventLoggerBase* AutofillManager::GetEventFormLogger(
     FieldTypeGroup field_type_group) const {

@@ -38,7 +38,7 @@ namespace vivaldi {
 namespace {
 
 HTMLFormElement* AssociatedFormElement(HTMLElement& element) {
-  if (auto* form = ToHTMLFormElementOrNull(element))
+  if (auto* form = blink::DynamicTo<HTMLFormElement>(element))
     return form;
   return element.formOwner();
 }
@@ -48,17 +48,19 @@ HTMLFormElement* ScanForForm(const Node* start) {
   if (!start || !start->IsHTMLElement())
     return nullptr;
 
-  const HTMLElement* start_element = ToHTMLElement(start);
+  const HTMLElement* start_element = blink::To<HTMLElement>(start);
   for (HTMLElement& element : Traversal<HTMLElement>::StartsAt(
            *Traversal<HTMLElement>::Next(*start_element))) {
     if (HTMLFormElement* form = AssociatedFormElement(element))
       return form;
 
     const blink::Document* child_document = nullptr;
-    if (IsHTMLIFrameElement(element)) {
-      child_document = ToHTMLIFrameElement(&element)->contentDocument();
-    } else if (IsHTMLFrameElement(element)) {
-      child_document = ToHTMLFrameElement(&element)->contentDocument();
+    if (blink::IsA<blink::HTMLIFrameElement>(&element)) {
+      child_document = blink::DynamicTo<blink::HTMLIFrameElement>(&element)
+                           ->contentDocument();
+    } else if (blink::IsA<blink::HTMLFrameElement>(&element)) {
+      child_document =
+          blink::DynamicTo<blink::HTMLFrameElement>(&element)->contentDocument();
     }
     if (child_document) {
       const blink::Element* child_root = child_document->documentElement();
@@ -87,7 +89,7 @@ HTMLFormElement* CurrentForm(const FrameSelection& current_selection) {
   for (Node& node : NodeTraversal::InclusiveAncestorsOf(*start)) {
     if (!node.IsHTMLElement())
       break;
-    HTMLElement& element = ToHTMLElement(node);
+    HTMLElement& element = blink::To<HTMLElement>(node);
     if (HTMLFormElement* form = AssociatedFormElement(element))
       return form;
   }

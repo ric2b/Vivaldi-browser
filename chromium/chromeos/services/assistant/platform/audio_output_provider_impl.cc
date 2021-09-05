@@ -81,19 +81,20 @@ class AudioOutputImpl : public assistant_client::AudioOutput {
     if (IsEncodedFormat(format_)) {
       main_task_runner_->PostTask(
           FROM_HERE,
-          base::BindOnce(&AudioStreamHandler::StartAudioDecoder,
-                         base::Unretained(audio_stream_handler_.get()),
-                         audio_decoder_factory_, delegate,
-                         base::BindOnce(&AudioDeviceOwner::StartOnMainThread,
-                                        base::Unretained(device_owner_.get()),
-                                        audio_stream_handler_.get(),
-                                        std::move(stream_factory_))));
+          base::BindOnce(
+              &AudioStreamHandler::StartAudioDecoder,
+              base::Unretained(audio_stream_handler_.get()),
+              audio_decoder_factory_, delegate,
+              base::BindOnce(&AudioDeviceOwner::StartOnMainThread,
+                             base::Unretained(device_owner_.get()),
+                             media_session_, audio_stream_handler_.get(),
+                             std::move(stream_factory_))));
     } else {
       main_task_runner_->PostTask(
           FROM_HERE,
           base::BindOnce(&AudioDeviceOwner::StartOnMainThread,
-                         base::Unretained(device_owner_.get()), delegate,
-                         std::move(stream_factory_), format_));
+                         base::Unretained(device_owner_.get()), media_session_,
+                         delegate, std::move(stream_factory_), format_));
     }
   }
 
@@ -157,8 +158,8 @@ AudioOutputProviderImpl::AudioOutputProviderImpl(
       device_id_(device_id),
       media_session_(media_session) {
   client_->RequestAudioDecoderFactory(
-      mojo::MakeRequest(&audio_decoder_factory_ptr_));
-  audio_decoder_factory_ = audio_decoder_factory_ptr_.get();
+      audio_decoder_factory_remote_.BindNewPipeAndPassReceiver());
+  audio_decoder_factory_ = audio_decoder_factory_remote_.get();
 }
 
 AudioOutputProviderImpl::~AudioOutputProviderImpl() = default;

@@ -4,28 +4,37 @@
 
 package org.chromium.chrome.browser.customtabs;
 
+import android.content.Intent;
 import android.graphics.Bitmap;
+import android.os.Build;
 import android.text.TextUtils;
 
-import org.chromium.base.ApiCompatibilityUtils;
-import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.favicon.FaviconHelper;
-import org.chromium.chrome.browser.ntp.NewTabPage;
-import org.chromium.chrome.browser.tab.EmptyTabObserver;
-import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tab.TabObserver;
-import org.chromium.chrome.browser.tab.TabThemeColorHelper;
-import org.chromium.chrome.browser.tabmodel.EmptyTabModelSelectorObserver;
-import org.chromium.chrome.browser.tabmodel.TabModel;
-import org.chromium.chrome.browser.tabmodel.TabModelSelector;
-import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
-import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabModelObserver;
-import org.chromium.chrome.browser.tabmodel.TabSelectionType;
-import org.chromium.chrome.browser.util.UrlUtilities;
-import org.chromium.components.security_state.ConnectionSecurityLevel;
-import org.chromium.content_public.browser.NavigationHandle;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
-import java.util.List;
+import org.chromium.base.ApiCompatibilityUtils;
+import org.chromium.chrome.R;
+import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider;
+import org.chromium.chrome.browser.customtabs.content.CustomTabActivityTabProvider;
+import org.chromium.chrome.browser.customtabs.content.TabObserverRegistrar;
+import org.chromium.chrome.browser.customtabs.content.TabObserverRegistrar.CustomTabTabObserver;
+import org.chromium.chrome.browser.dependency_injection.ActivityScope;
+import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
+import org.chromium.chrome.browser.lifecycle.Destroyable;
+import org.chromium.chrome.browser.lifecycle.NativeInitObserver;
+import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.ssl.ChromeSecurityStateModelDelegate;
+import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabThemeColorHelper;
+import org.chromium.chrome.browser.ui.favicon.FaviconHelper;
+import org.chromium.chrome.browser.webapps.WebappExtras;
+import org.chromium.components.embedder_support.util.UrlUtilities;
+import org.chromium.components.security_state.SecurityStateModel;
+import org.chromium.content_public.browser.NavigationHandle;
+import org.chromium.ui.util.ColorUtils;
+
+import javax.inject.Inject;
 
 /**
  * Helper that updates the Android task description given the state of the current tab.
@@ -33,49 +42,72 @@ import java.util.List;
  * <p>
  * The task description is what is shown in Android's Overview/Recents screen for each entry.
  */
-public class CustomTabTaskDescriptionHelper {
-    private final int mDefaultThemeColor;
-    private final ChromeActivity mActivity;
-    private final TabModelSelector mTabModelSelector;
+@ActivityScope
+public class CustomTabTaskDescriptionHelper implements NativeInitObserver, Destroyable {
+    private final ChromeActivity<?> mActivity;
+    private final CustomTabActivityTabProvider mTabProvider;
+    private final TabObserverRegistrar mTabObserverRegistrar;
+    private final BrowserServicesIntentDataProvider mIntentDataProvider;
 
-    private final CustomTabTaskDescriptionIconGenerator mIconGenerator;
-    private final FaviconHelper mFaviconHelper;
+    @Nullable
+    private CustomTabTaskDescriptionIconGenerator mIconGenerator;
+    @Nullable
+    private FaviconHelper mFaviconHelper;
 
-    private final TabModelSelectorObserver mTabModelSelectorObserver;
-    private final TabModelSelectorTabModelObserver mTabModelObserver;
-    private final TabObserver mTabObserver;
+    @Nullable
+    private CustomTabTabObserver mTabObserver;
+    @Nullable
+    private CustomTabTabObserver mIconTabObserver;
+    @Nullable
+    private CustomTabActivityTabProvider.Observer mActivityTabObserver;
 
+    private int mDefaultThemeColor;
+    @Nullable
+    private String mForceTitle;
+    @Nullable
+    private Bitmap mForceIcon;
+
+    @Nullable
     private Bitmap mLargestFavicon;
-    private Tab mCurrentTab;
 
-    /**
-     * Constructs a task description helper for the given activity.
-     *
-     * @param activity The activity whose descriptions should be updated.
-     * @param defaultThemeColor The default theme color to be used if the tab does not override it.
-     */
-    public CustomTabTaskDescriptionHelper(ChromeActivity activity, int defaultThemeColor) {
+    @Inject
+    public CustomTabTaskDescriptionHelper(ChromeActivity<?> activity,
+            CustomTabActivityTabProvider tabProvider, TabObserverRegistrar tabObserverRegistrar,
+            BrowserServicesIntentDataProvider intentDataProvider,
+            ActivityLifecycleDispatcher activityLifecycleDispatcher) {
         mActivity = activity;
-        mDefaultThemeColor = defaultThemeColor;
+        mTabProvider = tabProvider;
+        mTabObserverRegistrar = tabObserverRegistrar;
+        mIntentDataProvider = intentDataProvider;
 
-        mTabModelSelector = mActivity.getTabModelSelector();
+        activityLifecycleDispatcher.register(this);
+    }
 
-        mIconGenerator = new CustomTabTaskDescriptionIconGenerator(activity);
+    @Override
+    public void onFinishNativeInitialization() {
+        WebappExtras webappExtras = mIntentDataProvider.getWebappExtras();
+        boolean canUpdate = (webappExtras != null
+                || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && usesSeparateTask()));
+        if (!canUpdate) return;
+
+        mDefaultThemeColor = ApiCompatibilityUtils.getColor(
+                mActivity.getResources(), R.color.default_primary_color);
+        if (webappExtras != null) {
+            if (mIntentDataProvider.hasCustomToolbarColor()) {
+                mDefaultThemeColor = mIntentDataProvider.getToolbarColor();
+            }
+            mForceIcon = webappExtras.icon.bitmap();
+            mForceTitle = webappExtras.shortName;
+        }
+
+        mIconGenerator = new CustomTabTaskDescriptionIconGenerator(mActivity);
         mFaviconHelper = new FaviconHelper();
 
-        mTabObserver = new EmptyTabObserver() {
-            @Override
-            public void onWebContentsSwapped(Tab tab, boolean didStartLoad, boolean didFinishLoad) {
-                if (!didStartLoad) return;
-                resetIcon();
-            }
+        startObserving();
+    }
 
-            @Override
-            public void onFaviconUpdated(Tab tab, Bitmap icon) {
-                if (icon == null) return;
-                updateFavicon(icon);
-            }
-
+    private void startObserving() {
+        mTabObserver = new CustomTabTabObserver() {
             @Override
             public void onUrlUpdated(Tab tab) {
                 updateTaskDescription();
@@ -84,11 +116,6 @@ public class CustomTabTaskDescriptionHelper {
             @Override
             public void onTitleUpdated(Tab tab) {
                 updateTaskDescription();
-            }
-
-            @Override
-            public void onSSLStateUpdated(Tab tab) {
-                if (hasSecurityWarningOrError(tab)) resetIcon();
             }
 
             @Override
@@ -111,62 +138,67 @@ public class CustomTabTaskDescriptionHelper {
             }
 
             @Override
-            public void onDidAttachInterstitialPage(Tab tab) {
-                resetIcon();
+            public void onAttachedToInitialTab(@NonNull Tab tab) {
+                onActiveTabChanged();
             }
 
             @Override
-            public void onDidDetachInterstitialPage(Tab tab) {
-                resetIcon();
-            }
-
-            private boolean hasSecurityWarningOrError(Tab tab) {
-                int securityLevel = tab.getSecurityLevel();
-                return securityLevel == ConnectionSecurityLevel.DANGEROUS;
+            public void onObservingDifferentTab(@NonNull Tab tab) {
+                onActiveTabChanged();
             }
         };
+        mTabObserverRegistrar.registerActivityTabObserver(mTabObserver);
 
-        mTabModelSelectorObserver = new EmptyTabModelSelectorObserver() {
-            @Override
-            public void onTabModelSelected(TabModel newModel, TabModel oldModel) {
-                refreshSelectedTab();
-            }
-        };
+        if (mForceIcon != null) {
+            mIconTabObserver = new CustomTabTabObserver() {
+                @Override
+                public void onWebContentsSwapped(
+                        Tab tab, boolean didStartLoad, boolean didFinishLoad) {
+                    if (!didStartLoad) return;
+                    resetIcon();
+                }
 
-        mTabModelObserver = new TabModelSelectorTabModelObserver(mTabModelSelector) {
-            @Override
-            public void didSelectTab(Tab tab, @TabSelectionType int type, int lastId) {
-                refreshSelectedTab();
-            }
+                @Override
+                public void onFaviconUpdated(Tab tab, Bitmap icon) {
+                    if (icon == null) return;
+                    updateFavicon(icon);
+                }
 
-            @Override
-            public void tabClosureUndone(Tab tab) {
-                refreshSelectedTab();
-            }
+                @Override
+                public void onSSLStateUpdated(Tab tab) {
+                    if (hasSecurityWarningOrError(tab)) resetIcon();
+                }
 
-            @Override
-            public void didCloseTab(int tabId, boolean incognito) {
-                refreshSelectedTab();
-            }
+                @Override
+                public void onDidAttachInterstitialPage(Tab tab) {
+                    resetIcon();
+                }
 
-            @Override
-            public void tabRemoved(Tab tab) {
-                refreshSelectedTab();
-            }
+                @Override
+                public void onDidDetachInterstitialPage(Tab tab) {
+                    resetIcon();
+                }
 
-            @Override
-            public void tabPendingClosure(Tab tab) {
-                refreshSelectedTab();
-            }
+                private boolean hasSecurityWarningOrError(Tab tab) {
+                    boolean isContentDangerous = SecurityStateModel.isContentDangerous(
+                            tab.getWebContents(), ChromeSecurityStateModelDelegate.getInstance());
+                    return isContentDangerous;
+                }
+            };
+            mTabObserverRegistrar.registerActivityTabObserver(mIconTabObserver);
+        }
+    }
 
-            @Override
-            public void multipleTabsPendingClosure(List<Tab> tabs, boolean isAllTabs) {
-                refreshSelectedTab();
-            }
-        };
+    private void stopObserving() {
+        mTabObserverRegistrar.unregisterActivityTabObserver(mTabObserver);
+        mTabObserverRegistrar.unregisterActivityTabObserver(mIconTabObserver);
+    }
 
-        mTabModelSelector.addObserver(mTabModelSelectorObserver);
-        refreshSelectedTab();
+    private void onActiveTabChanged() {
+        updateTaskDescription();
+        if (mForceIcon == null) {
+            fetchIcon();
+        }
     }
 
     private void resetIcon() {
@@ -184,90 +216,89 @@ public class CustomTabTaskDescriptionHelper {
     }
 
     private void updateTaskDescription() {
-        if (mCurrentTab == null) {
-            updateTaskDescription(null, null);
-            return;
-        }
-
-        if (NewTabPage.isNTPUrl(mCurrentTab.getUrl()) && !mCurrentTab.isIncognito()) {
-            // NTP needs a new color in recents, but uses the default application title and icon
-            updateTaskDescription(null, null);
-            return;
-        }
-
-        String label = mCurrentTab.getTitle();
-        String domain = UrlUtilities.getDomainAndRegistry(mCurrentTab.getUrl(), false);
-        if (TextUtils.isEmpty(label)) {
-            label = domain;
-        }
-        if (mLargestFavicon == null && TextUtils.isEmpty(label)) {
-            updateTaskDescription(null, null);
-            return;
-        }
-
-        Bitmap bitmap = null;
-        if (!mCurrentTab.isIncognito()) {
-            bitmap = mIconGenerator.getBitmap(mCurrentTab.getUrl(), mLargestFavicon);
-        }
-
-        updateTaskDescription(label, bitmap);
+        ApiCompatibilityUtils.setTaskDescription(
+                mActivity, computeTitle(), computeIcon(), computeThemeColor());
     }
 
     /**
-     * Update the task description with the specified icon and label.
-     *
-     * <p>
-     * This is only publicly visible to allow activities to set this early during initialization
-     * prior to the tab's being available.
-     *
-     * @param label The text to use in the task description.
-     * @param icon The icon to use in the task description.
+     * Computes the title for the task description.
      */
-    public void updateTaskDescription(String label, Bitmap icon) {
-        int color = mDefaultThemeColor;
-        if (mCurrentTab != null) {
-            if (!TabThemeColorHelper.isDefaultColorUsed(mCurrentTab)) {
-                color = TabThemeColorHelper.getColor(mCurrentTab);
-            }
+    private String computeTitle() {
+        if (!TextUtils.isEmpty(mForceTitle)) return mForceTitle;
+
+        Tab currentTab = mTabProvider.getTab();
+        if (currentTab == null) return null;
+
+        String label = currentTab.getTitle();
+        String domain = UrlUtilities.getDomainAndRegistry(currentTab.getUrlString(), false);
+        if (TextUtils.isEmpty(label)) {
+            label = domain;
         }
-        ApiCompatibilityUtils.setTaskDescription(mActivity, label, icon, color);
+        return label;
     }
 
-    private void refreshSelectedTab() {
-        Tab tab = mTabModelSelector.getCurrentTab();
-        if (mCurrentTab == tab) return;
+    /**
+     * Computes the icon for the task description.
+     */
+    private Bitmap computeIcon() {
+        if (mForceIcon != null) return mForceIcon;
 
-        if (mCurrentTab != null) mCurrentTab.removeObserver(mTabObserver);
+        Tab currentTab = mTabProvider.getTab();
+        if (currentTab == null) return null;
 
-        mCurrentTab = tab;
-        if (mCurrentTab != null) {
-            mCurrentTab.addObserver(mTabObserver);
-
-            final String currentUrl = mCurrentTab.getUrl();
-            mFaviconHelper.getLocalFaviconImageForURL(
-                    mCurrentTab.getProfile(), mCurrentTab.getUrl(), 0, (image, iconUrl) -> {
-                        if (mCurrentTab == null
-                                || !TextUtils.equals(currentUrl, mCurrentTab.getUrl())) {
-                            return;
-                        }
-
-                        updateFavicon(image);
-                    });
+        Bitmap bitmap = null;
+        if (!currentTab.isIncognito()) {
+            bitmap = mIconGenerator.getBitmap(currentTab.getUrlString(), mLargestFavicon);
         }
-        updateTaskDescription();
+        return bitmap;
+    }
+
+    /**
+     * Computes the theme color for the task description.
+     */
+    private int computeThemeColor() {
+        Tab currentTab = mTabProvider.getTab();
+        int themeColor = (currentTab == null || TabThemeColorHelper.isDefaultColorUsed(currentTab))
+                ? mDefaultThemeColor
+                : TabThemeColorHelper.getColor(currentTab);
+        return ColorUtils.getOpaqueColor(themeColor);
+    }
+
+    private void fetchIcon() {
+        Tab currentTab = mTabProvider.getTab();
+        if (currentTab == null) return;
+
+        final String currentUrl = currentTab.getUrlString();
+        mFaviconHelper.getLocalFaviconImageForURL(
+                Profile.fromWebContents(currentTab.getWebContents()), currentTab.getUrlString(), 0,
+                (image, iconUrl) -> {
+                    if (mTabProvider.getTab() == null
+                            || !TextUtils.equals(
+                                    currentUrl, mTabProvider.getTab().getUrlString())) {
+                        return;
+                    }
+
+                    updateFavicon(image);
+                });
+    }
+
+    /**
+     * Returns true when the activity has been launched in a separate task.
+     */
+    private boolean usesSeparateTask() {
+        final int separateTaskFlags =
+                Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NEW_DOCUMENT;
+        return (mActivity.getIntent().getFlags() & separateTaskFlags) != 0;
     }
 
     /**
      * Destroys all dependent components of the task description helper.
      */
+    @Override
     public void destroy() {
-        mFaviconHelper.destroy();
-
-        if (mCurrentTab != null) {
-            mCurrentTab.removeObserver(mTabObserver);
+        if (mFaviconHelper != null) {
+            mFaviconHelper.destroy();
         }
-
-        mTabModelSelector.removeObserver(mTabModelSelectorObserver);
-        mTabModelObserver.destroy();
+        stopObserving();
     }
 }

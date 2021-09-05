@@ -15,7 +15,7 @@ using password_manager::FillData;
 namespace test_helpers {
 
 void SetPasswordFormFillData(const std::string& origin,
-                             const std::string& action,
+                             const char* form_name,
                              const char* username_field,
                              const char* username_value,
                              const char* password_field,
@@ -25,7 +25,7 @@ void SetPasswordFormFillData(const std::string& origin,
                              bool wait_for_username,
                              PasswordFormFillData* form_data) {
   form_data->origin = GURL(origin);
-  form_data->action = GURL(action);
+  form_data->name = base::UTF8ToUTF16(form_name);
   autofill::FormFieldData username;
   username.name = base::UTF8ToUTF16(username_field);
   username.unique_id = base::UTF8ToUTF16(username_field);
@@ -37,18 +37,18 @@ void SetPasswordFormFillData(const std::string& origin,
   password.value = base::UTF8ToUTF16(password_value);
   form_data->password_field = password;
   if (additional_username) {
-    autofill::PasswordAndRealm additional_password_data;
+    autofill::PasswordAndMetadata additional_password_data;
     additional_password_data.password = base::UTF8ToUTF16(additional_password);
     additional_password_data.realm.clear();
     form_data->additional_logins.insert(
-        std::pair<base::string16, autofill::PasswordAndRealm>(
+        std::pair<base::string16, autofill::PasswordAndMetadata>(
             base::UTF8ToUTF16(additional_username), additional_password_data));
   }
   form_data->wait_for_username = wait_for_username;
 }
 
 void SetFillData(const std::string& origin,
-                 const std::string& action,
+                 const char* form_name,
                  const char* username_field,
                  const char* username_value,
                  const char* password_field,
@@ -56,7 +56,7 @@ void SetFillData(const std::string& origin,
                  FillData* fill_data) {
   DCHECK(fill_data);
   fill_data->origin = GURL(origin);
-  fill_data->action = GURL(action);
+  fill_data->name = base::UTF8ToUTF16(form_name);
   fill_data->username_element = base::UTF8ToUTF16(username_field);
   fill_data->username_value = base::UTF8ToUTF16(username_value);
   fill_data->password_element = base::UTF8ToUTF16(password_field);

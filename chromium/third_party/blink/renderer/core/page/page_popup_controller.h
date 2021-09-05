@@ -37,11 +37,12 @@
 
 namespace blink {
 
+class CSSFontSelector;
 class Document;
 class PagePopup;
 class PagePopupClient;
 
-class PagePopupController final : public ScriptWrappable {
+class PagePopupController : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -50,7 +51,6 @@ class PagePopupController final : public ScriptWrappable {
   void setValueAndClosePopup(int num_value, const String& string_value);
   void setValue(const String&);
   void closePopup();
-  void selectFontsFromOwnerDocument(Document* target_document);
   String localizeNumberString(const String&);
   String formatMonth(int year, int zero_base_month);
   String formatShortMonth(int year, int zero_base_month);
@@ -60,8 +60,12 @@ class PagePopupController final : public ScriptWrappable {
   void ClearPagePopupClient();
   void setWindowRect(int x, int y, int width, int height);
 
+  static CSSFontSelector* CreateCSSFontSelector(Document& popup_document);
+
  private:
   PagePopup& popup_;
+
+ protected:
   PagePopupClient* popup_client_;
 };
 

@@ -22,9 +22,28 @@
  *   </template>
  * </dom-module>
  *
+ * In general when an icon is specified using a class, the expectation is the
+ * class will set an image to the --cr-icon-image variable.
+ *
  * Example of using an iron-icon:
  * <link rel="import" href="chrome://resources/cr_elements/icons.html">
  * <cr-icon-button iron-icon="cr:icon-key"></cr-icon-button>
+ *
+ * The color of the icon can be overridden using CSS variables. When using
+ * iron-icon both the fill and stroke can be overridden the variables:
+ * --cr-icon-button-fill-color
+ * --cr-icon-button-fill-color-focus
+ * --cr-icon-button-stroke-color
+ * --cr-icon-button-stroke-color-focus
+ *
+ * When not using iron-icon (ie. specifying --cr-icon-image), the icons support
+ * one color and the 'stroke' variables are ignored.
+ *
+ * The '-focus' variables are used for opaque ripple support. This is enabled
+ * when the 'a11y-enhanced' attribute on <html> is present.
+ *
+ * When using iron-icon's, more than one icon can be specified by setting
+ * the |ironIcon| property to a comma-delimited list of keys.
  */
 Polymer({
   is: 'cr-icon-button',
@@ -41,9 +60,25 @@ Polymer({
       observer: 'disabledChanged_',
     },
 
+    /**
+     * Use this property in order to configure the "tabindex" attribute.
+     */
+    customTabIndex: {
+      type: Number,
+      observer: 'applyTabIndex_',
+    },
+
     ironIcon: {
       type: String,
       observer: 'onIronIconChanged_',
+      reflectToAttribute: true,
+    },
+
+    /** @private */
+    rippleShowing_: {
+      type: Boolean,
+      value: false,
+      reflectToAttribute: true,
     },
   },
 
@@ -56,6 +91,7 @@ Polymer({
   listeners: {
     blur: 'hideRipple_',
     click: 'onClick_',
+    down: 'showRipple_',
     focus: 'showRipple_',
     keydown: 'onKeyDown_',
     keyup: 'onKeyUp_',
@@ -64,16 +100,18 @@ Polymer({
   },
 
   /** @private */
-  hideRipple_: function() {
+  hideRipple_() {
     if (this.hasRipple()) {
       this.getRipple().clear();
+      this.rippleShowing_ = false;
     }
   },
 
   /** @private */
-  showRipple_: function() {
+  showRipple_() {
     if (!this.noink && !this.disabled) {
       this.getRipple().showAndHoldDown();
+      this.rippleShowing_ = true;
     }
   },
 
@@ -82,29 +120,41 @@ Polymer({
    * @param {boolean} oldValue
    * @private
    */
-  disabledChanged_: function(newValue, oldValue) {
-    if (!newValue && oldValue == undefined) {
+  disabledChanged_(newValue, oldValue) {
+    if (!newValue && oldValue === undefined) {
       return;
     }
     if (this.disabled) {
       this.blur();
     }
     this.setAttribute('aria-disabled', this.disabled ? 'true' : 'false');
-    this.setAttribute('tabindex', this.disabled ? '-1' : '0');
+    this.applyTabIndex_();
+  },
+
+  /**
+   * Updates the tabindex HTML attribute to the actual value.
+   * @private
+   */
+  applyTabIndex_() {
+    let value = this.customTabIndex;
+    if (value === undefined) {
+      value = this.disabled ? -1 : 0;
+    }
+    this.setAttribute('tabindex', value);
   },
 
   /**
    * @param {!Event} e
    * @private
    */
-  onClick_: function(e) {
+  onClick_(e) {
     if (this.disabled) {
       e.stopImmediatePropagation();
     }
   },
 
   /** @private */
-  onIronIconChanged_: function() {
+  onIronIconChanged_() {
     this.shadowRoot.querySelectorAll('iron-icon').forEach(el => el.remove());
     if (!this.ironIcon) {
       return;
@@ -129,8 +179,8 @@ Polymer({
    * @param {!KeyboardEvent} e
    * @private
    */
-  onKeyDown_: function(e) {
-    if (e.key != ' ' && e.key != 'Enter') {
+  onKeyDown_(e) {
+    if (e.key !== ' ' && e.key !== 'Enter') {
       return;
     }
 
@@ -140,7 +190,7 @@ Polymer({
       return;
     }
 
-    if (e.key == 'Enter') {
+    if (e.key === 'Enter') {
       this.click();
     }
   },
@@ -149,19 +199,19 @@ Polymer({
    * @param {!KeyboardEvent} e
    * @private
    */
-  onKeyUp_: function(e) {
-    if (e.key == ' ' || e.key == 'Enter') {
+  onKeyUp_(e) {
+    if (e.key === ' ' || e.key === 'Enter') {
       e.preventDefault();
       e.stopPropagation();
     }
 
-    if (e.key == ' ') {
+    if (e.key === ' ') {
       this.click();
     }
   },
 
   // customize the element's ripple
-  _createRipple: function() {
+  _createRipple() {
     this._rippleContainer = this.$.icon;
     const ripple = Polymer.PaperRippleBehavior._createRipple();
     ripple.id = 'ink';

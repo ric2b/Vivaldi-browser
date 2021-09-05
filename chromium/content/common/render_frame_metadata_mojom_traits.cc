@@ -7,6 +7,7 @@
 #include "build/build_config.h"
 #include "mojo/public/cpp/base/time_mojom_traits.h"
 #include "services/viz/public/cpp/compositing/selection_mojom_traits.h"
+#include "services/viz/public/cpp/compositing/vertical_scroll_direction_mojom_traits.h"
 #include "ui/gfx/geometry/mojom/geometry_mojom_traits.h"
 #include "ui/gfx/mojom/selection_bound_mojom_traits.h"
 
@@ -28,6 +29,9 @@ bool StructTraits<content::mojom::RenderFrameMetadataDataView,
 #if defined(OS_ANDROID)
   out->bottom_controls_height = data.bottom_controls_height();
   out->bottom_controls_shown_ratio = data.bottom_controls_shown_ratio();
+  out->top_controls_min_height_offset = data.top_controls_min_height_offset();
+  out->bottom_controls_min_height_offset =
+      data.bottom_controls_min_height_offset();
   out->min_page_scale_factor = data.min_page_scale_factor();
   out->max_page_scale_factor = data.max_page_scale_factor();
   out->root_overflow_y_hidden = data.root_overflow_y_hidden();
@@ -40,7 +44,9 @@ bool StructTraits<content::mojom::RenderFrameMetadataDataView,
          data.ReadRootLayerSize(&out->root_layer_size) &&
 #endif
          data.ReadViewportSizeInPixels(&out->viewport_size_in_pixels) &&
-         data.ReadLocalSurfaceIdAllocation(&out->local_surface_id_allocation);
+         data.ReadLocalSurfaceIdAllocation(&out->local_surface_id_allocation) &&
+         data.ReadNewVerticalScrollDirection(
+             &out->new_vertical_scroll_direction);
 }
 
 }  // namespace mojo

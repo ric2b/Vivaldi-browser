@@ -8,7 +8,7 @@
 
 #include "browser/menus/vivaldi_menu_enums.h"
 #include "components/renderer_context_menu/render_view_context_menu_observer.h"
-#include "notes/notesnode.h"
+#include "notes/note_node.h"
 #include "notes/notes_submenu_observer_helper.h"
 #include "ui/base/models/simple_menu_model.h"
 
@@ -36,7 +36,7 @@ public:
   int get_root_id() { return root_id_; }
 
 private:
-  typedef std::map<ui::MenuModel*, vivaldi::Notes_Node*> MenuModelToNotesMap;
+  typedef std::map<ui::MenuModel*, vivaldi::NoteNode*> MenuModelToNotesMap;
 
   std::unique_ptr<NotesSubMenuObserverHelper> helper_;
   // The interface for adding a submenu to the parent.

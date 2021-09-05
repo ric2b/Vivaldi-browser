@@ -33,20 +33,22 @@ mojo.internal.Struct(
 {%- endfor %}
     ]);
 
+{% if generate_struct_deserializers %}
+{{module.namespace}}.{{struct.name}}_Deserialize =
+    mojo.internal.createStructDeserializer({{module.namespace}}.{{struct.name}}Spec.$);
+{% endif %}
+
 {%  if generate_closure_exports -%}
 goog.provide('{{module.namespace}}.{{struct.name}}');
 
-{% if struct.packed.packed_fields %}
-/**
- * @typedef { {
+/** @record */
+{{module.namespace}}.{{struct.name}} = class {
+  constructor() {
 {%- for packed_field in struct.packed.packed_fields %}
- *   {{packed_field.field.name}}: {{packed_field.field.kind|lite_closure_field_type}},
+    /** @type { {{packed_field.field.kind|lite_closure_field_type}} } */
+    this.{{packed_field.field.name}};
 {%-  endfor %}
- * } }
- */
-{% else %}
-/** @typedef {Object} */
-{% endif %}
-{{module.namespace}}.{{struct.name}};
+  }
+};
 
 {%- endif %}

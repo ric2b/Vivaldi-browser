@@ -17,8 +17,8 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
-import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge;
+import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.sync.SyncTestRule.DataCriteria;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
@@ -90,7 +90,7 @@ public class BookmarksTest {
     @Before
     public void setUp() throws Exception {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            mBookmarkBridge = new BookmarkBridge(Profile.getLastUsedProfile());
+            mBookmarkBridge = new BookmarkBridge(Profile.getLastUsedRegularProfile());
             // The BookmarkBridge needs to know how to handle partner bookmarks.
             // Without this call to fake that knowledge for testing, it crashes.
             mBookmarkBridge.loadEmptyPartnerBookmarkShimForTesting();
@@ -469,8 +469,8 @@ public class BookmarksTest {
         for (Pair<String, JSONObject> rawBookmark : rawBookmarks) {
             String id = rawBookmark.first;
             JSONObject json = rawBookmark.second;
-            bookmarks.add(new Bookmark(id, json.getString("title"), json.optString("url", null),
-                    json.getString("parent_id")));
+            bookmarks.add(new Bookmark(id, json.getString("legacy_canonicalized_title"),
+                    json.optString("url", null), json.getString("parent_id")));
         }
         return bookmarks;
     }
@@ -483,7 +483,7 @@ public class BookmarksTest {
             String id = entity.getIdString();
             String parentId = entity.getParentIdString();
             BookmarkSpecifics specifics = entity.getSpecifics().getBookmark();
-            bookmarks.add(new Bookmark(id, specifics.getTitle(),
+            bookmarks.add(new Bookmark(id, specifics.getLegacyCanonicalizedTitle(),
                     entity.getFolder() ? null : specifics.getUrl(), parentId));
         }
         return bookmarks;

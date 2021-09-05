@@ -23,11 +23,12 @@
 #include "base/strings/string_piece.h"
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
+#include "base/task/thread_pool.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
-#include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/system/data_pipe.h"
@@ -46,8 +47,8 @@
 
 namespace network {
 
-const size_t SimpleURLLoader::kMaxBoundedStringDownloadSize = 1024 * 1024;
-const size_t SimpleURLLoader::kMaxUploadStringSizeToCopy = 256 * 1024;
+constexpr size_t SimpleURLLoader::kMaxBoundedStringDownloadSize;
+constexpr size_t SimpleURLLoader::kMaxUploadStringSizeToCopy;
 
 namespace {
 
@@ -229,6 +230,7 @@ class SimpleURLLoaderImpl : public SimpleURLLoader,
       uint64_t length = std::numeric_limits<uint64_t>::max()) override;
   void SetRetryOptions(int max_retries, int retry_mode) override;
   void SetURLLoaderFactoryOptions(uint32_t options) override;
+  void SetRequestID(int32_t request_id) override;
   void SetTimeoutDuration(base::TimeDelta timeout_duration) override;
 
   int NetError() const override;
@@ -324,16 +326,16 @@ class SimpleURLLoaderImpl : public SimpleURLLoader,
     return task_priority;
   }
 
-  // Bound to the URLLoaderClient message pipe (|client_binding_|) via
-  // set_connection_error_handler.
-  void OnConnectionError();
+  // Bound to the URLLoaderClient message pipe (|client_receiver_|) via
+  // set_disconnect_handler.
+  void OnMojoDisconnect();
 
   // Completes the request by calling FinishWithResult() if OnComplete() was
   // called and either no body pipe was ever received, or the body pipe was
   // closed.
   void MaybeComplete();
 
-  std::vector<OnRedirectCallback> on_redirect_callback_;
+  OnRedirectCallback on_redirect_callback_;
   OnResponseStartedCallback on_response_started_callback_;
   UploadProgressCallback on_upload_progress_callback_;
   DownloadProgressCallback on_download_progress_callback_;
@@ -344,6 +346,7 @@ class SimpleURLLoaderImpl : public SimpleURLLoader,
   int remaining_retries_ = 0;
   int retry_mode_ = RETRY_NEVER;
   uint32_t url_loader_factory_options_ = 0;
+  int32_t request_id_ = 0;
 
   // The next values contain all the information required to restart the
   // request.
@@ -357,8 +360,8 @@ class SimpleURLLoaderImpl : public SimpleURLLoader,
   mojo::Remote<mojom::URLLoaderFactory> url_loader_factory_remote_;
   std::unique_ptr<BodyHandler> body_handler_;
 
-  mojo::Binding<mojom::URLLoaderClient> client_binding_;
-  mojom::URLLoaderPtr url_loader_;
+  mojo::Receiver<mojom::URLLoaderClient> client_receiver_{this};
+  mojo::Remote<mojom::URLLoader> url_loader_;
 
   std::unique_ptr<StringUploadDataPipeGetter> string_upload_data_pipe_getter_;
 
@@ -851,8 +854,8 @@ class SaveToFileBodyHandler : public BodyHandler {
                base::TaskPriority priority,
                base::RepeatingCallback<void(int64_t)> progress_callback)
         : body_handler_task_runner_(base::SequencedTaskRunnerHandle::Get()),
-          file_writer_task_runner_(base::CreateSequencedTaskRunner(
-              {base::ThreadPool(), base::MayBlock(), priority,
+          file_writer_task_runner_(base::ThreadPool::CreateSequencedTaskRunner(
+              {base::MayBlock(), priority,
                base::TaskShutdownBehavior::BLOCK_SHUTDOWN})),
           path_(path),
           create_temp_file_(create_temp_file),
@@ -1150,7 +1153,6 @@ SimpleURLLoaderImpl::SimpleURLLoaderImpl(
     const net::NetworkTrafficAnnotationTag& annotation_tag)
     : resource_request_(std::move(resource_request)),
       annotation_tag_(annotation_tag),
-      client_binding_(this),
       request_state_(std::make_unique<RequestState>()),
       final_url_(resource_request_->url),
       timeout_timer_(timeout_tick_clock_) {
@@ -1243,8 +1245,7 @@ void SimpleURLLoaderImpl::SetOnRedirectCallback(
   // Check if a request has not yet been started.
   DCHECK(!body_handler_);
 
-  on_redirect_callback_.push_back(on_redirect_callback);
-  DCHECK(on_redirect_callback);
+  on_redirect_callback_ = on_redirect_callback;
 }
 
 void SimpleURLLoaderImpl::SetOnResponseStartedCallback(
@@ -1292,8 +1293,8 @@ void SimpleURLLoaderImpl::AttachStringForUpload(
     const std::string& upload_content_type) {
   // Currently only allow a single string to be attached.
   DCHECK(!resource_request_->request_body);
-  DCHECK(resource_request_->method != "GET" &&
-         resource_request_->method != "HEAD");
+  DCHECK(resource_request_->method != net::HttpRequestHeaders::kGetMethod &&
+         resource_request_->method != net::HttpRequestHeaders::kHeadMethod);
 
   resource_request_->request_body = new ResourceRequestBody();
 
@@ -1322,8 +1323,8 @@ void SimpleURLLoaderImpl::AttachFileForUpload(
 
   // Currently only allow a single file to be attached.
   DCHECK(!resource_request_->request_body);
-  DCHECK(resource_request_->method != "GET" &&
-         resource_request_->method != "HEAD");
+  DCHECK(resource_request_->method != net::HttpRequestHeaders::kGetMethod &&
+         resource_request_->method != net::HttpRequestHeaders::kHeadMethod);
 
   // Create an empty body to make DCHECKing that there's no upload body yet
   // simpler.
@@ -1365,6 +1366,12 @@ void SimpleURLLoaderImpl::SetURLLoaderFactoryOptions(uint32_t options) {
   // Check if a request has not yet been started.
   DCHECK(!body_handler_);
   url_loader_factory_options_ = options;
+}
+
+void SimpleURLLoaderImpl::SetRequestID(int32_t request_id) {
+  // Check if a request has not yet been started.
+  DCHECK(!body_handler_);
+  request_id_ = request_id;
 }
 
 void SimpleURLLoaderImpl::SetTimeoutDuration(base::TimeDelta timeout_duration) {
@@ -1457,7 +1464,7 @@ void SimpleURLLoaderImpl::FinishWithResult(int net_error) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!request_state_->finished);
 
-  client_binding_.Close();
+  client_receiver_.reset();
   url_loader_.reset();
   timeout_timer_.Stop();
 
@@ -1508,10 +1515,6 @@ void SimpleURLLoaderImpl::StartRequest(
   if (on_upload_progress_callback_)
     resource_request_->enable_upload_progress = true;
 
-  mojom::URLLoaderClientPtr client_ptr;
-  client_binding_.Bind(mojo::MakeRequest(&client_ptr));
-  client_binding_.set_connection_error_handler(base::BindOnce(
-      &SimpleURLLoaderImpl::OnConnectionError, base::Unretained(this)));
   // Data elements that use pipes aren't reuseable, currently (Since the IPC
   // code doesn't call the Clone() method), so need to create another one, if
   // uploading a string via a data pipe.
@@ -1521,9 +1524,12 @@ void SimpleURLLoaderImpl::StartRequest(
         string_upload_data_pipe_getter_->GetRemoteForNewUpload());
   }
   url_loader_factory->CreateLoaderAndStart(
-      mojo::MakeRequest(&url_loader_), 0 /* routing_id */, 0 /* request_id */,
-      url_loader_factory_options_, *resource_request_, std::move(client_ptr),
+      url_loader_.BindNewPipeAndPassReceiver(), 0 /* routing_id */, request_id_,
+      url_loader_factory_options_, *resource_request_,
+      client_receiver_.BindNewPipeAndPassRemote(),
       net::MutableNetworkTrafficAnnotationTag(annotation_tag_));
+  client_receiver_.set_disconnect_handler(base::BindOnce(
+      &SimpleURLLoaderImpl::OnMojoDisconnect, base::Unretained(this)));
 
   // Note that this ends up restarting the timer on each retry.
   if (!timeout_duration_.is_zero()) {
@@ -1546,7 +1552,7 @@ void SimpleURLLoaderImpl::Retry() {
   DCHECK_GT(remaining_retries_, 0);
   --remaining_retries_;
 
-  client_binding_.Close();
+  client_receiver_.reset();
   url_loader_.reset();
 
   request_state_ = std::make_unique<RequestState>();
@@ -1609,15 +1615,13 @@ void SimpleURLLoaderImpl::OnReceiveRedirect(
   }
 
   std::vector<std::string> removed_headers;
-  for (auto callback : on_redirect_callback_) {
-    if (callback) {
-      base::WeakPtr<SimpleURLLoaderImpl> weak_this =
-          weak_ptr_factory_.GetWeakPtr();
-      callback.Run(redirect_info, *response_head, &removed_headers);
-      // If deleted by the callback, bail now.
-      if (!weak_this)
-        return;
-    }
+  if (on_redirect_callback_) {
+    base::WeakPtr<SimpleURLLoaderImpl> weak_this =
+        weak_ptr_factory_.GetWeakPtr();
+    on_redirect_callback_.Run(redirect_info, *response_head, &removed_headers);
+    // If deleted by the callback, bail now.
+    if (!weak_this)
+      return;
   }
 
   final_url_ = redirect_info.new_url;
@@ -1659,8 +1663,8 @@ void SimpleURLLoaderImpl::OnComplete(const URLLoaderCompletionStatus& status) {
   DCHECK(!request_state_->finished);
   DCHECK(!request_state_->request_completed);
 
-  // Close pipes to ignore any subsequent close notification.
-  client_binding_.Close();
+  // Reset pipes to ignore any subsequent close notification.
+  client_receiver_.reset();
   url_loader_.reset();
 
   request_state_->request_completed = true;
@@ -1675,7 +1679,7 @@ void SimpleURLLoaderImpl::OnComplete(const URLLoaderCompletionStatus& status) {
   MaybeComplete();
 }
 
-void SimpleURLLoaderImpl::OnConnectionError() {
+void SimpleURLLoaderImpl::OnMojoDisconnect() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // |this| closes the pipe to the URLLoader in OnComplete(), so this method
   // being called indicates the pipe was closed before completion, most likely
@@ -1707,6 +1711,14 @@ void SimpleURLLoaderImpl::MaybeComplete() {
   // read more data.
   if (request_state_->body_started && !request_state_->body_completed)
     return;
+
+  // DNS errors can be transient, and due to other issues, especially with
+  // DoH. If required, retry.
+  if (request_state_->net_error == net::ERR_NAME_NOT_RESOLVED &&
+      remaining_retries_ > 0 && (retry_mode_ & RETRY_ON_NAME_NOT_RESOLVED)) {
+    Retry();
+    return;
+  }
 
   // Retry on network change errors. Waiting for body complete isn't strictly
   // necessary, but it guarantees a consistent situation, with no reads pending

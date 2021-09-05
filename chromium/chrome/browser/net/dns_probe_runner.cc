@@ -12,6 +12,8 @@
 #include "net/base/address_list.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/net_errors.h"
+#include "net/base/network_isolation_key.h"
+#include "net/dns/public/resolve_error_info.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 
 namespace chrome_browser_net {
@@ -93,9 +95,13 @@ void DnsProbeRunner::RunProbe(base::OnceClosure callback) {
       network::mojom::ResolveHostParameters::New();
   parameters->dns_query_type = net::DnsQueryType::A;
   parameters->source = net::HostResolverSource::DNS;
-  parameters->allow_cached_response = false;
+  parameters->cache_usage =
+      network::mojom::ResolveHostParameters::CacheUsage::DISALLOWED;
 
+  // Use transient NIKs - don't want cached responses anyways, so no benefit
+  // from sharing a cache, beyond multiple probes not evicting anything.
   host_resolver_->ResolveHost(net::HostPortPair(kKnownGoodHostname, 80),
+                              net::NetworkIsolationKey::CreateTransient(),
                               std::move(parameters),
                               receiver_.BindNewPipeAndPassRemote());
   receiver_.set_disconnect_handler(base::BindOnce(
@@ -111,11 +117,12 @@ bool DnsProbeRunner::IsRunning() const {
 
 void DnsProbeRunner::OnComplete(
     int32_t result,
+    const net::ResolveErrorInfo& resolve_error_info,
     const base::Optional<net::AddressList>& resolved_addresses) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!callback_.is_null());
 
-  result_ = EvaluateResponse(result, resolved_addresses);
+  result_ = EvaluateResponse(resolve_error_info.error, resolved_addresses);
   receiver_.reset();
 
   // ResolveHost will call OnComplete asynchronously, so callback_ can be
@@ -133,7 +140,8 @@ void DnsProbeRunner::CreateHostResolver() {
 void DnsProbeRunner::OnMojoConnectionError() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   CreateHostResolver();
-  OnComplete(net::ERR_FAILED, base::nullopt);
+  OnComplete(net::ERR_NAME_NOT_RESOLVED, net::ResolveErrorInfo(net::ERR_FAILED),
+             base::nullopt);
 }
 
 }  // namespace chrome_browser_net

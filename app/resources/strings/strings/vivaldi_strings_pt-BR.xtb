@@ -1,10 +1,14 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="pt-BR">
+<translation id="1974060860693918893">Avançado</translation>
 <translation id="2392002507524894126">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. 
 Todos os direitos reservados.</translation>
+<translation id="335985608243443814">Navegar...</translation>
 <translation id="3850557856045828465">Aviso: O Vivaldi não impede que as extensões vejam seu histórico de navegação ou enviem ele para algum servidor. Para desativar esta extensão no modo privado, desmarque esta opção.</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
+<translation id="4619978527973181021">Aceitar e Instalar</translation>
+<translation id="5247376421371319618">Aceitar e Atualizar</translation>
 <translation id="5743878272102782872">Gerenciador de Tarefas - Vivaldi</translation>
 <translation id="6213772951145281007">Limpar cookies e dados de sites ao sair do Vivaldi</translation>
 </translationbundle>

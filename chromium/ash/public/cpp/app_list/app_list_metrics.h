@@ -85,9 +85,12 @@ enum SearchResultType {
 };
 
 ASH_PUBLIC_EXPORT void RecordSearchResultOpenTypeHistogram(
-    ash::AppListLaunchedFrom launch_location,
+    AppListLaunchedFrom launch_location,
     SearchResultType type,
     bool is_tablet_mode);
+
+ASH_PUBLIC_EXPORT void RecordDefaultSearchResultOpenTypeHistogram(
+    SearchResultType type);
 
 ASH_PUBLIC_EXPORT void RecordZeroStateSuggestionOpenTypeHistogram(
     SearchResultType type);
@@ -95,7 +98,7 @@ ASH_PUBLIC_EXPORT void RecordZeroStateSuggestionOpenTypeHistogram(
 ASH_PUBLIC_EXPORT void RecordLauncherIssuedSearchQueryLength(int query_length);
 
 ASH_PUBLIC_EXPORT void RecordSuccessfulAppLaunchUsingSearch(
-    ash::AppListLaunchedFrom launched_from,
+    AppListLaunchedFrom launched_from,
     int query_length);
 
 }  // namespace ash

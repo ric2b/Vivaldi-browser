@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "app/vivaldi_resources.h"
+#include "base/guid.h"
 #include "base/i18n/string_compare.h"
 #include "base/i18n/string_search.h"
 #include "base/memory/ptr_util.h"
@@ -19,8 +20,9 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/profiles/profile.h"
 #include "importer/imported_notes_entry.h"
+#include "notes/note_node.h"
 #include "notes/notes_storage.h"
-#include "notes/notesnode.h"
+#include "sync/notes/note_sync_service.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/tree_node_iterator.h"
 
@@ -28,6 +30,7 @@ using base::Time;
 
 namespace vivaldi {
 namespace {
+const char kNullGuid[] = "00000000-0000-0000-0000-000000000000";
 // Comparator used when sorting notes. Folders are sorted first, then
 // notes.
 class SortComparator {
@@ -35,8 +38,8 @@ class SortComparator {
   explicit SortComparator(icu::Collator* collator) : collator_(collator) {}
 
   // Returns true if |n1| preceeds |n2|.
-  bool operator()(const std::unique_ptr<Notes_Node>& n1,
-                  const std::unique_ptr<Notes_Node>& n2) {
+  bool operator()(const std::unique_ptr<NoteNode>& n1,
+                  const std::unique_ptr<NoteNode>& n2) {
     if (n1->type() == n2->type()) {
       // Types are the same, compare the names.
       if (!collator_)
@@ -57,13 +60,14 @@ static const char kNotes[] = "Notes";
 static const char kOtherNotes[] = "Other Notes";
 
 // Helper to get a mutable notes node.
-Notes_Node* AsMutable(const Notes_Node* node) {
-  return const_cast<Notes_Node*>(node);
+NoteNode* AsMutable(const NoteNode* node) {
+  return const_cast<NoteNode*>(node);
 }
 
-Notes_Model::Notes_Model(content::BrowserContext* context)
+NotesModel::NotesModel(content::BrowserContext* context,
+                       sync_notes::NoteSyncService* sync_service)
     : context_(context),
-      root_(0),
+      root_(0, NoteNode::RootNodeGuid(), NoteNode::FOLDER),
       main_node_(nullptr),
       other_node_(nullptr),
       trash_node_(nullptr),
@@ -71,11 +75,12 @@ Notes_Model::Notes_Model(content::BrowserContext* context)
       loaded_signal_(base::WaitableEvent::ResetPolicy::MANUAL,
                      base::WaitableEvent::InitialState::NOT_SIGNALED),
       extensive_changes_(0),
-      current_index_(0) {  // root_ has 0
-  root_.SetType(Notes_Node::FOLDER);
-}
+      current_index_(0),  // root_ has 0
+      sync_service_(sync_service)
 
-Notes_Model::~Notes_Model() {
+{}
+
+NotesModel::~NotesModel() {
   for (auto& observer : observers_)
     observer.NotesModelBeingDeleted(this);
 
@@ -86,41 +91,37 @@ Notes_Model::~Notes_Model() {
   }
 }
 
-void Notes_Model::Shutdown() {
+void NotesModel::Shutdown() {
   if (loaded_)
     return;
 
   // See comment in HistoryService::ShutdownOnUIThread where this is invoked for
-  // details. It is also called when the Notes_Model is deleted.
+  // details. It is also called when the NotesModel is deleted.
   loaded_signal_.Signal();
 }
 
-// Static
-std::unique_ptr<Notes_Model> Notes_Model::CreateModel() {
-  std::unique_ptr<Notes_Model> model(new Notes_Model(NULL));
-  std::unique_ptr<NotesLoadDetails> details(model->CreateLoadDetails());
-  model->DoneLoading(std::move(details));
+/*static*/
+std::unique_ptr<NotesModel> NotesModel::CreateForTests() {
+  auto model = std::make_unique<NotesModel>(nullptr, nullptr);
+  model->DoneLoading(model->CreateLoadDetails());
   return model;
 }
 
-std::unique_ptr<NotesLoadDetails> Notes_Model::CreateLoadDetails() {
-  Notes_Node* main_node = new Notes_Node(GetNewIndex());
-  main_node->SetType(Notes_Node::FOLDER);
+std::unique_ptr<NotesLoadDetails> NotesModel::CreateLoadDetails() {
+  NoteNode* main_node = new PermanentNoteNode(GetNewIndex(), NoteNode::MAIN);
   main_node->SetTitle(base::ASCIIToUTF16(kNotes));
 
-  Notes_Node* other_node = new Notes_Node(GetNewIndex());
-  other_node->SetType(Notes_Node::OTHER);
+  NoteNode* other_node = new PermanentNoteNode(GetNewIndex(), NoteNode::OTHER);
   other_node->SetTitle(base::ASCIIToUTF16(kOtherNotes));
 
-  Notes_Node* trash_node = new Notes_Node(GetNewIndex());
-  trash_node->SetType(Notes_Node::TRASH);
+  NoteNode* trash_node = new PermanentNoteNode(GetNewIndex(), NoteNode::TRASH);
   trash_node->SetTitle(l10n_util::GetStringUTF16(IDS_NOTES_TRASH_FOLDER_NAME));
 
   return base::WrapUnique(
       new NotesLoadDetails(main_node, other_node, trash_node, current_index_));
 }
 
-void Notes_Model::Load(
+void NotesModel::Load(
     const scoped_refptr<base::SequencedTaskRunner>& task_runner) {
   if (store_.get()) {
     // If the store is non-null, it means Load was already invoked. Load should
@@ -134,7 +135,7 @@ void Notes_Model::Load(
   store_->LoadNotes(CreateLoadDetails());
 }
 
-void Notes_Model::DoneLoading(std::unique_ptr<NotesLoadDetails> details) {
+void NotesModel::DoneLoading(std::unique_ptr<NotesLoadDetails> details) {
   DCHECK(details);
   if (loaded_) {
     // We should only ever be loaded once.
@@ -143,7 +144,7 @@ void Notes_Model::DoneLoading(std::unique_ptr<NotesLoadDetails> details) {
   }
 
   if (details->computed_checksum() != details->stored_checksum() ||
-      details->ids_reassigned()) {
+      details->ids_reassigned() || details->guids_reassigned()) {
     // If notes file changed externally, the IDs may have changed
     // externally. In that case, the decoder may have reassigned IDs to make
     // them unique. So when the file has changed externally, we should save the
@@ -151,10 +152,10 @@ void Notes_Model::DoneLoading(std::unique_ptr<NotesLoadDetails> details) {
     if (store_.get())
       store_->ScheduleSave();
   }
-  std::unique_ptr<Notes_Node> main_node_owned = details->release_notes_node();
-  std::unique_ptr<Notes_Node> other_node_owned =
+  std::unique_ptr<NoteNode> main_node_owned = details->release_notes_node();
+  std::unique_ptr<NoteNode> other_node_owned =
       details->release_other_notes_node();
-  std::unique_ptr<Notes_Node> trash_node_owned =
+  std::unique_ptr<NoteNode> trash_node_owned =
       details->release_trash_notes_node();
   main_node_ = main_node_owned.get();
   other_node_ = other_node_owned.get();
@@ -166,9 +167,14 @@ void Notes_Model::DoneLoading(std::unique_ptr<NotesLoadDetails> details) {
 
   loaded_ = true;
 
-  // Check if we have trash and add it if we don't.
-  trash_node_ = GetOrCreateTrashNode();
-
+  if (sync_service_) {
+    sync_service_->DecodeNoteSyncMetadata(
+        details->sync_metadata_str(),
+        store_ ? base::BindRepeating(&NotesStorage::ScheduleSave,
+                                    base::Unretained(store_.get()))
+              : base::DoNothing(),
+        this);
+  }
   loaded_signal_.Signal();
 
   // Notify our direct observers.
@@ -176,14 +182,14 @@ void Notes_Model::DoneLoading(std::unique_ptr<NotesLoadDetails> details) {
     observer.NotesModelLoaded(this, details->ids_reassigned());
 }
 
-void Notes_Model::GetNotes(std::vector<Notes_Model::URLAndTitle>* notes) {
+void NotesModel::GetNotes(std::vector<NotesModel::URLAndTitle>* notes) {
   base::AutoLock url_lock(url_lock_);
   const GURL* last_url = NULL;
   for (auto* i : nodes_ordered_by_url_set_) {
     const GURL* url = &(i->GetURL());
     // Only add unique URLs.
     if (!last_url || *url != *last_url) {
-      Notes_Model::URLAndTitle note;
+      NotesModel::URLAndTitle note;
       note.url = *url;
       note.title = i->GetTitle();
       note.content = i->GetContent();
@@ -193,15 +199,15 @@ void Notes_Model::GetNotes(std::vector<Notes_Model::URLAndTitle>* notes) {
   }
 }
 
-void Notes_Model::BlockTillLoaded() {
+void NotesModel::BlockTillLoaded() {
   loaded_signal_.Wait();
 }
 
-bool Notes_Model::LoadNotes() {
+bool NotesModel::LoadNotes() {
   return false;
 }
 
-bool Notes_Model::SaveNotes() {
+bool NotesModel::SaveNotes() {
   if (store_.get()) {
     store_->ScheduleSave();
     return true;
@@ -209,22 +215,22 @@ bool Notes_Model::SaveNotes() {
   return false;
 }
 
-void Notes_Model::AddObserver(NotesModelObserver* observer) {
+void NotesModel::AddObserver(NotesModelObserver* observer) {
   observers_.AddObserver(observer);
 }
 
-void Notes_Model::RemoveObserver(NotesModelObserver* observer) {
+void NotesModel::RemoveObserver(NotesModelObserver* observer) {
   observers_.RemoveObserver(observer);
 }
 
-void Notes_Model::BeginExtensiveChanges() {
+void NotesModel::BeginExtensiveChanges() {
   if (++extensive_changes_ == 1) {
     for (auto& observer : observers_)
       observer.ExtensiveNotesChangesBeginning(this);
   }
 }
 
-void Notes_Model::EndExtensiveChanges() {
+void NotesModel::EndExtensiveChanges() {
   --extensive_changes_;
   DCHECK_GE(extensive_changes_, 0);
   if (extensive_changes_ == 0) {
@@ -233,10 +239,10 @@ void Notes_Model::EndExtensiveChanges() {
   }
 }
 
-Notes_Node* Notes_Model::AddNode(Notes_Node* parent,
-                                 int index,
-                                 std::unique_ptr<Notes_Node> node) {
-  Notes_Node* node_ptr = node.get();
+NoteNode* NotesModel::AddNode(NoteNode* parent,
+                              int index,
+                              std::unique_ptr<NoteNode> node) {
+  NoteNode* node_ptr = node.get();
   if (!parent)
     parent = &root_;
 
@@ -251,18 +257,30 @@ Notes_Node* Notes_Model::AddNode(Notes_Node* parent,
   return node_ptr;
 }
 
-Notes_Node* Notes_Model::AddNote(const Notes_Node* parent,
-                                 size_t index,
-                                 const base::string16& subject,
-                                 const GURL& url,
-                                 const base::string16& content) {
+NoteNode* NotesModel::AddNote(const NoteNode* parent,
+                              size_t index,
+                              const base::string16& title,
+                              const GURL& url,
+                              const base::string16& content,
+                              base::Optional<base::Time> creation_time,
+                              base::Optional<std::string> guid) {
   if (!loaded_)
     return NULL;
 
+  if (guid)
+    DCHECK(base::IsValidGUIDOutputString(*guid));
+  else
+    guid = base::GenerateGUID();
+
+  if (!creation_time)
+    creation_time = Time::Now();
+
   int64_t id = GetNewIndex();
 
-  std::unique_ptr<Notes_Node> new_node = std::make_unique<Notes_Node>(id);
-  new_node->SetTitle(subject);
+  std::unique_ptr<NoteNode> new_node =
+      std::make_unique<NoteNode>(id, *guid, NoteNode::NOTE);
+  new_node->SetTitle(title);
+  new_node->SetCreationTime(*creation_time);
   new_node->SetContent(content);
   new_node->SetURL(url);
 
@@ -275,47 +293,78 @@ Notes_Node* Notes_Model::AddNote(const Notes_Node* parent,
   return AddNode(AsMutable(parent), index, std::move(new_node));
 }
 
-Notes_Node* Notes_Model::AddNote(const Notes_Node* parent,
+NoteNode* NotesModel::ImportNote(const NoteNode* parent,
                                  size_t index,
-                                 bool is_folder,
                                  const ImportedNotesEntry& note) {
   if (!loaded_)
     return NULL;
 
   int64_t id = GetNewIndex();
 
-  std::unique_ptr<Notes_Node> new_node = std::make_unique<Notes_Node>(id);
+  std::unique_ptr<NoteNode> new_node = std::make_unique<NoteNode>(
+      id, base::GenerateGUID(),
+      note.is_folder ? NoteNode::FOLDER : NoteNode::NOTE);
   new_node->SetTitle(note.title);
   new_node->SetCreationTime(note.creation_time);
 
-  if (is_folder) {
-    new_node->SetType(Notes_Node::FOLDER);
-  } else {
+  if (!note.is_folder) {
     new_node->SetURL(note.url);
     new_node->SetContent(note.content);
   }
   return AddNode(AsMutable(parent), index, std::move(new_node));
 }
 
-Notes_Node* Notes_Model::AddFolder(const Notes_Node* parent,
-                                   size_t index,
-                                   const base::string16& name) {
+NoteNode* NotesModel::AddFolder(const NoteNode* parent,
+                                size_t index,
+                                const base::string16& name,
+                                base::Optional<std::string> guid) {
   DCHECK(loaded_);
   if (!loaded_)
     return NULL;
 
+  if (guid)
+    DCHECK(base::IsValidGUIDOutputString(*guid));
+  else
+    guid = base::GenerateGUID();
+
   int64_t id = GetNewIndex();
-  std::unique_ptr<Notes_Node> new_node = std::make_unique<Notes_Node>(id);
+  std::unique_ptr<NoteNode> new_node =
+      std::make_unique<NoteNode>(id, *guid, NoteNode::FOLDER);
   new_node->SetTitle(name);
-  new_node->SetType(Notes_Node::FOLDER);
   DCHECK(new_node->GetTitle() == name);
   DCHECK(new_node->is_folder());
 
   return AddNode(AsMutable(parent), index, std::move(new_node));
 }
 
-void Notes_Model::SetTitle(const Notes_Node* node,
-                           const base::string16& title) {
+NoteNode* NotesModel::AddSeparator(const NoteNode* parent,
+                                   size_t index,
+                                   base::Optional<base::string16> name,
+                                   base::Optional<base::Time> creation_time,
+                                   base::Optional<std::string> guid) {
+  DCHECK(loaded_);
+  if (!loaded_)
+    return NULL;
+
+  if (guid)
+    DCHECK(base::IsValidGUIDOutputString(*guid));
+  else
+    guid = base::GenerateGUID();
+
+  if (!creation_time)
+    creation_time = Time::Now();
+
+  int64_t id = GetNewIndex();
+  std::unique_ptr<NoteNode> new_node =
+      std::make_unique<NoteNode>(id, *guid, NoteNode::SEPARATOR);
+  if (name)
+    new_node->SetTitle(*name);
+  new_node->SetCreationTime(*creation_time);
+
+  return AddNode(AsMutable(parent), index, std::move(new_node));
+}
+
+void NotesModel::SetTitle(const NoteNode* node, const base::string16& title) {
   if (!node) {
     NOTREACHED();
     return;
@@ -340,8 +389,8 @@ void Notes_Model::SetTitle(const Notes_Node* node,
     observer.NotesNodeChanged(this, node);
 }
 
-void Notes_Model::SetContent(const Notes_Node* node,
-                             const base::string16& content) {
+void NotesModel::SetContent(const NoteNode* node,
+                            const base::string16& content) {
   if (!node) {
     NOTREACHED();
     return;
@@ -366,7 +415,7 @@ void Notes_Model::SetContent(const Notes_Node* node,
     observer.NotesNodeChanged(this, node);
 }
 
-void Notes_Model::SetURL(const Notes_Node* node, const GURL& url) {
+void NotesModel::SetURL(const NoteNode* node, const GURL& url) {
   if (!node) {
     NOTREACHED();
     return;
@@ -381,7 +430,7 @@ void Notes_Model::SetURL(const Notes_Node* node, const GURL& url) {
   if (node->GetURL() == url)
     return;
 
-  Notes_Node* mutable_node = AsMutable(node);
+  NoteNode* mutable_node = AsMutable(node);
 
   for (auto& observer : observers_)
     observer.OnWillChangeNotesNode(this, node);
@@ -400,7 +449,7 @@ void Notes_Model::SetURL(const Notes_Node* node, const GURL& url) {
     observer.NotesNodeChanged(this, node);
 }
 
-void Notes_Model::ClearAttachments(const Notes_Node* node) {
+void NotesModel::ClearAttachments(const NoteNode* node) {
   if (!node) {
     NOTREACHED();
     return;
@@ -418,8 +467,8 @@ void Notes_Model::ClearAttachments(const Notes_Node* node) {
     observer.NotesNodeChanged(this, node);
 }
 
-void Notes_Model::AddAttachment(const Notes_Node* node,
-                                NoteAttachment&& attachment) {
+void NotesModel::AddAttachment(const NoteNode* node,
+                               NoteAttachment&& attachment) {
   if (!node) {
     NOTREACHED();
     return;
@@ -437,8 +486,32 @@ void Notes_Model::AddAttachment(const Notes_Node* node,
     observer.NotesNodeChanged(this, node);
 }
 
-void Notes_Model::SetDateFolderModified(const Notes_Node* parent,
-                                        const Time time) {
+void NotesModel::SwapAttachments(const NoteNode* node1, const NoteNode* node2) {
+  if (!node1 || !node2) {
+    NOTREACHED();
+    return;
+  }
+
+  for (auto& observer : observers_)
+    observer.OnWillChangeNotesNode(this, node1);
+
+  for (auto& observer : observers_)
+    observer.OnWillChangeNotesNode(this, node2);
+
+  AsMutable(node1)->SwapAttachments(AsMutable(node2));
+
+  if (store_.get())
+    store_->ScheduleSave();
+
+  for (auto& observer : observers_)
+    observer.NotesNodeChanged(this, node1);
+
+  for (auto& observer : observers_)
+    observer.NotesNodeChanged(this, node2);
+}
+
+void NotesModel::SetDateFolderModified(const NoteNode* parent,
+                                       const Time time) {
   DCHECK(parent);
   AsMutable(parent)->SetCreationTime(time);
 
@@ -446,7 +519,7 @@ void Notes_Model::SetDateFolderModified(const Notes_Node* parent,
     store_->ScheduleSave();
 }
 
-void Notes_Model::SetDateAdded(const Notes_Node* node, base::Time date_added) {
+void NotesModel::SetDateAdded(const NoteNode* node, base::Time date_added) {
   if (!node) {
     NOTREACHED();
     return;
@@ -471,18 +544,18 @@ void Notes_Model::SetDateAdded(const Notes_Node* node, base::Time date_added) {
   }
 }
 
-bool Notes_Model::IsValidIndex(const Notes_Node* parent,
-                               size_t index,
-                               bool allow_end) {
+bool NotesModel::IsValidIndex(const NoteNode* parent,
+                              size_t index,
+                              bool allow_end) {
   return (parent && parent->is_folder() &&
           (index >= 0 && (index < parent->children().size() ||
                           (allow_end && index == parent->children().size()))));
 }
 
-void Notes_Model::GetNodesByURL(const GURL& url,
-                                std::vector<const Notes_Node*>* nodes) {
+void NotesModel::GetNodesByURL(const GURL& url,
+                               std::vector<const NoteNode*>* nodes) {
   base::AutoLock url_lock(url_lock_);
-  Notes_Node tmp_node(0);
+  NoteNode tmp_node(0, kNullGuid, NoteNode::NOTE);
   tmp_node.SetURL(url);
   NodesOrderedByURLSet::iterator i = nodes_ordered_by_url_set_.find(&tmp_node);
   while (i != nodes_ordered_by_url_set_.end() && (*i)->GetURL() == url) {
@@ -491,19 +564,19 @@ void Notes_Model::GetNodesByURL(const GURL& url,
   }
 }
 
-void Notes_Model::Remove(const Notes_Node* node) {
+void NotesModel::Remove(const NoteNode* node) {
   DCHECK(loaded_);
   DCHECK(node);
   DCHECK(!is_root_node(node));
 
-  const Notes_Node* parent = node->parent();
+  const NoteNode* parent = node->parent();
   DCHECK(parent);
   int index = parent->GetIndexOf(node);
 
   RemoveAndDeleteNode(AsMutable(parent), index, AsMutable(node));
 }
 
-void Notes_Model::RemoveAllUserNotes() {
+void NotesModel::RemoveAllUserNotes() {
   for (auto& observer : observers_)
     observer.OnWillRemoveAllNotes(this);
 
@@ -525,14 +598,14 @@ void Notes_Model::RemoveAllUserNotes() {
     observer.NotesAllNodesRemoved(this);
 }
 
-bool Notes_Model::IsNotesNoLock(const GURL& url) {
-  Notes_Node tmp_node(0);
+bool NotesModel::IsNotesNoLock(const GURL& url) {
+  NoteNode tmp_node(0, kNullGuid, NoteNode::NOTE);
   tmp_node.SetURL(url);
   return (nodes_ordered_by_url_set_.find(&tmp_node) !=
           nodes_ordered_by_url_set_.end());
 }
 
-void Notes_Model::RemoveNodeTreeFromURLSet(Notes_Node* node) {
+void NotesModel::RemoveNodeTreeFromURLSet(NoteNode* node) {
   if (!loaded_ || !node || is_permanent_node(node)) {
     NOTREACHED();
     return;
@@ -549,7 +622,7 @@ void Notes_Model::RemoveNodeTreeFromURLSet(Notes_Node* node) {
     RemoveNodeTreeFromURLSet((*child_it).get());
 }
 
-void Notes_Model::RemoveNodeFromURLSet(Notes_Node* node) {
+void NotesModel::RemoveNodeFromURLSet(NoteNode* node) {
   // NOTE: this is called in such a way that url_lock_ is already held. As
   // such, this doesn't explicitly grab the lock.
   NodesOrderedByURLSet::iterator i = nodes_ordered_by_url_set_.find(node);
@@ -562,18 +635,18 @@ void Notes_Model::RemoveNodeFromURLSet(Notes_Node* node) {
     nodes_ordered_by_url_set_.erase(i);
 }
 
-bool Notes_Model::Remove(Notes_Node* parent, size_t index) {
+bool NotesModel::Remove(NoteNode* parent, size_t index) {
   if (!parent)
     return false;
-  Notes_Node* node = parent->children()[index].get();
+  NoteNode* node = parent->children()[index].get();
   RemoveAndDeleteNode(parent, index, node);
   return true;
 }
 
-void Notes_Model::RemoveAndDeleteNode(Notes_Node* parent,
-                                      size_t index,
-                                      Notes_Node* node_ptr) {
-  std::unique_ptr<Notes_Node> node;
+void NotesModel::RemoveAndDeleteNode(NoteNode* parent,
+                                     size_t index,
+                                     NoteNode* node_ptr) {
+  std::unique_ptr<NoteNode> node;
 
   for (auto& observer : observers_)
     observer.OnWillRemoveNotes(this, parent, index, node_ptr);
@@ -591,8 +664,8 @@ void Notes_Model::RemoveAndDeleteNode(Notes_Node* parent,
     observer.NotesNodeRemoved(this, parent, index, node.get());
 }
 
-void Notes_Model::SetNodeSyncTransactionVersion(
-    const Notes_Node* node,
+void NotesModel::SetNodeSyncTransactionVersion(
+    const NoteNode* node,
     int64_t sync_transaction_version) {
   if (sync_transaction_version == node->sync_transaction_version())
     return;
@@ -602,36 +675,36 @@ void Notes_Model::SetNodeSyncTransactionVersion(
     store_->ScheduleSave();
 }
 
-void Notes_Model::BeginGroupedChanges() {
+void NotesModel::BeginGroupedChanges() {
   for (auto& observer : observers_)
     observer.GroupedNotesChangesBeginning(this);
 }
 
-void Notes_Model::EndGroupedChanges() {
+void NotesModel::EndGroupedChanges() {
   for (auto& observer : observers_)
     observer.GroupedNotesChangesEnded(this);
 }
 
-const Notes_Node* GetNotesNodeByID(const Notes_Model* model, int64_t id) {
+const NoteNode* GetNotesNodeByID(const NotesModel* model, int64_t id) {
   // TODO(sky): TreeNode needs a method that visits all nodes using a predicate.
   return GetNodeByID(model->root_node(), id);
 }
 
-const Notes_Node* GetNodeByID(const Notes_Node* node, int64_t id) {
+const NoteNode* GetNodeByID(const NoteNode* node, int64_t id) {
   if (node->id() == id)
     return node;
 
-  for (auto& it: node->children()) {
-    const Notes_Node* result = GetNodeByID(it.get(), id);
+  for (auto& it : node->children()) {
+    const NoteNode* result = GetNodeByID(it.get(), id);
     if (result)
       return result;
   }
   return NULL;
 }
 
-bool Notes_Model::Move(const Notes_Node* node,
-                       const Notes_Node* new_parent,
-                       size_t index) {
+bool NotesModel::Move(const NoteNode* node,
+                      const NoteNode* new_parent,
+                      size_t index) {
   if (!loaded_ || !node || !IsValidIndex(new_parent, index, true) ||
       is_root_node(new_parent) || is_permanent_node(node)) {
     NOTREACHED();
@@ -645,7 +718,7 @@ bool Notes_Model::Move(const Notes_Node* node,
     return false;
   }
 
-  const Notes_Node* old_parent = node->parent();
+  const NoteNode* old_parent = node->parent();
   size_t old_index = old_parent->GetIndexOf(node);
 
   if (old_parent == new_parent &&
@@ -659,10 +732,9 @@ bool Notes_Model::Move(const Notes_Node* node,
   if (old_parent == new_parent && index > old_index)
     index--;
 
-  Notes_Node* mutable_old_parent = AsMutable(old_parent);
-  std::unique_ptr<Notes_Node> owned_node =
-      mutable_old_parent->Remove(old_index);
-  Notes_Node* mutable_new_parent = AsMutable(new_parent);
+  NoteNode* mutable_old_parent = AsMutable(old_parent);
+  std::unique_ptr<NoteNode> owned_node = mutable_old_parent->Remove(old_index);
+  NoteNode* mutable_new_parent = AsMutable(new_parent);
   mutable_new_parent->Add(std::move(owned_node), index);
 
   if (store_.get())
@@ -674,29 +746,7 @@ bool Notes_Model::Move(const Notes_Node* node,
   return true;
 }
 
-Notes_Node* Notes_Model::GetOrCreateTrashNode() {
-  Notes_Node* root_node_p = root_node();
-  for (size_t i = 0; i < root_node_p->children().size(); ++i) {
-    Notes_Node* child = root_node_p->children()[i].get();
-    if (child->is_trash()) {
-      // Move it to the end of the list.
-      std::unique_ptr<Notes_Node> move_child = root_node_p->Remove(i);
-      AddNode(root_node_p, root_node_p->children().size(), std::move(move_child));
-      return child;
-    }
-  }
-  std::unique_ptr<Notes_Node> trash =
-      std::make_unique<Notes_Node>(GetNewIndex());
-  Notes_Node* trash_p = trash.get();
-  if (trash) {
-    trash->SetType(Notes_Node::TRASH);
-    trash->SetTitle(l10n_util::GetStringUTF16(IDS_NOTES_TRASH_FOLDER_NAME));
-    AddNode(root_node_p, root_node_p->children().size(), std::move(trash));
-  }
-  return trash_p;
-}
-
-void Notes_Model::SortChildren(const Notes_Node* parent) {
+void NotesModel::SortChildren(const NoteNode* parent) {
   if (!parent || !parent->is_folder() || is_root_node(parent) ||
       parent->children().size() <= 1) {
     return;
@@ -709,9 +759,9 @@ void Notes_Model::SortChildren(const Notes_Node* parent) {
   std::unique_ptr<icu::Collator> collator(icu::Collator::createInstance(error));
   if (U_FAILURE(error))
     collator.reset(NULL);
-  Notes_Node* mutable_parent = AsMutable(parent);
-  std::sort(mutable_parent->children_.begin(),
-            mutable_parent->children_.end(), SortComparator(collator.get()));
+  NoteNode* mutable_parent = AsMutable(parent);
+  std::sort(mutable_parent->children_.begin(), mutable_parent->children_.end(),
+            SortComparator(collator.get()));
 
   if (store_.get())
     store_->ScheduleSave();
@@ -720,9 +770,9 @@ void Notes_Model::SortChildren(const Notes_Node* parent) {
     observer.NotesNodeChildrenReordered(this, parent);
 }
 
-void Notes_Model::ReorderChildren(
-    const Notes_Node* parent,
-    const std::vector<const Notes_Node*>& ordered_nodes) {
+void NotesModel::ReorderChildren(
+    const NoteNode* parent,
+    const std::vector<const NoteNode*>& ordered_nodes) {
   // Ensure that all children in |parent| are in |ordered_nodes|.
   DCHECK_EQ(parent->children().size(), ordered_nodes.size());
   for (size_t i = 0; i < ordered_nodes.size(); ++i)
@@ -732,12 +782,12 @@ void Notes_Model::ReorderChildren(
     observer.OnWillReorderNotesNode(this, parent);
 
   if (ordered_nodes.size() > 1) {
-    std::map<const Notes_Node*, size_t> order;
+    std::map<const NoteNode*, size_t> order;
     for (size_t i = 0; i < ordered_nodes.size(); ++i)
       order[ordered_nodes[i]] = i;
 
-    std::vector<std::unique_ptr<Notes_Node>> new_children(ordered_nodes.size());
-    Notes_Node* mutable_parent = AsMutable(parent);
+    std::vector<std::unique_ptr<NoteNode>> new_children(ordered_nodes.size());
+    NoteNode* mutable_parent = AsMutable(parent);
     for (auto& child : mutable_parent->children_) {
       size_t new_location = order[child.get()];
       new_children[new_location] = std::move(child);
@@ -752,33 +802,33 @@ void Notes_Model::ReorderChildren(
     observer.NotesNodeChildrenReordered(this, parent);
 }
 
-void Notes_Model::GetNotesMatching(
+void NotesModel::GetNotesMatching(
     const base::string16& text,
     size_t max_count,
-    std::vector<std::pair<int, Notes_Node::Type>>* matches) {
-    if (!loaded_)
-        return;
+    std::vector<std::pair<int, NoteNode::Type>>* matches) {
+  if (!loaded_)
+    return;
 
-    std::vector<vivaldi::Notes_Node> search_result;
-    if (text.length() > 0) {
-      ui::TreeNodeIterator<Notes_Node> iterator(
-          &root_);
+  std::vector<vivaldi::NoteNode> search_result;
+  if (text.length() > 0) {
+    ui::TreeNodeIterator<NoteNode> iterator(&root_);
 
-      while (iterator.has_next()) {
-        Notes_Node* node = iterator.Next();
-        bool match = false;
+    while (iterator.has_next()) {
+      NoteNode* node = iterator.Next();
+      bool match = false;
+      match = base::i18n::StringSearchIgnoringCaseAndAccents(
+          text, node->GetContent(), NULL, NULL);
+      if (!match && node->GetURL().is_valid()) {
+        std::string value = node->GetURL().host() + node->GetURL().path();
         match = base::i18n::StringSearchIgnoringCaseAndAccents(
-                text, node->GetContent(), NULL, NULL);
-        if (!match && node->GetURL().is_valid()) {
-         std::string value = node->GetURL().host() + node->GetURL().path();
-         match = base::i18n::StringSearchIgnoringCaseAndAccents(
-                text, base::UTF8ToUTF16(value), NULL, NULL);
-         }
-        if (match) {
-            matches->push_back(std::pair<int, Notes_Node::Type>(node->id(), node->type()));
-        }
+            text, base::UTF8ToUTF16(value), NULL, NULL);
+      }
+      if (match) {
+        matches->push_back(
+            std::pair<int, NoteNode::Type>(node->id(), node->type()));
       }
     }
+  }
 }
 
 }  // namespace vivaldi

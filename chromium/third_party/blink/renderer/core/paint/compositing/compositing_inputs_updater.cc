@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/core/paint/compositing/compositing_inputs_updater.h"
 
+#include "third_party/blink/renderer/core/display_lock/display_lock_utilities.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/layout/layout_block.h"
@@ -48,6 +49,13 @@ void CompositingInputsUpdater::Update() {
   UpdateType update_type = kDoNotForceUpdate;
   PaintLayer* layer =
       compositing_inputs_root_ ? compositing_inputs_root_ : root_layer_;
+
+  if (DisplayLockUtilities::NearestLockedExclusiveAncestor(
+          layer->GetLayoutObject())) {
+    compositing_inputs_root_ = nullptr;
+    return;
+  }
+
   CompositingReasons initial_compositing_reasons =
       layer->DirectCompositingReasons();
   ApplyAncestorInfoToSelfAndAncestorsRecursively(layer, update_type, info);
@@ -80,6 +88,9 @@ void CompositingInputsUpdater::ApplyAncestorInfoToSelfAndAncestorsRecursively(
                                                  info);
   geometry_map_.PushMappingsToAncestor(layer, layer->Parent());
   UpdateAncestorInfo(layer, update_type, info);
+  if (layer != compositing_inputs_root_ &&
+      (layer->IsRootLayer() || layer->GetLayoutObject().HasOverflowClip()))
+    info.last_overflow_clip_layer = layer;
 }
 
 void CompositingInputsUpdater::UpdateSelfAndDescendantsRecursively(
@@ -130,6 +141,8 @@ void CompositingInputsUpdater::UpdateSelfAndDescendantsRecursively(
     geometry_map_.PushMappingsToAncestor(layer, layer->Parent());
     UpdateAncestorInfo(layer, update_type, info);
   }
+  if (layer->IsRootLayer() || layout_object.HasOverflowClip())
+    info.last_overflow_clip_layer = layer;
 
   PaintLayerCompositor* compositor =
       layer->GetLayoutObject().View()->Compositor();
@@ -155,8 +168,15 @@ void CompositingInputsUpdater::UpdateSelfAndDescendantsRecursively(
         layer->DirectCompositingReasons());
   }
 
-  bool should_recurse =
-      layer->ChildNeedsCompositingInputsUpdate() || update_type == kForceUpdate;
+  // Note that prepaint may use the compositing information, so only skip
+  // recursing it if we're skipping prepaint.
+  bool recursion_blocked_by_display_lock =
+      layer->GetLayoutObject().PrePaintBlockedByDisplayLock(
+          DisplayLockLifecycleTarget::kChildren);
+
+  bool should_recurse = (layer->ChildNeedsCompositingInputsUpdate() ||
+                         update_type == kForceUpdate) &&
+                        !recursion_blocked_by_display_lock;
 
   layer->SetDescendantHasDirectOrScrollingCompositingReason(false);
   bool descendant_has_direct_compositing_reason = false;
@@ -175,7 +195,11 @@ void CompositingInputsUpdater::UpdateSelfAndDescendantsRecursively(
       !layer->NeedsCompositedScrolling())
     layer->GetScrollableArea()->UpdateNeedsCompositedScrolling(true);
 
-  layer->ClearChildNeedsCompositingInputsUpdate();
+  // If display lock blocked this recursion, then keep the dirty bit around
+  // since it is a breadcrumb that will allow us to recurse later when we unlock
+  // the element.
+  if (!recursion_blocked_by_display_lock)
+    layer->ClearChildNeedsCompositingInputsUpdate();
 
   geometry_map_.PopMappingsToAncestor(layer->Parent());
 
@@ -203,6 +227,22 @@ void CompositingInputsUpdater::UpdateAncestorInfo(PaintLayer* const layer,
       info.enclosing_stacking_composited_layer;
   PaintLayer* enclosing_squashing_composited_layer =
       info.enclosing_squashing_composited_layer;
+
+  if (layer->NeedsCompositingInputsUpdate()) {
+    if (enclosing_stacking_composited_layer) {
+      enclosing_stacking_composited_layer->GetCompositedLayerMapping()
+          ->SetNeedsGraphicsLayerUpdate(kGraphicsLayerUpdateSubtree);
+    }
+
+    if (enclosing_squashing_composited_layer) {
+      enclosing_squashing_composited_layer->GetCompositedLayerMapping()
+          ->SetNeedsGraphicsLayerUpdate(kGraphicsLayerUpdateSubtree);
+    }
+
+    update_type = kForceUpdate;
+  }
+
+
   switch (layer->GetCompositingState()) {
     case kNotComposited:
       break;
@@ -216,17 +256,19 @@ void CompositingInputsUpdater::UpdateAncestorInfo(PaintLayer* const layer,
       break;
   }
 
+  // invalidate again after the switch, in case
+  // enclosing_stacking_composited_layer or
+  // enclosing_squashing_composited_layer was previously null.
   if (layer->NeedsCompositingInputsUpdate()) {
     if (enclosing_stacking_composited_layer) {
       enclosing_stacking_composited_layer->GetCompositedLayerMapping()
           ->SetNeedsGraphicsLayerUpdate(kGraphicsLayerUpdateSubtree);
     }
+
     if (enclosing_squashing_composited_layer) {
       enclosing_squashing_composited_layer->GetCompositedLayerMapping()
           ->SetNeedsGraphicsLayerUpdate(kGraphicsLayerUpdateSubtree);
     }
-
-    update_type = kForceUpdate;
   }
 
   if (style.GetPosition() == EPosition::kAbsolute) {
@@ -250,9 +292,6 @@ void CompositingInputsUpdater::UpdateAncestorInfo(PaintLayer* const layer,
   info.enclosing_squashing_composited_layer =
       enclosing_squashing_composited_layer;
 
-  if (layer->IsRootLayer() || layout_object.HasOverflowClip())
-    info.last_overflow_clip_layer = layer;
-
   // Handles sibling scroll problem, i.e. a non-stacking context scroller
   // needs to propagate scroll to its descendants that are siblings in
   // paint order. For example:
@@ -274,13 +313,13 @@ void CompositingInputsUpdater::UpdateAncestorInfo(PaintLayer* const layer,
   // in the sense that they don't scroll along with its in-flow contents.
   // However LayoutView does clip them.
   if (layout_object.CanContainFixedPositionObjects() &&
-      !layout_object.IsLayoutView()) {
+      !IsA<LayoutView>(layout_object)) {
     info.clip_chain_parent_for_fixed = layer;
     info.escape_clip_to_for_fixed = info.escape_clip_to;
     info.scrolling_ancestor_for_fixed = info.scrolling_ancestor;
     info.needs_reparent_scroll_for_fixed = info.needs_reparent_scroll;
   }
-  if (layout_object.IsLayoutView())
+  if (IsA<LayoutView>(layout_object))
     info.clip_chain_parent_for_fixed = layer;
 
   // CSS clip affects all descendants, not just containing-block descendants.
@@ -438,8 +477,16 @@ void CompositingInputsUpdater::UpdateAncestorDependentCompositingInputs(
 
 void CompositingInputsUpdater::AssertNeedsCompositingInputsUpdateBitsCleared(
     PaintLayer* layer) {
-  DCHECK(!layer->ChildNeedsCompositingInputsUpdate());
+  bool recursion_blocked_by_display_lock =
+      layer->GetLayoutObject().PrePaintBlockedByDisplayLock(
+          DisplayLockLifecycleTarget::kChildren);
+
+  DCHECK(recursion_blocked_by_display_lock ||
+         !layer->ChildNeedsCompositingInputsUpdate());
   DCHECK(!layer->NeedsCompositingInputsUpdate());
+
+  if (recursion_blocked_by_display_lock)
+    return;
 
   for (PaintLayer* child = layer->FirstChild(); child;
        child = child->NextSibling())

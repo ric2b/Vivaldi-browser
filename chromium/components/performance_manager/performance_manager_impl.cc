@@ -12,7 +12,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/task/lazy_task_runner.h"
+#include "base/task/lazy_thread_pool_task_runner.h"
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
 #include "components/performance_manager/graph/frame_node_impl.h"
@@ -27,34 +27,42 @@ namespace {
 
 // Singleton instance of PerformanceManagerImpl. Set from
 // PerformanceManagerImpl::StartImpl() and reset from the destructor of
-// PerformanceManagerImpl (PM sequence). Accesses should be on the PM sequence.
-PerformanceManagerImpl* g_performance_manager_from_pm_sequence = nullptr;
+// PerformanceManagerImpl (PM sequence). Should only be accessed on the PM
+// sequence.
+PerformanceManagerImpl* g_performance_manager = nullptr;
 
-// Singleton instance of PerformanceManagerImpl. Set from Create() and reset
-// from Destroy() (external sequence). Accesses can be on any sequence but must
-// not race with Create() or Destroy().
-//
-// TODO(https://crbug.com/1013127): Get rid of
-// PerformanceManagerImpl::GetInstance(). Callers can probably use
-// PerformanceManagerImpl::CallOnGraphImpl().
-PerformanceManagerImpl* g_performance_manager_from_any_sequence = nullptr;
-
-// The performance manager TaskRunner.
-base::LazySequencedTaskRunner g_performance_manager_task_runner =
-    LAZY_SEQUENCED_TASK_RUNNER_INITIALIZER(
-        base::TaskTraits(base::ThreadPool(),
-                         base::TaskPriority::USER_VISIBLE,
+// The performance manager TaskRunner. Thread-safe.
+base::LazyThreadPoolSequencedTaskRunner g_performance_manager_task_runner =
+    LAZY_THREAD_POOL_SEQUENCED_TASK_RUNNER_INITIALIZER(
+        base::TaskTraits(base::TaskPriority::USER_VISIBLE,
                          base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN,
                          base::MayBlock()));
 
+// Indicates if a task posted to |g_performance_manager_task_runner| will have
+// access to a valid PerformanceManagerImpl instance via
+// |g_performance_manager|. Should only be accessed on the main thread.
+bool g_pm_is_available = false;
+
 }  // namespace
+
+// static
+bool PerformanceManager::IsAvailable() {
+  return g_pm_is_available;
+}
 
 PerformanceManagerImpl::~PerformanceManagerImpl() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK_EQ(g_performance_manager_from_pm_sequence, this);
+  DCHECK_EQ(g_performance_manager, this);
   // TODO(https://crbug.com/966840): Move this to a TearDown function.
   graph_.TearDown();
-  g_performance_manager_from_pm_sequence = nullptr;
+  g_performance_manager = nullptr;
+}
+
+// static
+void PerformanceManagerImpl::CallOnGraphImpl(const base::Location& from_here,
+                                             base::OnceClosure callback) {
+  DCHECK(callback);
+  GetTaskRunner()->PostTask(from_here, std::move(callback));
 }
 
 // static
@@ -67,19 +75,14 @@ void PerformanceManagerImpl::CallOnGraphImpl(const base::Location& from_here,
                      std::move(callback)));
 }
 
-PerformanceManagerImpl* PerformanceManagerImpl::GetInstance() {
-  return g_performance_manager_from_any_sequence;
-}
-
 // static
 std::unique_ptr<PerformanceManagerImpl> PerformanceManagerImpl::Create(
     GraphImplCallback on_start) {
-  DCHECK(!g_performance_manager_from_any_sequence);
+  DCHECK(!g_pm_is_available);
+  g_pm_is_available = true;
 
   std::unique_ptr<PerformanceManagerImpl> instance =
       base::WrapUnique(new PerformanceManagerImpl());
-
-  g_performance_manager_from_any_sequence = instance.get();
 
   GetTaskRunner()->PostTask(
       FROM_HERE,
@@ -91,12 +94,14 @@ std::unique_ptr<PerformanceManagerImpl> PerformanceManagerImpl::Create(
 
 // static
 void PerformanceManagerImpl::Destroy(
-    std::unique_ptr<PerformanceManagerImpl> instance) {
-  DCHECK_EQ(instance.get(), g_performance_manager_from_any_sequence);
-  g_performance_manager_from_any_sequence = nullptr;
+    std::unique_ptr<PerformanceManager> instance) {
+  DCHECK(g_pm_is_available);
+  g_pm_is_available = false;
+
   GetTaskRunner()->DeleteSoon(FROM_HERE, instance.release());
 }
 
+// static
 std::unique_ptr<FrameNodeImpl> PerformanceManagerImpl::CreateFrameNode(
     ProcessNodeImpl* process_node,
     PageNodeImpl* page_node,
@@ -113,43 +118,73 @@ std::unique_ptr<FrameNodeImpl> PerformanceManagerImpl::CreateFrameNode(
       browsing_instance_id, site_instance_id);
 }
 
+// static
 std::unique_ptr<PageNodeImpl> PerformanceManagerImpl::CreatePageNode(
     const WebContentsProxy& contents_proxy,
     const std::string& browser_context_id,
     const GURL& visible_url,
     bool is_visible,
-    bool is_audible) {
+    bool is_audible,
+    base::TimeTicks visibility_change_time) {
   return CreateNodeImpl<PageNodeImpl>(base::OnceCallback<void(PageNodeImpl*)>(),
                                       contents_proxy, browser_context_id,
-                                      visible_url, is_visible, is_audible);
+                                      visible_url, is_visible, is_audible,
+                                      visibility_change_time);
 }
 
+// static
 std::unique_ptr<ProcessNodeImpl> PerformanceManagerImpl::CreateProcessNode(
     RenderProcessHostProxy proxy) {
   return CreateNodeImpl<ProcessNodeImpl>(
       base::OnceCallback<void(ProcessNodeImpl*)>(), proxy);
 }
 
+// static
 std::unique_ptr<WorkerNodeImpl> PerformanceManagerImpl::CreateWorkerNode(
     const std::string& browser_context_id,
     WorkerNode::WorkerType worker_type,
     ProcessNodeImpl* process_node,
-    const GURL& url,
     const base::UnguessableToken& dev_tools_token) {
   return CreateNodeImpl<WorkerNodeImpl>(
       base::OnceCallback<void(WorkerNodeImpl*)>(), browser_context_id,
-      worker_type, process_node, url, dev_tools_token);
+      worker_type, process_node, dev_tools_token);
 }
 
+// static
+void PerformanceManagerImpl::DeleteNode(std::unique_ptr<NodeBase> node) {
+  CallOnGraphImpl(
+      FROM_HERE,
+      base::BindOnce(&PerformanceManagerImpl::DeleteNodeImpl, node.release()));
+}
+
+// static
 void PerformanceManagerImpl::BatchDeleteNodes(
     std::vector<std::unique_ptr<NodeBase>> nodes) {
-  GetTaskRunner()->PostTask(
-      FROM_HERE, base::BindOnce(&PerformanceManagerImpl::BatchDeleteNodesImpl,
-                                base::Unretained(this), std::move(nodes)));
+  // Move the nodes vector to the heap.
+  auto nodes_ptr = std::make_unique<std::vector<std::unique_ptr<NodeBase>>>(
+      std::move(nodes));
+  CallOnGraphImpl(FROM_HERE,
+                  base::BindOnce(&PerformanceManagerImpl::BatchDeleteNodesImpl,
+                                 nodes_ptr.release()));
+}
+
+// static
+bool PerformanceManagerImpl::OnPMTaskRunnerForTesting() {
+  return GetTaskRunner()->RunsTasksInCurrentSequence();
 }
 
 PerformanceManagerImpl::PerformanceManagerImpl() {
   DETACH_FROM_SEQUENCE(sequence_checker_);
+}
+
+// static
+scoped_refptr<base::SequencedTaskRunner>
+PerformanceManagerImpl::GetTaskRunner() {
+  return g_performance_manager_task_runner.Get();
+}
+
+PerformanceManagerImpl* PerformanceManagerImpl::GetInstance() {
+  return g_performance_manager;
 }
 
 namespace {
@@ -168,76 +203,80 @@ void AddNodeAndInvokeCreationCallback(
 
 }  // namespace
 
+// static
 template <typename NodeType, typename... Args>
 std::unique_ptr<NodeType> PerformanceManagerImpl::CreateNodeImpl(
     base::OnceCallback<void(NodeType*)> creation_callback,
     Args&&... constructor_args) {
-  std::unique_ptr<NodeType> new_node = std::make_unique<NodeType>(
-      &graph_, std::forward<Args>(constructor_args)...);
-  GetTaskRunner()->PostTask(
-      FROM_HERE, base::BindOnce(&AddNodeAndInvokeCreationCallback<NodeType>,
-                                std::move(creation_callback),
-                                base::Unretained(new_node.get()),
-                                base::Unretained(&graph_)));
+  std::unique_ptr<NodeType> new_node =
+      std::make_unique<NodeType>(std::forward<Args>(constructor_args)...);
+  CallOnGraphImpl(FROM_HERE,
+                  base::BindOnce(&AddNodeAndInvokeCreationCallback<NodeType>,
+                                 std::move(creation_callback),
+                                 base::Unretained(new_node.get())));
   return new_node;
 }
 
-void PerformanceManagerImpl::PostDeleteNode(std::unique_ptr<NodeBase> node) {
-  GetTaskRunner()->PostTask(
-      FROM_HERE, base::BindOnce(&PerformanceManagerImpl::DeleteNodeImpl,
-                                base::Unretained(this), std::move(node)));
-}
+// static
+void PerformanceManagerImpl::DeleteNodeImpl(NodeBase* node_ptr,
+                                            GraphImpl* graph) {
+  // Must be done first to avoid leaking |node_ptr|.
+  std::unique_ptr<NodeBase> node(node_ptr);
 
-void PerformanceManagerImpl::DeleteNodeImpl(std::unique_ptr<NodeBase> node) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-  graph_.RemoveNode(node.get());
+  graph->RemoveNode(node.get());
 }
 
 namespace {
 
-void RemoveFrameAndChildrenFromGraph(FrameNodeImpl* frame_node) {
+void RemoveFrameAndChildrenFromGraph(FrameNodeImpl* frame_node,
+                                     GraphImpl* graph) {
   // Recurse on the first child while there is one.
-  while (!frame_node->child_frame_nodes().empty())
-    RemoveFrameAndChildrenFromGraph(*(frame_node->child_frame_nodes().begin()));
+  while (!frame_node->child_frame_nodes().empty()) {
+    RemoveFrameAndChildrenFromGraph(*(frame_node->child_frame_nodes().begin()),
+                                    graph);
+  }
 
   // Now that all children are deleted, delete this frame.
-  frame_node->graph()->RemoveNode(frame_node);
+  graph->RemoveNode(frame_node);
 }
 
 }  // namespace
 
+// static
 void PerformanceManagerImpl::BatchDeleteNodesImpl(
-    std::vector<std::unique_ptr<NodeBase>> nodes) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    std::vector<std::unique_ptr<NodeBase>>* nodes_ptr,
+    GraphImpl* graph) {
+  // Must be done first to avoid leaking |nodes_ptr|.
+  std::unique_ptr<std::vector<std::unique_ptr<NodeBase>>> nodes(nodes_ptr);
 
   base::flat_set<ProcessNodeImpl*> process_nodes;
 
-  for (auto it = nodes.begin(); it != nodes.end(); ++it) {
-    switch ((*it)->type()) {
+  for (const auto& node : *nodes) {
+    switch (node->type()) {
       case PageNodeImpl::Type(): {
-        auto* page_node = PageNodeImpl::FromNodeBase(it->get());
+        auto* page_node = PageNodeImpl::FromNodeBase(node.get());
 
         // Delete the main frame nodes until no more exist.
-        while (!page_node->main_frame_nodes().empty())
+        while (!page_node->main_frame_nodes().empty()) {
           RemoveFrameAndChildrenFromGraph(
-              *(page_node->main_frame_nodes().begin()));
+              *(page_node->main_frame_nodes().begin()), graph);
+        }
 
-        graph_.RemoveNode(page_node);
+        graph->RemoveNode(page_node);
         break;
       }
       case ProcessNodeImpl::Type(): {
         // Keep track of the process nodes for removing once all frames nodes
         // are removed.
-        auto* process_node = ProcessNodeImpl::FromNodeBase(it->get());
+        auto* process_node = ProcessNodeImpl::FromNodeBase(node.get());
         process_nodes.insert(process_node);
         break;
       }
       case FrameNodeImpl::Type():
         break;
       case WorkerNodeImpl::Type(): {
-        auto* worker_node = WorkerNodeImpl::FromNodeBase(it->get());
-        graph_.RemoveNode(worker_node);
+        auto* worker_node = WorkerNodeImpl::FromNodeBase(node.get());
+        graph->RemoveNode(worker_node);
         break;
       }
       case SystemNodeImpl::Type():
@@ -251,15 +290,18 @@ void PerformanceManagerImpl::BatchDeleteNodesImpl(
 
   // Remove the process nodes from the graph.
   for (auto* process_node : process_nodes)
-    graph_.RemoveNode(process_node);
+    graph->RemoveNode(process_node);
 
   // When |nodes| goes out of scope, all nodes are deleted.
 }
 
-// static
-scoped_refptr<base::SequencedTaskRunner>
-PerformanceManagerImpl::GetTaskRunner() {
-  return g_performance_manager_task_runner.Get();
+void PerformanceManagerImpl::OnStartImpl(GraphImplCallback on_start) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(!g_performance_manager);
+
+  g_performance_manager = this;
+  graph_.set_ukm_recorder(ukm::UkmRecorder::Get());
+  std::move(on_start).Run(&graph_);
 }
 
 // static
@@ -267,10 +309,8 @@ void PerformanceManagerImpl::RunCallbackWithGraphImpl(
     GraphImplCallback graph_callback) {
   DCHECK(GetTaskRunner()->RunsTasksInCurrentSequence());
 
-  if (g_performance_manager_from_pm_sequence) {
-    std::move(graph_callback)
-        .Run(&g_performance_manager_from_pm_sequence->graph_);
-  }
+  if (g_performance_manager)
+    std::move(graph_callback).Run(&g_performance_manager->graph_);
 }
 
 // static
@@ -278,19 +318,8 @@ void PerformanceManagerImpl::RunCallbackWithGraph(
     GraphCallback graph_callback) {
   DCHECK(GetTaskRunner()->RunsTasksInCurrentSequence());
 
-  if (g_performance_manager_from_pm_sequence) {
-    std::move(graph_callback)
-        .Run(&g_performance_manager_from_pm_sequence->graph_);
-  }
-}
-
-void PerformanceManagerImpl::OnStartImpl(GraphImplCallback on_start) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(!g_performance_manager_from_pm_sequence);
-
-  g_performance_manager_from_pm_sequence = this;
-  graph_.set_ukm_recorder(ukm::UkmRecorder::Get());
-  std::move(on_start).Run(&graph_);
+  if (g_performance_manager)
+    std::move(graph_callback).Run(&g_performance_manager->graph_);
 }
 
 }  // namespace performance_manager

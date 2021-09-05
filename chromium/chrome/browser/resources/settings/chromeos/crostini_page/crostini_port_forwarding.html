@@ -1,0 +1,121 @@
+<link rel="import" href="chrome://resources/html/polymer.html">
+
+<link rel="import" href="chrome://resources/cr_elements/cr_icon_button/cr_icon_button.html">
+<link rel="import" href="chrome://resources/html/i18n_behavior.html">
+<link rel="import" href="crostini_browser_proxy.html">
+<link rel="import" href="crostini_port_forwarding_add_port_dialog.html">
+<link rel="import" href="../../controls/settings_toggle_button.html">
+<link rel="import" href="../../i18n_setup.html">
+<link rel="import" href="../../prefs/prefs_behavior.html">
+<link rel="import" href="../../settings_shared_css.html">
+
+
+<dom-module id="settings-crostini-port-forwarding">
+  <template>
+    <style include="settings-shared">
+      .column-title {
+        color: var(--google-grey-500);
+      }
+
+      .no-ports-text {
+        padding-inline-start: 24px;
+        /* TODO(matterchen): Update with proper number of pixels when
+        formal UI spec is received (cr:848127). */
+      }
+
+      #addPort {
+        padding-top: 10px;
+      }
+
+      #protocolText {
+        color: var(--google-grey-500);
+        font-size: 10px;
+      }
+
+      #placeholderToggle {
+        visibility: hidden;
+      }
+    </style>
+    <div class="settings-box first"
+        id="portForwardingDescription">
+      $i18n{crostiniPortForwardingDescription}
+    </div>
+    <div id="addPort" class="settings-box first">
+      <div id="portForwardingTableTitle" class="start"
+          aria-hidden="true">
+        $i18n{crostiniPortForwardingTableTitle}
+      </div>
+      <cr-button on-click="onAddPortClick_"
+          aria-label="$i18n{crostiniPortForwardingAddPortButtonDescription}"
+          aria-describedby="portForwardingDescription">
+        $i18n{crostiniPortForwardingAddPortButton}
+      </cr-button>
+    </div>
+    <div id="no-ports-text"
+        class="settings-box continuation"
+        hidden="[[ports_.length]]">
+      $i18n{crostiniPortForwardingNoPorts}
+    </div>
+    <div class="list-frame vertical-list"
+        hidden="[[!ports_.length]]">
+      <div class="list-item">
+        <div id="portForwardingListPortNumber"
+            class="start column-title"
+            aria-hidden="true">
+          $i18n{crostiniPortForwardingListPortNumber}
+        </div>
+        <div id="portForwardingListPortLabel"
+            class="start column-title"
+            aria-hidden="true">
+          $i18n{crostiniPortForwardingListLabel}
+        </div>
+        <settings-toggle-button
+            id="placeholderToggle"
+            pref="true">
+        </settings-toggle-button>
+        <cr-icon-button class="icon-more-vert"
+            title="$i18n{moreActions}"
+            on-click="onBeginRemoveAllPorts_"
+            aria-label="$i18n{moreActions}">
+        </cr-icon-button>
+      </div>
+      <template is="dom-if" if="[[!ports_.length]]">
+        <div id="no-ports-text">
+          $i18n{crostiniPortForwardingNoPorts}
+        </div>
+      </template>
+      <template is="dom-repeat" items="[[ports_]]">
+        <div class="list-item">
+          <div class="start" aria-hidden="true">
+            [[item.port_number]]
+            <span id="protocolText">
+              <template is="dom-if" if="[[!item.protocol_type]]">
+                ($i18n{crostiniPortForwardingTCP})
+              </template>
+              <template is="dom-if" if="[[item.protocol_type]]">
+                ($i18n{crostiniPortForwardingUDP})
+              </template>
+            </span>
+          </div>
+          <div class="start" aria-hidden="true">[[item.label]]</div>
+          <settings-toggle-button
+              pref="[[item.is_active_pref]]"
+              data="[[item.port_number]]"
+              aria-label="[[item.label]] [[item.port_number]]"
+              no-set-pref>
+          </settings-toggle-button>
+          <cr-icon-button class="icon-more-vert"
+              title="$i18n{moreActions}"
+              on-click="onBeginRemovePort_"
+              aria-label="$i18n{moreActions}">
+          </cr-icon-button>
+        </div>
+      </template>
+    </div>
+    <template is="dom-if" if="[[showAddPortDialog_]]" restamp>
+      <settings-crostini-add-port-dialog on-close="onAddPortDialogClose_">
+      </settings-crostini-add-port-dialog>
+    </template>
+  </template>
+  <script src="crostini_port_forwarding.js"></script>
+</dom-module>

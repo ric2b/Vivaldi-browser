@@ -7,8 +7,9 @@
 #include <algorithm>
 #include <utility>
 
+#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/android/preferences/preferences_launcher.h"
+#include "chrome/browser/android/preferences/autofill/autofill_profile_bridge.h"
 #include "chrome/browser/autofill/manual_filling_controller.h"
 #include "chrome/browser/autofill/manual_filling_utils.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
@@ -120,12 +121,18 @@ void AddressAccessoryControllerImpl::OnFillingTriggered(
 void AddressAccessoryControllerImpl::OnOptionSelected(
     AccessoryAction selected_action) {
   if (selected_action == AccessoryAction::MANAGE_ADDRESSES) {
-    chrome::android::PreferencesLauncher::ShowAutofillProfileSettings(
-        web_contents_);
+    autofill::ShowAutofillProfileSettings(web_contents_);
     return;
   }
   NOTREACHED() << "Unhandled selected action: "
                << static_cast<int>(selected_action);
+}
+
+void AddressAccessoryControllerImpl::OnToggleChanged(
+    AccessoryAction toggled_action,
+    bool enabled) {
+  NOTREACHED() << "Unhandled toggled action: "
+               << static_cast<int>(toggled_action);
 }
 
 void AddressAccessoryControllerImpl::RefreshSuggestions() {

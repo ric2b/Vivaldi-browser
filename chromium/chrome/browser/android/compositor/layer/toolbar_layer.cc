@@ -13,6 +13,9 @@
 #include "ui/android/resources/nine_patch_resource.h"
 #include "ui/android/resources/resource_manager.h"
 
+// Vivaldi
+#include "app/vivaldi_apptools.h"
+
 namespace android {
 
 // static
@@ -32,7 +35,7 @@ void ToolbarLayer::PushResource(int toolbar_resource_id,
                                 int url_bar_background_resource_id,
                                 float url_bar_alpha,
                                 float window_height,
-                                float y_offset,
+                                float content_offset,
                                 bool show_debug,
                                 bool clip_shadow) {
   ToolbarResource* resource =
@@ -110,7 +113,18 @@ void ToolbarLayer::PushResource(int toolbar_resource_id,
   else if (!show_debug && debug_layer_->parent())
     debug_layer_->RemoveFromParent();
 
-  layer_->SetPosition(gfx::PointF(0, y_offset));
+  // Note (david@vivaldi.com): In Vivaldi the content
+  // offset is the top control offset therefore we don't need to take the
+  // |layer_| height into account and we only apply the position when really
+  // needed.
+  if (vivaldi::IsVivaldiRunning()) {
+    if (should_position_toolbar_)
+      layer_->SetPosition(gfx::PointF(0, content_offset));
+    should_position_toolbar_ = true;
+  } else
+  // Position the toolbar at the bottom of the space available for top controls.
+  layer_->SetPosition(
+      gfx::PointF(0, content_offset - layer_->bounds().height()));
 }
 
 int ToolbarLayer::GetIndexOfLayer(scoped_refptr<cc::Layer> layer) {
@@ -194,9 +208,17 @@ ToolbarLayer::ToolbarLayer(ui::ResourceManager* resource_manager)
   debug_layer_->SetIsDrawable(true);
   debug_layer_->SetBackgroundColor(SK_ColorGREEN);
   debug_layer_->SetOpacity(0.5f);
+
+  // Vivaldi
+  should_position_toolbar_ = true;
 }
 
 ToolbarLayer::~ToolbarLayer() {
+}
+
+// Vivaldi
+void ToolbarLayer::ShouldPositionToolbar(bool should_position) {
+  should_position_toolbar_ = should_position;
 }
 
 }  //  namespace android

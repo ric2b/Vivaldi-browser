@@ -126,6 +126,7 @@ class ASH_EXPORT DragDropController : public aura::client::DragDropClient,
   gfx::Rect drag_image_final_bounds_for_cancel_animation_;
 
   std::unique_ptr<gfx::LinearAnimation> cancel_animation_;
+  std::unique_ptr<gfx::AnimationDelegate> cancel_animation_notifier_;
 
   // Window that started the drag.
   aura::Window* drag_source_window_;
@@ -135,9 +136,9 @@ class ASH_EXPORT DragDropController : public aura::client::DragDropClient,
   bool should_block_during_drag_drop_;
 
   // Closure for quitting nested run loop.
-  base::Closure quit_closure_;
+  base::OnceClosure quit_closure_;
 
-  std::unique_ptr<ash::DragDropTracker> drag_drop_tracker_;
+  std::unique_ptr<DragDropTracker> drag_drop_tracker_;
   std::unique_ptr<DragDropTrackerDelegate> drag_drop_window_delegate_;
 
   ui::DragDropTypes::DragEventSource current_drag_event_source_;

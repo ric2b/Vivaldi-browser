@@ -10,28 +10,40 @@
 
 #include "cc/animation/animation_curve.h"
 #include "cc/animation/animation_export.h"
-#include "cc/animation/keyframe_model.h"
-#include "cc/paint/element_id.h"
 #include "cc/trees/mutator_host.h"
 
 namespace cc {
 
 struct CC_ANIMATION_EXPORT AnimationEvent {
-  enum Type { STARTED, FINISHED, ABORTED, TAKEOVER };
+  enum Type { STARTED, FINISHED, ABORTED, TAKEOVER, TIME_UPDATED };
+
+  typedef size_t KeyframeEffectId;
+  struct UniqueKeyframeModelId {
+    int timeline_id;
+    int animation_id;
+    int model_id;
+  };
 
   AnimationEvent(Type type,
-                 ElementId element_id,
+                 UniqueKeyframeModelId uid,
                  int group_id,
                  int target_property,
                  base::TimeTicks monotonic_time);
+
+  // Constructs AnimationEvent of TIME_UPDATED type.
+  AnimationEvent(int timeline_id,
+                 int animation_id,
+                 base::Optional<base::TimeDelta> local_time);
 
   AnimationEvent(const AnimationEvent& other);
   AnimationEvent& operator=(const AnimationEvent& other);
 
   ~AnimationEvent();
 
+  bool ShouldDispatchToKeyframeEffectAndModel() const;
+
   Type type;
-  ElementId element_id;
+  UniqueKeyframeModelId uid;
   int group_id;
   int target_property;
   base::TimeTicks monotonic_time;
@@ -40,6 +52,9 @@ struct CC_ANIMATION_EXPORT AnimationEvent {
   // For continuing a scroll offset animation on the main thread.
   base::TimeTicks animation_start_time;
   std::unique_ptr<AnimationCurve> curve;
+
+  // Set for TIME_UPDATED events.
+  base::Optional<base::TimeDelta> local_time;
 };
 
 class CC_ANIMATION_EXPORT AnimationEvents : public MutatorEvents {
@@ -50,7 +65,17 @@ class CC_ANIMATION_EXPORT AnimationEvents : public MutatorEvents {
   ~AnimationEvents() override;
   bool IsEmpty() const override;
 
+  bool needs_time_updated_events() const { return needs_time_updated_events_; }
+  void set_needs_time_updated_events(bool value) {
+    needs_time_updated_events_ = value;
+  }
+
+  // TODO(gerchiko): Make events_ a private member variable with methods to add
+  // and retrieve the events.
   std::vector<AnimationEvent> events_;
+
+ private:
+  bool needs_time_updated_events_;
 };
 
 }  // namespace cc

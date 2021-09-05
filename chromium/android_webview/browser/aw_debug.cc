@@ -17,8 +17,8 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/threading/thread_restrictions.h"
-#include "components/crash/content/app/crash_reporter_client.h"
-#include "components/crash/content/app/crashpad.h"
+#include "components/crash/core/app/crash_reporter_client.h"
+#include "components/crash/core/app/crashpad.h"
 #include "components/crash/core/common/crash_key.h"
 #include "components/minidump_uploader/rewrite_minidumps_as_mimes.h"
 #include "components/version_info/android/channel_getter.h"
@@ -183,6 +183,14 @@ static void JNI_AwDebug_SetNonWhiteListedKeyForTesting(JNIEnv* env) {
   static ::crash_reporter::CrashKeyString<32> crash_key(
       "AW_NONWHITELISTED_DEBUG_KEY");
   crash_key.Set("AW_DEBUG_VALUE");
+}
+
+static void JNI_AwDebug_SetSupportLibraryWebkitVersionCrashKey(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jstring>& version) {
+  static ::crash_reporter::CrashKeyString<32> crash_key(
+      crash_keys::kSupportLibraryWebkitVersion);
+  crash_key.Set(ConvertJavaStringToUTF8(env, version));
 }
 
 }  // namespace android_webview

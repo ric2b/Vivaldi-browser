@@ -7,13 +7,14 @@ package org.chromium.chrome.browser.incognito;
 import android.view.Window;
 import android.view.WindowManager;
 
-import org.chromium.base.VisibleForTesting;
-import org.chromium.chrome.browser.ChromeFeatureList;
+import androidx.annotation.VisibleForTesting;
+
 import org.chromium.chrome.browser.compositor.layouts.EmptyOverviewModeObserver;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManagerChrome;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior.OverviewModeObserver;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
+import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 
 /**
  * This is the controller that prevents incognito tabs from being visible in Android Recents.
@@ -21,7 +22,6 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 public class IncognitoTabSnapshotController extends EmptyTabModelSelectorObserver {
     private final Window mWindow;
     private final TabModelSelector mTabModelSelector;
-    private final OverviewModeObserver mOverviewModeObserver;
     private boolean mInOverviewMode;
 
     /**
@@ -43,7 +43,7 @@ public class IncognitoTabSnapshotController extends EmptyTabModelSelectorObserve
         mWindow = window;
         mTabModelSelector = tabModelSelector;
 
-        mOverviewModeObserver = new EmptyOverviewModeObserver() {
+        OverviewModeObserver mOverviewModeObserver = new EmptyOverviewModeObserver() {
             @Override
             public void onOverviewModeStartedShowing(boolean showToolbar) {
                 mInOverviewMode = true;
@@ -91,17 +91,21 @@ public class IncognitoTabSnapshotController extends EmptyTabModelSelectorObserve
         boolean isInIncognitoModel = mTabModelSelector.getCurrentModel().isIncognito();
 
         // If we're using the overlapping tab switcher, we show the edge of the open incognito tabs
-        // even if the tab switcher is showing the normal stack. But if the horizontal tab switcher
+        // even if the tab switcher is showing the normal stack. But if the grid tab switcher
         // is enabled, incognito tabs are not visible while we're showing the normal tabs.
         return isInIncognitoModel
-                || (!ChromeFeatureList.isEnabled(ChromeFeatureList.HORIZONTAL_TAB_SWITCHER_ANDROID)
-                           && mInOverviewMode && getIncognitoTabCount() > 0);
+                || (!isGridTabSwitcherEnabled() && mInOverviewMode && getIncognitoTabCount() > 0);
     }
 
     // Set in overview mode for testing.
     @VisibleForTesting
-    public void setInOverViewMode(boolean overviewMode) {
+    void setInOverViewMode(boolean overviewMode) {
         mInOverviewMode = overviewMode;
+    }
+
+    @VisibleForTesting
+    public boolean isGridTabSwitcherEnabled() {
+        return TabUiFeatureUtilities.isGridTabSwitcherEnabled();
     }
 
     /**

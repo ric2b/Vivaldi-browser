@@ -20,6 +20,7 @@
 #include "gpu/vulkan/vulkan_device_queue.h"
 #include "gpu/vulkan/vulkan_fence_helper.h"
 #include "gpu/vulkan/vulkan_function_pointers.h"
+#include "gpu/vulkan/vulkan_image.h"
 #endif
 
 namespace gpu {
@@ -37,6 +38,27 @@ void CleanupAfterSkiaFlush(void* context) {
     std::move(task).Run();
   }
   delete flush_context;
+}
+
+template <class T>
+void DeleteSkObject(SharedContextState* context_state, sk_sp<T> sk_object) {
+  DCHECK(sk_object && sk_object->unique());
+
+  if (context_state->context_lost())
+    return;
+  DCHECK(!context_state->gr_context()->abandoned());
+
+  if (!context_state->GrContextIsVulkan())
+    return;
+
+#if BUILDFLAG(ENABLE_VULKAN)
+  auto* fence_helper =
+      context_state->vk_context_provider()->GetDeviceQueue()->GetFenceHelper();
+  fence_helper->EnqueueCleanupTaskForSubmittedWork(base::BindOnce(
+      [](const sk_sp<GrContext>& gr_context, sk_sp<T> sk_object,
+         gpu::VulkanDeviceQueue* device_queue, bool is_lost) {},
+      sk_ref_sp(context_state->gr_context()), std::move(sk_object)));
+#endif
 }
 
 }  // namespace
@@ -112,6 +134,11 @@ void AddVulkanCleanupTaskForSkiaFlush(
 void DeleteGrBackendTexture(SharedContextState* context_state,
                             GrBackendTexture* backend_texture) {
   DCHECK(backend_texture && backend_texture->isValid());
+
+  if (context_state->context_lost())
+    return;
+  DCHECK(!context_state->gr_context()->abandoned());
+
   if (!context_state->GrContextIsVulkan()) {
     context_state->gr_context()->deleteBackendTexture(
         std::move(*backend_texture));
@@ -124,15 +151,37 @@ void DeleteGrBackendTexture(SharedContextState* context_state,
   fence_helper->EnqueueCleanupTaskForSubmittedWork(base::BindOnce(
       [](const sk_sp<GrContext>& gr_context, GrBackendTexture backend_texture,
          gpu::VulkanDeviceQueue* device_queue, bool is_lost) {
-        // If underlying Vulkan device is destroyed, gr_context should have been
-        // abandoned, the deleteBackendTexture() should be noop.
-        gr_context->deleteBackendTexture(std::move(backend_texture));
+        if (!gr_context->abandoned())
+          gr_context->deleteBackendTexture(std::move(backend_texture));
       },
       sk_ref_sp(context_state->gr_context()), std::move(*backend_texture)));
 #endif
 }
 
+void DeleteSkImage(SharedContextState* context_state, sk_sp<SkImage> sk_image) {
+  DeleteSkObject(context_state, std::move(sk_image));
+}
+
+void DeleteSkSurface(SharedContextState* context_state,
+                     sk_sp<SkSurface> sk_surface) {
+  DeleteSkObject(context_state, std::move(sk_surface));
+}
+
 #if BUILDFLAG(ENABLE_VULKAN)
+GrVkImageInfo CreateGrVkImageInfo(VulkanImage* image) {
+  DCHECK(image);
+  VkPhysicalDevice physical_device =
+      image->device_queue()->GetVulkanPhysicalDevice();
+  GrVkYcbcrConversionInfo gr_ycbcr_info = CreateGrVkYcbcrConversionInfo(
+      physical_device, image->image_tiling(), image->ycbcr_info());
+  GrVkAlloc alloc(image->device_memory(), /*offset=*/0, image->device_size(),
+                  /*flags=*/0);
+  bool is_protected = image->flags() & VK_IMAGE_CREATE_PROTECTED_BIT;
+  return GrVkImageInfo(
+      image->image(), alloc, image->image_tiling(), image->image_layout(),
+      image->format(), /*levelCount=*/1, image->queue_family_index(),
+      is_protected ? GrProtected::kYes : GrProtected::kNo, gr_ycbcr_info);
+}
 
 GrVkYcbcrConversionInfo CreateGrVkYcbcrConversionInfo(
     VkPhysicalDevice physical_device,
@@ -160,6 +209,17 @@ GrVkYcbcrConversionInfo CreateGrVkYcbcrConversionInfo(
                           : format_props.optimalTilingFeatures;
   }
 
+  // As per the spec here [1], if the format does not support
+  // VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_LINEAR_FILTER_BIT,
+  // chromaFilter must be VK_FILTER_NEAREST.
+  // [1] -
+  // https://www.khronos.org/registry/vulkan/specs/1.1-extensions/man/html/VkSamplerYcbcrConversionCreateInfo.html.
+  VkFilter chroma_filter =
+      (format_features &
+       VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_LINEAR_FILTER_BIT)
+          ? VK_FILTER_LINEAR
+          : VK_FILTER_NEAREST;
+
   return GrVkYcbcrConversionInfo(
       vk_format, ycbcr_info->external_format,
       static_cast<VkSamplerYcbcrModelConversion>(
@@ -167,7 +227,7 @@ GrVkYcbcrConversionInfo CreateGrVkYcbcrConversionInfo(
       static_cast<VkSamplerYcbcrRange>(ycbcr_info->suggested_ycbcr_range),
       static_cast<VkChromaLocation>(ycbcr_info->suggested_xchroma_offset),
       static_cast<VkChromaLocation>(ycbcr_info->suggested_ychroma_offset),
-      static_cast<VkFilter>(VK_FILTER_LINEAR),
+      chroma_filter,
       /*forceExplicitReconstruction=*/false, format_features);
 }
 

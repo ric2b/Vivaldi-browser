@@ -8,8 +8,8 @@
 #include "third_party/blink/public/platform/web_media_key_system_configuration.h"
 #include "third_party/blink/public/platform/web_vector.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
-#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
-#include "third_party/blink/renderer/modules/encryptedmedia/media_key_system_configuration.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_media_key_system_configuration.h"
+#include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
 #include "third_party/blink/renderer/platform/encrypted_media_request.h"
 #include "third_party/blink/renderer/platform/heap/member.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
@@ -17,7 +17,7 @@
 namespace blink {
 
 class MediaKeySystemAccessInitializerBase : public EncryptedMediaRequest,
-                                            public ContextLifecycleObserver {
+                                            public ExecutionContextClient {
   USING_GARBAGE_COLLECTED_MIXIN(MediaKeySystemAccessInitializerBase);
 
  public:
@@ -41,7 +41,7 @@ class MediaKeySystemAccessInitializerBase : public EncryptedMediaRequest,
   // Promise() in script_promise_resolver.h
   ScriptPromise Promise();
 
-  void Trace(blink::Visitor* visitor) override;
+  void Trace(Visitor* visitor) override;
 
  protected:
   // Returns true if the ExecutionContext is valid, false otherwise.

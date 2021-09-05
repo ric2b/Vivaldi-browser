@@ -42,9 +42,7 @@ static int64_t IdToMetahandle(syncable::BaseTransaction* trans,
   return entry.GetMetahandle();
 }
 
-BaseNode::BaseNode()
-    : password_data_(new sync_pb::PasswordSpecificsData),
-      wifi_configuration_data_(new sync_pb::WifiConfigurationSpecificsData) {}
+BaseNode::BaseNode() : password_data_(new sync_pb::PasswordSpecificsData) {}
 
 BaseNode::~BaseNode() {}
 
@@ -67,28 +65,14 @@ bool BaseNode::DecryptIfNecessary() {
     return true;
   }
 
-  if (specifics.has_wifi_configuration()) {
-    // Wifi configs have their own legacy encryption structure.
-    std::unique_ptr<sync_pb::WifiConfigurationSpecificsData> data =
-        DecryptWifiConfigurationSpecifics(specifics,
-                                          GetTransaction()->GetCryptographer());
-    if (!data) {
-      GetTransaction()->GetWrappedTrans()->OnUnrecoverableError(
-          FROM_HERE, std::string("Failed to decrypt encrypted node of type ") +
-                         ModelTypeToString(GetModelType()));
-      return false;
-    }
-    wifi_configuration_data_.swap(data);
-    return true;
-  }
-
   // We assume any node with the encrypted field set has encrypted data and if
   // not we have no work to do, with the exception of bookmarks. For bookmarks
   // we must make sure the bookmarks data has the title field supplied. If not,
   // we fill the unencrypted_data_ with a copy of the bookmark specifics that
   // follows the new bookmarks format.
   if (!specifics.has_encrypted()) {
-    if (GetModelType() == BOOKMARKS && !specifics.bookmark().has_title() &&
+    if (GetModelType() == BOOKMARKS &&
+        !specifics.bookmark().has_legacy_canonicalized_title() &&
         !GetTitle().empty()) {  // Last check ensures this isn't a new node.
       // We need to fill in the title.
       std::string title = GetTitle();
@@ -97,10 +81,11 @@ bool BaseNode::DecryptIfNecessary() {
       DVLOG(1) << "Reading from legacy bookmark, manually returning title "
                << title;
       unencrypted_data_.CopyFrom(specifics);
-      unencrypted_data_.mutable_bookmark()->set_title(server_legal_title);
+      unencrypted_data_.mutable_bookmark()->set_legacy_canonicalized_title(
+          server_legal_title);
     }
     else if (GetModelType() == NOTES &&
-        !specifics.notes().has_subject() &&
+        !specifics.notes().has_legacy_canonicalized_title() &&
         !GetTitle().empty()) {  // Last check ensures this isn't a new node.
       // We need to fill in the title.
       std::string title = GetTitle();
@@ -109,7 +94,7 @@ bool BaseNode::DecryptIfNecessary() {
       DVLOG(1) << "Reading from legacy note, manually returning title "
                << title;
       unencrypted_data_.CopyFrom(specifics);
-      unencrypted_data_.mutable_notes()->set_subject(
+      unencrypted_data_.mutable_notes()->set_legacy_canonicalized_title(
           server_legal_title);
     }
     return true;
@@ -149,7 +134,7 @@ const sync_pb::EntitySpecifics& BaseNode::GetUnencryptedSpecifics(
     if (GetModelType() == BOOKMARKS) {
       const sync_pb::BookmarkSpecifics& bookmark_specifics =
           specifics.bookmark();
-      if (bookmark_specifics.has_title() ||
+      if (bookmark_specifics.has_legacy_canonicalized_title() ||
           GetTitle().empty() ||  // For the empty node case
           GetIsPermanentFolder()) {
         // It's possible we previously had to convert and set
@@ -163,7 +148,8 @@ const sync_pb::EntitySpecifics& BaseNode::GetUnencryptedSpecifics(
     } else if (GetModelType() == NOTES) {
       const sync_pb::NotesSpecifics& notes_specifics =
           specifics.notes();
-      if (notes_specifics.has_subject() || notes_specifics.has_content() ||
+      if (notes_specifics.has_legacy_canonicalized_title() ||
+          notes_specifics.has_content() ||
           GetTitle().empty() ||  // For the empty node case
           GetIsPermanentFolder()) {
         // It's possible we previously had to convert and set
@@ -210,11 +196,13 @@ std::string BaseNode::GetTitle() const {
   if (BOOKMARKS == GetModelType() &&
       GetEntry()->GetSpecifics().has_encrypted()) {
     // Special case for legacy bookmarks dealing with encryption.
-    ServerNameToSyncAPIName(GetBookmarkSpecifics().title(), &result);
+    ServerNameToSyncAPIName(GetBookmarkSpecifics().legacy_canonicalized_title(),
+                            &result);
   } else if (NOTES == GetModelType() &&
       GetEntry()->GetSpecifics().has_encrypted()) {
     // Special case for legacy bookmarks dealing with encryption.
-    ServerNameToSyncAPIName(GetNotesSpecifics().subject(), &result);
+    ServerNameToSyncAPIName(GetNotesSpecifics().legacy_canonicalized_title(),
+                            &result);
   } else {
     ServerNameToSyncAPIName(GetEntry()->GetNonUniqueName(), &result);
   }
@@ -290,12 +278,6 @@ const sync_pb::NigoriSpecifics& BaseNode::GetNigoriSpecifics() const {
 const sync_pb::PasswordSpecificsData& BaseNode::GetPasswordSpecifics() const {
   DCHECK_EQ(GetModelType(), PASSWORDS);
   return *password_data_;
-}
-
-const sync_pb::WifiConfigurationSpecificsData&
-BaseNode::GetWifiConfigurationSpecifics() const {
-  DCHECK_EQ(GetModelType(), WIFI_CONFIGURATIONS);
-  return *wifi_configuration_data_;
 }
 
 const sync_pb::EntitySpecifics& BaseNode::GetEntitySpecifics() const {

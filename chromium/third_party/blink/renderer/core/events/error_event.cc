@@ -31,6 +31,7 @@
 #include "third_party/blink/renderer/core/events/error_event.h"
 
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_error_event_init.h"
 #include "third_party/blink/renderer/core/event_interface_names.h"
 #include "v8/include/v8.h"
 
@@ -113,7 +114,7 @@ ScriptValue ErrorEvent::error(ScriptState* script_state) const {
   return ScriptValue(script_state->GetIsolate(), error_.Get(script_state));
 }
 
-void ErrorEvent::Trace(blink::Visitor* visitor) {
+void ErrorEvent::Trace(Visitor* visitor) {
   visitor->Trace(error_);
   Event::Trace(visitor);
 }

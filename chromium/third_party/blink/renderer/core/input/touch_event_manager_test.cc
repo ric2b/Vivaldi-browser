@@ -28,7 +28,7 @@ class TouchEventManagerTest : public SimTest {
         type,
         WebPointerProperties(1, WebPointerProperties::PointerType::kTouch,
                              WebPointerProperties::Button::kLeft,
-                             WebFloatPoint(100, 100), WebFloatPoint(100, 100)),
+                             gfx::PointF(100, 100), gfx::PointF(100, 100)),
         1, 1);
     event.SetFrameScale(1);
     return event;
@@ -98,8 +98,8 @@ TEST_F(TouchEventManagerTest, AbosolutePosWithScrollAndZoom) {
       Vector<WebPointerEvent>(), Vector<WebPointerEvent>());
   GetEventHandler().DispatchBufferedTouchEvents();
 
-  HTMLInputElement* input =
-      ToHTMLInputElement(GetDocument().getElementById("slideElement"));
+  auto* input =
+      To<HTMLInputElement>(GetDocument().getElementById("slideElement"));
   // Allow off by 1 error because it may result in different value in some
   // platform.
   EXPECT_NEAR(23, ParseToDoubleForNumberType(input->value()), 1);

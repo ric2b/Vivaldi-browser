@@ -209,7 +209,6 @@
           },
           "type": {
             "type": "string",
-            "optional": true,
             "description": "The type of email address. Example: WORK, HOME. Note type=INTERNET is default."
           },
           "asDefault": {
@@ -283,7 +282,7 @@
           "propertyName": {
             "$ref": "ContactPropertyName",
             "optional": false,
-            "description": "The property name to be updated (email address, phone)."
+            "description": "The property name to be updated (address, phone)."
           },
           "contactId": {
             "type": "string",
@@ -299,6 +298,11 @@
             "type": "string",
             "optional": false,
             "description": "The email address or phonenumber value to update for the given contact."
+          },
+          "type": {
+            "type": "string",
+            "optional": false,
+            "description": "The type of address, phone. WORK, HOME etc"
           }
         }
       },

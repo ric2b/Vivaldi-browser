@@ -25,6 +25,7 @@
 <translation id="1243314992276662751">ಅಪ್‌ಲೋಡ್</translation>
 <translation id="1249250836236328755">ಪ್ರಕಾರ</translation>
 <translation id="1278813325885878377">ಹಂಗೇರಿಯನ್ QWERTY ಕೀಬೋರ್ಡ್</translation>
+<translation id="1293556467332435079">ಫೈಲ್‌ಗಳು</translation>
 <translation id="1297922636971898492">Google ಡ್ರೈವ್‌ ಇದೀಗ ಲಭ್ಯವಿಲ್ಲ. Google ಡ್ರೈವ್‌ ಒಮ್ಮೆ ಹಿಂತಿರುಗಿದರೆ ಅಪ್‌ಲೋಡ್‌ ಆಗುವುದು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಮರುಪ್ರಾರಂಭಗೊಳ್ಳುತ್ತದೆ.</translation>
 <translation id="1307931752636661898">Linux ಫೈಲ್‌ಗಳನ್ನು ವೀಕ್ಷಿಸಲು ಸಾಧ್ಯವಾಗುತ್ತಿಲ್ಲ</translation>
 <translation id="1310751437842832374">ಲಿಪ್ಯಂತರಣ (mausam → ନମସ୍ତେ)</translation>
@@ -76,6 +77,7 @@
 <translation id="1847880352285315359">ಉಳಿಸಲಾಗಿದೆ</translation>
 <translation id="1864756863218646478">ಫೈಲ್ ಅನ್ನು ಕಂಡುಹಿಡಿಯಲಾಗಲಿಲ್ಲ.</translation>
 <translation id="1921986354447415460">ಟರ್ಕಿಶ್-F ಕೀಬೋರ್ಡ್</translation>
+<translation id="1924372192547904021"><ph name="DRIVE_NAME" /> ಅನ್ನು ಫಾರ್ಮ್ಯಾಟ್ ಮಾಡಲಾಗಿದೆ</translation>
 <translation id="1931134289871235022">ಸ್ಲೋವೇಕ್</translation>
 <translation id="1933345018156373194">ಸರಿಸಲು ವಿಫಲವಾಗಿದೆ, ಅನಿರೀಕ್ಷಿತ ದೋಷ: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="1936717151811561466">ಫಿನ್ನಿಷ್</translation>
@@ -128,7 +130,7 @@
 <translation id="2542049655219295786">Google ಕೋಷ್ಟಕ</translation>
 <translation id="2547921442987553570"><ph name="EXTENSION_NAME" /> ಗೆ ಸೇರಿಸಿ</translation>
 <translation id="255937426064304553">US ಇಂಟರ್‌ನ್ಯಾಷನಲ್</translation>
-<translation id="2562685439590298522">ಡಾಕ್ಸ್</translation>
+<translation id="2562685439590298522">Docs</translation>
 <translation id="2563185590376525700">ಕಪ್ಪೆ</translation>
 <translation id="2614589611416690597"><ph name="VIDEO_TYPE" /> ವೀಡಿಯೊ</translation>
 <translation id="2620090360073999360">ಈ ಸಮಯದಲ್ಲಿ Google ಡ್ರೈವ್‌ ಅನ್ನು ತಲುಪಲು ಸಾಧ್ಯವಿಲ್ಲ.</translation>
@@ -159,6 +161,7 @@
 <translation id="2942290791863759244">ಜರ್ಮನ್ ನಿಯೊ 2 ಕೀಬೋರ್ಡ್</translation>
 <translation id="2943400156390503548">ಸ್ಲೈಡ್‌ಗಳು</translation>
 <translation id="2943503720238418293">ಕಡಿಮೆ ಅಕ್ಷರಗಳನ್ನು ಹೊಂದಿರುವ ಹೆಸರನ್ನು ಬಳಸಿ</translation>
+<translation id="2949781154072577687"><ph name="DRIVE_NAME" /> ಅನ್ನು ಫಾರ್ಮ್ಯಾಟ್ ಮಾಡಲಾಗುತ್ತಿದೆ...</translation>
 <translation id="2951236788251446349">ಜೆಲ್ಲಿಫಿಶ್</translation>
 <translation id="2963783323012015985">ಟರ್ಕಿಶ್ ಕೀಬೋರ್ಡ್</translation>
 <translation id="2966459079597787514">ಸ್ವೀಡಿಶ್ ಕೀಬೋರ್ಡ್</translation>
@@ -271,6 +274,7 @@
 <translation id="4336032328163998280">ನಕಲು ಕಾರ್ಯಾಚರಣೆ ವಿಫಲವಾಗಿದೆ. <ph name="ERROR_MESSAGE" /></translation>
 <translation id="4364327530094270451">ಕರಬೂಜ ಹಣ್ಣು</translation>
 <translation id="4372884569765913867">1x1</translation>
+<translation id="4394214039309501350">ಬಾಹ್ಯ ಲಿಂಕ್</translation>
 <translation id="4425149324548788773">ನನ್ನ ಡ್ರೈವ್</translation>
 <translation id="4465830120256509958">ಬ್ರೆಜಿಲಿಯನ್ ಕೀಬೋರ್ಡ್</translation>
 <translation id="4470564870223067757">ಹಂಗುಲ್ 2 ಸೆಟ್</translation>
@@ -501,6 +505,7 @@
 <translation id="6878261347041253038">ದೇವನಾಗರಿ ಕೀಬೋರ್ಡ್ (ಫೋನೆಟಿಕ್)</translation>
 <translation id="6885780034956018177">ಬಸವನ ಹುಳು</translation>
 <translation id="6896758677409633944">ನಕಲಿಸು</translation>
+<translation id="6898028766943174120">ಇನ್ನಷ್ಟು ಸಬ್-ಫೋಲ್ಡರ್‌ಗಳು...</translation>
 <translation id="691516599546977041"><ph name="FOLDER_NAME" /> ನಲ್ಲಿ ಉಳಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ. ಎಡಿಟ್ ಮಾಡಿದ ಚಿತ್ರಗಳನ್ನು ಡೌನ್‌ಲೋಡ್‌ಗಳ ಫೋಲ್ಡರ್‌ನಲ್ಲಿ ಉಳಿಸಲಾಗುತ್ತದೆ.</translation>
 <translation id="6915678159055240887">Chromebox</translation>
 <translation id="6918340160281024199">US ವರ್ಕ್‌ಮ್ಯಾನ್</translation>
@@ -511,6 +516,7 @@
 <translation id="696203921837389374">ಮೊಬೈಲ್ ಡೇಟಾ ಮೂಲಕ ಸಿಂಕ್ ಮಾಡುವುದನ್ನು ಸಕ್ರಿಯಗೊಳಿಸಿ</translation>
 <translation id="6965382102122355670">ಸರಿ</translation>
 <translation id="6970230597523682626">ಬಲ್ಗೇರಿಯನ್</translation>
+<translation id="6973630695168034713">ಫೋಲ್ಡರ್‌ಗಳು</translation>
 <translation id="6978611942794658017">ಈ ಫೈಲ್ ಅನ್ನು Windows ಸಾಫ್ಟ್‌ವೇರ್ ಬಳಸಿಕೊಂಡು ಒಂದು ಪಿಸಿಗಾಗಿ ವಿನ್ಯಾಸಗೊಳಿಸಲಾಗಿದೆ. Chrome OS ನಲ್ಲಿ ರನ್ ಆಗುವ ನಿಮ್ಮ ಸಾಧನದ ಜೊತೆಗೆ ಇದು ಹೊಂದಾಣಿಕೆಯಾಗುವುದಿಲ್ಲ. ದಯವಿಟ್ಟು ಸೂಕ್ತವಾದ ಬದಲಿ ಅಪ್ಲಿಕೇಶನ್‌ಗಾಗಿ Chrome ವೆಬ್‌ ಸ್ಟೋರ್‌ನಲ್ಲಿ ಹುಡುಕಿ.</translation>
 <translation id="6979158407327259162">Google ಡ್ರೈವ್‌‌</translation>
 <translation id="6990081529015358884">ನಿಮ್ಮ ಬಳಿ ಇದ್ದ ಸ್ಥಳ ಖಾಲಿಯಾಗಿದೆ</translation>
@@ -556,9 +562,11 @@
 <translation id="7589661784326793847">ಸ್ವಲ್ಪ ಕಾಯಿರಿ</translation>
 <translation id="7603724359189955920">ಗ್ರಿಡ್‌ಗಳು</translation>
 <translation id="7627790789328695202">ಓಹ್, <ph name="FILE_NAME" /> ಈಗಾಗಲೇ ಅಸ್ತಿತ್ವದಲ್ಲಿದೆ. ಅದನ್ನು ಮರುಹೆಸರಿಸಿ ಹಾಗೂ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.</translation>
+<translation id="7628656427739290098"><ph name="PERCENT" />% ಪೂರ್ಣಗೊಂಡಿದೆ.</translation>
 <translation id="7649070708921625228">ಸಹಾಯ</translation>
 <translation id="7654209398114106148"><ph name="NUMBER_OF_ITEMS" /> ಐಟಂಗಳನ್ನು ಸರಿಸಲಾಗುತ್ತಿದೆ...</translation>
 <translation id="7658239707568436148">ರದ್ದುಮಾಡಿ</translation>
+<translation id="7695430100978772476"><ph name="DRIVE_NAME" /> ಅನ್ನು ಫಾರ್ಮ್ಯಾಟ್ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ</translation>
 <translation id="770015031906360009">ಗ್ರೀಕ್</translation>
 <translation id="7706319470528945664">ಪೋರ್ಚುಗೀಸ್ ಕೀಬೋರ್ಡ್</translation>
 <translation id="7711920809702896782">ಚಿತ್ರ ಮಾಹಿತಿ</translation>

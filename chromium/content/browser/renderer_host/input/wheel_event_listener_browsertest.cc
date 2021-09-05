@@ -9,7 +9,7 @@
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/shell/browser/shell.h"
-#include "third_party/blink/public/platform/web_input_event.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
 
 using blink::WebInputEvent;
 
@@ -86,7 +86,7 @@ class WheelEventListenerBrowserTest : public ContentBrowserTest {
     blink::WebMouseWheelEvent wheel_event =
         SyntheticWebMouseWheelEventBuilder::Build(
             x, y, x, y, -20, -20, 0,
-            ui::input_types::ScrollGranularity::kScrollByPrecisePixel);
+            ui::ScrollGranularity::kScrollByPrecisePixel);
     wheel_event.phase = blink::WebMouseWheelEvent::kPhaseBegan;
     GetWidgetHost()->ForwardWheelEvent(wheel_event);
     EXPECT_EQ(INPUT_EVENT_ACK_STATE_SET_NON_BLOCKING,

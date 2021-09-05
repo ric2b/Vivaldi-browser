@@ -13,11 +13,11 @@ namespace video_capture {
 PushVideoStreamSubscriptionImpl::PushVideoStreamSubscriptionImpl(
     mojo::PendingReceiver<mojom::PushVideoStreamSubscription>
         subscription_receiver,
-    mojo::PendingRemote<mojom::Receiver> subscriber,
+    mojo::PendingRemote<mojom::VideoFrameHandler> subscriber,
     const media::VideoCaptureParams& requested_settings,
     mojom::VideoSource::CreatePushSubscriptionCallback creation_callback,
     BroadcastingReceiver* broadcaster,
-    mojom::DevicePtr* device)
+    mojo::Remote<mojom::Device>* device)
     : receiver_(this, std::move(subscription_receiver)),
       subscriber_(std::move(subscriber)),
       requested_settings_(requested_settings),

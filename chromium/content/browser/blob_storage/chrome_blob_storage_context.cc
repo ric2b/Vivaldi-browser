@@ -17,15 +17,14 @@
 #include "base/single_thread_task_runner.h"
 #include "base/supports_user_data.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/task_runner.h"
-#include "content/browser/resource_context_impl.h"
 #include "content/public/browser/blob_handle.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/content_features.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
-#include "services/network/public/cpp/resource_request_body.h"
 #include "services/network/public/cpp/wrapper_shared_url_loader_factory.h"
 #include "storage/browser/blob/blob_data_builder.h"
 #include "storage/browser/blob/blob_impl.h"
@@ -58,7 +57,7 @@ void RemoveOldBlobStorageDirectories(FilePath blob_storage_parent,
        name = enumerator.Next()) {
     cleanup_needed = true;
     if (current_run_dir.empty() || name != current_run_dir)
-      success &= base::DeleteFile(name, true /* recursive */);
+      success &= base::DeleteFileRecursively(name);
   }
   if (cleanup_needed)
     UMA_HISTOGRAM_BOOLEAN("Storage.Blob.CleanupSuccess", success);
@@ -95,12 +94,12 @@ ChromeBlobStorageContext* ChromeBlobStorageContext::GetFor(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   if (!context->GetUserData(kBlobStorageContextKeyName)) {
-    scoped_refptr<ChromeBlobStorageContext> blob =
+    scoped_refptr<ChromeBlobStorageContext> blob_storage_context =
         new ChromeBlobStorageContext();
     context->SetUserData(
         kBlobStorageContextKeyName,
         std::make_unique<UserDataAdapter<ChromeBlobStorageContext>>(
-            blob.get()));
+            blob_storage_context.get()));
 
     // Check first to avoid memory leak in unittests.
     bool io_thread_valid =
@@ -119,9 +118,8 @@ ChromeBlobStorageContext* ChromeBlobStorageContext::GetFor(
     // If we're not incognito mode, schedule all of our file tasks to enable
     // disk on the storage context.
     if (!context->IsOffTheRecord() && io_thread_valid) {
-      file_task_runner = base::CreateTaskRunner(
-          {base::ThreadPool(), base::MayBlock(),
-           base::TaskPriority::USER_VISIBLE,
+      file_task_runner = base::ThreadPool::CreateTaskRunner(
+          {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
            base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
       // Removes our old blob directories if they exist.
       BrowserThread::PostBestEffortTask(
@@ -133,7 +131,8 @@ ChromeBlobStorageContext* ChromeBlobStorageContext::GetFor(
     if (io_thread_valid) {
       base::PostTask(
           FROM_HERE, {BrowserThread::IO},
-          base::BindOnce(&ChromeBlobStorageContext::InitializeOnIOThread, blob,
+          base::BindOnce(&ChromeBlobStorageContext::InitializeOnIOThread,
+                         blob_storage_context, context->GetPath(),
                          std::move(blob_storage_dir),
                          std::move(file_task_runner)));
     }
@@ -143,11 +142,31 @@ ChromeBlobStorageContext* ChromeBlobStorageContext::GetFor(
       context, kBlobStorageContextKeyName);
 }
 
+// static
+mojo::PendingRemote<storage::mojom::BlobStorageContext>
+ChromeBlobStorageContext::GetRemoteFor(BrowserContext* browser_context) {
+  DCHECK(browser_context);
+  mojo::PendingRemote<storage::mojom::BlobStorageContext> remote;
+  auto receiver = remote.InitWithNewPipeAndPassReceiver();
+  base::PostTask(
+      FROM_HERE, {BrowserThread::IO},
+      base::BindOnce(
+          [](scoped_refptr<ChromeBlobStorageContext> blob_storage_context,
+             mojo::PendingReceiver<storage::mojom::BlobStorageContext>
+                 receiver) {
+            blob_storage_context->BindMojoContext(std::move(receiver));
+          },
+          base::RetainedRef(ChromeBlobStorageContext::GetFor(browser_context)),
+          std::move(receiver)));
+  return remote;
+}
+
 void ChromeBlobStorageContext::InitializeOnIOThread(
-    FilePath blob_storage_dir,
+    const FilePath& profile_dir,
+    const FilePath& blob_storage_dir,
     scoped_refptr<base::TaskRunner> file_task_runner) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  context_.reset(new BlobStorageContext(std::move(blob_storage_dir),
+  context_.reset(new BlobStorageContext(profile_dir, blob_storage_dir,
                                         std::move(file_task_runner)));
   // Signal the BlobMemoryController when it's appropriate to calculate its
   // storage limits.
@@ -162,16 +181,22 @@ storage::BlobStorageContext* ChromeBlobStorageContext::context() const {
   return context_.get();
 }
 
+void ChromeBlobStorageContext::BindMojoContext(
+    mojo::PendingReceiver<storage::mojom::BlobStorageContext> receiver) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  DCHECK(context_) << "InitializeOnIOThread must be called first";
+  context_->Bind(std::move(receiver));
+}
+
 std::unique_ptr<BlobHandle> ChromeBlobStorageContext::CreateMemoryBackedBlob(
-    const char* data,
-    size_t length,
+    base::span<const uint8_t> data,
     const std::string& content_type) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   std::string uuid(base::GenerateGUID());
   auto blob_data_builder = std::make_unique<storage::BlobDataBuilder>(uuid);
   blob_data_builder->set_content_type(content_type);
-  blob_data_builder->AppendData(data, length);
+  blob_data_builder->AppendData(data);
 
   std::unique_ptr<storage::BlobDataHandle> blob_data_handle =
       context_->AddFinishedBlob(std::move(blob_data_builder));
@@ -262,28 +287,6 @@ storage::BlobStorageContext* GetBlobStorageContext(
   if (!blob_storage_context)
     return nullptr;
   return blob_storage_context->context();
-}
-
-bool GetBodyBlobDataHandles(network::ResourceRequestBody* body,
-                            ResourceContext* resource_context,
-                            BlobHandles* blob_handles) {
-  blob_handles->clear();
-
-  storage::BlobStorageContext* blob_context = GetBlobStorageContext(
-      GetChromeBlobStorageContextForResourceContext(resource_context));
-
-  DCHECK(blob_context);
-  for (size_t i = 0; i < body->elements()->size(); ++i) {
-    const network::DataElement& element = (*body->elements())[i];
-    if (element.type() != network::mojom::DataElementType::kBlob)
-      continue;
-    std::unique_ptr<storage::BlobDataHandle> handle =
-        blob_context->GetBlobDataFromUUID(element.blob_uuid());
-    if (!handle)
-      return false;
-    blob_handles->push_back(std::move(handle));
-  }
-  return true;
 }
 
 const char kBlobStorageContextKeyName[] = "content_blob_storage_context";

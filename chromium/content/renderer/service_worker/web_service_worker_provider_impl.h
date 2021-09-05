@@ -13,9 +13,9 @@
 #include "base/memory/weak_ptr.h"
 #include "content/common/content_export.h"
 #include "third_party/blink/public/common/messaging/transferable_message.h"
-#include "third_party/blink/public/mojom/service_worker/service_worker_error_type.mojom.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_error_type.mojom-forward.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom.h"
-#include "third_party/blink/public/mojom/web_feature/web_feature.mojom.h"
+#include "third_party/blink/public/mojom/web_feature/web_feature.mojom-forward.h"
 #include "third_party/blink/public/platform/modules/service_worker/web_service_worker_provider.h"
 
 namespace blink {
@@ -43,6 +43,7 @@ class CONTENT_EXPORT WebServiceWorkerProviderImpl
       const blink::WebURL& web_script_url,
       blink::mojom::ScriptType script_type,
       blink::mojom::ServiceWorkerUpdateViaCache update_via_cache,
+      const blink::WebFetchClientSettingsObject& fetch_client_settings_object,
       std::unique_ptr<WebServiceWorkerRegistrationCallbacks>) override;
   void GetRegistration(
       const blink::WebURL& web_document_url,

@@ -14,6 +14,7 @@
 #include "content/public/browser/web_contents.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "url/origin.h"
+#include "url/url_util.h"
 
 namespace android_webview {
 
@@ -21,10 +22,10 @@ JsToJavaMessaging::JsToJavaMessaging(
     content::RenderFrameHost* render_frame_host,
     mojo::PendingAssociatedReceiver<mojom::JsToJavaMessaging> receiver,
     base::android::ScopedJavaGlobalRef<jobject> listener_ref,
-    const net::ProxyBypassRules& allowed_origin_rules)
+    const AwOriginMatcher& origin_matcher)
     : render_frame_host_(render_frame_host),
       listener_ref_(listener_ref),
-      allowed_origin_rules_(allowed_origin_rules) {
+      origin_matcher_(origin_matcher) {
   receiver_.Bind(std::move(receiver));
 }
 
@@ -46,7 +47,7 @@ void JsToJavaMessaging::PostMessage(
   // in sequence.
   url::Origin source_origin = render_frame_host_->GetLastCommittedOrigin();
 
-  if (!allowed_origin_rules_.Matches(source_origin.GetURL()))
+  if (!origin_matcher_.Matches(source_origin))
     return;
 
   std::vector<int> int_ports(ports.size(), MOJO_HANDLE_INVALID /* 0 */);
@@ -54,17 +55,30 @@ void JsToJavaMessaging::PostMessage(
     int_ports[i] = ports[i].release().value();
   }
 
+  // We want to pass a string "null" for local file schemes, to make it
+  // consistent to the Blink side SecurityOrigin serialization. When both
+  // setAllow{File,Universal}AccessFromFileURLs are false, Blink::SecurityOrigin
+  // will be serialized as string "null" for local file schemes, but when
+  // setAllowFileAccessFromFileURLs is true, Blink::SecurityOrigin will be
+  // serialized as the scheme, which will be inconsistentt to this place. In
+  // this case we want to let developer to know that local files are not safe,
+  // so we still pass "null".
+  std::string origin_string =
+      base::Contains(url::GetLocalSchemes(), source_origin.scheme())
+          ? "null"
+          : source_origin.Serialize();
   JNIEnv* env = base::android::AttachCurrentThread();
   Java_WebMessageListenerHolder_onPostMessage(
       env, listener_ref_, base::android::ConvertUTF16ToJavaString(env, message),
-      base::android::ConvertUTF8ToJavaString(env, source_origin.Serialize()),
+      base::android::ConvertUTF8ToJavaString(env, origin_string),
       web_contents->GetMainFrame() == render_frame_host_,
       base::android::ToJavaIntArray(env, int_ports.data(), int_ports.size()),
       reply_proxy_->GetJavaPeer());
 }
 
 void JsToJavaMessaging::SetJavaToJsMessaging(
-    mojo::PendingRemote<mojom::JavaToJsMessaging> java_to_js_messaging) {
+    mojo::PendingAssociatedRemote<mojom::JavaToJsMessaging>
+        java_to_js_messaging) {
   // A RenderFrame may inject JsToJavaMessaging in the JavaScript context more
   // than once because of reusing of RenderFrame.
   reply_proxy_ =

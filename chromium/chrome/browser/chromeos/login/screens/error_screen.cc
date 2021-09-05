@@ -76,7 +76,8 @@ constexpr const char ErrorScreen::kUserActionNetworkConnected[] =
     "network-connected";
 
 ErrorScreen::ErrorScreen(ErrorScreenView* view)
-    : BaseScreen(ErrorScreenView::kScreenId), view_(view) {
+    : BaseScreen(ErrorScreenView::kScreenId, OobeScreenPriority::DEFAULT),
+      view_(view) {
   network_state_informer_ = new NetworkStateInformer();
   network_state_informer_->Init();
   NetworkHandler::Get()->network_connection_handler()->AddObserver(this);
@@ -202,7 +203,7 @@ void ErrorScreen::DoHide() {
       PortalDetectorStrategy::STRATEGY_ID_LOGIN_SCREEN);
 }
 
-void ErrorScreen::Show() {
+void ErrorScreen::ShowImpl() {
   if (!on_hide_callback_) {
     SetHideCallback(base::Bind(&ErrorScreen::DefaultHideCallback,
                                weak_factory_.GetWeakPtr()));
@@ -211,7 +212,7 @@ void ErrorScreen::Show() {
     view_->Show();
 }
 
-void ErrorScreen::Hide() {
+void ErrorScreen::HideImpl() {
   if (view_)
     view_->Hide();
 }

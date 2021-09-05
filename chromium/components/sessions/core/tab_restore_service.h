@@ -20,6 +20,8 @@
 #include "components/sessions/core/session_id.h"
 #include "components/sessions/core/session_types.h"
 #include "components/sessions/core/sessions_export.h"
+#include "components/tab_groups/tab_group_id.h"
+#include "components/tab_groups/tab_group_visual_data.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/gfx/geometry/rect.h"
@@ -120,7 +122,10 @@ class SESSIONS_EXPORT TabRestoreService : public KeyedService {
     std::string user_agent_override;
 
     // The group the tab belonged to, if any.
-    base::Optional<base::Token> group;
+    base::Optional<tab_groups::TabGroupId> group;
+
+    // The group metadata for the tab, if any.
+    base::Optional<tab_groups::TabGroupVisualData> group_visual_data;
 
     // If non-empty external data stored on the tab.
     std::string ext_data;
@@ -140,7 +145,7 @@ class SESSIONS_EXPORT TabRestoreService : public KeyedService {
     std::vector<std::unique_ptr<Tab>> tabs;
 
     // Tab group data.
-    std::map<base::Token, TabGroupMetadata> tab_groups;
+    std::map<tab_groups::TabGroupId, tab_groups::TabGroupVisualData> tab_groups;
 
     // Index of the selected tab.
     int selected_tab_index = -1;

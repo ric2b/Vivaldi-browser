@@ -15,8 +15,8 @@
 #include "build/build_config.h"
 #include "components/webcrypto/webcrypto_impl.h"
 #include "content/common/content_export.h"
+#include "third_party/blink/public/common/input/web_gesture_device.h"
 #include "third_party/blink/public/platform/platform.h"
-#include "third_party/blink/public/platform/web_gesture_device.h"
 #include "third_party/blink/public/platform/web_url_error.h"
 #include "third_party/blink/public/public_buildflags.h"
 #include "ui/base/layout.h"
@@ -55,7 +55,7 @@ class CONTENT_EXPORT BlinkPlatformImpl : public blink::Platform {
   bool AllowScriptExtensionForServiceWorker(
       const blink::WebSecurityOrigin& script_origin) override;
   blink::WebCrypto* Crypto() override;
-  blink::ThreadSafeBrowserInterfaceBrokerProxy* GetBrowserInterfaceBrokerProxy()
+  blink::ThreadSafeBrowserInterfaceBrokerProxy* GetBrowserInterfaceBroker()
       override;
 
   scoped_refptr<base::SingleThreadTaskRunner> GetIOTaskRunner() const override;

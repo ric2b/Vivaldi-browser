@@ -29,8 +29,8 @@
  */
 
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/input/web_touch_event.h"
 #include "third_party/blink/public/platform/web_coalesced_input_event.h"
-#include "third_party/blink/public/platform/web_touch_event.h"
 #include "third_party/blink/public/platform/web_url_loader_mock_factory.h"
 #include "third_party/blink/public/web/web_document.h"
 #include "third_party/blink/public/web/web_frame.h"
@@ -66,7 +66,7 @@ class TouchActionTrackingWebWidgetClient
     : public frame_test_helpers::TestWebWidgetClient {
  public:
   TouchActionTrackingWebWidgetClient()
-      : action_set_count_(0), action_(TouchAction::kTouchActionAuto) {}
+      : action_set_count_(0), action_(TouchAction::kAuto) {}
 
   // WebWidgetClient methods
   void SetTouchAction(TouchAction touch_action) override {
@@ -77,7 +77,7 @@ class TouchActionTrackingWebWidgetClient
   // Local methods
   void Reset() {
     action_set_count_ = 0;
-    action_ = TouchAction::kTouchActionAuto;
+    action_ = TouchAction::kAuto;
   }
 
   int TouchActionSetCount() { return action_set_count_; }
@@ -217,7 +217,7 @@ WebViewImpl* TouchActionTest::SetupTest(
   Document* document =
       static_cast<Document*>(web_view->MainFrameImpl()->GetDocument());
   document->GetFrame()->View()->LayoutViewport()->SetScrollOffset(
-      ScrollOffset(0, kScrollOffset), kProgrammaticScroll);
+      ScrollOffset(0, kScrollOffset), mojom::blink::ScrollType::kProgrammatic);
 
   return web_view;
 }
@@ -325,7 +325,7 @@ void TouchActionTest::RunTestOnTree(
           << "Unexpected hit test result " << failure_context_pos
           << "  Got element: \""
           << result.InnerElement()
-                 ->OuterHTMLAsString()
+                 ->outerHTML()
                  .StripWhiteSpace()
                  .Left(80)
                  .Ascii()
@@ -342,23 +342,22 @@ void TouchActionTest::RunTestOnTree(
       EXPECT_EQ(1, client.TouchActionSetCount()) << failure_context_pos;
       if (client.TouchActionSetCount()) {
         if (expected_action == "auto") {
-          EXPECT_EQ(TouchAction::kTouchActionAuto, client.LastTouchAction())
+          EXPECT_EQ(TouchAction::kAuto, client.LastTouchAction())
               << failure_context_pos;
         } else if (expected_action == "none") {
-          EXPECT_EQ(TouchAction::kTouchActionNone, client.LastTouchAction())
+          EXPECT_EQ(TouchAction::kNone, client.LastTouchAction())
               << failure_context_pos;
         } else if (expected_action == "pan-x") {
-          EXPECT_EQ(TouchAction::kTouchActionPanX, client.LastTouchAction())
+          EXPECT_EQ(TouchAction::kPanX, client.LastTouchAction())
               << failure_context_pos;
         } else if (expected_action == "pan-y") {
-          EXPECT_EQ(TouchAction::kTouchActionPanY, client.LastTouchAction())
+          EXPECT_EQ(TouchAction::kPanY, client.LastTouchAction())
               << failure_context_pos;
         } else if (expected_action == "pan-x-y") {
-          EXPECT_EQ((TouchAction::kTouchActionPan), client.LastTouchAction())
+          EXPECT_EQ((TouchAction::kPan), client.LastTouchAction())
               << failure_context_pos;
         } else if (expected_action == "manipulation") {
-          EXPECT_EQ((TouchAction::kTouchActionManipulation),
-                    client.LastTouchAction())
+          EXPECT_EQ((TouchAction::kManipulation), client.LastTouchAction())
               << failure_context_pos;
         } else {
           FAIL() << "Unrecognized expected-action " << expected_action << " "
@@ -383,8 +382,8 @@ void TouchActionTest::SendTouchEvent(WebView* web_view,
       type,
       WebPointerProperties(1, WebPointerProperties::PointerType::kTouch,
                            WebPointerProperties::Button::kLeft,
-                           WebFloatPoint(client_point.X(), client_point.Y()),
-                           WebFloatPoint(client_point.X(), client_point.Y())),
+                           gfx::PointF(client_point.X(), client_point.Y()),
+                           gfx::PointF(client_point.X(), client_point.Y())),
       10.0f, 10.0f);
   if (type == WebInputEvent::kPointerCancel)
     event.dispatch_type = WebInputEvent::kEventNonBlocking;

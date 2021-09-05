@@ -47,16 +47,10 @@ class TopSitesImpl : public TopSites, public HistoryServiceObserver {
  public:
   // Called to check whether an URL can be added to the history. Must be
   // callable multiple time and during the whole lifetime of TopSitesImpl.
-  using CanAddURLToHistoryFn = base::Callback<bool(const GURL&)>;
-
-  // gisli@vivaldi.com:  Increased kNonForcedTopSitesNumber,
-  // kForcedTopSitesNumber and kMaxTempTopImages as we are using
-  // top sites as general storage for thumbnails (through
-  // the ThumbnailService).  When Chromium implements the
-  // ThumbnailService properly this change should be reverted.
+  using CanAddURLToHistoryFn = base::RepeatingCallback<bool(const GURL&)>;
 
   // How many top sites to store in the cache.
-  static constexpr size_t kTopSitesNumber = 60;
+  static constexpr size_t kTopSitesNumber = 10;
 
   TopSitesImpl(PrefService* pref_service,
                HistoryService* history_service,
@@ -67,7 +61,7 @@ class TopSitesImpl : public TopSites, public HistoryServiceObserver {
   void Init(const base::FilePath& db_name);
 
   // TopSites implementation.
-  void GetMostVisitedURLs(const GetMostVisitedURLsCallback& callback) override;
+  void GetMostVisitedURLs(GetMostVisitedURLsCallback callback) override;
   void SyncWithHistory() override;
   bool HasBlacklistedItems() const override;
   void AddBlacklistedURL(const GURL& url) override;
@@ -110,9 +104,9 @@ class TopSitesImpl : public TopSites, public HistoryServiceObserver {
   FRIEND_TEST_ALL_PREFIXES(TopSitesImplTest, DiffMostVisited);
   FRIEND_TEST_ALL_PREFIXES(TopSitesImplTest, DiffMostVisitedWithForced);
 
-  typedef base::Callback<void(const MostVisitedURLList&)> PendingCallback;
+  using PendingCallback = base::OnceCallback<void(const MostVisitedURLList&)>;
 
-  typedef std::vector<PendingCallback> PendingCallbacks;
+  using PendingCallbacks = std::vector<PendingCallback>;
 
   // Starts to query most visited URLs from history database instantly. Also
   // cancels any pending queries requested in a delayed manner by canceling the

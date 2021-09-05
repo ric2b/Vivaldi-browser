@@ -5,6 +5,8 @@
 #include "components/search_engines/android/template_url_service_android.h"
 
 #include <stddef.h>
+#include <string>
+#include <vector>
 
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
@@ -152,6 +154,29 @@ TemplateUrlServiceAndroid::GetUrlForSearchQuery(
 }
 
 base::android::ScopedJavaLocalRef<jstring>
+TemplateUrlServiceAndroid::GetSearchQueryForUrl(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    const JavaParamRef<jstring>& jurl) {
+  const TemplateURL* default_provider =
+      template_url_service_->GetDefaultSearchProvider();
+
+  GURL url(base::android::ConvertJavaStringToUTF8(env, jurl));
+  base::string16 query;
+
+  if (default_provider &&
+      default_provider->url_ref().SupportsReplacement(
+          template_url_service_->search_terms_data()) &&
+      template_url_service_->IsSearchResultsPageFromDefaultSearchProvider(
+          url)) {
+    default_provider->ExtractSearchTermsFromURL(
+        url, template_url_service_->search_terms_data(), &query);
+  }
+
+  return base::android::ConvertUTF16ToJavaString(env, query);
+}
+
+base::android::ScopedJavaLocalRef<jstring>
 TemplateUrlServiceAndroid::GetUrlForVoiceSearchQuery(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
@@ -245,7 +270,8 @@ jboolean TemplateUrlServiceAndroid::SetPlayAPISearchEngine(
     const base::android::JavaParamRef<jstring>& jkeyword,
     const base::android::JavaParamRef<jstring>& jsearch_url,
     const base::android::JavaParamRef<jstring>& jsuggest_url,
-    const base::android::JavaParamRef<jstring>& jfavicon_url) {
+    const base::android::JavaParamRef<jstring>& jfavicon_url,
+    jboolean set_as_default) {
   // Check if there is already a search engine created from Play API.
   TemplateURLService::TemplateURLVector template_urls =
       template_url_service_->GetTemplateURLs();
@@ -272,7 +298,7 @@ jboolean TemplateUrlServiceAndroid::SetPlayAPISearchEngine(
       template_url_service_->CreateOrUpdateTemplateURLFromPlayAPIData(
           name, keyword, search_url, suggest_url, favicon_url);
 
-  if (template_url_service_->CanMakeDefault(t_url))
+  if (set_as_default && template_url_service_->CanMakeDefault(t_url))
     template_url_service_->SetUserSelectedDefaultSearchProvider(t_url);
   return true;
 }
@@ -293,27 +319,15 @@ TemplateUrlServiceAndroid::AddSearchEngineForTesting(
   data.safe_for_autoreplace = true;
   data.input_encodings.push_back("UTF-8");
   data.prepopulate_id = 0;
-  data.date_created =
-      base::Time::Now() - base::TimeDelta::FromDays((int)age_in_days);
-  data.last_modified =
-      base::Time::Now() - base::TimeDelta::FromDays((int)age_in_days);
-  data.last_visited =
-      base::Time::Now() - base::TimeDelta::FromDays((int)age_in_days);
+  data.date_created = base::Time::Now() -
+                      base::TimeDelta::FromDays(static_cast<int>(age_in_days));
+  data.last_modified = base::Time::Now() -
+                       base::TimeDelta::FromDays(static_cast<int>(age_in_days));
+  data.last_visited = base::Time::Now() -
+                      base::TimeDelta::FromDays(static_cast<int>(age_in_days));
   TemplateURL* t_url =
       template_url_service_->Add(std::make_unique<TemplateURL>(data));
   CHECK(t_url) << "Failed adding template url for: " << keyword;
-  return base::android::ConvertUTF16ToJavaString(env, t_url->data().keyword());
-}
-
-base::android::ScopedJavaLocalRef<jstring>
-TemplateUrlServiceAndroid::UpdateLastVisitedForTesting(
-    JNIEnv* env,
-    const base::android::JavaParamRef<jobject>& obj,
-    const base::android::JavaParamRef<jstring>& jkeyword) {
-  base::string16 keyword =
-      base::android::ConvertJavaStringToUTF16(env, jkeyword);
-  TemplateURL* t_url = template_url_service_->GetTemplateURLForKeyword(keyword);
-  template_url_service_->UpdateTemplateURLVisitTime(t_url);
   return base::android::ConvertUTF16ToJavaString(env, t_url->data().keyword());
 }
 

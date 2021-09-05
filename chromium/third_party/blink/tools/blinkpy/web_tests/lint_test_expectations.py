@@ -34,15 +34,54 @@ import traceback
 from blinkpy.common import exit_codes
 from blinkpy.common.host import Host
 from blinkpy.common.system.log_utils import configure_logging
-from blinkpy.web_tests.models import test_expectations
+from blinkpy.web_tests.models.test_expectations import (
+    TestExpectations, ParseError)
+
 from blinkpy.web_tests.port.factory import platform_options
 
 _log = logging.getLogger(__name__)
 
 
+def PresubmitCheckTestExpectations(input_api, output_api):
+    os_path = input_api.os_path
+    lint_path = os_path.join(
+        os_path.dirname(os_path.abspath(__file__)),
+        '..', '..', 'lint_test_expectations.py')
+    _, errs = input_api.subprocess.Popen(
+        [input_api.python_executable, lint_path],
+        stdout=input_api.subprocess.PIPE,
+        stderr=input_api.subprocess.PIPE).communicate()
+    if not errs:
+        return [output_api.PresubmitError(
+            "lint_test_expectations.py failed "
+            "to produce output; check by hand. ")]
+    if errs.strip() != 'Lint succeeded.':
+        return [output_api.PresubmitError(errs)]
+    return []
+
+
 def lint(host, options):
-    ports_to_lint = [host.port_factory.get(name) for name in host.port_factory.all_port_names(options.platform)]
-    files_linted = set()
+    port = host.port_factory.get(options.platform)
+
+    # Add all extra expectation files to be linted.
+    options.additional_expectations.extend([
+        host.filesystem.join(
+            port.web_tests_dir(), 'android', 'ClankWPTOverrideExpectations'),
+        host.filesystem.join(
+            port.web_tests_dir(), 'android', 'WebviewWPTOverrideExpectations'),
+        host.filesystem.join(
+            port.web_tests_dir(), 'android', 'WeblayerWPTOverrideExpectations'),
+        host.filesystem.join(
+            port.web_tests_dir(), 'android', 'AndroidWPTNeverFixTests'),
+        host.filesystem.join(
+            port.web_tests_dir(), 'WPTOverrideExpectations'),
+        host.filesystem.join(
+            port.web_tests_dir(), 'WebGPUExpectations'),
+    ])
+
+    ports_to_lint = [
+        host.port_factory.get(name, options=options)
+        for name in host.port_factory.all_port_names(options.platform)]
 
     # In general, the set of TestExpectation files should be the same for
     # all ports. However, the method used to list expectations files is
@@ -51,30 +90,59 @@ def lint(host, options):
     # (the default Port for this host) and it would work the same.
 
     failures = []
-    for port_to_lint in ports_to_lint:
-        expectations_dict = port_to_lint.all_expectations_dict()
+    expectations_dict = {}
+    all_system_specifiers = set()
+    all_build_specifiers = set(ports_to_lint[0].ALL_BUILD_TYPES)
 
-        for path in port_to_lint.extra_expectations_files():
+    # TODO(crbug.com/986447) Remove the checks below after migrating the expectations
+    # parsing to Typ. All the checks below can be handled by Typ.
+
+    for port in ports_to_lint:
+        expectations_dict.update(port.all_expectations_dict())
+        config_macro_dict = port.configuration_specifier_macros()
+        if config_macro_dict:
+            all_system_specifiers.update({s.lower() for s in config_macro_dict.keys()})
+            all_system_specifiers.update(
+                {s.lower() for s in reduce(lambda x, y: x + y, config_macro_dict.values())})
+        for path in port.extra_expectations_files():
             if host.filesystem.exists(path):
                 expectations_dict[path] = host.filesystem.read_text_file(path)
 
-        for expectations_file in expectations_dict:
-
-            if expectations_file in files_linted:
+    for path, content in expectations_dict.items():
+        # check for expectations which start with the Bug(...) token
+        exp_lines = content.split('\n')
+        for lineno, line in enumerate(exp_lines, 1):
+            line = line.strip()
+            if not line or line.startswith('#'):
                 continue
+            if line.startswith('Bug('):
+                error = (("%s:%d Expectation '%s' has the Bug(...) token, "
+                          "The token has been removed in the new expectations format") %
+                          (host.filesystem.basename(path), lineno, line))
+                _log.error(error)
+                failures.append(error)
+                _log.error('')
 
-            try:
-                test_expectations.TestExpectations(
-                    port_to_lint,
-                    expectations_dict={expectations_file: expectations_dict[expectations_file]},
-                    is_lint_mode=True)
-            except test_expectations.ParseError as error:
+        # check for test expectations that start with leading spaces
+        for lineno, line in enumerate(exp_lines, 1):
+            if not line.strip() or line.strip().startswith('#'):
+                continue
+            if line.startswith(' '):
+                error = '%s:%d Line %d has a test expectation that has leading spaces.' % (
+                    host.filesystem.basename(path), lineno, lineno)
+                _log.error(error)
+                failures.append(error)
                 _log.error('')
-                for warning in error.warnings:
-                    _log.error(warning)
-                    failures.append('%s: %s' % (expectations_file, warning))
-                _log.error('')
-            files_linted.add(expectations_file)
+
+        # Create a TestExpectations instance and see if exception is raised
+        try:
+            TestExpectations(
+                ports_to_lint[0],
+                expectations_dict={path: content})
+        except ParseError as error:
+            _log.error(str(error))
+            failures.append(str(error))
+            _log.error('')
     return failures
 
 
@@ -83,38 +151,52 @@ def check_virtual_test_suites(host, options):
     fs = host.filesystem
     web_tests_dir = port.web_tests_dir()
     virtual_suites = port.virtual_test_suites()
-    # Make sure ancestors come first (e.g. "virtual/foo/bar", "virtual/foo/bar/baz").
-    virtual_suites.sort(key=lambda s: s.name)
+    virtual_suites.sort(key=lambda s: s.full_prefix)
 
-    seen = set()
     failures = []
     for suite in virtual_suites:
-        suite_comps = suite.name.split(port.TEST_PATH_SEPARATOR)
-        # E.g. virtual/foo/fast/css/a.html will execute twice if
-        # both virtual/foo/fast and virtual/foo/fast/css are both defined.
-        for i in range(3, len(suite_comps)):
-            ancestor = port.TEST_PATH_SEPARATOR.join(suite_comps[:i])
-            if ancestor in seen:
-                failure = ('{} is a subset of {}; you will see tests under the '
-                           'former running multiple times (potentially with '
-                           'different args).'.format(suite.name, ancestor))
-                _log.error(failure)
-                failures.append(failure)
-        seen.add(suite.name)
+        suite_comps = suite.full_prefix.split(port.TEST_PATH_SEPARATOR)
+        prefix = suite_comps[1]
+        normalized_bases = [port.normalize_test_name(b) for b in suite.bases]
+        normalized_bases.sort();
+        for i in range(1, len(normalized_bases)):
+            for j in range(0, i):
+                if normalized_bases[i].startswith(normalized_bases[j]):
+                    failure = 'Base "{}" starts with "{}" in the same virtual suite "{}", so is redundant.'.format(
+                        normalized_bases[i], normalized_bases[j], prefix)
+                    _log.error(failure)
+                    failures.append(failure)
 
         # A virtual test suite needs either
         # - a top-level README.md (e.g. virtual/foo/README.md)
-        # - a README.txt for each covered dir/file (e.g.
+        # - a README.txt for each covered directory (e.g.
         #   virtual/foo/http/tests/README.txt, virtual/foo/fast/README.txt, ...)
-        comps = [web_tests_dir] + suite_comps + ['README.txt']
-        path_to_readme_txt = fs.join(*comps)
-        comps = [web_tests_dir] + suite_comps[:2] + ['README.md']
+        comps = [web_tests_dir] + suite_comps + ['README.md']
         path_to_readme_md = fs.join(*comps)
-        if not fs.exists(path_to_readme_txt) and not fs.exists(path_to_readme_md):
-            failure = '{} and {} are both missing (each virtual suite must have one).'.format(
-                path_to_readme_txt, path_to_readme_md)
-            _log.error(failure)
-            failures.append(failure)
+        for base in suite.bases:
+            if not base:
+                failure = 'Base value in virtual suite "{}" should not be an empty string'.format(prefix)
+                _log.error(failure)
+                failures.append(failure)
+                continue
+            base_comps = base.split(port.TEST_PATH_SEPARATOR)
+            absolute_base = port.abspath_for_test(base)
+            if fs.isfile(absolute_base):
+                del base_comps[-1]
+            elif not fs.isdir(absolute_base):
+                failure = 'Base "{}" in virtual suite "{}" must refer to a real file or directory'.format(
+                    base, prefix)
+                _log.error(failure)
+                failures.append(failure)
+                continue
+            comps = [web_tests_dir] + suite_comps + base_comps + ['README.txt']
+            path_to_readme_txt = fs.join(*comps)
+            if not fs.exists(path_to_readme_md) and not fs.exists(path_to_readme_txt):
+                failure = '"{}" and "{}" are both missing (each virtual suite must have one).'.format(
+                    path_to_readme_txt, path_to_readme_md)
+                _log.error(failure)
+                failures.append(failure)
+
     if failures:
         _log.error('')
     return failures
@@ -172,6 +254,9 @@ def main(argv, stderr, host=None):
     parser.add_option('--json', help='Path to JSON output file')
     parser.add_option('--verbose', action='store_true', default=False,
                       help='log extra details that may be helpful when debugging')
+    parser.add_option('--additional-expectations', action='append', default=[],
+                      help='paths to additional expectation files to lint.')
+
     options, _ = parser.parse_args(argv)
 
     if not host:

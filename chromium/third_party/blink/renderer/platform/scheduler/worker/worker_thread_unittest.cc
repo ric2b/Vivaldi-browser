@@ -41,7 +41,7 @@ class TestObserver : public Thread::TaskObserver {
 
   ~TestObserver() override = default;
 
-  void WillProcessTask(const base::PendingTask&) override {
+  void WillProcessTask(const base::PendingTask&, bool) override {
     calls_->Append(" willProcessTask");
   }
 
@@ -77,7 +77,7 @@ class WorkerThreadTest : public testing::Test {
 
   void SetUp() override {
     thread_ =
-        Thread::CreateThread(ThreadCreationParams(WebThreadType::kTestThread));
+        Thread::CreateThread(ThreadCreationParams(ThreadType::kTestThread));
   }
 
   void RunOnWorkerThread(const base::Location& from_here,

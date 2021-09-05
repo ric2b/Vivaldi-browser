@@ -12,6 +12,7 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/containers/flat_set.h"
 #include "base/posix/safe_strerror.h"
 #include "base/process/launch.h"
 #include "base/strings/strcat.h"
@@ -29,7 +30,10 @@ namespace media {
 
 namespace {
 
-const base::TimeDelta kEventWaitTimeoutSecs = base::TimeDelta::FromSeconds(1);
+constexpr int32_t kDefaultFps = 30;
+
+constexpr base::TimeDelta kEventWaitTimeoutSecs =
+    base::TimeDelta::FromSeconds(1);
 
 class LocalCameraClientObserver : public CameraClientObserver {
  public:
@@ -37,8 +41,9 @@ class LocalCameraClientObserver : public CameraClientObserver {
       scoped_refptr<CameraHalDelegate> camera_hal_delegate)
       : camera_hal_delegate_(std::move(camera_hal_delegate)) {}
 
-  void OnChannelCreated(cros::mojom::CameraModulePtr camera_module) override {
-    camera_hal_delegate_->SetCameraModule(camera_module.PassInterface());
+  void OnChannelCreated(
+      mojo::PendingRemote<cros::mojom::CameraModule> camera_module) override {
+    camera_hal_delegate_->SetCameraModule(std::move(camera_module));
   }
 
  private:
@@ -82,6 +87,32 @@ void NotifyVideoCaptureDevicesChanged() {
   }
 }
 
+base::flat_set<int32_t> GetAvailableFramerates(
+    const cros::mojom::CameraInfoPtr& camera_info) {
+  base::flat_set<int32_t> candidates;
+  auto available_fps_ranges = GetMetadataEntryAsSpan<int32_t>(
+      camera_info->static_camera_characteristics,
+      cros::mojom::CameraMetadataTag::
+          ANDROID_CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES);
+  if (available_fps_ranges.empty()) {
+    // If there is no available target fps ranges listed in metadata, we set a
+    // default fps as candidate.
+    LOG(WARNING) << "No available fps ranges in metadata. Set default fps as "
+                    "candidate.";
+    candidates.insert(kDefaultFps);
+    return candidates;
+  }
+
+  // The available target fps ranges are stored as pairs int32s: (min, max) x n.
+  const size_t kRangeMaxOffset = 1;
+  const size_t kRangeSize = 2;
+
+  for (size_t i = 0; i < available_fps_ranges.size(); i += kRangeSize) {
+    candidates.insert(available_fps_ranges[i + kRangeMaxOffset]);
+  }
+  return candidates;
+}
+
 }  // namespace
 
 CameraHalDelegate::CameraHalDelegate(
@@ -113,10 +144,10 @@ void CameraHalDelegate::RegisterCameraClient() {
 }
 
 void CameraHalDelegate::SetCameraModule(
-    cros::mojom::CameraModulePtrInfo camera_module_ptr_info) {
+    mojo::PendingRemote<cros::mojom::CameraModule> camera_module) {
   ipc_task_runner_->PostTask(
       FROM_HERE, base::BindOnce(&CameraHalDelegate::SetCameraModuleOnIpcThread,
-                                this, base::Passed(&camera_module_ptr_info)));
+                                this, std::move(camera_module)));
 }
 
 void CameraHalDelegate::Reset() {
@@ -177,6 +208,9 @@ void CameraHalDelegate::GetSupportedFormats(
   }
   const cros::mojom::CameraInfoPtr& camera_info = camera_info_[camera_id];
 
+  base::flat_set<int32_t> candidate_fps_set =
+      GetAvailableFramerates(camera_info);
+
   const cros::mojom::CameraMetadataEntryPtr* min_frame_durations =
       GetMetadataEntry(camera_info->static_camera_characteristics,
                        cros::mojom::CameraMetadataTag::
@@ -221,10 +255,17 @@ void CameraHalDelegate::GetSupportedFormats(
     if (cr_format.video_format == PIXEL_FORMAT_UNKNOWN) {
       continue;
     }
-    VLOG(1) << "Supported format: " << width << "x" << height
-            << " fps=" << max_fps << " format=" << cr_format.video_format;
-    supported_formats->emplace_back(gfx::Size(width, height), max_fps,
-                                    cr_format.video_format);
+
+    for (auto fps : candidate_fps_set) {
+      if (fps > max_fps) {
+        continue;
+      }
+
+      VLOG(1) << "Supported format: " << width << "x" << height
+              << " fps=" << fps << " format=" << cr_format.video_format;
+      supported_formats->emplace_back(gfx::Size(width, height), fps,
+                                      cr_format.video_format);
+    }
   }
 }
 
@@ -325,7 +366,7 @@ cros::mojom::CameraInfoPtr CameraHalDelegate::GetCameraInfoFromDeviceId(
 
 void CameraHalDelegate::OpenDevice(
     int32_t camera_id,
-    cros::mojom::Camera3DeviceOpsRequest device_ops_request,
+    mojo::PendingReceiver<cros::mojom::Camera3DeviceOps> device_ops_receiver,
     OpenDeviceCallback callback) {
   DCHECK(!ipc_task_runner_->BelongsToCurrentThread());
   // This method may be called on any thread except |ipc_task_runner_|.
@@ -335,7 +376,7 @@ void CameraHalDelegate::OpenDevice(
   ipc_task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(&CameraHalDelegate::OpenDeviceOnIpcThread, this, camera_id,
-                     base::Passed(&device_ops_request), std::move(callback)));
+                     std::move(device_ops_receiver), std::move(callback)));
 }
 
 int CameraHalDelegate::GetCameraIdFromDeviceId(const std::string& device_id) {
@@ -348,24 +389,24 @@ int CameraHalDelegate::GetCameraIdFromDeviceId(const std::string& device_id) {
 }
 
 void CameraHalDelegate::SetCameraModuleOnIpcThread(
-    cros::mojom::CameraModulePtrInfo camera_module_ptr_info) {
+    mojo::PendingRemote<cros::mojom::CameraModule> camera_module) {
   DCHECK(ipc_task_runner_->BelongsToCurrentThread());
   if (camera_module_.is_bound()) {
     LOG(ERROR) << "CameraModule is already bound";
     return;
   }
-  camera_module_ = mojo::MakeProxy(std::move(camera_module_ptr_info));
-  camera_module_.set_connection_error_handler(
-      base::BindOnce(&CameraHalDelegate::ResetMojoInterfaceOnIpcThread, this));
+  if (camera_module.is_valid()) {
+    camera_module_.Bind(std::move(camera_module));
+    camera_module_.set_disconnect_handler(base::BindOnce(
+        &CameraHalDelegate::ResetMojoInterfaceOnIpcThread, this));
+  }
   camera_module_has_been_set_.Signal();
 }
 
 void CameraHalDelegate::ResetMojoInterfaceOnIpcThread() {
   DCHECK(ipc_task_runner_->BelongsToCurrentThread());
   camera_module_.reset();
-  if (camera_module_callbacks_.is_bound()) {
-    camera_module_callbacks_.Close();
-  }
+  camera_module_callbacks_.reset();
   vendor_tag_ops_delegate_.Reset();
   builtin_camera_info_updated_.Reset();
   camera_module_has_been_set_.Reset();
@@ -416,16 +457,12 @@ void CameraHalDelegate::OnGotNumberOfCamerasOnIpcThread(int32_t num_cameras) {
   // Per camera HAL v3 specification SetCallbacks() should be called after the
   // first time GetNumberOfCameras() is called, and before other CameraModule
   // functions are called.
-  cros::mojom::CameraModuleCallbacksPtr camera_module_callbacks_ptr;
-  cros::mojom::CameraModuleCallbacksRequest camera_module_callbacks_request =
-      mojo::MakeRequest(&camera_module_callbacks_ptr);
-  camera_module_callbacks_.Bind(std::move(camera_module_callbacks_request));
   camera_module_->SetCallbacks(
-      std::move(camera_module_callbacks_ptr),
+      camera_module_callbacks_.BindNewPipeAndPassRemote(),
       base::BindOnce(&CameraHalDelegate::OnSetCallbacksOnIpcThread, this));
 
   camera_module_->GetVendorTagOps(
-      vendor_tag_ops_delegate_.MakeRequest(),
+      vendor_tag_ops_delegate_.MakeReceiver(),
       base::BindOnce(&CameraHalDelegate::OnGotVendorTagOpsOnIpcThread, this));
 }
 
@@ -509,10 +546,10 @@ void CameraHalDelegate::OnGotCameraInfoOnIpcThread(
 
 void CameraHalDelegate::OpenDeviceOnIpcThread(
     int32_t camera_id,
-    cros::mojom::Camera3DeviceOpsRequest device_ops_request,
+    mojo::PendingReceiver<cros::mojom::Camera3DeviceOps> device_ops_receiver,
     OpenDeviceCallback callback) {
   DCHECK(ipc_task_runner_->BelongsToCurrentThread());
-  camera_module_->OpenDevice(camera_id, std::move(device_ops_request),
+  camera_module_->OpenDevice(camera_id, std::move(device_ops_receiver),
                              std::move(callback));
 }
 

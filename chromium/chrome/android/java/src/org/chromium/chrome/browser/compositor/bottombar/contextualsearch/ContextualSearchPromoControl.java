@@ -15,15 +15,15 @@ import android.widget.Button;
 import android.widget.TextView;
 
 import org.chromium.base.ApiCompatibilityUtils;
+import org.chromium.base.MathUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.compositor.animation.CompositorAnimator;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelAnimation;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanelInflater;
-import org.chromium.chrome.browser.preferences.PrefServiceBridge;
-import org.chromium.chrome.browser.preferences.PreferencesLauncher;
-import org.chromium.chrome.browser.preferences.privacy.ContextualSearchPreferenceFragment;
-import org.chromium.chrome.browser.util.MathUtils;
+import org.chromium.chrome.browser.contextualsearch.ContextualSearchManager;
+import org.chromium.chrome.browser.contextualsearch.ContextualSearchPreferenceFragment;
+import org.chromium.chrome.browser.settings.SettingsLauncher;
 import org.chromium.ui.base.LocalizationUtils;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
 import org.chromium.ui.text.NoUnderlineClickableSpan;
@@ -375,7 +375,7 @@ public class ContextualSearchPromoControl extends OverlayPanelInflater {
     private void handlePromoChoice(boolean hasEnabled) {
         if (!mHasHandledChoice) {
             mHasHandledChoice = true;
-            PrefServiceBridge.getInstance().setContextualSearchState(hasEnabled);
+            ContextualSearchManager.setContextualSearchState(hasEnabled);
         }
     }
 
@@ -386,7 +386,7 @@ public class ContextualSearchPromoControl extends OverlayPanelInflater {
         new Handler().post(new Runnable() {
             @Override
             public void run() {
-                PreferencesLauncher.launchSettingsPage(
+                SettingsLauncher.getInstance().launchSettingsPage(
                         getContext(), ContextualSearchPreferenceFragment.class);
             }
         });

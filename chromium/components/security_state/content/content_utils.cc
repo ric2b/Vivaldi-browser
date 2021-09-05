@@ -12,6 +12,7 @@
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "components/dom_distiller/core/url_constants.h"
 #include "components/security_interstitials/core/common_string_util.h"
 #include "components/security_state/content/ssl_status_input_event_data.h"
 #include "components/security_state/core/security_state.h"
@@ -42,14 +43,17 @@ blink::SecurityStyle SecurityLevelToSecurityStyle(
     security_state::SecurityLevel security_level) {
   switch (security_level) {
     case security_state::NONE:
+      return blink::SecurityStyle::kNeutral;
     case security_state::WARNING:
+      if (security_state::ShouldShowDangerTriangleForWarningLevel())
+        return blink::SecurityStyle::kInsecure;
       return blink::SecurityStyle::kNeutral;
     case security_state::SECURE_WITH_POLICY_INSTALLED_CERT:
     case security_state::EV_SECURE:
     case security_state::SECURE:
       return blink::SecurityStyle::kSecure;
     case security_state::DANGEROUS:
-      return blink::SecurityStyle::kInsecure;
+      return blink::SecurityStyle::kInsecureBroken;
     case security_state::SECURITY_LEVEL_COUNT:
       NOTREACHED();
       return blink::SecurityStyle::kNeutral;
@@ -427,6 +431,8 @@ std::unique_ptr<security_state::VisibleSecurityState> GetVisibleSecurityState(
       entry->GetVirtualURL().SchemeIs(content::kViewSourceScheme);
   state->is_devtools =
       entry->GetVirtualURL().SchemeIs(content::kChromeDevToolsScheme);
+  state->is_reader_mode =
+      entry->GetURL().SchemeIs(dom_distiller::kDomDistillerScheme);
   state->url = entry->GetURL();
 
   if (!entry->GetSSL().initialized)

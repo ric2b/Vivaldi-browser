@@ -5,19 +5,19 @@
 package org.chromium.chrome.browser.ntp.cards;
 
 import android.content.res.Resources;
-import android.support.v7.widget.RecyclerView;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.View.OnAttachStateChangeListener;
 import android.view.ViewGroup;
 
 import androidx.annotation.CallSuper;
+import androidx.recyclerview.widget.RecyclerView;
 
 import org.chromium.chrome.browser.native_page.ContextMenuManager;
 import org.chromium.chrome.browser.native_page.ContextMenuManager.ContextMenuItemId;
 import org.chromium.chrome.browser.suggestions.SuggestionsRecyclerView;
-import org.chromium.chrome.browser.ui.widget.displaystyle.HorizontalDisplayStyle;
-import org.chromium.chrome.browser.ui.widget.displaystyle.UiConfig;
+import org.chromium.components.browser_ui.widget.displaystyle.HorizontalDisplayStyle;
+import org.chromium.components.browser_ui.widget.displaystyle.UiConfig;
 
 /**
  * Holder for a generic card.

@@ -59,6 +59,13 @@ struct CONTENT_EXPORT OpenURLParams {
   // in reasonable defaults for other properties (like WindowOpenDisposition).
   static OpenURLParams FromNavigationHandle(NavigationHandle* handle);
 
+#if DCHECK_IS_ON()
+  // Returns true if the contents of this struct are considered valid and
+  // satisfy dependencies between fields (e.g. about:blank URLs require
+  // |initiator_origin| and |source_site_instance| to be set).
+  bool Valid() const;
+#endif
+
   // The URL/referrer to be opened.
   GURL url;
   Referrer referrer;
@@ -72,9 +79,6 @@ struct CONTENT_EXPORT OpenURLParams {
 
   // Any redirect URLs that occurred for this navigation before |url|.
   std::vector<GURL> redirect_chain;
-
-  // Indicates whether this navigation will be sent using POST.
-  bool uses_post;
 
   // The post data when the navigation uses POST.
   scoped_refptr<network::ResourceRequestBody> post_data;

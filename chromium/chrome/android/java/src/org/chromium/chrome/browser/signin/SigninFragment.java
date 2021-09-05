@@ -4,21 +4,21 @@
 
 package org.chromium.chrome.browser.signin;
 
+import android.accounts.Account;
 import android.app.Activity;
 import android.os.Bundle;
 
 import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
 
-import org.chromium.base.annotations.UsedByReflection;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.SyncFirstSetupCompleteSource;
-import org.chromium.chrome.browser.preferences.PreferencesLauncher;
-import org.chromium.chrome.browser.preferences.sync.SyncAndServicesPreferences;
+import org.chromium.chrome.browser.settings.SettingsLauncher;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
+import org.chromium.chrome.browser.sync.settings.SyncAndServicesSettings;
+import org.chromium.components.signin.AccountManagerFacadeProvider;
 import org.chromium.components.signin.metrics.SigninAccessPoint;
 
 import java.lang.annotation.Retention;
@@ -94,10 +94,6 @@ public class SigninFragment extends SigninFragmentBase {
         return result;
     }
 
-    // Every fragment must have a public default constructor.
-    @UsedByReflection("SigninActivity.java")
-    public SigninFragment() {}
-
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -108,9 +104,8 @@ public class SigninFragment extends SigninFragmentBase {
                 || accessPoint == SigninAccessPoint.NTP_CONTENT_SUGGESTIONS
                 || accessPoint == SigninAccessPoint.RECENT_TABS
                 || accessPoint == SigninAccessPoint.SETTINGS
-                || accessPoint == SigninAccessPoint.SIGNIN_PROMO
                 || accessPoint
-                        == SigninAccessPoint.START_PAGE : "invalid access point: " + accessPoint;
+                        == SigninAccessPoint.SIGNIN_PROMO : "invalid access point: " + accessPoint;
         mSigninAccessPoint = accessPoint;
         mPromoAction =
                 getSigninArguments().getInt(ARGUMENT_PERSONALIZED_PROMO_ACTION, PromoAction.NONE);
@@ -133,18 +128,24 @@ public class SigninFragment extends SigninFragmentBase {
     @Override
     protected void onSigninAccepted(String accountName, boolean isDefaultAccount,
             boolean settingsClicked, Runnable callback) {
-        IdentityServicesProvider.getSigninManager().signIn(
-                accountName, getActivity(), new SigninManager.SignInCallback() {
+        // TODO(https://crbug.com/1002056): Change onSigninAccepted to get CoreAccountInfo.
+        Account account =
+                AccountManagerFacadeProvider.getInstance().getAccountFromName(accountName);
+        if (account == null) {
+            callback.run();
+            return;
+        }
+        IdentityServicesProvider.get().getSigninManager().signIn(
+                mSigninAccessPoint, account, new SigninManager.SignInCallback() {
                     @Override
                     public void onSignInComplete() {
                         UnifiedConsentServiceBridge.setUrlKeyedAnonymizedDataCollectionEnabled(
                                 true);
                         if (settingsClicked) {
-                            PreferencesLauncher.launchSettingsPage(getActivity(),
-                                    SyncAndServicesPreferences.class,
-                                    SyncAndServicesPreferences.createArguments(true));
-                        } else if (ChromeFeatureList.isEnabled(
-                                           ChromeFeatureList.SYNC_MANUAL_START_ANDROID)) {
+                            SettingsLauncher.getInstance().launchSettingsPage(getActivity(),
+                                    SyncAndServicesSettings.class,
+                                    SyncAndServicesSettings.createArguments(true));
+                        } else {
                             ProfileSyncService.get().setFirstSetupComplete(
                                     SyncFirstSetupCompleteSource.BASIC_FLOW);
                         }

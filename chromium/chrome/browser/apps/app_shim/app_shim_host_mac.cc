@@ -15,7 +15,7 @@
 #include "components/remote_cocoa/browser/application_host.h"
 #include "components/remote_cocoa/common/application.mojom.h"
 #include "content/public/browser/browser_thread.h"
-#include "mojo/public/cpp/bindings/interface_request.h"
+#include "mojo/public/cpp/bindings/pending_associated_receiver.h"
 
 AppShimHost::AppShimHost(AppShimHost::Client* client,
                          const std::string& app_id,
@@ -34,12 +34,13 @@ AppShimHost::AppShimHost(AppShimHost::Client* client,
       base::FeatureList::IsEnabled(features::kAppShimRemoteCocoa)) {
     // Create the interface that will be used by views::NativeWidgetMac to
     // create NSWindows hosted in the app shim process.
-    remote_cocoa::mojom::ApplicationAssociatedRequest views_application_request;
+    mojo::PendingAssociatedReceiver<remote_cocoa::mojom::Application>
+        views_application_receiver;
     remote_cocoa_application_host_ =
         std::make_unique<remote_cocoa::ApplicationHost>(
-            &views_application_request);
+            &views_application_receiver);
     app_shim_->CreateRemoteCocoaApplication(
-        std::move(views_application_request));
+        std::move(views_application_receiver));
   }
 }
 
@@ -137,18 +138,19 @@ void AppShimHost::LaunchShim() {
 
   if (bootstrap_) {
     // If there is a connected app shim process, focus the app windows.
-    client_->OnShimFocus(this, apps::APP_SHIM_FOCUS_NORMAL,
-                         std::vector<base::FilePath>());
+    client_->OnShimFocus(this);
   } else {
     // Otherwise, attempt to launch whatever app shims we find.
     LaunchShimInternal(false /* recreate_shims */);
   }
 }
 
-void AppShimHost::FocusApp(apps::AppShimFocusType focus_type,
-                           const std::vector<base::FilePath>& files) {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  client_->OnShimFocus(this, focus_type, files);
+void AppShimHost::FocusApp() {
+  client_->OnShimFocus(this);
+}
+
+void AppShimHost::FilesOpened(const std::vector<base::FilePath>& files) {
+  client_->OnShimOpenedFiles(this, files);
 }
 
 void AppShimHost::ProfileSelectedFromMenu(const base::FilePath& profile_path) {

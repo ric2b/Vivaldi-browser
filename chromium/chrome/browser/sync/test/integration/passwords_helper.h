@@ -100,14 +100,40 @@ int GetVerifierPasswordCount();
 autofill::PasswordForm CreateTestPasswordForm(int index);
 
 // Injects the password entity based on given |form| and encrypted with key
-// derived from |key_params| into |fake_server|.
+// derived from |key_derivation_params| into |fake_server|.
+// For Keystore encryption, the |encryption_passphrase| is the base64 encoding
+// of FakeServer::GetKeystoreKeys().back().
 void InjectEncryptedServerPassword(
     const autofill::PasswordForm& form,
     const std::string& encryption_passphrase,
     const syncer::KeyDerivationParams& key_derivation_params,
     fake_server::FakeServer* fake_server);
+// As above, but takes a PasswordSpecificsData instead of a PasswordForm.
+void InjectEncryptedServerPassword(
+    const sync_pb::PasswordSpecificsData& password_data,
+    const std::string& encryption_passphrase,
+    const syncer::KeyDerivationParams& key_derivation_params,
+    fake_server::FakeServer* fake_server);
+// As above, but using standard Keystore encryption.
+void InjectKeystoreEncryptedServerPassword(
+    const autofill::PasswordForm& form,
+    fake_server::FakeServer* fake_server);
+// As above, but using standard Keystore encryption and PasswordSpecificsData.
+void InjectKeystoreEncryptedServerPassword(
+    const sync_pb::PasswordSpecificsData& password_data,
+    fake_server::FakeServer* fake_server);
 
 }  // namespace passwords_helper
+
+// Checker to wait until the PASSWORDS datatype becomes active.
+class PasswordSyncActiveChecker : public SingleClientStatusChangeChecker {
+ public:
+  explicit PasswordSyncActiveChecker(syncer::ProfileSyncService* service);
+  ~PasswordSyncActiveChecker() override;
+
+  // StatusChangeChecker implementation.
+  bool IsExitConditionSatisfied(std::ostream* os) override;
+};
 
 // TODO(crbug.com/1010490): avoid re-entrance protection in checkers below or
 // factor it out to not duplicate in every checker.
@@ -117,8 +143,7 @@ class SamePasswordFormsChecker : public MultiClientStatusChangeChecker {
   SamePasswordFormsChecker();
 
   // StatusChangeChecker implementation.
-  bool IsExitConditionSatisfied() override;
-  std::string GetDebugMessage() const override;
+  bool IsExitConditionSatisfied(std::ostream* os) override;
 
  private:
   bool in_progress_;
@@ -133,8 +158,7 @@ class SamePasswordFormsAsVerifierChecker
   explicit SamePasswordFormsAsVerifierChecker(int index);
 
   // StatusChangeChecker implementation.
-  bool IsExitConditionSatisfied() override;
-  std::string GetDebugMessage() const override;
+  bool IsExitConditionSatisfied(std::ostream* os) override;
 
  private:
   int index_;
@@ -151,11 +175,10 @@ class PasswordFormsChecker : public SingleClientStatusChangeChecker {
   ~PasswordFormsChecker() override;
 
   // StatusChangeChecker implementation.
-  bool IsExitConditionSatisfied() override;
-  std::string GetDebugMessage() const override;
+  bool IsExitConditionSatisfied(std::ostream* os) override;
 
  private:
-  bool IsExitConditionSatisfiedImpl();
+  bool IsExitConditionSatisfiedImpl(std::ostream* os);
 
   const int index_;
   std::vector<std::unique_ptr<autofill::PasswordForm>> expected_forms_;

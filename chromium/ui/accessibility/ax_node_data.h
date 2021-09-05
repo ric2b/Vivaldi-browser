@@ -14,8 +14,8 @@
 
 #include "base/strings/string16.h"
 #include "base/strings/string_split.h"
-#include "ui/accessibility/ax_enums.mojom-shared.h"
-#include "ui/accessibility/ax_export.h"
+#include "ui/accessibility/ax_base_export.h"
+#include "ui/accessibility/ax_enums.mojom-forward.h"
 #include "ui/accessibility/ax_node_text_styles.h"
 #include "ui/accessibility/ax_relative_bounds.h"
 #include "ui/gfx/geometry/rect_f.h"
@@ -24,16 +24,16 @@ namespace ui {
 
 // Return true if |attr| should be interpreted as the id of another node
 // in the same tree.
-AX_EXPORT bool IsNodeIdIntAttribute(ax::mojom::IntAttribute attr);
+AX_BASE_EXPORT bool IsNodeIdIntAttribute(ax::mojom::IntAttribute attr);
 
 // Return true if |attr| should be interpreted as a list of ids of
 // nodes in the same tree.
-AX_EXPORT bool IsNodeIdIntListAttribute(ax::mojom::IntListAttribute attr);
+AX_BASE_EXPORT bool IsNodeIdIntListAttribute(ax::mojom::IntListAttribute attr);
 
 // A compact representation of the accessibility information for a
 // single accessible object, in a form that can be serialized and sent from
 // one process to another.
-struct AX_EXPORT AXNodeData {
+struct AX_BASE_EXPORT AXNodeData {
   AXNodeData();
   virtual ~AXNodeData();
 
@@ -156,9 +156,9 @@ struct AX_EXPORT AXNodeData {
   bool HasDropeffect(ax::mojom::Dropeffect dropeffect) const;
 
   // Set or remove bits in the given enum's corresponding bitfield.
-  ax::mojom::State AddState(ax::mojom::State state);
-  ax::mojom::State RemoveState(ax::mojom::State state);
-  ax::mojom::Action AddAction(ax::mojom::Action action);
+  void AddState(ax::mojom::State state);
+  void RemoveState(ax::mojom::State state);
+  void AddAction(ax::mojom::Action action);
   void AddTextStyle(ax::mojom::TextStyle text_style);
   // aria-dropeffect is deprecated in WAI-ARIA 1.1.
   void AddDropeffect(ax::mojom::Dropeffect dropeffect);
@@ -190,8 +190,34 @@ struct AX_EXPORT AXNodeData {
   ax::mojom::ImageAnnotationStatus GetImageAnnotationStatus() const;
   void SetImageAnnotationStatus(ax::mojom::ImageAnnotationStatus status);
 
-  // Helper to determine if |GetRestriction| is either ReadOnly or Disabled
+  // Helper to determine if the data belongs to a node that can respond to
+  // clicks.
+  bool IsClickable() const;
+
+  // Helper to determine if the data has the ignored state or ignored role.
+  bool IsIgnored() const;
+
+  // Helper to determine if the data belongs to a node that is invocable.
+  bool IsInvocable() const;
+
+  // Helper to determine if the data belongs to a node that is a plain
+  // textfield.
+  bool IsPlainTextField() const;
+
+  // Helper to determine if |GetRestriction| is either ReadOnly or Disabled.
+  // By default, all nodes that can't be edited are readonly.
   bool IsReadOnlyOrDisabled() const;
+
+  // Helper to determine if the data belongs to a node that supports
+  // range-based value.
+  bool IsRangeValueSupported() const;
+
+  // Helper to determine if the data belongs to a node that supports
+  // expand/collapse.
+  bool SupportsExpandCollapse() const;
+
+  // Helper to determine if the node is in an active live region.
+  bool IsContainedInActiveLiveRegion() const;
 
   // Return a string representation of this data, for debugging.
   virtual std::string ToString() const;
@@ -204,9 +230,9 @@ struct AX_EXPORT AXNodeData {
   // As much as possible this should behave as a simple, serializable,
   // copyable struct.
   int32_t id = -1;
-  ax::mojom::Role role = ax::mojom::Role::kUnknown;
-  uint32_t state = static_cast<uint32_t>(ax::mojom::State::kNone);
-  uint32_t actions = static_cast<uint32_t>(ax::mojom::Action::kNone);
+  ax::mojom::Role role;
+  uint32_t state;
+  uint64_t actions;
   std::vector<std::pair<ax::mojom::StringAttribute, std::string>>
       string_attributes;
   std::vector<std::pair<ax::mojom::IntAttribute, int32_t>> int_attributes;

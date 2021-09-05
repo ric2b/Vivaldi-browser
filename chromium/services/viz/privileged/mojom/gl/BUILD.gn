@@ -16,6 +16,7 @@ mojom("gl") {
     "//media/mojo/mojom",
     "//ui/gfx/geometry/mojom",
     "//ui/gfx/mojom",
+    "//ui/gl/mojom",
     "//url/mojom:url_mojom_gurl",
   ]
   if (is_chromeos) {
@@ -24,4 +25,34 @@ mojom("gl") {
       "//components/chromeos_camera/common",
     ]
   }
+
+  enabled_features = []
+  if (!is_android) {
+    enabled_features += [ "is_not_android" ]
+  }
+
+  cpp_typemaps = [
+    {
+      types = [
+        {
+          mojom = "viz.mojom.ContextLostReason"
+          cpp = "::gpu::error::ContextLostReason"
+        },
+      ]
+      traits_headers =
+          [ "//services/viz/privileged/cpp/context_lost_reason_traits.h" ]
+      traits_public_deps = [ "//gpu/command_buffer/common" ]
+    },
+    {
+      types = [
+        {
+          mojom = "viz.mojom.OverlayStrategy"
+          cpp = "::viz::OverlayStrategy"
+        },
+      ]
+      traits_headers =
+          [ "//services/viz/privileged/cpp/overlay_strategy_mojom_traits.h" ]
+      traits_public_deps = [ "//components/viz/common" ]
+    },
+  ]
 }

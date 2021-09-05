@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # Copyright 2018 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
@@ -10,6 +10,7 @@ import collections
 import json
 import logging
 import os
+import re
 import sys
 
 sys.path.append(os.path.join(os.path.dirname(__file__), 'libsupersize'))
@@ -17,59 +18,58 @@ import archive
 import diagnose_bloat
 import diff
 import describe
-import html_report
+import file_format
 import models
 
-_NDJSON_FILENAME = 'supersize_diff.ndjson'
-_TEXT_FILENAME = 'supersize_diff.txt'
+_RESOURCE_SIZES_LOG = 'resource_sizes_log'
+_MUTABLE_CONSTANTS_LOG = 'mutable_contstants_log'
+_FOR_TESTING_LOG = 'for_test_log'
+_DEX_SYMBOLS_LOG = 'dex_symbols_log'
+_SIZEDIFF_FILENAME = 'supersize_diff.sizediff'
 _HTML_REPORT_BASE_URL = (
-    'https://storage.googleapis.com/chrome-supersize/viewer.html?load_url=')
+    'https://chrome-supersize.firebaseapp.com/viewer.html?load_url=')
 _MAX_DEX_METHOD_COUNT_INCREASE = 50
 _MAX_NORMALIZED_INCREASE = 16 * 1024
 _MAX_PAK_INCREASE = 1024
 
-_FAILURE_GUIDANCE = """
-Please look at size breakdowns, try to understand the growth, and see if it can
-be mitigated.
 
-There is guidance at:
-
-https://chromium.googlesource.com/chromium/src/+/master/docs/speed/apk_size_regressions.md
-
-If the growth is expected / justified, then you can bypass this bot failure by
-adding "Binary-Size: $JUSTIFICATION" footer to your commit message (must go at
-the bottom of the message, similar to "Bug:").
-
-Here are some examples:
-
-Binary-Size: Increase is due to translations and so cannot be avoided.
-Binary-Size: Increase is due to new images, which are already optimally encoded.
-Binary-Size: Increase is temporary due to a "new way" / "old way" refactoring. \
-It should go away once the "old way" is removed.
-Binary-Size: Increase is temporary and will be reverted before next branch cut.
-Binary-Size: Increase needed to reduce RAM of a common user flow.
-Binary-Size: Increase needed to reduce runtime of a common user flow.
-Binary-Size: Increase needed to implement a feature, and I've already spent a \
-non-trivial amount of time trying to reduce its size.
-"""
+_PROGUARD_CLASS_MAPPING_RE = re.compile(r'(?P<original_name>[^ ]+)'
+                                        r' -> '
+                                        r'(?P<obfuscated_name>[^:]+):')
+_PROGUARD_FIELD_MAPPING_RE = re.compile(r'(?P<type>[^ ]+) '
+                                        r'(?P<original_name>[^ (]+)'
+                                        r' -> '
+                                        r'(?P<obfuscated_name>[^:]+)')
+_PROGUARD_METHOD_MAPPING_RE = re.compile(
+    # line_start:line_end: (optional)
+    r'((?P<line_start>\d+):(?P<line_end>\d+):)?'
+    r'(?P<return_type>[^ ]+)'  # original method return type
+    # original method class name (if exists)
+    r' (?:(?P<original_method_class>[a-zA-Z_\d.$]+)\.)?'
+    r'(?P<original_method_name>[^.\(]+)'
+    r'\((?P<params>[^\)]*)\)'  # original method params
+    r'(?:[^ ]*)'  # original method line numbers (ignored)
+    r' -> '
+    r'(?P<obfuscated_name>.+)')  # obfuscated method name
 
 
 class _SizeDelta(collections.namedtuple(
-    'SizeDelta', ['name', 'units', 'expected', 'actual', 'details'])):
+    'SizeDelta', ['name', 'units', 'expected', 'actual'])):
 
   @property
   def explanation(self):
     ret = '{}: {} {} (max is {} {})'.format(
         self.name, self.actual, self.units, self.expected, self.units)
-    if self.details and not self.IsAllowable():
-      ret += '\n' + self.details
     return ret
 
   def IsAllowable(self):
     return self.actual <= self.expected
 
-  def __cmp__(self, other):
-    return cmp(self.name, other.name)
+  def IsLargeImprovement(self):
+    return (self.actual * -1) >= self.expected
+
+  def __lt__(self, other):
+    return self.name < other.name
 
 
 def _SymbolDiffHelper(symbols):
@@ -91,48 +91,35 @@ def _CreateMutableConstantsDelta(symbols):
   symbols = symbols.WhereInSection('d').WhereNameMatches(r'\bk[A-Z]|\b[A-Z_]+$')
   lines, net_added = _SymbolDiffHelper(symbols)
 
-  if net_added <= 0:
-    details = """\
-Symbols within .data that are named like constants (crbug.com/747064).
-"""
-  else:
-    details = """\
-Detected new symbols within .data that are named like constants.
-Either:
-  * Mark the symbols as const, or
-  * Rename them.
-
-For more context: https://crbug.com/747064
-"""
-
-  if net_added:
-    details += """
-Refer to Mutable Constants Diff for list of symbols.
-"""
-  return lines, _SizeDelta('Mutable Constants', 'symbols', 0, net_added,
-                           details)
+  return lines, _SizeDelta('Mutable Constants', 'symbols', 0, net_added)
 
 
 def _CreateMethodCountDelta(symbols):
-  symbols = symbols.WhereInSection(models.SECTION_DEX_METHOD)
-  lines, net_added = _SymbolDiffHelper(symbols)
-  details = 'Refer to Dex Method Diff for list of added/removed methods.'
+  method_symbols = symbols.WhereInSection(models.SECTION_DEX_METHOD)
+  method_lines, net_method_added = _SymbolDiffHelper(method_symbols)
+  class_symbols = symbols.WhereInSection(
+      models.SECTION_DEX).WhereNameMatches('#').Inverted()
+  class_lines, _ = _SymbolDiffHelper(class_symbols)
+  lines = []
+  if class_lines:
+    lines.append('===== Classes Added & Removed =====')
+    lines.extend(class_lines)
+    lines.extend(['', ''])  # empty lines added for clarity
+  if method_lines:
+    lines.append('===== Methods Added & Removed =====')
+    lines.extend(method_lines)
 
   return lines, _SizeDelta('Dex Methods Count', 'methods',
-                           _MAX_DEX_METHOD_COUNT_INCREASE, net_added, details)
+                           _MAX_DEX_METHOD_COUNT_INCREASE, net_method_added)
 
 
 def _CreateResourceSizesDelta(apk_name, before_dir, after_dir):
   sizes_diff = diagnose_bloat.ResourceSizesDiff(apk_name)
   sizes_diff.ProduceDiff(before_dir, after_dir)
-  details = (
-      'See https://chromium.googlesource.com/chromium/src/+/master/docs/speed/'
-      'binary_size/metrics.md#Normalized-APK-Size '
-      'for an explanation of Normalized APK Size')
 
   return sizes_diff.Summary(), _SizeDelta(
       'Normalized APK Size', 'bytes', _MAX_NORMALIZED_INCREASE,
-      sizes_diff.summary_stat.value, details)
+      sizes_diff.summary_stat.value)
 
 
 def _CreateSupersizeDiff(apk_name, before_dir, after_dir):
@@ -153,15 +140,117 @@ def _CreateUncompressedPakSizeDeltas(symbols):
       s.section_name == models.SECTION_PAK_NONTRANSLATED)
   return [
       _SizeDelta('Uncompressed Pak Entry "{}"'.format(pak.full_name), 'bytes',
-                 _MAX_PAK_INCREASE, pak.after_symbol.size, None)
+                 _MAX_PAK_INCREASE, pak.after_symbol.size)
       for pak in pak_symbols
   ]
 
 
-def _FormatSign(number):
-  if number > 0:
-    return '+{}'.format(number)
-  return '{}'.format(number)
+def _ExtractForTestingSymbolsFromMapping(mapping_path):
+  symbols = set()
+  with open(mapping_path) as f:
+    proguard_mapping_lines = f.readlines()
+    current_class_orig = None
+    for line in proguard_mapping_lines:
+      if line.isspace():
+        continue
+      if not line.startswith(' '):
+        match = _PROGUARD_CLASS_MAPPING_RE.search(line)
+        if match is None:
+          raise Exception('Malformed class mapping')
+        current_class_orig = match.group('original_name')
+        continue
+      assert current_class_orig is not None
+      line = line.strip()
+      match = _PROGUARD_METHOD_MAPPING_RE.search(line)
+      if (match is not None
+          and match.group('original_method_name').find('ForTest') > -1):
+        method_symbol = '{}#{}'.format(
+            match.group('original_method_class') or current_class_orig,
+            match.group('original_method_name'))
+        symbols.add(method_symbol)
+
+      match = _PROGUARD_FIELD_MAPPING_RE.search(line)
+      if (match is not None
+          and match.group('original_name').find('ForTest') > -1):
+        field_symbol = '{}#{}'.format(current_class_orig,
+                                      match.group('original_name'))
+        symbols.add(field_symbol)
+  return symbols
+
+
+def _CreateTestingSymbolsDeltas(before_mapping_path, after_mapping_path):
+  before_symbols = _ExtractForTestingSymbolsFromMapping(before_mapping_path)
+  after_symbols = _ExtractForTestingSymbolsFromMapping(after_mapping_path)
+  added_symbols = list(after_symbols.difference(before_symbols))
+  removed_symbols = list(before_symbols.difference(after_symbols))
+  lines = []
+  if added_symbols:
+    lines.append('Added Symbols Named "ForTest"')
+    lines.extend(added_symbols)
+    lines.extend(['', ''])  # empty lines added for clarity
+  if removed_symbols:
+    lines.append('Removed Symbols Named "ForTest"')
+    lines.extend(removed_symbols)
+    lines.extend(['', ''])  # empty lines added for clarity
+  return lines, _SizeDelta('Added symbols named "ForTest"', 'symbols', 0,
+                           len(added_symbols) - len(removed_symbols))
+
+
+def _GuessMappingFilename(results_dir, apk_name):
+  guess = apk_name + '.mapping'
+  if os.path.exists(os.path.join(results_dir, guess)):
+    return guess
+  guess = (apk_name.replace('minimal.apks', '.aab').replace('.apks', '.aab') +
+           '.mapping')
+  if os.path.exists(os.path.join(results_dir, guess)):
+    return guess
+  return None
+
+
+def _CreateTigerViewerUrl(apk_name, sizediff_path):
+  ret = _HTML_REPORT_BASE_URL + sizediff_path
+  if 'Public' not in apk_name:
+    ret += '&authenticate=1'
+  return ret
+
+
+def _GenerateBinarySizePluginDetails(apk_name, metrics):
+  binary_size_listings = []
+  for delta, log_name in metrics:
+    listing = {
+        'name': delta.name,
+        'delta': '{} {}'.format(_FormatNumber(delta.actual), delta.units),
+        'limit': '{} {}'.format(_FormatNumber(delta.expected), delta.units),
+        'log_name': log_name,
+        'allowed': delta.IsAllowable(),
+        'large_improvement': delta.IsLargeImprovement(),
+    }
+    if log_name == _RESOURCE_SIZES_LOG:
+      listing['name'] = 'Android Binary Size'
+      binary_size_listings.insert(0, listing)
+      continue
+    # The main 'binary size' delta is always shown even if unchanged.
+    elif delta.actual == 0:
+      continue
+    binary_size_listings.append(listing)
+
+  binary_size_extras = [
+      {
+          'text': 'APK Breakdown',
+          'url': _CreateTigerViewerUrl(apk_name,
+                                       '{{' + _SIZEDIFF_FILENAME + '}}')
+      },
+  ]
+
+  return {
+      'listings': binary_size_listings,
+      'extras': binary_size_extras,
+  }
+
+
+def _FormatNumber(number):
+  # Adds a sign for positive numbers and puts commas in large numbers
+  return '{:+,}'.format(number)
 
 
 def main():
@@ -194,9 +283,6 @@ def main():
   logging.info('Creating Supersize diff')
   supersize_diff_lines, delta_size_info = _CreateSupersizeDiff(
       args.apk_name, args.before_dir, args.after_dir)
-  supersize_text_path = os.path.join(args.staging_dir, _TEXT_FILENAME)
-  with open(supersize_text_path, 'w') as f:
-    describe.WriteLines(supersize_diff_lines, f.write)
 
   changed_symbols = delta_size_info.raw_symbols.WhereDiffStatusIs(
       models.DIFF_STATUS_UNCHANGED).Inverted()
@@ -205,6 +291,7 @@ def main():
   logging.info('Checking dex symbols')
   dex_delta_lines, dex_delta = _CreateMethodCountDelta(changed_symbols)
   size_deltas = {dex_delta}
+  metrics = {(dex_delta, _DEX_SYMBOLS_LOG)}
 
   # Look for native symbols called "kConstant" that are not actually constants.
   # C++ syntax makes this an easy mistake, and having symbols in .data uses more
@@ -213,6 +300,20 @@ def main():
   mutable_constants_lines, mutable_constants_delta = (
       _CreateMutableConstantsDelta(changed_symbols))
   size_deltas.add(mutable_constants_delta)
+  metrics.add((mutable_constants_delta, _MUTABLE_CONSTANTS_LOG))
+
+  # Look for symbols with 'ForTesting' in their name.
+  logging.info('Checking for DEX symbols named "ForTest"')
+  mapping_name = _GuessMappingFilename(args.before_dir, args.apk_name)
+  if not mapping_name:
+    raise Exception('Cannot find proguard mapping file.')
+
+  before_mapping = os.path.join(args.before_dir, mapping_name)
+  after_mapping = os.path.join(args.after_dir, mapping_name)
+  testing_symbols_lines, test_symbols_delta = (_CreateTestingSymbolsDeltas(
+      before_mapping, after_mapping))
+  size_deltas.add(test_symbols_delta)
+  metrics.add((test_symbols_delta, _FOR_TESTING_LOG))
 
   # Check for uncompressed .pak file entries being added to avoid unnecessary
   # bloat.
@@ -224,28 +325,30 @@ def main():
   resource_sizes_lines, resource_sizes_delta = (
       _CreateResourceSizesDelta(args.apk_name, args.before_dir, args.after_dir))
   size_deltas.add(resource_sizes_delta)
+  metrics.add((resource_sizes_delta, _RESOURCE_SIZES_LOG))
 
-  # .ndjson can be consumed by the html viewer.
+  # .sizediff can be consumed by the html viewer.
   logging.info('Creating HTML Report')
-  ndjson_path = os.path.join(args.staging_dir, _NDJSON_FILENAME)
-  html_report.BuildReportFromSizeInfo(ndjson_path, delta_size_info)
+  sizediff_path = os.path.join(args.staging_dir, _SIZEDIFF_FILENAME)
+  file_format.SaveDeltaSizeInfo(delta_size_info, sizediff_path)
 
-  passing_deltas = set(m for m in size_deltas if m.IsAllowable())
+  passing_deltas = set(d for d in size_deltas if d.IsAllowable())
   failing_deltas = size_deltas - passing_deltas
 
   is_roller = '-autoroll' in args.author
   failing_checks_text = '\n'.join(d.explanation for d in sorted(failing_deltas))
   passing_checks_text = '\n'.join(d.explanation for d in sorted(passing_deltas))
   checks_text = """\
-FAILING:
+FAILING Checks:
 {}
 
-PASSING:
+PASSING Checks:
 {}
+
+To understand what those checks are and how to pass them, see:
+https://chromium.googlesource.com/chromium/src/+/master/docs/speed/binary_size/android_binary_size_trybot.md
+
 """.format(failing_checks_text, passing_checks_text)
-
-  if failing_deltas:
-    checks_text += _FAILURE_GUIDANCE
 
   status_code = int(bool(failing_deltas))
 
@@ -255,71 +358,49 @@ PASSING:
   if is_roller and mutable_constants_delta not in failing_deltas:
     status_code = 0
 
-  summary = '<br>' + '<br>'.join(resource_sizes_lines)
-  if 'Empty Resource Sizes Diff' in summary:
-    summary = '<br>No size metrics were affected.'
-  if failing_deltas:
-    summary += '<br><br>Failed Size Checks:<br>'
-    summary += failing_checks_text.replace('\n', '<br>')
-    summary += '<br>Look at "Size Assertion Results" for guidance.'
-
+  summary = '<br>' + checks_text.replace('\n', '<br>')
+  supersize_url = _CreateTigerViewerUrl(args.apk_name,
+                                        '{{' + _SIZEDIFF_FILENAME + '}}')
   links_json = [
       {
-          'name': '>>> Size Assertion Results <<<',
-          'lines': checks_text.splitlines(),
+          'name': 'Binary Size Details',
+          'lines': resource_sizes_lines,
+          'log_name': _RESOURCE_SIZES_LOG,
       },
       {
-          'name': '>>> Mutable Constants Diff <<<',
+          'name': 'Mutable Constants Diff',
           'lines': mutable_constants_lines,
+          'log_name': _MUTABLE_CONSTANTS_LOG,
       },
       {
-          'name': '>>> Dex Method Diff <<<',
+          'name': 'ForTest Symbols Diff',
+          'lines': testing_symbols_lines,
+          'log_name': _FOR_TESTING_LOG,
+      },
+      {
+          'name': 'Dex Class and Method Diff',
           'lines': dex_delta_lines,
+          'log_name': _DEX_SYMBOLS_LOG,
       },
       {
-          'name': '>>> SuperSize Text Diff <<<',
-          'url': '{{' + _TEXT_FILENAME + '}}',
+          'name': 'SuperSize Text Diff',
+          'lines': supersize_diff_lines,
       },
       {
-          'name': '>>> SuperSize HTML Diff <<<',
-          'url': _HTML_REPORT_BASE_URL + '{{' + _NDJSON_FILENAME + '}}',
+          'name': 'SuperSize HTML Diff',
+          'url': supersize_url,
       },
   ]
-  # Remove empty diffs (Mutable Constants or Dex Method).
+  # Remove empty diffs (Mutable Constants, Dex Method, ...).
   links_json = [o for o in links_json if o.get('lines') or o.get('url')]
 
-  binary_size_listings = []
-  for delta in size_deltas:
-    if delta.actual == 0:
-      continue
-    listing = {
-        'name': delta.name,
-        'delta': '{} {}'.format(_FormatSign(delta.actual), delta.units),
-        'limit': '{} {}'.format(_FormatSign(delta.expected), delta.units),
-        'allowed': delta.IsAllowable(),
-    }
-    binary_size_listings.append(listing)
-
-  binary_size_extras = [
-      {
-          'text': 'SuperSize HTML Diff',
-          'url': _HTML_REPORT_BASE_URL + '{{' + _NDJSON_FILENAME + '}}',
-      },
-      {
-          'text': 'SuperSize Text Diff',
-          'url': '{{' + _TEXT_FILENAME + '}}',
-      },
-  ]
-
-  binary_size_plugin_json = {
-      'listings': binary_size_listings,
-      'extras': binary_size_extras,
-  }
+  binary_size_plugin_json = _GenerateBinarySizePluginDetails(
+      args.apk_name, metrics)
 
   results_json = {
       'status_code': status_code,
       'summary': summary,
-      'archive_filenames': [_NDJSON_FILENAME, _TEXT_FILENAME],
+      'archive_filenames': [_SIZEDIFF_FILENAME],
       'links': links_json,
       'gerrit_plugin_details': binary_size_plugin_json,
   }

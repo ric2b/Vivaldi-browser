@@ -13,6 +13,7 @@
 #include "base/path_service.h"
 #include "base/sequenced_task_runner.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/time/default_tick_clock.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
@@ -26,6 +27,7 @@
 #include "components/prefs/json_pref_store.h"
 #include "components/prefs/pref_service.h"
 #include "components/rappor/rappor_service_impl.h"
+#include "components/safe_browsing/core/features.h"
 #include "components/translate/core/browser/translate_download_manager.h"
 #include "components/ukm/ios/features.h"
 #include "components/variations/field_trial_config/field_trial_util.h"
@@ -44,6 +46,7 @@
 #include "ios/chrome/browser/metrics/ios_expired_histograms_array.h"
 #include "ios/chrome/browser/open_from_clipboard/create_clipboard_recent_content.h"
 #include "ios/chrome/browser/pref_names.h"
+#include "ios/chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "ios/chrome/browser/translate/translate_service_ios.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #include "ios/web/public/thread/web_task_traits.h"
@@ -100,9 +103,8 @@ void IOSChromeMainParts::PreCreateThreads() {
   // remaining BACKGROUND+BLOCK_SHUTDOWN tasks is bumped by the ThreadPool on
   // shutdown.
   scoped_refptr<base::SequencedTaskRunner> local_state_task_runner =
-      base::CreateSequencedTaskRunner(
-          {base::ThreadPool(), base::MayBlock(),
-           base::TaskPriority::BEST_EFFORT,
+      base::ThreadPool::CreateSequencedTaskRunner(
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
            base::TaskShutdownBehavior::BLOCK_SHUTDOWN});
 
   base::FilePath local_state_path;
@@ -155,7 +157,7 @@ void IOSChromeMainParts::PreMainMessageLoopRun() {
   EnsureBrowserStateKeyedServiceFactoriesBuilt();
   ios::ChromeBrowserStateManager* browser_state_manager =
       application_context_->GetChromeBrowserStateManager();
-  ios::ChromeBrowserState* last_used_browser_state =
+  ChromeBrowserState* last_used_browser_state =
       browser_state_manager->GetLastUsedBrowserState();
 
   // This must occur at PreMainMessageLoopRun because |SetupMetrics()| uses the
@@ -198,6 +200,17 @@ void IOSChromeMainParts::PreMainMessageLoopRun() {
     variations_service->set_policy_pref_service(
         last_used_browser_state->GetPrefs());
     variations_service->PerformPreMainMessageLoopStartup();
+  }
+
+  if (base::FeatureList::IsEnabled(
+          safe_browsing::kSafeBrowsingAvailableOnIOS)) {
+    // Ensure that Safe Browsing is initialized.
+    SafeBrowsingService* safe_browsing_service =
+        application_context_->GetSafeBrowsingService();
+    base::FilePath user_data_path;
+    CHECK(base::PathService::Get(ios::DIR_USER_DATA, &user_data_path));
+    safe_browsing_service->Initialize(last_used_browser_state->GetPrefs(),
+                                      user_data_path);
   }
 }
 

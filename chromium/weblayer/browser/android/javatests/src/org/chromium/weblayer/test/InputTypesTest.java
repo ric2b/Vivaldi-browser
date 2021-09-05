@@ -17,8 +17,9 @@ import android.os.Handler;
 import android.os.Parcelable;
 import android.provider.MediaStore;
 import android.support.test.filters.SmallTest;
-import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.Fragment;
+
+import androidx.core.app.ActivityCompat;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -27,7 +28,6 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.InMemorySharedPreferencesContext;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
@@ -41,7 +41,7 @@ import java.util.Arrays;
 /**
  * Tests that file inputs work as expected.
  */
-@RunWith(BaseJUnit4ClassRunner.class)
+@RunWith(WebLayerJUnit4ClassRunner.class)
 public class InputTypesTest {
     @Rule
     public InstrumentationActivityTestRule mActivityTestRule =
@@ -130,15 +130,15 @@ public class InputTypesTest {
         InstrumentationActivity activity = mActivityTestRule.launchShell(extras);
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             activity.loadWebLayerSync(
-                            new InMemorySharedPreferencesContext(activity.getApplication()) {
-                                @Override
-                                public int checkPermission(String permission, int pid, int uid) {
-                                    if (permission.equals(Manifest.permission.CAMERA)) {
-                                        return mCameraPermission;
-                                    }
-                                    return getBaseContext().checkPermission(permission, pid, uid);
-                                }
-                            });
+                    new InMemorySharedPreferencesContext(activity.getApplication()) {
+                        @Override
+                        public int checkPermission(String permission, int pid, int uid) {
+                            if (permission.equals(Manifest.permission.CAMERA)) {
+                                return mCameraPermission;
+                            }
+                            return getBaseContext().checkPermission(permission, pid, uid);
+                        }
+                    });
         });
         mActivityTestRule.navigateAndWait(mActivityTestRule.getTestDataURL("input_types.html"));
         mTempFile = File.createTempFile("file", null);

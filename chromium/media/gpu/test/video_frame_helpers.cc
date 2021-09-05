@@ -14,14 +14,15 @@
 #include "media/base/color_plane_layout.h"
 #include "media/base/format_utils.h"
 #include "media/base/video_frame.h"
-#include "media/gpu/buildflags.h"
 #include "media/gpu/test/image.h"
+#include "media/media_buildflags.h"
+#include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/libyuv/include/libyuv.h"
 #include "ui/gfx/buffer_format_util.h"
 #include "ui/gfx/gpu_memory_buffer.h"
 
 #if BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
-#include "media/gpu/linux/platform_video_frame_utils.h"
+#include "media/gpu/chromeos/platform_video_frame_utils.h"
 #include "media/gpu/video_frame_mapper.h"
 #include "media/gpu/video_frame_mapper_factory.h"
 #endif  // BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
@@ -31,10 +32,19 @@ namespace test {
 
 namespace {
 
+#define ASSERT_TRUE_OR_RETURN(predicate, return_value) \
+  do {                                                 \
+    if (!(predicate)) {                                \
+      ADD_FAILURE();                                   \
+      return (return_value);                           \
+    }                                                  \
+  } while (0)
+
 bool ConvertVideoFrameToI420(const VideoFrame* src_frame,
                              VideoFrame* dst_frame) {
-  LOG_ASSERT(src_frame->visible_rect() == dst_frame->visible_rect());
-  LOG_ASSERT(dst_frame->format() == PIXEL_FORMAT_I420);
+  ASSERT_TRUE_OR_RETURN(src_frame->visible_rect() == dst_frame->visible_rect(),
+                        false);
+  ASSERT_TRUE_OR_RETURN(dst_frame->format() == PIXEL_FORMAT_I420, false);
 
   const auto& visible_rect = src_frame->visible_rect();
   const int width = visible_rect.width();
@@ -81,8 +91,9 @@ bool ConvertVideoFrameToI420(const VideoFrame* src_frame,
 
 bool ConvertVideoFrameToARGB(const VideoFrame* src_frame,
                              VideoFrame* dst_frame) {
-  LOG_ASSERT(src_frame->visible_rect() == dst_frame->visible_rect());
-  LOG_ASSERT(dst_frame->format() == PIXEL_FORMAT_ARGB);
+  ASSERT_TRUE_OR_RETURN(src_frame->visible_rect() == dst_frame->visible_rect(),
+                        false);
+  ASSERT_TRUE_OR_RETURN(dst_frame->format() == PIXEL_FORMAT_ARGB, false);
 
   const auto& visible_rect = src_frame->visible_rect();
   const int width = visible_rect.width();
@@ -126,15 +137,15 @@ bool ConvertVideoFrameToARGB(const VideoFrame* src_frame,
 // Copy memory based |src_frame| buffer to |dst_frame| buffer.
 bool CopyVideoFrame(const VideoFrame* src_frame,
                     scoped_refptr<VideoFrame> dst_frame) {
-  LOG_ASSERT(src_frame->IsMappable());
+  ASSERT_TRUE_OR_RETURN(src_frame->IsMappable(), false);
 #if BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
   // If |dst_frame| is a Dmabuf-backed VideoFrame, we need to map its underlying
   // buffer into memory. We use a VideoFrameMapper to create a memory-based
   // VideoFrame that refers to the |dst_frame|'s buffer.
   if (dst_frame->storage_type() == VideoFrame::STORAGE_DMABUFS) {
-    auto video_frame_mapper =
-        VideoFrameMapperFactory::CreateMapper(dst_frame->format(), true);
-    LOG_ASSERT(video_frame_mapper);
+    auto video_frame_mapper = VideoFrameMapperFactory::CreateMapper(
+        dst_frame->format(), VideoFrame::STORAGE_DMABUFS, true);
+    ASSERT_TRUE_OR_RETURN(video_frame_mapper, false);
     dst_frame = video_frame_mapper->Map(std::move(dst_frame));
     if (!dst_frame) {
       LOG(ERROR) << "Failed to map DMABuf video frame.";
@@ -142,17 +153,19 @@ bool CopyVideoFrame(const VideoFrame* src_frame,
     }
   }
 #endif  // BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
-  LOG_ASSERT(dst_frame->IsMappable());
-  LOG_ASSERT(src_frame->format() == dst_frame->format());
+  ASSERT_TRUE_OR_RETURN(dst_frame->IsMappable(), false);
+  ASSERT_TRUE_OR_RETURN(src_frame->format() == dst_frame->format(), false);
 
   // Copy every plane's content from |src_frame| to |dst_frame|.
   const size_t num_planes = VideoFrame::NumPlanes(dst_frame->format());
-  LOG_ASSERT(dst_frame->layout().planes().size() == num_planes);
-  LOG_ASSERT(src_frame->layout().planes().size() == num_planes);
+  ASSERT_TRUE_OR_RETURN(dst_frame->layout().planes().size() == num_planes,
+                        false);
+  ASSERT_TRUE_OR_RETURN(src_frame->layout().planes().size() == num_planes,
+                        false);
   for (size_t i = 0; i < num_planes; ++i) {
     // |width| in libyuv::CopyPlane() is in bytes, not pixels.
-    gfx::Size plane_size = VideoFrame::PlaneSize(dst_frame->format(), i,
-                                                 dst_frame->natural_size());
+    gfx::Size plane_size =
+        VideoFrame::PlaneSize(dst_frame->format(), i, dst_frame->coded_size());
     libyuv::CopyPlane(
         src_frame->data(i), src_frame->layout().planes()[i].stride,
         dst_frame->data(i), dst_frame->layout().planes()[i].stride,
@@ -164,8 +177,10 @@ bool CopyVideoFrame(const VideoFrame* src_frame,
 }  // namespace
 
 bool ConvertVideoFrame(const VideoFrame* src_frame, VideoFrame* dst_frame) {
-  LOG_ASSERT(src_frame->visible_rect() == dst_frame->visible_rect());
-  LOG_ASSERT(src_frame->IsMappable() && dst_frame->IsMappable());
+  ASSERT_TRUE_OR_RETURN(src_frame->visible_rect() == dst_frame->visible_rect(),
+                        false);
+  ASSERT_TRUE_OR_RETURN(src_frame->IsMappable() && dst_frame->IsMappable(),
+                        false);
 
   // Writing into non-owned memory might produce some unexpected side effects.
   if (dst_frame->storage_type() != VideoFrame::STORAGE_OWNED_MEMORY)
@@ -254,53 +269,63 @@ scoped_refptr<VideoFrame> CloneVideoFrame(
   if (dst_storage_type == VideoFrame::STORAGE_GPU_MEMORY_BUFFER) {
     // Here, the content in |src_frame| is already copied to |dst_frame|, which
     // is a DMABUF based VideoFrame.
-    // Create GpuMemoryBufferHandle from |dst_frame|.
-    gfx::GpuMemoryBufferHandle gmb_handle;
-#if BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
-    gmb_handle = CreateGpuMemoryBufferHandle(dst_frame.get());
-#endif
-    if (gmb_handle.is_null() || gmb_handle.type != gfx::NATIVE_PIXMAP) {
-      LOG(ERROR) << "Failed to create native GpuMemoryBufferHandle";
-      return nullptr;
-    }
-
-    base::Optional<gfx::BufferFormat> buffer_format =
-        VideoPixelFormatToGfxBufferFormat(dst_layout.format());
-    if (!buffer_format) {
-      LOG(ERROR) << "Unexpected format: "
-                 << BufferFormatToString(*buffer_format);
-      return nullptr;
-    }
-
-    // Create GpuMemoryBuffer from GpuMemoryBufferHandle.
-    gpu::GpuMemoryBufferSupport support;
-    std::unique_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer =
-        support.CreateGpuMemoryBufferImplFromHandle(
-            std::move(gmb_handle), dst_layout.coded_size(), *buffer_format,
-            gfx::BufferUsage::SCANOUT_VEA_READ_CAMERA_AND_CPU_READ_WRITE,
-            base::DoNothing());
-    gpu::MailboxHolder dummy_mailbox[media::VideoFrame::kMaxPlanes];
-    dst_frame = media::VideoFrame::WrapExternalGpuMemoryBuffer(
-        src_frame->visible_rect(), src_frame->visible_rect().size(),
-        std::move(gpu_memory_buffer), dummy_mailbox /* mailbox_holders */,
-        base::DoNothing() /* mailbox_holder_release_cb_ */,
-        src_frame->timestamp());
+    // Create GpuMemoryBuffer based VideoFrame from |dst_frame|.
+    dst_frame = CreateGpuMemoryBufferVideoFrame(
+        gpu_memory_buffer_factory, dst_frame.get(), *dst_buffer_usage);
   }
 
   return dst_frame;
 }
 
+scoped_refptr<VideoFrame> CreateGpuMemoryBufferVideoFrame(
+    gpu::GpuMemoryBufferFactory* gpu_memory_buffer_factory,
+    const VideoFrame* const frame,
+    gfx::BufferUsage buffer_usage) {
+  gfx::GpuMemoryBufferHandle gmb_handle;
+#if BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
+  gmb_handle = CreateGpuMemoryBufferHandle(frame);
+#endif
+  if (gmb_handle.is_null() || gmb_handle.type != gfx::NATIVE_PIXMAP) {
+    LOG(ERROR) << "Failed to create native GpuMemoryBufferHandle";
+    return nullptr;
+  }
+
+  base::Optional<gfx::BufferFormat> buffer_format =
+      VideoPixelFormatToGfxBufferFormat(frame->format());
+  if (!buffer_format) {
+    LOG(ERROR) << "Unexpected format: " << frame->format();
+    return nullptr;
+  }
+
+  // Create GpuMemoryBuffer from GpuMemoryBufferHandle.
+  gpu::GpuMemoryBufferSupport support;
+  std::unique_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer =
+      support.CreateGpuMemoryBufferImplFromHandle(
+          std::move(gmb_handle), frame->coded_size(), *buffer_format,
+          buffer_usage, base::DoNothing());
+  if (!gpu_memory_buffer) {
+    LOG(ERROR) << "Failed to create GpuMemoryBuffer from GpuMemoryBufferHandle";
+    return nullptr;
+  }
+
+  gpu::MailboxHolder dummy_mailbox[media::VideoFrame::kMaxPlanes];
+  return media::VideoFrame::WrapExternalGpuMemoryBuffer(
+      frame->visible_rect(), frame->natural_size(),
+      std::move(gpu_memory_buffer), dummy_mailbox,
+      base::DoNothing() /* mailbox_holder_release_cb_ */, frame->timestamp());
+}
+
 scoped_refptr<const VideoFrame> CreateVideoFrameFromImage(const Image& image) {
   DCHECK(image.IsLoaded());
   const auto format = image.PixelFormat();
-  const auto& visible_size = image.Size();
+  const auto& image_size = image.Size();
   // Loaded image data must be tight.
-  DCHECK_EQ(image.DataSize(), VideoFrame::AllocationSize(format, visible_size));
+  DCHECK_EQ(image.DataSize(), VideoFrame::AllocationSize(format, image_size));
 
   // Create planes for layout. We cannot use WrapExternalData() because it
   // calls GetDefaultLayout() and it supports only a few pixel formats.
   base::Optional<VideoFrameLayout> layout =
-      CreateVideoFrameLayout(format, visible_size);
+      CreateVideoFrameLayout(format, image_size);
   if (!layout) {
     LOG(ERROR) << "Failed to create VideoFrameLayout";
     return nullptr;
@@ -308,8 +333,8 @@ scoped_refptr<const VideoFrame> CreateVideoFrameFromImage(const Image& image) {
 
   scoped_refptr<const VideoFrame> video_frame =
       VideoFrame::WrapExternalDataWithLayout(
-          *layout, gfx::Rect(visible_size), visible_size, image.Data(),
-          image.DataSize(), base::TimeDelta());
+          *layout, image.VisibleRect(), image.VisibleRect().size(),
+          image.Data(), image.DataSize(), base::TimeDelta());
   if (!video_frame) {
     LOG(ERROR) << "Failed to create VideoFrame";
     return nullptr;

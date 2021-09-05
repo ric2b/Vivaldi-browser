@@ -12,27 +12,31 @@ import android.view.ViewStub;
 
 import androidx.annotation.Nullable;
 
+import org.chromium.base.Callback;
+import org.chromium.base.supplier.ObservableSupplier;
+import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ThemeColorProvider;
-import org.chromium.chrome.browser.appmenu.AppMenuButtonHelper;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManager;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
 import org.chromium.chrome.browser.compositor.layouts.ToolbarSwipeLayout;
 import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
+import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.tasks.tab_management.TabGroupUi;
 import org.chromium.chrome.browser.tasks.tab_management.TabManagementModuleProvider;
+import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 import org.chromium.chrome.browser.toolbar.IncognitoStateProvider;
-import org.chromium.chrome.browser.toolbar.MenuButton;
 import org.chromium.chrome.browser.toolbar.TabCountProvider;
 import org.chromium.chrome.browser.toolbar.bottom.BottomControlsViewBinder.ViewHolder;
 import org.chromium.chrome.browser.ui.ImmersiveModeManager;
-import org.chromium.chrome.browser.util.FeatureUtilities;
+import org.chromium.chrome.browser.ui.appmenu.AppMenuButtonHelper;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
 import org.chromium.ui.resources.ResourceManager;
+import org.chromium.ui.widget.Toast;
 
 import org.chromium.chrome.browser.ChromeApplication;
 
@@ -66,18 +70,23 @@ public class BottomControlsCoordinator {
      * @param fullscreenManager A {@link ChromeFullscreenManager} to update the bottom controls
      *                          height for the renderer.
      * @param stub The bottom controls {@link ViewStub} to inflate.
-     * @param tabProvider The {@link ActivityTabProvider} used in the bottom toolbar.
-     * @param homeButtonListener The {@link OnClickListener} for the bottom toolbar's home button.
-     * @param searchAcceleratorListener The {@link OnClickListener} for the bottom toolbar's
-     *                                  search accelerator.
-     * @param shareButtonListener The {@link OnClickListener} for the bottom toolbar's share button.
+     * @param tabProvider
+     * @param tabSwitcherLongclickListener
      * @param themeColorProvider The {@link ThemeColorProvider} for the bottom toolbar.
+     * @param shareDelegateSupplier The supplier for the {@link ShareDelegate} the bottom controls
+     *         should use to share content.
+     * @param showStartSurfaceCallable The action that opens the start surface, returning true if
+     *         the start surface is shown.
+     * @param openHomepageAction The action that opens the homepage.
+     * @param setUrlBarFocusAction The function that sets Url bar focus. The first argument is
+     *         whether the bar should be focused, and the second is the OmniboxFocusReason.
      */
     public BottomControlsCoordinator(ChromeFullscreenManager fullscreenManager, ViewStub stub,
-            ActivityTabProvider tabProvider, OnClickListener homeButtonListener,
-            OnClickListener searchAcceleratorListener, OnClickListener shareButtonListener,
-            OnLongClickListener tabSwitcherLongClickListener,
-            ThemeColorProvider themeColorProvider) {
+            ActivityTabProvider tabProvider, OnLongClickListener tabSwitcherLongclickListener,
+            ThemeColorProvider themeColorProvider,
+            ObservableSupplier<ShareDelegate> shareDelegateSupplier,
+            Supplier<Boolean> showStartSurfaceCallable, Runnable openHomepageAction,
+            Callback<Integer> setUrlBarFocusAction) {
         final ScrollingBottomViewResourceFrameLayout root =
                 (ScrollingBottomViewResourceFrameLayout) stub.inflate();
 
@@ -89,7 +98,7 @@ public class BottomControlsCoordinator {
         int bottomToolbarHeightId;
         int bottomToolbarHeightWithShadowId;
 
-        if (FeatureUtilities.isLabeledBottomToolbarEnabled()) {
+        if (BottomToolbarConfiguration.isLabeledBottomToolbarEnabled()) {
             bottomToolbarHeightId = R.dimen.labeled_bottom_toolbar_height;
             bottomToolbarHeightWithShadowId = R.dimen.labeled_bottom_toolbar_height_with_shadow;
         } else {
@@ -105,9 +114,9 @@ public class BottomControlsCoordinator {
                 root.getResources().getDimensionPixelOffset(bottomToolbarHeightWithShadowId));
 
         if (TabManagementModuleProvider.getDelegate() != null
-                && FeatureUtilities.isTabGroupsAndroidEnabled()
-                && !(FeatureUtilities.isDuetTabStripIntegrationAndroidEnabled()
-                && FeatureUtilities.isBottomToolbarEnabled())) {
+                && TabUiFeatureUtilities.isTabGroupsAndroidEnabled()
+                && !(TabUiFeatureUtilities.isDuetTabStripIntegrationAndroidEnabled()
+                        && BottomToolbarConfiguration.isBottomToolbarEnabled())) {
             mTabGroupUi = TabManagementModuleProvider.getDelegate().createTabGroupUi(
                     root.findViewById(R.id.bottom_container_slot), themeColorProvider);
             if (ChromeApplication.isVivaldi()) {
@@ -118,17 +127,23 @@ public class BottomControlsCoordinator {
             }
         } else {
             mBottomToolbarCoordinator = new BottomToolbarCoordinator(
-                    root.findViewById(R.id.bottom_toolbar_stub), tabProvider, homeButtonListener,
-                    searchAcceleratorListener, shareButtonListener,
-                    themeColorProvider);
+                    root.findViewById(R.id.bottom_toolbar_stub), tabProvider,
+                    tabSwitcherLongclickListener, themeColorProvider, shareDelegateSupplier,
+                    showStartSurfaceCallable, openHomepageAction, setUrlBarFocusAction);
         }
+
+        Toast.setGlobalExtraYOffset(root.getResources().getDimensionPixelSize(
+                BottomToolbarConfiguration.isLabeledBottomToolbarEnabled()
+                        ? R.dimen.labeled_bottom_toolbar_height
+                        : R.dimen.bottom_toolbar_height));
 
         // NOTE(david@vivaldi.com): In any case we always create the
         // |BottomToolbarCoordinator|
         if (ChromeApplication.isVivaldi() && mBottomToolbarCoordinator == null)
             mBottomToolbarCoordinator = new BottomToolbarCoordinator(
-                    root.findViewById(R.id.bottom_toolbar_stub), tabProvider, homeButtonListener,
-                    searchAcceleratorListener, shareButtonListener, themeColorProvider);
+                    root.findViewById(R.id.bottom_toolbar_stub), tabProvider,
+                    tabSwitcherLongclickListener, themeColorProvider, shareDelegateSupplier,
+                    showStartSurfaceCallable, openHomepageAction, setUrlBarFocusAction);
         mBottomContainerSlot = toolbar;
     }
 
@@ -159,22 +174,24 @@ public class BottomControlsCoordinator {
      *                         incognito toggle tab layout.
      * @param incognitoStateProvider Notifies components when incognito mode is entered or exited.
      * @param topToolbarRoot The root {@link ViewGroup} of the top toolbar.
+     * @param closeAllTabsAction The runnable that closes all tabs in the current tab model.
      */
     public void initializeWithNative(ChromeActivity chromeActivity, ResourceManager resourceManager,
             LayoutManager layoutManager, OnClickListener tabSwitcherListener,
-            OnClickListener newTabClickListener, OnClickListener closeTabsClickListener,
-            AppMenuButtonHelper menuButtonHelper, OverviewModeBehavior overviewModeBehavior,
-            WindowAndroid windowAndroid, TabCountProvider tabCountProvider,
-            IncognitoStateProvider incognitoStateProvider, ViewGroup topToolbarRoot) {
+            OnClickListener newTabClickListener, AppMenuButtonHelper menuButtonHelper,
+            OverviewModeBehavior overviewModeBehavior, WindowAndroid windowAndroid,
+            TabCountProvider tabCountProvider, IncognitoStateProvider incognitoStateProvider,
+            ViewGroup topToolbarRoot, Runnable closeAllTabsAction) {
         mMediator.setLayoutManager(layoutManager);
         mMediator.setResourceManager(resourceManager);
         mMediator.setWindowAndroid(windowAndroid);
 
         if (mBottomToolbarCoordinator != null) {
             mBottomToolbarCoordinator.initializeWithNative(tabSwitcherListener, newTabClickListener,
-                    closeTabsClickListener, menuButtonHelper, overviewModeBehavior,
-                    tabCountProvider, incognitoStateProvider, topToolbarRoot);
-            mMediator.setToolbarSwipeHandler(layoutManager.getToolbarSwipeHandler());
+                    menuButtonHelper, overviewModeBehavior, tabCountProvider,
+                    incognitoStateProvider, topToolbarRoot, closeAllTabsAction);
+            mMediator.setToolbarSwipeHandler(
+                    layoutManager.createToolbarSwipeHandler(/* supportSwipeDown = */ false));
         }
 
         if (mTabGroupUi != null) {
@@ -190,44 +207,6 @@ public class BottomControlsCoordinator {
         if (mBottomToolbarCoordinator != null) {
             mBottomToolbarCoordinator.setBottomToolbarVisible(isVisible);
         }
-    }
-
-    /**
-     * Show the update badge over the bottom toolbar's app menu.
-     */
-    public void showAppMenuUpdateBadge() {
-        if (mBottomToolbarCoordinator != null) {
-            mBottomToolbarCoordinator.showAppMenuUpdateBadge();
-        }
-    }
-
-    /**
-     * Remove the update badge.
-     */
-    public void removeAppMenuUpdateBadge() {
-        if (mBottomToolbarCoordinator != null) {
-            mBottomToolbarCoordinator.removeAppMenuUpdateBadge();
-        }
-    }
-
-    /**
-     * @return Whether the update badge is showing.
-     */
-    public boolean isShowingAppMenuUpdateBadge() {
-        if (mBottomToolbarCoordinator != null) {
-            return mBottomToolbarCoordinator.isShowingAppMenuUpdateBadge();
-        }
-        return false;
-    }
-
-    /**
-     * @return The wrapper for the browsing mode toolbar's app menu button.
-     */
-    public MenuButton getMenuButtonWrapper() {
-        if (mBottomToolbarCoordinator != null) {
-            return mBottomToolbarCoordinator.getMenuButtonWrapper();
-        }
-        return null;
     }
 
     /**

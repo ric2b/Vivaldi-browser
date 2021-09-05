@@ -138,6 +138,9 @@ const char kSettingPinValue[] = "pinValue";
 // Policies affecting printing destination.
 const char kSettingPolicies[] = "policies";
 
+// Whether the source page content is from ARC or not.
+const char kSettingPreviewIsFromArc[] = "previewIsFromArc";
+
 // Whether the source page content is PDF or not.
 const char kSettingPreviewIsPdf[] = "previewIsPdf";
 
@@ -224,6 +227,10 @@ const char kNormalGray[] = "Normal.Gray";
 const char kRGB[] = "RGB";
 const char kRGBA[] = "RGBA";
 const char kRGB16[] = "RGB16";
+const char kSharpCMColor[] = "CMColor";
+const char kSharpCMBW[] = "CMBW";
+const char kXeroxAutomatic[] = "Automatic";
+const char kXeroxBW[] = "BW";
 #endif
 
 }  // namespace printing

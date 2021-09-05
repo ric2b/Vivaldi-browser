@@ -18,36 +18,22 @@
  */
 
 #include "third_party/blink/renderer/core/xml/dom_parser.h"
-#include "third_party/blink/renderer/bindings/core/v8/string_or_trusted_html.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/document_init.h"
 #include "third_party/blink/renderer/core/dom/dom_implementation.h"
-#include "third_party/blink/renderer/core/trustedtypes/trusted_types_util.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
 namespace blink {
 
-Document* DOMParser::parseFromString(const StringOrTrustedHTML& stringOrHTML,
-                                     const String& type,
-                                     ExceptionState& exception_state) {
-  String value = GetStringFromTrustedHTML(stringOrHTML, context_document_,
-                                          exception_state);
-  if (!exception_state.HadException()) {
-    return parseFromStringInternal(value, type);
-  }
-  return nullptr;
-}
-
-Document* DOMParser::parseFromStringInternal(const String& str,
-                                             const String& type) {
+Document* DOMParser::parseFromString(const String& str, const String& type) {
   Document* doc = DOMImplementation::createDocument(
-      type,
       DocumentInit::Create()
+          .WithTypeFrom(type)
           .WithContextDocument(context_document_)
-          .WithOwnerDocument(context_document_),
-      false);
+          .WithOwnerDocument(context_document_)
+          .WithContentSecurityPolicyFromContextDoc());
   doc->SetContent(str);
   doc->SetMimeType(AtomicString(type));
   if (context_document_) {
@@ -59,9 +45,13 @@ Document* DOMParser::parseFromStringInternal(const String& str,
 DOMParser::DOMParser(Document& document)
     : context_document_(document.ContextDocument()) {}
 
-void DOMParser::Trace(blink::Visitor* visitor) {
+void DOMParser::Trace(Visitor* visitor) {
   visitor->Trace(context_document_);
   ScriptWrappable::Trace(visitor);
+}
+
+Document* DOMParser::GetDocument() const {
+  return context_document_.Get();
 }
 
 }  // namespace blink

@@ -19,12 +19,9 @@
 #endif
 
 #if defined(NTLM_SSPI)
-#define SECURITY_WIN32 1
-#include <windows.h>
-#include <security.h>
 #include "net/http/http_auth_sspi_win.h"
 #elif defined(NTLM_PORTABLE)
-#include "net/ntlm/ntlm_client.h"
+#include "net/http/http_auth_ntlm_mechanism.h"
 #endif
 
 #include <memory>
@@ -40,18 +37,6 @@
 #include "net/http/http_auth_handler_factory.h"
 
 namespace net {
-
-#if defined(NTLM_PORTABLE)
-// These values are persisted to logs. Entries should not be renumbered and
-// numeric values should never be reused.
-enum class NtlmV2Usage : int {
-  kDisabledOverInsecure = 0,
-  kDisabledOverSecure,
-  kEnabledOverInsecure,
-  kEnabledOverSecure,
-  kMaxValue = kEnabledOverSecure
-};
-#endif
 
 class HttpAuthPreferences;
 
@@ -91,45 +76,6 @@ class NET_EXPORT_PRIVATE HttpAuthHandlerNTLM : public HttpAuthHandler {
   };
 
 #if defined(NTLM_PORTABLE)
-  // A function that returns the time as the number of 100 nanosecond ticks
-  // since Jan 1, 1601 (UTC).
-  typedef uint64_t (*GetMSTimeProc)();
-
-  // A function that generates n random bytes in the output buffer.
-  typedef void (*GenerateRandomProc)(uint8_t* output, size_t n);
-
-  // A function that returns the local host name. Returns an empty string if
-  // the local host name is not available.
-  typedef std::string (*HostNameProc)();
-
-  // For unit tests to override and restore the GenerateRandom and
-  // GetHostName functions.
-  class ScopedProcSetter {
-   public:
-    ScopedProcSetter(GetMSTimeProc ms_time_proc,
-                     GenerateRandomProc random_proc,
-                     HostNameProc host_name_proc) {
-      old_ms_time_proc_ = SetGetMSTimeProc(ms_time_proc);
-      old_random_proc_ = SetGenerateRandomProc(random_proc);
-      old_host_name_proc_ = SetHostNameProc(host_name_proc);
-    }
-
-    ~ScopedProcSetter() {
-      SetGetMSTimeProc(old_ms_time_proc_);
-      SetGenerateRandomProc(old_random_proc_);
-      SetHostNameProc(old_host_name_proc_);
-    }
-
-   private:
-    GetMSTimeProc old_ms_time_proc_;
-    GenerateRandomProc old_random_proc_;
-    HostNameProc old_host_name_proc_;
-
-    DISALLOW_COPY_AND_ASSIGN(ScopedProcSetter);
-  };
-#endif
-
-#if defined(NTLM_PORTABLE)
   explicit HttpAuthHandlerNTLM(
       const HttpAuthPreferences* http_auth_preferences);
 #endif
@@ -143,10 +89,6 @@ class NET_EXPORT_PRIVATE HttpAuthHandlerNTLM : public HttpAuthHandler {
   bool AllowsDefaultCredentials() override;
 
  protected:
-  // This function acquires a credentials handle in the SSPI implementation.
-  // It does nothing in the portable implementation.
-  int InitializeBeforeFirstChallenge();
-
   // HttpAuthHandler
   bool Init(HttpAuthChallengeTokenizer* tok, const SSLInfo& ssl_info) override;
   int GenerateAuthTokenImpl(const AuthCredentials* credentials,
@@ -159,48 +101,20 @@ class NET_EXPORT_PRIVATE HttpAuthHandlerNTLM : public HttpAuthHandler {
  private:
   ~HttpAuthHandlerNTLM() override;
 
-#if defined(NTLM_PORTABLE)
-  // For unit tests to override the GetMSTime, GenerateRandom and GetHostName
-  // functions. Returns the old function.
-  static GetMSTimeProc SetGetMSTimeProc(GetMSTimeProc proc);
-  static GenerateRandomProc SetGenerateRandomProc(GenerateRandomProc proc);
-  static HostNameProc SetHostNameProc(HostNameProc proc);
-
-  // Given an input token received from the server, generate the next output
-  // token to be sent to the server.
-  std::vector<uint8_t> GetNextToken(base::span<const uint8_t> in_token);
-#endif
-
   // Parse the challenge, saving the results into this instance.
-  HttpAuth::AuthorizationResult ParseChallenge(
-      HttpAuthChallengeTokenizer* tok, bool initial_challenge);
+  HttpAuth::AuthorizationResult ParseChallenge(HttpAuthChallengeTokenizer* tok);
 
   // Create an NTLM SPN to identify the |origin| server.
   static std::string CreateSPN(const GURL& origin);
 
 #if defined(NTLM_SSPI)
-  HttpAuthSSPI auth_sspi_;
-#elif defined(NTLM_PORTABLE)
-  ntlm::NtlmClient ntlm_client_;
-#endif
-
-#if defined(NTLM_PORTABLE)
-  static GetMSTimeProc get_ms_time_proc_;
-  static GenerateRandomProc generate_random_proc_;
-  static HostNameProc get_host_name_proc_;
-#endif
-
-  base::string16 domain_;
-  AuthCredentials credentials_;
-  std::string channel_bindings_;
-
-  // The base64-encoded string following "NTLM" in the "WWW-Authenticate" or
-  // "Proxy-Authenticate" response header.
-  std::string auth_data_;
-
-#if defined(NTLM_SSPI)
+  HttpAuthSSPI mechanism_;
   const HttpAuthPreferences* http_auth_preferences_;
+#elif defined(NTLM_PORTABLE)
+  HttpAuthNtlmMechanism mechanism_;
 #endif
+
+  std::string channel_bindings_;
 
   DISALLOW_COPY_AND_ASSIGN(HttpAuthHandlerNTLM);
 };

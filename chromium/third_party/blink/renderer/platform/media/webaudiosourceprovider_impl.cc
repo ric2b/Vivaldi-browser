@@ -16,7 +16,7 @@
 #include "media/base/audio_timestamp_helper.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/media_log.h"
-#include "third_party/blink/public/platform/web_audio_source_provider_client.h"
+#include "third_party/blink/renderer/platform/media/web_audio_source_provider_client.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 
 namespace blink {
@@ -134,7 +134,7 @@ void WebAudioSourceProviderImpl::SetClient(
     // The client will now take control by calling provideInput() periodically.
     client_ = client;
 
-    set_format_cb_ = media::BindToCurrentLoop(WTF::BindRepeating(
+    set_format_cb_ = media::BindToCurrentLoop(WTF::Bind(
         &WebAudioSourceProviderImpl::OnSetFormat, weak_factory_.GetWeakPtr()));
 
     // If |tee_filter_| is Initialize()d - then run |set_format_cb_| to send

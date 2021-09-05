@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/chromeos/attestation/mock_tpm_challenge_key.h"
+
 #include <utility>
 
 using ::testing::Invoke;
@@ -15,13 +16,15 @@ MockTpmChallengeKey::MockTpmChallengeKey() = default;
 MockTpmChallengeKey::~MockTpmChallengeKey() = default;
 
 void MockTpmChallengeKey::EnableFake() {
-  ON_CALL(*this, Run)
-      .WillByDefault(
-          WithArgs<2>(Invoke(this, &MockTpmChallengeKey::FakeRunSuccess)));
+  ON_CALL(*this, BuildResponse)
+      .WillByDefault(WithArgs<2>(
+          Invoke(this, &MockTpmChallengeKey::FakeBuildResponseSuccess)));
 }
 
-void MockTpmChallengeKey::FakeRunSuccess(TpmChallengeKeyCallback callback) {
-  std::move(callback).Run(TpmChallengeKeyResult::MakeResult("response"));
+void MockTpmChallengeKey::FakeBuildResponseSuccess(
+    TpmChallengeKeyCallback callback) {
+  std::move(callback).Run(
+      TpmChallengeKeyResult::MakeChallengeResponse("response"));
 }
 
 }  // namespace attestation

@@ -1,5 +1,6 @@
 // Copyright (c) 2016-2019 Vivaldi Technologies. All Rights Reserved.
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "prefs/native_settings_observer_win.h"
 #include "prefs/vivaldi_pref_names.h"

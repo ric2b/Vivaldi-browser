@@ -104,15 +104,16 @@ struct IgnoreResultHelper {
   T functor_;
 };
 
-template <typename T>
+template <typename T, typename Deleter = std::default_delete<T>>
 class OwnedWrapper {
  public:
   explicit OwnedWrapper(T* o) : ptr_(o) {}
-  explicit OwnedWrapper(std::unique_ptr<T>&& ptr) : ptr_(std::move(ptr)) {}
+  explicit OwnedWrapper(std::unique_ptr<T, Deleter>&& ptr)
+      : ptr_(std::move(ptr)) {}
   T* get() const { return ptr_.get(); }
 
  private:
-  std::unique_ptr<T> ptr_;
+  std::unique_ptr<T, Deleter> ptr_;
 };
 
 // PassedWrapper is a copyable adapter for a scoper that ignores const.
@@ -320,21 +321,11 @@ template <typename Callable>
 struct IsCallableObject<Callable, void_t<decltype(&Callable::operator())>>
     : std::true_type {};
 
-// HasRefCountedTypeAsRawPtr selects true_type when any of the |Args| is a raw
-// pointer to a RefCounted type.
-// Implementation note: This non-specialized case handles zero-arity case only.
-// Non-zero-arity cases should be handled by the specialization below.
-template <typename... Args>
-struct HasRefCountedTypeAsRawPtr : std::false_type {};
-
-// Implementation note: Select true_type if the first parameter is a raw pointer
-// to a RefCounted type. Otherwise, skip the first parameter and check rest of
-// parameters recursively.
-template <typename T, typename... Args>
-struct HasRefCountedTypeAsRawPtr<T, Args...>
-    : std::conditional_t<NeedsScopedRefptrButGetsRawPtr<T>::value,
-                         std::true_type,
-                         HasRefCountedTypeAsRawPtr<Args...>> {};
+// HasRefCountedTypeAsRawPtr inherits from true_type when any of the |Args| is a
+// raw pointer to a RefCounted type.
+template <typename... Ts>
+struct HasRefCountedTypeAsRawPtr
+    : disjunction<NeedsScopedRefptrButGetsRawPtr<Ts>...> {};
 
 // ForceVoidReturn<>
 //
@@ -513,6 +504,40 @@ struct FunctorTraits<R (Receiver::*)(Args...) const> {
     return ((*receiver_ptr).*method)(std::forward<RunArgs>(args)...);
   }
 };
+
+#if defined(OS_WIN) && !defined(ARCH_CPU_64_BITS)
+
+// For __stdcall methods.
+template <typename R, typename Receiver, typename... Args>
+struct FunctorTraits<R (__stdcall Receiver::*)(Args...)> {
+  using RunType = R(Receiver*, Args...);
+  static constexpr bool is_method = true;
+  static constexpr bool is_nullable = true;
+
+  template <typename Method, typename ReceiverPtr, typename... RunArgs>
+  static R Invoke(Method method,
+                  ReceiverPtr&& receiver_ptr,
+                  RunArgs&&... args) {
+    return ((*receiver_ptr).*method)(std::forward<RunArgs>(args)...);
+  }
+};
+
+// For __stdcall const methods.
+template <typename R, typename Receiver, typename... Args>
+struct FunctorTraits<R (__stdcall Receiver::*)(Args...) const> {
+  using RunType = R(const Receiver*, Args...);
+  static constexpr bool is_method = true;
+  static constexpr bool is_nullable = true;
+
+  template <typename Method, typename ReceiverPtr, typename... RunArgs>
+  static R Invoke(Method method,
+                  ReceiverPtr&& receiver_ptr,
+                  RunArgs&&... args) {
+    return ((*receiver_ptr).*method)(std::forward<RunArgs>(args)...);
+  }
+};
+
+#endif  // defined(OS_WIN) && !defined(ARCH_CPU_64_BITS)
 
 #ifdef __cpp_noexcept_function_type
 // noexcept makes a distinct function type in C++17.
@@ -801,8 +826,7 @@ BanUnconstructedRefCountedReceiver(const Receiver& receiver, Unused&&...) {
 // This stores all the state passed into Bind().
 template <typename Functor, typename... BoundArgs>
 struct BindState final : BindStateBase {
-  using IsCancellable = std::integral_constant<
-      bool,
+  using IsCancellable = bool_constant<
       CallbackCancellationTraits<Functor,
                                  std::tuple<BoundArgs...>>::is_cancellable>;
 
@@ -952,9 +976,11 @@ struct BindUnwrapTraits<internal::RetainedRefWrapper<T>> {
   static T* Unwrap(const internal::RetainedRefWrapper<T>& o) { return o.get(); }
 };
 
-template <typename T>
-struct BindUnwrapTraits<internal::OwnedWrapper<T>> {
-  static T* Unwrap(const internal::OwnedWrapper<T>& o) { return o.get(); }
+template <typename T, typename Deleter>
+struct BindUnwrapTraits<internal::OwnedWrapper<T, Deleter>> {
+  static T* Unwrap(const internal::OwnedWrapper<T, Deleter>& o) {
+    return o.get();
+  }
 };
 
 template <typename T>

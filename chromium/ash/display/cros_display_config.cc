@@ -4,6 +4,7 @@
 
 #include "ash/display/cros_display_config.h"
 
+#include <memory>
 #include <utility>
 
 #include "ash/display/display_configuration_controller.h"
@@ -13,6 +14,8 @@
 #include "ash/display/screen_orientation_controller.h"
 #include "ash/display/touch_calibrator_controller.h"
 #include "ash/display/window_tree_host_manager.h"
+#include "ash/public/cpp/tablet_mode_observer.h"
+#include "ash/public/mojom/cros_display_config.mojom.h"
 #include "ash/shell.h"
 #include "ash/touch/ash_touch_transform_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
@@ -23,6 +26,7 @@
 #include "ui/display/display.h"
 #include "ui/display/display_layout.h"
 #include "ui/display/display_layout_builder.h"
+#include "ui/display/display_observer.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/manager/display_util.h"
 #include "ui/display/mojom/display_mojom_traits.h"
@@ -224,9 +228,7 @@ mojom::DisplayModePtr GetDisplayMode(
     const display::ManagedDisplayInfo& display_info,
     const display::ManagedDisplayMode& display_mode) {
   auto result = mojom::DisplayMode::New();
-  bool is_internal = display::Display::HasInternalDisplay() &&
-                     display::Display::InternalDisplayId() == display_info.id();
-  gfx::Size size_dip = display_mode.GetSizeInDIP(is_internal);
+  gfx::Size size_dip = display_mode.GetSizeInDIP();
   result->size = size_dip;
   result->size_in_native_pixels = display_mode.size();
   result->device_scale_factor = display_mode.device_scale_factor();
@@ -234,6 +236,50 @@ mojom::DisplayModePtr GetDisplayMode(
   result->is_native = display_mode.native();
   result->is_interlaced = display_mode.is_interlaced();
   return result;
+}
+
+display::Display::Rotation DisplayRotationFromRotationOptions(
+    mojom::DisplayRotationOptions option) {
+  switch (option) {
+    case mojom::DisplayRotationOptions::kAutoRotate:
+      return display::Display::ROTATE_0;
+
+    case mojom::DisplayRotationOptions::kZeroDegrees:
+      return display::Display::ROTATE_0;
+
+    case mojom::DisplayRotationOptions::k90Degrees:
+      return display::Display::ROTATE_90;
+
+    case mojom::DisplayRotationOptions::k180Degrees:
+      return display::Display::ROTATE_180;
+
+    case mojom::DisplayRotationOptions::k270Degrees:
+      return display::Display::ROTATE_270;
+  }
+}
+
+mojom::DisplayRotationOptions RotationOptionsFromDisplayRotation(
+    display::Display::Rotation rotation) {
+  const bool is_in_tablet_physical_state =
+      Shell::Get()->tablet_mode_controller()->is_in_tablet_physical_state();
+  const bool is_auto_rotate_enabled =
+      !Shell::Get()->screen_orientation_controller()->user_rotation_locked();
+  if (is_in_tablet_physical_state && is_auto_rotate_enabled)
+    return mojom::DisplayRotationOptions::kAutoRotate;
+
+  switch (rotation) {
+    case display::Display::ROTATE_0:
+      return mojom::DisplayRotationOptions::kZeroDegrees;
+
+    case display::Display::ROTATE_90:
+      return mojom::DisplayRotationOptions::k90Degrees;
+
+    case display::Display::ROTATE_180:
+      return mojom::DisplayRotationOptions::k180Degrees;
+
+    case display::Display::ROTATE_270:
+      return mojom::DisplayRotationOptions::k270Degrees;
+  }
 }
 
 mojom::DisplayUnitInfoPtr GetDisplayUnitInfo(const display::Display& display,
@@ -259,11 +305,11 @@ mojom::DisplayUnitInfoPtr GetDisplayUnitInfo(const display::Display& display,
   info->is_primary = display.id() == primary_id;
   info->is_internal = display.IsInternal();
   info->is_enabled = true;
-  bool has_accelerometer_support =
+  info->is_in_tablet_physical_state =
+      Shell::Get()->tablet_mode_controller()->is_in_tablet_physical_state();
+  const bool has_accelerometer_support =
       display.accelerometer_support() ==
       display::Display::AccelerometerSupport::AVAILABLE;
-  info->is_tablet_mode = has_accelerometer_support &&
-                         Shell::Get()->tablet_mode_controller()->InTabletMode();
   info->has_touch_support =
       display.touch_support() == display::Display::TouchSupport::AVAILABLE;
   info->has_accelerometer_support = has_accelerometer_support;
@@ -274,7 +320,8 @@ mojom::DisplayUnitInfoPtr GetDisplayUnitInfo(const display::Display& display,
   info->dpi_y = device_dpi * display.size().height() /
                 display_info.bounds_in_native().height();
 
-  info->rotation = display.rotation();
+  info->rotation_options =
+      RotationOptionsFromDisplayRotation(display.rotation());
   info->bounds = display.bounds();
   info->overscan = display_manager->GetOverscanInsets(display.id());
   info->work_area = display.work_area();
@@ -451,37 +498,78 @@ display::TouchCalibrationData::CalibrationPointPair GetCalibrationPair(
 
 }  // namespace
 
-class CrosDisplayConfig::DisplayObserver : public display::DisplayObserver {
+// -----------------------------------------------------------------------------
+// CrosDisplayConfig::ObserverImpl:
+
+// Observes display and tablet mode events, and notifies the
+// CrosDisplayConfigObservers with OnDisplayConfigChanged() in response to those
+// events.
+class CrosDisplayConfig::ObserverImpl
+    : public display::DisplayObserver,
+      public TabletModeObserver,
+      public ScreenOrientationController::Observer {
  public:
-  explicit DisplayObserver(CrosDisplayConfig* owner) : owner_(owner) {
+  explicit ObserverImpl() {
     display::Screen::GetScreen()->AddObserver(this);
+    Shell::Get()->tablet_mode_controller()->AddObserver(this);
+    Shell::Get()->screen_orientation_controller()->AddObserver(this);
   }
-  ~DisplayObserver() override {
+
+  ~ObserverImpl() override {
+    Shell::Get()->screen_orientation_controller()->RemoveObserver(this);
+    Shell::Get()->tablet_mode_controller()->RemoveObserver(this);
     display::Screen::GetScreen()->RemoveObserver(this);
+  }
+
+  void AddObserver(
+      mojo::PendingAssociatedRemote<mojom::CrosDisplayConfigObserver>
+          observer) {
+    observers_.Add(mojo::AssociatedRemote<mojom::CrosDisplayConfigObserver>(
+        std::move(observer)));
   }
 
   // display::DisplayObserver:
   void OnDisplayAdded(const display::Display& new_display) override {
-    owner_->NotifyObserversDisplayConfigChanged();
+    NotifyObserversDisplayConfigChanged();
   }
+
   void OnDisplayRemoved(const display::Display& old_display) override {
-    owner_->NotifyObserversDisplayConfigChanged();
+    NotifyObserversDisplayConfigChanged();
   }
+
   void OnDisplayMetricsChanged(const display::Display& display,
                                uint32_t metrics) override {
-    owner_->NotifyObserversDisplayConfigChanged();
+    NotifyObserversDisplayConfigChanged();
+  }
+
+  // TabletModeObserver:
+  void OnTabletPhysicalStateChanged() override {
+    NotifyObserversDisplayConfigChanged();
+  }
+
+  // ScreenOrientationController::Observer:
+  void OnUserRotationLockChanged() override {
+    NotifyObserversDisplayConfigChanged();
   }
 
  private:
-  CrosDisplayConfig* owner_;
+  void NotifyObserversDisplayConfigChanged() {
+    for (auto& observer : observers_)
+      observer->OnDisplayConfigChanged();
+  }
 
-  DISALLOW_COPY_AND_ASSIGN(DisplayObserver);
+  mojo::AssociatedRemoteSet<mojom::CrosDisplayConfigObserver> observers_;
+
+  DISALLOW_COPY_AND_ASSIGN(ObserverImpl);
 };
 
-CrosDisplayConfig::CrosDisplayConfig()
-    : display_observer_(std::make_unique<DisplayObserver>(this)) {}
+// -----------------------------------------------------------------------------
+// CrosDisplayConfig:
 
-CrosDisplayConfig::~CrosDisplayConfig() {}
+CrosDisplayConfig::CrosDisplayConfig()
+    : observer_impl_(std::make_unique<ObserverImpl>()) {}
+
+CrosDisplayConfig::~CrosDisplayConfig() = default;
 
 void CrosDisplayConfig::BindReceiver(
     mojo::PendingReceiver<mojom::CrosDisplayConfigController> receiver) {
@@ -490,8 +578,7 @@ void CrosDisplayConfig::BindReceiver(
 
 void CrosDisplayConfig::AddObserver(
     mojo::PendingAssociatedRemote<mojom::CrosDisplayConfigObserver> observer) {
-  observers_.Add(mojo::AssociatedRemote<mojom::CrosDisplayConfigObserver>(
-      std::move(observer)));
+  observer_impl_->AddObserver(std::move(observer));
 }
 
 void CrosDisplayConfig::GetDisplayLayoutInfo(
@@ -662,12 +749,29 @@ void CrosDisplayConfig::SetDisplayProperties(
     display_manager->SetOverscanInsets(display.id(), *properties->overscan);
 
   if (properties->rotation) {
+    const mojom::DisplayRotationOptions rotation_options =
+        properties->rotation->rotation;
+    const bool is_in_tablet_physical_state =
+        Shell::Get()->tablet_mode_controller()->is_in_tablet_physical_state();
+    auto* screen_orientation_controller =
+        Shell::Get()->screen_orientation_controller();
+    const bool auto_rotate_requested =
+        rotation_options == mojom::DisplayRotationOptions::kAutoRotate;
+    if (auto_rotate_requested && !is_in_tablet_physical_state) {
+      LOG(ERROR) << "Auto-rotate is supported only when the device is in "
+                 << "physical tablet state. This will be treated as a request "
+                 << " to set the display rotation to 0 degrees.";
+    }
+
     display::Display::Rotation rotation =
-        display::Display::Rotation(properties->rotation->rotation);
-    if (Shell::Get()->tablet_mode_controller()->InTabletMode() &&
-        display.id() == display::Display::InternalDisplayId()) {
-      Shell::Get()->screen_orientation_controller()->SetLockToRotation(
-          rotation);
+        DisplayRotationFromRotationOptions(properties->rotation->rotation);
+    if (is_in_tablet_physical_state) {
+      if (auto_rotate_requested) {
+        if (screen_orientation_controller->user_rotation_locked())
+          screen_orientation_controller->ToggleUserRotationLock();
+      } else {
+        screen_orientation_controller->SetLockToRotation(rotation);
+      }
     } else {
       display_configuration_controller->SetDisplayRotation(
           display.id(), rotation, display::Display::RotationSource::USER);
@@ -799,7 +903,7 @@ void CrosDisplayConfig::TouchCalibration(const std::string& display_id,
       return;
     }
     if (!touch_calibrator_)
-      touch_calibrator_ = std::make_unique<ash::TouchCalibratorController>();
+      touch_calibrator_ = std::make_unique<TouchCalibratorController>();
     if (op == mojom::DisplayConfigOperation::kShowNative) {
       // For native calibration, |callback| is not run until calibration
       // completes.
@@ -823,8 +927,8 @@ void CrosDisplayConfig::TouchCalibration(const std::string& display_id,
   }
 
   if (op == mojom::DisplayConfigOperation::kReset) {
-    ash::Shell::Get()->display_manager()->ClearTouchCalibrationData(
-        display.id(), base::nullopt);
+    Shell::Get()->display_manager()->ClearTouchCalibrationData(display.id(),
+                                                               base::nullopt);
     std::move(callback).Run(mojom::DisplayConfigResult::kSuccess);
     return;
   }
@@ -850,7 +954,7 @@ void CrosDisplayConfig::TouchCalibration(const std::string& display_id,
     return;
   }
 
-  ash::Shell::Get()->touch_transformer_controller()->SetForCalibration(false);
+  Shell::Get()->touch_transformer_controller()->SetForCalibration(false);
 
   display::TouchCalibrationData::CalibrationPointPairQuad calibration_points;
   calibration_points[0] = GetCalibrationPair(*calibration->pairs[0]);
@@ -887,11 +991,6 @@ void CrosDisplayConfig::TouchCalibration(const std::string& display_id,
 
   touch_calibrator_->CompleteCalibration(calibration_points, bounds);
   std::move(callback).Run(mojom::DisplayConfigResult::kSuccess);
-}
-
-void CrosDisplayConfig::NotifyObserversDisplayConfigChanged() {
-  for (auto& observer : observers_)
-    observer->OnDisplayConfigChanged();
 }
 
 OverscanCalibrator* CrosDisplayConfig::GetOverscanCalibrator(

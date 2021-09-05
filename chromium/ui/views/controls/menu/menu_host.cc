@@ -4,6 +4,8 @@
 
 #include "ui/views/controls/menu/menu_host.h"
 
+#include <utility>
+
 #include "base/auto_reset.h"
 #include "base/logging.h"
 #include "base/trace_event/trace_event.h"
@@ -47,9 +49,7 @@ class PreMenuEventDispatchHandler : public ui::EventHandler,
     window_->AddObserver(this);
   }
 
-  ~PreMenuEventDispatchHandler() override {
-    StopObserving();
-  }
+  ~PreMenuEventDispatchHandler() override { StopObserving(); }
 
   // ui::EventHandler overrides.
   void OnTouchEvent(ui::TouchEvent* event) override {
@@ -95,9 +95,7 @@ void TransferGesture(Widget* source, Widget* target) {
 // MenuHost, public:
 
 MenuHost::MenuHost(SubmenuView* submenu)
-    : submenu_(submenu),
-      destroying_(false),
-      ignore_capture_lost_(false) {
+    : submenu_(submenu), destroying_(false), ignore_capture_lost_(false) {
   set_auto_release_capture(false);
 }
 
@@ -118,11 +116,11 @@ void MenuHost::InitMenuHost(Widget* parent,
   bool rounded_border = menu_config.CornerRadiusForMenu(menu_controller) != 0;
   bool bubble_border = submenu_->GetScrollViewContainer() &&
                        submenu_->GetScrollViewContainer()->HasBubbleBorder();
-  params.shadow_type = bubble_border ? Widget::InitParams::SHADOW_TYPE_NONE
-                                     : Widget::InitParams::SHADOW_TYPE_DROP;
-  params.opacity = (bubble_border || rounded_border) ?
-      Widget::InitParams::TRANSLUCENT_WINDOW :
-      Widget::InitParams::OPAQUE_WINDOW;
+  params.shadow_type = bubble_border ? Widget::InitParams::ShadowType::kNone
+                                     : Widget::InitParams::ShadowType::kDrop;
+  params.opacity = (bubble_border || rounded_border)
+                       ? Widget::InitParams::WindowOpacity::kTranslucent
+                       : Widget::InitParams::WindowOpacity::kOpaque;
   params.parent = parent ? parent->GetNativeView() : gfx::kNullNativeView;
   params.bounds = bounds;
   // If MenuHost has no parent widget, it needs to be marked
@@ -278,8 +276,8 @@ void MenuHost::OnDragComplete() {
   // exit.
   if (!menu_controller->did_initiate_drag()) {
     MenuDelegate* menu_delegate = submenu_->GetMenuItem()->GetDelegate();
-    should_close =
-      menu_delegate ? menu_delegate->ShouldCloseOnDragComplete() : should_close;
+    should_close = menu_delegate ? menu_delegate->ShouldCloseOnDragComplete()
+                                 : should_close;
   }
   menu_controller->OnDragComplete(should_close);
 

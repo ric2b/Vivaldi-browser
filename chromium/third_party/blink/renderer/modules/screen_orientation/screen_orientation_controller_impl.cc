@@ -37,7 +37,7 @@ ScreenOrientationControllerImpl* ScreenOrientationControllerImpl::From(
 ScreenOrientationControllerImpl::ScreenOrientationControllerImpl(
     LocalFrame& frame)
     : ScreenOrientationController(frame),
-      ContextLifecycleObserver(frame.GetDocument()),
+      ExecutionContextLifecycleObserver(frame.GetDocument()),
       PageVisibilityObserver(frame.GetPage()) {
   AssociatedInterfaceProvider* provider =
       frame.GetRemoteNavigationAssociatedInterfaces();
@@ -214,14 +214,14 @@ bool ScreenOrientationControllerImpl::MaybeHasActiveLock() const {
   return active_lock_;
 }
 
-void ScreenOrientationControllerImpl::ContextDestroyed(ExecutionContext*) {
+void ScreenOrientationControllerImpl::ContextDestroyed() {
   screen_orientation_service_.reset();
   active_lock_ = false;
 }
 
-void ScreenOrientationControllerImpl::Trace(blink::Visitor* visitor) {
+void ScreenOrientationControllerImpl::Trace(Visitor* visitor) {
   visitor->Trace(orientation_);
-  ContextLifecycleObserver::Trace(visitor);
+  ExecutionContextLifecycleObserver::Trace(visitor);
   PageVisibilityObserver::Trace(visitor);
   Supplement<LocalFrame>::Trace(visitor);
 }

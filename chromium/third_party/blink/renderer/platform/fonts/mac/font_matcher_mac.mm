@@ -46,7 +46,7 @@
 
 namespace {
 
-static CGFloat toYosemiteFontWeight(blink::FontSelectionValue font_weight) {
+static CGFloat toFontWeight(blink::FontSelectionValue font_weight) {
   static uint64_t ns_font_weights[] = {
       0xbfe99999a0000000,  // NSFontWeightUltraLight
       0xbfe3333340000000,  // NSFontWeightThin
@@ -181,8 +181,7 @@ NSFont* MatchNSFontFamily(const AtomicString& desired_family_string,
 // On OSX 10.10+, the default system font has more weights.
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunguarded-availability"
-    font = [NSFont systemFontOfSize:size
-                             weight:toYosemiteFontWeight(desired_weight)];
+    font = [NSFont systemFontOfSize:size weight:toFontWeight(desired_weight)];
 #pragma clang diagnostic pop
 
     if (desired_traits & IMPORTANT_FONT_TRAITS)
@@ -194,16 +193,19 @@ NSFont* MatchNSFontFamily(const AtomicString& desired_family_string,
   NSString* desired_family = desired_family_string;
   NSFontManager* font_manager = [NSFontManager sharedFontManager];
 
-  // Do a simple case insensitive search for a matching font family.
-  // NSFontManager requires exact name matches.
-  // This addresses the problem of matching arial to Arial, etc., but perhaps
-  // not all the issues.
-  NSEnumerator* e = [[font_manager availableFontFamilies] objectEnumerator];
-  NSString* available_family;
-  while ((available_family = [e nextObject])) {
-    if ([desired_family caseInsensitiveCompare:available_family] ==
-        NSOrderedSame)
-      break;
+  // From Mac OS 10.15 [NSFontManager availableFonts] does not list certain
+  // fonts that availableMembersOfFontFamily actually shows results for, for
+  // example "Hiragino Kaku Gothic ProN" is not listed, only Hiragino Sans is
+  // listed. We previously enumerated availableFontFamilies and looked for a
+  // case-insensitive string match here, but instead, we can rely on
+  // availableMembersOfFontFamily here to do a case-insensitive comparison, then
+  // set available_family to desired_family if the result was not empty.
+  // See https://crbug.com/1000542
+  NSString* available_family = nil;
+  NSArray* fonts_in_family =
+      [font_manager availableMembersOfFontFamily:desired_family];
+  if (fonts_in_family && [fonts_in_family count]) {
+    available_family = desired_family;
   }
 
   int app_kit_font_weight = ToAppKitFontWeight(desired_weight);

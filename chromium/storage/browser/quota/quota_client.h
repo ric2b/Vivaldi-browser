@@ -23,7 +23,11 @@ namespace storage {
 // the quota manager, by calling QuotaManager::RegisterClient().
 //
 // All the methods will be called on the IO thread in the browser.
-class COMPONENT_EXPORT(STORAGE_BROWSER) QuotaClient {
+//
+// When AppCache is deleted, this can become a std::unique_ptr instead
+// of refcounted, and owned by the QuotaManager.
+class COMPONENT_EXPORT(STORAGE_BROWSER) QuotaClient
+    : public base::RefCountedThreadSafe<QuotaClient> {
  public:
   using GetUsageCallback = base::OnceCallback<void(int64_t usage)>;
   using GetOriginsCallback =
@@ -31,17 +35,14 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) QuotaClient {
   using DeletionCallback =
       base::OnceCallback<void(blink::mojom::QuotaStatusCode status)>;
 
-  virtual ~QuotaClient() = default;
-
   enum ID {
-    kUnknown = 1 << 0,
-    kFileSystem = 1 << 1,
-    kDatabase = 1 << 2,
-    kAppcache = 1 << 3,
-    kIndexedDatabase = 1 << 4,
-    kServiceWorkerCache = 1 << 5,
-    kServiceWorker = 1 << 6,
-    kBackgroundFetch = 1 << 7,
+    kFileSystem = 1 << 0,
+    kDatabase = 1 << 1,
+    kAppcache = 1 << 2,
+    kIndexedDatabase = 1 << 3,
+    kServiceWorkerCache = 1 << 4,
+    kServiceWorker = 1 << 5,
+    kBackgroundFetch = 1 << 6,
     kAllClientsMask = -1,
   };
 
@@ -78,12 +79,17 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) QuotaClient {
                                 DeletionCallback callback) = 0;
 
   // Called by the QuotaManager.
-  // This can be implemented if a QuotaClient would like to perform a cleanup
-  // step after major deletions.
+  // Gives the QuotaClient an opportunity to perform a cleanup step after major
+  // deletions.
   virtual void PerformStorageCleanup(blink::mojom::StorageType type,
-                                     base::OnceClosure callback);
+                                     base::OnceClosure callback) = 0;
 
   virtual bool DoesSupport(blink::mojom::StorageType type) const = 0;
+
+ protected:
+  friend class RefCountedThreadSafe<QuotaClient>;
+
+  virtual ~QuotaClient() = default;
 };
 
 }  // namespace storage

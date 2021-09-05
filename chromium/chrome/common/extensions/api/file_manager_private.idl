@@ -10,10 +10,16 @@ namespace fileManagerPrivate {
 // Type of the mounted volume.
 enum VolumeType { drive, downloads, removable, archive, provided, mtp,
                   media_view, crostini, android_files, documents_provider,
-                  testing };
+                  testing, smb };
 
 // Device type. Available if this is removable volume.
 enum DeviceType { usb, sd, optical, mobile, unknown };
+
+// List of connection types of drive.
+enum DriveConnectionStateType {OFFLINE, METERED, ONLINE};
+
+// List of reasons of DriveConnectionStateType.
+enum DriveOfflineReason {NOT_READY, NO_NETWORK, NO_SERVICE};
 
 // Additional data about mount, for example, that the filesystem is not
 // supported.
@@ -217,10 +223,15 @@ enum SourceRestriction {
   any_source,
 
   // Allows source with native local file system only.
-  native_source,
+  native_source
+};
 
-  // Allows native source and Drive source.
-  native_or_drive_source
+// Recent file types to filter results from getRecentFiles().
+enum RecentFileType {
+  all,
+  audio,
+  image,
+  video
 };
 
 enum CrostiniEventType {
@@ -613,10 +624,10 @@ dictionary DriveMetadataSearchResult {
 };
 
 dictionary DriveConnectionState {
-  DOMString type;
+  DriveConnectionStateType type;
 
   // Reasons of offline.
-  DOMString? reason;
+  DriveOfflineReason? reason;
 
   // Whether the device has a cellular network access or not. i.e. the |type|
   // can be 'metered' or not.
@@ -630,6 +641,8 @@ dictionary DeviceEvent {
   DeviceEventType type;
   // Device path to identify the device.
   DOMString devicePath;
+  // Human readable label for the device.
+  DOMString deviceLabel;
 };
 
 // Describes an installed provider.
@@ -1083,9 +1096,6 @@ interface Functions {
   static void computeChecksum([instanceof=Entry] object entry,
                               ComputeChecksumCallback callback);
 
-  // Returns if Piex loader is enabled.
-  static void isPiexLoaderEnabled(BooleanCallback callback);
-
   // Returns list of available providers.
   static void getProviders(GetProvidersCallback callback);
 
@@ -1120,9 +1130,11 @@ interface Functions {
 
   // Gets recently modified files across file systems.
   // |restriction| Flag to restrict sources of recent files.
+  // |fileType| Requested file type to filter recent files.
   // |callback|
   [nocompile]
   static void getRecentFiles(SourceRestriction restriction,
+                             RecentFileType fileType,
                              GetRecentFilesCallback callback);
 
   // Starts and mounts crostini container.

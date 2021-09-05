@@ -8,6 +8,7 @@
 #include <memory>
 #include <string>
 
+#include "base/unguessable_token.h"
 #include "media/mojo/buildflags.h"
 #include "media/mojo/services/mojo_media_client.h"
 
@@ -15,7 +16,7 @@ namespace chromecast {
 namespace media {
 
 class CmaBackendFactory;
-class MediaResourceTracker;
+class VideoGeometrySetterService;
 class VideoModeSwitcher;
 class VideoResolutionPolicy;
 
@@ -28,12 +29,15 @@ class CastMojoMediaClient : public ::media::MojoMediaClient {
   CastMojoMediaClient(CmaBackendFactory* backend_factory,
                       const CreateCdmFactoryCB& create_cdm_factory_cb,
                       VideoModeSwitcher* video_mode_switcher,
-                      VideoResolutionPolicy* video_resolution_policy,
-                      MediaResourceTracker* media_resource_tracker);
+                      VideoResolutionPolicy* video_resolution_policy);
   ~CastMojoMediaClient() override;
 
+#if BUILDFLAG(ENABLE_CAST_RENDERER)
+  void SetVideoGeometrySetterService(
+      VideoGeometrySetterService* video_geometry_setter);
+#endif
+
   // MojoMediaClient implementation:
-  void Initialize(service_manager::Connector* connector) override;
 #if BUILDFLAG(ENABLE_CAST_RENDERER)
   std::unique_ptr<::media::Renderer> CreateCastRenderer(
       service_manager::mojom::InterfaceProvider* host_interfaces,
@@ -50,12 +54,14 @@ class CastMojoMediaClient : public ::media::MojoMediaClient {
       service_manager::mojom::InterfaceProvider* host_interfaces) override;
 
  private:
-  service_manager::Connector* connector_;
   CmaBackendFactory* const backend_factory_;
   const CreateCdmFactoryCB create_cdm_factory_cb_;
   VideoModeSwitcher* video_mode_switcher_;
   VideoResolutionPolicy* video_resolution_policy_;
-  MediaResourceTracker* media_resource_tracker_;
+
+#if BUILDFLAG(ENABLE_CAST_RENDERER)
+  VideoGeometrySetterService* video_geometry_setter_;
+#endif
 
   DISALLOW_COPY_AND_ASSIGN(CastMojoMediaClient);
 };

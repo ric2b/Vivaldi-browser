@@ -15,7 +15,7 @@
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
 #include "chrome/browser/ui/settings_window_manager_observer_chromeos.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/ui/web_applications/test/bookmark_app_navigation_browsertest.h"
+#include "chrome/browser/ui/web_applications/test/web_app_navigation_browsertest.h"
 #include "chrome/browser/web_applications/system_web_app_manager.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/common/chrome_features.h"
@@ -72,7 +72,7 @@ Browser* GetLastActiveBrowser() {
 using ChromeNewWindowClientBrowserTest = InProcessBrowserTest;
 
 using ChromeNewWindowClientWebAppBrowserTest =
-    extensions::test::BookmarkAppNavigationBrowserTest;
+    web_app::WebAppNavigationBrowserTest;
 
 // Tests that when we open a new window by pressing 'Ctrl-N', we should use the
 // current active window's profile to determine on which profile's desktop we
@@ -142,7 +142,7 @@ IN_PROC_BROWSER_TEST_F(ChromeNewWindowClientBrowserTest, IncognitoDisabled) {
 }
 
 IN_PROC_BROWSER_TEST_F(ChromeNewWindowClientWebAppBrowserTest, OpenWebApp) {
-  InstallTestBookmarkApp();
+  InstallTestWebApp();
   const GURL app_url = https_server().GetURL(GetAppUrlHost(), GetAppUrlPath());
   const char* key =
       arc::ArcWebContentsData::ArcWebContentsData::kArcTransitionFlag;
@@ -203,21 +203,9 @@ void TestOpenSettingFromArc(Browser* browser,
   settings->RemoveObserver(&observer);
 }
 
-class ChromeNewWindowClientBrowserTestWithSplitSettings
-    : public ChromeNewWindowClientBrowserTest {
- public:
-  ChromeNewWindowClientBrowserTestWithSplitSettings() {
-    feature_list_.InitAndEnableFeature(chromeos::features::kSplitSettings);
-  }
-
- private:
-  base::test::ScopedFeatureList feature_list_;
-};
-
-IN_PROC_BROWSER_TEST_F(ChromeNewWindowClientBrowserTestWithSplitSettings,
+IN_PROC_BROWSER_TEST_F(ChromeNewWindowClientBrowserTest,
                        OpenOSSettingsAppFromArc) {
-  // When flag is on, opening a browser setting should not open the OS setting
-  // window.
+  // Opening a browser setting should not open the OS setting window.
   TestOpenSettingFromArc(
       browser(), ChromePage::AUTOFILL,
       GURL("chrome://settings/").Resolve(chrome::kAutofillSubPage),
@@ -227,33 +215,6 @@ IN_PROC_BROWSER_TEST_F(ChromeNewWindowClientBrowserTestWithSplitSettings,
   TestOpenSettingFromArc(
       browser(), ChromePage::POWER,
       GURL("chrome://os-settings/").Resolve(chrome::kPowerSubPage),
-      /*expected_setting_window_count=*/1);
-}
-
-class ChromeNewWindowClientBrowserTestWithoutSplitSettings
-    : public ChromeNewWindowClientBrowserTest {
- public:
-  ChromeNewWindowClientBrowserTestWithoutSplitSettings() {
-    feature_list_.InitAndDisableFeature(chromeos::features::kSplitSettings);
-  }
-
- private:
-  base::test::ScopedFeatureList feature_list_;
-};
-
-// TODO(crbug/950007): This should be removed when the split is complete.
-IN_PROC_BROWSER_TEST_F(ChromeNewWindowClientBrowserTestWithoutSplitSettings,
-                       OpenSettingsAppFromArc) {
-  // When flag is off, opening a browser setting should open the setting window.
-  TestOpenSettingFromArc(
-      browser(), ChromePage::AUTOFILL,
-      GURL(chrome::kChromeUISettingsURL).Resolve(chrome::kAutofillSubPage),
-      /*expected_setting_window_count=*/1);
-
-  // And opening an OS setting should reuse that window.
-  TestOpenSettingFromArc(
-      browser(), ChromePage::POWER,
-      GURL(chrome::kChromeUISettingsURL).Resolve(chrome::kPowerSubPage),
       /*expected_setting_window_count=*/1);
 }
 
@@ -301,6 +262,8 @@ void TestAllOSSettingPages(const GURL& base_url) {
                      base_url.Resolve(chrome::kBluetoothSubPage));
   TestOpenChromePage(ChromePage::CHANGEPICTURE,
                      base_url.Resolve(chrome::kChangePictureSubPage));
+  TestOpenChromePage(ChromePage::CROSTINIDISKRESIZE,
+                     base_url.Resolve(chrome::kCrostiniDiskResizeSubPage));
   TestOpenChromePage(ChromePage::CUPSPRINTERS,
                      base_url.Resolve(chrome::kNativePrintingSettingsSubPage));
   TestOpenChromePage(ChromePage::KEYBOARDOVERLAY,
@@ -315,15 +278,69 @@ void TestAllOSSettingPages(const GURL& base_url) {
                      base_url.Resolve(chrome::kVPNSettingsSubPage));
   TestOpenChromePage(ChromePage::POINTEROVERLAY,
                      base_url.Resolve(chrome::kPointerOverlaySubPage));
-  TestOpenChromePage(ChromePage::RESET,
-                     base_url.Resolve(chrome::kResetSubPage));
+  TestOpenChromePage(ChromePage::OSRESET,
+                     base_url.Resolve(chrome::kOsResetSubPage));
   TestOpenChromePage(ChromePage::STORAGE,
                      base_url.Resolve(chrome::kStorageSubPage));
-  TestOpenChromePage(ChromePage::SYNCSETUP,
-                     base_url.Resolve(chrome::kSyncSetupSubPage));
+  TestOpenChromePage(ChromePage::OSACCESSIBILITY,
+                     base_url.Resolve(chrome::kOsAccessibilitySubPage));
+  TestOpenChromePage(ChromePage::ACCOUNTMANAGER,
+                     base_url.Resolve(chrome::kAccountManagerSubPage));
+  TestOpenChromePage(ChromePage::AMBIENTMODE,
+                     base_url.Resolve(chrome::kAmbientModeSubPage));
+  TestOpenChromePage(ChromePage::ANDROIDAPPSDETAILS,
+                     base_url.Resolve(chrome::kAndroidAppsDetailsSubPage));
+  TestOpenChromePage(
+      ChromePage::ANDROIDAPPSDETAILSINBROWSERSETTINGS,
+      base_url.Resolve(chrome::kAndroidAppsDetailsSubPageInBrowserSettings));
+  TestOpenChromePage(ChromePage::APPMANAGEMENTDETAILS,
+                     base_url.Resolve(chrome::kAppManagementDetailSubPage));
+  TestOpenChromePage(ChromePage::APPMANAGEMENT,
+                     base_url.Resolve(chrome::kAppManagementSubPage));
+  TestOpenChromePage(ChromePage::ASSISTANT,
+                     base_url.Resolve(chrome::kAssistantSubPage));
+  TestOpenChromePage(ChromePage::CONNECTEDDEVICES,
+                     base_url.Resolve(chrome::kConnectedDevicesSubPage));
+  TestOpenChromePage(ChromePage::CROSTINISHAREDPATHS,
+                     base_url.Resolve(chrome::kCrostiniSharedPathsSubPage));
+  TestOpenChromePage(
+      ChromePage::CROSTINISHAREDUSBDEVICES,
+      base_url.Resolve(chrome::kCrostiniSharedUsbDevicesSubPage));
+  TestOpenChromePage(ChromePage::CROSTINIEXPORTIMPORT,
+                     base_url.Resolve(chrome::kCrostiniExportImportSubPage));
+  TestOpenChromePage(ChromePage::EXTERNALSTORAGE,
+                     base_url.Resolve(chrome::kExternalStorageSubPage));
+  TestOpenChromePage(ChromePage::INTERNET,
+                     base_url.Resolve(chrome::kInternetSubPage));
+  TestOpenChromePage(ChromePage::KERBEROSACCOUNTS,
+                     base_url.Resolve(chrome::kKerberosAccountsSubPage));
+  TestOpenChromePage(ChromePage::KNOWNNETWORKS,
+                     base_url.Resolve(chrome::kKnownNetworksSubPage));
+  TestOpenChromePage(ChromePage::MANAGEACCESSIBILITYTTS,
+                     base_url.Resolve(chrome::kManageAccessibilityTtsSubPage));
+  TestOpenChromePage(ChromePage::PLUGINVMDETAILS,
+                     base_url.Resolve(chrome::kPluginVmDetailsSubPage));
+  TestOpenChromePage(ChromePage::PLUGINVMSHAREDPATHS,
+                     base_url.Resolve(chrome::kPluginVmSharedPathsSubPage));
+  TestOpenChromePage(ChromePage::OSSEARCH,
+                     base_url.Resolve(chrome::kOsSearchSubPage));
+  TestOpenChromePage(ChromePage::SMARTLOCKSETTINGS,
+                     base_url.Resolve(chrome::kSmartLockSettingsSubPage));
+  TestOpenChromePage(ChromePage::STYLUS,
+                     base_url.Resolve(chrome::kStylusSubPage));
+  TestOpenChromePage(ChromePage::SWITCHACCESS,
+                     base_url.Resolve(chrome::kSwitchAccessSubPage));
+  TestOpenChromePage(ChromePage::TETHERSETTINGS,
+                     base_url.Resolve(chrome::kTetherSettingsSubPage));
+  TestOpenChromePage(ChromePage::ETHERNET,
+                     base_url.Resolve(chrome::kEthernetSettingsSubPage));
+  TestOpenChromePage(ChromePage::CELLULAR,
+                     base_url.Resolve(chrome::kCellularSettingsSubPage));
 }
 
 void TestAllBrowserSettingPages(const GURL& base_url) {
+  TestOpenChromePage(ChromePage::ACCESSIBILITY,
+                     base_url.Resolve(chrome::kAccessibilitySubPage));
   TestOpenChromePage(ChromePage::PRIVACY,
                      base_url.Resolve(chrome::kPrivacySubPage));
   TestOpenChromePage(ChromePage::APPEARANCE,
@@ -340,8 +357,12 @@ void TestAllBrowserSettingPages(const GURL& base_url) {
                      base_url.Resolve(chrome::kOnStartupSubPage));
   TestOpenChromePage(ChromePage::PASSWORDS,
                      base_url.Resolve(chrome::kPasswordManagerSubPage));
+  TestOpenChromePage(ChromePage::RESET,
+                     base_url.Resolve(chrome::kResetSubPage));
   TestOpenChromePage(ChromePage::SEARCH,
                      base_url.Resolve(chrome::kSearchSubPage));
+  TestOpenChromePage(ChromePage::SYNCSETUP,
+                     base_url.Resolve(chrome::kSyncSetupSubPage));
 }
 
 void TestAllAboutPages() {
@@ -352,27 +373,13 @@ void TestAllAboutPages() {
   TestOpenChromePage(ChromePage::ABOUTBLANK, GURL(url::kAboutBlankURL));
 }
 
-IN_PROC_BROWSER_TEST_F(ChromeNewWindowClientBrowserTestWithSplitSettings,
-                       TestOpenChromePageWithSplitFlagOn) {
+IN_PROC_BROWSER_TEST_F(ChromeNewWindowClientBrowserTest, TestOpenChromePage) {
   // Install the Settings App.
   web_app::WebAppProvider::Get(browser()->profile())
       ->system_web_app_manager()
       .InstallSystemAppsForTesting();
 
   TestAllOSSettingPages(GURL(chrome::kChromeUIOSSettingsURL));
-  TestAllBrowserSettingPages(GURL(chrome::kChromeUISettingsURL));
-  TestAllAboutPages();
-}
-
-// TODO(crbug/950007): This should be removed when the split is complete.
-IN_PROC_BROWSER_TEST_F(ChromeNewWindowClientBrowserTestWithoutSplitSettings,
-                       TestOpenChromePageWithSplitFlagOff) {
-  // Install the Settings App.
-  web_app::WebAppProvider::Get(browser()->profile())
-      ->system_web_app_manager()
-      .InstallSystemAppsForTesting();
-
-  TestAllOSSettingPages(GURL(chrome::kChromeUISettingsURL));
   TestAllBrowserSettingPages(GURL(chrome::kChromeUISettingsURL));
   TestAllAboutPages();
 }

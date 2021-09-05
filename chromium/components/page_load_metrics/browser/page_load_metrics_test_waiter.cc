@@ -7,8 +7,8 @@
 #include "base/logging.h"
 #include "components/page_load_metrics/browser/page_load_metrics_observer.h"
 #include "components/page_load_metrics/common/page_load_metrics.mojom.h"
-#include "content/public/common/resource_type.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/mojom/loader/resource_load_info.mojom-shared.h"
 
 namespace page_load_metrics {
 
@@ -35,14 +35,15 @@ void PageLoadMetricsTestWaiter::AddFrameSizeExpectation(const gfx::Size& size) {
   expected_frame_sizes_.insert(size);
 }
 
+void PageLoadMetricsTestWaiter::AddMainFrameDocumentIntersectionExpectation(
+    const gfx::Rect& rect) {
+  expected_main_frame_intersection_ = rect;
+}
+
 void PageLoadMetricsTestWaiter::AddSubFrameExpectation(TimingField field) {
   CHECK_NE(field, TimingField::kLoadTimingInfo)
       << "LOAD_TIMING_INFO should only be used as a page-level expectation";
   subframe_expected_fields_.Set(field);
-  // If the given field is also a page-level field, then add a page-level
-  // expectation as well
-  if (IsPageLevelField(field))
-    page_expected_fields_.Set(field);
 }
 
 void PageLoadMetricsTestWaiter::AddWebFeatureExpectation(
@@ -53,9 +54,12 @@ void PageLoadMetricsTestWaiter::AddWebFeatureExpectation(
   }
 }
 
-void PageLoadMetricsTestWaiter::AddSubframeNavigationExpectation(
-    size_t expected_subframe_navigations) {
-  expected_subframe_navigations_ = expected_subframe_navigations;
+void PageLoadMetricsTestWaiter::AddSubframeNavigationExpectation() {
+  expected_subframe_navigation_ = true;
+}
+
+void PageLoadMetricsTestWaiter::AddSubframeDataExpectation() {
+  expected_subframe_data_ = true;
 }
 
 void PageLoadMetricsTestWaiter::AddMinimumCompleteResourcesExpectation(
@@ -98,7 +102,7 @@ void PageLoadMetricsTestWaiter::OnTimingUpdated(
     const page_load_metrics::mojom::PageLoadTiming& timing) {
   if (ExpectationsSatisfied())
     return;
-  const page_load_metrics::mojom::PageLoadMetadata& metadata =
+  const page_load_metrics::mojom::FrameMetadata& metadata =
       subframe_rfh ? GetDelegateForCommittedLoad().GetSubframeMetadata()
                    : GetDelegateForCommittedLoad().GetMainFrameMetadata();
   TimingFieldBitSet matched_bits = GetMatchedBits(timing, metadata);
@@ -128,8 +132,8 @@ void PageLoadMetricsTestWaiter::OnLoadedResource(
   if (ExpectationsSatisfied())
     return;
 
-  if (extra_request_complete_info.resource_type !=
-      content::ResourceType::kMainFrame) {
+  if (extra_request_complete_info.request_destination !=
+      network::mojom::RequestDestination::kDocument) {
     // The waiter confirms loading timing for the main frame only.
     return;
   }
@@ -157,6 +161,11 @@ void PageLoadMetricsTestWaiter::OnResourceDataUseObserved(
         current_network_body_bytes_ += resource->encoded_body_length;
     }
     current_network_bytes_ += resource->delta_bytes;
+
+    // If |rfh| is a subframe with nonzero bytes, update the subframe
+    // data expectation.
+    if (rfh->GetParent() && resource->delta_bytes > 0)
+      expected_subframe_data_ = false;
   }
   if (ExpectationsSatisfied() && run_loop_)
     run_loop_->Quit();
@@ -179,12 +188,25 @@ void PageLoadMetricsTestWaiter::OnFeaturesUsageObserved(
     run_loop_->Quit();
 }
 
+void PageLoadMetricsTestWaiter::OnFrameIntersectionUpdate(
+    content::RenderFrameHost* rfh,
+    const page_load_metrics::mojom::FrameIntersectionUpdate&
+        frame_intersection_update) {
+  if (expected_main_frame_intersection_ &&
+      expected_main_frame_intersection_ ==
+          frame_intersection_update.main_frame_document_intersection_rect) {
+    expected_main_frame_intersection_.reset();
+  }
+  if (ExpectationsSatisfied() && run_loop_)
+    run_loop_->Quit();
+}
+
 void PageLoadMetricsTestWaiter::OnDidFinishSubFrameNavigation(
     content::NavigationHandle* navigation_handle) {
   if (SubframeNavigationExpectationsSatisfied())
     return;
 
-  ++observed_subframe_navigations_;
+  expected_subframe_navigation_ = false;
 
   if (ExpectationsSatisfied() && run_loop_)
     run_loop_->Quit();
@@ -199,24 +221,11 @@ void PageLoadMetricsTestWaiter::FrameSizeChanged(
     run_loop_->Quit();
 }
 
-bool PageLoadMetricsTestWaiter::IsPageLevelField(TimingField field) {
-  switch (field) {
-    case TimingField::kFirstPaint:
-    case TimingField::kFirstContentfulPaint:
-    case TimingField::kFirstMeaningfulPaint:
-      return true;
-    default:
-      return false;
-  }
-}
-
 PageLoadMetricsTestWaiter::TimingFieldBitSet
 PageLoadMetricsTestWaiter::GetMatchedBits(
     const page_load_metrics::mojom::PageLoadTiming& timing,
-    const page_load_metrics::mojom::PageLoadMetadata& metadata) {
+    const page_load_metrics::mojom::FrameMetadata& metadata) {
   PageLoadMetricsTestWaiter::TimingFieldBitSet matched_bits;
-  if (timing.document_timing->first_layout)
-    matched_bits.Set(TimingField::kFirstLayout);
   if (timing.document_timing->load_event_start)
     matched_bits.Set(TimingField::kLoadEvent);
   if (timing.paint_timing->first_paint)
@@ -226,8 +235,17 @@ PageLoadMetricsTestWaiter::GetMatchedBits(
   if (timing.paint_timing->first_meaningful_paint)
     matched_bits.Set(TimingField::kFirstMeaningfulPaint);
   if (metadata.behavior_flags &
-      blink::LoadingBehaviorFlag::kLoadingBehaviorDocumentWriteBlockReload)
+      blink::LoadingBehaviorFlag::kLoadingBehaviorDocumentWriteBlockReload) {
     matched_bits.Set(TimingField::kDocumentWriteBlockReload);
+  }
+  if (timing.paint_timing->largest_image_paint ||
+      timing.paint_timing->largest_text_paint) {
+    matched_bits.Set(TimingField::kLargestContentfulPaint);
+  }
+  if (timing.paint_timing->first_input_or_scroll_notified_timestamp)
+    matched_bits.Set(TimingField::kFirstInputOrScroll);
+  if (timing.interactive_timing->first_input_delay)
+    matched_bits.Set(TimingField::kFirstInputDelay);
 
   return matched_bits;
 }
@@ -279,7 +297,11 @@ bool PageLoadMetricsTestWaiter::WebFeaturesExpectationsSatisfied() const {
 
 bool PageLoadMetricsTestWaiter::SubframeNavigationExpectationsSatisfied()
     const {
-  return observed_subframe_navigations_ >= expected_subframe_navigations_;
+  return !expected_subframe_navigation_;
+}
+
+bool PageLoadMetricsTestWaiter::SubframeDataExpectationsSatisfied() const {
+  return !expected_subframe_data_;
 }
 
 bool PageLoadMetricsTestWaiter::ExpectationsSatisfied() const {
@@ -287,10 +309,13 @@ bool PageLoadMetricsTestWaiter::ExpectationsSatisfied() const {
          ResourceUseExpectationsSatisfied() &&
          WebFeaturesExpectationsSatisfied() &&
          SubframeNavigationExpectationsSatisfied() &&
-         expected_frame_sizes_.empty() && CpuTimeExpectationsSatisfied();
+         SubframeDataExpectationsSatisfied() && expected_frame_sizes_.empty() &&
+         CpuTimeExpectationsSatisfied() &&
+         !expected_main_frame_intersection_.has_value();
 }
 
-PageLoadMetricsTestWaiter::WaiterMetricsObserver::~WaiterMetricsObserver() {}
+PageLoadMetricsTestWaiter::WaiterMetricsObserver::~WaiterMetricsObserver() =
+    default;
 
 PageLoadMetricsTestWaiter::WaiterMetricsObserver::WaiterMetricsObserver(
     base::WeakPtr<PageLoadMetricsTestWaiter> waiter)
@@ -331,6 +356,15 @@ void PageLoadMetricsTestWaiter::WaiterMetricsObserver::OnFeaturesUsageObserved(
     const mojom::PageLoadFeatures& features) {
   if (waiter_)
     waiter_->OnFeaturesUsageObserved(nullptr, features);
+}
+
+void PageLoadMetricsTestWaiter::WaiterMetricsObserver::
+    OnFrameIntersectionUpdate(
+        content::RenderFrameHost* rfh,
+        const page_load_metrics::mojom::FrameIntersectionUpdate&
+            frame_intersection_update) {
+  if (waiter_)
+    waiter_->OnFrameIntersectionUpdate(rfh, frame_intersection_update);
 }
 
 void PageLoadMetricsTestWaiter::WaiterMetricsObserver::

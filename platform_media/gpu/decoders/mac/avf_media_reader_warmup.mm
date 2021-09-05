@@ -6,18 +6,12 @@
 
 #include "platform_media/gpu/decoders/mac/avf_media_reader_warmup.h"
 
-#include "platform_media/gpu/decoders/mac/avf_media_reader.h"
-
-#include "media/base/data_source.h"
-#include "media/filters/file_data_source.h"
+#include "platform_media/gpu/pipeline/mac/avf_media_reader_runner.h"
 
 namespace media {
-  void InitializeAVFMediaReader() {
-    std::unique_ptr<DataSource> data_source_;
-    data_source_.reset(new FileDataSource());
 
-    std::unique_ptr<AVFMediaReader> reader_;
-    reader_.reset(new AVFMediaReader(dispatch_get_current_queue()));
-    reader_->Initialize(data_source_.get(), "video/mp4");
-  }
+void InitializeAVFMediaReader() {
+  AVFMediaReaderRunner::WarmUp();
 }
+
+}  // namespace media

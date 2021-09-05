@@ -48,7 +48,7 @@ class CORE_EXPORT FindTaskController final
   bool ShouldFindMatches(const String& search_text,
                          const mojom::blink::FindOptions& options);
 
-  // During a run of |idle_find_task|, we found a match.
+  // During a run of |find_task|, we found a match.
   // Updates |current_match_count_| and notifies |text_finder_|.
   void DidFindMatch(int identifier, Range* result_range);
 
@@ -59,12 +59,14 @@ class CORE_EXPORT FindTaskController final
                      const mojom::blink::FindOptions& options,
                      bool finished_whole_request,
                      PositionInFlatTree next_starting_position,
-                     int match_count);
+                     int match_count,
+                     bool aborted,
+                     base::TimeTicks task_start_time);
 
   Range* ResumeFindingFromRange() const { return resume_finding_from_range_; }
   int CurrentMatchCount() const { return current_match_count_; }
 
-  // Idle task, when invoked will search for a given text and notify us
+  // When invoked this will search for a given text and notify us
   // whenever a match is found or when it finishes, through FoundMatch and
   // DidFinishTask.
   class IdleFindTask;
@@ -78,11 +80,22 @@ class CORE_EXPORT FindTaskController final
                            const WebString& search_text,
                            const mojom::blink::FindOptions& options);
 
+  enum class RequestEndState {
+    // The find-in-page request got aborted before going through every text in
+    // the document.
+    ABORTED,
+    // The find-in-page request finished going through every text in the
+    // document.
+    FINISHED,
+  };
+
+  void RecordRequestMetrics(RequestEndState request_end_state);
+
   Member<WebLocalFrameImpl> owner_frame_;
 
   Member<TextFinder> text_finder_;
 
-  Member<IdleFindTask> idle_find_task_;
+  Member<IdleFindTask> find_task_;
 
   // Keeps track if there is any ongoing find effort or not.
   bool finding_in_progress_;
@@ -101,6 +114,13 @@ class CORE_EXPORT FindTaskController final
   // Keeps track of whether the last find request completed its finding effort
   // without finding any matches in this frame.
   bool last_find_request_completed_with_no_matches_;
+
+  // The start time of the current find-in-page request.
+  base::TimeTicks current_request_start_time_;
+  // The combined duration of all the tasks done for the current request.
+  base::TimeDelta total_task_duration_for_current_request_;
+  // The number of find-in-page tasks the current request has made.
+  int task_count_for_current_request_;
 
   // Keeps track of the last string this frame searched for. This is used for
   // short-circuiting searches in the following scenarios: When a frame has

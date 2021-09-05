@@ -35,20 +35,6 @@
     ],
     "functions": [
       {
-        "name": "setVisible",
-        "type": "function",
-        "parameters": [
-          {
-            "type": "integer",
-            "name": "instanceId"
-          },
-          {
-            "type": "boolean",
-            "name": "isVisible"
-          }
-        ]
-      },
-      {
         "name": "getThumbnail",
         "type": "function",
         "parameters": [

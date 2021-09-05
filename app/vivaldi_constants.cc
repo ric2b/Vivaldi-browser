@@ -49,6 +49,9 @@ const char kBasePathMappingUrl[] = VIVALDI_DATA_URL_SCHEME
 const char kBaseThumbnailUrl[] = VIVALDI_DATA_URL_SCHEME
     "://" VIVALDI_DATA_URL_HOST "/" VIVALDI_DATA_URL_THUMBNAIL_DIR "/";
 
+const char kBaseNotesAttachmentUrl[] = VIVALDI_DATA_URL_SCHEME
+    "://" VIVALDI_DATA_URL_HOST "/" VIVALDI_DATA_URL_NOTES_ATTACHMENT "/";
+
 const char kVivaldiWebUIURL[] =
     VIVALDI_DATA_URL_SCHEME "://" VIVALDI_WEBUI_URL_HOST "/";
 
@@ -59,4 +62,5 @@ const char kWindowExtDataKey[] = "extData";
 
 const wchar_t kUpdateNotifierAutorunName[] = L"Vivaldi Update Notifier";
 
+const char kSparkleAutoInstallSettingName[] = "SUAutomaticallyUpdate";
 }  // namespace vivaldi

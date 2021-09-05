@@ -5,12 +5,13 @@
 package org.chromium.chrome.browser.download.home.filter;
 
 import android.content.Context;
-import android.support.design.widget.TabLayout;
-import android.support.design.widget.TabLayout.Tab;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewGroup.LayoutParams;
+
+import com.google.android.material.tabs.TabLayout;
+import com.google.android.material.tabs.TabLayout.Tab;
 
 import org.chromium.base.Callback;
 import org.chromium.chrome.browser.download.home.filter.FilterCoordinator.TabType;
@@ -83,15 +84,5 @@ class FilterView {
     /** Sets whether or not we show the tabs. */
     public void setShowTabs(boolean show) {
         mTabsView.setVisibility(show ? View.VISIBLE : View.GONE);
-    }
-
-    /** Sets the title for the files tab. */
-    public void setFilesTabTitle(String title) {
-        mTabsView.getTabAt(0).setText(title);
-    }
-
-    /** Sets the title for the prefetch tab. */
-    public void setPrefetchTabTitle(String title) {
-        mTabsView.getTabAt(1).setText(title);
     }
 }

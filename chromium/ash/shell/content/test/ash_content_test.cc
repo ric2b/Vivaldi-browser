@@ -15,6 +15,7 @@
 #include "ash/wm/mru_window_tracker.h"
 #include "base/auto_reset.h"
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
@@ -64,7 +65,7 @@ perf_test::LuciTestResult CreateTestResult(
     const std::vector<std::string>& tbm_metrics) {
   perf_test::LuciTestResult result =
       perf_test::LuciTestResult::CreateForGTest();
-  result.AddOutputArtifactFile("trace/1", trace_file, "application/json");
+  result.AddOutputArtifactFile("trace/1.json", trace_file, "application/json");
   for (auto& metric : tbm_metrics)
     result.AddTag("tbmv2", metric);
 
@@ -189,7 +190,7 @@ aura::Window* AshContentTest::CreateBrowserWindow(const GURL& url) {
 }
 
 aura::Window* AshContentTest::CreateTestWindow() {
-  views::Widget* widget = views::Widget::CreateWindowWithContextAndBounds(
+  views::Widget* widget = views::Widget::CreateWindowWithContext(
       new ash::shell::WindowTypeLauncher(base::NullCallback(),
                                          base::NullCallback()),
       ash::Shell::GetPrimaryRootWindow(), gfx::Rect(test_window_size_));

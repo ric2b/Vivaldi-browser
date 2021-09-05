@@ -15,6 +15,7 @@ API_AVAILABLE(ios(13.0))
 
 // Initializes with the Credit Card consumer.
 - (instancetype)initWithBaseViewController:(UIViewController*)baseViewController
+                                   browser:(Browser*)browser
                         creditCardConsumer:
                             (id<CreditCardConsumer>)creditCardConsumer
     NS_DESIGNATED_INITIALIZER;
@@ -23,8 +24,7 @@ API_AVAILABLE(ios(13.0))
     NS_UNAVAILABLE;
 
 - (instancetype)initWithBaseViewController:(UIViewController*)viewController
-                              browserState:
-                                  (ios::ChromeBrowserState*)browserState
+                              browserState:(ChromeBrowserState*)browserState
     NS_UNAVAILABLE;
 
 - (instancetype)initWithBaseViewController:(UIViewController*)viewController

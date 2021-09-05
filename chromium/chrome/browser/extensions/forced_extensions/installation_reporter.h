@@ -9,9 +9,12 @@
 #include <utility>
 
 #include "base/macros.h"
+#include "base/observer_list.h"
+#include "base/observer_list_types.h"
 #include "base/optional.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "extensions/browser/install/crx_install_error.h"
+#include "extensions/browser/install/sandboxed_unpacker_failure_reason.h"
 #include "extensions/browser/updater/extension_downloader_delegate.h"
 #include "extensions/common/extension_id.h"
 
@@ -159,9 +162,15 @@ class InstallationReporter : public KeyedService {
     // extension in required time.
     IN_PROGRESS = 24,
 
+    // The download of the crx failed.
+    CRX_FETCH_URL_EMPTY = 25,
+
+    // The download of the crx failed.
+    CRX_FETCH_URL_INVALID = 26,
+
     // Magic constant used by the histogram macros.
     // Always update it to the max value.
-    kMaxValue = IN_PROGRESS,
+    kMaxValue = CRX_FETCH_URL_INVALID,
   };
 
   // Contains information about extension installation: failure reason, if any
@@ -174,17 +183,40 @@ class InstallationReporter : public KeyedService {
     base::Optional<extensions::InstallationReporter::Stage> install_stage;
     base::Optional<extensions::ExtensionDownloaderDelegate::Stage>
         downloading_stage;
+    base::Optional<extensions::ExtensionDownloaderDelegate::CacheStatus>
+        downloading_cache_status;
     base::Optional<extensions::InstallationReporter::FailureReason>
         failure_reason;
     base::Optional<extensions::CrxInstallErrorDetail> install_error_detail;
+    // Network error codes when failure_reason is CRX_FETCH_FAILED or
+    // MANIFEST_FETCH_FAILED.
+    base::Optional<int> network_error_code;
+    base::Optional<int> response_code;
+    // Number of fetch tries made when failure reason is CRX_FETCH_FAILED or
+    // MANIFEST_FETCH_FAILED.
+    base::Optional<int> fetch_tries;
+    // Unpack failure reason in case of
+    // CRX_INSTALL_ERROR_SANDBOXED_UNPACKER_FAILURE.
+    base::Optional<extensions::SandboxedUnpackerFailureReason>
+        unpacker_failure_reason;
+    // Type of extension, assigned when CRX installation error detail is
+    // DISALLOWED_BY_POLICY.
+    base::Optional<Manifest::Type> extension_type;
   };
 
-  class TestObserver {
+  class Observer : public base::CheckedObserver {
    public:
-    virtual ~TestObserver();
-    virtual void OnExtensionDataChanged(const ExtensionId& id,
-                                        const content::BrowserContext* context,
-                                        const InstallationData& data) = 0;
+    ~Observer() override;
+
+    virtual void OnExtensionInstallationFailed(const ExtensionId& id,
+                                               FailureReason reason) {}
+
+    // Called when any change happens. For production please use more specific
+    // methods (create one if necessary).
+    virtual void OnExtensionDataChangedForTesting(
+        const ExtensionId& id,
+        const content::BrowserContext* context,
+        const InstallationData& data) {}
   };
 
   explicit InstallationReporter(const content::BrowserContext* context);
@@ -196,12 +228,27 @@ class InstallationReporter : public KeyedService {
 
   // Remembers failure reason and in-progress stages in memory.
   void ReportInstallationStage(const ExtensionId& id, Stage stage);
+  void ReportFetchError(
+      const ExtensionId& id,
+      FailureReason reason,
+      const ExtensionDownloaderDelegate::FailureData& failure_data);
   void ReportFailure(const ExtensionId& id, FailureReason reason);
   void ReportDownloadingStage(const ExtensionId& id,
                               ExtensionDownloaderDelegate::Stage stage);
+  void ReportDownloadingCacheStatus(
+      const ExtensionId& id,
+      ExtensionDownloaderDelegate::CacheStatus cache_status);
+  // Assigns the extension type. See InstallationData::extension_type for more
+  // details.
+  void ReportExtensionTypeForPolicyDisallowedExtension(
+      const ExtensionId& id,
+      Manifest::Type extension_type);
   void ReportCrxInstallError(const ExtensionId& id,
                              FailureReason reason,
                              CrxInstallErrorDetail crx_install_error);
+  void ReportSandboxedUnpackerFailureReason(
+      const ExtensionId& id,
+      SandboxedUnpackerFailureReason unpacker_failure_reason);
 
   // Retrieves known information for installation of extension |id|.
   // Returns empty data if not found.
@@ -211,13 +258,21 @@ class InstallationReporter : public KeyedService {
   // Clears all collected failures and stages.
   void Clear();
 
-  static void SetTestObserver(TestObserver* observer);
+  void AddObserver(Observer* observer);
+  void RemoveObserver(Observer* observer);
 
  private:
+  // Helper function to report installation failures to the observers.
+  void NotifyObserversOfFailure(const ExtensionId& id,
+                                FailureReason reason,
+                                const InstallationData& data);
+
   const content::BrowserContext* browser_context_;
 
   std::map<ExtensionId, InstallationReporter::InstallationData>
       installation_data_map_;
+
+  base::ObserverList<Observer> observers_;
 
   DISALLOW_COPY_AND_ASSIGN(InstallationReporter);
 };

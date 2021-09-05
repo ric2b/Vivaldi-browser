@@ -4,54 +4,34 @@
 
 #include "chrome/browser/ui/views/chrome_browser_main_extra_parts_views_linux.h"
 
-#include "base/bind.h"
-#include "base/run_loop.h"
-#include "chrome/browser/chrome_browser_main.h"
-#include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/themes/theme_service.h"
-#include "chrome/browser/themes/theme_service_factory.h"
-#include "chrome/browser/ui/views/frame/browser_view.h"
-#include "chrome/browser/ui/views/linux_ui/linux_ui_factory.h"
+#include "chrome/browser/themes/theme_service_aura_linux.h"
+#include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/views/theme_profile_key.h"
-#include "chrome/common/pref_names.h"
-#include "components/prefs/pref_service.h"
-#include "ui/aura/env.h"
-#include "ui/aura/window.h"
-#include "ui/base/ime/init/input_method_initializer.h"
-#include "ui/base/ui_base_switches.h"
-#include "ui/display/display.h"
+#include "ui/base/buildflags.h"
 #include "ui/display/screen.h"
-#include "ui/native_theme/native_theme_aura.h"
-#include "ui/native_theme/native_theme_dark_aura.h"
 #include "ui/views/linux_ui/linux_ui.h"
-#include "ui/views/widget/desktop_aura/desktop_screen.h"
-#include "ui/views/widget/native_widget_aura.h"
+
+#if BUILDFLAG(USE_GTK)
+#include "ui/gtk/gtk_ui.h"
+#include "ui/gtk/gtk_ui_delegate.h"
+#endif
+
+#if defined(USE_X11)
+#include "ui/gfx/x/x11_types.h"          // nogncheck
+#include "ui/gtk/gtk_ui_delegate.h"      // nogncheck
+#include "ui/gtk/gtk_ui_delegate_x11.h"  // nogncheck
+#endif
 
 namespace {
 
-ui::NativeTheme* GetNativeThemeForWindow(aura::Window* window) {
-  if (!window)
-    return nullptr;
-
-  Profile* profile = GetThemeProfileForWindow(window);
-
-  // If using the system (GTK) theme, don't use an Aura NativeTheme at all.
-  // NB: ThemeService::UsingSystemTheme() might lag behind this pref. See
-  // http://crbug.com/585522
-  if (!profile || (!profile->IsSupervised() &&
-                   profile->GetPrefs()->GetBoolean(prefs::kUsesSystemTheme))) {
-    return nullptr;
-  }
-
-  // Use a dark theme for incognito browser windows that aren't
-  // custom-themed. Otherwise, normal Aura theme.
-  if (profile->IsIncognitoProfile() &&
-      ThemeServiceFactory::GetForProfile(profile)->UsingDefaultTheme() &&
-      BrowserView::GetBrowserViewForNativeWindow(window)) {
-    return ui::NativeThemeDarkAura::instance();
-  }
-
-  return ui::NativeTheme::GetInstanceForNativeUi();
+views::LinuxUI* BuildLinuxUI() {
+  views::LinuxUI* linux_ui = nullptr;
+  // GtkUi is the only LinuxUI implementation for now.
+#if BUILDFLAG(USE_GTK)
+  if (ui::GtkUiDelegate::instance())
+    linux_ui = BuildGtkUi(ui::GtkUiDelegate::instance());
+#endif
+  return linux_ui;
 }
 
 }  // namespace
@@ -60,30 +40,56 @@ ChromeBrowserMainExtraPartsViewsLinux::ChromeBrowserMainExtraPartsViewsLinux() =
     default;
 
 ChromeBrowserMainExtraPartsViewsLinux::
-    ~ChromeBrowserMainExtraPartsViewsLinux() = default;
-
-void ChromeBrowserMainExtraPartsViewsLinux::PreEarlyInitialization() {
-  views::LinuxUI* linux_ui = views::BuildLinuxUI();
-  if (!linux_ui)
-    return;
-
-  linux_ui->SetNativeThemeOverride(
-      base::BindRepeating(&GetNativeThemeForWindow));
-  views::LinuxUI::SetInstance(linux_ui);
+    ~ChromeBrowserMainExtraPartsViewsLinux() {
+  // It's not expected that the screen is destroyed by this point, but it can happen during fuzz
+  // tests.
+  if (display::Screen::GetScreen())
+    display::Screen::GetScreen()->RemoveObserver(this);
 }
 
 void ChromeBrowserMainExtraPartsViewsLinux::ToolkitInitialized() {
+#if defined(USE_X11)
+  // In Aura/X11, Gtk-based LinuxUI implementation is used, so we instantiate
+  // and inject the GtkUiDelegate before ChromeBrowserMainExtraPartsViewsLinux,
+  // so it can properly initialize GtkUi on its |ToolkitInitialized| override.
+  gtk_ui_delegate_ = std::make_unique<ui::GtkUiDelegateX11>(gfx::GetXDisplay());
+  ui::GtkUiDelegate::SetInstance(gtk_ui_delegate_.get());
+#endif
+
   ChromeBrowserMainExtraPartsViews::ToolkitInitialized();
-  auto* instance = views::LinuxUI::instance();
-  if (instance)
-    instance->Initialize();
+
+  views::LinuxUI* linux_ui = BuildLinuxUI();
+  if (!linux_ui)
+    return;
+
+  linux_ui->SetUseSystemThemeCallback(
+      base::BindRepeating([](aura::Window* window) {
+        if (!window)
+          return true;
+        return ThemeServiceAuraLinux::ShouldUseSystemThemeForProfile(
+            GetThemeProfileForWindow(window));
+      }));
+
+  // Update the device scale factor before initializing views
+  // because its display::Screen instance depends on it.
+  linux_ui->UpdateDeviceScaleFactor();
+
+  views::LinuxUI::SetInstance(linux_ui);
+  linux_ui->Initialize();
+
+  DCHECK(ui::LinuxInputMethodContextFactory::instance())
+      << "LinuxUI must set LinuxInputMethodContextFactory instance.";
 }
 
 void ChromeBrowserMainExtraPartsViewsLinux::PreCreateThreads() {
-  // Update the device scale factor before initializing views
-  // because its display::Screen instance depends on it.
-  auto* instance = views::LinuxUI::instance();
-  if (instance)
-    instance->UpdateDeviceScaleFactor();
   ChromeBrowserMainExtraPartsViews::PreCreateThreads();
+  // We could do that during the ToolkitInitialized call, which is called before
+  // this method, but the display::Screen is only created after PreCreateThreads
+  // is called. Thus, do that here instead.
+  display::Screen::GetScreen()->AddObserver(this);
+}
+
+void ChromeBrowserMainExtraPartsViewsLinux::OnCurrentWorkspaceChanged(
+    const std::string& new_workspace) {
+  BrowserList::MoveBrowsersInWorkspaceToFront(new_workspace);
 }

@@ -17,7 +17,8 @@
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "base/unguessable_token.h"
-#include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/system/data_pipe.h"
@@ -27,13 +28,16 @@
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_request.h"
 #include "services/network/cross_origin_read_blocking.h"
-#include "services/network/initiator_lock_compatibility.h"
 #include "services/network/keepalive_statistics_recorder.h"
+#include "services/network/public/cpp/initiator_lock_compatibility.h"
+#include "services/network/public/mojom/cross_origin_embedder_policy.mojom-forward.h"
 #include "services/network/public/mojom/fetch_api.mojom.h"
 #include "services/network/public/mojom/network_service.mojom.h"
+#include "services/network/public/mojom/trust_tokens.mojom-shared.h"
 #include "services/network/public/mojom/url_loader.mojom.h"
 #include "services/network/resource_scheduler/resource_scheduler.h"
 #include "services/network/resource_scheduler/resource_scheduler_client.h"
+#include "services/network/trust_tokens/trust_token_request_helper.h"
 #include "services/network/upload_progress_tracker.h"
 
 namespace net {
@@ -52,7 +56,6 @@ constexpr size_t kMaxFileUploadRequestsPerBatch = 64;
 class NetToMojoPendingBuffer;
 class NetworkUsageAccumulator;
 class KeepaliveStatisticsRecorder;
-struct ResourceResponse;
 class ScopedThrottlingToken;
 struct OriginPolicy;
 
@@ -62,30 +65,54 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
       public mojom::AuthChallengeResponder,
       public mojom::ClientCertificateResponder {
  public:
+  // Enumeration for UMA histograms logged by LogConcerningRequestHeaders().
+  // Entries should not be renumbered and numeric values should never be reused.
+  // Please keep in sync with "NetworkServiceConcerningRequestHeaders" in
+  // src/tools/metrics/histograms/enums.xml.
+  enum class ConcerningHeaderId {
+    kConnection = 0,
+    kCookie = 1,
+    kCookie2 = 2,
+    kContentTransferEncoding = 3,
+    kDate = 4,
+    kExpect = 5,
+    kKeepAlive = 6,
+    kReferer = 7,
+    kTe = 8,
+    kTransferEncoding = 9,
+    kVia = 10,
+    kMaxValue = kVia,
+  };
+
   using DeleteCallback = base::OnceCallback<void(mojom::URLLoader* loader)>;
 
   // |delete_callback| tells the URLLoader's owner to destroy the URLLoader.
   // The URLLoader must be destroyed before the |url_request_context|.
   // The |origin_policy_manager| must always be provided for requests that
   // have the |obey_origin_policy| flag set.
+  // If |trust_token_helper| is non-null, it will be queried to perform trust
+  // token operation steps before each request is started, and after each
+  // response's headers arrive.
   URLLoader(
       net::URLRequestContext* url_request_context,
       mojom::NetworkServiceClient* network_service_client,
       mojom::NetworkContextClient* network_context_client,
       DeleteCallback delete_callback,
-      mojom::URLLoaderRequest url_loader_request,
+      mojo::PendingReceiver<mojom::URLLoader> url_loader_receiver,
       int32_t options,
       const ResourceRequest& request,
-      mojom::URLLoaderClientPtr url_loader_client,
+      mojo::PendingRemote<mojom::URLLoaderClient> url_loader_client,
       const net::NetworkTrafficAnnotationTag& traffic_annotation,
       const mojom::URLLoaderFactoryParams* factory_params,
+      mojom::CrossOriginEmbedderPolicyReporter* reporter,
       uint32_t request_id,
       int keepalive_request_size,
       scoped_refptr<ResourceSchedulerClient> resource_scheduler_client,
       base::WeakPtr<KeepaliveStatisticsRecorder> keepalive_statistics_recorder,
       base::WeakPtr<NetworkUsageAccumulator> network_usage_accumulator,
       mojom::TrustedURLLoaderHeaderClient* url_loader_header_client,
-      mojom::OriginPolicyManager* origin_policy_manager);
+      mojom::OriginPolicyManager* origin_policy_manager,
+      std::unique_ptr<TrustTokenRequestHelper> trust_token_helper);
   ~URLLoader() override;
 
   // mojom::URLLoader implementation:
@@ -121,7 +148,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
       const net::HttpResponseHeaders* original_response_headers,
       scoped_refptr<net::HttpResponseHeaders>* override_response_headers,
       const net::IPEndPoint& endpoint,
-      GURL* allowed_unsafe_redirect_url);
+      base::Optional<GURL>* preserve_fragment_on_redirect_url);
 
   // mojom::AuthChallengeResponder:
   void OnAuthCredentials(
@@ -138,14 +165,15 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
 
   net::LoadState GetLoadStateForTesting() const;
 
-  uint32_t GetRenderFrameId() const;
-  uint32_t GetProcessId() const;
+  int32_t GetRenderFrameId() const;
+  int32_t GetProcessId() const;
   uint32_t GetResourceType() const;
 
   // Whether this URLLoader should allow sending/setting cookies for requests
   // with |url| and |site_for_cookies|. This decision is based on the options
   // passed to URLLoaderFactory::CreateLoaderAndStart().
-  bool AllowCookies(const GURL& url, const GURL& site_for_cookies) const;
+  bool AllowCookies(const GURL& url,
+                    const net::SiteForCookies& site_for_cookies) const;
 
   const net::HttpRequestHeaders& custom_proxy_pre_cache_headers() const {
     return custom_proxy_pre_cache_headers_;
@@ -153,10 +181,6 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
 
   const net::HttpRequestHeaders& custom_proxy_post_cache_headers() const {
     return custom_proxy_post_cache_headers_;
-  }
-
-  bool custom_proxy_use_alternate_proxy_list() const {
-    return custom_proxy_use_alternate_proxy_list_;
   }
 
   const base::Optional<GURL>& new_redirect_url() const {
@@ -173,6 +197,14 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   static URLLoader* ForRequest(const net::URLRequest& request);
 
   static const void* const kUserDataKey;
+
+  static void LogConcerningRequestHeaders(
+      const net::HttpRequestHeaders& request_headers,
+      bool added_during_redirect);
+
+  // Exposed for testing.
+  static CrossOriginEmbedderPolicy ParseCrossOriginEmbedderPolicyValue(
+      const net::HttpResponseHeaders* headers);
 
  private:
   // This class is used to set the URLLoader as user data on a URLRequest. This
@@ -194,15 +226,30 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   class FileOpenerForUpload;
   friend class FileOpenerForUpload;
 
+  // An enum class representing the result of keepalive requests. This is used
+  // for UMA so do NOT re-assign values.
+  enum class KeepaliveRequestResult {
+    kOk = 0,
+    kMojoConnectionErrorBeforeResponseArrival = 1,
+    kMojoConnectionErrorAfterResponseArrival = 2,
+    kErrorBeforeResponseArrival = 3,
+    kErrorAfterResponseArrival = 4,
+    kMaxValue = kErrorAfterResponseArrival,
+  };
+
   void OpenFilesForUpload(const ResourceRequest& request);
   void SetUpUpload(const ResourceRequest& request,
                    int error_code,
                    const std::vector<base::File> opened_files);
+  void BeginTrustTokenOperationIfNecessaryAndThenScheduleStart();
+  void OnDoneBeginningTrustTokenOperation(
+      mojom::TrustTokenOperationStatus status);
   void ScheduleStart();
   void ReadMore();
   void DidRead(int num_bytes, bool completed_synchronously);
   void NotifyCompleted(int error_code);
-  void OnConnectionError();
+  void RecordKeepaliveResult(KeepaliveRequestResult result);
+  void OnMojoDisconnect();
   void OnResponseBodyStreamConsumerClosed(MojoResult result);
   void OnResponseBodyStreamReady(MojoResult result);
   void DeleteSelf();
@@ -225,13 +272,15 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   void OnHeadersReceivedComplete(
       net::CompletionOnceCallback callback,
       scoped_refptr<net::HttpResponseHeaders>* out_headers,
-      GURL* out_allowed_unsafe_redirect_url,
+      base::Optional<GURL>* out_preserve_fragment_on_redirect_url,
       int result,
       const base::Optional<std::string>& headers,
-      const GURL& allowed_unsafe_redirect_url);
+      const base::Optional<GURL>& preserve_fragment_on_redirect_url);
 
-  void CompleteBlockedResponse(int error_code,
-                               bool should_report_corb_blocking);
+  void CompleteBlockedResponse(
+      int error_code,
+      bool should_report_corb_blocking,
+      base::Optional<BlockedByResponseReason> reason = base::nullopt);
 
   enum BlockResponseForCorbResult {
     // Returned when caller of BlockResponseForCorb doesn't need to continue,
@@ -257,10 +306,14 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   bool corb_detachable_;
   int resource_type_;
   bool is_load_timing_enabled_;
+  bool has_received_response_ = false;
+  bool has_recorded_keepalive_result_ = false;
 
   // URLLoaderFactory is guaranteed to outlive URLLoader, so it is safe to
   // store a raw pointer to mojom::URLLoaderFactoryParams.
   const mojom::URLLoaderFactoryParams* const factory_params_;
+  // This also belongs to URLLoaderFactory and outlives this loader.
+  mojom::CrossOriginEmbedderPolicyReporter* const coep_reporter_;
 
   int render_frame_id_;
   uint32_t request_id_;
@@ -268,12 +321,12 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   const bool keepalive_;
   const bool do_not_prompt_for_login_;
   std::unique_ptr<net::URLRequest> url_request_;
-  mojo::Binding<mojom::URLLoader> binding_;
+  mojo::Receiver<mojom::URLLoader> receiver_;
   mojo::Receiver<mojom::AuthChallengeResponder>
       auth_challenge_responder_receiver_{this};
   mojo::Receiver<mojom::ClientCertificateResponder>
       client_cert_responder_receiver_{this};
-  mojom::URLLoaderClientPtr url_loader_client_;
+  mojo::Remote<mojom::URLLoaderClient> url_loader_client_;
   int64_t total_written_bytes_ = 0;
 
   mojo::ScopedDataPipeProducerHandle response_body_stream_;
@@ -283,9 +336,12 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   mojo::SimpleWatcher writable_handle_watcher_;
   mojo::SimpleWatcher peer_closed_handle_watcher_;
 
+  // True if there's a URLRequest::Read() call in progress.
+  bool read_in_progress_ = false;
+
   // Used when deferring sending the data to the client until mime sniffing is
   // finished.
-  scoped_refptr<ResourceResponse> response_;
+  mojom::URLResponseHeadPtr response_;
   mojo::ScopedDataPipeConsumerHandle consumer_handle_;
 
   // Sniffing state.
@@ -343,6 +399,11 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
 
   mojom::RequestMode request_mode_;
 
+  bool has_user_activation_;
+
+  mojom::RequestDestination request_destination_ =
+      mojom::RequestDestination::kEmpty;
+
   scoped_refptr<ResourceSchedulerClient> resource_scheduler_client_;
 
   base::WeakPtr<KeepaliveStatisticsRecorder> keepalive_statistics_recorder_;
@@ -355,7 +416,6 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
 
   net::HttpRequestHeaders custom_proxy_pre_cache_headers_;
   net::HttpRequestHeaders custom_proxy_post_cache_headers_;
-  bool custom_proxy_use_alternate_proxy_list_ = false;
 
   // Indicates the originating frame of the request, see
   // network::ResourceRequest::fetch_window_id for details.
@@ -365,13 +425,35 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
 
   std::unique_ptr<FileOpenerForUpload> file_opener_for_upload_;
 
-  // See detailed comment in
-  // mojom::network::URLRequest::update_network_isolation_key_on_redirect.
-  mojom::UpdateNetworkIsolationKeyOnRedirect
-      update_network_isolation_key_on_redirect_;
-
   // Will only be set for requests that have |obey_origin_policy| set.
   mojom::OriginPolicyManager* origin_policy_manager_;
+
+  // If the request is configured for Trust Tokens
+  // (https://github.com/WICG/trust-token-api) protocol operations, annotates
+  // the request with the pertinent request headers and, on receiving the
+  // corresponding response, processes and strips Trust Tokens response headers.
+  //
+  // |trust_token_helper_| is null for (the usual case where) the request has no
+  // associated Trust Tokens operation.
+  std::unique_ptr<TrustTokenRequestHelper> trust_token_helper_;
+
+  // The cached result of the request's Trust Tokens protocol operation, if any.
+  // This can describe the result of either an outbound (request-annotating)
+  // protocol step or an inbound (response header reading) step; some error
+  // codes, like kFailedPrecondition (outbound) and kBadResponse (inbound) are
+  // specific to one direction.
+  base::Optional<mojom::TrustTokenOperationStatus> trust_token_status_;
+
+  // Stores ResourceRequest::isolated_world_origin.
+  //
+  // Note that |isolated_world_origin_| is unreliable (i.e. always
+  // base::nullopt) when URLLoaderFactoryParams::ignore_isolated_world_origin
+  // may be |true| (e.g. when the CorbAllowlistAlsoAppliesToOorCors feature is
+  // enabled).
+  //
+  // TODO(lukasza): https://crbug.com/920638: Remove
+  // |isolated_world_origin_| once we gather enough UMA and Rappor data.
+  const base::Optional<url::Origin> isolated_world_origin_;
 
   base::WeakPtrFactory<URLLoader> weak_ptr_factory_{this};
 

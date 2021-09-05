@@ -13,6 +13,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/logging.h"
 #include "base/macros.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
@@ -25,10 +26,12 @@
 #include "chrome/browser/web_applications/components/install_finalizer.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/browser/web_applications/components/web_app_data_retriever.h"
-#include "chrome/browser/web_applications/components/web_app_helpers.h"
+#include "chrome/browser/web_applications/components/web_app_id.h"
 #include "chrome/browser/web_applications/components/web_app_provider_base.h"
 #include "chrome/browser/web_applications/test/test_app_registrar.h"
+#include "chrome/browser/web_applications/test/test_app_shortcut_manager.h"
 #include "chrome/browser/web_applications/test/test_data_retriever.h"
+#include "chrome/browser/web_applications/test/test_file_handler_manager.h"
 #include "chrome/browser/web_applications/test/test_install_finalizer.h"
 #include "chrome/browser/web_applications/test/test_web_app_provider.h"
 #include "chrome/browser/web_applications/test/test_web_app_ui_manager.h"
@@ -43,7 +46,6 @@
 #include "content/public/test/test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/manifest/manifest.h"
-#include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
 #include "url/gurl.h"
 
 namespace web_app {
@@ -74,7 +76,11 @@ WebAppInstallManager::DataRetrieverFactory GetFactoryForRetriever(
       base::Passed(std::move(callback)));
 }
 
-const GURL kWebAppUrl("https://foo.example");
+// TODO(https://crbug.com/1042727): Fix test GURL scoping and remove this getter
+// function.
+GURL WebAppUrl() {
+  return GURL("https://foo.example");
+}
 
 // TODO(ortuno): Move this to ExternallyInstalledWebAppPrefs or replace with a
 // method in ExternallyInstalledWebAppPrefs once there is one.
@@ -116,16 +122,6 @@ class TestPendingAppInstallFinalizer : public InstallFinalizer {
         GetAppIdForUrl(app_url), uninstalled};
   }
 
-  void SetNextCreateOsShortcutsResult(const AppId& app_id,
-                                      bool shortcut_created) {
-    DCHECK(!base::Contains(next_create_os_shortcuts_results_, app_id));
-    next_create_os_shortcuts_results_[app_id] = shortcut_created;
-  }
-
-  void SetCanCreateOsShortcuts(bool can_create_os_shortcuts) {
-    can_create_os_shortcuts_ = can_create_os_shortcuts;
-  }
-
   const std::vector<WebApplicationInfo>& web_app_info_list() {
     return web_app_info_list_;
   }
@@ -136,10 +132,6 @@ class TestPendingAppInstallFinalizer : public InstallFinalizer {
 
   const std::vector<GURL>& uninstall_external_web_app_urls() const {
     return uninstall_external_web_app_urls_;
-  }
-
-  size_t num_create_os_shortcuts_calls() {
-    return num_create_os_shortcuts_calls_;
   }
   size_t num_add_app_to_quick_launch_bar_calls() {
     return num_add_app_to_quick_launch_bar_calls_;
@@ -174,13 +166,35 @@ class TestPendingAppInstallFinalizer : public InstallFinalizer {
             }));
   }
 
+  void FinalizeFallbackInstallAfterSync(
+      const AppId& app_id,
+      InstallFinalizedCallback callback) override {
+    NOTREACHED();
+  }
+
+  void FinalizeUninstallAfterSync(const AppId& app_id,
+                                  UninstallWebAppCallback callback) override {
+    NOTREACHED();
+  }
+
   void FinalizeUpdate(const WebApplicationInfo& web_app_info,
                       InstallFinalizedCallback callback) override {
     NOTREACHED();
   }
 
-  void UninstallExternalWebApp(const GURL& app_url,
+  void UninstallExternalWebApp(const AppId& app_id,
+                               ExternalInstallSource external_install_source,
                                UninstallWebAppCallback callback) override {
+    registrar_->RemoveExternalApp(app_id);
+
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(std::move(callback), /*uninstalled=*/true));
+  }
+
+  void UninstallExternalWebAppByUrl(
+      const GURL& app_url,
+      ExternalInstallSource external_install_source,
+      UninstallWebAppCallback callback) override {
     DCHECK(base::Contains(next_uninstall_external_web_app_results_, app_url));
     uninstall_external_web_app_urls_.push_back(app_url);
 
@@ -200,26 +214,31 @@ class TestPendingAppInstallFinalizer : public InstallFinalizer {
             }));
   }
 
-  void UninstallWebApp(const AppId& app_dd,
-                       UninstallWebAppCallback callback) override {}
-
-  bool CanCreateOsShortcuts() const override {
-    return can_create_os_shortcuts_;
+  bool CanUserUninstallFromSync(const AppId& app_id) const override {
+    NOTIMPLEMENTED();
+    return false;
   }
 
-  void CreateOsShortcuts(const AppId& app_id,
-                         bool add_to_desktop,
-                         CreateOsShortcutsCallback callback) override {
-    DCHECK(base::Contains(next_create_os_shortcuts_results_, app_id));
-    ++num_create_os_shortcuts_calls_;
-    add_to_desktop_ = add_to_desktop;
-    bool shortcut_created = next_create_os_shortcuts_results_[app_id];
-    next_create_os_shortcuts_results_.erase(app_id);
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::BindOnce(std::move(callback), shortcut_created));
+  void UninstallWebAppFromSyncByUser(
+      const AppId& app_dd,
+      UninstallWebAppCallback callback) override {
+    NOTIMPLEMENTED();
   }
 
-  const base::Optional<bool>& add_to_desktop() { return add_to_desktop_; }
+  bool CanUserUninstallExternalApp(const AppId& app_id) const override {
+    NOTIMPLEMENTED();
+    return false;
+  }
+
+  void UninstallExternalAppByUser(const AppId& app_id,
+                                  UninstallWebAppCallback callback) override {
+    NOTIMPLEMENTED();
+  }
+
+  bool WasExternalAppUninstalledByUser(const AppId& app_id) const override {
+    NOTIMPLEMENTED();
+    return false;
+  }
 
   bool CanAddAppToQuickLaunchBar() const override { return true; }
 
@@ -244,22 +263,12 @@ class TestPendingAppInstallFinalizer : public InstallFinalizer {
     ++num_reveal_appshim_calls_;
   }
 
-  bool CanUserUninstallFromSync(const AppId& app_id) const override {
-    NOTIMPLEMENTED();
-    return false;
-  }
-
  private:
   TestAppRegistrar* registrar_ = nullptr;
-
-  bool can_create_os_shortcuts_ = true;
 
   std::vector<WebApplicationInfo> web_app_info_list_;
   std::vector<FinalizeOptions> finalize_options_list_;
   std::vector<GURL> uninstall_external_web_app_urls_;
-
-  size_t num_create_os_shortcuts_calls_ = 0;
-  base::Optional<bool> add_to_desktop_;
 
   size_t num_add_app_to_quick_launch_bar_calls_ = 0;
   size_t num_reparent_tab_calls_ = 0;
@@ -272,8 +281,6 @@ class TestPendingAppInstallFinalizer : public InstallFinalizer {
   // url and the result of trying to uninstall it.
   std::map<GURL, std::pair<AppId, bool>>
       next_uninstall_external_web_app_results_;
-
-  std::map<AppId, bool> next_create_os_shortcuts_results_;
 
   DISALLOW_COPY_AND_ASSIGN(TestPendingAppInstallFinalizer);
 };
@@ -304,6 +311,13 @@ class PendingAppInstallTaskTest : public ChromeRenderViewHostTestHarness {
     auto install_manager = std::make_unique<WebAppInstallManager>(profile());
     install_manager_ = install_manager.get();
 
+    auto shortcut_manager = std::make_unique<TestAppShortcutManager>(profile());
+    shortcut_manager_ = shortcut_manager.get();
+
+    auto file_handler_manager =
+        std::make_unique<TestFileHandlerManager>(profile());
+    file_handler_manager_ = file_handler_manager.get();
+
     auto ui_manager = std::make_unique<TestWebAppUiManager>();
     ui_manager_ = ui_manager.get();
 
@@ -311,6 +325,8 @@ class PendingAppInstallTaskTest : public ChromeRenderViewHostTestHarness {
     provider->SetInstallManager(std::move(install_manager));
     provider->SetInstallFinalizer(std::move(install_finalizer));
     provider->SetWebAppUiManager(std::move(ui_manager));
+    provider->SetShortcutManager(std::move(shortcut_manager));
+    provider->SetFileHandlerManager(std::move(file_handler_manager));
 
     provider->Start();
   }
@@ -319,6 +335,10 @@ class PendingAppInstallTaskTest : public ChromeRenderViewHostTestHarness {
   TestWebAppUiManager* ui_manager() { return ui_manager_; }
   TestAppRegistrar* registrar() { return registrar_; }
   TestPendingAppInstallFinalizer* finalizer() { return install_finalizer_; }
+  TestAppShortcutManager* shortcut_manager() { return shortcut_manager_; }
+  TestFileHandlerManager* file_handler_manager() {
+    return file_handler_manager_;
+  }
 
   TestDataRetriever* data_retriever() { return data_retriever_; }
 
@@ -352,12 +372,12 @@ class PendingAppInstallTaskTest : public ChromeRenderViewHostTestHarness {
     install_finalizer_->SetNextFinalizeInstallResult(
         options.url, InstallResultCode::kSuccessNewInstall);
 
-    install_finalizer_->SetNextCreateOsShortcutsResult(
+    shortcut_manager_->SetNextCreateShortcutsResult(
         install_finalizer_->GetAppIdForUrl(options.url), true);
 
     auto task = std::make_unique<PendingAppInstallTask>(
-        profile(), registrar_, ui_manager_, install_finalizer_,
-        std::move(options));
+        profile(), registrar_, shortcut_manager_, file_handler_manager_,
+        ui_manager_, install_finalizer_, std::move(options));
     return task;
   }
 
@@ -369,6 +389,8 @@ class PendingAppInstallTaskTest : public ChromeRenderViewHostTestHarness {
   TestDataRetriever* data_retriever_ = nullptr;
   TestPendingAppInstallFinalizer* install_finalizer_ = nullptr;
   TestWebAppUiManager* ui_manager_ = nullptr;
+  TestAppShortcutManager* shortcut_manager_ = nullptr;
+  TestFileHandlerManager* file_handler_manager_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(PendingAppInstallTaskTest);
 };
@@ -376,7 +398,7 @@ class PendingAppInstallTaskTest : public ChromeRenderViewHostTestHarness {
 TEST_F(PendingAppInstallTaskTest,
        WebAppOrShortcutFromContents_InstallationSucceeds) {
   auto task = GetInstallationTaskWithTestMocks(
-      {kWebAppUrl, blink::mojom::DisplayMode::kUndefined,
+      {WebAppUrl(), DisplayMode::kUndefined,
        ExternalInstallSource::kInternalDefault});
 
   base::RunLoop run_loop;
@@ -386,17 +408,18 @@ TEST_F(PendingAppInstallTaskTest,
       base::BindLambdaForTesting([&](PendingAppInstallTask::Result result) {
         base::Optional<AppId> id =
             ExternallyInstalledWebAppPrefs(profile()->GetPrefs())
-                .LookupAppId(kWebAppUrl);
+                .LookupAppId(WebAppUrl());
 
         EXPECT_EQ(InstallResultCode::kSuccessNewInstall, result.code);
         EXPECT_TRUE(result.app_id.has_value());
 
-        EXPECT_FALSE(IsPlaceholderApp(profile(), kWebAppUrl));
+        EXPECT_FALSE(IsPlaceholderApp(profile(), WebAppUrl()));
 
         EXPECT_EQ(result.app_id.value(), id.value());
 
-        EXPECT_EQ(1u, finalizer()->num_create_os_shortcuts_calls());
-        EXPECT_TRUE(finalizer()->add_to_desktop().value());
+        EXPECT_EQ(1u, shortcut_manager()->num_create_shortcuts_calls());
+        EXPECT_TRUE(shortcut_manager()->did_add_to_desktop().value());
+
         EXPECT_EQ(1u, finalizer()->num_add_app_to_quick_launch_bar_calls());
         EXPECT_EQ(0u, finalizer()->num_reparent_tab_calls());
         EXPECT_EQ(0u, finalizer()->num_reveal_appshim_calls());
@@ -414,7 +437,7 @@ TEST_F(PendingAppInstallTaskTest,
 TEST_F(PendingAppInstallTaskTest,
        WebAppOrShortcutFromContents_InstallationFails) {
   auto task = GetInstallationTaskWithTestMocks(
-      {kWebAppUrl, blink::mojom::DisplayMode::kStandalone,
+      {WebAppUrl(), DisplayMode::kStandalone,
        ExternalInstallSource::kInternalDefault});
   data_retriever()->SetRendererWebApplicationInfo(nullptr);
 
@@ -425,7 +448,7 @@ TEST_F(PendingAppInstallTaskTest,
       base::BindLambdaForTesting([&](PendingAppInstallTask::Result result) {
         base::Optional<AppId> id =
             ExternallyInstalledWebAppPrefs(profile()->GetPrefs())
-                .LookupAppId(kWebAppUrl);
+                .LookupAppId(WebAppUrl());
 
         EXPECT_EQ(InstallResultCode::kGetWebApplicationInfoFailed, result.code);
         EXPECT_FALSE(result.app_id.has_value());
@@ -441,7 +464,7 @@ TEST_F(PendingAppInstallTaskTest,
 TEST_F(PendingAppInstallTaskTest,
        WebAppOrShortcutFromContents_NoDesktopShortcut) {
   ExternalInstallOptions install_options(
-      kWebAppUrl, blink::mojom::DisplayMode::kStandalone,
+      WebAppUrl(), DisplayMode::kStandalone,
       ExternalInstallSource::kInternalDefault);
   install_options.add_to_desktop = false;
   auto task = GetInstallationTaskWithTestMocks(std::move(install_options));
@@ -454,8 +477,8 @@ TEST_F(PendingAppInstallTaskTest,
         EXPECT_EQ(InstallResultCode::kSuccessNewInstall, result.code);
         EXPECT_TRUE(result.app_id.has_value());
 
-        EXPECT_EQ(1u, finalizer()->num_create_os_shortcuts_calls());
-        EXPECT_FALSE(finalizer()->add_to_desktop().value());
+        EXPECT_EQ(1u, shortcut_manager()->num_create_shortcuts_calls());
+        EXPECT_FALSE(shortcut_manager()->did_add_to_desktop().value());
 
         EXPECT_EQ(1u, finalizer()->num_add_app_to_quick_launch_bar_calls());
         EXPECT_EQ(0u, finalizer()->num_reparent_tab_calls());
@@ -470,7 +493,7 @@ TEST_F(PendingAppInstallTaskTest,
 TEST_F(PendingAppInstallTaskTest,
        WebAppOrShortcutFromContents_NoQuickLaunchBarShortcut) {
   ExternalInstallOptions install_options(
-      kWebAppUrl, blink::mojom::DisplayMode::kStandalone,
+      WebAppUrl(), DisplayMode::kStandalone,
       ExternalInstallSource::kInternalDefault);
   install_options.add_to_quick_launch_bar = false;
   auto task = GetInstallationTaskWithTestMocks(std::move(install_options));
@@ -482,8 +505,8 @@ TEST_F(PendingAppInstallTaskTest,
         EXPECT_EQ(InstallResultCode::kSuccessNewInstall, result.code);
         EXPECT_TRUE(result.app_id.has_value());
 
-        EXPECT_EQ(1u, finalizer()->num_create_os_shortcuts_calls());
-        EXPECT_TRUE(finalizer()->add_to_desktop().value());
+        EXPECT_EQ(1u, shortcut_manager()->num_create_shortcuts_calls());
+        EXPECT_TRUE(shortcut_manager()->did_add_to_desktop().value());
 
         EXPECT_EQ(0u, finalizer()->num_add_app_to_quick_launch_bar_calls());
         EXPECT_EQ(0u, finalizer()->num_reparent_tab_calls());
@@ -499,7 +522,7 @@ TEST_F(
     PendingAppInstallTaskTest,
     WebAppOrShortcutFromContents_NoDesktopShortcutAndNoQuickLaunchBarShortcut) {
   ExternalInstallOptions install_options(
-      kWebAppUrl, blink::mojom::DisplayMode::kStandalone,
+      WebAppUrl(), DisplayMode::kStandalone,
       ExternalInstallSource::kInternalDefault);
   install_options.add_to_desktop = false;
   install_options.add_to_quick_launch_bar = false;
@@ -512,8 +535,8 @@ TEST_F(
         EXPECT_EQ(InstallResultCode::kSuccessNewInstall, result.code);
         EXPECT_TRUE(result.app_id.has_value());
 
-        EXPECT_EQ(1u, finalizer()->num_create_os_shortcuts_calls());
-        EXPECT_FALSE(finalizer()->add_to_desktop().value());
+        EXPECT_EQ(1u, shortcut_manager()->num_create_shortcuts_calls());
+        EXPECT_FALSE(shortcut_manager()->did_add_to_desktop().value());
 
         EXPECT_EQ(0u, finalizer()->num_add_app_to_quick_launch_bar_calls());
         EXPECT_EQ(0u, finalizer()->num_reparent_tab_calls());
@@ -528,7 +551,7 @@ TEST_F(
 TEST_F(PendingAppInstallTaskTest,
        WebAppOrShortcutFromContents_ForcedContainerWindow) {
   auto install_options =
-      ExternalInstallOptions(kWebAppUrl, blink::mojom::DisplayMode::kStandalone,
+      ExternalInstallOptions(WebAppUrl(), DisplayMode::kStandalone,
                              ExternalInstallSource::kInternalDefault);
   auto task = GetInstallationTaskWithTestMocks(std::move(install_options));
 
@@ -548,7 +571,7 @@ TEST_F(PendingAppInstallTaskTest,
 TEST_F(PendingAppInstallTaskTest,
        WebAppOrShortcutFromContents_ForcedContainerTab) {
   auto install_options =
-      ExternalInstallOptions(kWebAppUrl, blink::mojom::DisplayMode::kBrowser,
+      ExternalInstallOptions(WebAppUrl(), DisplayMode::kBrowser,
                              ExternalInstallSource::kInternalDefault);
   auto task = GetInstallationTaskWithTestMocks(std::move(install_options));
 
@@ -567,7 +590,7 @@ TEST_F(PendingAppInstallTaskTest,
 
 TEST_F(PendingAppInstallTaskTest, WebAppOrShortcutFromContents_DefaultApp) {
   auto install_options =
-      ExternalInstallOptions(kWebAppUrl, blink::mojom::DisplayMode::kUndefined,
+      ExternalInstallOptions(WebAppUrl(), DisplayMode::kUndefined,
                              ExternalInstallSource::kInternalDefault);
   auto task = GetInstallationTaskWithTestMocks(std::move(install_options));
 
@@ -588,7 +611,7 @@ TEST_F(PendingAppInstallTaskTest, WebAppOrShortcutFromContents_DefaultApp) {
 
 TEST_F(PendingAppInstallTaskTest, WebAppOrShortcutFromContents_AppFromPolicy) {
   auto install_options =
-      ExternalInstallOptions(kWebAppUrl, blink::mojom::DisplayMode::kUndefined,
+      ExternalInstallOptions(WebAppUrl(), DisplayMode::kUndefined,
                              ExternalInstallSource::kExternalPolicy);
   auto task = GetInstallationTaskWithTestMocks(std::move(install_options));
 
@@ -608,8 +631,7 @@ TEST_F(PendingAppInstallTaskTest, WebAppOrShortcutFromContents_AppFromPolicy) {
 }
 
 TEST_F(PendingAppInstallTaskTest, InstallPlaceholder) {
-  ExternalInstallOptions options(kWebAppUrl,
-                                 blink::mojom::DisplayMode::kStandalone,
+  ExternalInstallOptions options(WebAppUrl(), DisplayMode::kStandalone,
                                  ExternalInstallSource::kExternalPolicy);
   options.install_placeholder = true;
   auto task = GetInstallationTaskWithTestMocks(std::move(options));
@@ -621,19 +643,20 @@ TEST_F(PendingAppInstallTaskTest, InstallPlaceholder) {
         EXPECT_EQ(InstallResultCode::kSuccessNewInstall, result.code);
         EXPECT_TRUE(result.app_id.has_value());
 
-        EXPECT_TRUE(IsPlaceholderApp(profile(), kWebAppUrl));
+        EXPECT_TRUE(IsPlaceholderApp(profile(), WebAppUrl()));
 
-        EXPECT_EQ(1u, finalizer()->num_create_os_shortcuts_calls());
+        EXPECT_EQ(1u, shortcut_manager()->num_create_shortcuts_calls());
         EXPECT_EQ(1u, finalizer()->finalize_options_list().size());
         EXPECT_EQ(WebappInstallSource::EXTERNAL_POLICY,
                   finalize_options().install_source);
         const WebApplicationInfo& web_app_info =
             finalizer()->web_app_info_list().at(0);
 
-        EXPECT_EQ(base::UTF8ToUTF16(kWebAppUrl.spec()), web_app_info.title);
-        EXPECT_EQ(kWebAppUrl, web_app_info.app_url);
+        EXPECT_EQ(base::UTF8ToUTF16(WebAppUrl().spec()), web_app_info.title);
+        EXPECT_EQ(WebAppUrl(), web_app_info.app_url);
         EXPECT_TRUE(web_app_info.open_as_window);
-        EXPECT_TRUE(web_app_info.icons.empty());
+        EXPECT_TRUE(web_app_info.icon_infos.empty());
+        EXPECT_TRUE(web_app_info.icon_bitmaps.empty());
 
         run_loop.Quit();
       }));
@@ -643,12 +666,11 @@ TEST_F(PendingAppInstallTaskTest, InstallPlaceholder) {
 // Tests that palceholders are correctly installed when the platform doesn't
 // support os shortcuts.
 TEST_F(PendingAppInstallTaskTest, InstallPlaceholderNoCreateOsShorcuts) {
-  ExternalInstallOptions options(kWebAppUrl,
-                                 blink::mojom::DisplayMode::kStandalone,
+  ExternalInstallOptions options(WebAppUrl(), DisplayMode::kStandalone,
                                  ExternalInstallSource::kExternalPolicy);
   options.install_placeholder = true;
   auto task = GetInstallationTaskWithTestMocks(std::move(options));
-  finalizer()->SetCanCreateOsShortcuts(false);
+  shortcut_manager()->set_can_create_shortcuts(false);
 
   base::RunLoop run_loop;
   task->Install(
@@ -657,19 +679,20 @@ TEST_F(PendingAppInstallTaskTest, InstallPlaceholderNoCreateOsShorcuts) {
         EXPECT_EQ(InstallResultCode::kSuccessNewInstall, result.code);
         EXPECT_TRUE(result.app_id.has_value());
 
-        EXPECT_TRUE(IsPlaceholderApp(profile(), kWebAppUrl));
+        EXPECT_TRUE(IsPlaceholderApp(profile(), WebAppUrl()));
 
-        EXPECT_EQ(0u, finalizer()->num_create_os_shortcuts_calls());
+        EXPECT_EQ(0u, shortcut_manager()->num_create_shortcuts_calls());
         EXPECT_EQ(1u, finalizer()->finalize_options_list().size());
         EXPECT_EQ(WebappInstallSource::EXTERNAL_POLICY,
                   finalize_options().install_source);
         const WebApplicationInfo& web_app_info =
             finalizer()->web_app_info_list().at(0);
 
-        EXPECT_EQ(base::UTF8ToUTF16(kWebAppUrl.spec()), web_app_info.title);
-        EXPECT_EQ(kWebAppUrl, web_app_info.app_url);
+        EXPECT_EQ(base::UTF8ToUTF16(WebAppUrl().spec()), web_app_info.title);
+        EXPECT_EQ(WebAppUrl(), web_app_info.app_url);
         EXPECT_TRUE(web_app_info.open_as_window);
-        EXPECT_TRUE(web_app_info.icons.empty());
+        EXPECT_TRUE(web_app_info.icon_infos.empty());
+        EXPECT_TRUE(web_app_info.icon_bitmaps.empty());
 
         run_loop.Quit();
       }));
@@ -677,8 +700,7 @@ TEST_F(PendingAppInstallTaskTest, InstallPlaceholderNoCreateOsShorcuts) {
 }
 
 TEST_F(PendingAppInstallTaskTest, InstallPlaceholderTwice) {
-  ExternalInstallOptions options(kWebAppUrl,
-                                 blink::mojom::DisplayMode::kStandalone,
+  ExternalInstallOptions options(WebAppUrl(), DisplayMode::kStandalone,
                                  ExternalInstallSource::kExternalPolicy);
   options.install_placeholder = true;
   AppId placeholder_app_id;
@@ -717,8 +739,7 @@ TEST_F(PendingAppInstallTaskTest, InstallPlaceholderTwice) {
 }
 
 TEST_F(PendingAppInstallTaskTest, ReinstallPlaceholderSucceeds) {
-  ExternalInstallOptions options(kWebAppUrl,
-                                 blink::mojom::DisplayMode::kStandalone,
+  ExternalInstallOptions options(WebAppUrl(), DisplayMode::kStandalone,
                                  ExternalInstallSource::kExternalPolicy);
   options.install_placeholder = true;
   AppId placeholder_app_id;
@@ -743,7 +764,7 @@ TEST_F(PendingAppInstallTaskTest, ReinstallPlaceholderSucceeds) {
   // Replace the placeholder with a real app.
   options.reinstall_placeholder = true;
   auto task = GetInstallationTaskWithTestMocks(options);
-  finalizer()->SetNextUninstallExternalWebAppResult(kWebAppUrl, true);
+  finalizer()->SetNextUninstallExternalWebAppResult(WebAppUrl(), true);
 
   base::RunLoop run_loop;
   task->Install(
@@ -751,10 +772,10 @@ TEST_F(PendingAppInstallTaskTest, ReinstallPlaceholderSucceeds) {
       base::BindLambdaForTesting([&](PendingAppInstallTask::Result result) {
         EXPECT_EQ(InstallResultCode::kSuccessNewInstall, result.code);
         EXPECT_TRUE(result.app_id.has_value());
-        EXPECT_FALSE(IsPlaceholderApp(profile(), kWebAppUrl));
+        EXPECT_FALSE(IsPlaceholderApp(profile(), WebAppUrl()));
 
         EXPECT_EQ(1u, finalizer()->uninstall_external_web_app_urls().size());
-        EXPECT_EQ(kWebAppUrl,
+        EXPECT_EQ(WebAppUrl(),
                   finalizer()->uninstall_external_web_app_urls().at(0));
 
         run_loop.Quit();
@@ -763,8 +784,7 @@ TEST_F(PendingAppInstallTaskTest, ReinstallPlaceholderSucceeds) {
 }
 
 TEST_F(PendingAppInstallTaskTest, ReinstallPlaceholderFails) {
-  ExternalInstallOptions options(kWebAppUrl,
-                                 blink::mojom::DisplayMode::kStandalone,
+  ExternalInstallOptions options(WebAppUrl(), DisplayMode::kStandalone,
                                  ExternalInstallSource::kExternalPolicy);
   options.install_placeholder = true;
   AppId placeholder_app_id;
@@ -790,18 +810,18 @@ TEST_F(PendingAppInstallTaskTest, ReinstallPlaceholderFails) {
   options.reinstall_placeholder = true;
   auto task = GetInstallationTaskWithTestMocks(options);
 
-  finalizer()->SetNextUninstallExternalWebAppResult(kWebAppUrl, false);
+  finalizer()->SetNextUninstallExternalWebAppResult(WebAppUrl(), false);
 
   base::RunLoop run_loop;
   task->Install(
       web_contents(), WebAppUrlLoader::Result::kUrlLoaded,
       base::BindLambdaForTesting([&](PendingAppInstallTask::Result result) {
-        EXPECT_EQ(InstallResultCode::kFailedUnknownReason, result.code);
+        EXPECT_EQ(InstallResultCode::kFailedPlaceholderUninstall, result.code);
         EXPECT_FALSE(result.app_id.has_value());
-        EXPECT_TRUE(IsPlaceholderApp(profile(), kWebAppUrl));
+        EXPECT_TRUE(IsPlaceholderApp(profile(), WebAppUrl()));
 
         EXPECT_EQ(1u, finalizer()->uninstall_external_web_app_urls().size());
-        EXPECT_EQ(kWebAppUrl,
+        EXPECT_EQ(WebAppUrl(),
                   finalizer()->uninstall_external_web_app_urls().at(0));
 
         // There should have been no new calls to install a placeholder.
@@ -813,8 +833,7 @@ TEST_F(PendingAppInstallTaskTest, ReinstallPlaceholderFails) {
 }
 
 TEST_F(PendingAppInstallTaskTest, UninstallAndReplace) {
-  ExternalInstallOptions options = {kWebAppUrl,
-                                    blink::mojom::DisplayMode::kUndefined,
+  ExternalInstallOptions options = {WebAppUrl(), DisplayMode::kUndefined,
                                     ExternalInstallSource::kInternalDefault};
   AppId app_id;
   {
@@ -831,7 +850,7 @@ TEST_F(PendingAppInstallTaskTest, UninstallAndReplace) {
           EXPECT_EQ(InstallResultCode::kSuccessNewInstall, result.code);
           EXPECT_EQ(app_id,
                     *ExternallyInstalledWebAppPrefs(profile()->GetPrefs())
-                         .LookupAppId(kWebAppUrl));
+                         .LookupAppId(WebAppUrl()));
 
           EXPECT_TRUE(ui_manager()->DidUninstallAndReplace("app1", app_id));
           EXPECT_TRUE(ui_manager()->DidUninstallAndReplace("app2", app_id));
@@ -869,16 +888,17 @@ TEST_F(PendingAppInstallTaskTest, InstallURLLoadFailed) {
                       {WebAppUrlLoader::Result::kFailedUnknownReason,
                        InstallResultCode::kInstallURLLoadFailed},
                       {WebAppUrlLoader::Result::kFailedPageTookTooLong,
-                       InstallResultCode::kInstallURLLoadFailed}};
+                       InstallResultCode::kInstallURLLoadTimeOut}};
 
   for (const auto& result_pair : result_pairs) {
     base::RunLoop run_loop;
 
     ExternalInstallOptions install_options(
-        GURL(), blink::mojom::DisplayMode::kStandalone,
+        GURL(), DisplayMode::kStandalone,
         ExternalInstallSource::kInternalDefault);
-    PendingAppInstallTask install_task(profile(), registrar(), ui_manager(),
-                                       finalizer(), install_options);
+    PendingAppInstallTask install_task(
+        profile(), registrar(), shortcut_manager(), file_handler_manager(),
+        ui_manager(), finalizer(), install_options);
 
     install_task.Install(
         web_contents(), result_pair.loader_result,
@@ -893,9 +913,10 @@ TEST_F(PendingAppInstallTaskTest, InstallURLLoadFailed) {
 
 TEST_F(PendingAppInstallTaskTest, FailedWebContentsDestroyed) {
   ExternalInstallOptions install_options(
-      GURL(), blink::mojom::DisplayMode::kStandalone,
+      GURL(), DisplayMode::kStandalone,
       ExternalInstallSource::kInternalDefault);
-  PendingAppInstallTask install_task(profile(), registrar(), ui_manager(),
+  PendingAppInstallTask install_task(profile(), registrar(), shortcut_manager(),
+                                     file_handler_manager(), ui_manager(),
                                      finalizer(), install_options);
 
   install_task.Install(

@@ -13,14 +13,14 @@ struct DefaultSingletonTraits;
 
 namespace vivaldi {
 
-class Notes_Model;
+class NotesModel;
 
 class NotesModelFactory : public BrowserContextKeyedServiceFactory {
  public:
-  static Notes_Model* GetForBrowserContext(
+  static NotesModel* GetForBrowserContext(
     content::BrowserContext* browser_context);
 
-  static Notes_Model* GetForBrowserContextIfExists(
+  static NotesModel* GetForBrowserContextIfExists(
     content::BrowserContext* browser_context);
 
   static NotesModelFactory* GetInstance();

@@ -19,24 +19,25 @@ struct VectorIcon;
 }  // namespace gfx
 
 namespace views {
-class ButtonListener;
 class ImageButton;
 }  // namespace views
 
 namespace ash {
 
+class AssistantButtonListener;
 enum class AssistantButtonId;
 
 class COMPONENT_EXPORT(ASSISTANT_UI) AssistantButton
     : public views::ImageButton,
       public views::ButtonListener {
  public:
-  AssistantButton(views::ButtonListener* listener, AssistantButtonId button_id);
+  AssistantButton(AssistantButtonListener* listener,
+                  AssistantButtonId button_id);
   ~AssistantButton() override;
 
-  // Creates an ImageButton with the default Assistant styles.
-  static views::ImageButton* Create(
-      views::ButtonListener* listener,
+  // Creates a button with the default Assistant styles.
+  static std::unique_ptr<AssistantButton> Create(
+      AssistantButtonListener* listener,
       const gfx::VectorIcon& icon,
       int size_in_dip,
       int icon_size_in_dip,
@@ -45,20 +46,22 @@ class COMPONENT_EXPORT(ASSISTANT_UI) AssistantButton
       base::Optional<int> tooltip_id = base::nullopt,
       SkColor icon_color = gfx::kGoogleGrey700);
 
+  AssistantButtonId GetAssistantButtonId() const { return id_; }
+
   // views::Button:
   const char* GetClassName() const override;
   void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
   std::unique_ptr<views::InkDrop> CreateInkDrop() override;
   std::unique_ptr<views::InkDropHighlight> CreateInkDropHighlight()
       const override;
-  std::unique_ptr<views::InkDropMask> CreateInkDropMask() const override;
   std::unique_ptr<views::InkDropRipple> CreateInkDropRipple() const override;
 
   // views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
  private:
-  views::ButtonListener* listener_;
+  AssistantButtonListener* listener_;
+  const AssistantButtonId id_;
 
   DISALLOW_COPY_AND_ASSIGN(AssistantButton);
 };

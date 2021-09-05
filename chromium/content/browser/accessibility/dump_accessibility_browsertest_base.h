@@ -5,6 +5,7 @@
 #ifndef CONTENT_BROWSER_ACCESSIBILITY_DUMP_ACCESSIBILITY_BROWSERTEST_BASE_H_
 #define CONTENT_BROWSER_ACCESSIBILITY_DUMP_ACCESSIBILITY_BROWSERTEST_BASE_H_
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -13,8 +14,11 @@
 #include "content/browser/accessibility/accessibility_event_recorder.h"
 #include "content/public/browser/accessibility_tree_formatter.h"
 #include "content/public/test/content_browser_test.h"
+#include "third_party/blink/public/common/features.h"
 
 namespace content {
+
+class BrowserAccessibility;
 
 // Base class for an accessibility browsertest that takes an HTML file as
 // input, loads it into a tab, dumps some accessibility data in text format,
@@ -61,6 +65,10 @@ class DumpAccessibilityTestBase : public ContentBrowserTest,
   // additional useful info.
   virtual void OnDiffFailed() {}
 
+  // Choose which feature flags to enable or disable.
+  virtual void ChooseFeatures(std::vector<base::Feature>* enabled_features,
+                              std::vector<base::Feature>* disabled_features);
+
   //
   // Helpers
   //
@@ -96,9 +104,11 @@ class DumpAccessibilityTestBase : public ContentBrowserTest,
 
   void RunTestForPlatform(const base::FilePath file_path, const char* file_dir);
 
-  // Retrieve the accessibility node, starting from the root node, that matches
-  // the accessibility name.
-  BrowserAccessibility* FindNode(const std::string& name);
+  // Retrieve the accessibility node that matches the accessibility name. There
+  // is an optional search_root parameter that defaults to the document root if
+  // not provided.
+  BrowserAccessibility* FindNode(const std::string& name,
+                                 BrowserAccessibility* search_root = nullptr);
 
   // Retrieve the browser accessibility manager object for the current web
   // contents.
@@ -127,6 +137,9 @@ class DumpAccessibilityTestBase : public ContentBrowserTest,
  private:
   BrowserAccessibility* FindNodeInSubtree(BrowserAccessibility& node,
                                           const std::string& name);
+
+  void WaitForAXTreeLoaded(WebContentsImpl* web_contents,
+                           const std::vector<std::string>& wait_for);
 };
 
 }  // namespace content

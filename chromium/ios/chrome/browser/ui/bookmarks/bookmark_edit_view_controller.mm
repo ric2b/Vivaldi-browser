@@ -36,8 +36,8 @@
 #include "ios/chrome/browser/ui/util/rtl_geometry.h"
 #include "ios/chrome/browser/ui/util/ui_util.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
-#import "ios/chrome/common/colors/semantic_color_names.h"
-#import "ios/chrome/common/ui_util/constraints_ui_util.h"
+#import "ios/chrome/common/ui/colors/semantic_color_names.h"
+#import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #include "ui/base/l10n/l10n_util_mac.h"
@@ -105,7 +105,7 @@ const CGFloat kEstimatedTableSectionFooterHeight = 40;
 // Redefined to be readwrite.
 @property(nonatomic, strong) BookmarkFolderViewController* folderViewController;
 
-@property(nonatomic, assign) ios::ChromeBrowserState* browserState;
+@property(nonatomic, assign) ChromeBrowserState* browserState;
 
 // Dispatcher for sending commands.
 @property(nonatomic, readonly, weak) id<BrowserCommands> dispatcher;
@@ -179,12 +179,11 @@ const CGFloat kEstimatedTableSectionFooterHeight = 40;
 #pragma mark - Lifecycle
 
 - (instancetype)initWithBookmark:(const BookmarkNode*)bookmark
-                    browserState:(ios::ChromeBrowserState*)browserState
+                    browserState:(ChromeBrowserState*)browserState
                       dispatcher:(id<BrowserCommands>)dispatcher {
   DCHECK(bookmark);
   DCHECK(browserState);
-  self = [super initWithTableViewStyle:UITableViewStylePlain
-                           appBarStyle:ChromeTableViewControllerStyleNoAppBar];
+  self = [super initWithStyle:UITableViewStylePlain];
   if (self) {
     DCHECK(!bookmark->is_folder());
     DCHECK(!browserState->IsOffTheRecord());
@@ -221,9 +220,6 @@ const CGFloat kEstimatedTableSectionFooterHeight = 40;
       kEstimatedTableSectionFooterHeight;
   self.view.accessibilityIdentifier = kBookmarkEditViewContainerIdentifier;
 
-  // Add a tableFooterView in order to disable separators at the bottom of the
-  // tableView.
-  self.tableView.tableFooterView = [[UIView alloc] init];
   [self.tableView
       setSeparatorInset:UIEdgeInsetsMake(0, kBookmarkCellHorizontalLeadingInset,
                                          0, 0)];

@@ -8,7 +8,6 @@
  */
 
 (function() {
-'use strict';
 
 /**
  * The states of the export passwords dialog.
@@ -71,7 +70,7 @@ Polymer({
    */
   passwordManager_: null,
 
-  /** @private {function(!PasswordManagerProxy.PasswordExportProgress):void} */
+  /** @private {?function(!PasswordManagerProxy.PasswordExportProgress):void} */
   onPasswordsFileExportProgressListener_: null,
 
   /**
@@ -98,7 +97,7 @@ Polymer({
   delayedProgress_: null,
 
   /** @override */
-  attached: function() {
+  attached() {
     this.passwordManager_ = PasswordManagerImpl.getInstance();
 
     this.switchToDialog_(States.START);
@@ -167,13 +166,17 @@ Polymer({
   },
 
   /** Closes the dialog. */
-  close: function() {
+  close() {
     clearTimeout(this.progressTaskToken_);
     clearTimeout(this.delayedCompletionToken_);
     this.progressTaskToken_ = null;
     this.delayedCompletionToken_ = null;
     this.passwordManager_.removePasswordsFileExportProgressListener(
-        this.onPasswordsFileExportProgressListener_);
+        /**
+         * @type {function(!PasswordManagerProxy.PasswordExportProgress):
+         *             void}
+         */
+        (this.onPasswordsFileExportProgressListener_));
     this.showStartDialog_ = false;
     this.showProgressDialog_ = false;
     this.showErrorDialog_ = false;
@@ -183,7 +186,7 @@ Polymer({
   },
 
   /** @private */
-  onExportTap_: function() {
+  onExportTap_() {
     // <if expr="chromeos">
     this.tokenRequestManager.request(this.exportPasswords_.bind(this));
     // </if>
@@ -197,7 +200,7 @@ Polymer({
    * security checks.
    * @private
    */
-  exportPasswords_: function() {
+  exportPasswords_() {
     this.passwordManager_.exportPasswords(() => {
       if (chrome.runtime.lastError &&
           chrome.runtime.lastError.message == 'in-progress') {
@@ -225,8 +228,9 @@ Polymer({
       return;
     }
     if (progress.status == ProgressStatus.FAILED_WRITE_FAILED) {
-      this.exportErrorMessage =
-          this.i18n('exportPasswordsFailTitle', progress.folderName);
+      this.exportErrorMessage = this.i18n(
+          'exportPasswordsFailTitle',
+          /** @type {string} */ (progress.folderName));
       this.switchToDialog_(States.ERROR);
       return;
     }
@@ -247,7 +251,7 @@ Polymer({
    * Handler for tapping the 'cancel' button. Should just dismiss the dialog.
    * @private
    */
-  onCancelButtonTap_: function() {
+  onCancelButtonTap_() {
     this.close();
   },
 
@@ -256,7 +260,7 @@ Polymer({
    * cancel the export and dismiss the dialog.
    * @private
    */
-  onCancelProgressButtonTap_: function() {
+  onCancelProgressButtonTap_() {
     this.passwordManager_.cancelExportPasswords();
     this.close();
   },

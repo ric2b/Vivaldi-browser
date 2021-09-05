@@ -38,11 +38,11 @@ struct EsParserMpeg1Audio::Mpeg1AudioFrame {
 
 EsParserMpeg1Audio::EsParserMpeg1Audio(
     const NewAudioConfigCB& new_audio_config_cb,
-    const EmitBufferCB& emit_buffer_cb,
+    EmitBufferCB emit_buffer_cb,
     MediaLog* media_log)
     : media_log_(media_log),
       new_audio_config_cb_(new_audio_config_cb),
-      emit_buffer_cb_(emit_buffer_cb) {}
+      emit_buffer_cb_(std::move(emit_buffer_cb)) {}
 
 EsParserMpeg1Audio::~EsParserMpeg1Audio() {
 }
@@ -169,7 +169,7 @@ bool EsParserMpeg1Audio::UpdateAudioConfiguration(
   // field for Mpeg1 audio. If yes, we should generate this field.
   AudioDecoderConfig audio_decoder_config(
       kCodecMP3, kSampleFormatS16, header.channel_layout, header.sample_rate,
-      EmptyExtraData(), Unencrypted());
+      EmptyExtraData(), EncryptionScheme::kUnencrypted);
 
   if (!audio_decoder_config.IsValidConfig()) {
     DVLOG(1) << "Invalid config: "

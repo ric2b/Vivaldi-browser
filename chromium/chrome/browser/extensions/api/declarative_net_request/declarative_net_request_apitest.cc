@@ -47,20 +47,23 @@ class DeclarativeNetRequestAPItest : public extensions::ExtensionApiTest {
   DISALLOW_COPY_AND_ASSIGN(DeclarativeNetRequestAPItest);
 };
 
-IN_PROC_BROWSER_TEST_F(DeclarativeNetRequestAPItest, PageAllowingAPI) {
-  ASSERT_TRUE(RunExtensionTest("page_allowing_api")) << message_;
-}
-
-IN_PROC_BROWSER_TEST_F(DeclarativeNetRequestAPItest, ExtensionWithNoRuleset) {
-  ASSERT_TRUE(RunExtensionTest("extension_with_no_ruleset")) << message_;
-}
-
 IN_PROC_BROWSER_TEST_F(DeclarativeNetRequestAPItest, DynamicRules) {
   ASSERT_TRUE(RunExtensionTest("dynamic_rules")) << message_;
 }
 
 IN_PROC_BROWSER_TEST_F(DeclarativeNetRequestAPItest, HeaderRemoval) {
   ASSERT_TRUE(RunExtensionTest("header_removal")) << message_;
+}
+
+// TODO(crbug.com/1029233) Restore this test. This is disabled due to
+// flakiness.
+IN_PROC_BROWSER_TEST_F(DeclarativeNetRequestAPItest,
+                       DISABLED_OnRulesMatchedDebug) {
+  ASSERT_TRUE(RunExtensionTest("on_rules_matched_debug")) << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(DeclarativeNetRequestAPItest, GetMatchedRules) {
+  ASSERT_TRUE(RunExtensionTest("get_matched_rules")) << message_;
 }
 
 }  // namespace

@@ -109,7 +109,7 @@ class SVGSVGElement final : public SVGGraphicsElement,
   SVGAnimatedLength* width() const { return width_.Get(); }
   SVGAnimatedLength* height() const { return height_.Get(); }
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  private:
   ~SVGSVGElement() override;
@@ -118,7 +118,6 @@ class SVGSVGElement final : public SVGGraphicsElement,
 
   void ParseAttribute(const AttributeModificationParams&) override;
   bool IsPresentationAttribute(const QualifiedName&) const override;
-  bool IsPresentationAttributeWithSVGDOM(const QualifiedName&) const override;
   void CollectStyleForPresentationAttribute(
       const QualifiedName&,
       const AtomicString&,

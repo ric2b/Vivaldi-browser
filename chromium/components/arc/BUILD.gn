@@ -32,9 +32,8 @@ static_library("arc") {
     "intent_helper/arc_intent_helper_bridge.cc",
     "intent_helper/arc_intent_helper_bridge.h",
     "intent_helper/arc_intent_helper_observer.h",
+    "intent_helper/control_camera_app_delegate.h",
     "intent_helper/factory_reset_delegate.h",
-    "intent_helper/font_size_util.cc",
-    "intent_helper/font_size_util.h",
     "intent_helper/intent_constants.cc",
     "intent_helper/intent_constants.h",
     "intent_helper/intent_filter.cc",
@@ -42,8 +41,6 @@ static_library("arc") {
     "intent_helper/link_handler_model.cc",
     "intent_helper/link_handler_model.h",
     "intent_helper/open_url_delegate.h",
-    "keymaster/arc_keymaster_bridge.cc",
-    "keymaster/arc_keymaster_bridge.h",
     "lock_screen/arc_lock_screen_bridge.cc",
     "lock_screen/arc_lock_screen_bridge.h",
     "metrics/arc_metrics_service.cc",
@@ -132,7 +129,7 @@ static_library("arc") {
     "//ui/display/manager",
     "//ui/events",
     "//ui/events:dom_keycode_converter",
-    "//ui/events/ozone:events_ozone_evdev",
+    "//ui/events/ozone",
     "//ui/wm/public",
     "//url:url",
   ]
@@ -164,19 +161,25 @@ static_library("arc_base_enums") {
     "session/arc_supervision_transition.h",
   ]
 
-  deps = [
-    "//base",
+  deps = [ "//base" ]
+}
+
+source_set("arc_features") {
+  sources = [
+    "arc_features.cc",
+    "arc_features.h",
   ]
+
+  deps = [ "//base" ]
 }
 
 static_library("arc_base_utils") {
   sources = [
-    "arc_features.cc",
-    "arc_features.h",
     "arc_util.cc",
     "arc_util.h",
   ]
 
+  public_deps = [ ":arc_features" ]
   deps = [
     "//ash/public/cpp",
     "//base",
@@ -207,19 +210,28 @@ static_library("arc_base") {
     "session/arc_container_client_adapter.h",
     "session/arc_data_remover.cc",
     "session/arc_data_remover.h",
+    "session/arc_property_util.cc",
+    "session/arc_property_util.h",
     "session/arc_session.cc",
     "session/arc_session.h",
     "session/arc_session_impl.cc",
     "session/arc_session_impl.h",
     "session/arc_session_runner.cc",
     "session/arc_session_runner.h",
+    "session/arc_start_params.cc",
+    "session/arc_start_params.h",
+    "session/arc_upgrade_params.cc",
+    "session/arc_upgrade_params.h",
     "session/arc_vm_client_adapter.cc",
     "session/arc_vm_client_adapter.h",
+    "session/file_system_status.cc",
+    "session/file_system_status.h",
   ]
 
   deps = [
     "//ash/public/cpp",
     "//base",
+    "//base/util/memory_pressure",
     "//chromeos/constants",
     "//chromeos/cryptohome",
     "//chromeos/dbus:common",
@@ -334,9 +346,7 @@ static_library("arc_test_support") {
 }
 
 source_set("arc_metrics_constants") {
-  sources = [
-    "metrics/arc_metrics_constants.h",
-  ]
+  sources = [ "metrics/arc_metrics_constants.h" ]
 }
 
 source_set("unit_tests") {
@@ -350,7 +360,6 @@ source_set("unit_tests") {
     "ime/arc_ime_service_unittest.cc",
     "intent_helper/activity_icon_loader_unittest.cc",
     "intent_helper/arc_intent_helper_bridge_unittest.cc",
-    "intent_helper/font_size_util_unittest.cc",
     "intent_helper/intent_filter_unittest.cc",
     "intent_helper/link_handler_model_unittest.cc",
     "metrics/arc_metrics_service_unittest.cc",
@@ -358,11 +367,15 @@ source_set("unit_tests") {
     "net/always_on_vpn_manager_unittest.cc",
     "net/arc_net_host_impl_unittest.cc",
     "power/arc_power_bridge_unittest.cc",
+    "property/arc_property_bridge_unittest.cc",
     "session/arc_data_remover_unittest.cc",
+    "session/arc_property_util_unittest.cc",
     "session/arc_session_impl_unittest.cc",
     "session/arc_session_runner_unittest.cc",
     "session/arc_vm_client_adapter_unittest.cc",
+    "session/file_system_status_unittest.cc",
     "timer/arc_timer_bridge_unittest.cc",
+    "video_accelerator/arc_video_accelerator_util_unittest.cc",
     "wake_lock/arc_wake_lock_bridge_unittest.cc",
   ]
 
@@ -385,6 +398,7 @@ source_set("unit_tests") {
     "//chromeos/network:test_support",
     "//chromeos/system:system",
     "//components/account_id",
+    "//components/arc/video_accelerator",
     "//components/keyed_service/content",
     "//components/prefs:test_support",
     "//components/session_manager/core:core",
@@ -397,7 +411,6 @@ source_set("unit_tests") {
     "//mojo/public/cpp/system:system",
     "//services/device/public/cpp:test_support",
     "//services/device/public/mojom",
-    "//services/service_manager/public/cpp/test:test_support",
     "//testing/gmock",
     "//testing/gtest",
     "//ui/aura",

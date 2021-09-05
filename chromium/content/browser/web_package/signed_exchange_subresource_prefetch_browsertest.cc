@@ -21,6 +21,7 @@
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time_override.h"
+#include "build/build_config.h"
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/loader/prefetch_browsertest_base.h"
@@ -691,8 +692,16 @@ IN_PROC_BROWSER_TEST_P(SignedExchangePrefetchBrowserTest,
   EXPECT_EQ(2, sxg_request_counter->GetRequestCount());
 }
 
+// Flaky on Linux TSan, http://crbug.com/1050879
+#if defined(OS_LINUX) && defined(THREAD_SANITIZER)
+#define MAYBE_PrefetchMainResourceSXG_SignatureExpire \
+  DISABLED_PrefetchMainResourceSXG_SignatureExpire
+#else
+#define MAYBE_PrefetchMainResourceSXG_SignatureExpire \
+  PrefetchMainResourceSXG_SignatureExpire
+#endif
 IN_PROC_BROWSER_TEST_P(SignedExchangePrefetchBrowserTest,
-                       PrefetchMainResourceSXG_SignatureExpire) {
+                       MAYBE_PrefetchMainResourceSXG_SignatureExpire) {
   const char* hostname = "example.com";
   const char* sxg_path = "/target.sxg";
   const char* inner_url_path = "/target.html";
@@ -1035,6 +1044,7 @@ class SignedExchangeSubresourcePrefetchBrowserTest
       const std::string& script_inner_url_path,
       const std::vector<std::pair<std::string, std::string>>&
           script_sxg_outer_headers,
+      const std::string& additional_link_element_attributes,
       int64_t elapsed_time_after_prefetch,
       const std::string& expected_title,
       bool script_sxg_should_be_stored,
@@ -1076,8 +1086,9 @@ class SignedExchangeSubresourcePrefetchBrowserTest
 
     RegisterResponse(prefetch_page_path,
                      ResponseEntry(base::StringPrintf(
-                         "<body><link rel='prefetch' href='%s'></body>",
-                         sxg_page_url.spec().c_str())));
+                         "<body><link rel='prefetch' href='%s' %s></body>",
+                         sxg_page_url.spec().c_str(),
+                         additional_link_element_attributes.c_str())));
     RegisterResponse(
         script_inner_url_path,
         ResponseEntry("document.title=\"from server\";", "text/javascript",
@@ -1283,8 +1294,10 @@ IN_PROC_BROWSER_TEST_F(SignedExchangeSubresourcePrefetchBrowserTest,
       "example.com" /* inner_url_hostname */,
       "/target.html" /* page_inner_url_path */,
       "/script.js" /* script_inner_url_path */,
-      {} /* script_sxg_outer_headers */, 0 /* elapsed_time_after_prefetch */,
-      "done" /* expected_title */, true /* script_sxg_should_be_stored */,
+      {} /* script_sxg_outer_headers */,
+      "" /* additional_link_element_attributes */,
+      0 /* elapsed_time_after_prefetch */, "done" /* expected_title */,
+      true /* script_sxg_should_be_stored */,
       0 /* expected_script_fetch_count */);
 }
 
@@ -1301,8 +1314,10 @@ IN_PROC_BROWSER_TEST_F(SignedExchangeSubresourcePrefetchBrowserTest,
       "example.com" /* inner_url_hostname */,
       "/target.html" /* page_inner_url_path */,
       "/script.js" /* script_inner_url_path */,
-      {} /* script_sxg_outer_headers */, 0 /* elapsed_time_after_prefetch */,
-      "done" /* expected_title */, true /* script_sxg_should_be_stored */,
+      {} /* script_sxg_outer_headers */,
+      "" /* additional_link_element_attributes */,
+      0 /* elapsed_time_after_prefetch */, "done" /* expected_title */,
+      true /* script_sxg_should_be_stored */,
       // Note that we don't check the script fetch count in this test.
       -1 /* expected_script_fetch_count  */);
 }
@@ -1323,8 +1338,38 @@ IN_PROC_BROWSER_TEST_F(SignedExchangeSubresourcePrefetchBrowserTest,
       "publisher.example.com" /* inner_url_hostname */,
       "/target.html" /* page_inner_url_path */,
       "/script.js" /* script_inner_url_path */,
-      {} /* script_sxg_outer_headers */, 0 /* elapsed_time_after_prefetch */,
-      "done" /* expected_title */, true /* script_sxg_should_be_stored */,
+      {} /* script_sxg_outer_headers */,
+      "" /* additional_link_element_attributes */,
+      0 /* elapsed_time_after_prefetch */, "done" /* expected_title */,
+      true /* script_sxg_should_be_stored */,
+      0 /* expected_script_fetch_count */);
+}
+
+IN_PROC_BROWSER_TEST_F(SignedExchangeSubresourcePrefetchBrowserTest,
+                       MainResourceSXGAndScriptSXG_CrossOrigin_AsDocument) {
+  // This test is almost same as MainResourceSXGAndScriptSXG_CrossOrigin. The
+  // only difference is that the <link rel=prefetch> element has "as=document"
+  // attribute which was introduced to support cross origin prefetch with
+  // SplitCacheByNetworkIsolationKey feature. Note that even if
+  // SplitCacheByNetworkIsolationKey feature is enabled, current Chromium
+  // implementation doesn't require as=document for prefetching main resource
+  // signed exchanges when SignedExchangePrefetchCacheForNavigations feature is
+  // enabled, and for prefetching main resource and subresource signed exchanges
+  // when SignedExchangeSubresourcePrefetch is enabled.
+  RunPrefetchMainResourceSXGAndScriptSXGTest(
+      "aggregator.example.com" /* prefetch_page_hostname */,
+      "/prefetch.html" /* prefetch_page_path */,
+      "distoributor.example.com" /* page_sxg_hostname */,
+      "/target.sxg" /* page_sxg_path */,
+      "distoributor.example.com" /* script_sxg_hostname */,
+      "/script.sxg" /* script_sxg_path */,
+      "publisher.example.com" /* inner_url_hostname */,
+      "/target.html" /* page_inner_url_path */,
+      "/script.js" /* script_inner_url_path */,
+      {} /* script_sxg_outer_headers */,
+      "as='document'" /* additional_link_element_attributes */,
+      0 /* elapsed_time_after_prefetch */, "done" /* expected_title */,
+      true /* script_sxg_should_be_stored */,
       0 /* expected_script_fetch_count */);
 }
 
@@ -1342,8 +1387,9 @@ IN_PROC_BROWSER_TEST_F(SignedExchangeSubresourcePrefetchBrowserTest,
       "publisher.example.com" /* inner_url_hostname */,
       "/target.html" /* page_inner_url_path */,
       "/script.js" /* script_inner_url_path */,
-      {} /* script_sxg_outer_headers */, 0 /* elapsed_time_after_prefetch */,
-      "from server" /* expected_title */,
+      {} /* script_sxg_outer_headers */,
+      "" /* additional_link_element_attributes */,
+      0 /* elapsed_time_after_prefetch */, "from server" /* expected_title */,
       true /* script_sxg_should_be_stored */,
       1 /* expected_script_fetch_count */);
 }
@@ -1360,6 +1406,7 @@ IN_PROC_BROWSER_TEST_F(SignedExchangeSubresourcePrefetchBrowserTest,
       "/target.html" /* page_inner_url_path */,
       "/script.js" /* script_inner_url_path */,
       {{"cache-control", "no-store"}} /* script_sxg_outer_headers */,
+      "" /* additional_link_element_attributes */,
       0 /* elapsed_time_after_prefetch */, "from server" /* expected_title */,
       false /* script_sxg_should_be_stored */,
       1 /* expected_script_fetch_count */);
@@ -1377,6 +1424,7 @@ IN_PROC_BROWSER_TEST_F(SignedExchangeSubresourcePrefetchBrowserTest,
       "/target.html" /* page_inner_url_path */,
       "/script.js" /* script_inner_url_path */,
       {{"vary", "*"}} /* script_sxg_outer_headers */,
+      "" /* additional_link_element_attributes */,
       0 /* elapsed_time_after_prefetch */, "from server" /* expected_title */,
       false /* script_sxg_should_be_stored */,
       1 /* expected_script_fetch_count */);
@@ -1394,6 +1442,7 @@ IN_PROC_BROWSER_TEST_F(SignedExchangeSubresourcePrefetchBrowserTest,
       "/target.html" /* page_inner_url_path */,
       "/script.js" /* script_inner_url_path */,
       {{"vary", "accept-encoding"}} /* script_sxg_outer_headers */,
+      "" /* additional_link_element_attributes */,
       0 /* elapsed_time_after_prefetch */, "done" /* expected_title */,
       true /* script_sxg_should_be_stored */,
       0 /* expected_script_fetch_count */);
@@ -1411,6 +1460,7 @@ IN_PROC_BROWSER_TEST_F(SignedExchangeSubresourcePrefetchBrowserTest,
       "/target.html" /* page_inner_url_path */,
       "/script.js" /* script_inner_url_path */,
       {} /* script_sxg_outer_headers */,
+      "" /* additional_link_element_attributes */,
       net::HttpCache::kPrefetchReuseMins * 60 + 1
       /* elapsed_time_after_prefetch */,
       "from server" /* expected_title */,
@@ -1433,6 +1483,7 @@ IN_PROC_BROWSER_TEST_F(SignedExchangeSubresourcePrefetchBrowserTest,
         base::StringPrintf("public, max-age=%d",
                            net::HttpCache::kPrefetchReuseMins * 3 *
                                60)}} /* script_sxg_outer_headers */,
+      "" /* additional_link_element_attributes */,
       net::HttpCache::kPrefetchReuseMins * 2 * 60
       /* elapsed_time_after_prefetch */,
       "done" /* expected_title */, true /* script_sxg_should_be_stored */,
@@ -1454,6 +1505,7 @@ IN_PROC_BROWSER_TEST_F(SignedExchangeSubresourcePrefetchBrowserTest,
         base::StringPrintf("public, max-age=%d",
                            net::HttpCache::kPrefetchReuseMins * 3 *
                                60)}} /* script_sxg_outer_headers */,
+      "" /* additional_link_element_attributes */,
       net::HttpCache::kPrefetchReuseMins * 3 * 60 + 1
       /* elapsed_time_after_prefetch */,
       "from server" /* expected_title */,

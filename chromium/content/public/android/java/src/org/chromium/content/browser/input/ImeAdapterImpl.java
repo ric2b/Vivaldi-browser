@@ -13,7 +13,6 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.ResultReceiver;
 import android.os.SystemClock;
-import android.support.v13.view.inputmethod.EditorInfoCompat;
 import android.text.SpannableString;
 import android.text.Spanned;
 import android.text.TextUtils;
@@ -30,15 +29,17 @@ import android.view.inputmethod.ExtractedText;
 import android.view.inputmethod.InputConnection;
 import android.view.inputmethod.InputMethodManager;
 
+import androidx.annotation.VisibleForTesting;
+import androidx.core.view.inputmethod.EditorInfoCompat;
+
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.UserData;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
-import org.chromium.blink_public.web.WebFocusType;
+import org.chromium.blink.mojom.FocusType;
 import org.chromium.blink_public.web.WebInputEventModifier;
 import org.chromium.blink_public.web.WebInputEventType;
 import org.chromium.blink_public.web.WebTextInputMode;
@@ -53,6 +54,7 @@ import org.chromium.content_public.browser.InputMethodManagerWrapper;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.ViewAndroidDelegate;
 import org.chromium.ui.base.ViewUtils;
+import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.base.ime.TextInputAction;
 import org.chromium.ui.base.ime.TextInputType;
 
@@ -85,8 +87,9 @@ import java.util.List;
  * lifetime of the object.
  */
 @JNINamespace("content")
-public class ImeAdapterImpl implements ImeAdapter, WindowEventObserver, UserData {
-    private static final String TAG = "cr_Ime";
+public class ImeAdapterImpl
+        implements ImeAdapter, WindowEventObserver, UserData, InputMethodManagerWrapper.Delegate {
+    private static final String TAG = "Ime";
     private static final boolean DEBUG_LOGS = false;
 
     private static final float SUGGESTION_HIGHLIGHT_BACKGROUND_TRANSPARENCY = 0.4f;
@@ -107,6 +110,7 @@ public class ImeAdapterImpl implements ImeAdapter, WindowEventObserver, UserData
 
     private final WebContentsImpl mWebContents;
     private ViewAndroidDelegate mViewDelegate;
+    private WindowAndroid mWindowAndroid;
 
     // This holds the information necessary for constructing CursorAnchorInfo, and notifies to
     // InputMethodManager on appropriate timing, depending on how IME requested the information
@@ -182,9 +186,9 @@ public class ImeAdapterImpl implements ImeAdapter, WindowEventObserver, UserData
     /**
      * Returns an instance of the default {@link InputMethodManagerWrapper}
      */
-    public static InputMethodManagerWrapper createDefaultInputMethodManagerWrapper(
-            Context context) {
-        return new InputMethodManagerWrapperImpl(context);
+    public static InputMethodManagerWrapper createDefaultInputMethodManagerWrapper(Context context,
+            WindowAndroid windowAndroid, InputMethodManagerWrapper.Delegate delegate) {
+        return new InputMethodManagerWrapperImpl(context, windowAndroid, delegate);
     }
 
     /**
@@ -195,9 +199,10 @@ public class ImeAdapterImpl implements ImeAdapter, WindowEventObserver, UserData
         mWebContents = (WebContentsImpl) webContents;
         mViewDelegate = mWebContents.getViewAndroidDelegate();
         assert mViewDelegate != null;
+
         // Use application context here to avoid leaking the activity context.
-        InputMethodManagerWrapper wrapper =
-                createDefaultInputMethodManagerWrapper(ContextUtils.getApplicationContext());
+        InputMethodManagerWrapper wrapper = createDefaultInputMethodManagerWrapper(
+                ContextUtils.getApplicationContext(), mWebContents.getTopLevelNativeWindow(), this);
 
         // Deep copy newConfig so that we can notice the difference.
         mCurrentConfig = new Configuration(getContainerView().getResources().getConfiguration());
@@ -326,6 +331,8 @@ public class ImeAdapterImpl implements ImeAdapter, WindowEventObserver, UserData
                     ImeAdapterImpl.this, false /* not an immediate request */,
                     false /* disable monitoring */);
         }
+
+        if (mInputConnection != null) mInputMethodManagerWrapper.onInputConnectionCreated();
         return mInputConnection;
     }
 
@@ -334,6 +341,11 @@ public class ImeAdapterImpl implements ImeAdapter, WindowEventObserver, UserData
         // The previous input connection might be waiting for state update.
         if (mInputConnection != null) mInputConnection.unblockOnUiThread();
         mInputConnection = inputConnection;
+    }
+
+    @Override
+    public boolean hasInputConnection() {
+        return mInputConnection != null;
     }
 
     @Override
@@ -604,10 +616,11 @@ public class ImeAdapterImpl implements ImeAdapter, WindowEventObserver, UserData
             // show soft keyboard (for IME composition window only) if a hardware keyboard is
             // present.
             restartInput();
-            if (!isHardwareKeyboardAttached())
+            if (!isHardwareKeyboardAttached()) {
                 hideKeyboard();
-            else
+            } else {
                 showSoftKeyboard();
+            }
         }
     }
 
@@ -615,6 +628,13 @@ public class ImeAdapterImpl implements ImeAdapter, WindowEventObserver, UserData
     public void onWindowFocusChanged(boolean gainFocus) {
         if (mInputConnectionFactory != null) {
             mInputConnectionFactory.onWindowFocusChanged(gainFocus);
+        }
+    }
+
+    @Override
+    public void onWindowAndroidChanged(WindowAndroid windowAndroid) {
+        if (mInputMethodManagerWrapper != null) {
+            mInputMethodManagerWrapper.onWindowAndroidChanged(windowAndroid);
         }
     }
 
@@ -739,7 +759,7 @@ public class ImeAdapterImpl implements ImeAdapter, WindowEventObserver, UserData
         }
     }
 
-    boolean performEditorAction(int actionCode) {
+    public boolean performEditorAction(int actionCode) {
         if (!isValid()) return false;
 
         // If mTextInputAction has been specified (indicating an enterKeyHint
@@ -749,10 +769,10 @@ public class ImeAdapterImpl implements ImeAdapter, WindowEventObserver, UserData
         if (mTextInputAction == TextInputAction.DEFAULT) {
             switch (actionCode) {
                 case EditorInfo.IME_ACTION_NEXT:
-                    advanceFocusInForm(WebFocusType.FORWARD);
+                    advanceFocusInForm(FocusType.FORWARD);
                     return true;
                 case EditorInfo.IME_ACTION_PREVIOUS:
-                    advanceFocusInForm(WebFocusType.BACKWARD);
+                    advanceFocusInForm(FocusType.BACKWARD);
                     return true;
             }
         }

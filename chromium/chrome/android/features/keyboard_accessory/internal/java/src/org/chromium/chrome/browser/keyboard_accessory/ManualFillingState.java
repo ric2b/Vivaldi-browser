@@ -7,8 +7,8 @@ package org.chromium.chrome.browser.keyboard_accessory;
 import android.util.SparseArray;
 
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
-import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.browser.keyboard_accessory.data.CachedProviderAdapter;
 import org.chromium.chrome.browser.keyboard_accessory.data.KeyboardAccessoryData;
 import org.chromium.chrome.browser.keyboard_accessory.data.KeyboardAccessoryData.AccessorySheetData;
@@ -25,7 +25,7 @@ import java.util.ArrayList;
  * and its sheet for the {@link WebContents} it is attached to.
  */
 class ManualFillingState {
-    private final static int[] TAB_ORDER = {
+    private static final int[] TAB_ORDER = {
             AccessoryTabType.PASSWORDS,
             AccessoryTabType.CREDIT_CARDS,
             AccessoryTabType.ADDRESSES,

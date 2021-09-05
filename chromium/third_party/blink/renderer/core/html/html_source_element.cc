@@ -34,14 +34,11 @@
 #include "third_party/blink/renderer/core/html/html_picture_element.h"
 #include "third_party/blink/renderer/core/html/media/html_media_element.h"
 #include "third_party/blink/renderer/core/html_names.h"
-#include "third_party/blink/renderer/core/trustedtypes/trusted_url.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 
 #define SOURCE_LOG_LEVEL 3
 
 namespace blink {
-
-using namespace html_names;
 
 class HTMLSourceElement::Listener final : public MediaQueryListListener {
  public:
@@ -62,19 +59,12 @@ class HTMLSourceElement::Listener final : public MediaQueryListListener {
 };
 
 HTMLSourceElement::HTMLSourceElement(Document& document)
-    : HTMLElement(kSourceTag, document),
+    : HTMLElement(html_names::kSourceTag, document),
       listener_(MakeGarbageCollected<Listener>(this)) {
   DVLOG(SOURCE_LOG_LEVEL) << "HTMLSourceElement - " << (void*)this;
 }
 
 HTMLSourceElement::~HTMLSourceElement() = default;
-
-const AttrNameToTrustedType& HTMLSourceElement::GetCheckedAttributeTypes()
-    const {
-  DEFINE_STATIC_LOCAL(AttrNameToTrustedType, attribute_map,
-                      ({{"src", SpecificTrustedType::kTrustedURL}}));
-  return attribute_map;
-}
 
 void HTMLSourceElement::CreateMediaQueryList(const AtomicString& media) {
   RemoveMediaQueryListListener();
@@ -83,14 +73,16 @@ void HTMLSourceElement::CreateMediaQueryList(const AtomicString& media) {
     return;
   }
 
-  scoped_refptr<MediaQuerySet> set = MediaQuerySet::Create(media);
+  ExecutionContext* execution_context = GetExecutionContext();
+  scoped_refptr<MediaQuerySet> set =
+      MediaQuerySet::Create(media, execution_context);
   media_query_list_ = MakeGarbageCollected<MediaQueryList>(
-      &GetDocument(), &GetDocument().GetMediaQueryMatcher(), set);
+      execution_context, &GetDocument().GetMediaQueryMatcher(), set);
   AddMediaQueryListListener();
 }
 
 void HTMLSourceElement::DidMoveToNewDocument(Document& old_document) {
-  CreateMediaQueryList(FastGetAttribute(kMediaAttr));
+  CreateMediaQueryList(FastGetAttribute(html_names::kMediaAttr));
   HTMLElement::DidMoveToNewDocument(old_document);
 }
 
@@ -98,7 +90,7 @@ Node::InsertionNotificationRequest HTMLSourceElement::InsertedInto(
     ContainerNode& insertion_point) {
   HTMLElement::InsertedInto(insertion_point);
   Element* parent = parentElement();
-  if (auto* media = ToHTMLMediaElementOrNull(parent))
+  if (auto* media = DynamicTo<HTMLMediaElement>(parent))
     media->SourceWasAdded(this);
 
   auto* html_picture_element = parent == insertion_point
@@ -115,7 +107,7 @@ void HTMLSourceElement::RemovedFrom(ContainerNode& removal_root) {
   bool was_removed_from_parent = !parent;
   if (was_removed_from_parent)
     parent = DynamicTo<Element>(&removal_root);
-  if (auto* media = ToHTMLMediaElementOrNull(parent))
+  if (auto* media = DynamicTo<HTMLMediaElement>(parent))
     media->SourceWasRemoved(this);
   if (auto* picture = DynamicTo<HTMLPictureElement>(parent)) {
     RemoveMediaQueryListListener();
@@ -136,11 +128,11 @@ void HTMLSourceElement::AddMediaQueryListListener() {
 }
 
 const AtomicString& HTMLSourceElement::type() const {
-  return getAttribute(kTypeAttr);
+  return FastGetAttribute(html_names::kTypeAttr);
 }
 
 void HTMLSourceElement::setType(const AtomicString& type) {
-  setAttribute(kTypeAttr, type);
+  setAttribute(html_names::kTypeAttr, type);
 }
 
 void HTMLSourceElement::ScheduleErrorEvent() {
@@ -170,7 +162,7 @@ bool HTMLSourceElement::MediaQueryMatches() const {
 }
 
 bool HTMLSourceElement::IsURLAttribute(const Attribute& attribute) const {
-  return attribute.GetName() == kSrcAttr ||
+  return attribute.GetName() == html_names::kSrcAttr ||
          HTMLElement::IsURLAttribute(attribute);
 }
 
@@ -178,10 +170,10 @@ void HTMLSourceElement::ParseAttribute(
     const AttributeModificationParams& params) {
   HTMLElement::ParseAttribute(params);
   const QualifiedName& name = params.name;
-  if (name == kMediaAttr)
+  if (name == html_names::kMediaAttr)
     CreateMediaQueryList(params.new_value);
-  if (name == kSrcsetAttr || name == kSizesAttr || name == kMediaAttr ||
-      name == kTypeAttr) {
+  if (name == html_names::kSrcsetAttr || name == html_names::kSizesAttr ||
+      name == html_names::kMediaAttr || name == html_names::kTypeAttr) {
     if (auto* picture = DynamicTo<HTMLPictureElement>(parentElement()))
       picture->SourceOrMediaChanged();
   }

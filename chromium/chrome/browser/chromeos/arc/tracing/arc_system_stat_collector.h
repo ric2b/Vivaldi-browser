@@ -81,11 +81,14 @@ class ArcSystemStatCollector {
              const base::TimeTicks& max_timestamp,
              ArcSystemModel* system_model);
 
+  base::TimeDelta max_interval() const { return max_interval_; }
+
  private:
   struct Sample;
   struct SystemReadersContext;
 
   struct RuntimeFrame {
+    base::TimeTicks timestamp;
     // read, written sectors and total time in milliseconds.
     int64_t zram_stat[base::size(kZramStatColumns) - 1] = {0};
     // total, available.
@@ -96,6 +99,12 @@ class ArcSystemStatCollector {
     int64_t cpu_temperature = std::numeric_limits<int>::min();
     // CPU Frequency.
     int64_t cpu_frequency = 0;
+    // CPU energy in micro-joules for Intel platforms.
+    int64_t cpu_energy = 0;
+    // GPU energy in micro-joules for some Intel platforms.
+    int64_t gpu_energy = 0;
+    // Memory energy in micro-joules for some Intel platforms.
+    int64_t memory_energy = 0;
   };
 
   // Schedules reading System stat files in |ReadSystemStatOnBackgroundThread|
@@ -130,6 +139,10 @@ class ArcSystemStatCollector {
 
   // Used to calculate delta.
   RuntimeFrame previous_frame_;
+
+  // Defines the maximum interval and it is used for circle buffer size
+  // calculation.
+  base::TimeDelta max_interval_;
 
   std::unique_ptr<SystemReadersContext> context_;
 

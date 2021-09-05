@@ -117,7 +117,9 @@ ScreenOrientation* ScreenOrientation::Create(LocalFrame* frame) {
 }
 
 ScreenOrientation::ScreenOrientation(LocalFrame* frame)
-    : ContextClient(frame), type_(kWebScreenOrientationUndefined), angle_(0) {}
+    : ExecutionContextClient(frame),
+      type_(kWebScreenOrientationUndefined),
+      angle_(0) {}
 
 ScreenOrientation::~ScreenOrientation() = default;
 
@@ -128,7 +130,7 @@ const WTF::AtomicString& ScreenOrientation::InterfaceName() const {
 ExecutionContext* ScreenOrientation::GetExecutionContext() const {
   if (!GetFrame())
     return nullptr;
-  return GetFrame()->GetDocument();
+  return GetFrame()->GetDocument()->ToExecutionContext();
 }
 
 String ScreenOrientation::type() const {
@@ -148,29 +150,26 @@ void ScreenOrientation::SetAngle(uint16_t angle) {
 }
 
 ScriptPromise ScreenOrientation::lock(ScriptState* state,
-                                      const AtomicString& lock_string) {
-  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(state);
-  ScriptPromise promise = resolver->Promise();
-
+                                      const AtomicString& lock_string,
+                                      ExceptionState& exception_state) {
   Document* document = GetFrame() ? GetFrame()->GetDocument() : nullptr;
 
   if (!document || !Controller()) {
-    auto* exception = MakeGarbageCollected<DOMException>(
+    exception_state.ThrowDOMException(
         DOMExceptionCode::kInvalidStateError,
         "The object is no longer associated to a document.");
-    resolver->Reject(exception);
-    return promise;
+    return ScriptPromise();
   }
 
-  if (document->IsSandboxed(WebSandboxFlags::kOrientationLock)) {
-    auto* exception = MakeGarbageCollected<DOMException>(
-        DOMExceptionCode::kSecurityError,
+  if (document->IsSandboxed(mojom::blink::WebSandboxFlags::kOrientationLock)) {
+    exception_state.ThrowSecurityError(
         "The document is sandboxed and lacks the "
         "'allow-orientation-lock' flag.");
-    resolver->Reject(exception);
-    return promise;
+    return ScriptPromise();
   }
 
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(state);
+  ScriptPromise promise = resolver->Promise();
   Controller()->lock(StringToOrientationLock(lock_string),
                      std::make_unique<LockOrientationCallback>(resolver));
   return promise;
@@ -190,9 +189,9 @@ ScreenOrientationControllerImpl* ScreenOrientation::Controller() {
   return ScreenOrientationControllerImpl::From(*GetFrame());
 }
 
-void ScreenOrientation::Trace(blink::Visitor* visitor) {
+void ScreenOrientation::Trace(Visitor* visitor) {
   EventTargetWithInlineData::Trace(visitor);
-  ContextClient::Trace(visitor);
+  ExecutionContextClient::Trace(visitor);
 }
 
 }  // namespace blink

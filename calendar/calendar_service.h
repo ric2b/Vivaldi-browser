@@ -119,6 +119,32 @@ class CalendarService : public KeyedService {
   typedef base::Callback<void(std::shared_ptr<CreateRecurrenceExceptionResult>)>
       CreateRecurrenceExceptionCallback;
 
+  typedef base::Callback<void(std::shared_ptr<GetAllNotificationResult>)>
+      GetAllNotificationsCallback;
+
+  typedef base::Callback<void(std::shared_ptr<CreateNotificationResult>)>
+      CreateNotificationCallback;
+
+  typedef base::Callback<void(std::shared_ptr<DeleteNotificationResult>)>
+      DeleteNotificationCallback;
+
+  typedef base::Callback<void(std::shared_ptr<InviteResult>)> InviteCallback;
+
+  typedef base::Callback<void(std::shared_ptr<DeleteInviteResult>)>
+      DeleteInviteCallback;
+
+  typedef base::Callback<void(std::shared_ptr<CreateAccountResult>)>
+      CreateAccountCallback;
+
+  typedef base::Callback<void(std::shared_ptr<DeleteAccountResult>)>
+      DeleteAccountCallback;
+
+  typedef base::Callback<void(std::shared_ptr<UpdateAccountResult>)>
+      UpdateAccountCallback;
+
+  typedef base::Callback<void(std::shared_ptr<AccountRows>)>
+      GetALLAccounsCallback;
+
   base::CancelableTaskTracker::TaskId GetAllEvents(
       const QueryCalendarCallback& callback,
       base::CancelableTaskTracker* tracker);
@@ -194,6 +220,54 @@ class CalendarService : public KeyedService {
       const CreateRecurrenceExceptionCallback& callback,
       base::CancelableTaskTracker* tracker);
 
+  base::CancelableTaskTracker::TaskId GetAllNotifications(
+      const GetAllNotificationsCallback& callback,
+      base::CancelableTaskTracker* tracker);
+
+  base::CancelableTaskTracker::TaskId CreateNotification(
+      NotificationRow notification,
+      const CreateNotificationCallback& callback,
+      base::CancelableTaskTracker* tracker);
+
+  base::CancelableTaskTracker::TaskId DeleteNotification(
+      NotificationID notification_id,
+      const DeleteNotificationCallback& callback,
+      base::CancelableTaskTracker* tracker);
+
+  base::CancelableTaskTracker::TaskId CreateInvite(
+      InviteRow invite,
+      const InviteCallback& callback,
+      base::CancelableTaskTracker* tracker);
+
+  base::CancelableTaskTracker::TaskId DeleteInvite(
+      InviteID invite_id,
+      const DeleteInviteCallback& callback,
+      base::CancelableTaskTracker* tracker);
+
+  base::CancelableTaskTracker::TaskId UpdateInvite(
+      UpdateInviteRow invite,
+      const InviteCallback& callback,
+      base::CancelableTaskTracker* tracker);
+
+  base::CancelableTaskTracker::TaskId CreateAccount(
+      AccountRow ev,
+      const CreateAccountCallback& callback,
+      base::CancelableTaskTracker* tracker);
+
+  base::CancelableTaskTracker::TaskId DeleteAccount(
+      AccountID id,
+      const DeleteAccountCallback& callback,
+      base::CancelableTaskTracker* tracker);
+
+  base::CancelableTaskTracker::TaskId UpdateAccount(
+      AccountRow invite,
+      const UpdateAccountCallback& callback,
+      base::CancelableTaskTracker* tracker);
+
+  base::CancelableTaskTracker::TaskId GetAllAccounts(
+      const GetALLAccounsCallback& callback,
+      base::CancelableTaskTracker* tracker);
+
  private:
   class CalendarBackendDelegate;
   friend class base::RefCountedThreadSafe<CalendarService>;
@@ -222,6 +296,9 @@ class CalendarService : public KeyedService {
   void OnEventTypeCreated(const EventTypeRow& row);
   void OnEventTypeDeleted(const EventTypeRow& row);
   void OnEventTypeChanged(const EventTypeRow& row);
+
+  void OnNotificationChanged(const NotificationRow& row);
+  void OnCalendarModified();
 
   void Cleanup();
 

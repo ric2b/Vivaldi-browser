@@ -12,15 +12,20 @@
 #include "base/callback.h"
 #include "base/feature_list.h"
 #include "base/no_destructor.h"
+#include "chrome/browser/banners/app_banner_manager.h"
 #include "chrome/browser/installable/installable_metrics.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/web_applications/components/install_manager.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
+#include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/browser/web_applications/components/web_app_install_utils.h"
+#include "chrome/browser/web_applications/components/web_app_utils.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/web_application_info.h"
+#include "content/public/browser/navigation_entry.h"
 
 namespace web_app {
 
@@ -40,9 +45,8 @@ void WebAppInstallDialogCallback(
                                  std::move(web_app_info),
                                  std::move(web_app_acceptance_callback));
   } else {
-    chrome::ShowBookmarkAppDialog(initiator_web_contents,
-                                  std::move(web_app_info),
-                                  std::move(web_app_acceptance_callback));
+    chrome::ShowWebAppDialog(initiator_web_contents, std::move(web_app_info),
+                             std::move(web_app_acceptance_callback));
   }
 }
 
@@ -65,17 +69,31 @@ void OnWebAppInstalled(WebAppInstalledCallback callback,
 bool CanCreateWebApp(const Browser* browser) {
   content::WebContents* web_contents =
       browser->tab_strip_model()->GetActiveWebContents();
-  auto* provider = WebAppProvider::GetForWebContents(web_contents);
-  if (!provider)
+  if (!WebAppProvider::GetForWebContents(web_contents))
     return false;
+  content::NavigationEntry* entry =
+      web_contents->GetController().GetLastCommittedEntry();
+  bool is_error_page =
+      entry && entry->GetPageType() == content::PAGE_TYPE_ERROR;
+  Profile* web_contents_profile =
+      Profile::FromBrowserContext(web_contents->GetBrowserContext());
+  banners::AppBannerManager* app_banner_manager =
+      banners::AppBannerManager::FromWebContents(web_contents);
+  bool externally_installed =
+      app_banner_manager && app_banner_manager->IsExternallyInstalledWebApp();
 
-  return provider->install_manager().CanInstallWebApp(web_contents);
+  return AreWebAppsUserInstallable(web_contents_profile) &&
+         IsValidWebAppUrl(web_contents->GetLastCommittedURL()) &&
+         !is_error_page && !externally_installed;
 }
 
-void CreateWebAppFromCurrentWebContents(
-    Browser* browser,
-    bool force_shortcut_app,
-    WebAppInstalledCallback installed_callback) {
+bool CanPopOutWebApp(Profile* profile) {
+  return AreWebAppsEnabled(profile) && !profile->IsGuestSession() &&
+         !profile->IsOffTheRecord();
+}
+
+void CreateWebAppFromCurrentWebContents(Browser* browser,
+                                        bool force_shortcut_app) {
   DCHECK(CanCreateWebApp(browser));
 
   content::WebContents* web_contents =
@@ -86,10 +104,12 @@ void CreateWebAppFromCurrentWebContents(
   WebappInstallSource install_source =
       InstallableMetrics::GetInstallSource(web_contents, InstallTrigger::MENU);
 
+  WebAppInstalledCallback callback = base::DoNothing();
+
   provider->install_manager().InstallWebAppFromManifestWithFallback(
       web_contents, force_shortcut_app, install_source,
       base::BindOnce(WebAppInstallDialogCallback, install_source),
-      base::BindOnce(OnWebAppInstalled, std::move(installed_callback)));
+      base::BindOnce(OnWebAppInstalled, std::move(callback)));
 }
 
 bool CreateWebAppFromManifest(content::WebContents* web_contents,

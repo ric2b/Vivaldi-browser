@@ -5,14 +5,27 @@
       "bounds": [2008, 1516],
       "contentsOpaque": true,
       "backgroundColor": "#FFFFFF",
-      "paintInvalidations": [
-        {
-          "object": "NGPhysicalBoxFragment LayoutNGBlockFlow DIV id='content'",
-          "rect": [8, 8, 2000, 1500],
-          "reason": "background"
-        }
+      "invalidations": [
+        [8, 8, 2000, 1500]
       ],
       "transform": 1
+    },
+    {
+      "name": "ContentsLayer for Horizontal Scrollbar Layer",
+      "position": [0, 585],
+      "bounds": [785, 15],
+      "contentsOpaque": true
+    },
+    {
+      "name": "ContentsLayer for Vertical Scrollbar Layer",
+      "position": [785, 0],
+      "bounds": [15, 585],
+      "contentsOpaque": true
+    },
+    {
+      "name": "Scroll Corner Layer",
+      "position": [785, 585],
+      "bounds": [15, 15]
     }
   ],
   "transforms": [

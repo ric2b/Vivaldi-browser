@@ -13,10 +13,10 @@ cr.define('app_management', function() {
      */
     static createWebPermissions(options) {
       const permissionIds = [
-        PwaPermissionType.CONTENT_SETTINGS_TYPE_GEOLOCATION,
-        PwaPermissionType.CONTENT_SETTINGS_TYPE_NOTIFICATIONS,
-        PwaPermissionType.CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC,
-        PwaPermissionType.CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA,
+        PwaPermissionType.GEOLOCATION,
+        PwaPermissionType.NOTIFICATIONS,
+        PwaPermissionType.MEDIASTREAM_MIC,
+        PwaPermissionType.MEDIASTREAM_CAMERA,
       ];
 
       const permissions = {};
@@ -164,7 +164,7 @@ cr.define('app_management', function() {
       const app = app_management.Store.getInstance().data.apps[appId];
 
       const newApp =
-          /** @type {App} */ (Object.assign({}, app, {isPinned: pinnedValue}));
+          /** @type {!App} */ (Object.assign({}, app, {isPinned: pinnedValue}));
       this.page.onAppChanged(newApp);
     }
 
@@ -180,7 +180,7 @@ cr.define('app_management', function() {
 
       const newPermissions = Object.assign({}, app.permissions);
       newPermissions[permission.permissionId] = permission;
-      const newApp = /** @type {App} */ (
+      const newApp = /** @type {!App} */ (
           Object.assign({}, app, {permissions: newPermissions}));
       this.page.onAppChanged(newApp);
     }
@@ -223,5 +223,6 @@ cr.define('app_management', function() {
     }
   }
 
+  // #cr_define_end
   return {FakePageHandler: FakePageHandler};
 });

@@ -15,9 +15,9 @@
 #include "chrome/browser/notifications/notification_permission_context.h"
 #include "chrome/browser/notifications/platform_notification_service_factory.h"
 #include "chrome/browser/notifications/platform_notification_service_impl.h"
-#include "chrome/browser/permissions/permission_uma_util.h"
-#include "chrome/browser/permissions/permission_util.h"
 #include "chrome/browser/profiles/profile.h"
+#include "components/permissions/permission_uma_util.h"
+#include "components/permissions/permission_util.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_event_dispatcher.h"
 #include "content/public/browser/permission_controller.h"
@@ -171,9 +171,10 @@ void PersistentNotificationHandler::OnClickCompleted(
 
 void PersistentNotificationHandler::DisableNotifications(Profile* profile,
                                                          const GURL& origin) {
-  PermissionUtil::ScopedRevocationReporter scoped_revocation_reporter(
-      profile, origin, origin, CONTENT_SETTINGS_TYPE_NOTIFICATIONS,
-      PermissionSourceUI::INLINE_SETTINGS);
+  permissions::PermissionUmaUtil::ScopedRevocationReporter
+      scoped_revocation_reporter(
+          profile, origin, origin, ContentSettingsType::NOTIFICATIONS,
+          permissions::PermissionSourceUI::INLINE_SETTINGS);
   NotificationPermissionContext::UpdatePermission(profile, origin,
                                                   CONTENT_SETTING_BLOCK);
 }

@@ -31,7 +31,9 @@ class MockControllerObserver : public ControllerObserver {
                void(const std::vector<UserAction>& user_actions));
   MOCK_METHOD1(OnCollectUserDataOptionsChanged,
                void(const CollectUserDataOptions* options));
-  MOCK_METHOD1(OnUserDataChanged, void(const UserData* user_data));
+  MOCK_METHOD2(OnUserDataChanged,
+               void(const UserData* user_data,
+                    UserData::FieldChange field_change));
   MOCK_METHOD1(OnDetailsChanged, void(const Details* details));
   MOCK_METHOD1(OnInfoBoxChanged, void(const InfoBox* info_box));
   MOCK_METHOD1(OnProgressChanged, void(int progress));
@@ -45,10 +47,15 @@ class MockControllerObserver : public ControllerObserver {
   MOCK_METHOD1(OnViewportModeChanged, void(ViewportMode mode));
   MOCK_METHOD1(OnPeekModeChanged,
                void(ConfigureBottomSheetProto::PeekMode peek_mode));
+  MOCK_METHOD0(OnExpandBottomSheet, void());
+  MOCK_METHOD0(OnCollapseBottomSheet, void());
   MOCK_METHOD1(OnOverlayColorsChanged,
                void(const UiDelegate::OverlayColors& colors));
-  MOCK_METHOD1(OnFormChanged, void(const FormProto* form));
+  MOCK_METHOD2(OnFormChanged,
+               void(const FormProto* form, const FormProto::Result* result));
   MOCK_METHOD1(OnClientSettingsChanged, void(const ClientSettings& settings));
+  MOCK_METHOD1(OnGenericUserInterfaceChanged,
+               void(const GenericUserInterfaceProto* generic_ui));
 };
 
 }  // namespace autofill_assistant

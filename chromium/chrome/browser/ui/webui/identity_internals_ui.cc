@@ -16,7 +16,6 @@
 #include "base/values.h"
 #include "chrome/browser/extensions/api/identity/identity_api.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/webui/localized_string.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/browser_resources.h"
 #include "chrome/grit/generated_resources.h"
@@ -186,7 +185,11 @@ std::string IdentityInternalsUIMessageHandler::GetStatus(
     const extensions::IdentityTokenCacheValue& token_cache_value) {
   switch (token_cache_value.status()) {
     case extensions::IdentityTokenCacheValue::CACHE_STATUS_ADVICE:
-      // Fallthrough to NOT FOUND case, as ADVICE is short lived.
+    case extensions::IdentityTokenCacheValue::CACHE_STATUS_REMOTE_CONSENT:
+    case extensions::IdentityTokenCacheValue::
+        CACHE_STATUS_REMOTE_CONSENT_APPROVED:
+      // Fallthrough to NOT FOUND case, as ADVICE, REMOTE_CONSENT and
+      // REMOTE_CONSENT_APPROVED are short lived.
     case extensions::IdentityTokenCacheValue::CACHE_STATUS_NOTFOUND:
       return "Not Found";
     case extensions::IdentityTokenCacheValue::CACHE_STATUS_TOKEN:

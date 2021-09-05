@@ -70,36 +70,6 @@ enum : size_t {
   kUVPlaneImageIndex = 1,
 };
 
-void RecordOverlayFullScreenTypes(const gfx::Rect& overlay_onscreen_rect) {
-  OverlayFullScreenTypes full_screen_type;
-  const gfx::Size& screen_size =
-      DirectCompositionSurfaceWin::GetOverlayMonitorSize();
-  const gfx::Size& overlay_onscreen_size = overlay_onscreen_rect.size();
-  const gfx::Point& origin = overlay_onscreen_rect.origin();
-
-  // The kFullScreenInWidthOnly type might be over counted, it's possible the
-  // video width fits the screen but it's still in a window mode.
-  if (screen_size.IsEmpty()) {
-    full_screen_type = OverlayFullScreenTypes::kNotAvailable;
-  } else if (origin.IsOrigin() && overlay_onscreen_size == screen_size)
-    full_screen_type = OverlayFullScreenTypes::kFullScreenMode;
-  else if (overlay_onscreen_size.width() > screen_size.width() ||
-           overlay_onscreen_size.height() > screen_size.height()) {
-    full_screen_type = OverlayFullScreenTypes::kOverSizedFullScreen;
-  } else if (origin.x() == 0 &&
-             overlay_onscreen_size.width() == screen_size.width()) {
-    full_screen_type = OverlayFullScreenTypes::kFullScreenInWidthOnly;
-  } else if (origin.y() == 0 &&
-             overlay_onscreen_size.height() == screen_size.height()) {
-    full_screen_type = OverlayFullScreenTypes::kFullScreenInHeightOnly;
-  } else {
-    full_screen_type = OverlayFullScreenTypes::kWindowMode;
-  }
-
-  UMA_HISTOGRAM_ENUMERATION("GPU.DirectComposition.OverlayFullScreenTypes",
-                            full_screen_type);
-}
-
 const char* ProtectedVideoTypeToString(gfx::ProtectedVideoType type) {
   switch (type) {
     case gfx::ProtectedVideoType::kClear:
@@ -409,7 +379,6 @@ gfx::Size SwapChainPresenter::CalculateSwapChainSize(
       swap_chain_size.set_height(overlay_monitor_size.height());
     }
   }
-  RecordOverlayFullScreenTypes(gfx::ToEnclosingRect(bounds));
 
   // 4:2:2 subsampled formats like YUY2 must have an even width, and 4:2:0
   // subsampled formats like NV12 must have an even width and height.
@@ -872,10 +841,13 @@ bool SwapChainPresenter::PresentToSwapChain(
     DCHECK(SUCCEEDED(hr));
     event.Wait();
   }
-
+  const bool use_swap_chain_tearing =
+      DirectCompositionSurfaceWin::AllowTearing();
+  UINT flags = use_swap_chain_tearing ? DXGI_PRESENT_ALLOW_TEARING : 0;
+  UINT interval = use_swap_chain_tearing ? 0 : 1;
   // Ignore DXGI_STATUS_OCCLUDED since that's not an error but only indicates
   // that the window is occluded and we can stop rendering.
-  HRESULT hr = swap_chain_->Present(1, 0);
+  HRESULT hr = swap_chain_->Present(interval, flags);
   if (FAILED(hr) && hr != DXGI_STATUS_OCCLUDED) {
     DLOG(ERROR) << "Present failed with error 0x" << std::hex << hr;
     return false;
@@ -1159,6 +1131,8 @@ bool SwapChainPresenter::ReallocateSwapChain(
   desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
   desc.Flags =
       DXGI_SWAP_CHAIN_FLAG_YUV_VIDEO | DXGI_SWAP_CHAIN_FLAG_FULLSCREEN_VIDEO;
+  if (DirectCompositionSurfaceWin::AllowTearing())
+    desc.Flags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
   if (IsProtectedVideo(protected_video_type))
     desc.Flags |= DXGI_SWAP_CHAIN_FLAG_DISPLAY_ONLY;
   if (protected_video_type == gfx::ProtectedVideoType::kHardwareProtected)
@@ -1205,6 +1179,8 @@ bool SwapChainPresenter::ReallocateSwapChain(
       desc.Flags |= DXGI_SWAP_CHAIN_FLAG_DISPLAY_ONLY;
     if (protected_video_type == gfx::ProtectedVideoType::kHardwareProtected)
       desc.Flags |= DXGI_SWAP_CHAIN_FLAG_HW_PROTECTED;
+    if (DirectCompositionSurfaceWin::AllowTearing())
+      desc.Flags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
 
     HRESULT hr = media_factory->CreateSwapChainForCompositionSurfaceHandle(
         d3d11_device_.Get(), swap_chain_handle_.Get(), &desc, nullptr,

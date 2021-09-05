@@ -17,15 +17,16 @@ import org.junit.rules.RuleChain;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.BaseJUnit4ClassRunner;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.test.ChromeBrowserTestRule;
 import org.chromium.components.dom_distiller.core.DistilledPagePrefs;
 import org.chromium.components.dom_distiller.core.DomDistillerService;
-import org.chromium.components.dom_distiller.core.FontFamily;
-import org.chromium.components.dom_distiller.core.Theme;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.content_public.browser.test.util.UiUtils;
+import org.chromium.dom_distiller.mojom.FontFamily;
+import org.chromium.dom_distiller.mojom.Theme;
 
 /**
  * Test class for {@link DistilledPagePrefs}.
@@ -47,8 +48,9 @@ public class DistilledPagePrefsTest {
 
     private void getDistilledPagePrefs() {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
+            // TODO (https://crbug.com/1063807):  Add incognito mode tests.
             DomDistillerService domDistillerService =
-                    DomDistillerServiceFactory.getForProfile(Profile.getLastUsedProfile());
+                    DomDistillerServiceFactory.getForProfile(Profile.getLastUsedRegularProfile());
             mDistilledPagePrefs = domDistillerService.getDistilledPagePrefs();
         });
     }
@@ -72,6 +74,7 @@ public class DistilledPagePrefsTest {
     @Test
     @SmallTest
     @Feature({"DomDistiller"})
+    @DisabledTest(message = "Test Suite flaky: crbug.com/1065452")
     public void testSingleObserverTheme() throws InterruptedException {
         TestingObserver testObserver = new TestingObserver();
         mDistilledPagePrefs.addObserver(testObserver);
@@ -123,6 +126,7 @@ public class DistilledPagePrefsTest {
     @Test
     @SmallTest
     @Feature({"DomDistiller"})
+    @DisabledTest(message = "Test Suite flaky: crbug.com/1065452")
     public void testSingleObserverFontFamily() throws InterruptedException {
         TestingObserver testObserver = new TestingObserver();
         mDistilledPagePrefs.addObserver(testObserver);
@@ -174,6 +178,7 @@ public class DistilledPagePrefsTest {
     @Test
     @SmallTest
     @Feature({"DomDistiller"})
+    @DisabledTest(message = "Test Suite flaky: crbug.com/1065452")
     public void testSingleObserverFontScaling() throws InterruptedException {
         TestingObserver testObserver = new TestingObserver();
         mDistilledPagePrefs.addObserver(testObserver);
@@ -228,27 +233,27 @@ public class DistilledPagePrefsTest {
     }
 
     private static class TestingObserver implements DistilledPagePrefs.Observer {
-        private @FontFamily int mFontFamily;
-        private @Theme int mTheme;
+        private int mFontFamily;
+        private int mTheme;
         private float mFontScaling;
 
         public TestingObserver() {}
 
-        public @FontFamily int getFontFamily() {
+        public int getFontFamily() {
             return mFontFamily;
         }
 
         @Override
-        public void onChangeFontFamily(@FontFamily int font) {
+        public void onChangeFontFamily(int font) {
             mFontFamily = font;
         }
 
-        public @Theme int getTheme() {
+        public int getTheme() {
             return mTheme;
         }
 
         @Override
-        public void onChangeTheme(@Theme int theme) {
+        public void onChangeTheme(int theme) {
             mTheme = theme;
         }
 
@@ -262,11 +267,11 @@ public class DistilledPagePrefsTest {
         }
     }
 
-    private void setFontFamily(final @FontFamily int font) {
+    private void setFontFamily(final int font) {
         TestThreadUtils.runOnUiThreadBlocking(() -> mDistilledPagePrefs.setFontFamily(font));
     }
 
-    private void setTheme(final @Theme int theme) {
+    private void setTheme(final int theme) {
         TestThreadUtils.runOnUiThreadBlocking(() -> mDistilledPagePrefs.setTheme(theme));
     }
 

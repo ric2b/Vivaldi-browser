@@ -39,10 +39,8 @@
 
 namespace blink {
 
-using namespace html_names;
-
 HTMLOptGroupElement::HTMLOptGroupElement(Document& document)
-    : HTMLElement(kOptgroupTag, document) {
+    : HTMLElement(html_names::kOptgroupTag, document) {
   EnsureUserAgentShadowRoot();
 }
 
@@ -55,21 +53,22 @@ HTMLOptGroupElement::~HTMLOptGroupElement() = default;
 
 // static
 bool HTMLOptGroupElement::CanAssignToOptGroupSlot(const Node& node) {
-  return node.HasTagName(kOptionTag) || node.HasTagName(kHrTag);
+  return node.HasTagName(html_names::kOptionTag) ||
+         node.HasTagName(html_names::kHrTag);
 }
 
 bool HTMLOptGroupElement::IsDisabledFormControl() const {
-  return FastHasAttribute(kDisabledAttr);
+  return FastHasAttribute(html_names::kDisabledAttr);
 }
 
 void HTMLOptGroupElement::ParseAttribute(
     const AttributeModificationParams& params) {
   HTMLElement::ParseAttribute(params);
 
-  if (params.name == kDisabledAttr) {
+  if (params.name == html_names::kDisabledAttr) {
     PseudoStateChanged(CSSSelector::kPseudoDisabled);
     PseudoStateChanged(CSSSelector::kPseudoEnabled);
-  } else if (params.name == kLabelAttr) {
+  } else if (params.name == html_names::kLabelAttr) {
     UpdateGroupLabel();
   }
 }
@@ -83,6 +82,30 @@ bool HTMLOptGroupElement::SupportsFocus() const {
 
 bool HTMLOptGroupElement::MatchesEnabledPseudoClass() const {
   return !IsDisabledFormControl();
+}
+
+void HTMLOptGroupElement::ChildrenChanged(const ChildrenChange& change) {
+  HTMLElement::ChildrenChanged(change);
+  auto* select = OwnerSelectElement();
+  if (!select)
+    return;
+  if (change.type == ChildrenChangeType::kElementInserted) {
+    if (auto* option = DynamicTo<HTMLOptionElement>(change.sibling_changed))
+      select->OptionInserted(*option, option->Selected());
+  } else if (change.type == ChildrenChangeType::kElementRemoved) {
+    if (auto* option = DynamicTo<HTMLOptionElement>(change.sibling_changed))
+      select->OptionRemoved(*option);
+  } else if (change.type == ChildrenChangeType::kAllChildrenRemoved) {
+    DCHECK(change.removed_nodes);
+    for (Node* node : *change.removed_nodes) {
+      if (auto* option = DynamicTo<HTMLOptionElement>(node))
+        select->OptionRemoved(*option);
+    }
+  }
+}
+
+bool HTMLOptGroupElement::ChildrenChangedAllChildrenRemovedNeedsList() const {
+  return true;
 }
 
 Node::InsertionNotificationRequest HTMLOptGroupElement::InsertedInto(
@@ -104,7 +127,7 @@ void HTMLOptGroupElement::RemovedFrom(ContainerNode& insertion_point) {
 }
 
 String HTMLOptGroupElement::GroupLabelText() const {
-  String item_text = getAttribute(kLabelAttr);
+  String item_text = FastGetAttribute(html_names::kLabelAttr);
 
   // In WinIE, leading and trailing whitespace is ignored in options and
   // optgroups. We match this behavior.
@@ -137,8 +160,8 @@ void HTMLOptGroupElement::DidAddUserAgentShadowRoot(ShadowRoot& root) {
   DEFINE_STATIC_LOCAL(AtomicString, label_padding, ("0 2px 1px 2px"));
   DEFINE_STATIC_LOCAL(AtomicString, label_min_height, ("1.2em"));
   auto* label = MakeGarbageCollected<HTMLDivElement>(GetDocument());
-  label->setAttribute(kRoleAttr, AtomicString("group"));
-  label->setAttribute(kAriaLabelAttr, AtomicString());
+  label->setAttribute(html_names::kRoleAttr, AtomicString("group"));
+  label->setAttribute(html_names::kAriaLabelAttr, AtomicString());
   label->SetInlineStyleProperty(CSSPropertyID::kPadding, label_padding);
   label->SetInlineStyleProperty(CSSPropertyID::kMinHeight, label_min_height);
   label->SetIdAttribute(shadow_element_names::OptGroupLabel());
@@ -152,7 +175,7 @@ void HTMLOptGroupElement::UpdateGroupLabel() {
   const String& label_text = GroupLabelText();
   HTMLDivElement& label = OptGroupLabelElement();
   label.setTextContent(label_text);
-  label.setAttribute(kAriaLabelAttr, AtomicString(label_text));
+  label.setAttribute(html_names::kAriaLabelAttr, AtomicString(label_text));
 }
 
 HTMLDivElement& HTMLOptGroupElement::OptGroupLabelElement() const {

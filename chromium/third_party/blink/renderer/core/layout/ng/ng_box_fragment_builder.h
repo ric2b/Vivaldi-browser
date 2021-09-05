@@ -9,7 +9,6 @@
 #include "third_party/blink/renderer/core/layout/ng/geometry/ng_border_edges.h"
 #include "third_party/blink/renderer/core/layout/ng/geometry/ng_box_strut.h"
 #include "third_party/blink/renderer/core/layout/ng/geometry/ng_fragment_geometry.h"
-#include "third_party/blink/renderer/core/layout/ng/inline/ng_baseline.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_fragment_items_builder.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_break_token.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_container_fragment_builder.h"
@@ -38,6 +37,7 @@ class CORE_EXPORT NGBoxFragmentBuilder final
                                    writing_mode,
                                    direction),
         box_type_(NGPhysicalFragment::NGBoxType::kNormalBox),
+        is_inline_formatting_context_(node.IsInline()),
         did_break_(false) {}
 
   // Build a fragment for LayoutObject without NGLayoutInputNode. LayoutInline
@@ -52,6 +52,7 @@ class CORE_EXPORT NGBoxFragmentBuilder final
                                    writing_mode,
                                    direction),
         box_type_(NGPhysicalFragment::NGBoxType::kNormalBox),
+        is_inline_formatting_context_(true),
         did_break_(false) {
     layout_object_ = layout_object;
   }
@@ -68,9 +69,8 @@ class CORE_EXPORT NGBoxFragmentBuilder final
     return *initial_fragment_geometry_;
   }
 
-  void SetUnconstrainedIntrinsicBlockSize(
-      LayoutUnit unconstrained_intrinsic_block_size) {
-    unconstrained_intrinsic_block_size_ = unconstrained_intrinsic_block_size;
+  void SetOverflowBlockSize(LayoutUnit overflow_block_size) {
+    overflow_block_size_ = overflow_block_size;
   }
   void SetIntrinsicBlockSize(LayoutUnit intrinsic_block_size) {
     intrinsic_block_size_ = intrinsic_block_size;
@@ -95,9 +95,12 @@ class CORE_EXPORT NGBoxFragmentBuilder final
 
   // Add a break token for a child that doesn't yet have any fragments, because
   // its first fragment is to be produced in the next fragmentainer. This will
-  // add a break token for the child, but no fragment.
+  // add a break token for the child, but no fragment. Break appeal should
+  // always be provided for regular in-flow children. For other types of
+  // children it may be omitted, if the break shouldn't affect the appeal of
+  // breaking inside this container.
   void AddBreakBeforeChild(NGLayoutInputNode child,
-                           NGBreakAppeal,
+                           base::Optional<NGBreakAppeal> appeal,
                            bool is_forced_break);
 
   // Add a layout result. This involves appending the fragment and its relative
@@ -117,6 +120,10 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   // the sum of the block-size of all previous fragments PLUS the one we're
   // building now.
   void SetConsumedBlockSize(LayoutUnit size) { consumed_block_size_ = size; }
+
+  void SetSequenceNumber(unsigned sequence_number) {
+    sequence_number_ = sequence_number;
+  }
 
   // Specify that we broke.
   //
@@ -194,12 +201,20 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   void SetColumnSpanner(NGBlockNode spanner) { column_spanner_ = spanner; }
   bool FoundColumnSpanner() const { return !!column_spanner_; }
 
+  void SetLinesUntilClamp(const base::Optional<int>& value) {
+    lines_until_clamp_ = value;
+  }
+
   void SetEarlyBreak(scoped_refptr<const NGEarlyBreak> breakpoint,
                      NGBreakAppeal appeal) {
     early_break_ = breakpoint;
     break_appeal_ = appeal;
   }
   bool HasEarlyBreak() const { return early_break_.get(); }
+  const NGEarlyBreak& EarlyBreak() const {
+    DCHECK(early_break_.get());
+    return *early_break_.get();
+  }
 
   // Set the highest break appeal found so far. This is either:
   // 1: The highest appeal of a breakpoint found by our container
@@ -233,6 +248,12 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   void SetIsFieldsetContainer() { is_fieldset_container_ = true; }
   void SetIsLegacyLayoutRoot() { is_legacy_layout_root_ = true; }
 
+  void SetIsInlineFormattingContext(bool is_inline_formatting_context) {
+    is_inline_formatting_context_ = is_inline_formatting_context;
+  }
+
+  void SetIsMathMLFraction() { is_math_fraction_ = true; }
+
   bool DidBreak() const { return did_break_; }
 
   void SetBorderEdges(NGBorderEdges border_edges) {
@@ -247,15 +268,16 @@ class CORE_EXPORT NGBoxFragmentBuilder final
     custom_layout_data_ = std::move(custom_layout_data);
   }
 
-  // Layout algorithms should call this function for each baseline request in
-  // the constraint space.
-  //
-  // If a request should use a synthesized baseline from the box rectangle,
-  // algorithms can omit the call.
-  //
-  // This function should be called at most once for a given algorithm/baseline
-  // type pair.
-  void AddBaseline(NGBaselineRequest, LayoutUnit);
+  // Sets the alignment baseline for this fragment.
+  void SetBaseline(LayoutUnit baseline) { baseline_ = baseline; }
+  base::Optional<LayoutUnit> Baseline() const { return baseline_; }
+
+  // Sets the last baseline for this fragment.
+  void SetLastBaseline(LayoutUnit baseline) {
+    DCHECK_EQ(space_->BaselineAlgorithmType(),
+              NGBaselineAlgorithmType::kInlineBlock);
+    last_baseline_ = baseline;
+  }
 
   // The |NGFragmentItemsBuilder| for the inline formatting context of this box.
   NGFragmentItemsBuilder* ItemsBuilder() { return items_builder_; }
@@ -263,8 +285,12 @@ class CORE_EXPORT NGBoxFragmentBuilder final
     items_builder_ = builder;
   }
 
-  // Inline containing block geometry is defined by two rectangles defined
-  // by fragments generated by LayoutInline.
+  // Returns offset for given child. DCHECK if child not found.
+  // Warning: Do not call unless necessary.
+  LogicalOffset GetChildOffset(const LayoutObject* child) const;
+
+  // Inline containing block geometry is defined by two rectangles, generated
+  // by fragments of the LayoutInline.
   struct InlineContainingBlockGeometry {
     DISALLOW_NEW();
     // Union of fragments generated on the first line.
@@ -276,7 +302,13 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   using InlineContainingBlockMap =
       HashMap<const LayoutObject*,
               base::Optional<InlineContainingBlockGeometry>>;
-  void ComputeInlineContainerFragments(
+
+  // Computes the geometry required for any inline containing blocks.
+  // |inline_containing_block_map| is a map whose keys specify which inline
+  // containing block geometry is required.
+  void ComputeInlineContainerGeometryFromFragmentTree(
+      InlineContainingBlockMap* inline_containing_block_map);
+  void ComputeInlineContainerGeometry(
       InlineContainingBlockMap* inline_containing_block_map);
 
 #if DCHECK_IS_ON()
@@ -297,7 +329,7 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   scoped_refptr<const NGLayoutResult> ToBoxFragment(WritingMode);
 
   const NGFragmentGeometry* initial_fragment_geometry_ = nullptr;
-  LayoutUnit unconstrained_intrinsic_block_size_ = kIndefiniteSize;
+  LayoutUnit overflow_block_size_ = kIndefiniteSize;
   LayoutUnit intrinsic_block_size_;
 
   NGFragmentItemsBuilder* items_builder_ = nullptr;
@@ -307,12 +339,15 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   NGPhysicalFragment::NGBoxType box_type_;
   bool is_fieldset_container_ = false;
   bool is_initial_block_size_indefinite_ = false;
+  bool is_inline_formatting_context_;
   bool did_break_;
   bool has_forced_break_ = false;
   bool is_new_fc_ = false;
   bool subtree_modified_margin_strut_ = false;
   bool has_seen_all_children_ = false;
+  bool is_math_fraction_ = false;
   LayoutUnit consumed_block_size_;
+  unsigned sequence_number_ = 0;
 
   LayoutUnit minimal_space_shortage_ = LayoutUnit::Max();
   LayoutUnit tallest_unbreakable_block_size_ = LayoutUnit::Min();
@@ -324,11 +359,12 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   // The break-after value of the previous in-flow sibling.
   EBreakBetween previous_break_after_ = EBreakBetween::kAuto;
 
-  NGBaselineList baselines_;
-
+  base::Optional<LayoutUnit> baseline_;
+  base::Optional<LayoutUnit> last_baseline_;
   NGBorderEdges border_edges_;
 
   scoped_refptr<SerializedScriptValue> custom_layout_data_;
+  base::Optional<int> lines_until_clamp_;
 
   friend class NGPhysicalBoxFragment;
   friend class NGLayoutResult;

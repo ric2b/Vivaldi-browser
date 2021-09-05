@@ -14,6 +14,7 @@
 #include "chrome/browser/net/profile_network_context_service_factory.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_observer.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/common/buildflags.h"
 #include "chrome/common/pref_names.h"
@@ -22,10 +23,13 @@
 #include "components/language/core/browser/pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
-#include "components/safe_browsing/common/safe_browsing_prefs.h"
+#include "components/safe_browsing/core/common/safe_browsing_prefs.h"
+#include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/sync/base/sync_prefs.h"
 #include "components/sync/driver/sync_driver_switches.h"
 #include "components/sync/driver/sync_service.h"
+#include "components/variations/variations_client.h"
+#include "components/variations/variations_http_header_provider.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_source.h"
 #include "content/public/browser/storage_partition.h"
@@ -67,6 +71,37 @@ base::LazyInstance<std::set<content::BrowserContext*>>::Leaky
 }  // namespace
 
 #endif  // DCHECK_IS_ON()
+
+namespace {
+
+class ChromeVariationsClient : public variations::VariationsClient {
+ public:
+  explicit ChromeVariationsClient(content::BrowserContext* browser_context)
+      : browser_context_(browser_context) {}
+
+  ~ChromeVariationsClient() override = default;
+
+  bool IsIncognito() const override {
+    return browser_context_->IsOffTheRecord();
+  }
+
+  std::string GetVariationsHeader() const override {
+    return variations::VariationsHttpHeaderProvider::GetInstance()
+        ->GetClientDataHeader(IsSignedIn());
+  }
+
+ private:
+  bool IsSignedIn() const {
+    Profile* profile = Profile::FromBrowserContext(browser_context_);
+    signin::IdentityManager* identity_manager =
+        IdentityManagerFactory::GetForProfile(profile);
+    return identity_manager && identity_manager->HasPrimaryAccount();
+  }
+
+  content::BrowserContext* browser_context_;
+};
+
+}  // namespace
 
 Profile::Profile()
     : restored_last_session_(false),
@@ -184,6 +219,8 @@ void Profile::RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
                                std::string());
   registry->RegisterStringPref(prefs::kAccessibilityCaptionsTextShadow,
                                std::string());
+  registry->RegisterBooleanPref(prefs::kLiveCaptionEnabled, false);
+  registry->RegisterFilePathPref(prefs::kSODAPath, base::FilePath());
 #if !defined(OS_ANDROID)
   registry->RegisterDictionaryPref(prefs::kPartitionDefaultZoomLevel);
   registry->RegisterDictionaryPref(prefs::kPartitionPerHostZoomLevels);
@@ -201,7 +238,7 @@ void Profile::RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   // in user's profile for other platforms as well.
   registry->RegisterStringPref(
       language::prefs::kApplicationLocale, std::string(),
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
   registry->RegisterStringPref(prefs::kApplicationLocaleBackup, std::string());
   registry->RegisterStringPref(prefs::kApplicationLocaleAccepted,
                                std::string());
@@ -274,6 +311,17 @@ bool Profile::IsSystemProfile() const {
   return is_system_profile_;
 }
 
+bool Profile::CanUseDiskWhenOffTheRecord() {
+#if defined(OS_CHROMEOS)
+  // Guest mode on ChromeOS uses an in-memory file system to store the profile
+  // in, so despite this being an off the record profile, it is still okay to
+  // store data on disk.
+  return IsGuestSession();
+#else
+  return false;
+#endif
+}
+
 bool Profile::ShouldRestoreOldSessionCookies() {
   return false;
 }
@@ -289,10 +337,6 @@ mojo::Remote<network::mojom::NetworkContext> Profile::CreateNetworkContext(
       ->CreateNetworkContext(in_memory, relative_partition_path);
 }
 
-identity::mojom::IdentityService* Profile::GetIdentityService() {
-  return nullptr;
-}
-
 bool Profile::IsNewProfile() {
 #if !defined(OS_ANDROID)
   // The profile is new if the preference files has just been created, except on
@@ -304,22 +348,6 @@ bool Profile::IsNewProfile() {
 
   return GetOriginalProfile()->GetPrefs()->GetInitializationStatus() ==
          PrefService::INITIALIZATION_STATUS_CREATED_NEW_PREF_STORE;
-}
-
-bool Profile::IsSyncAllowed() {
-  if (ProfileSyncServiceFactory::HasSyncService(this)) {
-    syncer::SyncService* sync_service =
-        ProfileSyncServiceFactory::GetForProfile(this);
-    return !sync_service->HasDisableReason(
-               syncer::SyncService::DISABLE_REASON_PLATFORM_OVERRIDE) &&
-           !sync_service->HasDisableReason(
-               syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY);
-  }
-
-  // No ProfileSyncService created yet - we don't want to create one, so just
-  // infer the accessible state by looking at prefs/command line flags.
-  syncer::SyncPrefs prefs(GetPrefs());
-  return switches::IsSyncAllowedByFlag() && !prefs.IsManaged();
 }
 
 void Profile::MaybeSendDestroyedNotification() {
@@ -377,4 +405,10 @@ void Profile::NotifyOffTheRecordProfileCreated(Profile* off_the_record) {
   DCHECK(off_the_record->IsOffTheRecord());
   for (auto& observer : observers_)
     observer.OnOffTheRecordProfileCreated(off_the_record);
+}
+
+variations::VariationsClient* Profile::GetVariationsClient() {
+  if (!chrome_variations_client_)
+    chrome_variations_client_ = std::make_unique<ChromeVariationsClient>(this);
+  return chrome_variations_client_.get();
 }

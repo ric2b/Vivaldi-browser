@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#include <string>
 #include <vector>
 
 #include "base/strings/string16.h"
@@ -26,27 +27,31 @@ class CONTENT_EXPORT BrowserAccessibilityPosition
  public:
   BrowserAccessibilityPosition();
   ~BrowserAccessibilityPosition() override;
+  BrowserAccessibilityPosition(const BrowserAccessibilityPosition& other);
 
   AXPositionInstance Clone() const override;
 
+  base::string16 GetText() const override;
   bool IsInLineBreak() const override;
   bool IsInTextObject() const override;
   bool IsInWhiteSpace() const override;
-  base::string16 GetText() const override;
 
  protected:
-  BrowserAccessibilityPosition(const BrowserAccessibilityPosition& other) =
-      default;
   void AnchorChild(int child_index,
                    AXTreeID* tree_id,
                    ui::AXNode::AXID* child_id) const override;
   int AnchorChildCount() const override;
+  int AnchorUnignoredChildCount() const override;
   int AnchorIndexInParent() const override;
   base::stack<BrowserAccessibility*> GetAncestorAnchors() const override;
+  BrowserAccessibility* GetLowestUnignoredAncestor() const override;
   void AnchorParent(AXTreeID* tree_id,
                     ui::AXNode::AXID* parent_id) const override;
   BrowserAccessibility* GetNodeInTree(AXTreeID tree_id,
                                       ui::AXNode::AXID node_id) const override;
+  int32_t GetAnchorID(BrowserAccessibility* node) const override;
+  AXTreeID GetTreeID(BrowserAccessibility* node) const override;
+
   bool IsEmbeddedObjectInParent() const override;
 
   bool IsInLineBreakingObject() const override;

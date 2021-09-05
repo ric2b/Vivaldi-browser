@@ -24,6 +24,7 @@
 
 #include "third_party/blink/renderer/core/layout/layout_embedded_content.h"
 
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
 #include "third_party/blink/renderer/core/exported/web_plugin_container_impl.h"
 #include "third_party/blink/renderer/core/frame/embedded_content_view.h"
@@ -41,7 +42,7 @@
 
 namespace blink {
 
-LayoutEmbeddedContent::LayoutEmbeddedContent(Element* element)
+LayoutEmbeddedContent::LayoutEmbeddedContent(HTMLFrameOwnerElement* element)
     : LayoutReplaced(element),
       // Reference counting is used to prevent the part from being destroyed
       // while inside the EmbeddedContentView code, which might not be able to
@@ -62,14 +63,13 @@ void LayoutEmbeddedContent::WillBeDestroyed() {
     cache->Remove(this);
   }
 
-  if (auto* frame_owner = DynamicTo<HTMLFrameOwnerElement>(GetNode()))
+  if (auto* frame_owner = GetFrameOwnerElement())
     frame_owner->SetEmbeddedContentView(nullptr);
 
   LayoutReplaced::WillBeDestroyed();
 }
 
-void LayoutEmbeddedContent::Destroy() {
-  WillBeDestroyed();
+void LayoutEmbeddedContent::DeleteThis() {
   // We call clearNode here because LayoutEmbeddedContent is ref counted. This
   // call to destroy may not actually destroy the layout object. We can keep it
   // around because of references from the LocalFrameView class. (The actual
@@ -77,7 +77,7 @@ void LayoutEmbeddedContent::Destroy() {
   // Release()).
   //
   // But, we've told the system we've destroyed the layoutObject, which happens
-  // when the DOM node is destroyed. So there is a good change the DOM node this
+  // when the DOM node is destroyed. So there is a good chance the DOM node this
   // object points too is invalid, so we have to clear the node so we make sure
   // we don't access it in the future.
   ClearNode();
@@ -95,13 +95,13 @@ FrameView* LayoutEmbeddedContent::ChildFrameView() const {
 WebPluginContainerImpl* LayoutEmbeddedContent::Plugin() const {
   EmbeddedContentView* embedded_content_view = GetEmbeddedContentView();
   if (embedded_content_view && embedded_content_view->IsPluginView())
-    return ToWebPluginContainerImpl(embedded_content_view);
+    return To<WebPluginContainerImpl>(embedded_content_view);
   return nullptr;
 }
 
 EmbeddedContentView* LayoutEmbeddedContent::GetEmbeddedContentView() const {
-  if (auto* frame_owner_element = DynamicTo<HTMLFrameOwnerElement>(GetNode()))
-    return frame_owner_element->OwnedEmbeddedContentView();
+  if (auto* frame_owner = GetFrameOwnerElement())
+    return frame_owner->OwnedEmbeddedContentView();
   return nullptr;
 }
 
@@ -124,12 +124,19 @@ bool LayoutEmbeddedContent::RequiresAcceleratedCompositing() const {
   if (plugin_view && plugin_view->CcLayer())
     return true;
 
-  auto* element = DynamicTo<HTMLFrameOwnerElement>(GetNode());
+  auto* element = GetFrameOwnerElement();
   if (!element)
     return false;
 
-  if (element->ContentFrame() && element->ContentFrame()->IsRemoteFrame())
-    return true;
+  if (Frame* content_frame = element->ContentFrame()) {
+    if (content_frame->IsRemoteFrame())
+      return true;
+    if (base::FeatureList::IsEnabled(
+            blink::features::kCompositeCrossOriginIframes) &&
+        content_frame->IsCrossOriginToParentFrame()) {
+      return true;
+    }
+  }
 
   if (Document* content_document = element->contentDocument()) {
     auto* layout_view = content_document->GetLayoutView();
@@ -268,7 +275,7 @@ void LayoutEmbeddedContent::StyleDidChange(StyleDifference diff,
     return;
   }
 
-  auto* frame_owner = DynamicTo<HTMLFrameOwnerElement>(GetNode());
+  auto* frame_owner = GetFrameOwnerElement();
   if (!frame_owner)
     return;
 
@@ -302,7 +309,7 @@ void LayoutEmbeddedContent::InvalidatePaint(
 }
 
 CursorDirective LayoutEmbeddedContent::GetCursor(const PhysicalOffset& point,
-                                                 Cursor& cursor) const {
+                                                 ui::Cursor& cursor) const {
   if (Plugin()) {
     // A plugin is responsible for setting the cursor when the pointer is over
     // it.
@@ -394,9 +401,12 @@ void LayoutEmbeddedContent::UpdateGeometry(
   // than reimplementing in each concrete subclass.
   LayoutView* layout_view = View();
   if (layout_view && layout_view->HasOverflowClip()) {
-    // Floored because the frame_rect in a content view is an IntRect. We may
-    // want to reevaluate that since scroll offsets/layout can be fractional.
-    frame_rect.Move(FlooredIntSize(layout_view->ScrolledContentOffset()));
+    // Floored because the PixelSnappedScrollOffset returns a ScrollOffset
+    // which is a float-type but frame_rect in a content view is an IntRect. We
+    // may want to reevaluate the use of pixel snapping that since scroll
+    // offsets/layout can be fractional.
+    frame_rect.Move(
+        FlooredIntSize(layout_view->PixelSnappedScrolledContentOffset()));
   }
 
   embedded_content_view.SetFrameRect(frame_rect);

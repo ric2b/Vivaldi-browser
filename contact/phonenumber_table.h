@@ -40,6 +40,7 @@ class PhonenumberTable {
   bool GetPhonenumbersForContact(ContactID contact_id,
                                  PhonenumberRows* phonenumbers);
   bool DoesPhonumberIdExist(PhonenumberID phonenumber_id, ContactID contact_id);
+  bool DeletePhoneNumbersForContact(ContactID contact_id);
 
  protected:
   virtual sql::Database& GetDB() = 0;

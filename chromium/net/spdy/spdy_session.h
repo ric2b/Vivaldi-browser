@@ -87,6 +87,13 @@ const spdy::SpdyStreamId kFirstStreamId = 1;
 const spdy::SpdyStreamId kLastStreamId = 0x7fffffff;
 
 // Maximum number of capped frames that can be queued at any time.
+// We measured how many queued capped frames were ever in the
+// SpdyWriteQueue at one given time between 2019-08 and 2020-02.
+// The numbers showed that in 99.94% of cases it would always
+// stay below 10, and that it would exceed 1000 only in
+// 10^-8 of cases. Therefore we picked 10000 as a number that will
+// virtually never be hit in practice, while still preventing an
+// attacker from growing this queue unboundedly.
 const int kSpdySessionMaxQueuedCappedFrames = 10000;
 
 class NetLog;
@@ -117,6 +124,24 @@ enum SpdyProtocolErrorDetails {
   SPDY_ERROR_INTERNAL_FRAMER_ERROR = 41,
   SPDY_ERROR_INVALID_CONTROL_FRAME_SIZE = 37,
   SPDY_ERROR_OVERSIZED_PAYLOAD = 40,
+  // HttpDecoder or HttpDecoderAdapter error.
+  SPDY_ERROR_HPACK_INDEX_VARINT_ERROR = 43,
+  SPDY_ERROR_HPACK_NAME_LENGTH_VARINT_ERROR = 44,
+  SPDY_ERROR_HPACK_VALUE_LENGTH_VARINT_ERROR = 45,
+  SPDY_ERROR_HPACK_NAME_TOO_LONG = 46,
+  SPDY_ERROR_HPACK_VALUE_TOO_LONG = 47,
+  SPDY_ERROR_HPACK_NAME_HUFFMAN_ERROR = 48,
+  SPDY_ERROR_HPACK_VALUE_HUFFMAN_ERROR = 49,
+  SPDY_ERROR_HPACK_MISSING_DYNAMIC_TABLE_SIZE_UPDATE = 50,
+  SPDY_ERROR_HPACK_INVALID_INDEX = 51,
+  SPDY_ERROR_HPACK_INVALID_NAME_INDEX = 52,
+  SPDY_ERROR_HPACK_DYNAMIC_TABLE_SIZE_UPDATE_NOT_ALLOWED = 53,
+  SPDY_ERROR_HPACK_INITIAL_DYNAMIC_TABLE_SIZE_UPDATE_IS_ABOVE_LOW_WATER_MARK =
+      54,
+  SPDY_ERROR_HPACK_DYNAMIC_TABLE_SIZE_UPDATE_IS_ABOVE_ACKNOWLEDGED_SETTING = 55,
+  SPDY_ERROR_HPACK_TRUNCATED_BLOCK = 56,
+  SPDY_ERROR_HPACK_FRAGMENT_TOO_LONG = 57,
+  SPDY_ERROR_HPACK_COMPRESSED_HEADER_SIZE_EXCEEDS_LIMIT = 58,
   // spdy::SpdyErrorCode mappings.
   STATUS_CODE_NO_ERROR = 41,
   STATUS_CODE_PROTOCOL_ERROR = 11,
@@ -147,7 +172,7 @@ enum SpdyProtocolErrorDetails {
   PROTOCOL_ERROR_RECEIVE_WINDOW_VIOLATION = 28,
 
   // Next free value.
-  NUM_SPDY_PROTOCOL_ERROR_DETAILS = 43,
+  NUM_SPDY_PROTOCOL_ERROR_DETAILS = 59,
 };
 SpdyProtocolErrorDetails NET_EXPORT_PRIVATE MapFramerErrorToProtocolError(
     http2::Http2DecoderAdapter::SpdyFramerError error);
@@ -187,7 +212,7 @@ enum class SpdyPushedStreamFate {
 
 // If these compile asserts fail then SpdyProtocolErrorDetails needs
 // to be updated with new values, as do the mapping functions above.
-static_assert(17 == http2::Http2DecoderAdapter::LAST_ERROR,
+static_assert(33 == http2::Http2DecoderAdapter::LAST_ERROR,
               "SpdyProtocolErrorDetails / Spdy Errors mismatch");
 static_assert(13 == spdy::SpdyErrorCode::ERROR_CODE_MAX,
               "SpdyProtocolErrorDetails / spdy::SpdyErrorCode mismatch");
@@ -198,6 +223,12 @@ class NET_EXPORT_PRIVATE SpdyStreamRequest {
   SpdyStreamRequest();
   // Calls CancelRequest().
   ~SpdyStreamRequest();
+
+  // Returns the time when ConfirmHandshake() completed, if this request had to
+  // wait for ConfirmHandshake().
+  base::TimeTicks confirm_handshake_end() const {
+    return confirm_handshake_end_;
+  }
 
   // Starts the request to create a stream. If OK is returned, then
   // ReleaseStream() may be called. If ERR_IO_PENDING is returned,
@@ -248,16 +279,7 @@ class NET_EXPORT_PRIVATE SpdyStreamRequest {
  private:
   friend class SpdySession;
 
-  enum State {
-    STATE_NONE,
-    STATE_WAIT_FOR_CONFIRMATION,
-    STATE_REQUEST_STREAM,
-  };
-
-  void OnIOComplete(int rv);
-  int DoLoop(int rv);
-  int DoWaitForConfirmation();
-  int DoRequestStream(int rv);
+  void OnConfirmHandshakeComplete(int rv);
 
   // Called by |session_| when the stream attempt has finished
   // successfully.
@@ -280,13 +302,12 @@ class NET_EXPORT_PRIVATE SpdyStreamRequest {
   base::WeakPtr<SpdySession> session_;
   base::WeakPtr<SpdyStream> stream_;
   GURL url_;
-  bool can_send_early_;
   RequestPriority priority_;
   SocketTag socket_tag_;
   NetLogWithSource net_log_;
   CompletionOnceCallback callback_;
   MutableNetworkTrafficAnnotationTag traffic_annotation_;
-  State next_state_;
+  base::TimeTicks confirm_handshake_end_;
 
   base::WeakPtrFactory<SpdyStreamRequest> weak_ptr_factory_{this};
 
@@ -403,6 +424,14 @@ class NET_EXPORT SpdySession : public BufferedSpdyFramerVisitorInterface,
   void EnqueueStreamWrite(const base::WeakPtr<SpdyStream>& stream,
                           spdy::SpdyFrameType frame_type,
                           std::unique_ptr<SpdyBufferProducer> producer);
+
+  // Returns true if this session is configured to send greased HTTP/2 frames.
+  // For more details on greased frames, see
+  // https://tools.ietf.org/html/draft-bishop-httpbis-grease-00.
+  bool GreasedFramesEnabled() const;
+
+  // Send greased frame, that is, a frame of reserved type.
+  void EnqueueGreasedFrame(const base::WeakPtr<SpdyStream>& stream);
 
   // Runs the handshake to completion to confirm the handshake with the server.
   // If ERR_IO_PENDING is returned, then when the handshake is confirmed,

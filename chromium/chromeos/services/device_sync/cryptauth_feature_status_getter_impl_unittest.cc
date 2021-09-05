@@ -59,15 +59,17 @@ const cryptauthv2::RequestContext& GetRequestContext() {
 
 cryptauthv2::DeviceFeatureStatus ConvertDeviceToDeviceFeatureStatus(
     const CryptAuthDevice& device,
-    const base::flat_set<std::string>& feature_types) {
+    const base::flat_set<CryptAuthFeatureType>& feature_types) {
   cryptauthv2::DeviceFeatureStatus device_feature_status;
   device_feature_status.set_device_id(device.instance_id());
-  for (const std::string& feature_type : feature_types) {
+
+  int64_t last_modified_time_offset_millis = 0;
+  for (CryptAuthFeatureType feature_type : feature_types) {
     bool is_supported_feature_type =
-        base::Contains(GetSupportedCryptAuthFeatureTypeStrings(), feature_type);
+        base::Contains(GetSupportedCryptAuthFeatureTypes(), feature_type);
 
     const auto it = device.feature_states.find(
-        CryptAuthFeatureTypeStringToSoftwareFeature(feature_type));
+        CryptAuthFeatureTypeToSoftwareFeature(feature_type));
     bool is_supported =
         it != device.feature_states.end() &&
         it->second != multidevice::SoftwareFeatureState::kNotSupported;
@@ -76,12 +78,22 @@ cryptauthv2::DeviceFeatureStatus ConvertDeviceToDeviceFeatureStatus(
 
     cryptauthv2::DeviceFeatureStatus::FeatureStatus* feature_status =
         device_feature_status.add_feature_statuses();
-    feature_status->set_feature_type(feature_type);
+
+    // The first feature type in the set will have the device.last_update_time
+    // as the last_modified_time_millis. All other feature types will have
+    // smaller last_modified_time_millis.
+    feature_status->set_last_modified_time_millis(
+        std::max(0L, device.last_update_time.ToJavaTime() -
+                         last_modified_time_offset_millis));
+    ++last_modified_time_offset_millis;
+
+    feature_status->set_feature_type(
+        CryptAuthFeatureTypeToString(feature_type));
     if (is_supported_feature_type) {
       feature_status->set_enabled(is_supported);
     } else {
-      EXPECT_TRUE(base::Contains(GetEnabledCryptAuthFeatureTypeStrings(),
-                                 feature_type));
+      EXPECT_TRUE(
+          base::Contains(GetEnabledCryptAuthFeatureTypes(), feature_type));
       feature_status->set_enabled(is_enabled);
     }
   }
@@ -110,9 +122,8 @@ class DeviceSyncCryptAuthFeatureStatusGetterImplTest
     auto mock_timer = std::make_unique<base::MockOneShotTimer>();
     timer_ = mock_timer.get();
 
-    feature_status_getter_ =
-        CryptAuthFeatureStatusGetterImpl::Factory::Get()->BuildInstance(
-            client_factory_.get(), std::move(mock_timer));
+    feature_status_getter_ = CryptAuthFeatureStatusGetterImpl::Factory::Create(
+        client_factory_.get(), std::move(mock_timer));
   }
 
   // MockCryptAuthClientFactory::Observer:
@@ -148,7 +159,7 @@ class DeviceSyncCryptAuthFeatureStatusGetterImplTest
               base::flat_set<std::string>(
                   batch_get_feature_statuses_request_->device_ids().begin(),
                   batch_get_feature_statuses_request_->device_ids().end()));
-    EXPECT_EQ(GetCryptAuthFeatureTypeStrings(),
+    EXPECT_EQ(GetAllCryptAuthFeatureTypeStrings(),
               base::flat_set<std::string>(
                   batch_get_feature_statuses_request_->feature_types().begin(),
                   batch_get_feature_statuses_request_->feature_types().end()));
@@ -156,7 +167,7 @@ class DeviceSyncCryptAuthFeatureStatusGetterImplTest
 
   void SendCorrectBatchGetFeatureStatusesResponse(
       const base::flat_set<std::string>& device_ids,
-      const base::flat_set<std::string>& feature_types) {
+      const base::flat_set<CryptAuthFeatureType>& feature_types) {
     cryptauthv2::BatchGetFeatureStatusesResponse response;
     for (const std::string& device_id : device_ids) {
       base::Optional<CryptAuthDevice> device = GetTestDeviceWithId(device_id);
@@ -187,13 +198,17 @@ class DeviceSyncCryptAuthFeatureStatusGetterImplTest
       const base::flat_set<std::string>& expected_device_ids,
       CryptAuthDeviceSyncResult::ResultCode expected_result_code) {
     ASSERT_TRUE(device_sync_result_code_);
-    EXPECT_EQ(expected_device_ids.size(), id_to_feature_status_map_.size());
+    EXPECT_EQ(expected_device_ids.size(),
+              id_to_device_software_feature_info_map_.size());
     EXPECT_EQ(expected_result_code, device_sync_result_code_);
 
     for (const std::string& id : expected_device_ids) {
-      const auto it = id_to_feature_status_map_.find(id);
-      ASSERT_TRUE(it != id_to_feature_status_map_.end());
-      EXPECT_EQ(GetTestDeviceWithId(id).feature_states, it->second);
+      const auto it = id_to_device_software_feature_info_map_.find(id);
+      ASSERT_TRUE(it != id_to_device_software_feature_info_map_.end());
+      EXPECT_EQ(GetTestDeviceWithId(id).feature_states,
+                it->second.feature_state_map);
+      EXPECT_EQ(GetTestDeviceWithId(id).last_update_time,
+                it->second.last_modified_time);
     }
   }
 
@@ -214,10 +229,11 @@ class DeviceSyncCryptAuthFeatureStatusGetterImplTest
   }
 
   void OnGetFeatureStatusesComplete(
-      const CryptAuthFeatureStatusGetter::IdToFeatureStatusMap&
-          id_to_feature_status_map,
+      const CryptAuthFeatureStatusGetter::IdToDeviceSoftwareFeatureInfoMap&
+          id_to_device_software_feature_info_map,
       CryptAuthDeviceSyncResult::ResultCode device_sync_result_code) {
-    id_to_feature_status_map_ = id_to_feature_status_map;
+    id_to_device_software_feature_info_map_ =
+        id_to_device_software_feature_info_map;
     device_sync_result_code_ = device_sync_result_code;
   }
 
@@ -227,7 +243,8 @@ class DeviceSyncCryptAuthFeatureStatusGetterImplTest
       batch_get_feature_statuses_success_callback_;
   CryptAuthClient::ErrorCallback batch_get_feature_statuses_failure_callback_;
 
-  CryptAuthFeatureStatusGetter::IdToFeatureStatusMap id_to_feature_status_map_;
+  CryptAuthFeatureStatusGetter::IdToDeviceSoftwareFeatureInfoMap
+      id_to_device_software_feature_info_map_;
   base::Optional<CryptAuthDeviceSyncResult::ResultCode>
       device_sync_result_code_;
 
@@ -245,7 +262,7 @@ TEST_F(DeviceSyncCryptAuthFeatureStatusGetterImplTest, Success) {
   VerifyBatchGetFeatureStatusesRequest(GetAllTestDeviceIds());
 
   SendCorrectBatchGetFeatureStatusesResponse(GetAllTestDeviceIds(),
-                                             GetCryptAuthFeatureTypeStrings());
+                                             GetAllCryptAuthFeatureTypes());
 
   VerifyGetFeatureStatuesResult(
       GetAllTestDeviceIds(), CryptAuthDeviceSyncResult::ResultCode::kSuccess);
@@ -262,7 +279,7 @@ TEST_F(DeviceSyncCryptAuthFeatureStatusGetterImplTest,
   // Include an unknown feature type string in the response. The unknown feature
   // type should be ignored.
   cryptauthv2::DeviceFeatureStatus status = ConvertDeviceToDeviceFeatureStatus(
-      GetLocalDeviceForTest(), GetCryptAuthFeatureTypeStrings());
+      GetLocalDeviceForTest(), GetAllCryptAuthFeatureTypes());
   status.add_feature_statuses()->set_feature_type("Unknown_feature_type");
 
   cryptauthv2::BatchGetFeatureStatusesResponse response;
@@ -283,7 +300,7 @@ TEST_F(DeviceSyncCryptAuthFeatureStatusGetterImplTest,
   VerifyBatchGetFeatureStatusesRequest(device_ids);
 
   cryptauthv2::DeviceFeatureStatus status = ConvertDeviceToDeviceFeatureStatus(
-      GetLocalDeviceForTest(), GetCryptAuthFeatureTypeStrings());
+      GetLocalDeviceForTest(), GetAllCryptAuthFeatureTypes());
 
   // The BetterTogether host feature is not supported for the local device.
   EXPECT_EQ(multidevice::SoftwareFeatureState::kNotSupported,
@@ -339,7 +356,7 @@ TEST_F(DeviceSyncCryptAuthFeatureStatusGetterImplTest,
   // Include features statuses for unrequested devices. These extra devices
   // should be ignored.
   SendCorrectBatchGetFeatureStatusesResponse(GetAllTestDeviceIds(),
-                                             GetCryptAuthFeatureTypeStrings());
+                                             GetAllCryptAuthFeatureTypes());
 
   VerifyGetFeatureStatuesResult(
       requested_device_ids,
@@ -357,7 +374,7 @@ TEST_F(DeviceSyncCryptAuthFeatureStatusGetterImplTest,
   // Send duplicate local device entries in the response. These duplicate
   // entries should be ignored.
   cryptauthv2::DeviceFeatureStatus status = ConvertDeviceToDeviceFeatureStatus(
-      GetLocalDeviceForTest(), GetCryptAuthFeatureTypeStrings());
+      GetLocalDeviceForTest(), GetAllCryptAuthFeatureTypes());
   cryptauthv2::BatchGetFeatureStatusesResponse response;
   response.add_device_feature_statuses()->CopyFrom(status);
   response.add_device_feature_statuses()->CopyFrom(status);
@@ -378,7 +395,7 @@ TEST_F(DeviceSyncCryptAuthFeatureStatusGetterImplTest,
   base::flat_set<std::string> returned_device_ids = {
       GetLocalDeviceMetadataPacketForTest().device_id()};
   SendCorrectBatchGetFeatureStatusesResponse(returned_device_ids,
-                                             GetCryptAuthFeatureTypeStrings());
+                                             GetAllCryptAuthFeatureTypes());
 
   VerifyGetFeatureStatuesResult(
       returned_device_ids,

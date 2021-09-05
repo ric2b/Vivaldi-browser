@@ -47,23 +47,23 @@ void OnNetworkConnectionError(
 
 // static
 std::unique_ptr<OtaActivator> OtaActivatorImpl::Factory::Create(
-    mojom::ActivationDelegatePtr activation_delegate,
+    mojo::PendingRemote<mojom::ActivationDelegate> activation_delegate,
     base::OnceClosure on_finished_callback,
     NetworkStateHandler* network_state_handler,
     NetworkConnectionHandler* network_connection_handler,
     NetworkActivationHandler* network_activation_handler,
     scoped_refptr<base::TaskRunner> task_runner) {
   if (g_test_factory) {
-    return g_test_factory->BuildInstance(
+    return g_test_factory->CreateInstance(
         std::move(activation_delegate), std::move(on_finished_callback),
         network_state_handler, network_connection_handler,
-        network_activation_handler, task_runner);
+        network_activation_handler, std::move(task_runner));
   }
 
   return base::WrapUnique(new OtaActivatorImpl(
       std::move(activation_delegate), std::move(on_finished_callback),
       network_state_handler, network_connection_handler,
-      network_activation_handler, task_runner));
+      network_activation_handler, std::move(task_runner)));
 }
 
 // static
@@ -74,7 +74,7 @@ void OtaActivatorImpl::Factory::SetFactoryForTesting(Factory* test_factory) {
 OtaActivatorImpl::Factory::~Factory() = default;
 
 OtaActivatorImpl::OtaActivatorImpl(
-    mojom::ActivationDelegatePtr activation_delegate,
+    mojo::PendingRemote<mojom::ActivationDelegate> activation_delegate,
     base::OnceClosure on_finished_callback,
     NetworkStateHandler* network_state_handler,
     NetworkConnectionHandler* network_connection_handler,
@@ -151,7 +151,7 @@ void OtaActivatorImpl::StartActivation() {
 
   // If |activation_delegate_| becomes disconnected, the activation request is
   // considered canceled.
-  activation_delegate_.set_connection_error_handler(base::BindOnce(
+  activation_delegate_.set_disconnect_handler(base::BindOnce(
       &OtaActivatorImpl::FinishActivationAttempt, base::Unretained(this),
       mojom::ActivationResult::kFailedToActivate));
 
@@ -221,9 +221,9 @@ void OtaActivatorImpl::AttemptToDiscoverSim() {
     NET_LOG(DEBUG) << "No SIM detected; restarting modem.";
     ShillDeviceClient::Get()->Reset(
         dbus::ObjectPath(cellular_device->path()),
-        base::Bind(&OtaActivatorImpl::AttemptNextActivationStep,
-                   weak_ptr_factory_.GetWeakPtr()),
-        base::Bind(&OnModemResetError));
+        base::BindOnce(&OtaActivatorImpl::AttemptNextActivationStep,
+                       weak_ptr_factory_.GetWeakPtr()),
+        base::BindOnce(&OnModemResetError));
     return;
   }
 

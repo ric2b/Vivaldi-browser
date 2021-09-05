@@ -17,8 +17,10 @@
 #include "ash/wm/splitview/split_view_observer.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
+#include "base/optional.h"
 #include "ui/aura/window_observer.h"
 #include "ui/display/display.h"
+#include "ui/display/display_observer.h"
 #include "ui/wm/public/activation_change_observer.h"
 
 namespace aura {
@@ -58,7 +60,8 @@ class ASH_EXPORT ScreenOrientationController
       public AccelerometerReader::Observer,
       public WindowTreeHostManager::Observer,
       public TabletModeObserver,
-      public SplitViewObserver {
+      public SplitViewObserver,
+      public display::DisplayObserver {
  public:
   // Observer that reports changes to the state of ScreenOrientationProvider's
   // rotation lock.
@@ -68,7 +71,7 @@ class ASH_EXPORT ScreenOrientationController
     virtual void OnUserRotationLockChanged() {}
 
    protected:
-    virtual ~Observer() {}
+    virtual ~Observer() = default;
   };
 
   // Controls the behavior after lock is applied to the window (when the window
@@ -102,12 +105,16 @@ class ASH_EXPORT ScreenOrientationController
   // Unlock all and set the rotation back to the user specified rotation.
   void UnlockAll();
 
-  bool ScreenOrientationProviderSupported() const;
-
   // Returns true if the user has locked the orientation to portrait, false if
   // the user has locked the orientation to landscape or not locked the
   // orientation.
   bool IsUserLockedOrientationPortrait();
+
+  // Returns the OrientationLockType that is applied on based on whether a
+  // rotation lock was requested for an app window, and whether the current
+  // system state allows it to lock the rotation (e.g. being in tablet mode, on
+  // the internal display, and splitview is inactive).
+  OrientationLockType GetCurrentAppRequestedOrientationLock() const;
 
   bool ignore_display_configuration_updates() const {
     return ignore_display_configuration_updates_;
@@ -140,6 +147,7 @@ class ASH_EXPORT ScreenOrientationController
       aura::Window* lost_active) override;
 
   // aura::WindowObserver:
+  void OnWindowHierarchyChanged(const HierarchyChangeParams& params) override;
   void OnWindowDestroying(aura::Window* window) override;
   void OnWindowVisibilityChanged(aura::Window* window, bool visible) override;
 
@@ -152,20 +160,27 @@ class ASH_EXPORT ScreenOrientationController
 
   // TabletModeObserver:
   void OnTabletModeStarted() override;
-  void OnTabletModeEnding() override;
   void OnTabletModeEnded() override;
+  void OnTabletPhysicalStateChanged() override;
 
   // SplitViewObserver:
   void OnSplitViewStateChanged(SplitViewController::State previous_state,
                                SplitViewController::State state) override;
 
+  // display::DisplayObserver:
+  void OnWillProcessDisplayChanges() override;
+  void OnDidProcessDisplayChanges() override;
+
  private:
   friend class ScreenOrientationControllerTestApi;
 
   struct LockInfo {
-    LockInfo() {}
-    LockInfo(OrientationLockType lock) : orientation_lock(lock) {}
+    LockInfo(OrientationLockType lock, aura::Window* root)
+        : orientation_lock(lock), root_window(root) {}
     OrientationLockType orientation_lock = OrientationLockType::kAny;
+    // Tracks the requesting window's root window and is updated whenever it
+    // changes.
+    aura::Window* root_window = nullptr;
     LockCompletionBehavior lock_completion_behavior =
         LockCompletionBehavior::None;
   };
@@ -208,9 +223,12 @@ class ASH_EXPORT ScreenOrientationController
   // preferences. These are then applied.
   void LoadDisplayRotationProperties();
 
-  // Determines the rotation lock, and orientation, for the currently active
-  // window, and applies it. If there is none, rotation lock will be removed.
-  void ApplyLockForActiveWindow();
+  // Determines the rotation lock, and orientation, for the top-most window on
+  // the internal display, and applies it. If there is none, rotation lock will
+  // be removed.
+  // TODO(oshima|afakhry): This behavior needs to be revised when Android
+  // implements multi-display support.
+  void ApplyLockForTopMostWindowOnInternalDisplay();
 
   // If there is a rotation lock that can be applied to window, applies it and
   // returns true. Otherwise returns false.
@@ -240,6 +258,16 @@ class ASH_EXPORT ScreenOrientationController
   // When true then accelerometer updates should not rotate the display.
   bool rotation_locked_;
 
+  // True while the displays are being updated by the display manager, so that
+  // we don't set the display rotation while this operation is in progress.
+  bool suspend_orientation_lock_refreshes_ = false;
+
+  // True if there was a request to refresh the orientation lock while the
+  // display manager is in the process of updating the displays. When the
+  // display manager is done, we check this value to see if we need to refresh
+  // the orientation lock.
+  bool is_orientation_lock_refresh_pending_ = false;
+
   // The orientation to which the current |rotation_locked_| was applied.
   OrientationLockType rotation_locked_orientation_;
 
@@ -249,6 +277,10 @@ class ASH_EXPORT ScreenOrientationController
 
   // The orientation of the device locked by the user.
   OrientationLockType user_locked_orientation_ = OrientationLockType::kAny;
+
+  // The currently applied orientation lock that was requested by an app if any.
+  base::Optional<OrientationLockType> current_app_requested_orientation_lock_ =
+      base::nullopt;
 
   // The current rotation set by ScreenOrientationController for the internal
   // display.

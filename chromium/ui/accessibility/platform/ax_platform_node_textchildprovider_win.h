@@ -5,6 +5,8 @@
 #ifndef UI_ACCESSIBILITY_PLATFORM_AX_PLATFORM_NODE_TEXTCHILDPROVIDER_WIN_H_
 #define UI_ACCESSIBILITY_PLATFORM_AX_PLATFORM_NODE_TEXTCHILDPROVIDER_WIN_H_
 
+#include <wrl/client.h>
+
 #include "ui/accessibility/ax_export.h"
 #include "ui/accessibility/platform/ax_platform_node_win.h"
 
@@ -28,13 +30,14 @@ class AX_EXPORT AXPlatformNodeTextChildProviderWin
   // control pattern. If the element does not have an ancestor which supports
   // the Text control pattern, nullptr is returned. Note, an element which
   // supports the Text control pattern is not an ancestor of itself.
-  STDMETHOD(get_TextContainer)(IRawElementProviderSimple** pRetVal) override;
+  IFACEMETHODIMP get_TextContainer(
+      IRawElementProviderSimple** pRetVal) override;
 
   // Retrieves a text range that encloses this child element. If the element
   // does not have an ancestor which supports the Text control pattern, nullptr
   // is returned. Note, an element which supports the Text control pattern is
   // not an ancestor of itself.
-  STDMETHOD(get_TextRange)(ITextRangeProvider** pRetVal) override;
+  IFACEMETHODIMP get_TextRange(ITextRangeProvider** pRetVal) override;
 
   // Helper function to get_TextContainer().
   static AXPlatformNodeWin* GetTextContainer(AXPlatformNodeWin* descendant);
@@ -42,7 +45,7 @@ class AX_EXPORT AXPlatformNodeTextChildProviderWin
  private:
   AXPlatformNodeWin* owner() const;
 
-  CComPtr<AXPlatformNodeWin> owner_;
+  Microsoft::WRL::ComPtr<AXPlatformNodeWin> owner_;
 };
 
 }  // namespace ui

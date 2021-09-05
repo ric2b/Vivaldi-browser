@@ -29,7 +29,6 @@ class ColorSpace;
 }  // namespace gfx
 
 namespace service_manager {
-class Connector;
 namespace mojom {
 class InterfaceProvider;
 }  // namespace mojom
@@ -57,9 +56,8 @@ class MEDIA_MOJO_EXPORT MojoMediaClient {
   // up tasks requiring the message loop must be completed before returning.
   virtual ~MojoMediaClient();
 
-  // Called exactly once before any other method. |connector| can be used by
-  // |this| to connect to other services. It is guaranteed to outlive |this|.
-  virtual void Initialize(service_manager::Connector* connector);
+  // Called exactly once before any other method.
+  virtual void Initialize();
 
   virtual std::unique_ptr<AudioDecoder> CreateAudioDecoder(
       scoped_refptr<base::SingleThreadTaskRunner> task_runner);
@@ -102,11 +100,11 @@ class MEDIA_MOJO_EXPORT MojoMediaClient {
   virtual std::unique_ptr<CdmFactory> CreateCdmFactory(
       service_manager::mojom::InterfaceProvider* host_interfaces);
 
-#if BUILDFLAG(ENABLE_LIBRARY_CDMS)
+#if BUILDFLAG(ENABLE_CDM_PROXY)
   // Creates a CdmProxy that proxies part of CDM functionalities to a different
   // entity, e.g. hardware CDM modules.
   virtual std::unique_ptr<CdmProxy> CreateCdmProxy(const base::Token& cdm_guid);
-#endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
+#endif  // BUILDFLAG(ENABLE_CDM_PROXY)
 
  protected:
   MojoMediaClient();

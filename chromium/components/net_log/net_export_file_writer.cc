@@ -16,6 +16,7 @@
 #include "base/files/scoped_file.h"
 #include "base/sequenced_task_runner.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/task_runner_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
@@ -54,29 +55,19 @@ NetExportFileWriter::DefaultLogPathResults SetUpDefaultLogPath(
   return results;
 }
 
-// If running on a POSIX OS, this will attempt to set all the permission flags
-// of the file at |path| to 1. Will return |path| on success and the empty path
-// on failure.
-base::FilePath GetPathWithAllPermissions(const base::FilePath& path) {
+base::FilePath GetPathIfExists(const base::FilePath& path) {
   if (!base::PathExists(path))
     return base::FilePath();
-#if defined(OS_POSIX)
-  return base::SetPosixFilePermissions(path, base::FILE_PERMISSION_MASK)
-             ? path
-             : base::FilePath();
-#else
   return path;
-#endif
 }
 
 scoped_refptr<base::SequencedTaskRunner> CreateFileTaskRunner() {
-  // The tasks posted to this sequenced task runner do synchronous File I/O for
-  // checking paths and setting permissions on files.
+  // The tasks posted to this sequenced task runner do synchronous File I/O.
   //
   // These operations can be skipped on shutdown since FileNetLogObserver's API
   // doesn't require things to have completed until notified of completion.
-  return base::CreateSequencedTaskRunner(
-      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE,
+  return base::ThreadPool::CreateSequencedTaskRunner(
+      {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
        base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
 }
 
@@ -87,7 +78,7 @@ NetExportFileWriter::NetExportFileWriter()
       log_exists_(false),
       log_capture_mode_known_(false),
       log_capture_mode_(net::NetLogCaptureMode::kDefault),
-      default_log_base_dir_getter_(base::Bind(&base::GetTempDir)) {}
+      default_log_base_dir_getter_(base::BindRepeating(&base::GetTempDir)) {}
 
 NetExportFileWriter::~NetExportFileWriter() {
   if (net_log_exporter_) {
@@ -120,9 +111,9 @@ void NetExportFileWriter::Initialize() {
 
   base::PostTaskAndReplyWithResult(
       file_task_runner_.get(), FROM_HERE,
-      base::Bind(&SetUpDefaultLogPath, default_log_base_dir_getter_),
-      base::Bind(&NetExportFileWriter::SetStateAfterSetUpDefaultLogPath,
-                 weak_ptr_factory_.GetWeakPtr()));
+      base::BindOnce(&SetUpDefaultLogPath, default_log_base_dir_getter_),
+      base::BindOnce(&NetExportFileWriter::SetStateAfterSetUpDefaultLogPath,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 void NetExportFileWriter::StartNetLog(
@@ -276,20 +267,20 @@ std::unique_ptr<base::DictionaryValue> NetExportFileWriter::GetState() const {
 }
 
 void NetExportFileWriter::GetFilePathToCompletedLog(
-    const FilePathCallback& path_callback) const {
+    FilePathCallback path_callback) const {
   DCHECK(thread_checker_.CalledOnValidThread());
   if (!(log_exists_ && state_ == STATE_NOT_LOGGING)) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::BindOnce(path_callback, base::FilePath()));
+        FROM_HERE, base::BindOnce(std::move(path_callback), base::FilePath()));
     return;
   }
 
   DCHECK(file_task_runner_);
   DCHECK(!log_path_.empty());
 
-  base::PostTaskAndReplyWithResult(
-      file_task_runner_.get(), FROM_HERE,
-      base::Bind(&GetPathWithAllPermissions, log_path_), path_callback);
+  base::PostTaskAndReplyWithResult(file_task_runner_.get(), FROM_HERE,
+                                   base::BindOnce(&GetPathIfExists, log_path_),
+                                   std::move(path_callback));
 }
 
 std::string NetExportFileWriter::CaptureModeToString(

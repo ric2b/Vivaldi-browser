@@ -4,7 +4,7 @@
 
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/sessions/session_tab_helper.h"
+#include "components/sessions/content/session_tab_helper.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/tools/vivaldi_tools.h"
@@ -20,7 +20,7 @@ ConfirmInfoBarWebProxy::ConfirmInfoBarWebProxy(
     content::WebContents* contents)
     : infobars::InfoBar(std::move(delegate)),
       profile_(Profile::FromBrowserContext(contents->GetBrowserContext())),
-      tab_id_(SessionTabHelper::IdForTab(contents).id()) {
+      tab_id_(sessions::SessionTabHelper::IdForTab(contents).id()) {
 }
 
 ConfirmInfoBarWebProxy::~ConfirmInfoBarWebProxy() {

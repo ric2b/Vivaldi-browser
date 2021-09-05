@@ -15,6 +15,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/task_runner_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
@@ -32,7 +33,6 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/resource_type.h"
 #include "net/base/file_stream.h"
 #include "net/base/filename_util.h"
 #include "net/base/io_buffer.h"
@@ -565,8 +565,8 @@ void OfflinePageRequestHandler::OnOfflinePagesAvailable(
     return;
   }
 
-  file_task_runner_ = base::CreateTaskRunner(
-      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE,
+  file_task_runner_ = base::ThreadPool::CreateTaskRunner(
+      {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
        base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
 
   // Start the file validation from the 1st offline page.

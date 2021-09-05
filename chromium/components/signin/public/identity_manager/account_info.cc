@@ -7,8 +7,8 @@
 
 #if defined(OS_ANDROID)
 #include "base/android/jni_string.h"
-#include "components/signin/internal/identity_manager/android/jni_headers/CoreAccountId_jni.h"
-#include "components/signin/internal/identity_manager/android/jni_headers/CoreAccountInfo_jni.h"
+#include "components/signin/public/android/jni_headers/CoreAccountId_jni.h"
+#include "components/signin/public/android/jni_headers/CoreAccountInfo_jni.h"
 #endif
 
 namespace {
@@ -141,7 +141,7 @@ base::android::ScopedJavaLocalRef<jobject> ConvertToJavaCoreAccountId(
     const CoreAccountId& account_id) {
   DCHECK(!account_id.empty());
   return signin::Java_CoreAccountId_Constructor(
-      env, base::android::ConvertUTF8ToJavaString(env, account_id.id));
+      env, base::android::ConvertUTF8ToJavaString(env, account_id.ToString()));
 }
 
 CoreAccountInfo ConvertFromJavaCoreAccountInfo(
@@ -153,16 +153,16 @@ CoreAccountInfo ConvertFromJavaCoreAccountInfo(
   account.gaia = base::android::ConvertJavaStringToUTF8(
       signin::Java_CoreAccountInfo_getGaiaId(env, j_core_account_info));
   account.email = base::android::ConvertJavaStringToUTF8(
-      signin::Java_CoreAccountInfo_getName(env, j_core_account_info));
+      signin::Java_CoreAccountInfo_getEmail(env, j_core_account_info));
   return account;
 }
 
 CoreAccountId ConvertFromJavaCoreAccountId(
     JNIEnv* env,
     const base::android::JavaRef<jobject>& j_core_account_id) {
-  CoreAccountId id;
-  id.id = base::android::ConvertJavaStringToUTF8(
-      signin::Java_CoreAccountId_getId(env, j_core_account_id));
+  CoreAccountId id =
+      CoreAccountId::FromString(base::android::ConvertJavaStringToUTF8(
+          signin::Java_CoreAccountId_getId(env, j_core_account_id)));
   return id;
 }
 #endif

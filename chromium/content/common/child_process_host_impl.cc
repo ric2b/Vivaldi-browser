@@ -7,12 +7,13 @@
 #include <limits>
 
 #include "base/atomic_sequence_num.h"
-#include "base/clang_coverage_buildflags.h"
+#include "base/clang_profiling_buildflags.h"
 #include "base/command_line.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/hash/hash.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_math.h"
 #include "base/path_service.h"
@@ -22,7 +23,6 @@
 #include "base/synchronization/lock.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
-#include "content/public/common/bind_interface_helpers.h"
 #include "content/public/common/child_process_host_delegate.h"
 #include "content/public/common/content_paths.h"
 #include "content/public/common/content_switches.h"
@@ -31,6 +31,7 @@
 #include "ipc/ipc_channel_mojo.h"
 #include "ipc/ipc_logging.h"
 #include "ipc/message_filter.h"
+#include "mojo/public/cpp/bindings/lib/message_quota_checker.h"
 #include "services/resource_coordinator/public/mojom/memory_instrumentation/constants.mojom.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 
@@ -41,8 +42,8 @@
 #include "content/common/mac_helpers.h"
 #endif  // OS_LINUX
 
-#if BUILDFLAG(CLANG_COVERAGE)
-#include "content/common/coverage_utils.h"
+#if BUILDFLAG(CLANG_PROFILING_INSIDE_SANDBOX)
+#include "content/common/profiling_utils.h"
 #endif
 
 namespace {
@@ -56,8 +57,9 @@ namespace content {
 
 // static
 std::unique_ptr<ChildProcessHost> ChildProcessHost::Create(
-    ChildProcessHostDelegate* delegate) {
-  return base::WrapUnique(new ChildProcessHostImpl(delegate));
+    ChildProcessHostDelegate* delegate,
+    IpcMode ipc_mode) {
+  return base::WrapUnique(new ChildProcessHostImpl(delegate, ipc_mode));
 }
 
 // static
@@ -109,8 +111,24 @@ base::FilePath ChildProcessHost::GetChildPath(int flags) {
   return child_path;
 }
 
-ChildProcessHostImpl::ChildProcessHostImpl(ChildProcessHostDelegate* delegate)
-    : delegate_(delegate), opening_channel_(false) {}
+ChildProcessHostImpl::ChildProcessHostImpl(ChildProcessHostDelegate* delegate,
+                                           IpcMode ipc_mode)
+    : ipc_mode_(ipc_mode), delegate_(delegate), opening_channel_(false) {
+  if (ipc_mode_ == IpcMode::kLegacy) {
+    // In legacy mode, we only have an IPC Channel. Bind ChildProcess to a
+    // disconnected pipe so it quietly discards messages.
+    ignore_result(child_process_.BindNewPipeAndPassReceiver());
+    channel_ = IPC::ChannelMojo::Create(
+        mojo_invitation_->AttachMessagePipe(0), IPC::Channel::MODE_SERVER, this,
+        base::ThreadTaskRunnerHandle::Get(),
+        base::ThreadTaskRunnerHandle::Get(),
+        mojo::internal::MessageQuotaChecker::MaybeCreate());
+  } else if (ipc_mode_ == IpcMode::kNormal) {
+    child_process_.Bind(mojo::PendingRemote<mojom::ChildProcess>(
+        mojo_invitation_->AttachMessagePipe(0), /*version=*/0));
+    child_process_->Initialize(bootstrap_receiver_.BindNewPipeAndPassRemote());
+  }
+}
 
 ChildProcessHostImpl::~ChildProcessHostImpl() {
   // If a channel was never created than it wasn't registered and the filters
@@ -132,12 +150,6 @@ void ChildProcessHostImpl::AddFilter(IPC::MessageFilter* filter) {
     filter->OnFilterAdded(channel_.get());
 }
 
-void ChildProcessHostImpl::BindInterface(
-    const std::string& interface_name,
-    mojo::ScopedMessagePipeHandle interface_pipe) {
-  return delegate_->BindInterface(interface_name, std::move(interface_pipe));
-}
-
 void ChildProcessHostImpl::BindReceiver(mojo::GenericPendingReceiver receiver) {
   child_process_->BindReceiver(std::move(receiver));
 }
@@ -152,12 +164,28 @@ void ChildProcessHostImpl::ForceShutdown() {
   child_process_->ProcessShutdown();
 }
 
+base::Optional<mojo::OutgoingInvitation>&
+ChildProcessHostImpl::GetMojoInvitation() {
+  return mojo_invitation_;
+}
+
 void ChildProcessHostImpl::CreateChannelMojo() {
-  mojo::MessagePipe pipe;
-  BindInterface(IPC::mojom::ChannelBootstrap::Name_, std::move(pipe.handle1));
-  channel_ = IPC::ChannelMojo::Create(
-      std::move(pipe.handle0), IPC::Channel::MODE_SERVER, this,
-      base::ThreadTaskRunnerHandle::Get(), base::ThreadTaskRunnerHandle::Get());
+  // If in legacy mode, |channel_| is already initialized by the constructor
+  // not bound through the ChildProcess API.
+  if (ipc_mode_ != IpcMode::kLegacy) {
+    DCHECK(!channel_);
+    DCHECK_EQ(ipc_mode_, IpcMode::kNormal);
+    DCHECK(child_process_);
+
+    mojo::PendingRemote<IPC::mojom::ChannelBootstrap> bootstrap;
+    auto bootstrap_receiver = bootstrap.InitWithNewPipeAndPassReceiver();
+    child_process_->BootstrapLegacyIpc(std::move(bootstrap_receiver));
+    channel_ = IPC::ChannelMojo::Create(
+        bootstrap.PassPipe(), IPC::Channel::MODE_SERVER, this,
+        base::ThreadTaskRunnerHandle::Get(),
+        base::ThreadTaskRunnerHandle::Get(),
+        mojo::internal::MessageQuotaChecker::MaybeCreate());
+  }
   DCHECK(channel_);
 
   bool initialized = InitChannel();
@@ -173,25 +201,14 @@ bool ChildProcessHostImpl::InitChannel() {
 
   delegate_->OnChannelInitialized(channel_.get());
 
-  // We want to bind this interface as early as possible, but the constructor is
-  // too early. |delegate_| may not be fully initialized at that point and thus
-  // may be unable to properly fulfill the BindInterface() call. Instead we bind
-  // here since the |delegate_| has already been initialized and this is the
-  // first potential use of the interface.
-  mojo::Remote<mojom::ChildProcess> bootstrap;
-  content::BindInterface(
-      this,
-      mojom::ChildProcessRequest(child_process_.BindNewPipeAndPassReceiver()));
-  child_process_->Initialize(bootstrap_receiver_.BindNewPipeAndPassRemote());
-
   // Make sure these messages get sent first.
 #if BUILDFLAG(IPC_MESSAGE_LOG_ENABLED)
   bool enabled = IPC::Logging::GetInstance()->Enabled();
   child_process_->SetIPCLoggingEnabled(enabled);
 #endif
 
-#if BUILDFLAG(CLANG_COVERAGE)
-  child_process_->SetCoverageFile(OpenCoverageFile());
+#if BUILDFLAG(CLANG_PROFILING_INSIDE_SANDBOX)
+  child_process_->SetProfilingFile(OpenProfilingFile());
 #endif
 
   opening_channel_ = true;
@@ -238,8 +255,8 @@ uint64_t ChildProcessHostImpl::ChildProcessUniqueIdToTracingProcessId(
 
   // The hash value is incremented so that the tracing id is never equal to
   // MemoryDumpManager::kInvalidTracingProcessId.
-  return static_cast<uint64_t>(
-             base::Hash(&child_process_id, sizeof(child_process_id))) +
+  return static_cast<uint64_t>(base::PersistentHash(
+             base::as_bytes(base::make_span(&child_process_id, 1)))) +
          1;
 }
 

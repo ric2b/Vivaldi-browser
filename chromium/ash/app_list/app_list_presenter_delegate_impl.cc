@@ -20,9 +20,11 @@
 #include "ash/shelf/back_button.h"
 #include "ash/shelf/home_button.h"
 #include "ash/shelf/shelf_layout_manager.h"
+#include "ash/shelf/shelf_navigation_widget.h"
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
 #include "ash/system/status_area_widget.h"
+#include "ash/wm/container_finder.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/command_line.h"
 #include "chromeos/constants/chromeos_switches.h"
@@ -39,11 +41,11 @@ namespace {
 // Whether the shelf is oriented on the side, not on the bottom.
 bool IsSideShelf(Shelf* shelf) {
   switch (shelf->alignment()) {
-    case SHELF_ALIGNMENT_BOTTOM:
-    case SHELF_ALIGNMENT_BOTTOM_LOCKED:
+    case ShelfAlignment::kBottom:
+    case ShelfAlignment::kBottomLocked:
       return false;
-    case SHELF_ALIGNMENT_LEFT:
-    case SHELF_ALIGNMENT_RIGHT:
+    case ShelfAlignment::kLeft:
+    case ShelfAlignment::kRight:
       return true;
   }
   return false;
@@ -53,15 +55,17 @@ bool IsSideShelf(Shelf* shelf) {
 bool IsShelfBackgroundTypeWithRoundedCorners(
     ShelfBackgroundType background_type) {
   switch (background_type) {
-    case SHELF_BACKGROUND_DEFAULT:
-    case SHELF_BACKGROUND_APP_LIST:
-    case SHELF_BACKGROUND_OVERVIEW:
+    case ShelfBackgroundType::kDefaultBg:
+    case ShelfBackgroundType::kAppList:
+    case ShelfBackgroundType::kOverview:
       return true;
-    case SHELF_BACKGROUND_MAXIMIZED:
-    case SHELF_BACKGROUND_MAXIMIZED_WITH_APP_LIST:
-    case SHELF_BACKGROUND_OOBE:
-    case SHELF_BACKGROUND_LOGIN:
-    case SHELF_BACKGROUND_LOGIN_NONBLURRED_WALLPAPER:
+    case ShelfBackgroundType::kMaximized:
+    case ShelfBackgroundType::kMaximizedWithAppList:
+    case ShelfBackgroundType::kOobe:
+    case ShelfBackgroundType::kHomeLauncher:
+    case ShelfBackgroundType::kLogin:
+    case ShelfBackgroundType::kLoginNonBlurredWallpaper:
+    case ShelfBackgroundType::kInApp:
       return false;
   }
 }
@@ -150,9 +154,14 @@ bool AppListPresenterDelegateImpl::GetOnScreenKeyboardShown() {
   return controller_->onscreen_keyboard_shown();
 }
 
+aura::Window* AppListPresenterDelegateImpl::GetContainerForWindow(
+    aura::Window* window) {
+  return ash::GetContainerForWindow(window);
+}
+
 aura::Window* AppListPresenterDelegateImpl::GetRootWindowForDisplayId(
     int64_t display_id) {
-  return ash::Shell::Get()->GetRootWindowForDisplayId(display_id);
+  return Shell::Get()->GetRootWindowForDisplayId(display_id);
 }
 
 void AppListPresenterDelegateImpl::OnVisibilityChanged(bool visible,
@@ -165,8 +174,9 @@ void AppListPresenterDelegateImpl::OnVisibilityWillChange(bool visible,
   controller_->OnVisibilityWillChange(visible, display_id);
 }
 
-bool AppListPresenterDelegateImpl::IsVisible() {
-  return controller_->IsVisible();
+bool AppListPresenterDelegateImpl::IsVisible(
+    const base::Optional<int64_t>& display_id) {
+  return controller_->IsVisible(display_id);
 }
 
 void AppListPresenterDelegateImpl::OnDisplayMetricsChanged(
@@ -212,23 +222,27 @@ void AppListPresenterDelegateImpl::ProcessLocatedEvent(
       return;
   }
 
-  // If the event happened on the home button, it'll get handled by the
+  // If the event happened on the home button's widget, it'll get handled by the
   // button.
   Shelf* shelf = Shelf::ForWindow(target);
-  HomeButton* home_button = shelf->shelf_widget()->GetHomeButton();
+  HomeButton* home_button = shelf->navigation_widget()->GetHomeButton();
   if (home_button && home_button->GetWidget() &&
-      target == home_button->GetWidget()->GetNativeWindow() &&
-      home_button->bounds().Contains(event->location())) {
-    return;
+      target == home_button->GetWidget()->GetNativeWindow()) {
+    gfx::Point location_in_home_button = event->location();
+    views::View::ConvertPointFromWidget(home_button, &location_in_home_button);
+    if (home_button->HitTestPoint(location_in_home_button))
+      return;
   }
 
   // If the event happened on the back button, it'll get handled by the
   // button.
-  BackButton* back_button = shelf->shelf_widget()->GetBackButton();
+  BackButton* back_button = shelf->navigation_widget()->GetBackButton();
   if (back_button && back_button->GetWidget() &&
-      target == back_button->GetWidget()->GetNativeWindow() &&
-      back_button->bounds().Contains(event->location())) {
-    return;
+      target == back_button->GetWidget()->GetNativeWindow()) {
+    gfx::Point location_in_back_button = event->location();
+    views::View::ConvertPointFromWidget(back_button, &location_in_back_button);
+    if (back_button->HitTestPoint(location_in_back_button))
+      return;
   }
 
   aura::Window* window = view_->GetWidget()->GetNativeView()->parent();
@@ -236,32 +250,20 @@ void AppListPresenterDelegateImpl::ProcessLocatedEvent(
       !switches::ShouldNotDismissOnBlur() && !IsTabletMode()) {
     const aura::Window* status_window =
         shelf->shelf_widget()->status_area_widget()->GetNativeWindow();
-    // Don't dismiss the auto-hide shelf if event happened in status area. Then
-    // the event can still be propagated to the status area tray to open the
-    // corresponding tray bubble.
-    base::Optional<Shelf::ScopedAutoHideLock> auto_hide_lock;
-    if (status_window && status_window->Contains(target))
-      auto_hide_lock.emplace(shelf);
-
-    // Keep the app list open if the event happened in the shelf area.
     const aura::Window* hotseat_window =
-        shelf->shelf_widget()->hotseat_widget()->GetNativeWindow();
-    if (!hotseat_window || !hotseat_window->Contains(target))
-      presenter_->Dismiss(event->time_stamp());
-  }
-
-  if (IsTabletMode() && presenter_->IsShowingEmbeddedAssistantUI()) {
-    auto* contents_view =
-        presenter_->GetView()->app_list_main_view()->contents_view();
-    if (contents_view->bounds().Contains(event->location())) {
-      // Keep Assistant open if event happen inside.
-      return;
+        shelf->hotseat_widget()->GetNativeWindow();
+    // Don't dismiss the auto-hide shelf if event happened in status area or the
+    // hotseat. Then the event can still be propagated.
+    base::Optional<Shelf::ScopedAutoHideLock> auto_hide_lock;
+    if ((status_window && status_window->Contains(target)) ||
+        (hotseat_window && hotseat_window->Contains(target))) {
+      auto_hide_lock.emplace(shelf);
     }
-
-    // Touching anywhere else closes Assistant.
-    view_->Back();
-    view_->search_box_view()->ClearSearch();
-    view_->search_box_view()->SetSearchBoxActive(false, ui::ET_UNKNOWN);
+    // Record the current AppListViewState to be used later for metrics. The
+    // AppListViewState will change on app launch, so this will record the
+    // AppListViewState before the app was launched.
+    controller_->RecordAppListState();
+    presenter_->Dismiss(event->time_stamp());
   }
 }
 
@@ -293,11 +295,15 @@ void AppListPresenterDelegateImpl::OnKeyEvent(ui::KeyEvent* event) {
     return;
 
   // If the home launcher is not shown in tablet mode, ignore events.
-  if (IsTabletMode() && !IsVisible())
+  if (IsTabletMode() && !IsVisible(base::nullopt))
     return;
 
   // Don't absorb the first event for the search box while it is open
   if (view_->search_box_view()->is_search_box_active())
+    return;
+
+  // Don't absorb the first event when showing Assistant.
+  if (view_->IsShowingEmbeddedAssistantUI())
     return;
 
   // Arrow keys or Tab will engage the traversal mode.

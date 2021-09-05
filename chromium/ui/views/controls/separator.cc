@@ -4,6 +4,8 @@
 
 #include "ui/views/controls/separator.h"
 
+#include <algorithm>
+
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/gfx/canvas.h"
@@ -11,9 +13,6 @@
 #include "ui/native_theme/native_theme.h"
 
 namespace views {
-
-// static
-const int Separator::kThickness = 1;
 
 Separator::Separator() = default;
 

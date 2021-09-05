@@ -146,7 +146,8 @@ class PLATFORM_EXPORT IdleHelper : public base::TaskObserver,
   base::TimeTicks NowTicks() override;
 
   // base::TaskObserver implementation:
-  void WillProcessTask(const base::PendingTask& pending_task) override;
+  void WillProcessTask(const base::PendingTask& pending_task,
+                       bool was_blocked_or_low_priority) override;
   void DidProcessTask(const base::PendingTask& pending_task) override;
 
   IdlePeriodState SchedulerIdlePeriodState() const;
@@ -194,6 +195,7 @@ class PLATFORM_EXPORT IdleHelper : public base::TaskObserver,
     bool idle_period_trace_event_started_;
     bool running_idle_task_for_tracing_;
     const char* idle_period_tracing_name_;
+    const char* last_sub_trace_event_name_ = nullptr;
 
     DISALLOW_COPY_AND_ASSIGN(State);
   };

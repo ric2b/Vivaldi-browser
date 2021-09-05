@@ -4,140 +4,63 @@
 
 #include "chrome/browser/sharing/sharing_service.h"
 
-#include <algorithm>
-#include <map>
-#include <memory>
-#include <unordered_set>
-
 #include "base/bind.h"
 #include "base/feature_list.h"
-#include "base/guid.h"
-#include "base/strings/strcat.h"
-#include "base/strings/utf_string_conversions.h"
+#include "base/stl_util.h"
 #include "base/task/post_task.h"
 #include "base/time/time.h"
-#include "chrome/browser/sharing/click_to_call/feature.h"
 #include "chrome/browser/sharing/features.h"
-#include "chrome/browser/sharing/shared_clipboard/feature_flags.h"
 #include "chrome/browser/sharing/sharing_constants.h"
-#include "chrome/browser/sharing/sharing_device_registration.h"
 #include "chrome/browser/sharing/sharing_device_registration_result.h"
+#include "chrome/browser/sharing/sharing_device_source.h"
 #include "chrome/browser/sharing/sharing_fcm_handler.h"
-#include "chrome/browser/sharing/sharing_fcm_sender.h"
+#include "chrome/browser/sharing/sharing_handler_registry.h"
 #include "chrome/browser/sharing/sharing_message_handler.h"
 #include "chrome/browser/sharing/sharing_metrics.h"
 #include "chrome/browser/sharing/sharing_sync_preference.h"
+#include "chrome/browser/sharing/sharing_utils.h"
 #include "chrome/browser/sharing/vapid_key_manager.h"
-#include "chrome/grit/generated_resources.h"
-#include "components/gcm_driver/crypto/gcm_encryption_provider.h"
-#include "components/gcm_driver/gcm_driver.h"
+#include "chrome/browser/sharing/webrtc/webrtc_flags.h"
 #include "components/sync/driver/sync_service.h"
 #include "components/sync_device_info/device_info.h"
-#include "components/sync_device_info/local_device_info_provider.h"
-#include "components/sync_device_info/local_device_info_util.h"
 #include "content/public/browser/browser_task_traits.h"
-#include "ui/base/l10n/l10n_util.h"
 
 namespace {
-// Util function to return a string denoting the type of device.
-std::string GetDeviceType(sync_pb::SyncEnums::DeviceType type) {
-  int device_type_message_id = -1;
 
-  switch (type) {
-    case sync_pb::SyncEnums::TYPE_LINUX:
-    case sync_pb::SyncEnums::TYPE_WIN:
-    case sync_pb::SyncEnums::TYPE_CROS:
-    case sync_pb::SyncEnums::TYPE_MAC:
-      device_type_message_id = IDS_BROWSER_SHARING_DEVICE_TYPE_COMPUTER;
-      break;
-
-    case sync_pb::SyncEnums::TYPE_UNSET:
-    case sync_pb::SyncEnums::TYPE_OTHER:
-      device_type_message_id = IDS_BROWSER_SHARING_DEVICE_TYPE_DEVICE;
-      break;
-
-    case sync_pb::SyncEnums::TYPE_PHONE:
-      device_type_message_id = IDS_BROWSER_SHARING_DEVICE_TYPE_PHONE;
-      break;
-
-    case sync_pb::SyncEnums::TYPE_TABLET:
-      device_type_message_id = IDS_BROWSER_SHARING_DEVICE_TYPE_TABLET;
-      break;
+SharingMessageSender::DelegateType GetSendDelegateType(
+    const syncer::DeviceInfo& device,
+    const chrome_browser_sharing::SharingMessage& message) {
+#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX) || \
+    defined(OS_CHROMEOS)
+  // Messages other than SharedClipboard are always sent via FCM.
+  if (message.payload_case() !=
+      chrome_browser_sharing::SharingMessage::kSharedClipboardMessage) {
+    return SharingMessageSender::DelegateType::kFCM;
   }
 
-  return l10n_util::GetStringUTF8(device_type_message_id);
-}
-
-std::string CapitalizeWords(const std::string& sentence) {
-  std::string capitalized_sentence;
-  bool use_upper_case = true;
-  for (char ch : sentence) {
-    capitalized_sentence += (use_upper_case ? toupper(ch) : ch);
-    use_upper_case = !isalpha(ch);
-  }
-  return capitalized_sentence;
-}
-
-struct DeviceNames {
-  std::string full_name;
-  std::string short_name;
-};
-
-// Returns full and short names for |device|.
-DeviceNames GetDeviceNames(const syncer::DeviceInfo* device) {
-  DCHECK(device);
-  DeviceNames device_names;
-
-  base::SysInfo::HardwareInfo hardware_info = device->hardware_info();
-  sync_pb::SyncEnums::DeviceType type = device->device_type();
-  // We only want to apply renaming for sign-in only devices. sign-in only
-  // devices has client_name == model. Additionally, Android and Chrome OS also
-  // uses model as client_name, so we should avoid renaming them as well.
-  // Lastly, avoid renaming if HardwareInfo is not available for M78- devices,
-  if (hardware_info.model.empty() ||
-      hardware_info.model != device->client_name() ||
-      type == sync_pb::SyncEnums::TYPE_CROS ||
-      type == sync_pb::SyncEnums::TYPE_PHONE ||
-      type == sync_pb::SyncEnums::TYPE_TABLET) {
-    device_names.full_name = device_names.short_name = device->client_name();
-    return device_names;
+  // Check if the local device support sending and receiving WebRTC messages.
+  if (!base::FeatureList::IsEnabled(kSharingPeerConnectionSender) ||
+      !base::FeatureList::IsEnabled(kSharingPeerConnectionReceiver)) {
+    return SharingMessageSender::DelegateType::kFCM;
   }
 
-  hardware_info.manufacturer = CapitalizeWords(hardware_info.manufacturer);
-
-  // For chromeOS, return manufacturer + model.
-  if (type == sync_pb::SyncEnums::TYPE_CROS) {
-    device_names.short_name = device_names.full_name =
-        base::StrCat({hardware_info.manufacturer, " ", hardware_info.model});
-    return device_names;
+  // Fallback to FCM if remote device does not support WebRTC yet.
+  if (!device.sharing_info() ||
+      !device.sharing_info()->enabled_features.count(
+          sync_pb::SharingSpecificFields::PEER_CONNECTION)) {
+    return SharingMessageSender::DelegateType::kFCM;
   }
 
-  if (hardware_info.manufacturer == "Apple Inc.") {
-    // Internal names of Apple devices are formatted as MacbookPro2,3 or
-    // iPhone2,1 or Ipad4,1.
-    device_names.short_name = hardware_info.model.substr(
-        0, hardware_info.model.find_first_of("0123456789,"));
-    device_names.full_name = hardware_info.model;
-    return device_names;
-  }
-
-  device_names.short_name =
-      base::StrCat({hardware_info.manufacturer, " ", GetDeviceType(type)});
-  device_names.full_name =
-      base::StrCat({device_names.short_name, " ", hardware_info.model});
-  return device_names;
-}
-
-// Clones device with new device name.
-std::unique_ptr<syncer::DeviceInfo> CloneDevice(
-    const syncer::DeviceInfo* device,
-    const std::string& device_name) {
-  return std::make_unique<syncer::DeviceInfo>(
-      device->guid(), device_name, device->chrome_version(),
-      device->sync_user_agent(), device->device_type(),
-      device->signin_scoped_device_id(), device->hardware_info(),
-      device->last_updated_timestamp(),
-      device->send_tab_to_self_receiving_enabled(), device->sharing_info());
+  // TODO(crbug.com/1002436): This will send SharedClipboard messages between
+  // compatible devices that are both in the experiment via WebRTC. Revisit this
+  // logic once we wrap up the experiment and e.g. only send messages over a
+  // certain size via WebRTC.
+  return SharingMessageSender::DelegateType::kWebRtc;
+#else
+  // Only FCM is supported for non desktop OS.
+  return SharingMessageSender::DelegateType::kFCM;
+#endif  // defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX) ||
+        // defined(OS_CHROMEOS)
 }
 
 }  // namespace
@@ -146,65 +69,21 @@ SharingService::SharingService(
     std::unique_ptr<SharingSyncPreference> sync_prefs,
     std::unique_ptr<VapidKeyManager> vapid_key_manager,
     std::unique_ptr<SharingDeviceRegistration> sharing_device_registration,
-    std::unique_ptr<SharingFCMSender> fcm_sender,
+    std::unique_ptr<SharingMessageSender> message_sender,
+    std::unique_ptr<SharingDeviceSource> device_source,
+    std::unique_ptr<SharingHandlerRegistry> handler_registry,
     std::unique_ptr<SharingFCMHandler> fcm_handler,
-    gcm::GCMDriver* gcm_driver,
-    syncer::DeviceInfoTracker* device_info_tracker,
-    syncer::LocalDeviceInfoProvider* local_device_info_provider,
-    syncer::SyncService* sync_service,
-    NotificationDisplayService* notification_display_service)
+    syncer::SyncService* sync_service)
     : sync_prefs_(std::move(sync_prefs)),
       vapid_key_manager_(std::move(vapid_key_manager)),
       sharing_device_registration_(std::move(sharing_device_registration)),
-      fcm_sender_(std::move(fcm_sender)),
+      message_sender_(std::move(message_sender)),
+      device_source_(std::move(device_source)),
+      handler_registry_(std::move(handler_registry)),
       fcm_handler_(std::move(fcm_handler)),
-      device_info_tracker_(device_info_tracker),
-      local_device_info_provider_(local_device_info_provider),
       sync_service_(sync_service),
       backoff_entry_(&kRetryBackoffPolicy),
-      state_(State::DISABLED),
-      is_observing_device_info_tracker_(false) {
-  // Remove old encryption info with empty authorized_entity to avoid DCHECK.
-  // See http://crbug/987591
-  if (gcm_driver) {
-    gcm::GCMEncryptionProvider* encryption_provider =
-        gcm_driver->GetEncryptionProviderInternal();
-    if (encryption_provider) {
-      encryption_provider->RemoveEncryptionInfo(
-          kSharingFCMAppID, /*authorized_entity=*/std::string(),
-          base::DoNothing());
-    }
-  }
-
-  // Initialize sharing handlers.
-  fcm_handler_->AddSharingHandler(
-      chrome_browser_sharing::SharingMessage::kAckMessage,
-      &ack_message_handler_);
-  ack_message_handler_.AddObserver(this);
-  fcm_handler_->AddSharingHandler(
-      chrome_browser_sharing::SharingMessage::kPingMessage,
-      &ping_message_handler_);
-#if defined(OS_ANDROID)
-  if (base::FeatureList::IsEnabled(kClickToCallReceiver)) {
-    fcm_handler_->AddSharingHandler(
-        chrome_browser_sharing::SharingMessage::kClickToCallMessage,
-        sharing_service_proxy_android_.click_to_call_message_handler());
-  }
-
-  shared_clipboard_message_handler_ =
-      std::make_unique<SharedClipboardMessageHandlerAndroid>(this);
-#else
-  shared_clipboard_message_handler_ =
-      std::make_unique<SharedClipboardMessageHandlerDesktop>(
-          this, notification_display_service);
-#endif  // defined(OS_ANDROID)
-
-  if (sharing_device_registration_->IsSharedClipboardSupported()) {
-    fcm_handler_->AddSharingHandler(
-        chrome_browser_sharing::SharingMessage::kSharedClipboardMessage,
-        shared_clipboard_message_handler_.get());
-  }
-
+      state_(State::DISABLED) {
   // If device has already registered before, start listening to FCM right away
   // to avoid missing messages.
   if (sync_prefs_ && sync_prefs_->GetFCMRegistration())
@@ -214,214 +93,86 @@ SharingService::SharingService(
     sync_service_->AddObserver(this);
 
   // Only unregister if sync is disabled (not initializing).
-  if (IsSyncDisabled()) {
+  if (IsSyncDisabledForSharing(sync_service_)) {
     // state_ is kept as State::DISABLED as SharingService has never registered,
     // and only doing clean up via UnregisterDevice().
     UnregisterDevice();
   }
-
-  base::PostTaskAndReplyWithResult(
-      FROM_HERE,
-      {base::ThreadPool(), base::MayBlock(),
-       base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
-      base::BindOnce(syncer::GetPersonalizableDeviceNameBlocking),
-      base::BindOnce(&SharingService::InitPersonalizableLocalDeviceName,
-                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 SharingService::~SharingService() {
-  ack_message_handler_.RemoveObserver(this);
-
   if (sync_service_ && sync_service_->HasObserver(this))
     sync_service_->RemoveObserver(this);
 }
 
 std::unique_ptr<syncer::DeviceInfo> SharingService::GetDeviceByGuid(
     const std::string& guid) const {
-  if (!IsSyncEnabled())
-    return nullptr;
-
-  std::unique_ptr<syncer::DeviceInfo> device_info =
-      device_info_tracker_->GetDeviceInfo(guid);
-  return CloneDevice(device_info.get(),
-                     GetDeviceNames(device_info.get()).full_name);
+  return device_source_->GetDeviceByGuid(guid);
 }
 
 SharingService::SharingDeviceList SharingService::GetDeviceCandidates(
     sync_pb::SharingSpecificFields::EnabledFeatures required_feature) const {
-  if (IsSyncDisabled() || !local_device_info_provider_->GetLocalDeviceInfo() ||
-      !personalizable_local_device_name_)
-    return {};
-
-  SharingDeviceList device_candidates =
-      device_info_tracker_->GetAllDeviceInfo();
-  device_candidates =
-      FilterDeviceCandidates(std::move(device_candidates), required_feature);
-  return RenameAndDeduplicateDevices(std::move(device_candidates));
-}
-
-void SharingService::AddDeviceCandidatesInitializedObserver(
-    base::OnceClosure callback) {
-  if (IsSyncDisabled()) {
-    std::move(callback).Run();
-    return;
-  }
-
-  bool is_device_info_tracker_ready = device_info_tracker_->IsSyncing();
-  bool is_local_device_info_ready =
-      local_device_info_provider_->GetLocalDeviceInfo();
-  if (is_device_info_tracker_ready && is_local_device_info_ready) {
-    std::move(callback).Run();
-    return;
-  }
-
-  device_candidates_initialized_callbacks_.emplace_back(std::move(callback));
-
-  if (!is_device_info_tracker_ready && !is_observing_device_info_tracker_) {
-    device_info_tracker_->AddObserver(this);
-    is_observing_device_info_tracker_ = true;
-  }
-
-  if (!is_local_device_info_ready && !local_device_info_ready_subscription_) {
-    local_device_info_ready_subscription_ =
-        local_device_info_provider_->RegisterOnInitializedCallback(
-            base::BindRepeating(&SharingService::OnDeviceInfoChange,
-                                weak_ptr_factory_.GetWeakPtr()));
-  }
+  return device_source_->GetDeviceCandidates(required_feature);
 }
 
 void SharingService::SendMessageToDevice(
-    const std::string& device_guid,
-    base::TimeDelta time_to_live,
+    const syncer::DeviceInfo& device,
+    base::TimeDelta response_timeout,
     chrome_browser_sharing::SharingMessage message,
-    SendMessageCallback callback) {
-  std::string message_guid = base::GenerateGUID();
-  send_message_callbacks_.emplace(message_guid, std::move(callback));
-  chrome_browser_sharing::MessageType message_type =
-      SharingPayloadCaseToMessageType(message.payload_case());
-
-  base::PostDelayedTask(
-      FROM_HERE, {base::TaskPriority::USER_VISIBLE, content::BrowserThread::UI},
-      base::BindOnce(&SharingService::InvokeSendMessageCallback,
-                     weak_ptr_factory_.GetWeakPtr(), message_guid, message_type,
-                     SharingSendMessageResult::kAckTimeout),
-      kSendMessageTimeout);
-
-  // TODO(crbug/1015411): Here we assume caller gets |device_guid| from
-  // GetDeviceCandidates, so both DeviceInfoTracker and LocalDeviceInfoProvider
-  // are already ready. It's better to queue up the message and wait until
-  // DeviceInfoTracker and LocalDeviceInfoProvider are ready.
-  base::Optional<syncer::DeviceInfo::SharingInfo> target_sharing_info =
-      sync_prefs_->GetSharingInfo(device_guid);
-  if (!target_sharing_info) {
-    InvokeSendMessageCallback(message_guid, message_type,
-                              SharingSendMessageResult::kDeviceNotFound);
-    return;
-  }
-
-  const syncer::DeviceInfo* local_device_info =
-      local_device_info_provider_->GetLocalDeviceInfo();
-  if (!local_device_info) {
-    InvokeSendMessageCallback(message_guid, message_type,
-                              SharingSendMessageResult::kInternalError);
-    return;
-  }
-
-  std::unique_ptr<syncer::DeviceInfo> sender_device_info = CloneDevice(
-      local_device_info, GetDeviceNames(local_device_info).full_name);
-  sender_device_info->set_sharing_info(
-      sync_prefs_->GetLocalSharingInfo(local_device_info));
-
-  if (!sender_device_info->sharing_info()) {
-    InvokeSendMessageCallback(message_guid, message_type,
-                              SharingSendMessageResult::kInternalError);
-    return;
-  }
-
-  fcm_sender_->SendMessageToDevice(
-      std::move(*target_sharing_info), time_to_live, std::move(message),
-      std::move(sender_device_info),
-      base::BindOnce(&SharingService::OnMessageSent,
-                     weak_ptr_factory_.GetWeakPtr(), base::TimeTicks::Now(),
-                     message_guid, message_type));
+    SharingMessageSender::ResponseCallback callback) {
+  auto delegate_type = GetSendDelegateType(device, message);
+  message_sender_->SendMessageToDevice(device, response_timeout,
+                                       std::move(message), delegate_type,
+                                       std::move(callback));
 }
 
-void SharingService::SetDeviceInfoTrackerForTesting(
-    syncer::DeviceInfoTracker* tracker) {
-  device_info_tracker_ = tracker;
+void SharingService::RegisterSharingHandler(
+    std::unique_ptr<SharingMessageHandler> handler,
+    chrome_browser_sharing::SharingMessage::PayloadCase payload_case) {
+  handler_registry_->RegisterSharingHandler(std::move(handler), payload_case);
 }
 
-void SharingService::OnMessageSent(
-    base::TimeTicks start_time,
-    const std::string& message_guid,
-    chrome_browser_sharing::MessageType message_type,
-    SharingSendMessageResult result,
-    base::Optional<std::string> message_id) {
-  if (result != SharingSendMessageResult::kSuccessful) {
-    InvokeSendMessageCallback(message_guid, message_type, result);
-    return;
-  }
-
-  send_message_times_.emplace(*message_id, start_time);
-  message_guids_.emplace(*message_id, message_guid);
+void SharingService::UnregisterSharingHandler(
+    chrome_browser_sharing::SharingMessage::PayloadCase payload_case) {
+  handler_registry_->UnregisterSharingHandler(payload_case);
 }
 
-void SharingService::OnAckReceived(
-    chrome_browser_sharing::MessageType message_type,
-    const std::string& message_id) {
-  auto times_iter = send_message_times_.find(message_id);
-  if (times_iter != send_message_times_.end()) {
-    LogSharingMessageAckTime(message_type,
-                             base::TimeTicks::Now() - times_iter->second);
-    send_message_times_.erase(times_iter);
-  }
-
-  auto iter = message_guids_.find(message_id);
-  if (iter == message_guids_.end())
-    return;
-
-  std::string message_guid = std::move(iter->second);
-  message_guids_.erase(iter);
-  InvokeSendMessageCallback(message_guid, message_type,
-                            SharingSendMessageResult::kSuccessful);
+void SharingService::SetNotificationActionHandler(
+    const std::string& notification_id,
+    NotificationActionCallback callback) {
+  if (callback)
+    notification_action_handlers_[notification_id] = callback;
+  else
+    notification_action_handlers_.erase(notification_id);
 }
 
-void SharingService::InvokeSendMessageCallback(
-    const std::string& message_guid,
-    chrome_browser_sharing::MessageType message_type,
-    SharingSendMessageResult result) {
-  auto iter = send_message_callbacks_.find(message_guid);
-  if (iter == send_message_callbacks_.end())
-    return;
-
-  SendMessageCallback callback = std::move(iter->second);
-  send_message_callbacks_.erase(iter);
-  std::move(callback).Run(result);
-  LogSendSharingMessageResult(message_type, result);
+SharingService::NotificationActionCallback
+SharingService::GetNotificationActionHandler(
+    const std::string& notification_id) const {
+  auto iter = notification_action_handlers_.find(notification_id);
+  return iter == notification_action_handlers_.end()
+             ? NotificationActionCallback()
+             : iter->second;
 }
 
-void SharingService::OnDeviceInfoChange() {
-  if (!device_info_tracker_->IsSyncing() ||
-      !local_device_info_provider_->GetLocalDeviceInfo()) {
-    return;
-  }
-
-  device_info_tracker_->RemoveObserver(this);
-  is_observing_device_info_tracker_ = false;
-  local_device_info_ready_subscription_.reset();
-
-  for (base::OnceClosure& callback : device_candidates_initialized_callbacks_) {
-    std::move(callback).Run();
-  }
-  device_candidates_initialized_callbacks_.clear();
+SharingDeviceSource* SharingService::GetDeviceSource() const {
+  return device_source_.get();
 }
 
-void SharingService::RegisterHandler(
-    chrome_browser_sharing::SharingMessage::PayloadCase payload_type,
-    SharingMessageHandler* handler) {}
-
-SharingService::State SharingService::GetState() const {
+SharingService::State SharingService::GetStateForTesting() const {
   return state_;
+}
+
+SharingSyncPreference* SharingService::GetSyncPreferencesForTesting() const {
+  return sync_prefs_.get();
+}
+
+SharingFCMHandler* SharingService::GetFCMHandlerForTesting() const {
+  return fcm_handler_.get();
+}
+
+SharingMessageSender* SharingService::GetMessageSenderForTesting() const {
+  return message_sender_.get();
 }
 
 void SharingService::OnSyncShutdown(syncer::SyncService* sync) {
@@ -431,20 +182,11 @@ void SharingService::OnSyncShutdown(syncer::SyncService* sync) {
 }
 
 void SharingService::OnStateChanged(syncer::SyncService* sync) {
-  if (IsSyncEnabled()) {
-    if (base::FeatureList::IsEnabled(kSharingDeviceRegistration)) {
-      if (state_ == State::DISABLED) {
-        state_ = State::REGISTERING;
-        RegisterDevice();
-      }
-    } else {
-      // Unregister the device once and stop listening for sync state changes.
-      // If feature is turned back on, Chrome needs to be restarted.
-      if (sync_service_ && sync_service_->HasObserver(this))
-        sync_service_->RemoveObserver(this);
-      UnregisterDevice();
-    }
-  } else if (IsSyncDisabled() && state_ == State::ACTIVE) {
+  if (IsSyncEnabledForSharing(sync_service_) && state_ == State::DISABLED) {
+    state_ = State::REGISTERING;
+    RegisterDevice();
+  } else if (IsSyncDisabledForSharing(sync_service_) &&
+             state_ == State::ACTIVE) {
     state_ = State::UNREGISTERING;
     fcm_handler_->StopListening();
     sync_prefs_->ClearVapidKeyChangeObserver();
@@ -472,10 +214,10 @@ void SharingService::RegisterDevice() {
 }
 
 void SharingService::RegisterDeviceInTesting(
-    std::set<sync_pb::SharingSpecificFields_EnabledFeatures> enabled_feautres,
+    std::set<sync_pb::SharingSpecificFields_EnabledFeatures> enabled_features,
     SharingDeviceRegistration::RegistrationCallback callback) {
   sharing_device_registration_->SetEnabledFeaturesForTesting(
-      std::move(enabled_feautres));
+      std::move(enabled_features));
   sharing_device_registration_->RegisterDevice(std::move(callback));
 }
 
@@ -491,7 +233,7 @@ void SharingService::OnDeviceRegistered(
     case SharingDeviceRegistrationResult::kSuccess:
       backoff_entry_.InformOfRequest(true);
       if (state_ == State::REGISTERING) {
-        if (IsSyncEnabled()) {
+        if (IsSyncEnabledForSharing(sync_service_)) {
           state_ = State::ACTIVE;
           fcm_handler_->StartListening();
 
@@ -505,7 +247,7 @@ void SharingService::OnDeviceRegistered(
                 base::BindRepeating(&SharingService::RefreshVapidKey,
                                     weak_ptr_factory_.GetWeakPtr()));
           }
-        } else if (IsSyncDisabled()) {
+        } else if (IsSyncDisabledForSharing(sync_service_)) {
           // In case sync is disabled during registration, unregister it.
           state_ = State::UNREGISTERING;
           UnregisterDevice();
@@ -528,6 +270,7 @@ void SharingService::OnDeviceRegistered(
       break;
     case SharingDeviceRegistrationResult::kEncryptionError:
     case SharingDeviceRegistrationResult::kFcmFatalError:
+    case SharingDeviceRegistrationResult::kInternalError:
       backoff_entry_.InformOfRequest(false);
       // No need to bother retrying in the case of one of fatal errors.
       LOG(ERROR) << "Device registration failed with fatal error";
@@ -541,8 +284,7 @@ void SharingService::OnDeviceRegistered(
 void SharingService::OnDeviceUnregistered(
     SharingDeviceRegistrationResult result) {
   LogSharingUnegistrationResult(result);
-  if (IsSyncEnabled() &&
-      base::FeatureList::IsEnabled(kSharingDeviceRegistration)) {
+  if (IsSyncEnabledForSharing(sync_service_)) {
     // In case sync is enabled during un-registration, register it.
     state_ = State::REGISTERING;
     RegisterDevice();
@@ -560,124 +302,11 @@ void SharingService::OnDeviceUnregistered(
       break;
     case SharingDeviceRegistrationResult::kEncryptionError:
     case SharingDeviceRegistrationResult::kFcmFatalError:
+    case SharingDeviceRegistrationResult::kInternalError:
       LOG(ERROR) << "Device un-registration failed with fatal error";
       break;
     case SharingDeviceRegistrationResult::kDeviceNotRegistered:
       // Device has not been registered, no-op.
       break;
   }
-}
-
-bool SharingService::IsSyncEnabled() const {
-  return sync_service_ &&
-         sync_service_->GetTransportState() ==
-             syncer::SyncService::TransportState::ACTIVE &&
-         sync_service_->GetActiveDataTypes().HasAll(GetRequiredSyncDataTypes());
-}
-
-SharingSyncPreference* SharingService::GetSyncPreferences() const {
-  return sync_prefs_.get();
-}
-
-bool SharingService::IsSyncDisabled() const {
-  return sync_service_ && (sync_service_->GetTransportState() ==
-                               syncer::SyncService::TransportState::DISABLED ||
-                           (sync_service_->GetTransportState() ==
-                                syncer::SyncService::TransportState::ACTIVE &&
-                            !sync_service_->GetActiveDataTypes().HasAll(
-                                GetRequiredSyncDataTypes())));
-}
-
-syncer::ModelTypeSet SharingService::GetRequiredSyncDataTypes() const {
-  // DeviceInfo is always required to list devices.
-  syncer::ModelTypeSet required_data_types(syncer::DEVICE_INFO);
-
-  // Legacy implementation of device list and VAPID key uses sync preferences.
-  if (!base::FeatureList::IsEnabled(kSharingUseDeviceInfo) ||
-      !base::FeatureList::IsEnabled(kSharingDeriveVapidKey)) {
-    required_data_types.Put(syncer::PREFERENCES);
-  }
-
-  return required_data_types;
-}
-
-SharingService::SharingDeviceList SharingService::FilterDeviceCandidates(
-    SharingDeviceList devices,
-    sync_pb::SharingSpecificFields::EnabledFeatures required_feature) const {
-  const base::Time min_updated_time = base::Time::Now() - kDeviceExpiration;
-  SharingDeviceList filtered_devices;
-
-  for (auto& device : devices) {
-    // Checks if |last_updated_timestamp| is not too old.
-    if (device->last_updated_timestamp() < min_updated_time)
-      continue;
-
-    // Checks whether |device| supports |required_feature|.
-    base::Optional<syncer::DeviceInfo::SharingInfo> sharing_info =
-        sync_prefs_->GetSharingInfo(device.get());
-    if (!sharing_info ||
-        !sharing_info->enabled_features.count(required_feature)) {
-      continue;
-    }
-
-    filtered_devices.push_back(std::move(device));
-  }
-
-  return filtered_devices;
-}
-
-SharingService::SharingDeviceList SharingService::RenameAndDeduplicateDevices(
-    SharingDeviceList devices) const {
-  // Sort the devices so the most recently modified devices are first.
-  std::sort(devices.begin(), devices.end(),
-            [](const auto& device1, const auto& device2) {
-              return device1->last_updated_timestamp() >
-                     device2->last_updated_timestamp();
-            });
-
-  std::unordered_map<std::string, DeviceNames> device_candidate_names;
-  std::unordered_set<std::string> full_device_names;
-  std::unordered_map<std::string, int> short_device_name_counter;
-
-  // To prevent adding candidates with same full name as local device.
-  full_device_names.insert(
-      GetDeviceNames(local_device_info_provider_->GetLocalDeviceInfo())
-          .full_name);
-  // To prevent M78- instances of Chrome with same device model from showing up.
-  full_device_names.insert(*personalizable_local_device_name_);
-
-  for (const auto& device : devices) {
-    DeviceNames device_names = GetDeviceNames(device.get());
-
-    // Only insert the first occurrence of each device name.
-    auto inserted = full_device_names.insert(device_names.full_name);
-    if (!inserted.second)
-      continue;
-
-    short_device_name_counter[device_names.short_name]++;
-    device_candidate_names.insert({device->guid(), std::move(device_names)});
-  }
-
-  // Rename filtered devices.
-  SharingDeviceList device_candidates;
-  for (const auto& device : devices) {
-    auto it = device_candidate_names.find(device->guid());
-    if (it == device_candidate_names.end())
-      continue;
-
-    const DeviceNames& device_names = it->second;
-    bool is_short_name_unique =
-        short_device_name_counter[device_names.short_name] == 1;
-    device_candidates.push_back(CloneDevice(
-        device.get(), is_short_name_unique ? device_names.short_name
-                                           : device_names.full_name));
-  }
-
-  return device_candidates;
-}
-
-void SharingService::InitPersonalizableLocalDeviceName(
-    std::string personalizable_local_device_name) {
-  personalizable_local_device_name_ =
-      std::move(personalizable_local_device_name);
 }

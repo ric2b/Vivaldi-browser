@@ -26,13 +26,8 @@ void MigrateOldPlatformPrefs(PrefService* prefs) {
   }
 }
 
-std::unique_ptr<base::Value> GetPlatformComputedDefault(
-    const std::string& path) {
-  return std::make_unique<base::Value>();
-}
-
-std::string GetPlatformDefaultKey() {
-  return "default_linux";
+base::Value GetPlatformComputedDefault(const std::string& path) {
+  return base::Value();
 }
 
 }  // namespace vivaldi

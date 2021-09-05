@@ -6,8 +6,8 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_FRAME_FRAME_OWNER_H_
 
 #include "third_party/blink/public/common/frame/frame_policy.h"
+#include "third_party/blink/public/mojom/scroll/scrollbar_mode.mojom-blink.h"
 #include "third_party/blink/renderer/core/core_export.h"
-#include "third_party/blink/renderer/core/scroll/scroll_types.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
 
@@ -26,7 +26,7 @@ class CORE_EXPORT FrameOwner : public GarbageCollectedMixin {
  public:
   virtual ~FrameOwner() = default;
 
-  void Trace(blink::Visitor* visitor) override {}
+  void Trace(Visitor* visitor) override {}
 
   virtual bool IsLocal() const = 0;
   virtual bool IsRemote() const = 0;
@@ -66,7 +66,7 @@ class CORE_EXPORT FrameOwner : public GarbageCollectedMixin {
   // container.
   // https://html.spec.whatwg.org/C/#browsing-context-container
   virtual AtomicString BrowsingContextContainerName() const = 0;
-  virtual ScrollbarMode ScrollingMode() const = 0;
+  virtual mojom::blink::ScrollbarMode ScrollbarMode() const = 0;
   virtual int MarginWidth() const = 0;
   virtual int MarginHeight() const = 0;
   virtual bool AllowFullscreen() const = 0;
@@ -111,7 +111,7 @@ class FrameSwapScope {
   }
 
  private:
-  Member<FrameOwner> frame_owner_;
+  FrameOwner* frame_owner_;
 };
 
 // TODO(dcheng): This class is an internal implementation detail of provisional
@@ -123,7 +123,7 @@ class CORE_EXPORT DummyFrameOwner final
   USING_GARBAGE_COLLECTED_MIXIN(DummyFrameOwner);
 
  public:
-  void Trace(blink::Visitor* visitor) override { FrameOwner::Trace(visitor); }
+  void Trace(Visitor* visitor) override { FrameOwner::Trace(visitor); }
 
   // FrameOwner overrides:
   Frame* ContentFrame() const override { return nullptr; }
@@ -142,7 +142,9 @@ class CORE_EXPORT DummyFrameOwner final
   AtomicString BrowsingContextContainerName() const override {
     return AtomicString();
   }
-  ScrollbarMode ScrollingMode() const override { return ScrollbarMode::kAuto; }
+  mojom::blink::ScrollbarMode ScrollbarMode() const override {
+    return mojom::blink::ScrollbarMode::kAuto;
+  }
   int MarginWidth() const override { return -1; }
   int MarginHeight() const override { return -1; }
   bool AllowFullscreen() const override { return false; }

@@ -24,8 +24,6 @@ struct UserMetricsAction;
 
 namespace content {
 
-class ServiceManagerConnection;
-
 // An abstract base class that contains logic shared between most child
 // processes of the embedder.
 class CONTENT_EXPORT ChildThread : public IPC::Sender {
@@ -55,10 +53,6 @@ class CONTENT_EXPORT ChildThread : public IPC::Sender {
   // actions in chrome/tools/extract_actions.py.
   virtual void RecordComputedAction(const std::string& action) = 0;
 
-  // Returns the ServiceManagerConnection for the thread (from which a
-  // service_manager::Connector can be obtained).
-  virtual ServiceManagerConnection* GetServiceManagerConnection() = 0;
-
   // Asks the browser-side process host object to bind |receiver|. Whether or
   // not the interface type encapsulated by |receiver| is supported depends on
   // the process type and potentially on the Content embedder.
@@ -69,10 +63,8 @@ class CONTENT_EXPORT ChildThread : public IPC::Sender {
   //
   //   For renderers:
   //       1. IO thread, IOThreadHostImpl::BindHostReceiver.
-  //       2. IO thread,
-  //          ContentBrowserClient::BindHostReceiverForRendererOnIOThread.
-  //       3. Main thread, RenderProcessHostImpl::BindHostReceiver.
-  //       4. Main thread, ContentBrowserClient::BindHostReceiverForRenderer.
+  //       2. Main thread, RenderProcessHostImpl::BindHostReceiver.
+  //       3. Main thread, ContentBrowserClient::BindHostReceiverForRenderer.
   //
   // TODO(crbug.com/977637): Document behavior for other process types when
   // their support is added.

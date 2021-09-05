@@ -1,0 +1,41 @@
+# Copyright (c) 2020 Vivaldi Technologies AS. All rights reserved
+
+if (is_android) {
+  import("//build/config/android/rules.gni")
+}
+
+static_library("menus") {
+  sources = [
+    "menu_codec.cc",
+    "menu_codec.h",
+    "menu_model.cc",
+    "menu_model.h",
+    "menu_node.cc",
+    "menu_node.h",
+    "menu_service_factory.cc",
+    "menu_service_factory.h",
+    "menu_storage.cc",
+    "menu_storage.h",
+    "menu_model_loaded_observer.cc",
+    "menu_model_loaded_observer.h",
+  ]
+  deps = [
+    "//base:base",
+    "//base:i18n",
+    "//chrome/common:constants",
+    "//components/keyed_service/core:core",
+    "//components/keyed_service/content:content",
+    "//content/public/browser",
+    "//skia",
+    "//third_party/icu",
+    "//ui/base:base",
+    "//url:url",
+    "//vivaldi/app:vivaldi_native_resources",
+    "//vivaldi/app:vivaldi_unscaled_native_resources",
+    "//vivaldi/prefs",
+  ]
+  public_deps = [
+    "//components/renderer_context_menu",
+    "//components/sync/protocol",
+  ]
+}

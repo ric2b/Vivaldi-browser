@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="fr">
 <translation id="1017280919048282932">&amp;Ajouter au dictionnaire</translation>
+<translation id="1029317248976101138">Zoom</translation>
 <translation id="1031362278801463162">Chargement de l’aperçu...</translation>
 <translation id="1047431265488717055">Copier le te&amp;xte du lien</translation>
 <translation id="1049795001945932310">&amp;Paramètres linguistiques</translation>
@@ -54,6 +55,7 @@
 <translation id="1886996562706621347">Permettre aux sites de demander l’autorisation de devenir gestionnaires par défaut des protocoles (recommandé)</translation>
 <translation id="1901303067676059328">&amp;Tout sélectionner</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> points par pouce</translation>
+<translation id="1936931585862840749">Indiquez le nombre de copies à imprimer (1 à <ph name="MAX_COPIES" />).</translation>
 <translation id="1963227389609234879">Tout supprimer</translation>
 <translation id="1994173015038366702">URL du site</translation>
 <translation id="2019718679933488176">&amp;Ouvrir le fichier audio dans un nouvel onglet</translation>
@@ -66,7 +68,6 @@
 <translation id="2150139952286079145">Rechercher des destinations</translation>
 <translation id="215753907730220065">Quitter le mode plein écran</translation>
 <translation id="2177950615300672361">Onglet de navigation privée : <ph name="TAB_NAME" /></translation>
-<translation id="218070003709087997">Indiquez le nombre de copies à imprimer (1 à 999).</translation>
 <translation id="219008588003277019">Module Native Client : <ph name="NEXE_NAME" /></translation>
 <translation id="220138918934036434">Masquer le bouton</translation>
 <translation id="2218515861914035131">Coller en texte brut</translation>
@@ -78,11 +79,9 @@
 <translation id="2282146716419988068">Processeur graphique</translation>
 <translation id="2301382460326681002">Le répertoire racine de l’extension est incorrect.</translation>
 <translation id="2318143611928805047">Taille du papier</translation>
-<translation id="2318923050469484167">Session de navigation privée actuelle (<ph name="EMBEDDING" />)</translation>
 <translation id="2322193970951063277">En-têtes et pieds de page</translation>
 <translation id="2326931316514688470">Rech&amp;arger l’application</translation>
 <translation id="2327492829706409234">Activer l’application</translation>
-<translation id="2344028582131185878">Téléchargements automatiques</translation>
 <translation id="2348176352564285430">Application : <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">Sélectionner le répertoire de l’extension.</translation>
 <translation id="2379281330731083556">Imprimer via la boîte de dialogue du système... <ph name="SHORTCUT_KEY" /></translation>
@@ -95,12 +94,12 @@
 <translation id="2470702053775288986">Désactivation des extensions non compatibles</translation>
 <translation id="2476578072172137802">Paramètres du site</translation>
 <translation id="2482878487686419369">Notifications</translation>
+<translation id="2498539833203011245">Réduire</translation>
 <translation id="2509495747794740764">Le facteur d’échelle doit être un nombre compris entre 10 et 200.</translation>
 <translation id="253557089021624350">Nombre de keepalive (pour extensions)</translation>
 <translation id="2546283357679194313">Cookies et données de site</translation>
 <translation id="2550212893339833758">Mémoire Swap</translation>
 <translation id="2553440850688409052">Masquer ce plug-in</translation>
-<translation id="2580924999637585241">Total : <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="26224892172169984">Interdire à tous les sites de gérer les protocoles</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Réactiver</translation>
@@ -120,7 +119,6 @@
 <translation id="2932883381142163287">Signaler un abus</translation>
 <translation id="2941112035454246133">Faible</translation>
 <translation id="2972581237482394796">&amp;Rétablir</translation>
-<translation id="299483336428448530">Installée par vos parents.</translation>
 <translation id="3003623123441819449">Cache CSS</translation>
 <translation id="3008272652534848354">Réinitialiser les autorisations</translation>
 <translation id="3012631534724231212">(iframe)</translation>
@@ -274,7 +272,6 @@
 <translation id="5425042808445046667">Continuer le téléchargement</translation>
 <translation id="5427459444770871191">Rotation &amp;horaire</translation>
 <translation id="5431318178759467895">Couleur</translation>
-<translation id="5472133193607270166">Lorsque cette option est activée, les sites ne peuvent pas utiliser votre activité de navigation sur d’autres sites pour personnaliser les annonces. Certains peuvent ne pas fonctionner correctement.</translation>
 <translation id="5483785310822538350">Retirer les droits d’accès aux fichiers et aux appareils</translation>
 <translation id="5485102783864353244">Ajouter l’application</translation>
 <translation id="5486561344817861625">Simuler le redémarrage du navigateur</translation>
@@ -302,7 +299,6 @@
 <translation id="5804241973901381774">Autorisations</translation>
 <translation id="5828633471261496623">Impression...</translation>
 <translation id="583281660410589416">Inconnu</translation>
-<translation id="5838456317242088717">Session de navigation privée actuelle</translation>
 <translation id="5860491529813859533">Activer</translation>
 <translation id="5867841422488265304">Recherchez ou saisissez une adresse Web</translation>
 <translation id="5908769186679515905">Interdire aux sites d’exécuter Flash</translation>
@@ -322,7 +318,6 @@
 <translation id="6147020289383635445">Échec de l’aperçu avant impression.</translation>
 <translation id="6156863943908443225">Cache des scripts</translation>
 <translation id="6169666352732958425">Impossible de caster le bureau.</translation>
-<translation id="6196640612572343990">Bloquer les cookies tiers</translation>
 <translation id="6196854373336333322">L’extension <ph name="EXTENSION_NAME" /> a pris le contrôle de vos réglages de proxy, ce qui signifie que toutes vos activités en ligne peuvent être modifiées, interrompues ou espionnées. Si vous ne savez pas pourquoi cette modification s’est produite, c’est qu’elle est probablement indésirable.</translation>
 <translation id="6206311232642889873">Cop&amp;ier l’image</translation>
 <translation id="6239558157302047471">Recharger le &amp;cadre</translation>
@@ -335,6 +330,7 @@
 <translation id="6295158916970320988">Tous les sites</translation>
 <translation id="6295855836753816081">Enregistrement…</translation>
 <translation id="6308937455967653460">Enregistrer le lie&amp;n sous…</translation>
+<translation id="6315493146179903667">Tout ramener au premier plan</translation>
 <translation id="6326855256003666642">Nombre d’activités en cours</translation>
 <translation id="6374469231428023295">Réessayer</translation>
 <translation id="6385543213911723544">Les sites peuvent enregistrer et consulter les données liées aux cookies</translation>
@@ -380,6 +376,7 @@
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> points par pouce</translation>
 <translation id="7309257895202129721">Afficher les &amp;commandes</translation>
 <translation id="7311079019872751559">Accès via un plug-in sans système de bac à sable</translation>
+<translation id="73174032666024687"><ph name="SHEETS_LABEL" /> <ph name="NUMBER_OF_SHEETS" /></translation>
 <translation id="7385854874724088939">Erreur lors de la tentative d’impression. Vérifiez votre imprimante et réessayez.</translation>
 <translation id="7412226954991670867">Mémoire processeur graphique</translation>
 <translation id="7421925624202799674">&amp;Afficher le code source de la page</translation>

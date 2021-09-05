@@ -15,12 +15,14 @@ CustomLayoutFragment::CustomLayoutFragment(
     CustomLayoutToken* token,
     scoped_refptr<const NGLayoutResult> layout_result,
     const LogicalSize& size,
+    const base::Optional<LayoutUnit> baseline,
     v8::Isolate* isolate)
     : child_(child),
       token_(token),
       layout_result_(std::move(layout_result)),
       inline_size_(size.inline_size.ToDouble()),
-      block_size_(size.block_size.ToDouble()) {
+      block_size_(size.block_size.ToDouble()),
+      baseline_(baseline) {
   // Immediately store the result data, so that it remains immutable between
   // layout calls to the child.
   if (SerializedScriptValue* data = layout_result_->CustomLayoutData())
@@ -34,6 +36,11 @@ const NGLayoutResult& CustomLayoutFragment::GetLayoutResult() const {
 
 const NGLayoutInputNode& CustomLayoutFragment::GetLayoutNode() const {
   return child_->GetLayoutNode();
+}
+
+double CustomLayoutFragment::baseline(bool& is_null) const {
+  is_null = !baseline_.has_value();
+  return baseline_.value_or(0.0);
 }
 
 ScriptValue CustomLayoutFragment::data(ScriptState* script_state) const {
@@ -51,7 +58,7 @@ ScriptValue CustomLayoutFragment::data(ScriptState* script_state) const {
       layout_worklet_world_v8_data_.NewLocal(script_state->GetIsolate()));
 }
 
-void CustomLayoutFragment::Trace(blink::Visitor* visitor) {
+void CustomLayoutFragment::Trace(Visitor* visitor) {
   visitor->Trace(child_);
   visitor->Trace(token_);
   visitor->Trace(layout_worklet_world_v8_data_);

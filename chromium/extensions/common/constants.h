@@ -20,11 +20,17 @@ extern const char kExtensionScheme[];
 // The name of the manifest inside an extension.
 extern const base::FilePath::CharType kManifestFilename[];
 
+// The name of the differential fingerprint file inside an extension.
+extern const base::FilePath::CharType kDifferentialFingerprintFilename[];
+
 // The name of locale folder inside an extension.
 extern const base::FilePath::CharType kLocaleFolder[];
 
 // The name of the messages file inside an extension.
 extern const base::FilePath::CharType kMessagesFilename[];
+
+// The name of the gzipped messages file inside an extension.
+extern const base::FilePath::CharType kGzippedMessagesFilename[];
 
 // The base directory for subdirectories with platform-specific code.
 extern const base::FilePath::CharType kPlatformSpecificFolder[];
@@ -39,8 +45,8 @@ extern const base::FilePath::CharType kVerifiedContentsFilename[];
 // Name of the computed hashes file within the metadata folder.
 extern const base::FilePath::CharType kComputedHashesFilename[];
 
-// Name of the indexed ruleset file for the Declarative Net Request API.
-extern const base::FilePath::CharType kIndexedRulesetFilename[];
+// Name of the indexed ruleset directory for the Declarative Net Request API.
+extern const base::FilePath::CharType kIndexedRulesetDirectory[];
 
 // The name of the directory inside the profile where extensions are
 // installed to.
@@ -192,6 +198,9 @@ extern const char kMimeHandlerPrivateTestExtensionId[];
 // The extension id of the Camera application.
 extern const char kCameraAppId[];
 
+// The extension id of the devoloper version of Camera application.
+extern const char kCameraAppDevId[];
+
 // The extension id of the Chrome component application.
 extern const char kChromeAppId[];
 
@@ -229,8 +238,11 @@ extern const char kScreensaverEveAppId[];
 // The extension id of the nocturne Demo Mode screensaver app.
 extern const char kScreensaverNocturneAppId[];
 
-// The extension id of an alternate Demo Mode screensaver app.
-extern const char kScreensaverAltAppId[];
+// The extension id of the atlas Demo Mode screensaver app.
+extern const char kScreensaverAtlasAppId[];
+
+// The extension id of the kukui Demo Mode screensaver app.
+extern const char kScreensaverKukuiAppId[];
 
 // Returns true if this app is part of the "system UI". Generally this is UI
 // that that on other operating systems would be considered part of the OS,

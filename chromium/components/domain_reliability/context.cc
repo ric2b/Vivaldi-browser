@@ -29,14 +29,11 @@ namespace domain_reliability {
 // static
 const int DomainReliabilityContext::kMaxUploadDepthToSchedule = 1;
 
-DomainReliabilityContext::Factory::~Factory() {
-}
-
 // static
 const size_t DomainReliabilityContext::kMaxQueuedBeacons = 150;
 
 DomainReliabilityContext::DomainReliabilityContext(
-    MockableTime* time,
+    const MockableTime* time,
     const DomainReliabilityScheduler::Params& scheduler_params,
     const std::string& upload_reporter_string,
     const base::TimeTicks* last_network_change_time,
@@ -50,17 +47,15 @@ DomainReliabilityContext::DomainReliabilityContext(
       scheduler_(time,
                  config_->collectors.size(),
                  scheduler_params,
-                 base::Bind(&DomainReliabilityContext::ScheduleUpload,
-                            base::Unretained(this))),
+                 base::BindRepeating(&DomainReliabilityContext::ScheduleUpload,
+                                     base::Unretained(this))),
       dispatcher_(dispatcher),
       uploader_(uploader),
       uploading_beacons_size_(0),
       last_network_change_time_(last_network_change_time),
       upload_allowed_callback_(upload_allowed_callback) {}
 
-DomainReliabilityContext::~DomainReliabilityContext() {
-  ClearBeacons();
-}
+DomainReliabilityContext::~DomainReliabilityContext() = default;
 
 void DomainReliabilityContext::OnBeacon(
     std::unique_ptr<DomainReliabilityBeacon> beacon) {
@@ -101,7 +96,6 @@ std::unique_ptr<Value> DomainReliabilityContext::GetWebUIData() const {
 
 void DomainReliabilityContext::GetQueuedBeaconsForTesting(
     std::vector<const DomainReliabilityBeacon*>* beacons_out) const {
-  DCHECK(this);
   DCHECK(beacons_out);
   beacons_out->clear();
   for (const auto& beacon : beacons_)
@@ -112,8 +106,8 @@ void DomainReliabilityContext::ScheduleUpload(
     base::TimeDelta min_delay,
     base::TimeDelta max_delay) {
   dispatcher_->ScheduleTask(
-      base::Bind(&DomainReliabilityContext::CallUploadAllowedCallback,
-                 weak_factory_.GetWeakPtr()),
+      base::BindOnce(&DomainReliabilityContext::CallUploadAllowedCallback,
+                     weak_factory_.GetWeakPtr()),
       min_delay, max_delay);
 }
 
@@ -156,12 +150,9 @@ void DomainReliabilityContext::StartUpload() {
   DCHECK_NE(-1, max_upload_depth);
 
   uploader_->UploadReport(
-      report_json,
-      max_upload_depth,
-      collector_url,
-      base::Bind(
-          &DomainReliabilityContext::OnUploadComplete,
-          weak_factory_.GetWeakPtr()));
+      report_json, max_upload_depth, collector_url,
+      base::BindOnce(&DomainReliabilityContext::OnUploadComplete,
+                     weak_factory_.GetWeakPtr()));
 }
 
 void DomainReliabilityContext::OnUploadComplete(
@@ -170,16 +161,8 @@ void DomainReliabilityContext::OnUploadComplete(
     CommitUpload();
   else
     RollbackUpload();
-  base::TimeTicks first_beacon_time = scheduler_.first_beacon_time();
   scheduler_.OnUploadComplete(result);
-  UMA_HISTOGRAM_BOOLEAN("DomainReliability.UploadSuccess",
-      result.is_success());
-  base::TimeTicks now = time_->NowTicks();
-  UMA_HISTOGRAM_LONG_TIMES("DomainReliability.UploadLatency",
-                           now - first_beacon_time);
   DCHECK(!upload_time_.is_null());
-  UMA_HISTOGRAM_MEDIUM_TIMES("DomainReliability.UploadDuration",
-                             now - upload_time_);
   last_upload_time_ = upload_time_;
   upload_time_ = base::TimeTicks();
 }

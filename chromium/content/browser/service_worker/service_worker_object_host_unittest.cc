@@ -13,6 +13,7 @@
 #include "base/test/simple_test_tick_clock.h"
 #include "content/browser/service_worker/embedded_worker_test_helper.h"
 #include "content/browser/service_worker/fake_embedded_worker_instance_client.h"
+#include "content/browser/service_worker/service_worker_container_host.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_object_host.h"
 #include "content/browser/service_worker/service_worker_registration.h"
@@ -115,18 +116,18 @@ class ServiceWorkerObjectHostTest : public testing::Test {
 
     blink::mojom::ServiceWorkerRegistrationOptions options;
     options.scope = scope;
-    registration_ = new ServiceWorkerRegistration(
-        options, helper_->context()->storage()->NewRegistrationId(),
-        helper_->context()->AsWeakPtr());
-    version_ = new ServiceWorkerVersion(
-        registration_.get(), script_url, blink::mojom::ScriptType::kClassic,
-        helper_->context()->storage()->NewVersionId(),
-        helper_->context()->AsWeakPtr());
-    std::vector<ServiceWorkerDatabase::ResourceRecord> records;
-    records.push_back(
-        ServiceWorkerDatabase::ResourceRecord(10, version_->script_url(), 100));
+    registration_ = CreateNewServiceWorkerRegistration(
+        helper_->context()->registry(), options);
+    version_ = CreateNewServiceWorkerVersion(
+        helper_->context()->registry(), registration_.get(), script_url,
+        blink::mojom::ScriptType::kClassic);
+    std::vector<storage::mojom::ServiceWorkerResourceRecordPtr> records;
+    records.push_back(storage::mojom::ServiceWorkerResourceRecord::New(
+        10, version_->script_url(), 100));
     version_->script_cache_map()->SetResources(records);
-    version_->SetMainScriptHttpResponseInfo(net::HttpResponseInfo());
+    version_->SetMainScriptResponse(
+        std::make_unique<ServiceWorkerVersion::MainScriptResponse>(
+            network::mojom::URLResponseHead()));
     version_->set_fetch_handler_existence(
         ServiceWorkerVersion::FetchHandlerExistence::EXISTS);
     version_->SetStatus(ServiceWorkerVersion::INSTALLING);
@@ -134,7 +135,7 @@ class ServiceWorkerObjectHostTest : public testing::Test {
     // Make the registration findable via storage functions.
     base::Optional<blink::ServiceWorkerStatusCode> status;
     base::RunLoop run_loop;
-    helper_->context()->storage()->StoreRegistration(
+    helper_->context()->registry()->StoreRegistration(
         registration_.get(), version_.get(),
         ReceiveServiceWorkerStatus(&status, run_loop.QuitClosure()));
     run_loop.Run();
@@ -160,17 +161,17 @@ class ServiceWorkerObjectHostTest : public testing::Test {
   }
 
   ServiceWorkerObjectHost* GetServiceWorkerObjectHost(
-      ServiceWorkerProviderHost* provider_host,
+      ServiceWorkerContainerHost* container_host,
       int64_t version_id) {
-    auto iter = provider_host->service_worker_object_hosts_.find(version_id);
-    if (iter != provider_host->service_worker_object_hosts_.end())
+    auto iter = container_host->service_worker_object_hosts_.find(version_id);
+    if (iter != container_host->service_worker_object_hosts_.end())
       return iter->second.get();
     return nullptr;
   }
 
-  void SetProviderHostRenderFrameId(ServiceWorkerProviderHost* host,
-                                    int render_frame_id) {
-    host->frame_id_ = render_frame_id;
+  void SetContainerHostRenderFrameId(ServiceWorkerContainerHost* container_host,
+                                     int render_frame_id) {
+    container_host->frame_id_ = render_frame_id;
   }
 
   blink::mojom::ServiceWorkerRegistrationObjectInfoPtr
@@ -216,11 +217,12 @@ TEST_F(ServiceWorkerObjectHostTest, OnVersionStateChanged) {
   registration_->SetInstallingVersion(version_);
 
   ServiceWorkerRemoteProviderEndpoint remote_endpoint;
-  base::WeakPtr<ServiceWorkerProviderHost> provider_host =
-      CreateProviderHostForWindow(
+  base::WeakPtr<ServiceWorkerContainerHost> container_host =
+      CreateContainerHostForWindow(
           helper_->mock_render_process_id(), true /* is_parent_frame_secure */,
           helper_->context()->AsWeakPtr(), &remote_endpoint);
-  provider_host->UpdateUrls(scope, scope, url::Origin::Create(scope));
+  container_host->UpdateUrls(scope, net::SiteForCookies::FromUrl(scope),
+                             url::Origin::Create(scope));
   blink::mojom::ServiceWorkerRegistrationObjectInfoPtr registration_info =
       GetRegistrationFromRemote(remote_endpoint.host_remote()->get(), scope);
   // |version_| is the installing version of |registration_| now.
@@ -266,12 +268,13 @@ TEST_F(ServiceWorkerObjectHostTest,
   // object for the service worker, inside the service worker's own
   // execution context (e.g., self.registration.active inside the active
   // worker and self.serviceWorker).
-  ServiceWorkerProviderHost* provider_host = version_->provider_host();
+  ServiceWorkerContainerHost* container_host =
+      version_->provider_host()->container_host();
   blink::mojom::ServiceWorkerObjectInfoPtr info =
-      provider_host->GetOrCreateServiceWorkerObjectHost(version_)
+      container_host->GetOrCreateServiceWorkerObjectHost(version_)
           ->CreateCompleteObjectInfoToSend();
   ServiceWorkerObjectHost* object_host =
-      GetServiceWorkerObjectHost(provider_host, version_->version_id());
+      GetServiceWorkerObjectHost(container_host, version_->version_id());
   EXPECT_EQ(2u, GetReceiverCount(object_host));
 
   {
@@ -355,7 +358,7 @@ TEST_F(ServiceWorkerObjectHostTest, DispatchExtendableMessageEvent_FromClient) {
   auto* worker =
       helper_->AddNewPendingServiceWorker<MessageEventWorker>(helper_.get());
 
-  // Prepare a ServiceWorkerProviderHost for a window client. A
+  // Prepare a ServiceWorkerContainerHost for a window client. A
   // WebContents/RenderFrameHost must be created too because it's needed for
   // DispatchExtendableMessageEvent to populate ExtendableMessageEvent#source.
   RenderViewHostTestEnabler rvh_test_enabler;
@@ -364,19 +367,21 @@ TEST_F(ServiceWorkerObjectHostTest, DispatchExtendableMessageEvent_FromClient) {
                                                nullptr));
   RenderFrameHost* frame_host = web_contents->GetMainFrame();
   ServiceWorkerRemoteProviderEndpoint remote_endpoint;
-  base::WeakPtr<ServiceWorkerProviderHost> provider_host =
-      CreateProviderHostForWindow(
+  base::WeakPtr<ServiceWorkerContainerHost> container_host =
+      CreateContainerHostForWindow(
           frame_host->GetProcess()->GetID(), true /* is_parent_frame_secure */,
           helper_->context()->AsWeakPtr(), &remote_endpoint);
-  SetProviderHostRenderFrameId(provider_host.get(), frame_host->GetRoutingID());
-  provider_host->UpdateUrls(scope, scope, url::Origin::Create(scope));
+  SetContainerHostRenderFrameId(container_host.get(),
+                                frame_host->GetRoutingID());
+  container_host->UpdateUrls(scope, net::SiteForCookies::FromUrl(scope),
+                             url::Origin::Create(scope));
 
   // Prepare a ServiceWorkerObjectHost for the worker.
   blink::mojom::ServiceWorkerObjectInfoPtr info =
-      provider_host->GetOrCreateServiceWorkerObjectHost(version_)
+      container_host->GetOrCreateServiceWorkerObjectHost(version_)
           ->CreateCompleteObjectInfoToSend();
   ServiceWorkerObjectHost* object_host =
-      GetServiceWorkerObjectHost(provider_host.get(), version_->version_id());
+      GetServiceWorkerObjectHost(container_host.get(), version_->version_id());
 
   // Simulate postMessage() from the window client to the worker.
   blink::TransferableMessage message;
@@ -392,15 +397,15 @@ TEST_F(ServiceWorkerObjectHostTest, DispatchExtendableMessageEvent_FromClient) {
   EXPECT_EQ(blink::ServiceWorkerStatusCode::kOk, status);
 
   // The worker should have received an ExtendableMessageEvent whose
-  // source is |provider_host|.
+  // source is |container_host|.
   const std::vector<blink::mojom::ExtendableMessageEventPtr>& events =
       worker->events();
   EXPECT_EQ(1u, events.size());
   EXPECT_FALSE(events[0]->source_info_for_service_worker);
   EXPECT_TRUE(events[0]->source_info_for_client);
-  EXPECT_EQ(provider_host->client_uuid(),
+  EXPECT_EQ(container_host->client_uuid(),
             events[0]->source_info_for_client->client_uuid);
-  EXPECT_EQ(provider_host->client_type(),
+  EXPECT_EQ(container_host->client_type(),
             events[0]->source_info_for_client->client_type);
 }
 

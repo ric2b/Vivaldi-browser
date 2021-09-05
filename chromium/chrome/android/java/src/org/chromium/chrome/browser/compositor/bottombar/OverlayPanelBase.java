@@ -11,14 +11,14 @@ import android.view.ViewGroup;
 
 import androidx.annotation.ColorInt;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ApiCompatibilityUtils;
-import org.chromium.base.VisibleForTesting;
+import org.chromium.base.MathUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel.PanelState;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel.StateChangeReason;
-import org.chromium.chrome.browser.util.MathUtils;
 import org.chromium.ui.base.LocalizationUtils;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
 
@@ -162,8 +162,6 @@ abstract class OverlayPanelBase {
                 ApiCompatibilityUtils.getColor(resources, R.color.drag_handlebar_color);
         mButtonPaddingDps =
                 (int) (mPxToDp * resources.getDimension(R.dimen.overlay_panel_button_padding));
-        mBarShadowVisible = true;
-        mPanelShadowVisible = true;
     }
 
     // ============================================================================================
@@ -412,8 +410,6 @@ abstract class OverlayPanelBase {
     // --------------------------------------------------------------------------------------------
     private final float mBarMarginSide;
     private final float mBarMarginTop;
-    private final boolean mBarShadowVisible;
-    private final boolean mPanelShadowVisible;
 
     private float mBarHeight;
     private boolean mIsBarBorderVisible;
@@ -462,24 +458,10 @@ abstract class OverlayPanelBase {
     }
 
     /**
-     * @return Whether the Bar shadow is visible (between the Bar and content).
-     */
-    public boolean getBarShadowVisible() {
-        return mBarShadowVisible;
-    }
-
-    /**
      * @return The background color of the Bar.
      */
     public int getBarBackgroundColor() {
         return mBarBackgroundColor;
-    }
-
-    /**
-     * @return Whether the shadow for the entire Panel & Bar is visible.
-     */
-    public boolean getPanelShadowVisible() {
-        return mPanelShadowVisible;
     }
 
     /**
@@ -597,7 +579,7 @@ abstract class OverlayPanelBase {
     private float mProgressBarOpacity;
     private boolean mIsProgressBarVisible;
     private float mProgressBarHeight;
-    private int mProgressBarCompletion;
+    private float mProgressBarCompletion;
 
     /**
      * @return Whether the Progress Bar is visible.
@@ -630,14 +612,14 @@ abstract class OverlayPanelBase {
     /**
      * @return The completion percentage of the Progress Bar.
      */
-    public int getProgressBarCompletion() {
+    public float getProgressBarCompletion() {
         return mProgressBarCompletion;
     }
 
     /**
-     * @param completion The completion percentage to be set.
+     * @param completion The completion to be set.
      */
-    protected void setProgressBarCompletion(int completion) {
+    protected void setProgressBarCompletion(float completion) {
         mProgressBarCompletion = completion;
     }
 

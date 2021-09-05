@@ -73,7 +73,7 @@ class MODULES_EXPORT ServiceWorker final
 
   ServiceWorker(ExecutionContext*, WebServiceWorkerObjectInfo);
   ~ServiceWorker() override;
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
   // Pre-finalization needed to promptly release owned WebServiceWorker.
   void Dispose();
@@ -105,9 +105,9 @@ class MODULES_EXPORT ServiceWorker final
   ScriptPromise InternalsTerminate(ScriptState*);
 
  private:
-  // ContextLifecycleStateObserver overrides.
+  // ExecutionContextLifecycleStateObserver overrides.
   void ContextLifecycleStateChanged(mojom::FrameLifecycleState state) override;
-  void ContextDestroyed(ExecutionContext*) override;
+  void ContextDestroyed() override;
 
   bool was_stopped_;
   const KURL url_;

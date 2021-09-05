@@ -7,7 +7,7 @@
 
 #include "platform_media/common/feature_toggles.h"
 
-#include "base/memory/shared_memory.h"
+#include "base/memory/unsafe_shared_memory_region.h"
 #include "base/time/time.h"
 #include "ipc/ipc_message_macros.h"
 #include "platform_media/common/platform_media_pipeline_types.h"
@@ -16,10 +16,10 @@
 #define IPC_MESSAGE_START MediaPipelineMsgStart
 
 IPC_ENUM_TRAITS_MAX_VALUE(media::PlatformMediaDataType,
-                          media::PlatformMediaDataType::PLATFORM_MEDIA_DATA_TYPE_COUNT - 1)
+                          media::kPlatformMediaDataTypeCount - 1)
 
 IPC_ENUM_TRAITS_MAX_VALUE(media::MediaDataStatus,
-                          int(media::MediaDataStatus::kCount) - 1)
+                          media::kMediaDataStatusCount - 1)
 
 IPC_STRUCT_TRAITS_BEGIN(media::PlatformMediaTimeInfo)
   IPC_STRUCT_TRAITS_MEMBER(duration)
@@ -54,42 +54,31 @@ IPC_STRUCT_BEGIN(MediaPipelineMsg_DecodedDataReady_Params)
   IPC_STRUCT_MEMBER(base::TimeDelta, duration)
 IPC_STRUCT_END()
 
-IPC_SYNC_MESSAGE_CONTROL2_0(
+IPC_SYNC_MESSAGE_CONTROL1_0(
     MediaPipelineMsg_New,
-    int32_t /* route_id */,
-    int32_t /* gpu_video_accelerator_factories_route_id */)
+    int32_t /* route_id */)
 
 IPC_MESSAGE_CONTROL1(MediaPipelineMsg_Destroy,
                      int32_t /* route_id */)
 
-IPC_MESSAGE_ROUTED1(MediaPipelineMsg_RequestBufferForRawData,
-                    uint32_t /* requested_size */)
-
-IPC_MESSAGE_ROUTED2(MediaPipelineMsg_BufferForRawDataReady,
-                    uint32_t /* buffer_size */,
-                    base::SharedMemoryHandle /* handle */)
-
-IPC_MESSAGE_ROUTED2(MediaPipelineMsg_RequestBufferForDecodedData,
-                    media::PlatformMediaDataType /* type */,
-                    uint32_t /* requested_size */)
-
-IPC_MESSAGE_ROUTED3(MediaPipelineMsg_BufferForDecodedDataReady,
-                    media::PlatformMediaDataType /* type */,
-                    uint32_t /* buffer_size */,
-                    base::SharedMemoryHandle /* handle */)
-
-IPC_MESSAGE_ROUTED2(MediaPipelineMsg_ReadRawData,
+IPC_MESSAGE_ROUTED3(MediaPipelineMsg_ReadRawData,
+                    int64_t /* tag */,
                     int64_t /* position */,
                     int /* size */)
 
-IPC_MESSAGE_ROUTED1(MediaPipelineMsg_RawDataReady,
-                    int /* size (DataSource::kReadError on error, 0 on EOS) */)
+IPC_MESSAGE_ROUTED3(MediaPipelineMsg_RawDataReady,
+                    int64_t /* tag */,
+                    int /* size (DataSource::kReadError on error, 0 on EOS) */,
+                    base::ReadOnlySharedMemoryRegion
+                    /* new region or not valid to reuse cached one */)
 
 IPC_MESSAGE_ROUTED1(MediaPipelineMsg_ReadDecodedData,
                     media::PlatformMediaDataType /* type */)
 
-IPC_MESSAGE_ROUTED1(MediaPipelineMsg_DecodedDataReady,
-                    MediaPipelineMsg_DecodedDataReady_Params /* data */)
+IPC_MESSAGE_ROUTED2(MediaPipelineMsg_DecodedDataReady,
+                    MediaPipelineMsg_DecodedDataReady_Params /* data */,
+                    base::ReadOnlySharedMemoryRegion
+                    /* new region or not valid to reuse cached one*/)
 
 IPC_MESSAGE_ROUTED3(MediaPipelineMsg_Initialize,
                     int64_t /* data_source_size (<0 means "unknown") */,
@@ -116,5 +105,3 @@ IPC_MESSAGE_ROUTED1(MediaPipelineMsg_Seek,
 
 IPC_MESSAGE_ROUTED1(MediaPipelineMsg_Sought,
                     bool /* success */)
-
-IPC_MESSAGE_ROUTED0(MediaPipelineMsg_Stop)

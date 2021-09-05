@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "chromeos/components/multidevice/logging/logging.h"
@@ -22,6 +23,17 @@ namespace chromeos {
 namespace device_sync {
 
 namespace {
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused. If entries are added, kMaxValue should
+// be updated.
+enum class TargetServiceForMetrics {
+  kUnknown = 0,
+  kEnrollment = 1,
+  kDeviceSync = 2,
+  // Used for UMA logs.
+  kMaxValue = kDeviceSync
+};
 
 // The 'registrationTickleType' key-value pair is present in GCM push
 // messages. The values correspond to a server-side enum.
@@ -41,9 +53,11 @@ const char kTargetServiceKey[] = "S";
 const char kSessionIdKey[] = "I";
 
 // Used in GCM messages triggered by a BatchNofityGroupDevices request. The
-// value corresponding to this key is the feature_type field forwarded from the
-// BatchNotifyGroupDevicesRequest.
-const char kFeatureTypeKey[] = "F";
+// value corresponding to this key is the base64url-encoded, SHA-256 8-byte hash
+// of the feature_type field forwarded from the BatchNotifyGroupDevicesRequest.
+// CryptAuth chooses this hashing scheme to accommodate the limited bandwidth of
+// GCM messages.
+const char kFeatureTypeHashKey[] = "F";
 
 // Only used in GCM messages sent by CryptAuth v2 DeviceSync. The value
 // corresponding to this key specifies the relevant DeviceSync group. Currently,
@@ -62,41 +76,61 @@ base::Optional<cryptauthv2::TargetService> TargetServiceFromMessage(
 
   auto it = message.data.find(kRegistrationTickleTypeKey);
   if (it != message.data.end()) {
+    TargetServiceForMetrics target_service_for_metrics;
     if (it->second == kRegistrationTickleTypeForceEnrollment ||
         it->second == kRegistrationTickleTypeUpdateEnrollment) {
+      target_service_for_metrics = TargetServiceForMetrics::kEnrollment;
       target_from_registration_tickle_type =
           cryptauthv2::TargetService::ENROLLMENT;
     } else if (it->second == kRegistrationTickleTypeDevicesSync) {
+      target_service_for_metrics = TargetServiceForMetrics::kDeviceSync;
       target_from_registration_tickle_type =
           cryptauthv2::TargetService::DEVICE_SYNC;
     } else {
-      // TODO(https://crbug.com/956592): Add metrics.
+      target_service_for_metrics = TargetServiceForMetrics::kUnknown;
       PA_LOG(WARNING) << "Unknown tickle type in GCM message: " << it->second;
     }
+    base::UmaHistogramEnumeration(
+        "CryptAuth.Gcm.Message.TargetService.FromRegistrationTickleType",
+        target_service_for_metrics);
   }
 
   it = message.data.find(kTargetServiceKey);
   if (it != message.data.end()) {
+    TargetServiceForMetrics target_service_for_metrics;
     if (it->second ==
         base::NumberToString(cryptauthv2::TargetService::ENROLLMENT)) {
+      target_service_for_metrics = TargetServiceForMetrics::kEnrollment;
       target_from_target_service = cryptauthv2::TargetService::ENROLLMENT;
     } else if (it->second ==
                base::NumberToString(cryptauthv2::TargetService::DEVICE_SYNC)) {
+      target_service_for_metrics = TargetServiceForMetrics::kDeviceSync;
       target_from_target_service = cryptauthv2::TargetService::DEVICE_SYNC;
     } else {
-      // TODO(https://crbug.com/956592): Add metrics.
+      target_service_for_metrics = TargetServiceForMetrics::kUnknown;
       PA_LOG(WARNING) << "Invalid TargetService in GCM message: " << it->second;
     }
+    base::UmaHistogramEnumeration(
+        "CryptAuth.Gcm.Message.TargetService.FromTargetServiceValue",
+        target_service_for_metrics);
   }
 
-  if (target_from_registration_tickle_type && target_from_target_service) {
-    // TODO(https://crbug.com/956592): Add metrics.
+  bool are_tickle_type_and_target_service_both_specified =
+      target_from_registration_tickle_type && target_from_target_service;
+  base::UmaHistogramBoolean(
+      "CryptAuth.Gcm.Message.TargetService."
+      "AreTickleTypeAndTargetServiceBothSpecified",
+      are_tickle_type_and_target_service_both_specified);
+  if (are_tickle_type_and_target_service_both_specified) {
     PA_LOG(WARNING) << "Registration tickle type, "
                     << *target_from_registration_tickle_type
                     << ", and target service, " << *target_from_target_service
                     << ", are both set in the same GCM message";
   }
 
+  // If the target service is specified via both the CryptAuth v1 registration
+  // tickle type field and the v2 target service field, prefer the v2 value.
+  // That said, we do not expect both to be used in the same GCM message.
   return target_from_target_service ? target_from_target_service
                                     : target_from_registration_tickle_type;
 }
@@ -116,19 +150,22 @@ base::Optional<std::string> StringValueFromMessage(
 // if the value does not correspond to one of the CryptAuthFeatureType enums.
 base::Optional<CryptAuthFeatureType> FeatureTypeFromMessage(
     const gcm::IncomingMessage& message) {
-  base::Optional<std::string> feature_type_string =
-      StringValueFromMessage(kFeatureTypeKey, message);
+  base::Optional<std::string> feature_type_hash =
+      StringValueFromMessage(kFeatureTypeHashKey, message);
 
-  if (!feature_type_string)
+  if (!feature_type_hash)
     return base::nullopt;
 
   base::Optional<CryptAuthFeatureType> feature_type =
-      CryptAuthFeatureTypeFromString(*feature_type_string);
-
-  if (!feature_type) {
-    // TODO(https://crbug.com/956592): Add metrics.
-    PA_LOG(WARNING) << "GCM message contains unknown feature type: "
-                    << *feature_type_string;
+      CryptAuthFeatureTypeFromGcmHash(*feature_type_hash);
+  base::UmaHistogramBoolean("CryptAuth.Gcm.Message.IsKnownFeatureType",
+                            feature_type.has_value());
+  if (feature_type) {
+    base::UmaHistogramEnumeration("CryptAuth.Gcm.Message.FeatureType",
+                                  *feature_type);
+  } else {
+    PA_LOG(WARNING) << "GCM message contains unknown feature type hash: "
+                    << *feature_type_hash;
   }
 
   return feature_type;
@@ -140,10 +177,26 @@ base::Optional<CryptAuthFeatureType> FeatureTypeFromMessage(
 bool IsDeviceSyncGroupNameValid(const gcm::IncomingMessage& message) {
   base::Optional<std::string> group_name =
       StringValueFromMessage(kDeviceSyncGroupNameKey, message);
-  return !group_name ||
-         *group_name ==
-             CryptAuthKeyBundle::KeyBundleNameEnumToString(
-                 CryptAuthKeyBundle::Name::kDeviceSyncBetterTogether);
+  if (!group_name)
+    return true;
+
+  bool is_device_sync_group_name_valid =
+      *group_name == CryptAuthKeyBundle::KeyBundleNameEnumToString(
+                         CryptAuthKeyBundle::Name::kDeviceSyncBetterTogether);
+  base::UmaHistogramBoolean("CryptAuth.Gcm.Message.IsDeviceSyncGroupNameValid",
+                            is_device_sync_group_name_valid);
+
+  return is_device_sync_group_name_valid;
+}
+
+void RecordGCMRegistrationMetrics(gcm::GCMClient::Result result,
+                                  base::TimeDelta execution_time) {
+  base::UmaHistogramCustomTimes(
+      "CryptAuth.Gcm.Registration.AttemptTimeWithRetries", execution_time,
+      base::TimeDelta::FromSeconds(1) /* min */,
+      base::TimeDelta::FromMinutes(10) /* max */, 100 /* buckets */);
+
+  base::UmaHistogramEnumeration("CryptAuth.Gcm.Registration.Result", result);
 }
 
 }  // namespace
@@ -153,28 +206,22 @@ CryptAuthGCMManagerImpl::Factory*
     CryptAuthGCMManagerImpl::Factory::factory_instance_ = nullptr;
 
 // static
-std::unique_ptr<CryptAuthGCMManager>
-CryptAuthGCMManagerImpl::Factory::NewInstance(gcm::GCMDriver* gcm_driver,
-                                              PrefService* pref_service) {
-  if (!factory_instance_)
-    factory_instance_ = new Factory();
+std::unique_ptr<CryptAuthGCMManager> CryptAuthGCMManagerImpl::Factory::Create(
+    gcm::GCMDriver* gcm_driver,
+    PrefService* pref_service) {
+  if (factory_instance_)
+    return factory_instance_->CreateInstance(gcm_driver, pref_service);
 
-  return factory_instance_->BuildInstance(gcm_driver, pref_service);
+  return base::WrapUnique(
+      new CryptAuthGCMManagerImpl(gcm_driver, pref_service));
 }
 
 // static
-void CryptAuthGCMManagerImpl::Factory::SetInstanceForTesting(Factory* factory) {
+void CryptAuthGCMManagerImpl::Factory::SetFactoryForTesting(Factory* factory) {
   factory_instance_ = factory;
 }
 
 CryptAuthGCMManagerImpl::Factory::~Factory() = default;
-
-std::unique_ptr<CryptAuthGCMManager>
-CryptAuthGCMManagerImpl::Factory::BuildInstance(gcm::GCMDriver* gcm_driver,
-                                                PrefService* pref_service) {
-  return base::WrapUnique(
-      new CryptAuthGCMManagerImpl(gcm_driver, pref_service));
-}
 
 CryptAuthGCMManagerImpl::CryptAuthGCMManagerImpl(gcm::GCMDriver* gcm_driver,
                                                  PrefService* pref_service)
@@ -204,12 +251,13 @@ void CryptAuthGCMManagerImpl::RegisterWithGCM() {
 
   PA_LOG(VERBOSE) << "Beginning GCM registration...";
   registration_in_progress_ = true;
+  gcm_registration_start_timestamp_ = base::TimeTicks::Now();
 
   std::vector<std::string> sender_ids(1, kCryptAuthGcmSenderId);
   gcm_driver_->Register(
       kCryptAuthGcmAppId, sender_ids,
-      base::Bind(&CryptAuthGCMManagerImpl::OnRegistrationCompleted,
-                 weak_ptr_factory_.GetWeakPtr()));
+      base::BindOnce(&CryptAuthGCMManagerImpl::OnRegistrationCompleted,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 std::string CryptAuthGCMManagerImpl::GetRegistrationId() {
@@ -246,13 +294,11 @@ void CryptAuthGCMManagerImpl::OnMessage(const std::string& app_id,
   base::Optional<cryptauthv2::TargetService> target_service =
       TargetServiceFromMessage(message);
   if (!target_service) {
-    // TODO(https://crbug.com/956592): Add metrics.
     PA_LOG(ERROR) << "GCM message does not specify a valid target service.";
     return;
   }
 
   if (!IsDeviceSyncGroupNameValid(message)) {
-    // TODO(https://crbug.com/956592): Add metrics.
     PA_LOG(ERROR) << "GCM message contains unexpected DeviceSync group name: "
                   << *StringValueFromMessage(kDeviceSyncGroupNameKey, message);
     return;
@@ -293,8 +339,11 @@ void CryptAuthGCMManagerImpl::OnRegistrationCompleted(
     const std::string& registration_id,
     gcm::GCMClient::Result result) {
   registration_in_progress_ = false;
+  RecordGCMRegistrationMetrics(
+      result, base::TimeTicks::Now() -
+                  gcm_registration_start_timestamp_ /* execution_time */);
+
   if (result != gcm::GCMClient::SUCCESS) {
-    // TODO(https://crbug.com/956592): Add metrics.
     PA_LOG(WARNING) << "GCM registration failed with result="
                     << static_cast<int>(result);
     for (auto& observer : observers_)

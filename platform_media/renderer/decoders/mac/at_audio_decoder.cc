@@ -229,7 +229,7 @@ void ATAudioDecoder::Initialize(const AudioDecoderConfig& config,
   if (config.is_encrypted()) {
     LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                  << " Unsupported Encrypted Audio codec : " << GetCodecName(config.codec());
-    task_runner_->PostTask(FROM_HERE, base::BindOnce(std::move(init_cb), false));
+    task_runner_->PostTask(FROM_HERE, base::BindOnce(std::move(init_cb), media::Status(media::StatusCode::kDecoderUnsupportedCodec)));
     return;
   }
 
@@ -237,14 +237,22 @@ void ATAudioDecoder::Initialize(const AudioDecoderConfig& config,
   if (!codec_helper_) {
     VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
             << " Unsupported codec: " << GetCodecName(config.codec());
-    task_runner_->PostTask(FROM_HERE, base::BindOnce(std::move(init_cb), false));
+    task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(
+            std::move(init_cb),
+            media::Status(media::StatusCode::kDecoderUnsupportedCodec)));
     return;
   }
 
   if (!IsPlatformAudioDecoderAvailable(config.codec())) {
     LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                  << " PlatformAudioDecoder Not Available for codec : " << GetCodecName(config.codec());
-    task_runner_->PostTask(FROM_HERE, base::BindOnce(std::move(init_cb), false));
+    task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(
+            std::move(init_cb),
+            media::Status(media::StatusCode::kDecoderUnsupportedCodec)));
     return;
   }
 
@@ -266,7 +274,11 @@ void ATAudioDecoder::Initialize(const AudioDecoderConfig& config,
           base::Bind(&ATAudioDecoder::ConvertAudio, base::Unretained(this)))) {
     LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                  << ": Initialize helper failed for codec : " << GetCodecName(config.codec());
-    task_runner_->PostTask(FROM_HERE, base::BindOnce(std::move(init_cb), false));
+    task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(
+            std::move(init_cb),
+            media::Status(media::StatusCode::kDecoderFailedInitialization)));
     return;
   }
 
@@ -275,7 +287,8 @@ void ATAudioDecoder::Initialize(const AudioDecoderConfig& config,
 
   debug_buffer_logger_.Initialize(GetCodecName(config_.codec()));
 
-  task_runner_->PostTask(FROM_HERE, base::BindOnce(std::move(init_cb), true));
+  task_runner_->PostTask(FROM_HERE,
+    base::BindOnce(std::move(init_cb), media::Status()));
 }
 
 void ATAudioDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,

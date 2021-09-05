@@ -11,18 +11,18 @@
 
 #include "base/hash/md5.h"
 #include "base/strings/string16.h"
+#include "notes/note_node.h"
 #include "notes/notes_model.h"
-#include "notes/notesnode.h"
 
 namespace base {
 class DictionaryValue;
 class ListValue;
 class Value;
-}
+}  // namespace base
 
 namespace vivaldi {
 
-// NotesCodec is responsible for encoding and decoding the Notes_Model
+// NotesCodec is responsible for encoding and decoding the NotesModel
 // into JSON values. The encoded values are written to disk via the
 // NotesStorage.
 class NotesCodec {
@@ -38,25 +38,28 @@ class NotesCodec {
   // returned object. This is invoked to encode the contents of the notes
   // model and is currently a convenience to invoking Encode that takes the
   // notes node and other folder node.
-  std::unique_ptr<base::Value> Encode(Notes_Model* model);
+  std::unique_ptr<base::Value> Encode(NotesModel* model,
+                                      const std::string& sync_metadata_str);
 
   // Encodes the notes folder returning the JSON value. It's
   // up to the caller to delete the returned object.
-  std::unique_ptr<base::Value> Encode(const Notes_Node* notes_node,
-                      const Notes_Node* other_notes_node,
-                      const Notes_Node* trash_notes_node,
-                      int64_t sync_transaction_version);
+  std::unique_ptr<base::Value> Encode(const NoteNode* notes_node,
+                                      const NoteNode* other_notes_node,
+                                      const NoteNode* trash_notes_node,
+                                      int64_t sync_transaction_version,
+                                      const std::string& sync_metadata_str);
 
   // Decodes the previously encoded value to the specified nodes as well as
   // setting |max_node_id| to the greatest node id. Returns true on success,
   // false otherwise. If there is an error (such as unexpected version) all
   // children are removed from the notes and other folder nodes. On exit
   // |max_node_id| is set to the max id of the nodes.
-  bool Decode(Notes_Node* notes_node,
-              Notes_Node* other_notes_node,
-              Notes_Node* trash_notes_node,
+  bool Decode(NoteNode* notes_node,
+              NoteNode* other_notes_node,
+              NoteNode* trash_notes_node,
               int64_t* max_node_id,
-              const base::Value& value);
+              const base::Value& value,
+              std::string* sync_metadata_str);
 
   // Updates the check-sum with the given string.
   void UpdateChecksum(const std::string& str);
@@ -81,42 +84,64 @@ class NotesCodec {
   // false after encoding.
   bool ids_reassigned() const { return ids_reassigned_; }
 
-  void register_id(int64_t id);
-  size_t count_id(int64_t id) { return ids_.count(id); }
-  bool ids_valid() const { return ids_valid_; }
-  void set_ids_valid(bool val) { ids_valid_ = val; }
+  // Returns whether the GUIDs were reassigned during decoding. Always returns
+  // false after encoding.
+  bool guids_reassigned() const { return guids_reassigned_; }
 
   // Names of the various keys written to the Value.
-  static const char* kRootsKey;
-  static const char* kVersionKey;
-  static const char* kChecksumKey;
-  static const char* kIdKey;
-  static const char* kNameKey;
-  static const char* kDateModifiedKey;
-  static const char* kChildrenKey;
-  static const char* kSyncTransactionVersion;
+  static const char kVersionKey[];
+  static const char kChecksumKey[];
+  static const char kIdKey[];
+  static const char kTypeKey[];
+  static const char kSubjectKey[];
+  static const char kDateAddedKey[];
+  static const char kURLKey[];
+  static const char kChildrenKey[];
+  static const char kContentKey[];
+  static const char kGuidKey[];
+  static const char kAttachmentsKey[];
+  static const char kSyncMetadata[];
+  static const char kTypeNote[];
+  static const char kTypeFolder[];
+  static const char kTypeSeparator[];
+  static const char kTypeOther[];
+  static const char kTypeTrash[];
+  static const char kSyncTransactionVersion[];
 
  private:
   // Encodes node and all its children into a Value object and returns it.
   // The caller takes ownership of the returned object.
-  base::Value* EncodeNode(const Notes_Node* node);
+  std::unique_ptr<base::Value> EncodeNode(
+      const NoteNode* node,
+      const std::vector<const NoteNode*>* extra_nodes);
 
   // Helper to perform decoding.
-  bool DecodeHelper(Notes_Node* notes_node,
-                    Notes_Node* other_notes_node,
-                    Notes_Node* trash_notes_node,
-                    const base::Value& value);
-  void ExtractSpecialNode(Notes_Node::Type type,
-                          Notes_Node* source,
-                          Notes_Node* target);
+  bool DecodeHelper(NoteNode* notes_node,
+                    NoteNode* other_notes_node,
+                    NoteNode* trash_notes_node,
+                    const base::Value& value,
+                    std::string* sync_metadata_str);
+  void ExtractSpecialNode(NoteNode::Type type,
+                          NoteNode* source,
+                          NoteNode* target);
 
   // Reassigns Notes IDs for all nodes.
-  void ReassignIDs(Notes_Node* notes_node,
-                   Notes_Node* other_node,
-                   Notes_Node* trash_node);
+  void ReassignIDs(NoteNode* notes_node,
+                   NoteNode* other_node,
+                   NoteNode* trash_node);
 
   // Helper to recursively reassign IDs.
-  void ReassignIDsHelper(Notes_Node* node);
+  void ReassignIDsHelper(NoteNode* node);
+
+  // Decodes the supplied node from the supplied value. Child nodes are
+  // created appropriately by way of DecodeChildren. If node is NULL a new
+  // node is created and added to parent (parent must then be non-NULL),
+  // otherwise node is used.
+  bool DecodeNode(const base::DictionaryValue& value,
+                  NoteNode* parent,
+                  NoteNode* node,
+                  NoteNode* child_other_node,
+                  NoteNode* child_trash_node);
 
   // Initializes/Finalizes the checksum.
   void InitializeChecksum();
@@ -125,6 +150,9 @@ class NotesCodec {
   // Whether or not IDs were reassigned by the codec.
   bool ids_reassigned_;
 
+  // Whether or not GUIDs were reassigned by the codec.
+  bool guids_reassigned_;
+
   // Whether or not IDs are valid. This is initially true, but set to false
   // if an id is missing or not unique.
   bool ids_valid_;
@@ -132,6 +160,10 @@ class NotesCodec {
   // Contains the id of each of the nodes found in the file. Used to determine
   // if we have duplicates.
   std::set<int64_t> ids_;
+
+  // Contains the GUID of each of the nodes found in the file. Used to determine
+  // if we have duplicates.
+  std::set<std::string> guids_;
 
   // MD5 context used to compute MD5 hash of all notes data.
   base::MD5Context md5_context_;

@@ -81,7 +81,7 @@ class CORE_EXPORT InspectorNetworkAgent final
                         WorkerGlobalScope*,
                         v8_inspector::V8InspectorSession*);
   ~InspectorNetworkAgent() override;
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
   void Restore() override;
 
@@ -150,7 +150,6 @@ class CORE_EXPORT InspectorNetworkAgent final
                    const AtomicString& method,
                    const KURL&,
                    bool async,
-                   EncodedFormData* form_data,
                    const HTTPHeaderMap& headers,
                    bool include_crendentials);
   void DidFinishXHR(XMLHttpRequest*);
@@ -257,6 +256,7 @@ class CORE_EXPORT InspectorNetworkAgent final
   bool CanGetResponseBodyBlob(const String& request_id);
   void GetResponseBodyBlob(const String& request_id,
                            std::unique_ptr<GetResponseBodyCallback>);
+  ExecutionContext* GetTargetExecutionContext() const;
 
   static std::unique_ptr<protocol::Network::Initiator> BuildInitiatorObject(
       Document*,

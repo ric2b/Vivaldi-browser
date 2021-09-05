@@ -10,6 +10,7 @@
 
 #include "base/callback_forward.h"
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "chrome/browser/ui/views/payments/view_stack.h"
 #include "components/payments/content/initialization_task.h"
 #include "components/payments/content/payment_request_dialog.h"
@@ -89,9 +90,9 @@ class PaymentRequestDialogView : public views::DialogDelegateView,
   // Build a Dialog around the PaymentRequest object. |observer| is used to
   // be notified of dialog events as they happen (but may be NULL) and should
   // outlive this object.
-  PaymentRequestDialogView(PaymentRequest* request,
-                           PaymentRequestDialogView::ObserverForTest* observer);
-  ~PaymentRequestDialogView() override;
+  static base::WeakPtr<PaymentRequestDialogView> Create(
+      PaymentRequest* request,
+      PaymentRequestDialogView::ObserverForTest* observer);
 
   // views::View
   void RequestFocus() override;
@@ -103,7 +104,6 @@ class PaymentRequestDialogView : public views::DialogDelegateView,
   // views::DialogDelegate:
   bool Cancel() override;
   bool ShouldShowCloseButton() const override;
-  int GetDialogButtons() const override;
 
   // payments::PaymentRequestDialog:
   void ShowDialog() override;
@@ -183,6 +183,10 @@ class PaymentRequestDialogView : public views::DialogDelegateView,
   views::View* throbber_overlay_for_testing() { return throbber_overlay_; }
 
  private:
+  PaymentRequestDialogView(PaymentRequest* request,
+                           PaymentRequestDialogView::ObserverForTest* observer);
+  ~PaymentRequestDialogView() override;
+
   void OnDialogOpened();
   void ShowInitialPaymentSheet();
   void SetupSpinnerOverlay();
@@ -214,6 +218,8 @@ class PaymentRequestDialogView : public views::DialogDelegateView,
 
   // The number of initialization tasks that are not yet initialized.
   size_t number_of_initialization_tasks_ = 0;
+
+  base::WeakPtrFactory<PaymentRequestDialogView> weak_ptr_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(PaymentRequestDialogView);
 };

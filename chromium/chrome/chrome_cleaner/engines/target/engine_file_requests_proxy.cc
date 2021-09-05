@@ -9,7 +9,6 @@
 
 #include "base/bind.h"
 #include "base/synchronization/waitable_event.h"
-#include "mojo/public/cpp/system/platform_handle.h"
 
 namespace chrome_cleaner {
 
@@ -51,23 +50,19 @@ void SaveFindCloseCallback(uint32_t* out_result,
 
 void SaveOpenReadOnlyFileCallback(base::win::ScopedHandle* result_holder,
                                   base::WaitableEvent* async_call_done_event,
-                                  mojo::ScopedHandle handle) {
-  HANDLE raw_handle = INVALID_HANDLE_VALUE;
-  MojoResult mojo_result =
-      mojo::UnwrapPlatformFile(std::move(handle), &raw_handle);
-  LOG_IF(ERROR, mojo_result != MOJO_RESULT_OK)
-      << "UnwrapPlatformFile failed " << mojo_result;
-  result_holder->Set(raw_handle);
+                                  mojo::PlatformHandle handle) {
+  *result_holder = handle.TakeHandle();
   async_call_done_event->Signal();
 }
 
 }  // namespace
 
 EngineFileRequestsProxy::EngineFileRequestsProxy(
-    mojom::EngineFileRequestsAssociatedPtr file_requests_ptr,
+    mojo::PendingAssociatedRemote<mojom::EngineFileRequests> file_requests,
     scoped_refptr<base::SingleThreadTaskRunner> task_runner)
-    : file_requests_ptr_(std::move(file_requests_ptr)),
-      task_runner_(task_runner) {}
+    : file_requests_(std::move(file_requests)), task_runner_(task_runner) {}
+
+EngineFileRequestsProxy::EngineFileRequestsProxy() = default;
 
 EngineFileRequestsProxy::~EngineFileRequestsProxy() = default;
 
@@ -144,19 +139,19 @@ base::win::ScopedHandle EngineFileRequestsProxy::OpenReadOnlyFile(
   return handle;
 }
 
-void EngineFileRequestsProxy::UnbindRequestsPtr() {
-  file_requests_ptr_.reset();
+void EngineFileRequestsProxy::UnbindRequestsRemote() {
+  file_requests_.reset();
 }
 
 MojoCallStatus EngineFileRequestsProxy::SandboxFindFirstFile(
     const base::FilePath& path,
     mojom::EngineFileRequests::SandboxFindFirstFileCallback result_callback) {
-  if (!file_requests_ptr_.is_bound()) {
+  if (!file_requests_.is_bound()) {
     LOG(ERROR) << "SandboxFindFirstFile called without bound pointer";
     return MojoCallStatus::Failure(SandboxErrorCode::INTERNAL_ERROR);
   }
 
-  file_requests_ptr_->SandboxFindFirstFile(path, std::move(result_callback));
+  file_requests_->SandboxFindFirstFile(path, std::move(result_callback));
 
   return MojoCallStatus::Success();
 }
@@ -164,15 +159,15 @@ MojoCallStatus EngineFileRequestsProxy::SandboxFindFirstFile(
 MojoCallStatus EngineFileRequestsProxy::SandboxFindNextFile(
     FindFileHandle handle,
     mojom::EngineFileRequests::SandboxFindNextFileCallback result_callback) {
-  if (!file_requests_ptr_.is_bound()) {
+  if (!file_requests_.is_bound()) {
     LOG(ERROR) << "SandboxFindNextFile called without bound pointer";
     return MojoCallStatus::Failure(SandboxErrorCode::INTERNAL_ERROR);
   }
 
   auto find_handle = mojom::FindHandle::New();
   find_handle->find_handle = handle;
-  file_requests_ptr_->SandboxFindNextFile(std::move(find_handle),
-                                          std::move(result_callback));
+  file_requests_->SandboxFindNextFile(std::move(find_handle),
+                                      std::move(result_callback));
 
   return MojoCallStatus::Success();
 }
@@ -180,15 +175,15 @@ MojoCallStatus EngineFileRequestsProxy::SandboxFindNextFile(
 MojoCallStatus EngineFileRequestsProxy::SandboxFindClose(
     FindFileHandle handle,
     mojom::EngineFileRequests::SandboxFindCloseCallback result_callback) {
-  if (!file_requests_ptr_.is_bound()) {
+  if (!file_requests_.is_bound()) {
     LOG(ERROR) << "SandboxFindClose called without bound pointer";
     return MojoCallStatus::Failure(SandboxErrorCode::INTERNAL_ERROR);
   }
 
   auto find_handle = mojom::FindHandle::New();
   find_handle->find_handle = handle;
-  file_requests_ptr_->SandboxFindClose(std::move(find_handle),
-                                       std::move(result_callback));
+  file_requests_->SandboxFindClose(std::move(find_handle),
+                                   std::move(result_callback));
 
   return MojoCallStatus::Success();
 }
@@ -198,13 +193,13 @@ MojoCallStatus EngineFileRequestsProxy::SandboxOpenReadOnlyFile(
     uint32_t dwFlagsAndAttributes,
     mojom::EngineFileRequests::SandboxOpenReadOnlyFileCallback
         result_callback) {
-  if (!file_requests_ptr_.is_bound()) {
+  if (!file_requests_.is_bound()) {
     LOG(ERROR) << "SandboxOpenReadOnlyFile called without bound pointer";
     return MojoCallStatus::Failure(SandboxErrorCode::INTERNAL_ERROR);
   }
 
-  file_requests_ptr_->SandboxOpenReadOnlyFile(path, dwFlagsAndAttributes,
-                                              std::move(result_callback));
+  file_requests_->SandboxOpenReadOnlyFile(path, dwFlagsAndAttributes,
+                                          std::move(result_callback));
 
   return MojoCallStatus::Success();
 }

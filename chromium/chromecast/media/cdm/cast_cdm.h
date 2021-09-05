@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef CHROMECAST_MEDIA_CDM_cast_cdm_H_
-#define CHROMECAST_MEDIA_CDM_cast_cdm_H_
+#ifndef CHROMECAST_MEDIA_CDM_CAST_CDM_H_
+#define CHROMECAST_MEDIA_CDM_CAST_CDM_H_
 
 #include <stdint.h>
 
@@ -50,8 +50,8 @@ class CastCdm : public ::media::ContentDecryptionModule {
       const ::media::SessionKeysChangeCB& session_keys_change_cb,
       const ::media::SessionExpirationUpdateCB& session_expiration_update_cb);
 
-  int RegisterPlayer(const base::Closure& new_key_cb,
-                     const base::Closure& cdm_unset_cb);
+  int RegisterPlayer(base::RepeatingClosure new_key_cb,
+                     base::RepeatingClosure cdm_unset_cb);
   void UnregisterPlayer(int registration_id);
 
   // Returns the decryption context needed to decrypt frames encrypted with
@@ -103,7 +103,10 @@ class CastCdm : public ::media::ContentDecryptionModule {
   ::media::SessionKeysChangeCB session_keys_change_cb_;
   ::media::SessionExpirationUpdateCB session_expiration_update_cb_;
 
-  MediaResourceTracker* media_resource_tracker_;
+  // Track the usage for hardware resource. nullptr means the implementation
+  // doesn't need hardware resource.
+  MediaResourceTracker* const media_resource_tracker_;
+  std::unique_ptr<MediaResourceTracker::ScopedUsage> media_resource_usage_;
   std::unique_ptr<::media::PlayerTrackerImpl> player_tracker_impl_;
   std::unique_ptr<CastCdmContext> cast_cdm_context_;
 
@@ -115,4 +118,4 @@ class CastCdm : public ::media::ContentDecryptionModule {
 }  // namespace media
 }  // namespace chromecast
 
-#endif  // CHROMECAST_MEDIA_CDM_cast_cdm_H_
+#endif  // CHROMECAST_MEDIA_CDM_CAST_CDM_H_

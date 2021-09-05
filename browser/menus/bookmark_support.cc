@@ -6,6 +6,8 @@
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "ui/gfx/image/image.h"
 
+#include "components/bookmarks/vivaldi_bookmark_kit.h"
+
 namespace vivaldi {
 
 BookmarkSupport::BookmarkSupport()
@@ -31,8 +33,8 @@ void BookmarkSupport::initIcons(const std::vector<std::string>& src_icons) {
 const gfx::Image& BookmarkSupport::iconForNode(
     const bookmarks::BookmarkNode* node) const {
   if (node->is_folder()) {
-    return node->GetSpeeddial() ? icons[kSpeeddial]
-                                : icons[kFolder];
+    return vivaldi_bookmark_kit::GetSpeeddial(node) ? icons[kSpeeddial]
+                                                    : icons[kFolder];
   }
   return icons[kUrl];
 }

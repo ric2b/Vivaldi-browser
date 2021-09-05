@@ -63,5 +63,31 @@ class AutoUpdateDisableUpdateNotifierFunction : public ExtensionFunction {
   DISALLOW_COPY_AND_ASSIGN(AutoUpdateDisableUpdateNotifierFunction);
 };
 
+class AutoUpdateGetAutoInstallUpdatesFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("autoUpdate.getAutoInstallUpdates",
+                             AUTOUPDATE_GETAUTOINSTALLUPDATES)
+  AutoUpdateGetAutoInstallUpdatesFunction() = default;
+
+ private:
+  ~AutoUpdateGetAutoInstallUpdatesFunction() override = default;
+  ResponseAction Run() override;
+
+  DISALLOW_COPY_AND_ASSIGN(AutoUpdateGetAutoInstallUpdatesFunction);
+};
+
+class AutoUpdateSetAutoInstallUpdatesFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("autoUpdate.setAutoInstallUpdates",
+                             AUTOUPDATE_SETAUTOINSTALLUPDATES)
+  AutoUpdateSetAutoInstallUpdatesFunction() = default;
+
+ private:
+  ~AutoUpdateSetAutoInstallUpdatesFunction() override = default;
+  ResponseAction Run() override;
+
+  DISALLOW_COPY_AND_ASSIGN(AutoUpdateSetAutoInstallUpdatesFunction);
+};
+
 }  // namespace extensions
 #endif  // EXTENSIONS_API_AUTO_UPDATE_AUTO_UPDATE_API_H_

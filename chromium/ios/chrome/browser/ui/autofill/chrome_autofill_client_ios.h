@@ -17,6 +17,7 @@
 #include "components/autofill/core/browser/payments/legal_message_line.h"
 #include "components/autofill/core/browser/payments/strike_database.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
+#include "components/autofill/core/browser/ui/payments/card_expiration_date_fix_flow_controller_impl.h"
 #include "components/autofill/core/browser/ui/payments/card_name_fix_flow_controller_impl.h"
 #include "components/autofill/core/browser/ui/payments/card_unmask_prompt_controller_impl.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
@@ -38,7 +39,7 @@ namespace autofill {
 // Chrome iOS implementation of AutofillClient.
 class ChromeAutofillClientIOS : public AutofillClient {
  public:
-  ChromeAutofillClientIOS(ios::ChromeBrowserState* browser_state,
+  ChromeAutofillClientIOS(ChromeBrowserState* browser_state,
                           web::WebState* web_state,
                           infobars::InfoBarManager* infobar_manager,
                           id<AutofillClientIOSBridge> bridge,
@@ -63,6 +64,7 @@ class ChromeAutofillClientIOS : public AutofillClient {
   AddressNormalizer* GetAddressNormalizer() override;
   security_state::SecurityLevel GetSecurityLevelForUmaHistograms() override;
   std::string GetPageLanguage() const override;
+  std::string GetVariationConfigCountryCode() const override;
 
   void ShowAutofillSettings(bool show_credit_card_settings) override;
   void ShowUnmaskPrompt(const CreditCard& card,
@@ -81,7 +83,6 @@ class ChromeAutofillClientIOS : public AutofillClient {
       const base::string16& tip_message,
       const std::vector<MigratableCreditCard>& migratable_credit_cards,
       MigrationDeleteCardCallback delete_local_card_callback) override;
-  void ShowWebauthnOfferDialog(WebauthnOfferDialogCallback callback) override;
   void ConfirmSaveAutofillProfile(const AutofillProfile& profile,
                                   base::OnceClosure callback) override;
   void ConfirmSaveCreditCardLocally(
@@ -90,6 +91,10 @@ class ChromeAutofillClientIOS : public AutofillClient {
       LocalSaveCardPromptCallback callback) override;
   void ConfirmAccountNameFixFlow(
       base::OnceCallback<void(const base::string16&)> callback) override;
+  void ConfirmExpirationDateFixFlow(
+      const CreditCard& card,
+      base::OnceCallback<void(const base::string16&, const base::string16&)>
+          callback) override;
   void ConfirmSaveCreditCardToCloud(
       const CreditCard& card,
       const LegalMessageLines& legal_message_lines,
@@ -99,7 +104,7 @@ class ChromeAutofillClientIOS : public AutofillClient {
   void ConfirmCreditCardFillAssist(const CreditCard& card,
                                    base::OnceClosure callback) override;
   bool HasCreditCardScanFeature() override;
-  void ScanCreditCard(const CreditCardScanCallback& callback) override;
+  void ScanCreditCard(CreditCardScanCallback callback) override;
   void ShowAutofillPopup(
       const gfx::RectF& element_bounds,
       base::i18n::TextDirection text_direction,
@@ -110,7 +115,11 @@ class ChromeAutofillClientIOS : public AutofillClient {
   void UpdateAutofillPopupDataListValues(
       const std::vector<base::string16>& values,
       const std::vector<base::string16>& labels) override;
-  void HideAutofillPopup() override;
+  base::span<const autofill::Suggestion> GetPopupSuggestions() const override;
+  void PinPopupView() override;
+  void UpdatePopup(const std::vector<autofill::Suggestion>& suggestions,
+                   PopupType popup_type) override;
+  void HideAutofillPopup(PopupHidingReason reason) override;
   bool IsAutocompleteEnabled() override;
   void PropagateAutofillPredictions(
       content::RenderFrameHost* rfh,
@@ -133,7 +142,7 @@ class ChromeAutofillClientIOS : public AutofillClient {
   syncer::SyncService* sync_service_;
   PersonalDataManager* personal_data_manager_;
   AutocompleteHistoryManager* autocomplete_history_manager_;
-  ios::ChromeBrowserState* browser_state_;
+  ChromeBrowserState* browser_state_;
   web::WebState* web_state_;
   __weak id<AutofillClientIOSBridge> bridge_;
   signin::IdentityManager* identity_manager_;
@@ -145,6 +154,8 @@ class ChromeAutofillClientIOS : public AutofillClient {
   CardUnmaskPromptControllerImpl unmask_controller_;
   std::unique_ptr<LogManager> log_manager_;
   CardNameFixFlowControllerImpl card_name_fix_flow_controller_;
+  CardExpirationDateFixFlowControllerImpl
+      card_expiration_date_fix_flow_controller_;
 
   // A weak reference to the view controller used to present UI.
   __weak UIViewController* base_view_controller_;

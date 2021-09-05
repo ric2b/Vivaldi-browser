@@ -5,7 +5,6 @@
 package org.chromium.chrome.browser.metrics;
 
 import android.app.Activity;
-import android.content.SharedPreferences;
 import android.os.Handler;
 import android.text.format.DateUtils;
 
@@ -15,17 +14,18 @@ import androidx.annotation.Nullable;
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationState;
 import org.chromium.base.ApplicationStatus;
-import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ntp.NewTabPage;
+import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
+import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tabmodel.TabLaunchType;
+import org.chromium.chrome.browser.tab.TabCreationState;
+import org.chromium.chrome.browser.tab.TabLaunchType;
+import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabModelObserver;
-import org.chromium.chrome.browser.tabmodel.TabSelectionType;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -64,11 +64,6 @@ public class MainIntentBehaviorMetrics implements ApplicationStatus.ActivityStat
             }
         });
     }
-
-    @VisibleForTesting
-    static final String LAUNCH_TIMESTAMP_PREF = "MainIntent.LaunchTimestamp";
-    @VisibleForTesting
-    static final String LAUNCH_COUNT_PREF = "MainIntent.LaunchCount";
 
     // Constants used to log UMA "enum" histogram about launch type.
     private static final int LAUNCH_FROM_ICON = 0;
@@ -134,9 +129,10 @@ public class MainIntentBehaviorMetrics implements ApplicationStatus.ActivityStat
 
         mTabModelObserver = new TabModelSelectorTabModelObserver(mActivity.getTabModelSelector()) {
             @Override
-            public void didAddTab(Tab tab, @TabLaunchType int type) {
+            public void didAddTab(
+                    Tab tab, @TabLaunchType int type, @TabCreationState int creationState) {
                 if (type == TabLaunchType.FROM_RESTORE) return;
-                if (NewTabPage.isNTPUrl(tab.getUrl())) {
+                if (NewTabPage.isNTPUrl(tab.getUrlString())) {
                     recordUserBehavior(MainIntentActionType.NTP_CREATED);
                 }
             }
@@ -269,11 +265,11 @@ public class MainIntentBehaviorMetrics implements ApplicationStatus.ActivityStat
         if (sLoggedLaunchBehavior) return;
         sLoggedLaunchBehavior = true;
 
-        SharedPreferences pref = ContextUtils.getAppSharedPreferences();
-        SharedPreferences.Editor editor = pref.edit();
+        SharedPreferencesManager prefs = SharedPreferencesManager.getInstance();
         long current = System.currentTimeMillis();
-        long timestamp = pref.getLong(LAUNCH_TIMESTAMP_PREF, 0);
-        int count = pref.getInt(LAUNCH_COUNT_PREF, 0);
+        long timestamp =
+                prefs.readLong(ChromePreferenceKeys.METRICS_MAIN_INTENT_LAUNCH_TIMESTAMP, 0);
+        int count = prefs.readInt(ChromePreferenceKeys.METRICS_MAIN_INTENT_LAUNCH_COUNT, 0);
 
         if (current - timestamp > DateUtils.DAY_IN_MILLIS) {
             // Log count if it's not first launch of Chrome.
@@ -281,11 +277,11 @@ public class MainIntentBehaviorMetrics implements ApplicationStatus.ActivityStat
                 RecordHistogram.recordCountHistogram("MobileStartup.DailyLaunchCount", count);
             }
             count = 0;
-            editor.putLong(LAUNCH_TIMESTAMP_PREF, current);
+            prefs.writeLong(ChromePreferenceKeys.METRICS_MAIN_INTENT_LAUNCH_TIMESTAMP, current);
         }
 
         count++;
-        editor.putInt(LAUNCH_COUNT_PREF, count).apply();
+        prefs.writeInt(ChromePreferenceKeys.METRICS_MAIN_INTENT_LAUNCH_COUNT, count);
         RecordHistogram.recordEnumeratedHistogram("MobileStartup.LaunchType",
                 isLaunchFromIcon ? LAUNCH_FROM_ICON : LAUNCH_NOT_FROM_ICON, LAUNCH_BOUNDARY);
 

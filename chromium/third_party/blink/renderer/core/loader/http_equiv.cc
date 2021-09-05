@@ -16,12 +16,13 @@
 #include "third_party/blink/renderer/core/loader/document_loader.h"
 #include "third_party/blink/renderer/core/loader/private/frame_client_hints_preferences_context.h"
 #include "third_party/blink/renderer/core/origin_trials/origin_trial_context.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/loader/fetch/client_hints_preferences.h"
 #include "third_party/blink/renderer/platform/network/http_names.h"
 #include "third_party/blink/renderer/platform/network/http_parsers.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
-#include "third_party/blink/renderer/platform/weborigin/security_violation_reporting_policy.h"
+#include "third_party/blink/renderer/platform/weborigin/reporting_disposition.h"
 
 namespace blink {
 
@@ -36,7 +37,7 @@ bool IsFirstPartyOrigin(Frame* frame, const KURL& url) {
       .Top()
       .GetSecurityContext()
       ->GetSecurityOrigin()
-      ->IsSameSchemeHostPort(SecurityOrigin::Create(url).get());
+      ->IsSameOriginWith(SecurityOrigin::Create(url).get());
 }
 
 // Returns true if execution of scripts from the url are allowed. Compared to
@@ -57,8 +58,14 @@ bool AllowScriptFromSourceWithoutNotifying(
 
 // Notifies content settings client of persistent client hint headers.
 void NotifyPersistentClientHintsToContentSettingsClient(Document& document) {
-  base::TimeDelta persist_duration =
-      document.GetFrame()->GetClientHintsPreferences().GetPersistDuration();
+  base::TimeDelta persist_duration;
+  if (RuntimeEnabledFeatures::FeaturePolicyForClientHintsEnabled()) {
+    persist_duration = base::TimeDelta::Max();
+  } else {
+    persist_duration =
+        document.GetFrame()->GetClientHintsPreferences().GetPersistDuration();
+  }
+
   if (persist_duration.InSeconds() <= 0)
     return;
 
@@ -104,7 +111,7 @@ void HttpEquiv::Process(Document& document,
   } else if (EqualIgnoringASCIICase(equiv, "x-dns-prefetch-control")) {
     document.ParseDNSPrefetchControlHeader(content);
   } else if (EqualIgnoringASCIICase(equiv, "x-frame-options")) {
-    document.AddConsoleMessage(ConsoleMessage::Create(
+    document.AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
         mojom::ConsoleMessageSource::kSecurity,
         mojom::ConsoleMessageLevel::kError,
         "X-Frame-Options may only be set via an HTTP header sent along with a "
@@ -136,13 +143,13 @@ void HttpEquiv::ProcessHttpEquivContentSecurityPolicy(
     return;
   if (EqualIgnoringASCIICase(equiv, "content-security-policy")) {
     document.GetContentSecurityPolicy()->DidReceiveHeader(
-        content, kContentSecurityPolicyHeaderTypeEnforce,
-        kContentSecurityPolicyHeaderSourceMeta);
+        content, network::mojom::ContentSecurityPolicyType::kEnforce,
+        network::mojom::ContentSecurityPolicySource::kMeta);
   } else if (EqualIgnoringASCIICase(equiv,
                                     "content-security-policy-report-only")) {
     document.GetContentSecurityPolicy()->DidReceiveHeader(
-        content, kContentSecurityPolicyHeaderTypeReport,
-        kContentSecurityPolicyHeaderSourceMeta);
+        content, network::mojom::ContentSecurityPolicyType::kReport,
+        network::mojom::ContentSecurityPolicySource::kMeta);
   } else {
     NOTREACHED();
   }
@@ -167,6 +174,9 @@ void HttpEquiv::ProcessHttpEquivAcceptCHLifetime(Document& document,
   if (!frame)
     return;
 
+  if (RuntimeEnabledFeatures::FeaturePolicyForClientHintsEnabled())
+    return;
+
   UseCounter::Count(document, WebFeature::kClientHintsMetaAcceptCHLifetime);
   FrameClientHintsPreferencesContext hints_context(frame);
   frame->GetClientHintsPreferences().UpdateFromAcceptClientHintsLifetimeHeader(
@@ -186,7 +196,7 @@ void HttpEquiv::ProcessHttpEquivRefresh(Document& document,
   if (!document.GetContentSecurityPolicy()->AllowInline(
           ContentSecurityPolicy::InlineType::kScript, element, "" /* content */,
           "" /* nonce */, NullURL(), OrdinalNumber(),
-          SecurityViolationReportingPolicy::kSuppressReporting)) {
+          ReportingDisposition::kSuppressReporting)) {
     UseCounter::Count(document,
                       WebFeature::kMetaRefreshWhenCSPBlocksInlineScript);
   }
@@ -197,7 +207,7 @@ void HttpEquiv::ProcessHttpEquivRefresh(Document& document,
 void HttpEquiv::ProcessHttpEquivSetCookie(Document& document,
                                           const AtomicString& content,
                                           Element* element) {
-  document.AddConsoleMessage(ConsoleMessage::Create(
+  document.AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
       mojom::ConsoleMessageSource::kSecurity,
       mojom::ConsoleMessageLevel::kError,
       String::Format("Blocked setting the `%s` cookie from a `<meta>` tag.",

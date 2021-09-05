@@ -8,15 +8,13 @@
 #include <memory>
 #include <set>
 
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "base/scoped_observer.h"
 #include "chrome/browser/ui/toolbar/app_menu_icon_controller.h"
 #include "chrome/browser/ui/views/frame/app_menu_button.h"
 #include "components/feature_engagement/buildflags.h"
-#include "ui/base/material_design/material_design_controller.h"
-#include "ui/base/material_design/material_design_controller_observer.h"
+#include "ui/base/pointer/touch_ui_controller.h"
 #include "ui/views/view.h"
 
 class ToolbarView;
@@ -24,10 +22,11 @@ enum class InProductHelpFeature;
 
 // The app menu button in the main browser window (as opposed to web app
 // windows, which is implemented in WebAppMenuButton).
-class BrowserAppMenuButton : public AppMenuButton,
-                             public ui::MaterialDesignControllerObserver {
+class BrowserAppMenuButton : public AppMenuButton {
  public:
   explicit BrowserAppMenuButton(ToolbarView* toolbar_view);
+  BrowserAppMenuButton(const BrowserAppMenuButton&) = delete;
+  BrowserAppMenuButton& operator=(const BrowserAppMenuButton&) = delete;
   ~BrowserAppMenuButton() override;
 
   void SetTypeAndSeverity(
@@ -47,33 +46,23 @@ class BrowserAppMenuButton : public AppMenuButton,
   void SetPromoFeature(base::Optional<InProductHelpFeature> promo_feature);
 
   // views::MenuButton:
-  gfx::Rect GetAnchorBoundsInScreen() const override;
   void OnThemeChanged() override;
 
   // Updates the presentation according to |severity_| and the theme provider.
   void UpdateIcon();
-
-  // Sets |margin_trailing_| when the browser is maximized and updates layout
-  // to make the focus rectangle centered.
-  void SetTrailingMargin(int margin);
 
   // Opens the app menu immediately during a drag-and-drop operation.
   // Used only in testing.
   static bool g_open_app_immediately_for_testing;
 
  protected:
-  // ui::MaterialDesignControllerObserver:
-  void OnTouchUiChanged() override;
+  // If the button is being used as an anchor for a promo, returns the best
+  // promo color given the current background color. Otherwise, returns the
+  // standard ToolbarButton foreground color for the given |state|.
+  SkColor GetForegroundColor(ButtonState state) const override;
 
  private:
-  void UpdateBorder();
-
-  // If the button is being used as an anchor for a promo, returns the best
-  // promo color given the current background color.
-  base::Optional<SkColor> GetPromoHighlightColor() const;
-
   // AppMenuButton:
-  void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
   const char* GetClassName() const override;
   bool GetDropFormats(int* formats,
                       std::set<ui::ClipboardFormatType>* format_types) override;
@@ -89,6 +78,8 @@ class BrowserAppMenuButton : public AppMenuButton,
   SkColor GetInkDropBaseColor() const override;
   base::string16 GetTooltipText(const gfx::Point& p) const override;
 
+  void OnTouchUiChanged();
+
   AppMenuIconController::TypeAndSeverity type_and_severity_{
       AppMenuIconController::IconType::NONE,
       AppMenuIconController::Severity::NONE};
@@ -99,14 +90,13 @@ class BrowserAppMenuButton : public AppMenuButton,
   // The feature, if any, for which this button is anchoring a promo.
   base::Optional<InProductHelpFeature> promo_feature_;
 
-  ScopedObserver<ui::MaterialDesignController,
-                 ui::MaterialDesignControllerObserver>
-      md_observer_{this};
+  std::unique_ptr<ui::TouchUiController::Subscription> subscription_ =
+      ui::TouchUiController::Get()->RegisterCallback(
+          base::BindRepeating(&BrowserAppMenuButton::OnTouchUiChanged,
+                              base::Unretained(this)));
 
   // Used to spawn weak pointers for delayed tasks to open the overflow menu.
   base::WeakPtrFactory<BrowserAppMenuButton> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(BrowserAppMenuButton);
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_TOOLBAR_BROWSER_APP_MENU_BUTTON_H_

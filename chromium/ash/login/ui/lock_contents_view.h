@@ -12,6 +12,7 @@
 
 #include "ash/ash_export.h"
 #include "ash/keyboard/ui/keyboard_ui_controller.h"
+#include "ash/login/ui/bottom_status_indicator.h"
 #include "ash/login/ui/lock_screen.h"
 #include "ash/login/ui/login_data_dispatcher.h"
 #include "ash/login/ui/login_display_style.h"
@@ -72,6 +73,9 @@ class ASH_EXPORT LockContentsView
       public KeyboardControllerObserver,
       public chromeos::PowerManagerClient::Observer {
  public:
+  class AuthErrorBubble;
+  class UserState;
+
   // TestApi is used for tests to get internal implementation details.
   class ASH_EXPORT TestApi {
    public:
@@ -80,6 +84,7 @@ class ASH_EXPORT LockContentsView
 
     LoginBigUserView* primary_big_view() const;
     LoginBigUserView* opt_secondary_big_view() const;
+    AccountId focused_user() const;
     ScrollableUsersListView* users_list() const;
     LockScreenMediaControlsView* media_controls_view() const;
     views::View* note_action() const;
@@ -89,8 +94,16 @@ class ASH_EXPORT LockContentsView
     LoginErrorBubble* warning_banner_bubble() const;
     LoginErrorBubble* supervised_user_deprecation_bubble() const;
     views::View* system_info() const;
+    views::View* bottom_status_indicator() const;
     LoginExpandedPublicAccountView* expanded_view() const;
     views::View* main_view() const;
+    const std::vector<LockContentsView::UserState>& users() const;
+
+    // Finds and focuses User view specified by |account_id|. Returns nullptr if
+    // not found.
+    LoginBigUserView* FindUser(const AccountId& account_id);
+    bool RemoveUser(const AccountId& account_id);
+    bool IsOobeDialogVisible() const;
 
    private:
     LockContentsView* const view_;
@@ -105,8 +118,6 @@ class ASH_EXPORT LockContentsView
   };
 
   enum class AcceleratorAction {
-    kFocusNextUser,
-    kFocusPreviousUser,
     kShowSystemInfo,
     kShowFeedback,
     kShowResetScreen,
@@ -127,15 +138,15 @@ class ASH_EXPORT LockContentsView
 
   void FocusNextUser();
   void FocusPreviousUser();
+  void ShowAdbEnabled();
   void ShowSystemInfo();
   void ShowParentAccessDialog();
-  void RequestSecurityTokenPin(SecurityTokenPinRequest request);
-  void ClearSecurityTokenPinRequest();
 
   // views::View:
   void Layout() override;
   void AddedToWidget() override;
   void OnFocus() override;
+  bool OnKeyPressed(const ui::KeyEvent& event) override;
   void AboutToRequestFocusFromTabTraversal(bool reverse) override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
@@ -166,7 +177,8 @@ class ASH_EXPORT LockContentsView
                            bool enforced,
                            const std::string& os_version_label_text,
                            const std::string& enterprise_info_text,
-                           const std::string& bluetooth_name) override;
+                           const std::string& bluetooth_name,
+                           bool adb_sideloading_enabled) override;
   void OnPublicSessionDisplayNameChanged(
       const AccountId& account_id,
       const std::string& display_name) override;
@@ -212,7 +224,6 @@ class ASH_EXPORT LockContentsView
   void HideMediaControlsLayout();
   bool AreMediaControlsEnabled() const;
 
- private:
   class UserState {
    public:
     explicit UserState(const LoginUserInfo& user_info);
@@ -225,6 +236,7 @@ class ASH_EXPORT LockContentsView
     bool enable_tap_auth = false;
     bool force_online_sign_in = false;
     bool disable_auth = false;
+    bool show_pin_pad_for_password = false;
     base::Optional<EasyUnlockIconOptions> easy_unlock_state;
     FingerprintState fingerprint_state;
 
@@ -232,6 +244,7 @@ class ASH_EXPORT LockContentsView
     DISALLOW_COPY_AND_ASSIGN(UserState);
   };
 
+ private:
   class AutoLoginUserActivityHandler;
 
   using DisplayLayoutAction = base::RepeatingCallback<void(bool landscape)>;
@@ -265,6 +278,10 @@ class ASH_EXPORT LockContentsView
   // Lay out the top header. This is called when the children of the top header
   // change contents or visibility.
   void LayoutTopHeader();
+
+  // Lay out the bottom status indicator. This is called when system information
+  // is shown if ADB is enabled.
+  void LayoutBottomStatusIndicator();
 
   // Lay out the expanded public session view.
   void LayoutPublicSessionView();
@@ -366,6 +383,10 @@ class ASH_EXPORT LockContentsView
   // factors including policy settings, channel and Alt-V accelerator.
   bool GetSystemInfoVisibility() const;
 
+  // Toggles the visibility of the |bottom_status_indicator_| based on its
+  // content type and whether the extension UI window is opened.
+  void UpdateBottomStatusIndicatorVisibility();
+
   const LockScreen::ScreenType screen_type_;
 
   std::vector<UserState> users_;
@@ -406,7 +427,7 @@ class ASH_EXPORT LockContentsView
   // All error bubbles and the tooltip view are child views of LockContentsView,
   // and will be torn down when LockContentsView is torn down.
   // Bubble for displaying authentication error.
-  LoginErrorBubble* auth_error_bubble_;
+  AuthErrorBubble* auth_error_bubble_;
   // Bubble for displaying detachable base errors.
   LoginErrorBubble* detachable_base_error_bubble_;
   // Bubble for displaying easy-unlock tooltips.
@@ -415,6 +436,12 @@ class ASH_EXPORT LockContentsView
   LoginErrorBubble* warning_banner_bubble_;
   // Bubble for displaying supervised user deprecation message.
   LoginErrorBubble* supervised_user_deprecation_bubble_;
+
+  // Bottom status indicator displaying ADB enabled alert.
+  BottomStatusIndicator* bottom_status_indicator_;
+
+  // Tracks the visibility of the extension Ui window.
+  bool extension_ui_visible_ = false;
 
   int unlock_attempt_ = 0;
 

@@ -249,11 +249,11 @@ class CORE_EXPORT Event : public ScriptWrappable {
   }
   void setCancelBubble(ScriptState*, bool);
 
-  Event* UnderlyingEvent() const { return underlying_event_.Get(); }
-  void SetUnderlyingEvent(Event*);
+  const Event* UnderlyingEvent() const { return underlying_event_.Get(); }
+  void SetUnderlyingEvent(const Event*);
 
   bool HasEventPath() { return event_path_; }
-  EventPath& GetEventPath() {
+  EventPath& GetEventPath() const {
     DCHECK(event_path_);
     return *event_path_;
   }
@@ -290,6 +290,10 @@ class CORE_EXPORT Event : public ScriptWrappable {
 
   void LegacySetDidListenersThrowFlag() {
     legacy_did_listeners_throw_flag_ = true;
+  }
+
+  void SetCopyEventPathFromUnderlyingEvent() {
+    copy_event_path_from_underlying_event_ = true;
   }
 
   // In general, event listeners do not run when related execution contexts are
@@ -343,23 +347,21 @@ class CORE_EXPORT Event : public ScriptWrappable {
   unsigned fire_only_capture_listeners_at_target_ : 1;
   unsigned fire_only_non_capture_listeners_at_target_ : 1;
 
+  unsigned copy_event_path_from_underlying_event_ : 1;
+
   PassiveMode handling_passive_;
   uint8_t event_phase_;
   probe::AsyncTaskId async_task_id_;
 
   Member<EventTarget> current_target_;
   Member<EventTarget> target_;
-  Member<Event> underlying_event_;
+  Member<const Event> underlying_event_;
   Member<EventPath> event_path_;
   // The monotonic platform time in seconds, for input events it is the
   // event timestamp provided by the host OS and reported in the original
   // WebInputEvent instance.
   base::TimeTicks platform_time_stamp_;
 };
-
-#define DEFINE_EVENT_TYPE_CASTS(typeName)                          \
-  DEFINE_TYPE_CASTS(typeName, Event, event, event->Is##typeName(), \
-                    event.Is##typeName())
 
 }  // namespace blink
 

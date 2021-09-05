@@ -30,6 +30,8 @@ class ClipboardAura : public Clipboard {
   void ReadAvailableTypes(ClipboardBuffer buffer,
                           std::vector<base::string16>* types,
                           bool* contains_filenames) const override;
+  std::vector<base::string16> ReadAvailablePlatformSpecificFormatNames(
+      ClipboardBuffer buffer) const override;
   void ReadText(ClipboardBuffer buffer, base::string16* result) const override;
   void ReadAsciiText(ClipboardBuffer buffer,
                      std::string* result) const override;
@@ -39,7 +41,8 @@ class ClipboardAura : public Clipboard {
                 uint32_t* fragment_start,
                 uint32_t* fragment_end) const override;
   void ReadRTF(ClipboardBuffer buffer, std::string* result) const override;
-  SkBitmap ReadImage(ClipboardBuffer buffer) const override;
+  void ReadImage(ClipboardBuffer buffer,
+                 ReadImageCallback callback) const override;
   void ReadCustomData(ClipboardBuffer buffer,
                       const base::string16& type,
                       base::string16* result) const override;

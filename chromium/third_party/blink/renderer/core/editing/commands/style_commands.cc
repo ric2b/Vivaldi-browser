@@ -216,8 +216,9 @@ bool StyleCommands::SelectionStartHasStyle(LocalFrame& frame,
           frame.Selection().ComputeVisibleSelectionInDOMTreeDeprecated(),
           property_id == CSSPropertyID::kBackgroundColor,
           style_to_check->Style());
-  return style_to_check->TriStateOfStyle(style_at_start, secure_context_mode) !=
-         EditingTriState::kFalse;
+  return style_to_check->TriStateOfStyle(
+             frame.GetDocument()->ToExecutionContext(), style_at_start,
+             secure_context_mode) != EditingTriState::kFalse;
 }
 
 bool StyleCommands::ExecuteToggleStyle(LocalFrame& frame,
@@ -351,7 +352,7 @@ bool StyleCommands::ExecuteStyleWithCSS(LocalFrame& frame,
                                         EditorCommandSource,
                                         const String& value) {
   frame.GetEditor().SetShouldStyleWithCSS(
-      !DeprecatedEqualIgnoringCase(value, "false"));
+      !EqualIgnoringASCIICase(value, "false"));
   return true;
 }
 
@@ -360,7 +361,7 @@ bool StyleCommands::ExecuteUseCSS(LocalFrame& frame,
                                   EditorCommandSource,
                                   const String& value) {
   frame.GetEditor().SetShouldStyleWithCSS(
-      DeprecatedEqualIgnoringCase(value, "false"));
+      EqualIgnoringASCIICase(value, "false"));
   return true;
 }
 
@@ -368,7 +369,7 @@ bool StyleCommands::ExecuteUseCSS(LocalFrame& frame,
 EditingTriState StyleCommands::StateStyle(LocalFrame& frame,
                                           CSSPropertyID property_id,
                                           const char* desired_value) {
-  frame.GetDocument()->UpdateStyleAndLayout();
+  frame.GetDocument()->UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
   if (frame.GetEditor().Behavior().ShouldToggleStyleBasedOnStartOfSelection()) {
     return SelectionStartHasStyle(frame, property_id, desired_value)
                ? EditingTriState::kTrue
@@ -528,7 +529,7 @@ WritingDirection StyleCommands::TextDirectionForSelection(
 EditingTriState StyleCommands::StateTextWritingDirection(
     LocalFrame& frame,
     WritingDirection direction) {
-  frame.GetDocument()->UpdateStyleAndLayout();
+  frame.GetDocument()->UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
 
   bool has_nested_or_multiple_embeddings;
   WritingDirection selection_direction = TextDirectionForSelection(
@@ -582,7 +583,7 @@ String StyleCommands::SelectionStartCSSPropertyValue(
 }
 
 String StyleCommands::ValueStyle(LocalFrame& frame, CSSPropertyID property_id) {
-  frame.GetDocument()->UpdateStyleAndLayout();
+  frame.GetDocument()->UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
 
   // TODO(editing-dev): Rather than retrieving the style at the start of the
   // current selection, we should retrieve the style present throughout the

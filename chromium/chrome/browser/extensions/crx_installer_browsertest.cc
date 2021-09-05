@@ -29,10 +29,10 @@
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/fake_safe_browsing_database_manager.h"
 #include "chrome/browser/extensions/forced_extensions/installation_reporter.h"
+#include "chrome/browser/extensions/scripting_permissions_modifier.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/extensions/browser_action_test_util.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/web_application_info.h"
 #include "chrome/grit/generated_resources.h"
@@ -54,6 +54,7 @@
 #include "extensions/browser/notification_types.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_builder.h"
+#include "extensions/common/extension_features.h"
 #include "extensions/common/feature_switch.h"
 #include "extensions/common/file_util.h"
 #include "extensions/common/permissions/api_permission.h"
@@ -90,10 +91,11 @@ class MockInstallPrompt;
 // This class holds information about things that happen with a
 // MockInstallPrompt. We create the MockInstallPrompt but need to pass
 // ownership of it to CrxInstaller, so it isn't safe to hang this data on
-// MockInstallPrompt itself becuase we can't guarantee it's lifetime.
+// MockInstallPrompt itself because we can't guarantee it's lifetime.
 class MockPromptProxy {
  public:
-  explicit MockPromptProxy(content::WebContents* web_contents);
+  MockPromptProxy(content::WebContents* web_contents,
+                  ScopedTestDialogAutoConfirm::AutoConfirm confirm_mode);
   ~MockPromptProxy();
 
   bool did_succeed() const { return !extension_id_.empty(); }
@@ -131,14 +133,6 @@ SkBitmap CreateSquareBitmap(int size) {
   return bitmap;
 }
 
-WebApplicationIconInfo CreateIconInfoWithBitmap(int size) {
-  WebApplicationIconInfo icon_info;
-  icon_info.width = size;
-  icon_info.height = size;
-  icon_info.data = CreateSquareBitmap(size);
-  return icon_info;
-}
-
 WebApplicationInfo CreateWebAppInfo(const char* title,
                                     const char* description,
                                     const char* app_url,
@@ -148,8 +142,7 @@ WebApplicationInfo CreateWebAppInfo(const char* title,
   web_app_info.description = base::UTF8ToUTF16(description);
   web_app_info.app_url = GURL(app_url);
   web_app_info.scope = GURL(app_url);
-
-  web_app_info.icons.push_back(CreateIconInfoWithBitmap(size));
+  web_app_info.icon_bitmaps[size] = CreateSquareBitmap(size);
 
   return web_app_info;
 }
@@ -178,29 +171,36 @@ class MockInstallPrompt : public ExtensionInstallPrompt {
   DISALLOW_COPY_AND_ASSIGN(MockInstallPrompt);
 };
 
-MockPromptProxy::MockPromptProxy(content::WebContents* web_contents)
+MockPromptProxy::MockPromptProxy(
+    content::WebContents* web_contents,
+    ScopedTestDialogAutoConfirm::AutoConfirm confirm_mode)
     : web_contents_(web_contents),
       confirmation_requested_(false),
-      auto_confirm(new ScopedTestDialogAutoConfirm(
-          ScopedTestDialogAutoConfirm::ACCEPT)) {
-}
+      auto_confirm(new ScopedTestDialogAutoConfirm(confirm_mode)) {}
 
-MockPromptProxy::~MockPromptProxy() {}
+MockPromptProxy::~MockPromptProxy() = default;
 
 std::unique_ptr<ExtensionInstallPrompt> MockPromptProxy::CreatePrompt() {
   return std::unique_ptr<MockInstallPrompt>(
       new MockInstallPrompt(web_contents_, this));
 }
 
+std::unique_ptr<MockPromptProxy> CreateMockPromptProxyForBrowserWithConfirmMode(
+    Browser* browser,
+    ScopedTestDialogAutoConfirm::AutoConfirm confirm_mode) {
+  return std::make_unique<MockPromptProxy>(
+      browser->tab_strip_model()->GetActiveWebContents(), confirm_mode);
+}
+
 std::unique_ptr<MockPromptProxy> CreateMockPromptProxyForBrowser(
     Browser* browser) {
-  return std::make_unique<MockPromptProxy>(
-      browser->tab_strip_model()->GetActiveWebContents());
+  return CreateMockPromptProxyForBrowserWithConfirmMode(
+      browser, ScopedTestDialogAutoConfirm::ACCEPT);
 }
 
 class ManagementPolicyMock : public extensions::ManagementPolicy::Provider {
  public:
-  ManagementPolicyMock() {}
+  ManagementPolicyMock() = default;
 
   std::string GetDebugPolicyProviderName() const override {
     return "ManagementPolicyMock";
@@ -530,21 +530,14 @@ IN_PROC_BROWSER_TEST_F(ExtensionCrxInstallerTest,
 
 // Tests that scopes are only granted if |record_oauth2_grant_| on the prompt is
 // true.
-#if defined(OS_WIN)
-#define MAYBE_GrantScopes DISABLED_GrantScopes
-#define MAYBE_GrantScopes_WithCallback DISABLED_GrantScopes_WithCallback
-#else
-#define MAYBE_GrantScopes GrantScopes
-#define MAYBE_GrantScopes_WithCallback GrantScopes_WithCallback
-#endif
 IN_PROC_BROWSER_TEST_F(ExtensionCrxInstallerTestWithExperimentalApis,
-                       MAYBE_GrantScopes) {
+                       GrantScopes) {
   EXPECT_NO_FATAL_FAILURE(CheckHasEmptyScopesAfterInstall(
       "browsertest/scopes", CrxInstaller::InstallerResultCallback(), true));
 }
 
 IN_PROC_BROWSER_TEST_F(ExtensionCrxInstallerTestWithExperimentalApis,
-                       MAYBE_GrantScopes_WithCallback) {
+                       GrantScopes_WithCallback) {
   EXPECT_NO_FATAL_FAILURE(CheckHasEmptyScopesAfterInstall(
       "browsertest/scopes",
       base::BindOnce([](const base::Optional<CrxInstallError>& error) {
@@ -1158,5 +1151,58 @@ IN_PROC_BROWSER_TEST_F(ExtensionCrxInstallerTest, UpdateWithFileAccess) {
     EXPECT_TRUE(extension->creation_flags() & Extension::ALLOW_FILE_ACCESS);
   }
 }
+
+class ExtensionCrxInstallerTestWithWithholdingUI
+    : public ExtensionCrxInstallerTest,
+      public testing::WithParamInterface<bool> {
+ public:
+  ExtensionCrxInstallerTestWithWithholdingUI() {
+    feature_list_.InitAndEnableFeature(
+        extensions_features::kAllowWithholdingExtensionPermissionsOnInstall);
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_P(ExtensionCrxInstallerTestWithWithholdingUI,
+                       WithholdingHostsOnInstall) {
+  bool should_check_box = GetParam();
+  ScopedTestDialogAutoConfirm::AutoConfirm mode =
+      should_check_box ? ScopedTestDialogAutoConfirm::ACCEPT_AND_OPTION
+                       : ScopedTestDialogAutoConfirm::ACCEPT;
+  std::unique_ptr<MockPromptProxy> mock_prompt =
+      CreateMockPromptProxyForBrowserWithConfirmMode(browser(), mode);
+
+  scoped_refptr<CrxInstaller> crx_installer(
+      CrxInstaller::Create(extension_service(), mock_prompt->CreatePrompt()));
+
+  // Install a simple extension with google.com as a permission.
+  base::RunLoop run_loop;
+  crx_installer->set_installer_callback(base::BindOnce(
+      &ExtensionCrxInstallerTest::InstallerCallback,
+      run_loop.QuitWhenIdleClosure(), CrxInstaller::InstallerResultCallback()));
+  base::FilePath crx_with_host =
+      PackExtension(test_data_dir_.AppendASCII("simple_with_host"));
+  crx_installer->InstallCrx(crx_with_host);
+  run_loop.Run();
+
+  EXPECT_TRUE(mock_prompt->did_succeed());
+  EXPECT_TRUE(mock_prompt->confirmation_requested());
+
+  // Access to google.com should be withheld only when the box was checked.
+  const Extension* extension =
+      GetInstalledExtension(mock_prompt->extension_id());
+  ScriptingPermissionsModifier modifier(browser()->profile(), extension);
+  EXPECT_EQ(should_check_box, modifier.HasWithheldHostPermissions());
+  const ScriptingPermissionsModifier::SiteAccess site_access =
+      modifier.GetSiteAccess(GURL("https://google.com"));
+  EXPECT_EQ(should_check_box, site_access.withheld_site_access);
+  EXPECT_EQ(!should_check_box, site_access.has_site_access);
+}
+
+INSTANTIATE_TEST_SUITE_P(All,
+                         ExtensionCrxInstallerTestWithWithholdingUI,
+                         testing::Bool());
 
 }  // namespace extensions

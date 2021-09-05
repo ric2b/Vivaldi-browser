@@ -28,7 +28,6 @@
 #include "cc/paint/paint_flags.h"
 #include "third_party/blink/renderer/platform/fonts/character_range.h"
 #include "third_party/blink/renderer/platform/fonts/font_cache.h"
-#include "third_party/blink/renderer/platform/fonts/font_fallback_iterator.h"
 #include "third_party/blink/renderer/platform/fonts/font_fallback_list.h"
 #include "third_party/blink/renderer/platform/fonts/ng_text_fragment_paint_info.h"
 #include "third_party/blink/renderer/platform/fonts/shaping/caching_word_shaper.h"
@@ -49,27 +48,20 @@
 
 namespace blink {
 
-Font::Font() : can_shape_word_by_word_(0), shape_word_by_word_computed_(0) {}
+Font::Font() = default;
 
-Font::Font(const FontDescription& fd)
-    : font_description_(fd),
-      can_shape_word_by_word_(0),
-      shape_word_by_word_computed_(0) {}
+Font::Font(const FontDescription& fd) : font_description_(fd) {}
 
-Font::Font(const Font& other)
-    : font_description_(other.font_description_),
-      font_fallback_list_(other.font_fallback_list_),
-      // TODO(yosin): We should have a comment the reason why don't we copy
-      // |m_canShapeWordByWord| and |m_shapeWordByWordComputed| from |other|,
-      // since |operator=()| copies them from |other|.
-      can_shape_word_by_word_(0),
-      shape_word_by_word_computed_(0) {}
+Font::Font(const FontDescription& font_description, FontSelector* font_selector)
+    : font_description_(font_description),
+      font_fallback_list_(
+          font_selector ? FontFallbackList::Create(font_selector) : nullptr) {}
+
+Font::Font(const Font& other) = default;
 
 Font& Font::operator=(const Font& other) {
   font_description_ = other.font_description_;
   font_fallback_list_ = other.font_fallback_list_;
-  can_shape_word_by_word_ = other.can_shape_word_by_word_;
-  shape_word_by_word_computed_ = other.shape_word_by_word_computed_;
   return *this;
 }
 
@@ -90,18 +82,6 @@ bool Font::operator==(const Font& other) const {
              (other.font_fallback_list_
                   ? other.font_fallback_list_->Generation()
                   : 0);
-}
-
-void Font::Update(FontSelector* font_selector) const {
-  // FIXME: It is pretty crazy that we are willing to just poke into a RefPtr,
-  // but it ends up being reasonably safe (because inherited fonts in the render
-  // tree pick up the new style anyway. Other copies are transient, e.g., the
-  // state in the GraphicsContext, and won't stick around long enough to get you
-  // in trouble). Still, this is pretty disgusting, and could eventually be
-  // rectified by using RefPtrs for Fonts themselves.
-  if (!font_fallback_list_)
-    font_fallback_list_ = FontFallbackList::Create();
-  font_fallback_list_->Invalidate(font_selector);
 }
 
 namespace {
@@ -218,7 +198,10 @@ bool Font::DrawBidiText(cc::PaintCanvas* canvas,
 
     TextRunPaintInfo subrun_info(subrun);
 
-    ShapeResultBloberizer bloberizer(*this, device_scale_factor);
+    // Fix regression with -ftrivial-auto-var-init=pattern. See
+    // crbug.com/1055652.
+    STACK_UNINITIALIZED ShapeResultBloberizer bloberizer(*this,
+                                                         device_scale_factor);
     ShapeResultBuffer buffer;
     word_shaper.FillResultBuffer(subrun_info, &buffer);
     float run_width = bloberizer.FillGlyphs(subrun_info, buffer);
@@ -423,31 +406,15 @@ int Font::OffsetForPosition(const TextRun& run,
 }
 
 ShapeCache* Font::GetShapeCache() const {
-  return font_fallback_list_->GetShapeCache(font_description_);
+  return EnsureFontFallbackList()->GetShapeCache(font_description_);
 }
 
 bool Font::CanShapeWordByWord() const {
-  if (!shape_word_by_word_computed_) {
-    can_shape_word_by_word_ = ComputeCanShapeWordByWord();
-    shape_word_by_word_computed_ = true;
-  }
-  return can_shape_word_by_word_;
-}
-
-bool Font::ComputeCanShapeWordByWord() const {
-  if (!GetFontDescription().GetTypesettingFeatures())
-    return true;
-
-  if (!PrimaryFont())
-    return false;
-
-  const FontPlatformData& platform_data = PrimaryFont()->PlatformData();
-  TypesettingFeatures features = GetFontDescription().GetTypesettingFeatures();
-  return !platform_data.HasSpaceInLigaturesOrKerning(features);
+  return EnsureFontFallbackList()->CanShapeWordByWord(GetFontDescription());
 }
 
 void Font::ReportNotDefGlyph() const {
-  FontSelector* fontSelector = font_fallback_list_->GetFontSelector();
+  FontSelector* fontSelector = EnsureFontFallbackList()->GetFontSelector();
   // We have a few non-DOM usages of Font code, for example in DragImage::Create
   // and in EmbeddedObjectPainter::paintReplaced. In those cases, we can't
   // retrieve a font selector as our connection to a Document object to report
@@ -462,12 +429,6 @@ void Font::WillUseFontData(const String& text) const {
       !family.FamilyIsEmpty())
     font_fallback_list_->GetFontSelector()->WillUseFontData(
         GetFontDescription(), family.Family(), text);
-}
-
-scoped_refptr<FontFallbackIterator> Font::CreateFontFallbackIterator(
-    FontFallbackPriority fallback_priority) const {
-  return FontFallbackIterator::Create(font_description_, font_fallback_list_,
-                                      fallback_priority);
 }
 
 GlyphData Font::GetEmphasisMarkGlyphData(const AtomicString& mark) const {

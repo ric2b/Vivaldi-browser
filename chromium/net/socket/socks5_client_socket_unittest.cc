@@ -11,6 +11,7 @@
 
 #include "base/containers/span.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "base/sys_byteorder.h"
 #include "build/build_config.h"
@@ -57,7 +58,7 @@ class SOCKS5ClientSocketTest : public PlatformTest, public WithTaskEnvironment {
 
  protected:
   const uint16_t kNwPort;
-  TestNetLog net_log_;
+  RecordingTestNetLog net_log_;
   std::unique_ptr<SOCKS5ClientSocket> user_sock_;
   AddressList address_list_;
   // Filled in by BuildMockSocket() and owned by its return value
@@ -359,7 +360,7 @@ TEST_F(SOCKS5ClientSocketTest, PartialReadWrites) {
 
 TEST_F(SOCKS5ClientSocketTest, Tag) {
   StaticSocketDataProvider data;
-  TestNetLog log;
+  RecordingTestNetLog log;
   MockTaggingStreamSocket* tagging_sock =
       new MockTaggingStreamSocket(std::unique_ptr<StreamSocket>(
           new MockTCPClientSocket(address_list_, &log, &data)));

@@ -82,7 +82,7 @@ public class WebApkServiceConnectionManager {
         }
     }
 
-    private static final String TAG = "cr_WebApkService";
+    private static final String TAG = "WebApkService";
 
     /** The category of the service to connect to. */
     private String mCategory;
@@ -248,7 +248,6 @@ public class WebApkServiceConnectionManager {
     private void destroyTaskRunner() {
         if (mTaskRunner == null) return;
 
-        mTaskRunner.destroy();
         mTaskRunner = null;
     }
 }

@@ -37,9 +37,10 @@ class CastCdmContextImpl : public CastCdmContext {
   ~CastCdmContextImpl() override {}
 
   // CastCdmContext implementation:
-  int RegisterPlayer(const base::Closure& new_key_cb,
-                     const base::Closure& cdm_unset_cb) override {
-    return cast_cdm_->RegisterPlayer(new_key_cb, cdm_unset_cb);
+  int RegisterPlayer(base::RepeatingClosure new_key_cb,
+                     base::RepeatingClosure cdm_unset_cb) override {
+    return cast_cdm_->RegisterPlayer(std::move(new_key_cb),
+                                     std::move(cdm_unset_cb));
   }
 
   void UnregisterPlayer(int registration_id) override {
@@ -104,7 +105,6 @@ int HdcpVersionX10(::media::HdcpVersion hdcp_version) {
 CastCdm::CastCdm(MediaResourceTracker* media_resource_tracker)
     : media_resource_tracker_(media_resource_tracker),
       cast_cdm_context_(new CastCdmContextImpl(this)) {
-  DCHECK(media_resource_tracker);
   thread_checker_.DetachFromThread();
 }
 
@@ -112,7 +112,6 @@ CastCdm::~CastCdm() {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(player_tracker_impl_.get());
   player_tracker_impl_->NotifyCdmUnset();
-  media_resource_tracker_->DecrementUsageCount();
 }
 
 void CastCdm::Initialize(
@@ -122,7 +121,11 @@ void CastCdm::Initialize(
     const ::media::SessionExpirationUpdateCB& session_expiration_update_cb) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  media_resource_tracker_->IncrementUsageCount();
+  if (media_resource_tracker_) {
+    media_resource_usage_ = std::make_unique<MediaResourceTracker::ScopedUsage>(
+        media_resource_tracker_);
+  }
+
   player_tracker_impl_.reset(new ::media::PlayerTrackerImpl());
 
   session_message_cb_ = session_message_cb;
@@ -133,10 +136,11 @@ void CastCdm::Initialize(
   InitializeInternal();
 }
 
-int CastCdm::RegisterPlayer(const base::Closure& new_key_cb,
-                            const base::Closure& cdm_unset_cb) {
+int CastCdm::RegisterPlayer(base::RepeatingClosure new_key_cb,
+                            base::RepeatingClosure cdm_unset_cb) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  return player_tracker_impl_->RegisterPlayer(new_key_cb, cdm_unset_cb);
+  return player_tracker_impl_->RegisterPlayer(std::move(new_key_cb),
+                                              std::move(cdm_unset_cb));
 }
 
 void CastCdm::UnregisterPlayer(int registration_id) {

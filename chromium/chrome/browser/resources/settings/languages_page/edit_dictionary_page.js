@@ -35,7 +35,7 @@ Polymer({
     /** @private {!Array<string>} */
     words_: {
       type: Array,
-      value: function() {
+      value() {
         return [];
       },
     },
@@ -47,21 +47,21 @@ Polymer({
     },
   },
 
-  /** @type {LanguageSettingsPrivate} */
-  languageSettingsPrivate: null,
+  /** @private {LanguageSettingsPrivate} */
+  languageSettingsPrivate_: null,
 
   /** @override */
-  ready: function() {
-    this.languageSettingsPrivate = settings.languageSettingsPrivateApiForTest ||
-        /** @type {!LanguageSettingsPrivate} */
-        (chrome.languageSettingsPrivate);
+  ready() {
+    this.languageSettingsPrivate_ =
+        settings.LanguagesBrowserProxyImpl.getInstance()
+            .getLanguageSettingsPrivate();
 
-    this.languageSettingsPrivate.getSpellcheckWords(words => {
+    this.languageSettingsPrivate_.getSpellcheckWords(words => {
       this.hasWords_ = words.length > 0;
       this.words_ = words;
     });
 
-    this.languageSettingsPrivate.onCustomDictionaryChanged.addListener(
+    this.languageSettingsPrivate_.onCustomDictionaryChanged.addListener(
         this.onCustomDictionaryChanged_.bind(this));
 
     // Add a key handler for the new-word input.
@@ -72,12 +72,12 @@ Polymer({
    * Adds the word in the new-word input to the dictionary.
    * @private
    */
-  addWordFromInput_: function() {
+  addWordFromInput_() {
     // Spaces are allowed, but removing leading and trailing whitespace.
     const word = this.getTrimmedNewWord_();
     this.newWordValue_ = '';
     if (word) {
-      this.languageSettingsPrivate.addSpellcheckWord(word);
+      this.languageSettingsPrivate_.addSpellcheckWord(word);
     }
   },
 
@@ -86,7 +86,7 @@ Polymer({
    * @return {boolean}
    * @private
    */
-  disableAddButton_: function() {
+  disableAddButton_() {
     return this.getTrimmedNewWord_().length == 0 || this.isWordInvalid_();
   },
 
@@ -94,7 +94,7 @@ Polymer({
    * @return {string}
    * @private
    */
-  getErrorMessage_: function() {
+  getErrorMessage_() {
     if (this.newWordIsTooLong_()) {
       return loadTimeData.getString('addDictionaryWordLengthError');
     }
@@ -108,7 +108,7 @@ Polymer({
    * @return {string}
    * @private
    */
-  getTrimmedNewWord_: function() {
+  getTrimmedNewWord_() {
     return this.newWordValue_.trim();
   },
 
@@ -118,7 +118,7 @@ Polymer({
    * @return {boolean}
    * @private
    */
-  isWordInvalid_: function() {
+  isWordInvalid_() {
     return this.newWordAlreadyAdded_() || this.newWordIsTooLong_();
   },
 
@@ -126,7 +126,7 @@ Polymer({
    * @return {boolean}
    * @private
    */
-  newWordAlreadyAdded_: function() {
+  newWordAlreadyAdded_() {
     return this.words_.includes(this.getTrimmedNewWord_());
   },
 
@@ -134,14 +134,14 @@ Polymer({
    * @return {boolean}
    * @private
    */
-  newWordIsTooLong_: function() {
+  newWordIsTooLong_() {
     return this.getTrimmedNewWord_().length > MAX_CUSTOM_DICTIONARY_WORD_BYTES;
   },
 
   /**
    * Handles tapping on the Add Word button.
    */
-  onAddWordTap_: function(e) {
+  onAddWordTap_(e) {
     this.addWordFromInput_();
     this.$.newWord.focus();
   },
@@ -152,7 +152,7 @@ Polymer({
    * @param {!Array<string>} added
    * @param {!Array<string>} removed
    */
-  onCustomDictionaryChanged_: function(added, removed) {
+  onCustomDictionaryChanged_(added, removed) {
     const wasEmpty = this.words_.length == 0;
 
     for (const word of removed) {
@@ -191,7 +191,7 @@ Polymer({
    * Handles Enter and Escape key presses for the new-word input.
    * @param {!CustomEvent<!{key: string}>} e
    */
-  onKeysPress_: function(e) {
+  onKeysPress_(e) {
     if (e.detail.key == 'enter' && !this.disableAddButton_()) {
       this.addWordFromInput_();
     } else if (e.detail.key == 'esc') {
@@ -203,7 +203,7 @@ Polymer({
    * Handles tapping on a "Remove word" icon button.
    * @param {!{model: !{item: string}}} e
    */
-  onRemoveWordTap_: function(e) {
-    this.languageSettingsPrivate.removeSpellcheckWord(e.model.item);
+  onRemoveWordTap_(e) {
+    this.languageSettingsPrivate_.removeSpellcheckWord(e.model.item);
   },
 });

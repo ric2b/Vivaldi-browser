@@ -10,10 +10,10 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "base/strings/string_piece.h"
+#include "base/task/single_thread_task_executor.h"
 #include "media/base/audio_parameters.h"
 #include "media/base/video_frame.h"
 #include "media/muxers/webm_muxer.h"
@@ -37,7 +37,7 @@ static struct {
 struct Env {
   Env() { logging::SetMinLogLevel(logging::LOG_FATAL); }
 
-  base::MessageLoop message_loop;
+  base::SingleThreadTaskExecutor task_executor;
 };
 Env* env = new Env();
 
@@ -58,8 +58,9 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
         kSupportedVideoCodecs[rng() % base::size(kSupportedVideoCodecs)]);
     const auto audio_codec = static_cast<media::AudioCodec>(
         kSupportedAudioCodecs[rng() % base::size(kSupportedAudioCodecs)]);
-    media::WebmMuxer muxer(video_codec, audio_codec, input_type.has_video,
-                           input_type.has_audio, base::Bind(&OnWriteCallback));
+    media::WebmMuxer muxer(audio_codec, input_type.has_video,
+                           input_type.has_audio,
+                           base::BindRepeating(&OnWriteCallback));
     base::RunLoop run_loop;
     run_loop.RunUntilIdle();
 
@@ -72,8 +73,10 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
             media::VideoFrame::CreateBlackFrame(visible_rect);
         const auto is_key_frame = rng() % 2;
         const auto has_alpha_frame = rng() % 4;
-        muxer.OnEncodedVideo(media::WebmMuxer::VideoParameters(video_frame),
-                             str, has_alpha_frame ? str : std::string(),
+        auto parameters = media::WebmMuxer::VideoParameters(video_frame);
+        parameters.codec = video_codec;
+        muxer.OnEncodedVideo(parameters, str,
+                             has_alpha_frame ? str : std::string(),
                              base::TimeTicks(), is_key_frame);
         base::RunLoop run_loop;
         run_loop.RunUntilIdle();

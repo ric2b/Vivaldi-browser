@@ -42,8 +42,6 @@
 
 namespace blink {
 
-using namespace html_names;
-
 static const int kDateDefaultStep = 1;
 static const int kDateDefaultStepBase = 0;
 static const int kDateStepScaleFactor = 86400000;
@@ -109,11 +107,13 @@ void DateInputType::SetupLayoutParameters(
     const DateComponents& date) const {
   layout_parameters.date_time_format = layout_parameters.locale.DateFormat();
   layout_parameters.fallback_date_time_format = "yyyy-MM-dd";
-  if (!ParseToDateComponents(GetElement().FastGetAttribute(kMinAttr),
-                             &layout_parameters.minimum))
+  if (!ParseToDateComponents(
+          GetElement().FastGetAttribute(html_names::kMinAttr),
+          &layout_parameters.minimum))
     layout_parameters.minimum = DateComponents();
-  if (!ParseToDateComponents(GetElement().FastGetAttribute(kMaxAttr),
-                             &layout_parameters.maximum))
+  if (!ParseToDateComponents(
+          GetElement().FastGetAttribute(html_names::kMaxAttr),
+          &layout_parameters.maximum))
     layout_parameters.maximum = DateComponents();
   layout_parameters.placeholder_for_day =
       GetLocale().QueryString(IDS_FORM_PLACEHOLDER_FOR_DAY_OF_MONTH_FIELD);
@@ -132,6 +132,10 @@ bool DateInputType::IsValidFormat(bool has_year,
                                   bool has_minute,
                                   bool has_second) const {
   return has_year && has_month && has_day;
+}
+
+String DateInputType::AriaRoleForPickerIndicator() const {
+  return GetLocale().QueryString(IDS_AX_CALENDAR_SHOW_DATE_PICKER);
 }
 
 }  // namespace blink

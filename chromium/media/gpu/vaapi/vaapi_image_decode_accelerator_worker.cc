@@ -4,6 +4,7 @@
 
 #include "media/gpu/vaapi/vaapi_image_decode_accelerator_worker.h"
 
+#include "base/task/thread_pool.h"
 #include "string.h"
 
 #include <utility>
@@ -73,8 +74,7 @@ void DecodeTask(
     DVLOGF(1) << "No decoder is available for supplied image";
     return;
   }
-  VaapiImageDecodeStatus status = decoder->Decode(
-      base::make_span<const uint8_t>(encoded_data.data(), encoded_data.size()));
+  VaapiImageDecodeStatus status = decoder->Decode(encoded_data);
   if (status != VaapiImageDecodeStatus::kSuccess) {
     DVLOGF(1) << "Failed to decode - status = "
               << static_cast<uint32_t>(status);
@@ -151,7 +151,7 @@ VaapiImageDecodeAcceleratorWorker::Create() {
 VaapiImageDecodeAcceleratorWorker::VaapiImageDecodeAcceleratorWorker(
     VaapiImageDecoderVector decoders) {
   DETACH_FROM_SEQUENCE(io_sequence_checker_);
-  decoder_task_runner_ = base::CreateSequencedTaskRunner({base::ThreadPool()});
+  decoder_task_runner_ = base::ThreadPool::CreateSequencedTaskRunner({});
   DCHECK(decoder_task_runner_);
 
   DCHECK(!decoders.empty());
@@ -177,17 +177,15 @@ VaapiImageDecodeAcceleratorWorker::GetSupportedProfiles() {
 VaapiImageDecoder* VaapiImageDecodeAcceleratorWorker::GetDecoderForImage(
     const std::vector<uint8_t>& encoded_data) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(io_sequence_checker_);
-  auto encoded_data_span =
-      base::make_span<const uint8_t>(encoded_data.data(), encoded_data.size());
   auto result = decoders_.end();
 
   if (base::FeatureList::IsEnabled(
           features::kVaapiJpegImageDecodeAcceleration) &&
-      IsJpegImage(encoded_data_span)) {
+      IsJpegImage(encoded_data)) {
     result = decoders_.find(gpu::ImageDecodeAcceleratorType::kJpeg);
   } else if (base::FeatureList::IsEnabled(
                  features::kVaapiWebPImageDecodeAcceleration) &&
-             IsLossyWebPImage(encoded_data_span)) {
+             IsLossyWebPImage(encoded_data)) {
     result = decoders_.find(gpu::ImageDecodeAcceleratorType::kWebP);
   }
 

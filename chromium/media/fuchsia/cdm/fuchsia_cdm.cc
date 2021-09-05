@@ -4,12 +4,14 @@
 
 #include "media/fuchsia/cdm/fuchsia_cdm.h"
 
+#include "base/command_line.h"
 #include "base/fuchsia/fuchsia_logging.h"
 #include "base/logging.h"
 #include "base/optional.h"
 #include "fuchsia/base/mem_buffer_util.h"
 #include "media/base/callback_registry.h"
 #include "media/base/cdm_promise.h"
+#include "media/base/media_switches.h"
 
 #define REJECT_PROMISE_AND_RETURN_IF_BAD_CDM(promise, cdm)         \
   if (!cdm) {                                                      \
@@ -115,7 +117,7 @@ class FuchsiaCdm::CdmSession {
       base::OnceCallback<void(base::Optional<CdmPromise::Exception>)>;
 
   CdmSession(const FuchsiaCdm::SessionCallbacks* callbacks,
-             FuchsiaSecureStreamDecryptor::NewKeyCB on_new_key)
+             base::RepeatingClosure on_new_key)
       : session_callbacks_(callbacks), on_new_key_(on_new_key) {
     // License session events, e.g. license request message, key status change.
     // Fuchsia CDM service guarantees callback of functions (e.g.
@@ -124,8 +126,8 @@ class FuchsiaCdm::CdmSession {
     // JS. EME requires promises are resolved before session message.
     session_.events().OnLicenseMessageGenerated =
         fit::bind_member(this, &CdmSession::OnLicenseMessageGenerated);
-    session_.events().OnKeysChanged =
-        fit::bind_member(this, &CdmSession::OnKeysChanged);
+    session_.events().OnKeyStatesChanged =
+        fit::bind_member(this, &CdmSession::OnKeyStatesChanged);
 
     session_.set_error_handler(
         fit::bind_member(this, &CdmSession::OnSessionError));
@@ -183,31 +185,25 @@ class FuchsiaCdm::CdmSession {
         std::vector<uint8_t>(session_msg.begin(), session_msg.end()));
   }
 
-  void OnKeysChanged(std::vector<fuchsia::media::drm::KeyInfo> key_info) {
-    std::string new_key_id;
+  void OnKeyStatesChanged(
+      std::vector<fuchsia::media::drm::KeyState> key_states) {
     bool has_additional_usable_key = false;
     CdmKeysInfo keys_info;
-    for (const auto& info : key_info) {
-      CdmKeyInformation::KeyStatus status = ToCdmKeyStatus(info.status);
-      has_additional_usable_key |= (status == CdmKeyInformation::USABLE);
-      if (status == CdmKeyInformation::USABLE && new_key_id.empty()) {
-        // The |key_id| is passed to |on_new_key_| to workaround fxb/38253 in
-        // FuchsiaSecureStreamDecryptor. It needs just one valid |key_id|, so it
-        // doesn't matter if |key_info| contains more than one key.
-        // TODO(crbug.com/1012525): Remove the hack once fxb/38253 is resolved.
-        new_key_id.assign(
-            reinterpret_cast<const char*>(info.key_id.data.data()),
-            info.key_id.data.size());
+    for (const auto& key_state : key_states) {
+      if (!key_state.has_key_id() || !key_state.has_status()) {
+        continue;
       }
-      keys_info.emplace_back(new CdmKeyInformation(
-          info.key_id.data.data(), info.key_id.data.size(), status, 0));
+      CdmKeyInformation::KeyStatus status = ToCdmKeyStatus(key_state.status());
+      has_additional_usable_key |= (status == CdmKeyInformation::USABLE);
+      keys_info.emplace_back(
+          new CdmKeyInformation(key_state.key_id(), status, 0));
     }
 
     session_callbacks_->keys_change_cb.Run(
         session_id_, has_additional_usable_key, std::move(keys_info));
 
     if (has_additional_usable_key)
-      on_new_key_.Run(new_key_id);
+      on_new_key_.Run();
   }
 
   void OnSessionError(zx_status_t status) {
@@ -226,7 +222,7 @@ class FuchsiaCdm::CdmSession {
   }
 
   const SessionCallbacks* const session_callbacks_;
-  FuchsiaSecureStreamDecryptor::NewKeyCB on_new_key_;
+  base::RepeatingClosure on_new_key_;
 
   fuchsia::media::drm::LicenseSessionPtr session_;
   std::string session_id_;
@@ -264,8 +260,9 @@ std::unique_ptr<FuchsiaSecureStreamDecryptor> FuchsiaCdm::CreateVideoDecryptor(
     FuchsiaSecureStreamDecryptor::Client* client) {
   fuchsia::media::drm::DecryptorParams params;
 
-  // TODO(crbug.com/997853): Enable secure mode when it's implemented in sysmem.
-  params.set_require_secure_mode(false);
+  bool secure_mode = base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kEnableProtectedVideoBuffers);
+  params.set_require_secure_mode(secure_mode);
 
   params.mutable_input_details()->set_format_details_version_ordinal(0);
   fuchsia::media::StreamProcessorPtr stream_processor;
@@ -467,12 +464,12 @@ FuchsiaCdmContext* FuchsiaCdm::GetFuchsiaCdmContext() {
   return this;
 }
 
-void FuchsiaCdm::OnNewKey(const std::string& key_id) {
+void FuchsiaCdm::OnNewKey() {
   decryptor_.OnNewKey();
   {
     base::AutoLock auto_lock(new_key_cb_for_video_lock_);
     if (new_key_cb_for_video_)
-      new_key_cb_for_video_.Run(key_id);
+      new_key_cb_for_video_.Run();
   }
 }
 

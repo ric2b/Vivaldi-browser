@@ -64,6 +64,7 @@
 #include "third_party/blink/renderer/core/html/html_span_element.h"
 #include "third_party/blink/renderer/core/html/html_table_cell_element.h"
 #include "third_party/blink/renderer/core/html/html_ulist_element.h"
+#include "third_party/blink/renderer/core/html/image_document.h"
 #include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
 #include "third_party/blink/renderer/core/html_element_factory.h"
 #include "third_party/blink/renderer/core/html_names.h"
@@ -81,8 +82,6 @@
 #include "third_party/blink/renderer/platform/wtf/text/unicode.h"
 
 namespace blink {
-
-using namespace html_names;
 
 namespace {
 
@@ -342,7 +341,7 @@ bool IsNodeFullyContained(const EphemeralRange& range, const Node& node) {
 // TODO(editing-dev): We should make |SelectionAdjuster| to use this funciton
 // instead of |isSelectionBondary()|.
 bool IsUserSelectContain(const Node& node) {
-  return IsHTMLTextAreaElement(node) || IsHTMLInputElement(node) ||
+  return IsA<HTMLTextAreaElement>(node) || IsA<HTMLInputElement>(node) ||
          IsA<HTMLSelectElement>(node);
 }
 
@@ -412,8 +411,10 @@ bool IsEditableElement(const Node& node) {
       return true;
   }
 
-  if (auto* element = DynamicTo<Element>(&node))
-    return EqualIgnoringASCIICase(element->getAttribute(kRoleAttr), "textbox");
+  if (auto* element = DynamicTo<Element>(&node)) {
+    return EqualIgnoringASCIICase(
+        element->FastGetAttribute(html_names::kRoleAttr), "textbox");
+  }
 
   return false;
 }
@@ -1109,7 +1110,7 @@ Position PositionAfterNode(const Node& node) {
 }
 
 bool IsHTMLListElement(const Node* n) {
-  return (n && (IsHTMLUListElement(*n) || IsA<HTMLOListElement>(*n) ||
+  return (n && (IsA<HTMLUListElement>(*n) || IsA<HTMLOListElement>(*n) ||
                 IsA<HTMLDListElement>(*n)));
 }
 
@@ -1122,10 +1123,13 @@ bool IsPresentationalHTMLElement(const Node* node) {
   if (!element)
     return false;
 
-  return element->HasTagName(kUTag) || element->HasTagName(kSTag) ||
-         element->HasTagName(kStrikeTag) || element->HasTagName(kITag) ||
-         element->HasTagName(kEmTag) || element->HasTagName(kBTag) ||
-         element->HasTagName(kStrongTag);
+  return element->HasTagName(html_names::kUTag) ||
+         element->HasTagName(html_names::kSTag) ||
+         element->HasTagName(html_names::kStrikeTag) ||
+         element->HasTagName(html_names::kITag) ||
+         element->HasTagName(html_names::kEmTag) ||
+         element->HasTagName(html_names::kBTag) ||
+         element->HasTagName(html_names::kStrongTag);
 }
 
 Element* AssociatedElementOf(const Position& position) {
@@ -1237,13 +1241,13 @@ Element* EnclosingAnchorElement(const Position& p) {
 }
 
 bool IsDisplayInsideTable(const Node* node) {
-  return node && node->GetLayoutObject() && IsHTMLTableElement(node);
+  return node && node->GetLayoutObject() && IsA<HTMLTableElement>(node);
 }
 
 bool IsTableCell(const Node* node) {
   DCHECK(node);
   LayoutObject* r = node->GetLayoutObject();
-  return r ? r->IsTableCell() : IsHTMLTableCellElement(*node);
+  return r ? r->IsTableCell() : IsA<HTMLTableCellElement>(*node);
 }
 
 HTMLElement* CreateDefaultParagraphElement(Document& document) {
@@ -1259,7 +1263,7 @@ HTMLElement* CreateDefaultParagraphElement(Document& document) {
 }
 
 bool IsTabHTMLSpanElement(const Node* node) {
-  if (!IsHTMLSpanElement(node))
+  if (!IsA<HTMLSpanElement>(node))
     return false;
   const Node* const first_child = NodeTraversal::FirstChild(*node);
   auto* first_child_text_node = DynamicTo<Text>(first_child);
@@ -1281,7 +1285,7 @@ bool IsTabHTMLSpanElementTextNode(const Node* node) {
 
 HTMLSpanElement* TabSpanElement(const Node* node) {
   return IsTabHTMLSpanElementTextNode(node)
-             ? ToHTMLSpanElement(node->parentNode())
+             ? To<HTMLSpanElement>(node->parentNode())
              : nullptr;
 }
 
@@ -1289,7 +1293,7 @@ static HTMLSpanElement* CreateTabSpanElement(Document& document,
                                              Text* tab_text_node) {
   // Make the span to hold the tab.
   auto* span_element = MakeGarbageCollected<HTMLSpanElement>(document);
-  span_element->setAttribute(kStyleAttr, "white-space:pre");
+  span_element->setAttribute(html_names::kStyleAttr, "white-space:pre");
 
   // Add tab text to that span.
   if (!tab_text_node)
@@ -1391,7 +1395,7 @@ bool IsMailHTMLBlockquoteElement(const Node* node) {
   if (!element)
     return false;
 
-  return element->HasTagName(kBlockquoteTag) &&
+  return element->HasTagName(html_names::kBlockquoteTag) &&
          element->getAttribute("type") == "cite";
 }
 
@@ -1516,12 +1520,17 @@ bool IsNonTableCellHTMLBlockElement(const Node* node) {
   if (!element)
     return false;
 
-  return element->HasTagName(kListingTag) || element->HasTagName(kOlTag) ||
-         element->HasTagName(kPreTag) || element->HasTagName(kTableTag) ||
-         element->HasTagName(kUlTag) || element->HasTagName(kXmpTag) ||
-         element->HasTagName(kH1Tag) || element->HasTagName(kH2Tag) ||
-         element->HasTagName(kH3Tag) || element->HasTagName(kH4Tag) ||
-         element->HasTagName(kH5Tag);
+  return element->HasTagName(html_names::kListingTag) ||
+         element->HasTagName(html_names::kOlTag) ||
+         element->HasTagName(html_names::kPreTag) ||
+         element->HasTagName(html_names::kTableTag) ||
+         element->HasTagName(html_names::kUlTag) ||
+         element->HasTagName(html_names::kXmpTag) ||
+         element->HasTagName(html_names::kH1Tag) ||
+         element->HasTagName(html_names::kH2Tag) ||
+         element->HasTagName(html_names::kH3Tag) ||
+         element->HasTagName(html_names::kH4Tag) ||
+         element->HasTagName(html_names::kH5Tag);
 }
 
 bool IsBlockFlowElement(const Node& node) {
@@ -1532,9 +1541,9 @@ bool IsBlockFlowElement(const Node& node) {
 
 bool IsInPasswordField(const Position& position) {
   TextControlElement* text_control = EnclosingTextControl(position);
-  return IsHTMLInputElement(text_control) &&
-         ToHTMLInputElement(text_control)->type() ==
-             input_type_names::kPassword;
+  auto* html_input_element = DynamicTo<HTMLInputElement>(text_control);
+  return html_input_element &&
+         html_input_element->type() == input_type_names::kPassword;
 }
 
 // If current position is at grapheme boundary, return 0; otherwise, return the
@@ -1572,7 +1581,7 @@ FloatQuad LocalToAbsoluteQuadOf(const LocalCaretRect& caret_rect) {
 const StaticRangeVector* TargetRangesForInputEvent(const Node& node) {
   // TODO(editing-dev): The use of UpdateStyleAndLayout
   // needs to be audited. see http://crbug.com/590369 for more details.
-  node.GetDocument().UpdateStyleAndLayout();
+  node.GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
   if (!HasRichlyEditableStyle(node))
     return nullptr;
   const EphemeralRange& range =
@@ -1707,25 +1716,26 @@ static scoped_refptr<Image> ImageFromNode(const Node& node) {
 AtomicString GetUrlStringFromNode(const Node& node) {
   // TODO(editing-dev): This should probably be reconciled with
   // HitTestResult::absoluteImageURL.
-  if (IsHTMLImageElement(node) || IsHTMLInputElement(node))
-    return To<HTMLElement>(node).getAttribute(kSrcAttr);
-  if (IsSVGImageElement(node))
+  if (IsA<HTMLImageElement>(node) || IsA<HTMLInputElement>(node))
+    return To<HTMLElement>(node).FastGetAttribute(html_names::kSrcAttr);
+  if (IsA<SVGImageElement>(node))
     return To<SVGElement>(node).ImageSourceURL();
-  if (IsHTMLEmbedElement(node) || IsHTMLObjectElement(node) ||
+  if (IsA<HTMLEmbedElement>(node) || IsA<HTMLObjectElement>(node) ||
       IsA<HTMLCanvasElement>(node))
     return To<HTMLElement>(node).ImageSourceURL();
   return AtomicString();
 }
 
-void WriteImageNodeToClipboard(const Node& node, const String& title) {
+void WriteImageNodeToClipboard(SystemClipboard& system_clipboard,
+                               const Node& node,
+                               const String& title) {
   const scoped_refptr<Image> image = ImageFromNode(node);
   if (!image.get())
     return;
   const KURL url_string = node.GetDocument().CompleteURL(
       StripLeadingAndTrailingHTMLSpaces(GetUrlStringFromNode(node)));
-  SystemClipboard::GetInstance().WriteImageWithTag(image.get(), url_string,
-                                                   title);
-  SystemClipboard::GetInstance().CommitWrite();
+  system_clipboard.WriteImageWithTag(image.get(), url_string, title);
+  system_clipboard.CommitWrite();
 }
 
 Element* FindEventTargetFrom(LocalFrame& frame,
@@ -1741,14 +1751,14 @@ Element* FindEventTargetFrom(LocalFrame& frame,
 HTMLImageElement* ImageElementFromImageDocument(const Document* document) {
   if (!document)
     return nullptr;
-  if (!document->IsImageDocument())
+  if (!IsA<ImageDocument>(document))
     return nullptr;
 
   const HTMLElement* const body = document->body();
   if (!body)
     return nullptr;
 
-  return ToHTMLImageElementOrNull(body->firstChild());
+  return DynamicTo<HTMLImageElement>(body->firstChild());
 }
 
 }  // namespace blink

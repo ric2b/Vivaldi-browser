@@ -36,6 +36,7 @@
 <translation id="2292556288342944218">Ihre Internetverbindung ist gesperrt</translation>
 <translation id="2317259163369394535">Für <ph name="DOMAIN" /> sind ein Nutzername und ein Passwort erforderlich.</translation>
 <translation id="2337852623177822836">Einstellung wird von Ihrem Administrator gesteuert</translation>
+<translation id="2344028582131185878">Auto-Downloads</translation>
 <translation id="2355395290879513365">Angreifer können unter Umständen die Bilder sehen, die Sie sich auf dieser Website ansehen, und könnten dann versuchen, Sie durch Ändern der Bilder zu täuschen.</translation>
 <translation id="2356070529366658676">Nachfragen</translation>
 <translation id="2359808026110333948">Weiter</translation>
@@ -47,7 +48,7 @@
 <translation id="2609632851001447353">Varianten</translation>
 <translation id="2634124572758952069">Die IP-Adresse des Servers <ph name="HOST_NAME" /> wurde nicht gefunden.</translation>
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
-<translation id="2650446666397867134">Der Zugriff auf die Datei wurde verweigert.</translation>
+<translation id="2650446666397867134">Der Zugriff auf die Datei wurde verweigert</translation>
 <translation id="2705137772291741111">Die (im Cache) gespeicherte Kopie dieser Website konnte nicht gelesen werden.</translation>
 <translation id="2730326759066348565"><ph name="BEGIN_LINK" />Verbindungsdiagnose ausführen<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">Die Verbindung wurde zurückgesetzt.</translation>
@@ -87,7 +88,6 @@
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> ist gesperrt</translation>
 <translation id="3987940399970879459">Weniger als 1 MB</translation>
 <translation id="4075732493274867456">Client und Server unterstützen keine gemeinsamen SSL-Protokollversionen oder Verschlüsselungsverfahren.</translation>
-<translation id="410351446219883937">Autoplay</translation>
 <translation id="4116663294526079822">Auf dieser Website immer zulassen</translation>
 <translation id="4130226655945681476">Prüfen Sie Netzwerkkabel, Modem und Router</translation>
 <translation id="4151403195736952345">Globalen Standard verwenden (Erkennen)</translation>
@@ -150,11 +150,11 @@
 <translation id="614940544461990577">Versuchen Sie folgendes:</translation>
 <translation id="6165508094623778733">Weitere Informationen</translation>
 <translation id="6177128806592000436">Die Verbindung zu dieser Website ist nicht sicher</translation>
-<translation id="6203231073485539293">Bitte überprüfen Sie Ihre Internetverbindung.</translation>
+<translation id="6203231073485539293">Überprüfen Sie Ihre Internetverbindung.</translation>
 <translation id="625755898061068298">Sie haben die Sicherheitswarnmeldungen für diese Website deaktiviert.</translation>
 <translation id="6264485186158353794">Zurück zu sicherer Website</translation>
 <translation id="6305205051461490394"><ph name="URL" /> ist nicht erreichbar.</translation>
-<translation id="6321917430147971392">Überprüfen Sie die DNS-Einstellungen.</translation>
+<translation id="6321917430147971392">Überprüfen Sie Ihre DNS-Einstellungen.</translation>
 <translation id="6328639280570009161">Deaktivieren Sie die Netzwerkvervollständigung.</translation>
 <translation id="6328786501058569169">Sie befinden sich auf einer betrügerischen Website</translation>
 <translation id="6358450015545214790">Was bedeuten diese Hinweise?</translation>
@@ -164,7 +164,7 @@
 <translation id="6569060085658103619">Dies ist eine Erweiterungsseite</translation>
 <translation id="6657585470893396449">Passwort</translation>
 <translation id="6685834062052613830">Abmelden und Einrichtung abschließen</translation>
-<translation id="6711464428925977395">Mit dem Proxyserver ist ein Problem aufgetreten oder die Adresse ist falsch.</translation>
+<translation id="6711464428925977395">Bei der Verbindungsaufnahme mit dem Proxyserver ist ein Problem aufgetreten oder dessen Adresse ist ungültig.</translation>
 <translation id="6757797048963528358">Ihr Gerät geht in den Ruhemodus.</translation>
 <translation id="6897140037006041989">User-Agent</translation>
 <translation id="7053983685419859001">Blockieren</translation>

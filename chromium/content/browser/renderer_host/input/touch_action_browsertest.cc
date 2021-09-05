@@ -35,7 +35,7 @@
 #include "content/public/test/hit_test_region_observer.h"
 #include "content/public/test/test_utils.h"
 #include "content/shell/browser/shell.h"
-#include "third_party/blink/public/platform/web_input_event.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
 #include "ui/events/blink/blink_features.h"
 #include "ui/latency/latency_info.h"
 
@@ -476,7 +476,7 @@ class TouchActionBrowserTest : public ContentBrowserTest,
   DISALLOW_COPY_AND_ASSIGN(TouchActionBrowserTest);
 };
 
-INSTANTIATE_TEST_SUITE_P(, TouchActionBrowserTest, testing::Bool());
+INSTANTIATE_TEST_SUITE_P(All, TouchActionBrowserTest, testing::Bool());
 
 #if !defined(NDEBUG) || defined(ADDRESS_SANITIZER) ||       \
     defined(MEMORY_SANITIZER) || defined(LEAK_SANITIZER) || \

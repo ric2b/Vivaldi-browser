@@ -6,7 +6,7 @@
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
-#include "base/task/post_task.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -17,35 +17,6 @@
 #include "ui/compositor/layer_animator.h"
 #include "ui/wm/core/window_util.h"
 #include "ui/wm/core/wm_core_switches.h"
-
-namespace {
-
-class TestLayerAnimationObserver : public ui::LayerAnimationObserver {
- public:
-  TestLayerAnimationObserver(ui::LayerAnimator* animator,
-                             base::OnceClosure callback)
-      : animator_(animator), callback_(std::move(callback)) {
-    animator_->AddObserver(this);
-  }
-  ~TestLayerAnimationObserver() override = default;
-
-  void OnLayerAnimationEnded(ui::LayerAnimationSequence* sequence) override {
-    if (!animator_->is_animating()) {
-      std::move(callback_).Run();
-      animator_->RemoveObserver(this);
-    }
-  }
-  void OnLayerAnimationAborted(ui::LayerAnimationSequence* sequence) override {}
-  void OnLayerAnimationScheduled(
-      ui::LayerAnimationSequence* sequence) override {}
-
- private:
-  ui::LayerAnimator* animator_;
-  base::OnceClosure callback_;
-  DISALLOW_COPY_AND_ASSIGN(TestLayerAnimationObserver);
-};
-
-}  // namespace
 
 class TabletModeTransitionTest : public UIPerformanceTest {
  public:
@@ -65,8 +36,9 @@ class TabletModeTransitionTest : public UIPerformanceTest {
     int wait_ms = (base::SysInfo::IsRunningOnChromeOS() ? 5000 : 0) +
                   (additional_browsers + 1) * cost_per_browser;
     base::RunLoop run_loop;
-    base::PostDelayedTask(FROM_HERE, run_loop.QuitClosure(),
-                          base::TimeDelta::FromMilliseconds(wait_ms));
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+        FROM_HERE, run_loop.QuitClosure(),
+        base::TimeDelta::FromMilliseconds(wait_ms));
     run_loop.Run();
 
     // The uma stats we are interested in measure the animations directly so we
@@ -89,29 +61,24 @@ class TabletModeTransitionTest : public UIPerformanceTest {
   DISALLOW_COPY_AND_ASSIGN(TabletModeTransitionTest);
 };
 
-IN_PROC_BROWSER_TEST_F(TabletModeTransitionTest, EnterExit) {
+// Flaky possibly due to https://crbug.com/1054489
+// TODO(sammiequon, mukai): re-enable this. See also https://crbug.com/1057868
+IN_PROC_BROWSER_TEST_F(TabletModeTransitionTest, DISABLED_EnterExit) {
   // Activate the first window. The top window is the only window which animates
   // and is the one we should check to see if the tablet animation has finished.
   Browser* browser = BrowserList::GetInstance()->GetLastActive();
   aura::Window* browser_window = browser->window()->GetNativeWindow();
+  ash::ShellTestApi shell_test_api;
 
-  {
-    base::RunLoop run_loop;
-    ui::LayerAnimator* animator = browser_window->layer()->GetAnimator();
-    TestLayerAnimationObserver waiter(animator, run_loop.QuitClosure());
-    ash::ShellTestApi().SetTabletModeEnabledForTest(
-        true, /*wait_for_completion=*/false);
-    EXPECT_TRUE(animator->is_animating());
-    run_loop.Run();
-  }
+  auto waiter =
+      shell_test_api.CreateWaiterForFinishingWindowAnimation(browser_window);
+  shell_test_api.SetTabletModeEnabledForTest(true,
+                                             /*wait_for_completion=*/false);
+  std::move(waiter).Run();
 
-  {
-    base::RunLoop run_loop;
-    ui::LayerAnimator* animator = browser_window->layer()->GetAnimator();
-    TestLayerAnimationObserver waiter(animator, run_loop.QuitClosure());
-    ash::ShellTestApi().SetTabletModeEnabledForTest(
-        false, /*wait_for_completion=*/false);
-    EXPECT_TRUE(animator->is_animating());
-    run_loop.Run();
-  }
+  waiter =
+      shell_test_api.CreateWaiterForFinishingWindowAnimation(browser_window);
+  shell_test_api.SetTabletModeEnabledForTest(false,
+                                             /*wait_for_completion=*/false);
+  std::move(waiter).Run();
 }

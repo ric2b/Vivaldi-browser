@@ -7,12 +7,11 @@
 
 #include "base/macros.h"
 #include "chrome/browser/safe_browsing/services_delegate.h"
-#include "components/safe_browsing/common/safe_browsing_prefs.h"
+#include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 
 namespace safe_browsing {
 
 class AndroidTelemetryService;
-class TelemetryService;
 
 // Android ServicesDelegate implementation. Create via
 // ServicesDelegate::Create().
@@ -39,7 +38,6 @@ class ServicesDelegateAndroid : public ServicesDelegate {
       const DelayedAnalysisCallback& callback) override;
   void AddDownloadManager(content::DownloadManager* download_manager) override;
   ClientSideDetectionService* GetCsdService() override;
-  DownloadProtectionService* GetDownloadService() override;
 
   void StartOnIOThread(
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
@@ -47,12 +45,7 @@ class ServicesDelegateAndroid : public ServicesDelegate {
   void StopOnIOThread(bool shutdown) override;
 
   void CreateTelemetryService(Profile* profile) override;
-  void RemoveTelemetryService() override;
-  TelemetryService* GetTelemetryService() const override;
-
-  void CreateBinaryUploadService(Profile* profile) override;
-  void RemoveBinaryUploadService(Profile* profile) override;
-  BinaryUploadService* GetBinaryUploadService(Profile* profile) const override;
+  void RemoveTelemetryService(Profile* profile) override;
 
   std::string GetSafetyNetId() const override;
 

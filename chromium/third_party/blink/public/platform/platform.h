@@ -58,8 +58,6 @@
 #include "third_party/blink/public/platform/web_common.h"
 #include "third_party/blink/public/platform/web_data.h"
 #include "third_party/blink/public/platform/web_dedicated_worker_host_factory_client.h"
-#include "third_party/blink/public/platform/web_gesture_device.h"
-#include "third_party/blink/public/platform/web_rtc_api_name.h"
 #include "third_party/blink/public/platform/web_size.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_url_error.h"
@@ -70,10 +68,6 @@
 
 namespace base {
 class SingleThreadTaskRunner;
-}
-
-namespace cricket {
-class PortAllocator;
 }
 
 namespace gpu {
@@ -87,10 +81,6 @@ class MediaPermission;
 class GpuVideoAcceleratorFactories;
 }
 
-namespace service_manager {
-class InterfaceProvider;
-}
-
 namespace v8 {
 class Context;
 template <class T>
@@ -98,17 +88,13 @@ class Local;
 }
 
 namespace viz {
-class ContextProvider;
-}
-
-namespace webrtc {
-class AsyncResolverFactory;
+class RasterContextProvider;
 }
 
 namespace blink {
 
+class BrowserInterfaceBrokerProxy;
 class ThreadSafeBrowserInterfaceBrokerProxy;
-class InterfaceProvider;
 class Thread;
 struct ThreadCreationParams;
 class WebAudioBus;
@@ -118,17 +104,13 @@ class WebDedicatedWorker;
 class WebGraphicsContext3DProvider;
 class WebLocalFrame;
 class WebMediaCapabilitiesClient;
-class WebPrescientNetworking;
 class WebPublicSuffixList;
-class WebRTCPeerConnectionHandler;
-class WebRTCPeerConnectionHandlerClient;
 class WebSandboxSupport;
 class WebSecurityOrigin;
 class WebThemeEngine;
 class WebURLLoaderMockFactory;
 class WebURLResponse;
 class WebURLResponse;
-class WebUserMediaRequest;
 class WebVideoCaptureImplManager;
 
 namespace scheduler {
@@ -246,8 +228,9 @@ class BLINK_PLATFORM_EXPORT Platform {
   // See comments on ImageDecoder::max_decoded_bytes_.
   virtual size_t MaxDecodedImageBytes() { return kNoDecodedImageByteLimit; }
 
-  // Returns true if this is a low-end device.
-  // This is the same as base::SysInfo::IsLowEndDevice.
+  // See: SysUtils::IsLowEndDevice for the full details of what "low-end" means.
+  // This returns true for devices that can use more extreme tradeoffs for
+  // performance. Many low memory devices (<=1GB) are not considered low-end.
   virtual bool IsLowEndDevice() { return false; }
 
   // Process -------------------------------------------------------------
@@ -300,9 +283,6 @@ class BLINK_PLATFORM_EXPORT Platform {
       scoped_refptr<network::SharedURLLoaderFactory> factory) {
     return nullptr;
   }
-
-  // May return null.
-  virtual WebPrescientNetworking* PrescientNetworking() { return nullptr; }
 
   // Returns the User-Agent string.
   virtual WebString UserAgent() { return WebString(); }
@@ -419,7 +399,7 @@ class BLINK_PLATFORM_EXPORT Platform {
 
   // Disable/Enable sudden termination on a process level. When possible, it
   // is preferable to disable sudden termination on a per-frame level via
-  // WebLocalFrameClient::SuddenTerminationDisablerChanged.
+  // mojom::LocalFrameHost::SuddenTerminationDisablerChanged.
   // This method should only be called on the main thread.
   virtual void SuddenTerminationChanged(bool enabled) {}
 
@@ -450,13 +430,6 @@ class BLINK_PLATFORM_EXPORT Platform {
   // in production builds.
   // TODO(kinuko,toyoshim): Deprecate this one. (crbug.com/751425)
   virtual WebURLLoaderMockFactory* GetURLLoaderMockFactory() { return nullptr; }
-
-  // Record to a RAPPOR privacy-preserving metric, see:
-  // https://www.chromium.org/developers/design-documents/rappor.
-  // RecordRappor records a sample string, while RecordRapporURL records the
-  // eTLD+1 of a url.
-  virtual void RecordRappor(const char* metric, const WebString& sample) {}
-  virtual void RecordRapporURL(const char* metric, const blink::WebURL& url) {}
 
   // Record a UMA sequence action.  The UserMetricsAction construction must
   // be on a single line for extract_actions.py to find it.  Please see
@@ -527,8 +500,7 @@ class BLINK_PLATFORM_EXPORT Platform {
   // backed by an independent context. Returns null if the context cannot be
   // created or initialized.
   virtual std::unique_ptr<WebGraphicsContext3DProvider>
-  CreateWebGPUGraphicsContext3DProvider(const WebURL& top_document_url,
-                                        GraphicsInfo*);
+  CreateWebGPUGraphicsContext3DProvider(const WebURL& top_document_url);
 
   virtual gpu::GpuMemoryBufferManager* GetGpuMemoryBufferManager() {
     return nullptr;
@@ -554,7 +526,7 @@ class BLINK_PLATFORM_EXPORT Platform {
     return nullptr;
   }
 
-  virtual viz::ContextProvider* SharedMainThreadContextProvider() {
+  virtual viz::RasterContextProvider* SharedMainThreadContextProvider() {
     return nullptr;
   }
 
@@ -562,30 +534,6 @@ class BLINK_PLATFORM_EXPORT Platform {
 
   // WebRTC ----------------------------------------------------------
 
-  // Creates a WebRTCPeerConnectionHandler for RTCPeerConnection.
-  // May return null if WebRTC functionality is not avaliable or if it's out of
-  // resources.
-  virtual std::unique_ptr<WebRTCPeerConnectionHandler>
-  CreateRTCPeerConnectionHandler(WebRTCPeerConnectionHandlerClient*,
-                                 scoped_refptr<base::SingleThreadTaskRunner>);
-
-  // Returns the SingleThreadTaskRunner suitable for running WebRTC networking.
-  // An rtc::Thread will have already been created.
-  // May return null if WebRTC functionality is not implemented.
-  virtual scoped_refptr<base::SingleThreadTaskRunner> GetWebRtcWorkerThread() {
-    return nullptr;
-  }
-
-  // May return null if WebRTC functionality is not implemented.
-  virtual std::unique_ptr<cricket::PortAllocator> CreateWebRtcPortAllocator(
-      WebLocalFrame* frame);
-
-  // May return null if WebRTC functionality is not implemented.
-  virtual std::unique_ptr<webrtc::AsyncResolverFactory>
-  CreateWebRtcAsyncResolverFactory();
-
-  // Checks if the default minimum starting volume value for the AGC is
-  // overridden on the command line.
   virtual base::Optional<double> GetWebRtcMaxCaptureFrameRate() {
     return base::nullopt;
   }
@@ -622,7 +570,7 @@ class BLINK_PLATFORM_EXPORT Platform {
 
   virtual bool IsWebRtcSrtpEncryptedHeadersEnabled() { return false; }
 
-  virtual base::Optional<std::string> WebRtcStunProbeTrialParameter() {
+  virtual base::Optional<WebString> WebRtcStunProbeTrialParameter() {
     return base::nullopt;
   }
 
@@ -639,9 +587,6 @@ class BLINK_PLATFORM_EXPORT Platform {
   virtual base::Optional<int> GetAgcStartupMinimumVolume() {
     return base::nullopt;
   }
-
-  virtual void TrackGetUserMedia(
-      const blink::WebUserMediaRequest& web_request) {}
 
   virtual bool IsWebRtcHWH264DecodingEnabled(
       webrtc::VideoCodecType video_coded_type) {
@@ -664,7 +609,7 @@ class BLINK_PLATFORM_EXPORT Platform {
 
   virtual std::unique_ptr<WebDedicatedWorkerHostFactoryClient>
   CreateDedicatedWorkerHostFactoryClient(WebDedicatedWorker*,
-                                         service_manager::InterfaceProvider*) {
+                                         const BrowserInterfaceBrokerProxy&) {
     return nullptr;
   }
   virtual void DidStartWorkerThread() {}
@@ -685,10 +630,6 @@ class BLINK_PLATFORM_EXPORT Platform {
 
   // Mojo ---------------------------------------------------------------
 
-  // DEPRECATED: Use |GetBrowserInterfaceBrokerProxy()| instead. The same
-  // interfaces are reachable through either method.
-  virtual InterfaceProvider* GetInterfaceProvider();
-
   // Callable from any thread. Asks the browser to bind an interface receiver on
   // behalf of this renderer.
   //
@@ -701,8 +642,7 @@ class BLINK_PLATFORM_EXPORT Platform {
   // instances have less overhead since they don't need to be thread-safe.
   // Using a more narrowly defined scope when possible is also generally better
   // for security.
-  virtual ThreadSafeBrowserInterfaceBrokerProxy*
-  GetBrowserInterfaceBrokerProxy();
+  virtual ThreadSafeBrowserInterfaceBrokerProxy* GetBrowserInterfaceBroker();
 
   // Media Capabilities --------------------------------------------------
 

@@ -17,7 +17,6 @@
 #include <vector>
 
 #include "base/fuchsia/scoped_service_binding.h"
-#include "base/fuchsia/service_directory_client.h"
 #include "base/fuchsia/startup_context.h"
 #include "base/logging.h"
 #include "fuchsia/base/lifecycle_impl.h"
@@ -59,6 +58,8 @@ class WebComponent : public fuchsia::sys::ComponentController,
 
   fuchsia::web::Frame* frame() const { return frame_.get(); }
 
+  WebContentRunner* runner() const { return runner_; }
+
  protected:
   // fuchsia::sys::ComponentController implementation.
   void Kill() override;
@@ -94,12 +95,6 @@ class WebComponent : public fuchsia::sys::ComponentController,
 
   // If running as a Mod then these are used to e.g. RemoveSelfFromStory().
   fuchsia::modular::ModuleContextPtr module_context_;
-
-  // Incoming services provided at component creation.
-  std::unique_ptr<base::fuchsia::ServiceDirectoryClient> additional_services_;
-
-  // The names of services provided at component creation.
-  std::vector<std::string> additional_service_names_;
 
   // Objects used for binding and exporting the ViewProvider service.
   std::unique_ptr<

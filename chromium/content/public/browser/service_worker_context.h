@@ -15,6 +15,7 @@
 #include "content/public/browser/service_worker_external_request_result.h"
 #include "content/public/browser/service_worker_running_info.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom-forward.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_registration_options.mojom-forward.h"
 #include "url/gurl.h"
 
 namespace blink {
@@ -32,6 +33,11 @@ enum class ServiceWorkerCapability {
   NO_SERVICE_WORKER,
   SERVICE_WORKER_NO_FETCH_HANDLER,
   SERVICE_WORKER_WITH_FETCH_HANDLER,
+};
+
+enum class OfflineCapability {
+  kUnsupported,
+  kSupported,
 };
 
 // Used for UMA. Append only.
@@ -66,6 +72,9 @@ class CONTENT_EXPORT ServiceWorkerContext {
 
   using CheckHasServiceWorkerCallback =
       base::OnceCallback<void(ServiceWorkerCapability capability)>;
+
+  using CheckOfflineCapabilityCallback =
+      base::OnceCallback<void(OfflineCapability capability)>;
 
   using CountExternalRequestsCallback =
       base::OnceCallback<void(size_t external_request_count)>;
@@ -152,7 +161,10 @@ class CONTENT_EXPORT ServiceWorkerContext {
   virtual void GetAllOriginsInfo(GetUsageInfoCallback callback) = 0;
 
   // This function can be called from any thread, and the callback is called
-  // on that thread.
+  // on that thread.  Deletes all registrations in the origin and clears all
+  // service workers belonging to the registrations. All clients controlled by
+  // those service workers will lose their controllers immediately after this
+  // operation.
   virtual void DeleteForOrigin(const GURL& origin_url,
                                ResultCallback callback) = 0;
 
@@ -173,6 +185,19 @@ class CONTENT_EXPORT ServiceWorkerContext {
   virtual void CheckHasServiceWorker(
       const GURL& url,
       CheckHasServiceWorkerCallback callback) = 0;
+
+  // Simulates a navigation request in the offline state and dispatches a fetch
+  // event. Returns OfflineCapability::kSupported if the response's status code
+  // is 200.
+  //
+  // This function can be called from any thread, but the callback will always
+  // be called on the UI thread.
+  //
+  // TODO(hayato): Re-visit to integrate this function with
+  // |ServiceWorkerContext::CheckHasServiceWorker|.
+  virtual void CheckOfflineCapability(
+      const GURL& url,
+      CheckOfflineCapabilityCallback callback) = 0;
 
   // Stops all running service workers and unregisters all service worker
   // registrations. This method is used in web tests to make sure that the

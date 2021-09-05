@@ -22,10 +22,6 @@
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
 
-namespace autofill {
-struct PasswordForm;
-}
-
 namespace content {
 class RenderFrameHost;
 }
@@ -56,6 +52,7 @@ class ContentPasswordManagerDriver
   int GetId() const override;
   void FillPasswordForm(
       const autofill::PasswordFormFillData& form_data) override;
+  void InformNoSavedCredentials() override;
   void FormEligibleForGenerationFound(
       const autofill::PasswordFormGenerationData& form) override;
   void GeneratedPasswordAccepted(const base::string16& password) override;
@@ -76,6 +73,7 @@ class ContentPasswordManagerDriver
   void SendLoggingAvailability() override;
   autofill::AutofillDriver* GetAutofillDriver() override;
   bool IsMainFrame() const override;
+  bool CanShowAutofillUi() const override;
   const GURL& GetLastCommittedURL() const override;
   void AnnotateFieldsWithParsingResult(
       const autofill::ParsingResult& parsing_result) override;
@@ -94,13 +92,13 @@ class ContentPasswordManagerDriver
   // For that reason, any access to form data should be validated via
   // bad_message::CheckChildProcessSecurityPolicy.
   void PasswordFormsParsed(
-      const std::vector<autofill::PasswordForm>& forms) override;
+      const std::vector<autofill::FormData>& forms_data) override;
   void PasswordFormsRendered(
-      const std::vector<autofill::PasswordForm>& visible_forms,
+      const std::vector<autofill::FormData>& visible_forms_data,
       bool did_stop_loading) override;
-  void PasswordFormSubmitted(
-      const autofill::PasswordForm& password_form) override;
-  void ShowManualFallbackForSaving(const autofill::PasswordForm& form) override;
+  void PasswordFormSubmitted(const autofill::FormData& form_data) override;
+  void ShowManualFallbackForSaving(
+      const autofill::FormData& form_data) override;
   void HideManualFallbackForSaving() override;
   void SameDocumentNavigation(autofill::mojom::SubmissionIndicatorEvent
                                   submission_indication_event) override;

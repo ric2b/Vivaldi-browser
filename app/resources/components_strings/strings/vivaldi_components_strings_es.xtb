@@ -36,6 +36,7 @@
 <translation id="2292556288342944218">Tu acceso a Internet está bloqueado</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> necesita un nombre de usuario y una contraseña.</translation>
 <translation id="2337852623177822836">Configuración controlada por tu administrador</translation>
+<translation id="2344028582131185878">Descargas automáticas</translation>
 <translation id="2355395290879513365">Puede ser que los atacantes sepan qué imágenes estás viendo en este sitio web y que las modifiquen para engañarte.</translation>
 <translation id="2356070529366658676">Preguntar</translation>
 <translation id="2359808026110333948">Continuar</translation>
@@ -88,7 +89,6 @@
 <translation id="3973234410852337861">La página <ph name="HOST_NAME" /> está bloqueada</translation>
 <translation id="3987940399970879459">Menos de 1 MB</translation>
 <translation id="4075732493274867456">El cliente y el servidor no son compatibles con la misma versión del protocolo SSL o sistema de cifrado.</translation>
-<translation id="410351446219883937">Reproducción automática</translation>
 <translation id="4116663294526079822">Permitir siempre en este sitio</translation>
 <translation id="4130226655945681476">Comprobando los cables de red, el módem y el router</translation>
 <translation id="4151403195736952345">Usar valor predeterminado global (Detectar)</translation>
@@ -177,7 +177,7 @@
 <translation id="7219179957768738017">La conexión utiliza <ph name="SSL_VERSION" />.</translation>
 <translation id="7260504762447901703">Revocar el acceso</translation>
 <translation id="7353601530677266744">Línea de comandos</translation>
-<translation id="7419106976560586862">Ruta al perfil</translation>
+<translation id="7419106976560586862">Ruta de perfil</translation>
 <translation id="7445762425076701745">La identidad del servidor al que estás conectado no puede ser validada en su totalidad. Estás conectado a un servidor con un nombre que solo es válido en tu red y cuya posesión no puede ser validada por una entidad externa emisora de certificados. A pesar de ello, algunas entidades emisoras emiten certificados para esos nombres, por lo que no es posible garantizar que estés conectado al sitio web deseado, en lugar de a un atacante.</translation>
 <translation id="7455133967321480974">Utilizar valor predeterminado global (Bloquear)</translation>
 <translation id="7518003948725431193">No se ha encontrado ninguna página web en la dirección <ph name="URL" /></translation>

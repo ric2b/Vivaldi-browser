@@ -12,7 +12,6 @@ namespace supervised_users {
 #if defined(OS_CHROMEOS)
 extern const char kAccountConsistencyMirrorRequired[];
 #endif
-extern const char kApprovedExtensions[];
 extern const char kAuthorizationHeaderFormat[];
 extern const char kCameraMicDisabled[];
 extern const char kContentPackDefaultFilteringBehavior[];

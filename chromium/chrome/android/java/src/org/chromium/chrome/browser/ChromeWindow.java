@@ -7,7 +7,8 @@ package org.chromium.chrome.browser;
 import android.app.Activity;
 import android.view.View;
 
-import org.chromium.base.VisibleForTesting;
+import androidx.annotation.VisibleForTesting;
+
 import org.chromium.chrome.browser.infobar.InfoBarIdentifier;
 import org.chromium.chrome.browser.infobar.SimpleConfirmInfoBarBuilder;
 import org.chromium.chrome.browser.metrics.WebApkUma;
@@ -16,6 +17,7 @@ import org.chromium.chrome.browser.webapps.WebApkActivity;
 import org.chromium.ui.base.ActivityAndroidPermissionDelegate;
 import org.chromium.ui.base.ActivityKeyboardVisibilityDelegate;
 import org.chromium.ui.base.ActivityWindowAndroid;
+import org.chromium.ui.modaldialog.ModalDialogManager;
 
 import java.lang.ref.WeakReference;
 
@@ -50,6 +52,12 @@ public class ChromeWindow extends ActivityWindowAndroid {
         return chromeActivity.getCompositorViewHolder() == null
                 ? null
                 : chromeActivity.getCompositorViewHolder().getActiveSurfaceView();
+    }
+
+    @Override
+    public ModalDialogManager getModalDialogManager() {
+        ChromeActivity activity = (ChromeActivity) getActivity().get();
+        return activity == null ? null : activity.getModalDialogManager();
     }
 
     @Override

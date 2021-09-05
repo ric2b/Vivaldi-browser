@@ -5,12 +5,42 @@
 #ifndef CHROME_BROWSER_EXTENSIONS_API_TERMINAL_TERMINAL_PRIVATE_API_H_
 #define CHROME_BROWSER_EXTENSIONS_API_TERMINAL_TERMINAL_PRIVATE_API_H_
 
+#include <memory>
 #include <string>
 #include <vector>
 
+#include "chrome/browser/chromeos/crostini/crostini_simple_types.h"
+#include "chrome/browser/profiles/profile.h"
+#include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/extension_function.h"
+#include "extensions/browser/value_store/value_store.h"
+
+class PrefChangeRegistrar;
 
 namespace extensions {
+
+class CrostiniStartupStatus;
+
+class TerminalPrivateAPI : public BrowserContextKeyedAPI {
+ public:
+  explicit TerminalPrivateAPI(content::BrowserContext* context);
+  ~TerminalPrivateAPI() override;
+
+  // BrowserContextKeyedAPI implementation.
+  static BrowserContextKeyedAPIFactory<TerminalPrivateAPI>*
+  GetFactoryInstance();
+
+ private:
+  friend class BrowserContextKeyedAPIFactory<TerminalPrivateAPI>;
+
+  // BrowserContextKeyedAPI implementation.
+  static const char* service_name() { return "TerminalPrivateAPI"; }
+
+  content::BrowserContext* const context_;
+  std::unique_ptr<PrefChangeRegistrar> pref_change_registrar_;
+
+  DISALLOW_COPY_AND_ASSIGN(TerminalPrivateAPI);
+};
 
 // Opens new terminal process. Returns the new terminal id.
 class TerminalPrivateOpenTerminalProcessFunction : public ExtensionFunction {
@@ -18,14 +48,25 @@ class TerminalPrivateOpenTerminalProcessFunction : public ExtensionFunction {
   DECLARE_EXTENSION_FUNCTION("terminalPrivate.openTerminalProcess",
                              TERMINALPRIVATE_OPENTERMINALPROCESS)
 
-  TerminalPrivateOpenTerminalProcessFunction();
-
  protected:
   ~TerminalPrivateOpenTerminalProcessFunction() override;
 
   ExtensionFunction::ResponseAction Run() override;
 
+  // Open the specified |process_name| with supplied |args|.
+  ExtensionFunction::ResponseAction OpenProcess(
+      const std::string& process_name,
+      std::unique_ptr<std::vector<std::string>> args);
+
  private:
+  // Callback for when starting crostini is complete.
+  void OnCrostiniRestarted(
+      std::unique_ptr<CrostiniStartupStatus> startup_status,
+      const std::string& user_id_hash,
+      int tab_id,
+      const std::vector<std::string>& arguments,
+      crostini::CrostiniResult result);
+
   using ProcessOutputCallback =
       base::Callback<void(const std::string& terminal_id,
                           const std::string& output_type,
@@ -33,13 +74,27 @@ class TerminalPrivateOpenTerminalProcessFunction : public ExtensionFunction {
   using OpenProcessCallback =
       base::Callback<void(bool success, const std::string& terminal_id)>;
 
-  std::string UserIdHash();
-  void OpenProcess(const std::vector<std::string> arguments);
+  void OpenProcess(const std::string& user_id_hash,
+                   int tab_id,
+                   const std::vector<std::string>& arguments);
   void OpenOnRegistryTaskRunner(const ProcessOutputCallback& output_callback,
                                 const OpenProcessCallback& callback,
                                 const std::vector<std::string>& arguments,
                                 const std::string& user_id_hash);
   void RespondOnUIThread(bool success, const std::string& terminal_id);
+};
+
+// Opens new vmshell process. Returns the new terminal id.
+class TerminalPrivateOpenVmshellProcessFunction
+    : public TerminalPrivateOpenTerminalProcessFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("terminalPrivate.openVmshellProcess",
+                             TERMINALPRIVATE_OPENVMSHELLPROCESS)
+
+ protected:
+  ~TerminalPrivateOpenVmshellProcessFunction() override;
+
+  ExtensionFunction::ResponseAction Run() override;
 };
 
 // Send input to the terminal process specified by the terminal ID, which is set
@@ -106,6 +161,55 @@ class TerminalPrivateAckOutputFunction : public ExtensionFunction {
 
  private:
   void AckOutputOnRegistryTaskRunner(const std::string& terminal_id);
+};
+
+// TODO(crbug.com/1019021): Remove this function after M-83.
+// Be sure to first remove the callsite in the terminal system app.
+class TerminalPrivateGetCroshSettingsFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("terminalPrivate.getCroshSettings",
+                             TERMINALPRIVATE_GETCROSHSETTINGS)
+
+ protected:
+  ~TerminalPrivateGetCroshSettingsFunction() override;
+
+  ExtensionFunction::ResponseAction Run() override;
+
+ private:
+  void AsyncRunWithStorage(ValueStore* storage);
+};
+
+class TerminalPrivateGetSettingsFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("terminalPrivate.getSettings",
+                             TERMINALPRIVATE_GETSETTINGS)
+
+ protected:
+  ~TerminalPrivateGetSettingsFunction() override;
+
+  ExtensionFunction::ResponseAction Run() override;
+};
+
+class TerminalPrivateSetSettingsFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("terminalPrivate.setSettings",
+                             TERMINALPRIVATE_SETSETTINGS)
+
+ protected:
+  ~TerminalPrivateSetSettingsFunction() override;
+
+  ExtensionFunction::ResponseAction Run() override;
+};
+
+class TerminalPrivateGetA11yStatusFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("terminalPrivate.getA11yStatus",
+                             TERMINALPRIVATE_GETA11YSTATUS)
+
+ protected:
+  ~TerminalPrivateGetA11yStatusFunction() override;
+
+  ExtensionFunction::ResponseAction Run() override;
 };
 
 }  // namespace extensions

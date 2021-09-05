@@ -6,37 +6,56 @@
 
 #include "third_party/blink/renderer/modules/xr/xr_hit_test_source.h"
 #include "third_party/blink/renderer/modules/xr/xr_pose.h"
+#include "third_party/blink/renderer/modules/xr/xr_rigid_transform.h"
+#include "third_party/blink/renderer/modules/xr/xr_session.h"
 #include "third_party/blink/renderer/modules/xr/xr_space.h"
 
 namespace blink {
 
-XRHitTestResult::XRHitTestResult(XRHitTestSource* hit_test_source,
-                                 const TransformationMatrix& pose)
-    : hit_test_source_(hit_test_source),
-      pose_(std::make_unique<TransformationMatrix>(pose)) {}
+XRHitTestResult::XRHitTestResult(
+    XRSession* session,
+    const device::mojom::blink::XRHitResult& hit_result)
+    : session_(session),
+      mojo_from_this_(std::make_unique<TransformationMatrix>(
+          hit_result.hit_matrix.matrix())),
+      plane_id_(hit_result.plane_id != 0
+                    ? base::Optional<uint64_t>(hit_result.plane_id)
+                    : base::nullopt) {}
 
-XRHitTestOptions* XRHitTestResult::hitTestOptions() const {
-  return hit_test_source_->hitTestOptions();
+XRPose* XRHitTestResult::getPose(XRSpace* other) {
+  auto maybe_other_space_native_from_mojo = other->NativeFromMojo();
+  DCHECK(maybe_other_space_native_from_mojo);
+
+  auto mojo_from_this = *mojo_from_this_;
+
+  auto other_native_from_mojo = *maybe_other_space_native_from_mojo;
+  auto other_offset_from_other_native = other->OffsetFromNativeMatrix();
+
+  auto other_offset_from_mojo =
+      other_offset_from_other_native * other_native_from_mojo;
+
+  auto other_offset_from_this = other_offset_from_mojo * mojo_from_this;
+
+  return MakeGarbageCollected<XRPose>(other_offset_from_this, false);
 }
 
-XRPose* XRHitTestResult::getPose(XRSpace* relative_to) {
-  DCHECK(relative_to->MojoFromSpace());
+ScriptPromise XRHitTestResult::createAnchor(ScriptState* script_state,
+                                            XRRigidTransform* initial_pose,
+                                            ExceptionState& exception_state) {
+  DVLOG(2) << __func__;
 
-  auto mojo_from_this = *pose_;
+  if (!initial_pose) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      XRSession::kNoRigidTransformSpecified);
+    return {};
+  }
 
-  auto mojo_from_other = *relative_to->MojoFromSpace();
-  DCHECK(mojo_from_other.IsInvertible());
-
-  auto other_from_mojo = mojo_from_other.Inverse();
-
-  auto other_from_this = other_from_mojo * mojo_from_this;
-
-  return MakeGarbageCollected<XRPose>(other_from_this, false);
+  return session_->CreateAnchor(script_state, initial_pose->TransformMatrix(),
+                                *mojo_from_this_, plane_id_, exception_state);
 }
 
-void XRHitTestResult::Trace(blink::Visitor* visitor) {
-  visitor->Trace(hit_test_source_);
+void XRHitTestResult::Trace(Visitor* visitor) {
+  visitor->Trace(session_);
   ScriptWrappable::Trace(visitor);
 }
-
 }  // namespace blink

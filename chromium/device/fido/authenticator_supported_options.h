@@ -82,6 +82,12 @@ struct COMPONENT_EXPORT(DEVICE_FIDO) AuthenticatorSupportedOptions {
   // authenticator.
   ClientPinAvailability client_pin_availability =
       ClientPinAvailability::kNotSupported;
+  // Indicates whether the authenticator is capable of handling built in user
+  // verification based tokens.
+  bool supports_uv_token = false;
+  // Indicates whether the authenticator supports an extension for passing
+  // information from the collectedClientData structure with a CTAP request.
+  bool supports_android_client_data_ext = false;
 };
 
 COMPONENT_EXPORT(DEVICE_FIDO)

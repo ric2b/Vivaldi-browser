@@ -6,73 +6,13 @@ module ui.mojom;
 
 import "mojo/public/mojom/base/time.mojom";
 import "skia/public/mojom/bitmap.mojom";
+import "ui/base/mojom/cursor_type.mojom";
 import "ui/gfx/geometry/mojom/geometry.mojom";
-
-// Standard Cursor numbers. These are the same as Chrome's ui::Cursor and
-// blink's WebCursorInfo.
-enum CursorType {
-  // kNull is kept for compatibility with chrome declarations. In chrome code,
-  // it is treated exactly like kPointer, the default pointer.
-  kNull = 0,
-  kPointer,
-  kCross,
-  kHand,
-  kIBeam,
-  kWait,
-  kHelp,
-  kEastResize,
-  kNorthResize,
-  kNorthEastResize,
-  kNorthWestResize,
-  kSouthResize,
-  kSouthEastResize,
-  kSouthWestResize,
-  kWestResize,
-  kNorthSouthResize,
-  kEastWestResize,
-  kNorthEastSouthWestResize,
-  kNorthWestSouthEastResize,
-  kColumnResize,
-  kRowResize,
-  kMiddlePanning,
-  kMiddlePanningVertical,
-  kMiddlePanningHorizontal,
-  kEastPanning,
-  kNorthPanning,
-  kNorthEastPanning,
-  kNorthWestPanning,
-  kSouthPanning,
-  kSouthEastPanning,
-  kSouthWestPanning,
-  kWestPanning,
-  kMove,
-  kVerticalText,
-  kCell,
-  kContextMenu,
-  kAlias,
-  kProgress,
-  kNoDrop,
-  kCopy,
-  kNone,
-  kNotAllowed,
-  kZoomIn,
-  kZoomOut,
-  kGrab,
-  kGrabbing,
-  kCustom
-};
-
-// Whether we use normal or large cursors. These are the same as Chrome's
-// ui::CursorSize.
-enum CursorSize {
-  kNormal,
-  kLarge
-};
 
 // A description of a cursor.
 struct Cursor {
   // The type of cursor. If kCustom, the rest of the fields are relevant.
-  CursorType native_type;
+  CursorType type;
 
   // The hotspot in pixels in the source cursor frames.
   gfx.mojom.Point hotspot;
@@ -81,5 +21,5 @@ struct Cursor {
   skia.mojom.Bitmap? bitmap;
 
   // This is the image scale of this cursor.
-  float device_scale_factor;
+  float image_scale_factor;
 };

@@ -4,7 +4,8 @@
 
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "components/sync/base/cancelation_signal.h"
+#include "base/guid.h"
+#include "base/test/task_environment.h"
 #include "components/sync/engine_impl/loopback_server/loopback_connection_manager.h"
 #include "components/sync/engine_impl/syncer_proto_util.h"
 #include "components/sync/protocol/sync.pb.h"
@@ -32,6 +33,7 @@ SyncEntity NewBookmarkEntity(const std::string& url,
   SyncEntity entity;
   entity.mutable_specifics()->mutable_bookmark()->set_url(url);
   entity.set_parent_id_string(parent_id);
+  entity.set_id_string(base::GenerateGUID());
   return entity;
 }
 
@@ -72,8 +74,7 @@ class LoopbackServerTest : public testing::Test {
  public:
   void SetUp() override {
     base::CreateTemporaryFile(&persistent_file_);
-    lcm_ =
-        std::make_unique<LoopbackConnectionManager>(&signal_, persistent_file_);
+    lcm_ = std::make_unique<LoopbackConnectionManager>(persistent_file_);
   }
 
   static bool CallPostAndProcessHeaders(ServerConnectionManager* scm,
@@ -133,7 +134,8 @@ class LoopbackServerTest : public testing::Test {
     EXPECT_FALSE(response.has_commit());
   }
 
-  CancelationSignal signal_;
+  base::test::TaskEnvironment task_environment_;
+
   base::FilePath persistent_file_;
   std::unique_ptr<LoopbackConnectionManager> lcm_;
 };
@@ -225,9 +227,6 @@ TEST_F(LoopbackServerTest, CommitBookmarkTombstoneFailure) {
 TEST_F(LoopbackServerTest, LoadSavedState) {
   std::string id = CommitVerifySuccess(NewBookmarkEntity(kUrl1, kBookmarkBar));
 
-  CancelationSignal signal;
-  LoopbackConnectionManager second_user(&signal, persistent_file_);
-
   ClientToServerMessage get_updates_msg;
   SyncerProtoUtil::SetProtocolVersion(&get_updates_msg);
   get_updates_msg.set_share("required");
@@ -235,6 +234,18 @@ TEST_F(LoopbackServerTest, LoadSavedState) {
   get_updates_msg.mutable_get_updates()
       ->add_from_progress_marker()
       ->set_data_type_id(EntitySpecifics::kBookmarkFieldNumber);
+
+  ClientToServerResponse expected_response;
+  EXPECT_TRUE(CallPostAndProcessHeaders(lcm_.get(), nullptr, get_updates_msg,
+                                        &expected_response));
+  EXPECT_EQ(SyncEnums::SUCCESS, expected_response.error_code());
+  ASSERT_TRUE(expected_response.has_get_updates());
+  ASSERT_TRUE(expected_response.has_store_birthday());
+
+  lcm_.reset();
+  task_environment_.RunUntilIdle();
+
+  LoopbackConnectionManager second_user(persistent_file_);
 
   ClientToServerResponse response;
   EXPECT_TRUE(CallPostAndProcessHeaders(&second_user, nullptr, get_updates_msg,
@@ -244,6 +255,8 @@ TEST_F(LoopbackServerTest, LoadSavedState) {
   // Expect to see the four top-level folders and the newly added bookmark!
   EXPECT_EQ(5 + 1 /*trash-node*/, response.get_updates().entries_size());
   EXPECT_EQ(1U, ResponseToMap(response).count(id));
+
+  EXPECT_EQ(expected_response.store_birthday(), response.store_birthday());
 }
 
 TEST_F(LoopbackServerTest, CommitCommandUpdate) {

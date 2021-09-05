@@ -38,18 +38,27 @@ template <typename T>
 struct FinalizerTraitImpl<T, true> {
  private:
   STATIC_ONLY(FinalizerTraitImpl);
-  struct CustomDispatch {
+  struct Custom {
     static void Call(void* obj) {
       static_cast<T*>(obj)->FinalizeGarbageCollectedObject();
     }
   };
-  struct DestructorDispatch {
-    static void Call(void* obj) { static_cast<T*>(obj)->~T(); }
+  struct Destructor {
+    static void Call(void* obj) {
+// The garbage collector differs from regular C++ here as it remembers whether
+// an object's base class has a virtual destructor. In case there is no virtual
+// destructor present, the object is always finalized through its leaf type. In
+// other words: there is no finalization through a base pointer.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdelete-non-abstract-non-virtual-dtor"
+      static_cast<T*>(obj)->~T();
+#pragma GCC diagnostic pop
+    }
   };
   using FinalizeImpl =
       std::conditional_t<HasFinalizeGarbageCollectedObject<T>::value,
-                         CustomDispatch,
-                         DestructorDispatch>;
+                         Custom,
+                         Destructor>;
 
  public:
   static void Finalize(void* obj) {
@@ -82,10 +91,6 @@ struct FinalizerTrait {
 };
 
 class HeapAllocator;
-template <typename T, typename Traits>
-class HeapVectorBacking;
-template <typename Table>
-class HeapHashTableBacking;
 
 template <typename T, typename U, typename V>
 struct FinalizerTrait<LinkedHashSet<T, U, V, HeapAllocator>> {
@@ -126,27 +131,6 @@ struct FinalizerTrait<Deque<T, inlineCapacity, HeapAllocator>> {
       inlineCapacity && VectorTraits<T>::kNeedsDestruction;
   static void Finalize(void* obj) {
     internal::FinalizerTraitImpl<Deque<T, inlineCapacity, HeapAllocator>,
-                                 kNonTrivialFinalizer>::Finalize(obj);
-  }
-};
-
-template <typename Table>
-struct FinalizerTrait<HeapHashTableBacking<Table>> {
-  STATIC_ONLY(FinalizerTrait);
-  static const bool kNonTrivialFinalizer =
-      !std::is_trivially_destructible<typename Table::ValueType>::value;
-  static void Finalize(void* obj) {
-    internal::FinalizerTraitImpl<HeapHashTableBacking<Table>,
-                                 kNonTrivialFinalizer>::Finalize(obj);
-  }
-};
-
-template <typename T, typename Traits>
-struct FinalizerTrait<HeapVectorBacking<T, Traits>> {
-  STATIC_ONLY(FinalizerTrait);
-  static const bool kNonTrivialFinalizer = Traits::kNeedsDestruction;
-  static void Finalize(void* obj) {
-    internal::FinalizerTraitImpl<HeapVectorBacking<T, Traits>,
                                  kNonTrivialFinalizer>::Finalize(obj);
   }
 };

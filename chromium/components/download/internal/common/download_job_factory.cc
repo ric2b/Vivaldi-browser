@@ -29,44 +29,14 @@ enum class ConnectionType {
 
 ConnectionType GetConnectionType(
     net::HttpResponseInfo::ConnectionInfo connection_info) {
-  switch (connection_info) {
-    case net::HttpResponseInfo::CONNECTION_INFO_HTTP0_9:
-    case net::HttpResponseInfo::CONNECTION_INFO_HTTP1_0:
-    case net::HttpResponseInfo::CONNECTION_INFO_HTTP1_1:
+  switch (net::HttpResponseInfo::ConnectionInfoToCoarse(connection_info)) {
+    case net::HttpResponseInfo::CONNECTION_INFO_COARSE_HTTP1:
       return ConnectionType::kHTTP;
-    case net::HttpResponseInfo::CONNECTION_INFO_DEPRECATED_SPDY2:
-    case net::HttpResponseInfo::CONNECTION_INFO_DEPRECATED_SPDY3:
-    case net::HttpResponseInfo::CONNECTION_INFO_DEPRECATED_HTTP2_14:
-    case net::HttpResponseInfo::CONNECTION_INFO_DEPRECATED_HTTP2_15:
-    case net::HttpResponseInfo::CONNECTION_INFO_HTTP2:
+    case net::HttpResponseInfo::CONNECTION_INFO_COARSE_HTTP2:
       return ConnectionType::kHTTP2;
-    case net::HttpResponseInfo::CONNECTION_INFO_QUIC_UNKNOWN_VERSION:
-    case net::HttpResponseInfo::CONNECTION_INFO_QUIC_32:
-    case net::HttpResponseInfo::CONNECTION_INFO_QUIC_33:
-    case net::HttpResponseInfo::CONNECTION_INFO_QUIC_34:
-    case net::HttpResponseInfo::CONNECTION_INFO_QUIC_35:
-    case net::HttpResponseInfo::CONNECTION_INFO_QUIC_36:
-    case net::HttpResponseInfo::CONNECTION_INFO_QUIC_37:
-    case net::HttpResponseInfo::CONNECTION_INFO_QUIC_38:
-    case net::HttpResponseInfo::CONNECTION_INFO_QUIC_39:
-    case net::HttpResponseInfo::CONNECTION_INFO_QUIC_40:
-    case net::HttpResponseInfo::CONNECTION_INFO_QUIC_41:
-    case net::HttpResponseInfo::CONNECTION_INFO_QUIC_42:
-    case net::HttpResponseInfo::CONNECTION_INFO_QUIC_43:
-    case net::HttpResponseInfo::CONNECTION_INFO_QUIC_44:
-    case net::HttpResponseInfo::CONNECTION_INFO_QUIC_45:
-    case net::HttpResponseInfo::CONNECTION_INFO_QUIC_46:
-    case net::HttpResponseInfo::CONNECTION_INFO_QUIC_47:
-    case net::HttpResponseInfo::CONNECTION_INFO_QUIC_48:
-    case net::HttpResponseInfo::CONNECTION_INFO_QUIC_49:
-    case net::HttpResponseInfo::CONNECTION_INFO_QUIC_50:
-    case net::HttpResponseInfo::CONNECTION_INFO_QUIC_99:
-    case net::HttpResponseInfo::CONNECTION_INFO_QUIC_999:
+    case net::HttpResponseInfo::CONNECTION_INFO_COARSE_QUIC:
       return ConnectionType::kQUIC;
-    case net::HttpResponseInfo::CONNECTION_INFO_UNKNOWN:
-      return ConnectionType::kUnknown;
-    case net::HttpResponseInfo::NUM_OF_CONNECTION_INFOS:
-      NOTREACHED();
+    case net::HttpResponseInfo::CONNECTION_INFO_COARSE_OTHER:
       return ConnectionType::kUnknown;
   }
   NOTREACHED();
@@ -105,8 +75,14 @@ bool IsParallelizableDownload(const DownloadCreateInfo& create_info,
        base::FeatureList::IsEnabled(features::kUseParallelRequestsForQUIC));
   bool http_get_method =
       create_info.method == "GET" && create_info.url().SchemeIsHTTPOrHTTPS();
-  bool partial_response_success =
-      download_item->GetReceivedSlices().empty() || create_info.offset != 0;
+  // If the file is empty, we always assume parallel download is supported.
+  // Otherwise, check if the download already has multiple slices and whether
+  // the http response offset is non-zero.
+  bool can_support_parallel_requests =
+      download_item->GetReceivedBytes() <= 0 ||
+      (download_item->GetReceivedSlices().size() > 0 &&
+       create_info.offset != 0);
+
   bool range_support_allowed =
       create_info.accept_range == RangeRequestSupportType::kSupport ||
       (base::FeatureList::IsEnabled(
@@ -115,7 +91,7 @@ bool IsParallelizableDownload(const DownloadCreateInfo& create_info,
   bool is_parallelizable = has_strong_validator && range_support_allowed &&
                            has_content_length && satisfy_min_file_size &&
                            satisfy_connection_type && http_get_method &&
-                           partial_response_success;
+                           can_support_parallel_requests;
   RecordDownloadConnectionInfo(create_info.connection_info);
 
   if (!IsParallelDownloadEnabled())
@@ -153,7 +129,11 @@ bool IsParallelizableDownload(const DownloadCreateInfo& create_info,
     RecordParallelDownloadCreationEvent(
         ParallelDownloadCreationEvent::FALLBACK_REASON_HTTP_METHOD);
   }
-
+  if (!can_support_parallel_requests) {
+    RecordParallelDownloadCreationEvent(
+        ParallelDownloadCreationEvent::
+            FALLBACK_REASON_RESUMPTION_WITHOUT_SLICES);
+  }
   return is_parallelizable;
 }
 
@@ -167,7 +147,7 @@ std::unique_ptr<DownloadJob> DownloadJobFactory::CreateJob(
     bool is_save_package_download,
     URLLoaderFactoryProvider::URLLoaderFactoryProviderPtr
         url_loader_factory_provider,
-    service_manager::Connector* connector) {
+    WakeLockProviderBinder wake_lock_provider_binder) {
   if (is_save_package_download) {
     return std::make_unique<SavePackageDownloadJob>(
         download_item, std::move(cancel_request_callback));
@@ -178,7 +158,8 @@ std::unique_ptr<DownloadJob> DownloadJobFactory::CreateJob(
   if (IsParallelDownloadEnabled() && is_parallelizable) {
     return std::make_unique<ParallelDownloadJob>(
         download_item, std::move(cancel_request_callback), create_info,
-        std::move(url_loader_factory_provider), connector);
+        std::move(url_loader_factory_provider),
+        std::move(wake_lock_provider_binder));
   }
 
   // An ordinary download job.

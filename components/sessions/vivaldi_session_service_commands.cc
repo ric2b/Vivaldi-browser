@@ -1,10 +1,10 @@
-// Copyright (c) 2015 Vivaldi Technologies AS. All rights reserved
+// Copyright (c) 2015-2019 Vivaldi Technologies AS. All rights reserved
 
 #include "components/sessions/vivaldi_session_service_commands.h"
 
 #include <stddef.h>
-
 #include <limits>
+#include <map>
 
 #include "base/pickle.h"
 #include "components/sessions/core/session_command.h"

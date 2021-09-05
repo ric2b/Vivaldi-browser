@@ -17,6 +17,7 @@
 #include "components/signin/public/identity_manager/access_token_fetcher.h"
 #include "components/signin/public/identity_manager/access_token_info.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
+#include "components/signin/public/identity_manager/scope_set.h"
 #include "google_apis/gaia/gaia_constants.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
@@ -28,7 +29,7 @@ namespace policy {
 AndroidManagementClient::AndroidManagementClient(
     DeviceManagementService* device_management_service,
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
-    const std::string& account_id,
+    const CoreAccountId& account_id,
     signin::IdentityManager* identity_manager)
     : device_management_service_(device_management_service),
       url_loader_factory_(url_loader_factory),
@@ -66,7 +67,7 @@ void AndroidManagementClient::RequestAccessToken() {
   // The user must be signed in already.
   DCHECK(identity_manager_->HasAccountWithRefreshToken(account_id_));
 
-  identity::ScopeSet scopes;
+  signin::ScopeSet scopes;
   scopes.insert(GaiaConstants::kDeviceManagementServiceOAuth);
   scopes.insert(GaiaConstants::kOAuthWrapBridgeUserInfoScope);
 

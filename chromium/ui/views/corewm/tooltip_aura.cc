@@ -4,6 +4,9 @@
 
 #include "ui/views/corewm/tooltip_aura.h"
 
+#include <algorithm>
+#include <utility>
+
 #include "base/macros.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -64,8 +67,8 @@ views::Widget* CreateTooltipWidget(aura::Window* tooltip_window,
   params.accept_events = false;
   params.bounds = bounds;
   if (CanUseTranslucentTooltipWidget())
-    params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
-  params.shadow_type = views::Widget::InitParams::SHADOW_TYPE_NONE;
+    params.opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;
+  params.shadow_type = views::Widget::InitParams::ShadowType::kNone;
   // Use software compositing to avoid using unnecessary hardware resources
   // which just amount to overkill for this UI.
   params.force_software_compositing = true;
@@ -81,7 +84,7 @@ namespace corewm {
 // TODO(oshima): Consider to use views::Label.
 class TooltipAura::TooltipView : public views::View {
  public:
-  TooltipView() : render_text_(gfx::RenderText::CreateHarfBuzzInstance()) {
+  TooltipView() : render_text_(gfx::RenderText::CreateRenderText()) {
     SetBorder(CreateEmptyBorder(kVerticalPaddingTop, kHorizontalPadding,
                                 kVerticalPaddingBottom, kHorizontalPadding));
 
@@ -115,9 +118,7 @@ class TooltipAura::TooltipView : public views::View {
     return view_size;
   }
 
-  const char* GetClassName() const override {
-    return "TooltipView";
-  }
+  const char* GetClassName() const override { return "TooltipView"; }
 
   void SetText(const base::string16& text) {
     render_text_->SetHorizontalAlignment(gfx::ALIGN_TO_HEAD);
@@ -131,22 +132,18 @@ class TooltipAura::TooltipView : public views::View {
     SchedulePaint();
   }
 
-  void SetForegroundColor(SkColor color) {
-    render_text_->SetColor(color);
-  }
+  void SetForegroundColor(SkColor color) { render_text_->SetColor(color); }
 
-  void SetBackgroundColor(SkColor background_color) {
+  void SetBackgroundColor(SkColor background_color, SkColor border_color) {
     if (CanUseTranslucentTooltipWidget()) {
       // Corner radius of tooltip background.
       const float kTooltipCornerRadius = 2.f;
       SetBackground(views::CreateBackgroundFromPainter(
-          views::Painter::CreateSolidRoundRectPainter(background_color,
-                                                      kTooltipCornerRadius)));
+          views::Painter::CreateRoundRectWith1PxBorderPainter(
+              background_color, border_color, kTooltipCornerRadius)));
     } else {
       SetBackground(views::CreateSolidBackground(background_color));
 
-      auto border_color =
-          color_utils::GetColorWithMaxContrast(background_color);
       SetBorder(views::CreatePaddedBorder(
           views::CreateSolidBorder(1, border_color),
           gfx::Insets(kVerticalPaddingTop - 1, kHorizontalPadding - 1,
@@ -254,13 +251,17 @@ void TooltipAura::SetText(aura::Window* window,
   ui::NativeTheme* native_theme = widget_->GetNativeTheme();
   auto background_color =
       native_theme->GetSystemColor(ui::NativeTheme::kColorId_TooltipBackground);
-  if (!CanUseTranslucentTooltipWidget())
-    background_color = SkColorSetA(background_color, 0xFF);
-  tooltip_view_->SetBackgroundColor(background_color);
+  if (!CanUseTranslucentTooltipWidget()) {
+    background_color = color_utils::GetResultingPaintColor(
+        background_color, native_theme->GetSystemColor(
+                              ui::NativeTheme::kColorId_WindowBackground));
+  }
   auto foreground_color =
       native_theme->GetSystemColor(ui::NativeTheme::kColorId_TooltipText);
   if (!CanUseTranslucentTooltipWidget())
-    foreground_color = SkColorSetA(foreground_color, 0xFF);
+    foreground_color =
+        color_utils::GetResultingPaintColor(foreground_color, background_color);
+  tooltip_view_->SetBackgroundColor(background_color, foreground_color);
   tooltip_view_->SetForegroundColor(foreground_color);
 }
 
@@ -281,9 +282,8 @@ void TooltipAura::Hide() {
     // OnPaint() which happens asynchronously after the Show(). As a result,
     // we can just destroy the widget and create a new one each time which
     // guarantees we never show outdated information.
-    // TODO: Figure out why the old content is displayed despite the size
-    // change.
-    // http://crbug.com/998280
+    // TODO(http://crbug.com/998280): Figure out why the old content is
+    // displayed despite the size change.
     DestroyWidget();
     tooltip_view_->NotifyAccessibilityEvent(ax::mojom::Event::kTooltipClosed,
                                             true);
@@ -296,6 +296,8 @@ bool TooltipAura::IsVisible() {
 
 void TooltipAura::OnWidgetDestroying(views::Widget* widget) {
   DCHECK_EQ(widget_, widget);
+  if (widget_)
+    widget_->RemoveObserver(this);
   widget_ = nullptr;
   tooltip_window_ = nullptr;
 }

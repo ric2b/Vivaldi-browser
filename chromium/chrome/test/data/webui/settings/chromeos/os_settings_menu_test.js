@@ -4,10 +4,23 @@
 
 /** @fileoverview Runs tests for the OS settings menu. */
 
+function setupRouter() {
+  const routes = {
+    BASIC: new settings.Route('/'),
+    ADVANCED: new settings.Route('/advanced'),
+  };
+  routes.BLUETOOTH = routes.BASIC.createSection('/bluetooth', 'bluetooth');
+  routes.RESET = routes.ADVANCED.createSection('/osReset', 'osReset');
+
+  settings.Router.resetInstanceForTesting(new settings.Router(routes));
+  settings.routes = routes;
+}
+
 suite('OSSettingsMenu', function() {
   let settingsMenu = null;
 
   setup(function() {
+    setupRouter();
     PolymerTest.clearBody();
     settingsMenu = document.createElement('os-settings-menu');
     settingsMenu.pageVisibility = settings.pageVisibility;
@@ -59,28 +72,13 @@ suite('OSSettingsMenu', function() {
     Polymer.dom.flush();
     assertNotEquals(openIcon, ironIconElement.icon);
   });
-
-  // Test that navigating via the paper menu always clears the current
-  // search URL parameter.
-  test('clearsUrlSearchParam', function() {
-    // As of iron-selector 2.x, need to force iron-selector to update before
-    // clicking items on it, or wait for 'iron-items-changed'
-    const ironSelector = settingsMenu.$$('iron-selector');
-    ironSelector.forceSynchronousItemUpdate();
-
-    const urlParams = new URLSearchParams('search=foo');
-    settings.navigateTo(settings.routes.BASIC, urlParams);
-    assertEquals(
-        urlParams.toString(), settings.getQueryParameters().toString());
-    settingsMenu.$.people.click();
-    assertEquals('', settings.getQueryParameters().toString());
-  });
 });
 
 suite('OSSettingsMenuReset', function() {
   setup(function() {
+    setupRouter();
     PolymerTest.clearBody();
-    settings.navigateTo(settings.routes.RESET, '');
+    settings.Router.getInstance().navigateTo(settings.routes.RESET, '');
     settingsMenu = document.createElement('os-settings-menu');
     document.body.appendChild(settingsMenu);
   });
@@ -92,15 +90,15 @@ suite('OSSettingsMenuReset', function() {
   test('openResetSection', function() {
     const selector = settingsMenu.$.subMenu;
     const path = new window.URL(selector.selected).pathname;
-    assertEquals('/reset', path);
+    assertEquals('/osReset', path);
   });
 
   test('navigateToAnotherSection', function() {
     const selector = settingsMenu.$.subMenu;
     let path = new window.URL(selector.selected).pathname;
-    assertEquals('/reset', path);
+    assertEquals('/osReset', path);
 
-    settings.navigateTo(settings.routes.BLUETOOTH, '');
+    settings.Router.getInstance().navigateTo(settings.routes.BLUETOOTH, '');
     Polymer.dom.flush();
 
     path = new window.URL(selector.selected).pathname;
@@ -110,9 +108,9 @@ suite('OSSettingsMenuReset', function() {
   test('navigateToBasic', function() {
     const selector = settingsMenu.$.subMenu;
     const path = new window.URL(selector.selected).pathname;
-    assertEquals('/reset', path);
+    assertEquals('/osReset', path);
 
-    settings.navigateTo(settings.routes.BASIC, '');
+    settings.Router.getInstance().navigateTo(settings.routes.BASIC, '');
     Polymer.dom.flush();
 
     // BASIC has no sub page selected.

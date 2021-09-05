@@ -31,8 +31,8 @@ BluetoothGattServiceServiceProviderImpl::
       includes_(includes),
       bus_(bus),
       object_path_(object_path) {
-  VLOG(1) << "Creating Bluetooth GATT service: " << object_path_.value()
-          << " UUID: " << uuid;
+  DVLOG(1) << "Creating Bluetooth GATT service: " << object_path_.value()
+           << " UUID: " << uuid;
   if (!bus_)
     return;
 
@@ -65,7 +65,7 @@ BluetoothGattServiceServiceProviderImpl::
 
 BluetoothGattServiceServiceProviderImpl::
     ~BluetoothGattServiceServiceProviderImpl() {
-  VLOG(1) << "Cleaning up Bluetooth GATT service: " << object_path_.value();
+  DVLOG(1) << "Cleaning up Bluetooth GATT service: " << object_path_.value();
   if (bus_)
     bus_->UnregisterExportedObject(object_path_);
 }
@@ -77,8 +77,8 @@ bool BluetoothGattServiceServiceProviderImpl::OnOriginThread() {
 void BluetoothGattServiceServiceProviderImpl::Get(
     dbus::MethodCall* method_call,
     dbus::ExportedObject::ResponseSender response_sender) {
-  VLOG(2) << "BluetoothGattServiceServiceProvider::Get: "
-          << object_path_.value();
+  DVLOG(2) << "BluetoothGattServiceServiceProvider::Get: "
+           << object_path_.value();
   DCHECK(OnOriginThread());
 
   dbus::MessageReader reader(method_call);
@@ -90,7 +90,7 @@ void BluetoothGattServiceServiceProviderImpl::Get(
     std::unique_ptr<dbus::ErrorResponse> error_response =
         dbus::ErrorResponse::FromMethodCall(method_call, kErrorInvalidArgs,
                                             "Expected 'ss'.");
-    response_sender.Run(std::move(error_response));
+    std::move(response_sender).Run(std::move(error_response));
     return;
   }
 
@@ -101,7 +101,7 @@ void BluetoothGattServiceServiceProviderImpl::Get(
         dbus::ErrorResponse::FromMethodCall(
             method_call, kErrorInvalidArgs,
             "No such interface: '" + interface_name + "'.");
-    response_sender.Run(std::move(error_response));
+    std::move(response_sender).Run(std::move(error_response));
     return;
   }
 
@@ -112,7 +112,7 @@ void BluetoothGattServiceServiceProviderImpl::Get(
         dbus::ErrorResponse::FromMethodCall(
             method_call, kErrorInvalidArgs,
             "No such property: '" + property_name + "'.");
-    response_sender.Run(std::move(error_response));
+    std::move(response_sender).Run(std::move(error_response));
     return;
   }
 
@@ -131,28 +131,28 @@ void BluetoothGattServiceServiceProviderImpl::Get(
     writer.CloseContainer(&variant_writer);
   }
 
-  response_sender.Run(std::move(response));
+  std::move(response_sender).Run(std::move(response));
 }
 
 void BluetoothGattServiceServiceProviderImpl::Set(
     dbus::MethodCall* method_call,
     dbus::ExportedObject::ResponseSender response_sender) {
-  VLOG(2) << "BluetoothGattServiceServiceProviderImpl::Set: "
-          << object_path_.value();
+  DVLOG(2) << "BluetoothGattServiceServiceProviderImpl::Set: "
+           << object_path_.value();
   DCHECK(OnOriginThread());
   // All of the properties on this interface are read-only, so just return
   // error.
   std::unique_ptr<dbus::ErrorResponse> error_response =
       dbus::ErrorResponse::FromMethodCall(method_call, kErrorPropertyReadOnly,
                                           "All properties are read-only.");
-  response_sender.Run(std::move(error_response));
+  std::move(response_sender).Run(std::move(error_response));
 }
 
 void BluetoothGattServiceServiceProviderImpl::GetAll(
     dbus::MethodCall* method_call,
     dbus::ExportedObject::ResponseSender response_sender) {
-  VLOG(2) << "BluetoothGattServiceServiceProvider::GetAll: "
-          << object_path_.value();
+  DVLOG(2) << "BluetoothGattServiceServiceProvider::GetAll: "
+           << object_path_.value();
   DCHECK(OnOriginThread());
 
   dbus::MessageReader reader(method_call);
@@ -162,7 +162,7 @@ void BluetoothGattServiceServiceProviderImpl::GetAll(
     std::unique_ptr<dbus::ErrorResponse> error_response =
         dbus::ErrorResponse::FromMethodCall(method_call, kErrorInvalidArgs,
                                             "Expected 's'.");
-    response_sender.Run(std::move(error_response));
+    std::move(response_sender).Run(std::move(error_response));
     return;
   }
 
@@ -173,7 +173,7 @@ void BluetoothGattServiceServiceProviderImpl::GetAll(
         dbus::ErrorResponse::FromMethodCall(
             method_call, kErrorInvalidArgs,
             "No such interface: '" + interface_name + "'.");
-    response_sender.Run(std::move(error_response));
+    std::move(response_sender).Run(std::move(error_response));
     return;
   }
 
@@ -181,7 +181,7 @@ void BluetoothGattServiceServiceProviderImpl::GetAll(
       dbus::Response::FromMethodCall(method_call);
   dbus::MessageWriter writer(response.get());
   WriteProperties(&writer);
-  response_sender.Run(std::move(response));
+  std::move(response_sender).Run(std::move(response));
 }
 
 void BluetoothGattServiceServiceProviderImpl::WriteProperties(
@@ -216,8 +216,8 @@ void BluetoothGattServiceServiceProviderImpl::OnExported(
     const std::string& interface_name,
     const std::string& method_name,
     bool success) {
-  LOG_IF(WARNING, !success) << "Failed to export " << interface_name << "."
-                            << method_name;
+  DVLOG_IF(1, !success) << "Failed to export " << interface_name << "."
+                        << method_name;
 }
 
 const dbus::ObjectPath& BluetoothGattServiceServiceProviderImpl::object_path()

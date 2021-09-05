@@ -2,19 +2,54 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
+import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.m.js';
+import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
+import 'chrome://resources/cr_elements/hidden_style_css.m.js';
+import 'chrome://resources/cr_elements/icons.m.js';
+import 'chrome://resources/cr_elements/shared_vars_css.m.js';
+import 'chrome://resources/js/action_link.js';
+import 'chrome://resources/cr_elements/action_link_css.m.js';
+import 'chrome://resources/cr_elements/md_select_css.m.js';
+import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
+import './icons.js';
+import '../print_preview_utils.js';
+import './destination_list.js';
+import './print_preview_search_box.js';
+import './print_preview_shared_css.js';
+import './print_preview_vars_css.js';
+import './provisional_destination_resolver.js';
+import '../strings.m.js';
+import './throbber_css.js';
+
+import {assert} from 'chrome://resources/js/assert.m.js';
+import {EventTracker} from 'chrome://resources/js/event_tracker.m.js';
+import {I18nBehavior} from 'chrome://resources/js/i18n_behavior.m.js';
+import {ListPropertyUpdateBehavior} from 'chrome://resources/js/list_property_update_behavior.m.js';
+import {beforeNextRender, html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
+import {Destination} from '../data/destination.js';
+import {DestinationStore} from '../data/destination_store.js';
+import {Invitation} from '../data/invitation.js';
+import {InvitationStore} from '../data/invitation_store.js';
+import {Metrics, MetricsContext} from '../metrics.js';
+import {NativeLayer} from '../native_layer.js';
+
 Polymer({
   is: 'print-preview-destination-dialog',
+
+  _template: html`{__html_template__}`,
 
   behaviors: [I18nBehavior, ListPropertyUpdateBehavior],
 
   properties: {
-    /** @type {?print_preview.DestinationStore} */
+    /** @type {?DestinationStore} */
     destinationStore: {
       type: Object,
       observer: 'onDestinationStoreSet_',
     },
 
-    /** @type {?print_preview.InvitationStore} */
+    /** @type {?InvitationStore} */
     invitationStore: {
       type: Object,
       observer: 'onInvitationStoreSet_',
@@ -30,7 +65,7 @@ Polymer({
     /** @type {!Array<string>} */
     users: Array,
 
-    /** @private {?print_preview.Invitation} */
+    /** @private {?Invitation} */
     invitation_: {
       type: Object,
       value: null,
@@ -44,7 +79,7 @@ Polymer({
       value: false,
     },
 
-    /** @private {!Array<!print_preview.Destination>} */
+    /** @private {!Array<!Destination>} */
     destinations_: {
       type: Array,
       value: [],
@@ -78,11 +113,11 @@ Polymer({
   /** @private {!EventTracker} */
   tracker_: new EventTracker(),
 
-  /** @private {!print_preview.MetricsContext} */
-  metrics_: print_preview.MetricsContext.destinationSearch(),
+  /** @private {!MetricsContext} */
+  metrics_: MetricsContext.destinationSearch(),
 
   // <if expr="chromeos">
-  /** @private {?print_preview.Destination} */
+  /** @private {?Destination} */
   destinationInConfiguring_: null,
   // </if>
 
@@ -90,27 +125,27 @@ Polymer({
   initialized_: false,
 
   /** @override */
-  ready: function() {
+  ready() {
     this.$$('.promo-text').innerHTML =
         this.i18nAdvanced('cloudPrintPromotion', {
           substitutions: ['<a is="action-link" class="sign-in">', '</a>'],
           attrs: {
-            'is': (node, v) => v == 'action-link',
-            'class': (node, v) => v == 'sign-in',
-            'tabindex': (node, v) => v == '0',
-            'role': (node, v) => v == 'link',
+            'is': (node, v) => v === 'action-link',
+            'class': (node, v) => v === 'sign-in',
+            'tabindex': (node, v) => v === '0',
+            'role': (node, v) => v === 'link',
           },
         });
   },
 
   /** @override */
-  attached: function() {
+  attached() {
     this.tracker_.add(
         assert(this.$$('.sign-in')), 'click', this.onSignInClick_.bind(this));
   },
 
   /** @override */
-  detached: function() {
+  detached() {
     this.tracker_.removeAll();
   },
 
@@ -118,10 +153,10 @@ Polymer({
    * @param {!KeyboardEvent} e Event containing the key
    * @private
    */
-  onKeydown_: function(e) {
+  onKeydown_(e) {
     e.stopPropagation();
     const searchInput = this.$.searchBox.getSearchInput();
-    if (e.key == 'Escape' &&
+    if (e.key === 'Escape' &&
         (e.composedPath()[0] !== searchInput || !searchInput.value.trim())) {
       this.$.dialog.cancel();
       e.preventDefault();
@@ -129,35 +164,31 @@ Polymer({
   },
 
   /** @private */
-  onDestinationStoreSet_: function() {
-    assert(this.destinations_.length == 0);
+  onDestinationStoreSet_() {
+    assert(this.destinations_.length === 0);
     const destinationStore = assert(this.destinationStore);
     this.tracker_.add(
-        destinationStore,
-        print_preview.DestinationStore.EventType.DESTINATIONS_INSERTED,
+        destinationStore, DestinationStore.EventType.DESTINATIONS_INSERTED,
         this.updateDestinations_.bind(this));
     this.tracker_.add(
-        destinationStore,
-        print_preview.DestinationStore.EventType.DESTINATION_SEARCH_DONE,
+        destinationStore, DestinationStore.EventType.DESTINATION_SEARCH_DONE,
         this.updateDestinationsAndInvitations_.bind(this));
     this.initialized_ = true;
   },
 
   /** @private */
-  onInvitationStoreSet_: function() {
+  onInvitationStoreSet_() {
     const invitationStore = assert(this.invitationStore);
     this.tracker_.add(
-        invitationStore,
-        print_preview.InvitationStore.EventType.INVITATION_SEARCH_DONE,
+        invitationStore, InvitationStore.EventType.INVITATION_SEARCH_DONE,
         this.updateInvitations_.bind(this));
     this.tracker_.add(
-        invitationStore,
-        print_preview.InvitationStore.EventType.INVITATION_PROCESSED,
+        invitationStore, InvitationStore.EventType.INVITATION_PROCESSED,
         this.updateInvitations_.bind(this));
   },
 
   /** @private */
-  onActiveUserChange_: function() {
+  onActiveUserChange_() {
     if (this.activeUser) {
       this.$$('select').value = this.activeUser;
     }
@@ -166,7 +197,7 @@ Polymer({
   },
 
   /** @private */
-  updateDestinationsAndInvitations_: function() {
+  updateDestinationsAndInvitations_() {
     if (!this.initialized_) {
       return;
     }
@@ -178,7 +209,7 @@ Polymer({
   },
 
   /** @private */
-  updateDestinations_: function() {
+  updateDestinations_() {
     if (this.destinationStore === undefined) {
       return;
     }
@@ -192,16 +223,15 @@ Polymer({
   },
 
   /** @private */
-  onCloseOrCancel_: function() {
+  onCloseOrCancel_() {
     if (this.searchQuery_) {
       this.$.searchBox.setValue('');
     }
     const cancelled = this.$.dialog.getNative().returnValue !== 'success';
     this.metrics_.record(
-        cancelled ? print_preview.Metrics.DestinationSearchBucket
-                        .DESTINATION_CLOSED_UNCHANGED :
-                    print_preview.Metrics.DestinationSearchBucket
-                        .DESTINATION_CLOSED_CHANGED);
+        cancelled ?
+            Metrics.DestinationSearchBucket.DESTINATION_CLOSED_UNCHANGED :
+            Metrics.DestinationSearchBucket.DESTINATION_CLOSED_CHANGED);
     if (this.currentDestinationAccount &&
         this.currentDestinationAccount !== this.activeUser) {
       this.fire('account-change', this.currentDestinationAccount);
@@ -209,7 +239,7 @@ Polymer({
   },
 
   /** @private */
-  onCancelButtonClick_: function() {
+  onCancelButtonClick_() {
     this.$.dialog.cancel();
   },
 
@@ -218,7 +248,7 @@ Polymer({
    *     containing the selected destination list item element.
    * @private
    */
-  onDestinationSelected_: function(e) {
+  onDestinationSelected_(e) {
     const listItem = e.detail;
     const destination = listItem.destination;
 
@@ -267,6 +297,11 @@ Polymer({
                   destination.policies = response.policies;
                 }
                 this.selectDestination_(destination);
+                // <if expr="chromeos">
+                // After destination is selected, start fetching for the EULA
+                // URL.
+                this.destinationStore.fetchEulaUrl(destination.id);
+                // </if>
               }
             },
             () => {
@@ -277,42 +312,39 @@ Polymer({
   },
 
   /**
-   * @param {!print_preview.Destination} destination The destination to select.
+   * @param {!Destination} destination The destination to select.
    * @private
    */
-  selectDestination_: function(destination) {
+  selectDestination_(destination) {
     this.destinationStore.selectDestination(destination);
     this.$.dialog.close();
   },
 
-  show: function() {
+  show() {
     this.$.dialog.showModal();
     this.loadingDestinations_ = this.destinationStore === undefined ||
         this.destinationStore.isPrintDestinationSearchInProgress;
-    this.metrics_.record(
-        print_preview.Metrics.DestinationSearchBucket.DESTINATION_SHOWN);
+    this.metrics_.record(Metrics.DestinationSearchBucket.DESTINATION_SHOWN);
     if (this.activeUser) {
-      Polymer.RenderStatus.beforeNextRender(assert(this.$$('select')), () => {
+      beforeNextRender(assert(this.$$('select')), () => {
         this.$$('select').value = this.activeUser;
       });
     }
-    this.$.printList.forceIronResize();
   },
 
   /** @return {boolean} Whether the dialog is open. */
-  isOpen: function() {
+  isOpen() {
     return this.$.dialog.hasAttribute('open');
   },
 
   /** @private */
-  onSignInClick_: function() {
-    this.metrics_.record(
-        print_preview.Metrics.DestinationSearchBucket.SIGNIN_TRIGGERED);
-    print_preview.NativeLayer.getInstance().signIn(false);
+  onSignInClick_() {
+    this.metrics_.record(Metrics.DestinationSearchBucket.SIGNIN_TRIGGERED);
+    NativeLayer.getInstance().signIn(false);
   },
 
   /** @private */
-  onCloudPrintPromoDismissed_: function() {
+  onCloudPrintPromoDismissed_() {
     this.cloudPrintPromoDismissed_ = true;
   },
 
@@ -320,13 +352,13 @@ Polymer({
    * Updates printer sharing invitations UI.
    * @private
    */
-  updateInvitations_: function() {
+  updateInvitations_() {
     const invitations = this.activeUser ?
         this.invitationStore.invitations(this.activeUser) :
         [];
-    if (this.invitation_ != invitations[0]) {
+    if (this.invitation_ !== invitations[0]) {
       this.metrics_.record(
-          print_preview.Metrics.DestinationSearchBucket.INVITATION_AVAILABLE);
+          Metrics.DestinationSearchBucket.INVITATION_AVAILABLE);
     }
     this.invitation_ = invitations.length > 0 ? invitations[0] : null;
   },
@@ -337,7 +369,7 @@ Polymer({
    *     invitation.
    * @private
    */
-  getAcceptButtonText_: function() {
+  getAcceptButtonText_() {
     if (!this.invitation_) {
       return '';
     }
@@ -350,7 +382,7 @@ Polymer({
    * @return {string} The formatted text to show for the invitation promo.
    * @private
    */
-  getInvitationText_: function() {
+  getInvitationText_() {
     if (!this.invitation_) {
       return '';
     }
@@ -371,35 +403,32 @@ Polymer({
   },
 
   /** @private */
-  onInvitationAcceptClick_: function() {
-    this.metrics_.record(
-        print_preview.Metrics.DestinationSearchBucket.INVITATION_ACCEPTED);
+  onInvitationAcceptClick_() {
+    this.metrics_.record(Metrics.DestinationSearchBucket.INVITATION_ACCEPTED);
     this.invitationStore.processInvitation(assert(this.invitation_), true);
     this.updateInvitations_();
   },
 
   /** @private */
-  onInvitationRejectClick_: function() {
-    this.metrics_.record(
-        print_preview.Metrics.DestinationSearchBucket.INVITATION_REJECTED);
+  onInvitationRejectClick_() {
+    this.metrics_.record(Metrics.DestinationSearchBucket.INVITATION_REJECTED);
     this.invitationStore.processInvitation(assert(this.invitation_), false);
     this.updateInvitations_();
   },
 
   /** @private */
-  onUserChange_: function() {
+  onUserChange_() {
     const select = this.$$('select');
     const account = select.value;
     if (account) {
       this.loadingDestinations_ = true;
       this.fire('account-change', account);
-      this.metrics_.record(
-          print_preview.Metrics.DestinationSearchBucket.ACCOUNT_CHANGED);
+      this.metrics_.record(Metrics.DestinationSearchBucket.ACCOUNT_CHANGED);
     } else {
       select.value = this.activeUser;
-      print_preview.NativeLayer.getInstance().signIn(true);
+      NativeLayer.getInstance().signIn(true);
       this.metrics_.record(
-          print_preview.Metrics.DestinationSearchBucket.ADD_ACCOUNT_SELECTED);
+          Metrics.DestinationSearchBucket.ADD_ACCOUNT_SELECTED);
     }
   },
 
@@ -407,16 +436,15 @@ Polymer({
    * @return {boolean} Whether to show the cloud print promo.
    * @private
    */
-  computeShouldShowCloudPrintPromo_: function() {
+  computeShouldShowCloudPrintPromo_() {
     return !this.activeUser && !this.cloudPrintDisabled &&
         !this.cloudPrintPromoDismissed_;
   },
 
   /** @private */
-  onShouldShowCloudPrintPromoChanged_: function() {
+  onShouldShowCloudPrintPromoChanged_() {
     if (this.shouldShowCloudPrintPromo_) {
-      this.metrics_.record(
-          print_preview.Metrics.DestinationSearchBucket.SIGNIN_PROMPT);
+      this.metrics_.record(Metrics.DestinationSearchBucket.SIGNIN_PROMPT);
     } else {
       // Since the sign in link/dismiss promo button is disappearing, focus the
       // search box.
@@ -428,14 +456,13 @@ Polymer({
    * @return {boolean} Whether to show the footer.
    * @private
    */
-  shouldShowFooter_: function() {
+  shouldShowFooter_() {
     return this.shouldShowCloudPrintPromo_ || !!this.invitation_;
   },
 
   /** @private */
-  onOpenSettingsPrintPage_: function() {
-    this.metrics_.record(
-        print_preview.Metrics.DestinationSearchBucket.MANAGE_BUTTON_CLICKED);
-    print_preview.NativeLayer.getInstance().openSettingsPrintPage();
+  onOpenSettingsPrintPage_() {
+    this.metrics_.record(Metrics.DestinationSearchBucket.MANAGE_BUTTON_CLICKED);
+    NativeLayer.getInstance().openSettingsPrintPage();
   },
 });

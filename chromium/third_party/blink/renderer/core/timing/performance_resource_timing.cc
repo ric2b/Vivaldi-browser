@@ -31,10 +31,13 @@
 
 #include "third_party/blink/renderer/core/timing/performance_resource_timing.h"
 
-#include "third_party/blink/public/platform/web_resource_timing_info.h"
+#include "third_party/blink/public/mojom/timing/performance_mark_or_measure.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_object_builder.h"
 #include "third_party/blink/renderer/core/performance_entry_names.h"
 #include "third_party/blink/renderer/core/timing/performance.h"
+#include "third_party/blink/renderer/core/timing/performance_mark.h"
+#include "third_party/blink/renderer/core/timing/performance_measure.h"
+#include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_initiator_type_names.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_load_timing.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_request.h"
@@ -44,10 +47,12 @@
 namespace blink {
 
 PerformanceResourceTiming::PerformanceResourceTiming(
-    const WebResourceTimingInfo& info,
+    const mojom::blink::ResourceTimingInfo& info,
     base::TimeTicks time_origin,
-    const AtomicString& initiator_type)
-    : PerformanceEntry(info.name,
+    const AtomicString& initiator_type,
+    mojo::PendingReceiver<mojom::blink::WorkerTimingContainer>
+        worker_timing_receiver)
+    : PerformanceEntry(AtomicString(info.name),
                        Performance::MonotonicTimeToDOMHighResTimeStamp(
                            time_origin,
                            info.start_time,
@@ -63,9 +68,11 @@ PerformanceResourceTiming::PerformanceResourceTiming(
           static_cast<String>(info.alpn_negotiated_protocol)),
       connection_info_(static_cast<String>(info.connection_info)),
       time_origin_(time_origin),
-      timing_(info.timing),
+      timing_(ResourceLoadTiming::FromMojo(info.timing.get())),
       last_redirect_end_time_(info.last_redirect_end_time),
       response_end_(info.response_end),
+      context_type_(info.context_type),
+      request_destination_(info.request_destination),
       transfer_size_(info.transfer_size),
       encoded_body_size_(info.encoded_body_size),
       decoded_body_size_(info.decoded_body_size),
@@ -75,20 +82,25 @@ PerformanceResourceTiming::PerformanceResourceTiming(
       allow_negative_value_(info.allow_negative_values),
       is_secure_context_(info.is_secure_context),
       server_timing_(
-          PerformanceServerTiming::FromParsedServerTiming(info.server_timing)) {
-}
+          PerformanceServerTiming::FromParsedServerTiming(info.server_timing)),
+      worker_timing_receiver_(this, std::move(worker_timing_receiver)) {}
 
 // This constructor is for PerformanceNavigationTiming.
+// TODO(https://crbug.com/900700): Set a Mojo pending receiver for
+// WorkerTimingContainer in |worker_timing_receiver_| when a service worker
+// controls a page.
 PerformanceResourceTiming::PerformanceResourceTiming(
     const AtomicString& name,
     base::TimeTicks time_origin,
     bool is_secure_context,
-    const WebVector<WebServerTimingInfo>& server_timing)
+    HeapVector<Member<PerformanceServerTiming>> server_timing)
     : PerformanceEntry(name, 0.0, 0.0),
       time_origin_(time_origin),
+      context_type_(mojom::RequestContextType::HYPERLINK),
+      request_destination_(network::mojom::RequestDestination::kDocument),
       is_secure_context_(is_secure_context),
-      server_timing_(
-          PerformanceServerTiming::FromParsedServerTiming(server_timing)) {}
+      server_timing_(std::move(server_timing)),
+      worker_timing_receiver_(this, mojo::NullReceiver()) {}
 
 PerformanceResourceTiming::~PerformanceResourceTiming() = default;
 
@@ -136,16 +148,32 @@ AtomicString PerformanceResourceTiming::ConnectionInfo() const {
   return connection_info_;
 }
 
+namespace {
+bool IsDocumentDestination(mojom::blink::RequestContextType context_type) {
+  // TODO(crbug.com/889751) : Need to change using RequestDestination
+  return context_type == mojom::blink::RequestContextType::IFRAME ||
+         context_type == mojom::blink::RequestContextType::FRAME ||
+         context_type == mojom::blink::RequestContextType::FORM ||
+         context_type == mojom::blink::RequestContextType::HYPERLINK;
+}
+
+}  // namespace
+
 AtomicString PerformanceResourceTiming::GetNextHopProtocol(
     const AtomicString& alpn_negotiated_protocol,
-    const AtomicString& connection_info) {
+    const AtomicString& connection_info) const {
   // Fallback to connection_info when alpn_negotiated_protocol is unknown.
   AtomicString returnedProtocol = (alpn_negotiated_protocol == "unknown")
                                       ? connection_info
                                       : alpn_negotiated_protocol;
-  // If connection_info is also unknown, return empty string.
-  // (https://github.com/w3c/navigation-timing/issues/71)
-  returnedProtocol = (returnedProtocol == "unknown") ? "" : returnedProtocol;
+  // If connection_info is unknown, or if this is a `document` destination and
+  // TAO didn't pass, return the empty string.
+  // https://github.com/w3c/navigation-timing/issues/71
+  // https://github.com/w3c/resource-timing/pull/224
+  if (returnedProtocol == "unknown" ||
+      (!AllowTimingDetails() && IsDocumentDestination(context_type_))) {
+    returnedProtocol = "";
+  }
 
   return returnedProtocol;
 }
@@ -157,8 +185,10 @@ AtomicString PerformanceResourceTiming::nextHopProtocol() const {
 
 DOMHighResTimeStamp PerformanceResourceTiming::workerStart() const {
   ResourceLoadTiming* timing = GetResourceLoadTiming();
-  if (!timing || timing->WorkerStart().is_null())
+  if (!timing || timing->WorkerStart().is_null() ||
+      (!AllowTimingDetails() && IsDocumentDestination(context_type_))) {
     return 0.0;
+  }
 
   return Performance::MonotonicTimeToDOMHighResTimeStamp(
       time_origin_, timing->WorkerStart(), allow_negative_value_);
@@ -339,6 +369,11 @@ PerformanceResourceTiming::serverTiming() const {
   return server_timing_;
 }
 
+const HeapVector<Member<PerformanceEntry>>&
+PerformanceResourceTiming::workerTiming() const {
+  return worker_timing_;
+}
+
 void PerformanceResourceTiming::BuildJSONValue(V8ObjectBuilder& builder) const {
   PerformanceEntry::BuildJSONValue(builder);
   builder.AddString("initiatorType", initiatorType());
@@ -359,17 +394,54 @@ void PerformanceResourceTiming::BuildJSONValue(V8ObjectBuilder& builder) const {
   builder.AddNumber("encodedBodySize", encodedBodySize());
   builder.AddNumber("decodedBodySize", decodedBodySize());
 
-  HeapVector<ScriptValue> server_timing;
-  server_timing.ReserveCapacity(server_timing_.size());
-  for (unsigned i = 0; i < server_timing_.size(); i++) {
-    server_timing.push_back(
-        server_timing_[i]->toJSONForBinding(builder.GetScriptState()));
-  }
-  builder.Add("serverTiming", server_timing);
+  ScriptState* script_state = builder.GetScriptState();
+  builder.Add("serverTiming", FreezeV8Object(ToV8(serverTiming(), script_state),
+                                             script_state->GetIsolate()));
+  builder.Add("workerTiming", FreezeV8Object(ToV8(workerTiming(), script_state),
+                                             script_state->GetIsolate()));
 }
 
-void PerformanceResourceTiming::Trace(blink::Visitor* visitor) {
+void PerformanceResourceTiming::AddPerformanceEntry(
+    mojom::blink::PerformanceMarkOrMeasurePtr
+        mojo_performance_mark_or_measure) {
+  // TODO(https://crbug.com/900700): Wait until the end of fetch event to stop
+  // appearing incomplete PerformanceResourceTiming. Incomplete |workerTiming|
+  // will be exposed in the case that FetchEvent#addPerformanceEntry is called
+  // after PerformanceResourceTiming is constructed. This may cause different
+  // results of |workerTiming| in accessing it at the different time.
+
+  NonThrowableExceptionState exception_state;
+  WTF::AtomicString name(mojo_performance_mark_or_measure->name);
+
+  scoped_refptr<SerializedScriptValue> serialized_detail =
+      SerializedScriptValue::NullValue();
+  if (mojo_performance_mark_or_measure->detail) {
+    serialized_detail = SerializedScriptValue::Create(
+        reinterpret_cast<const char*>(
+            mojo_performance_mark_or_measure->detail->data()),
+        mojo_performance_mark_or_measure->detail->size());
+  }
+
+  switch (mojo_performance_mark_or_measure->entry_type) {
+    case mojom::blink::PerformanceMarkOrMeasure::EntryType::kMark:
+      worker_timing_.emplace_back(MakeGarbageCollected<PerformanceMark>(
+          name, mojo_performance_mark_or_measure->start_time, serialized_detail,
+          exception_state));
+      break;
+    case mojom::blink::PerformanceMarkOrMeasure::EntryType::kMeasure:
+      ScriptState* script_state;
+      worker_timing_.emplace_back(MakeGarbageCollected<PerformanceMeasure>(
+          script_state, name, mojo_performance_mark_or_measure->start_time,
+          mojo_performance_mark_or_measure->start_time +
+              mojo_performance_mark_or_measure->duration,
+          serialized_detail, exception_state));
+      break;
+  }
+}
+
+void PerformanceResourceTiming::Trace(Visitor* visitor) {
   visitor->Trace(server_timing_);
+  visitor->Trace(worker_timing_);
   PerformanceEntry::Trace(visitor);
 }
 

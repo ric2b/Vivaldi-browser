@@ -2,6 +2,22 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
+import 'chrome://resources/cr_elements/cr_checkbox/cr_checkbox.m.js';
+import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.m.js';
+import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
+import 'chrome://resources/cr_elements/cr_input/cr_input.m.js';
+import 'chrome://resources/cr_elements/cr_radio_button/cr_radio_button.m.js';
+import 'chrome://resources/cr_elements/cr_radio_group/cr_radio_group.m.js';
+import 'chrome://resources/cr_elements/shared_style_css.m.js';
+import 'chrome://resources/polymer/v3_0/iron-flex-layout/iron-flex-layout-classes.js';
+import './icons.js';
+import './shared_styles.js';
+
+import {WebUIListenerBehavior} from 'chrome://resources/js/web_ui_listener_behavior.m.js';
+import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
+
 /**
  * A bluetooth device.
  * @constructor
@@ -54,6 +70,10 @@ var BluetoothDevice = function() {
 Polymer({
   is: 'bluetooth-settings',
 
+  _template: html`{__html_template__}`,
+
+  behaviors: [WebUIListenerBehavior],
+
   properties: {
     /**
      * A set of bluetooth devices.
@@ -61,31 +81,29 @@ Polymer({
      */
     devices: {
       type: Array,
-      value: function() {
+      value() {
         return [];
       }
     },
 
     /**
      * A set of predefined bluetooth devices.
-     * @type !Array<!Bluetooth>
+     * @type !Array<!BluetoothDevice>
      */
     predefinedDevices: {
       type: Array,
-      value: function() {
+      value() {
         return [];
       }
     },
 
     /**
      * A bluetooth device object which is currently being edited.
-     * @type {BluetoothDevice}
+     * @type {?BluetoothDevice}
      */
     currentEditableObject: {
       type: Object,
-      value: function() {
-        return {};
-      }
+      value: null,
     },
 
     /**
@@ -95,7 +113,7 @@ Polymer({
      */
     currentEditIndex: {
       type: Number,
-      value: function() {
+      value() {
         return -1;
       }
     },
@@ -104,11 +122,11 @@ Polymer({
      * A set of options for the possible bluetooth device classes/types.
      * Object |value| attribute comes from values in the WebUI, set in
      * setDeviceClassOptions.
-     * @type !Array<! {text: string, value: int} >
+     * @type !Array<!{text: string, value: number}>
      */
     deviceClassOptions: {
       type: Array,
-      value: function() {
+      value() {
         return [
           {text: 'Unknown', value: 0}, {text: 'Mouse', value: 0x2580},
           {text: 'Keyboard', value: 0x2540}, {text: 'Audio', value: 0x240408},
@@ -124,7 +142,7 @@ Polymer({
      */
     deviceAuthenticationMethods: {
       type: Array,
-      value: function() {
+      value() {
         return [];
       }
     },
@@ -136,7 +154,7 @@ Polymer({
      */
     deviceAuthenticationActions: {
       type: Array,
-      value: function() {
+      value() {
         return [];
       }
     },
@@ -149,7 +167,17 @@ Polymer({
    */
   devicePaths: {},
 
-  ready: function() {
+  ready() {
+    this.addWebUIListener(
+        'bluetooth-device-added', this.addBluetoothDevice_.bind(this));
+    this.addWebUIListener(
+        'device-paired-from-tray', this.devicePairedFromTray_.bind(this));
+    this.addWebUIListener(
+        'device-removed-from-main-adapter',
+        this.deviceRemovedFromMainAdapter_.bind(this));
+    this.addWebUIListener('pair-failed', this.pairFailed_.bind(this));
+    this.addWebUIListener(
+        'bluetooth-info-updated', this.updateBluetoothInfo_.bind(this));
     chrome.send('requestBluetoothInfo');
   },
 
@@ -162,7 +190,7 @@ Polymer({
    *     property of |this.currentEditableObject| was changed, what its value
    *     is, etc.)
    */
-  currentEditableObjectChanged: function(obj) {
+  currentEditableObjectChanged(obj) {
     if (this.currentEditIndex >= 0) {
       var prop = obj.path.split('.')[1];
       this.set(
@@ -171,12 +199,12 @@ Polymer({
     }
   },
 
-  handleAddressInput: function() {
+  handleAddressInput() {
     this.autoFormatAddress();
     this.validateAddress();
   },
 
-  autoFormatAddress: function() {
+  autoFormatAddress() {
     var input = this.$.deviceAddressInput;
     var regex = /([a-f0-9]{2})([a-f0-9]{2})/i;
     // Remove things that aren't hex characters from the string.
@@ -196,7 +224,7 @@ Polymer({
    * satisfies the regex, then make sure that the address is not already
    * in use.
    */
-  validateAddress: function() {
+  validateAddress() {
     var input = this.$.deviceAddressInput;
     var val = input.value;
     var exists = false;
@@ -233,7 +261,7 @@ Polymer({
   /**
    * Makes sure that a path is not already used.
    */
-  validatePath: function() {
+  validatePath() {
     var input = this.$.devicePathInput;
     var val = input.value;
     var exists = false;
@@ -269,31 +297,36 @@ Polymer({
    *     for a particular device.
    * @return {boolean} Whether the PIN/passkey input field should be shown.
    */
-  showAuthToken: function(pairMethod) {
-    return pairMethod && pairMethod != 'None';
+  showAuthToken(pairMethod) {
+    return !!pairMethod && pairMethod != 'None';
   },
 
   /**
    * Called by the WebUI which provides a list of devices which are connected
    * to the main adapter.
-   * @param {!Array<!BluetoothDevice>} devices A list of bluetooth devices.
+   * @param {{
+   *   predefined_devices: !Array<!BluetoothDevice>,
+   *   devices: !Array<!BluetoothDevice>,
+   *   pairing_method_options: !Array<string>,
+   *   pairing_action_options: !Array<string>,
+   * }} info
+   * @private
    */
-  updateBluetoothInfo: function(
-      predefinedDevices, loadedCustomDevices, pairingMethodOptions,
-      pairingActionOptions) {
-    this.predefinedDevices = this.loadDevicesFromList(predefinedDevices, true);
-    this.devices = this.loadDevicesFromList(loadedCustomDevices, false);
-    this.deviceAuthenticationMethods = pairingMethodOptions;
-    this.deviceAuthenticationActions = pairingActionOptions;
+  updateBluetoothInfo_(info) {
+    this.predefinedDevices =
+        this.loadDevicesFromList(info.predefined_devices, true);
+    this.devices = this.loadDevicesFromList(info.devices, false);
+    this.deviceAuthenticationMethods = info.pairing_method_options;
+    this.deviceAuthenticationActions = info.pairing_action_options;
   },
 
   /**
    * Builds complete BluetoothDevice objects for each element in |devices_list|.
-   * @param {!Array<!BluetoothDevice>} devices_list A list of incomplete
+   * @param {!Array<!BluetoothDevice>} devices A list of incomplete
    *     BluetoothDevice provided by the C++ WebUI.
    * @param {boolean} predefined Whether or not the device is a predefined one.
    */
-  loadDevicesFromList: function(devices, predefined) {
+  loadDevicesFromList(devices, predefined) {
     /** @type {!Array<!BluetoothDevice>} */ var deviceList = [];
 
     for (var i = 0; i < devices.length; ++i) {
@@ -316,8 +349,9 @@ Polymer({
   /**
    * Called when a device is paired from the Tray. Checks the paired box for
    * the device with path |path|.
+   * @private
    */
-  devicePairedFromTray: function(path) {
+  devicePairedFromTray_(path) {
     var obj = this.devicePaths[path];
 
     if (obj == undefined)
@@ -335,7 +369,7 @@ Polymer({
    * @param {Event} event Contains event data. |event.model.index| is the index
    *     of the item which the target is contained in.
    */
-  pairDevice: function(event) {
+  pairDevice(event) {
     var index = event.model.index;
     var predefined =
         /** @type {boolean} */ (event.target.dataset.predefined == 'true');
@@ -366,8 +400,9 @@ Polymer({
   /**
    * Called from Chrome OS back-end when a pair request fails.
    * @param {string} path The path of the device which failed to pair.
+   * @private
    */
-  pairFailed: function(path) {
+  pairFailed_(path) {
     var obj = this.devicePaths[path];
 
     if (obj == undefined)
@@ -383,7 +418,7 @@ Polymer({
    * @param {Event} event Contains event data. |event.model.index| is the index
    *     of the item which the target is contained in.
    */
-  discoverDevice: function(event) {
+  discoverDevice(event) {
     var index = event.model.index;
     var predefined =
         /** @type {boolean} */ (event.target.dataset.predefined == 'true');
@@ -407,7 +442,7 @@ Polymer({
   },
 
   // Adds a new device with default settings to the list of devices.
-  appendNewDevice: function() {
+  appendNewDevice() {
     var newDevice = new BluetoothDevice();
     newDevice.alias = 'New Device';
     this.push('devices', newDevice);
@@ -418,8 +453,9 @@ Polymer({
    * The device is only added to the view's list if it is not already in
    * the list (i.e. its path has not yet been recorded in |devicePaths|).
    * @param {BluetoothDevice} device A bluetooth device.
+   * @private
    */
-  addBluetoothDevice: function(device) {
+  addBluetoothDevice_(device) {
     if (this.devicePaths[device.path] != undefined) {
       var obj = this.devicePaths[device.path];
       var devicePath = (obj.predefined ? 'predefinedDevices.' : 'devices.');
@@ -443,7 +479,7 @@ Polymer({
    * @param {Event} event Contains event data. |event.model.index| is the index
    *     of the item which the target is contained in.
    */
-  copyDevice: function(event) {
+  copyDevice(event) {
     var predefined = (event.target.dataset.predefined == 'true');
     var index = event.model.index;
     var copyDevice =
@@ -465,7 +501,7 @@ Polymer({
    * @param {Event} event Contains event data. |event.model.index| is the index
    *     of the item which the target is contained in.
    */
-  showEditDialog: function(event) {
+  showEditDialog(event) {
     var index = event.model.index;
     this.currentEditIndex = index;
     this.currentEditableObject = this.devices[index];
@@ -475,7 +511,7 @@ Polymer({
   },
 
   /** @private */
-  onCloseClick_: function() {
+  onCloseClick_() {
     this.$.editDialog.close();
   },
 
@@ -484,7 +520,7 @@ Polymer({
    * @param {Event} event Contains event data. |event.model.index| is the index
    *     of the item which the target is contained in.
    */
-  deleteDevice: function(event) {
+  deleteDevice(event) {
     var index = event.model.index;
     var device = this.devices[index];
 
@@ -499,8 +535,9 @@ Polymer({
    * adapter's device list. It sets that device's |.discoverable| and |.paired|
    * attributes to false.
    * @param {string} path A bluetooth device's path.
+   * @private
    */
-  deviceRemovedFromMainAdapter: function(path) {
+  deviceRemovedFromMainAdapter_(path) {
     if (this.devicePaths[path] == undefined)
       return;
 
@@ -517,11 +554,12 @@ Polymer({
    *     of a device.
    * @return {string} The label which represents |classValue|.
    */
-  getTextForDeviceClass: function(classValue) {
+  getTextForDeviceClass(classValue) {
     for (var i = 0; i < this.deviceClassOptions.length; ++i) {
       if (this.deviceClassOptions[i].value == classValue)
         return this.deviceClassOptions[i].text;
     }
+    return '';
   },
 
   /**
@@ -529,7 +567,7 @@ Polymer({
    * @param {string} classText The label for a device class option.
    * @return {number} The value which |classText| represents.
    */
-  getValueForDeviceClass: function(classText) {
+  getValueForDeviceClass(classText) {
     for (var i = 0; i < this.deviceClassOptions.length; ++i) {
       if (this.deviceClassOptions[i].text == classText)
         return this.deviceClassOptions[i].value;

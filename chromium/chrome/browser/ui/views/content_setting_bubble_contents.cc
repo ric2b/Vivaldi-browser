@@ -4,14 +4,13 @@
 
 #include "chrome/browser/ui/views/content_setting_bubble_contents.h"
 
+#include <algorithm>
 #include <utility>
 #include <vector>
 
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
-#include "chrome/browser/plugins/plugin_finder.h"
-#include "chrome/browser/plugins/plugin_metadata.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
@@ -23,7 +22,6 @@
 #include "components/strings/grit/components_strings.h"
 #include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/navigation_handle.h"
-#include "content/public/browser/plugin_service.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -49,69 +47,8 @@
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/grid_layout.h"
 #include "ui/views/native_cursor.h"
-#include "ui/views/window/dialog_client_view.h"
 
 namespace {
-
-// Display a maximum of 4 visible items in a list before scrolling.
-const int kMaxVisibleListItems = 4;
-
-// Padding for list items and icons.
-const gfx::Insets kTitleDescriptionListItemInset = gfx::Insets(3, 0, 13, 0);
-
-// Returns a view with the given title and description.
-std::unique_ptr<views::View> ConstructTitleDescriptionItemContents(
-    const base::string16& title,
-    const base::string16& description) {
-  auto label_container = std::make_unique<views::View>();
-  label_container->SetBorder(
-      views::CreateEmptyBorder(kTitleDescriptionListItemInset));
-  label_container->SetLayoutManager(std::make_unique<views::BoxLayout>(
-      views::BoxLayout::Orientation::kVertical, gfx::Insets(), 0));
-  if (!title.empty()) {
-    auto title_label = std::make_unique<views::Label>(
-        title, views::style::CONTEXT_LABEL, views::style::STYLE_PRIMARY,
-        gfx::DirectionalityMode::DIRECTIONALITY_FROM_UI);
-    title_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-    title_label->SetAllowCharacterBreak(true);
-    label_container->AddChildView(title_label.release());
-  }
-  if (!description.empty()) {
-    auto description_label = std::make_unique<views::Label>(
-        description, views::style::CONTEXT_LABEL, views::style::STYLE_DISABLED,
-        gfx::DirectionalityMode::DIRECTIONALITY_FROM_UI);
-    description_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-    description_label->SetAllowCharacterBreak(true);
-    label_container->AddChildView(description_label.release());
-  }
-  return label_container;
-}
-
-// Constructs a view for a list item containing a link.
-std::unique_ptr<views::Link> ConstructLinkItemContents(
-    const base::string16& title,
-    views::LinkListener* parent_) {
-  auto link = std::make_unique<views::Link>(title);
-  link->SetElideBehavior(gfx::ELIDE_MIDDLE);
-  link->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
-  link->set_listener(parent_);
-  return link;
-}
-
-// Constructs an ImageView for a list item with the given icon.
-std::unique_ptr<views::ImageView> ConstructItemIcon(
-    const gfx::VectorIcon* icon,
-    const gfx::VectorIcon& badge) {
-  auto icon_view = std::make_unique<views::ImageView>();
-  DCHECK(icon);
-  icon_view->SetBorder(
-      views::CreateEmptyBorder(kTitleDescriptionListItemInset));
-  const SkColor icon_color = views::style::GetColor(
-      *icon_view, CONTEXT_BODY_TEXT_SMALL, views::style::STYLE_PRIMARY);
-  icon_view->SetImage(CreateVectorIconWithBadge(
-      *icon, GetLayoutConstant(LOCATION_BAR_ICON_SIZE), icon_color, badge));
-  return icon_view;
-}  // namespace
 
 enum class LayoutRowType {
   DEFAULT,
@@ -293,17 +230,48 @@ ContentSettingBubbleContents::ListItemContainer::ListItemContainer(
 
 void ContentSettingBubbleContents::ListItemContainer::AddItem(
     const ContentSettingBubbleModel::ListItem& item) {
-  std::unique_ptr<views::ImageView> item_icon =
-      std::make_unique<views::ImageView>();
+  // Padding for list items and icons.
+  static constexpr gfx::Insets kTitleDescriptionListItemInset(3, 0, 13, 0);
 
-  auto item_contents =
-      item.has_link
-          ? ConstructLinkItemContents(item.title, parent_)
-          : ConstructTitleDescriptionItemContents(item.title, item.description);
+  auto item_icon = std::make_unique<views::ImageView>();
   if (item.image) {
-    item_icon =
-        ConstructItemIcon(item.image, item.has_blocked_badge ? kBlockedBadgeIcon
-                                                             : gfx::kNoneIcon);
+    item_icon->SetBorder(
+        views::CreateEmptyBorder(kTitleDescriptionListItemInset));
+    const SkColor icon_color = views::style::GetColor(
+        *item_icon, CONTEXT_BODY_TEXT_SMALL, views::style::STYLE_PRIMARY);
+    item_icon->SetImage(CreateVectorIconWithBadge(
+        *item.image, GetLayoutConstant(LOCATION_BAR_ICON_SIZE), icon_color,
+        item.has_blocked_badge ? vector_icons::kBlockedBadgeIcon
+                               : gfx::kNoneIcon));
+  }
+
+  std::unique_ptr<views::View> item_contents;
+  if (item.has_link) {
+    auto link = std::make_unique<views::Link>(item.title);
+    link->SetElideBehavior(gfx::ELIDE_MIDDLE);
+    link->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
+    link->set_callback(base::BindRepeating(
+        &ContentSettingBubbleContents::LinkClicked, base::Unretained(parent_)));
+    item_contents = std::move(link);
+  } else {
+    item_contents = std::make_unique<views::View>();
+    item_contents->SetBorder(
+        views::CreateEmptyBorder(kTitleDescriptionListItemInset));
+    item_contents->SetLayoutManager(std::make_unique<views::BoxLayout>(
+        views::BoxLayout::Orientation::kVertical));
+    const auto add_label = [&item_contents](const base::string16& string,
+                                            int style) {
+      if (!string.empty()) {
+        auto label = std::make_unique<views::Label>(
+            string, views::style::CONTEXT_LABEL, style,
+            gfx::DirectionalityMode::DIRECTIONALITY_FROM_UI);
+        label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+        label->SetAllowCharacterBreak(true);
+        item_contents->AddChildView(std::move(label));
+      }
+    };
+    add_label(item.title, views::style::STYLE_PRIMARY);
+    add_label(item.description, views::style::STYLE_DISABLED);
   }
 
   list_item_views_.push_back(AddNewRowToLayout(
@@ -384,6 +352,8 @@ void ContentSettingBubbleContents::ListItemContainer::UpdateScrollHeight(
   auto* scroll_view = views::ScrollView::GetScrollViewForContents(this);
   DCHECK(scroll_view);
   if (!scroll_view->is_bounded()) {
+    // Display a maximum of 4 visible items in a list before scrolling.
+    static constexpr int kMaxVisibleListItems = 4;
     scroll_view->ClipHeightTo(
         0, std::max(row.first->GetPreferredSize().height(),
                     row.second->GetPreferredSize().height()) *
@@ -411,9 +381,14 @@ ContentSettingBubbleContents::ContentSettingBubbleContents(
   DCHECK(content_setting_bubble_model_);
   const base::string16& done_text =
       content_setting_bubble_model_->bubble_content().done_button_text;
-  DialogDelegate::set_button_label(
+  DialogDelegate::SetButtons(ui::DIALOG_BUTTON_OK);
+  DialogDelegate::SetButtonLabel(
       ui::DIALOG_BUTTON_OK,
       done_text.empty() ? l10n_util::GetStringUTF16(IDS_DONE) : done_text);
+  DialogDelegate::SetExtraView(CreateHelpAndManageView());
+  DialogDelegate::SetAcceptCallback(
+      base::BindOnce(&ContentSettingBubbleModel::OnDoneButtonClicked,
+                     base::Unretained(content_setting_bubble_model_.get())));
 }
 
 ContentSettingBubbleContents::~ContentSettingBubbleContents() {
@@ -545,9 +520,10 @@ void ContentSettingBubbleContents::Init() {
         std::make_unique<views::Link>(bubble_content.custom_link);
     custom_link->SetEnabled(bubble_content.custom_link_enabled);
     custom_link->SetMultiLine(true);
-    custom_link->set_listener(this);
+    custom_link->set_callback(
+        base::BindRepeating(&ContentSettingBubbleContents::CustomLinkClicked,
+                            base::Unretained(this)));
     custom_link->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-    custom_link_ = custom_link.get();
     rows.push_back({std::move(custom_link), LayoutRowType::DEFAULT});
   }
 
@@ -581,7 +557,16 @@ void ContentSettingBubbleContents::Init() {
   content_setting_bubble_model_->set_owner(this);
 }
 
-std::unique_ptr<views::View> ContentSettingBubbleContents::CreateExtraView() {
+void ContentSettingBubbleContents::StyleLearnMoreButton() {
+  DCHECK(learn_more_button_);
+  SkColor text_color = GetNativeTheme()->GetSystemColor(
+      ui::NativeTheme::kColorId_LabelEnabledColor);
+  views::SetImageFromVectorIcon(learn_more_button_,
+                                vector_icons::kHelpOutlineIcon, text_color);
+}
+
+std::unique_ptr<views::View>
+ContentSettingBubbleContents::CreateHelpAndManageView() {
   DCHECK(content_setting_bubble_model_);
   const auto& bubble_content = content_setting_bubble_model_->bubble_content();
   const auto* layout = ChromeLayoutProvider::Get();
@@ -624,26 +609,18 @@ std::unique_ptr<views::View> ContentSettingBubbleContents::CreateExtraView() {
   return container;
 }
 
-bool ContentSettingBubbleContents::Accept() {
-  content_setting_bubble_model_->OnDoneButtonClicked();
-
-  return true;
+void ContentSettingBubbleContents::LinkClicked(views::Link* source,
+                                               int event_flags) {
+  DCHECK(content_setting_bubble_model_);
+  int row = list_item_container_->GetRowIndexOf(source);
+  DCHECK_NE(row, -1);
+  content_setting_bubble_model_->OnListItemClicked(row, event_flags);
 }
 
-bool ContentSettingBubbleContents::Close() {
-  return true;
-}
-
-int ContentSettingBubbleContents::GetDialogButtons() const {
-  return ui::DIALOG_BUTTON_OK;
-}
-
-void ContentSettingBubbleContents::StyleLearnMoreButton() {
-  DCHECK(learn_more_button_);
-  SkColor text_color = GetNativeTheme()->GetSystemColor(
-      ui::NativeTheme::kColorId_LabelEnabledColor);
-  views::SetImageFromVectorIcon(learn_more_button_,
-                                vector_icons::kHelpOutlineIcon, text_color);
+void ContentSettingBubbleContents::CustomLinkClicked() {
+  DCHECK(content_setting_bubble_model_);
+  content_setting_bubble_model_->OnCustomLinkClicked();
+  GetWidget()->Close();
 }
 
 void ContentSettingBubbleContents::DidFinishNavigation(
@@ -683,7 +660,6 @@ void ContentSettingBubbleContents::ButtonPressed(views::Button* sender,
 
     // Toggling the check state may change the dialog button text.
     DialogModelChanged();
-    GetDialogClientView()->Layout();
   } else if (sender == learn_more_button_) {
     GetWidget()->Close();
     content_setting_bubble_model_->OnLearnMoreClicked();
@@ -693,19 +669,6 @@ void ContentSettingBubbleContents::ButtonPressed(views::Button* sender,
   } else {
     NOTREACHED();
   }
-}
-
-void ContentSettingBubbleContents::LinkClicked(views::Link* source,
-                                               int event_flags) {
-  DCHECK(content_setting_bubble_model_);
-  if (source == custom_link_) {
-    content_setting_bubble_model_->OnCustomLinkClicked();
-    GetWidget()->Close();
-    return;
-  }
-  int row = list_item_container_->GetRowIndexOf(source);
-  DCHECK_NE(row, -1);
-  content_setting_bubble_model_->OnListItemClicked(row, event_flags);
 }
 
 void ContentSettingBubbleContents::OnPerformAction(views::Combobox* combobox) {

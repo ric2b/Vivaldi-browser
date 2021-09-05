@@ -26,6 +26,7 @@ namespace device {
 class BluetoothAdapterWinrt;
 class BluetoothGattDiscovererWinrt;
 class BluetoothPairingWinrt;
+class BluetoothUUID;
 
 class DEVICE_BLUETOOTH_EXPORT BluetoothDeviceWinrt : public BluetoothDevice {
  public:
@@ -62,11 +63,11 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDeviceWinrt : public BluetoothDevice {
                             const base::Closure& callback,
                             const ErrorCallback& error_callback) override;
   void Connect(PairingDelegate* pairing_delegate,
-               const base::Closure& callback,
-               const ConnectErrorCallback& error_callback) override;
+               base::OnceClosure callback,
+               ConnectErrorCallback error_callback) override;
   void Pair(PairingDelegate* pairing_delegate,
-            const base::Closure& callback,
-            const ConnectErrorCallback& error_callback) override;
+            base::OnceClosure callback,
+            ConnectErrorCallback error_callback) override;
   void SetPinCode(const std::string& pincode) override;
   void SetPasskey(uint32_t passkey) override;
   void ConfirmPairing() override;
@@ -94,7 +95,9 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDeviceWinrt : public BluetoothDevice {
 
  protected:
   // BluetoothDevice:
-  void CreateGattConnectionImpl() override;
+  void CreateGattConnectionImpl(
+      base::Optional<BluetoothUUID> service_uuid) override;
+  void UpgradeToFullDiscovery() override;
   void DisconnectGatt() override;
 
   // This is declared virtual so that they can be overridden by tests.
@@ -122,17 +125,22 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDeviceWinrt : public BluetoothDevice {
       ABI::Windows::Devices::Bluetooth::IBluetoothLEDevice* ble_device,
       IInspectable* object);
 
+  void StartGattDiscovery();
   void OnGattDiscoveryComplete(bool success);
 
   void ClearGattServices();
   void ClearEventRegistrations();
 
+  ABI::Windows::Devices::Bluetooth::BluetoothConnectionStatus
+      connection_status_;
   uint64_t raw_address_;
   std::string address_;
   base::Optional<std::string> local_name_;
 
   std::unique_ptr<BluetoothPairingWinrt> pairing_;
 
+  bool pending_on_from_bluetooth_address_ = false;
+  base::Optional<BluetoothUUID> target_uuid_;
   std::unique_ptr<BluetoothGattDiscovererWinrt> gatt_discoverer_;
 
   base::Optional<EventRegistrationToken> connection_changed_token_;

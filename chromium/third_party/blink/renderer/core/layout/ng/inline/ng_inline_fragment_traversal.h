@@ -12,7 +12,6 @@
 
 namespace blink {
 
-class LayoutObject;
 class NGPhysicalContainerFragment;
 
 // Utility class for traversing the physical fragment tree.

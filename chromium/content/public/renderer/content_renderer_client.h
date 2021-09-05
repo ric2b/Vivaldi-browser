@@ -23,6 +23,7 @@
 #include "content/public/renderer/url_loader_throttle_provider.h"
 #include "content/public/renderer/websocket_handshake_throttle_provider.h"
 #include "media/base/audio_parameters.h"
+#include "media/base/speech_recognition_client.h"
 #include "media/base/supported_types.h"
 #include "mojo/public/cpp/bindings/generic_pending_receiver.h"
 #include "third_party/blink/public/platform/web_content_settings_client.h"
@@ -46,7 +47,6 @@ class WebLocalFrame;
 class WebPlugin;
 class WebPrescientNetworking;
 class WebServiceWorkerContextProxy;
-class WebMediaStreamRendererFactory;
 class WebThemeEngine;
 class WebURL;
 class WebURLRequest;
@@ -56,6 +56,10 @@ struct WebURLError;
 
 namespace media {
 class KeySystemProperties;
+}
+
+namespace mojo {
+class BinderMap;
 }
 
 namespace content {
@@ -71,6 +75,11 @@ class CONTENT_EXPORT ContentRendererClient {
 
   // Notifies us that the RenderThread has been created.
   virtual void RenderThreadStarted() {}
+
+  // Allows the embedder to make Mojo interfaces available to the browser
+  // process. Binders can be added to |*binders| to service incoming interface
+  // binding requests from RenderProcessHost::BindReceiver().
+  virtual void ExposeInterfacesToBrowser(mojo::BinderMap* binders) {}
 
   // Notifies that a new RenderFrame has been created.
   virtual void RenderFrameCreated(RenderFrame* render_frame) {}
@@ -153,13 +162,6 @@ class CONTENT_EXPORT ContentRendererClient {
       int http_status,
       std::string* error_html) {}
 
-  // Returns as |error_description| a brief description of the error that
-  // ocurred. The out parameter may be not written to in certain cases (lack of
-  // information on the error code)
-  virtual void GetErrorDescription(const blink::WebURLError& error,
-                                   const std::string& http_method,
-                                   base::string16* error_description) {}
-
   // Allows the embedder to control when media resources are loaded. Embedders
   // can run |closure| immediately if they don't wish to defer media resource
   // loading.  If |has_played_media_before| is true, the render frame has
@@ -212,23 +214,21 @@ class CONTENT_EXPORT ContentRendererClient {
                                 bool is_redirect);
 #endif
 
-  // Returns true if we should fork a new process for the given navigation.
-  virtual bool ShouldFork(blink::WebLocalFrame* frame,
-                          const GURL& url,
-                          const std::string& http_method,
-                          bool is_initial_navigation,
-                          bool is_server_redirect);
-
   // Notifies the embedder that the given frame is requesting the resource at
   // |url|. If the function returns a valid |new_url|, the request must be
   // updated to use it. The |attach_same_site_cookies| output parameter
   // determines whether SameSite cookies should be attached to the request.
+  // The |site_for_cookies| is the site_for_cookies of the request. (This is
+  // approximately the URL of the main frame. It is empty in the case of
+  // cross-site iframes.)
+  //
   // TODO(nasko): When moved over to Network Service, find a way to perform
   // this check on the browser side, so untrusted renderer processes cannot
   // influence whether SameSite cookies are attached.
   virtual void WillSendRequest(blink::WebLocalFrame* frame,
                                ui::PageTransition transition_type,
                                const blink::WebURL& url,
+                               const net::SiteForCookies& site_for_cookies,
                                const url::Origin* initiator_origin,
                                GURL* new_url,
                                bool* attach_same_site_cookies);
@@ -241,7 +241,11 @@ class CONTENT_EXPORT ContentRendererClient {
   // See blink::Platform.
   virtual uint64_t VisitedLinkHash(const char* canonical_url, size_t length);
   virtual bool IsLinkVisited(uint64_t link_hash);
-  virtual blink::WebPrescientNetworking* GetPrescientNetworking();
+
+  // Creates a WebPrescientNetworking instance for |render_frame|. The returned
+  // instance is owned by the frame. May return null.
+  virtual std::unique_ptr<blink::WebPrescientNetworking>
+  CreatePrescientNetworking(RenderFrame* render_frame);
 
   // Returns true if the given Pepper plugin is external (requiring special
   // startup steps).
@@ -252,10 +256,6 @@ class CONTENT_EXPORT ContentRendererClient {
   // worthwhile precaution when the plugin provides an active scripting
   // language.
   virtual bool IsOriginIsolatedPepperPlugin(const base::FilePath& plugin_path);
-
-  // Allows an embedder to provide a blink::WebMediaStreamRendererFactory.
-  virtual std::unique_ptr<blink::WebMediaStreamRendererFactory>
-  CreateMediaStreamRendererFactory();
 
   // Allows embedder to register the key system(s) it supports by populating
   // |key_systems|.
@@ -287,20 +287,15 @@ class CONTENT_EXPORT ContentRendererClient {
   virtual std::unique_ptr<blink::WebContentSettingsClient>
   CreateWorkerContentSettingsClient(RenderFrame* render_frame);
 
+  // Creates a speech recognition client used to transcribe audio into captions.
+  virtual std::unique_ptr<media::SpeechRecognitionClient>
+  CreateSpeechRecognitionClient(RenderFrame* render_frame);
+
   // Returns true if the page at |url| can use Pepper CameraDevice APIs.
   virtual bool IsPluginAllowedToUseCameraDeviceAPI(const GURL& url);
 
   // Returns true if dev channel APIs are available for plugins.
   virtual bool IsPluginAllowedToUseDevChannelAPIs();
-
-  // Records a sample string to a Rappor privacy-preserving metric.
-  // See: https://www.chromium.org/developers/design-documents/rappor
-  virtual void RecordRappor(const std::string& metric,
-                            const std::string& sample) {}
-
-  // Records a domain and registry of a url to a Rappor privacy-preserving
-  // metric. See: https://www.chromium.org/developers/design-documents/rappor
-  virtual void RecordRapporURL(const std::string& metric, const GURL& url) {}
 
   // Notifies that a document element has been inserted in the frame's document.
   // This may be called multiple times for the same document. This method may
@@ -393,7 +388,8 @@ class CONTENT_EXPORT ContentRendererClient {
 
   // Allows the embedder to return a (possibly null) URLLoaderThrottleProvider
   // for a frame or worker. For frames this is called on the main thread, and
-  // for workers it's called on the worker thread.
+  // for workers it's called on the main or worker threads depending on
+  // http://crbug.com/692909.
   virtual std::unique_ptr<URLLoaderThrottleProvider>
   CreateURLLoaderThrottleProvider(URLLoaderThrottleProviderType provider_type);
 
@@ -410,11 +406,11 @@ class CONTENT_EXPORT ContentRendererClient {
   // most once.
   virtual void DidSetUserAgent(const std::string& user_agent);
 
-  // Returns true if |url| still requires native HTML imports. Used for Web UI
-  // pages.
-  // TODO(https://crbug.com/937747): Remove this function, when all WebUIs have
-  // been migrated to use the HTML Imports Polyfill.
-  virtual bool RequiresHtmlImports(const GURL& url);
+  // Returns true if |url| still requires native Web Components v0 features.
+  // Used for Web UI pages.
+  // TODO(937747): Remove this function when all WebUIs can function without
+  // Web Components v0.
+  virtual bool RequiresWebComponentsV0(const GURL& url);
 
   // Optionally returns audio renderer algorithm parameters.
   virtual base::Optional<::media::AudioRendererAlgorithmParameters>

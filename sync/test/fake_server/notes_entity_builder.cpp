@@ -61,7 +61,7 @@ std::unique_ptr<LoopbackServerEntity> NotesEntityBuilder::Build() {
 
   sync_pb::EntitySpecifics entity_specifics;
   sync_pb::NotesSpecifics* notes_specifics = entity_specifics.mutable_notes();
-  notes_specifics->set_subject(title_);
+  notes_specifics->set_legacy_canonicalized_title(title_);
   notes_specifics->set_url(url_.spec());
   notes_specifics->set_content(content_);
 
@@ -76,7 +76,7 @@ std::unique_ptr<LoopbackServerEntity> NotesEntityBuilder::Build() {
   unique_position = syncer::UniquePosition::FromInt64(0, suffix).ToProto();
 
   const string id =
-    LoopbackServerEntity::CreateId(syncer::NOTES, base::GenerateGUID());
+      LoopbackServerEntity::CreateId(syncer::NOTES, base::GenerateGUID());
 
   return base::WrapUnique<LoopbackServerEntity>(
       new syncer::PersistentNotesEntity(
@@ -86,7 +86,9 @@ std::unique_ptr<LoopbackServerEntity> NotesEntityBuilder::Build() {
 }
 
 NotesEntityBuilder EntityBuilderFactory::NewNotesEntityBuilder(
-  const string& title, const GURL& url, const string& content) {
+    const string& title,
+    const GURL& url,
+    const string& content) {
   std::string originator_client_item_id = base::GenerateGUID();
   NotesEntityBuilder builder(title, url, content, cache_guid_,
                              originator_client_item_id);

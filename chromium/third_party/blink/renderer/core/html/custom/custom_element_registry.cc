@@ -11,9 +11,9 @@
 #include "third_party/blink/renderer/bindings/core/v8/script_custom_element_definition_builder.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_element_definition_options.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
-#include "third_party/blink/renderer/core/dom/element_definition_options.h"
 #include "third_party/blink/renderer/core/dom/element_traversal.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
@@ -150,7 +150,7 @@ CustomElementDefinition* CustomElementRegistry::DefineInternal(
     if (ThrowIfValidName(AtomicString(options->extends()), exception_state))
       return nullptr;
     // 7.2. If element interface is undefined element, throw exception
-    if (htmlElementTypeForTag(extends) ==
+    if (htmlElementTypeForTag(extends, owner_->document()) ==
         HTMLElementType::kHTMLUnknownElement) {
       exception_state.ThrowDOMException(
           DOMExceptionCode::kNotSupportedError,

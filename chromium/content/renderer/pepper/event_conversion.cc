@@ -25,11 +25,11 @@
 #include "device/gamepad/public/cpp/gamepads.h"
 #include "ppapi/c/pp_input_event.h"
 #include "ppapi/shared_impl/ppb_input_event_shared.h"
-#include "third_party/blink/public/platform/web_input_event.h"
-#include "third_party/blink/public/platform/web_keyboard_event.h"
-#include "third_party/blink/public/platform/web_mouse_wheel_event.h"
-#include "third_party/blink/public/platform/web_pointer_event.h"
-#include "third_party/blink/public/platform/web_touch_event.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
+#include "third_party/blink/public/common/input/web_keyboard_event.h"
+#include "third_party/blink/public/common/input/web_mouse_wheel_event.h"
+#include "third_party/blink/public/common/input/web_pointer_event.h"
+#include "third_party/blink/public/common/input/web_touch_event.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
 
 #if defined(OS_WIN)
@@ -45,7 +45,6 @@ using blink::WebMouseWheelEvent;
 using blink::WebPointerEvent;
 using blink::WebTouchEvent;
 using blink::WebTouchPoint;
-using blink::WebUChar;
 
 namespace content {
 
@@ -236,17 +235,17 @@ void AppendMouseEvent(const WebInputEvent& event,
         return;
     }
   }
-  result.mouse_position.x = mouse_event.PositionInWidget().x;
-  result.mouse_position.y = mouse_event.PositionInWidget().y;
+  result.mouse_position.x = mouse_event.PositionInWidget().x();
+  result.mouse_position.y = mouse_event.PositionInWidget().y();
   result.mouse_click_count = mouse_event.click_count;
 
   if (base::FeatureList::IsEnabled(features::kConsolidatedMovementXY)) {
     if (mouse_event.GetType() == WebInputEvent::kMouseMove &&
         *in_out_last_mouse_position) {
-      result.mouse_movement.x =
-          mouse_event.PositionInScreen().x - (*in_out_last_mouse_position)->x();
-      result.mouse_movement.y =
-          mouse_event.PositionInScreen().y - (*in_out_last_mouse_position)->y();
+      result.mouse_movement.x = mouse_event.PositionInScreen().x() -
+                                (*in_out_last_mouse_position)->x();
+      result.mouse_movement.y = mouse_event.PositionInScreen().y() -
+                                (*in_out_last_mouse_position)->y();
     }
     *in_out_last_mouse_position =
         std::make_unique<gfx::PointF>(mouse_event.PositionInScreen());
@@ -277,8 +276,7 @@ void AppendMouseWheelEvent(const WebInputEvent& event,
   result.wheel_ticks.x = mouse_wheel_event.wheel_ticks_x;
   result.wheel_ticks.y = mouse_wheel_event.wheel_ticks_y;
   result.wheel_scroll_by_page =
-      (mouse_wheel_event.delta_units ==
-       ui::input_types::ScrollGranularity::kScrollByPage);
+      (mouse_wheel_event.delta_units == ui::ScrollGranularity::kScrollByPage);
   result_events->push_back(result);
 }
 
@@ -305,8 +303,8 @@ void SetPPTouchPoints(const WebTouchPoint* touches,
     }
     PP_TouchPoint pp_pt;
     pp_pt.id = touch_point.id;
-    pp_pt.position.x = touch_point.PositionInWidget().x;
-    pp_pt.position.y = touch_point.PositionInWidget().y;
+    pp_pt.position.x = touch_point.PositionInWidget().x();
+    pp_pt.position.y = touch_point.PositionInWidget().y();
     pp_pt.radius.x = touch_point.radius_x;
     pp_pt.radius.y = touch_point.radius_y;
     pp_pt.rotation_angle = touch_point.rotation_angle;
@@ -533,10 +531,9 @@ WebMouseWheelEvent* BuildMouseWheelEvent(const InputEventData& event) {
   mouse_wheel_event->delta_y = event.wheel_delta.y;
   mouse_wheel_event->wheel_ticks_x = event.wheel_ticks.x;
   mouse_wheel_event->wheel_ticks_y = event.wheel_ticks.y;
-  mouse_wheel_event->delta_units =
-      event.wheel_scroll_by_page
-          ? ui::input_types::ScrollGranularity::kScrollByPage
-          : ui::input_types::ScrollGranularity::kScrollByPixel;
+  mouse_wheel_event->delta_units = event.wheel_scroll_by_page
+                                       ? ui::ScrollGranularity::kScrollByPage
+                                       : ui::ScrollGranularity::kScrollByPixel;
   return mouse_wheel_event;
 }
 
@@ -564,12 +561,12 @@ WebMouseWheelEvent* BuildMouseWheelEvent(const InputEventData& event) {
 // src/content/shell/test_runner/event_sender.cc. This
 // is used by CreateSimulatedWebInputEvents to convert keyboard events.
 void GetKeyCode(const std::string& char_text,
-                WebUChar* code,
-                WebUChar* text,
+                uint16_t* code,
+                uint16_t* text,
                 bool* needs_shift_modifier,
                 bool* generate_char) {
-  WebUChar vk_code = 0;
-  WebUChar vk_text = 0;
+  uint16_t vk_code = 0;
+  uint16_t vk_text = 0;
   *needs_shift_modifier = false;
   *generate_char = false;
   if ("\n" == char_text) {
@@ -764,7 +761,7 @@ std::vector<std::unique_ptr<WebInputEvent>> CreateSimulatedWebInputEvents(
       WebKeyboardEvent* web_char_event =
           static_cast<WebKeyboardEvent*>(original_event.get());
 
-      WebUChar code = 0, text = 0;
+      uint16_t code = 0, text = 0;
       bool needs_shift_modifier = false, generate_char = false;
       GetKeyCode(event.character_text,
                  &code,

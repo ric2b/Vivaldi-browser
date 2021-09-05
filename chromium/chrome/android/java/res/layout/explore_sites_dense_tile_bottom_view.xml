@@ -8,7 +8,8 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="@dimen/explore_sites_dense_title_bottom_tile_view_width"
-    android:layout_height="@dimen/explore_sites_dense_title_bottom_tile_view_height"
+    android:layout_height="wrap_content"
+    android:minHeight="@dimen/explore_sites_dense_title_bottom_tile_view_height"
     app:iconCornerRadius="@dimen/explore_sites_dense_icon_corner_radius">
 
     <!-- The icon background. -->
@@ -57,6 +58,6 @@
         android:ellipsize="end"
         android:gravity="center_horizontal"
         android:lines="2"
-        android:textAppearance="@style/TextAppearance.BlackCaption"
+        android:textAppearance="@style/TextAppearance.TextSmall.Secondary"
         app:leading="@dimen/text_size_small_leading" />
 </org.chromium.chrome.browser.explore_sites.ExploreSitesTileView>

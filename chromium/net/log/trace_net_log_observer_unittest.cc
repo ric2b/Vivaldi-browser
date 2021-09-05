@@ -157,7 +157,7 @@ class TraceNetLogObserverTest : public TestWithTaskEnvironment {
 
   base::ListValue* trace_events() const { return trace_events_.get(); }
 
-  TestNetLog* net_log() { return &net_log_; }
+  RecordingTestNetLog* net_log() { return &net_log_; }
 
   TraceNetLogObserver* trace_net_log_observer() const {
     return trace_net_log_observer_.get();
@@ -167,7 +167,7 @@ class TraceNetLogObserverTest : public TestWithTaskEnvironment {
   std::unique_ptr<base::ListValue> trace_events_;
   base::trace_event::TraceResultBuffer trace_buffer_;
   base::trace_event::TraceResultBuffer::SimpleOutput json_output_;
-  TestNetLog net_log_;
+  RecordingTestNetLog net_log_;
   std::unique_ptr<TraceNetLogObserver> trace_net_log_observer_;
 };
 
@@ -418,18 +418,18 @@ TEST_F(TraceNetLogObserverTest, EventsWithAndWithoutParameters) {
             actual_item2.source_type);
 
   std::string item1_params;
-  std::string item2_params;
+  const base::DictionaryValue* item2_params;
   EXPECT_TRUE(item1->GetString("args.params.foo", &item1_params));
   EXPECT_EQ("bar", item1_params);
 
-  EXPECT_TRUE(item2->GetString("args.params", &item2_params));
-  EXPECT_TRUE(item2_params.empty());
+  EXPECT_TRUE(item2->GetDictionary("args.params", &item2_params));
+  EXPECT_TRUE(item2_params->empty());
 }
 
 TEST(TraceNetLogObserverCategoryTest, DisabledCategory) {
   base::test::TaskEnvironment task_environment;
   TraceNetLogObserver observer;
-  NetLog net_log;
+  TestNetLog net_log;
   observer.WatchForTraceStart(&net_log);
 
   EXPECT_FALSE(net_log.IsCapturing());
@@ -446,7 +446,7 @@ TEST(TraceNetLogObserverCategoryTest, DisabledCategory) {
 TEST(TraceNetLogObserverCategoryTest, EnabledCategory) {
   base::test::TaskEnvironment task_environment;
   TraceNetLogObserver observer;
-  NetLog net_log;
+  TestNetLog net_log;
   observer.WatchForTraceStart(&net_log);
 
   EXPECT_FALSE(net_log.IsCapturing());

@@ -10,7 +10,7 @@
 #include "base/macros.h"
 #include "cc/input/input_handler.h"
 #include "cc/input/snap_fling_controller.h"
-#include "third_party/blink/public/platform/web_gesture_event.h"
+#include "third_party/blink/public/common/input/web_gesture_event.h"
 #include "ui/events/blink/blink_features.h"
 #include "ui/events/blink/input_scroll_elasticity_controller.h"
 #include "ui/events/blink/synchronous_input_handler_proxy.h"
@@ -21,9 +21,10 @@ class TickClock;
 }
 
 namespace blink {
+class WebInputEventAttribution;
 class WebMouseWheelEvent;
 class WebTouchEvent;
-}
+}  // namespace blink
 
 namespace ui {
 
@@ -32,7 +33,7 @@ class InputHandlerProxyTest;
 class InputHandlerProxyEventQueueTest;
 class InputHandlerProxyMomentumScrollJankTest;
 class TestInputHandlerProxy;
-}
+}  // namespace test
 
 class CompositorThreadEventQueue;
 class EventWithCallback;
@@ -61,8 +62,6 @@ class InputHandlerProxy : public cc::InputHandlerClient,
     return scroll_elasticity_controller_.get();
   }
 
-  void set_smooth_scroll_enabled(bool value) { smooth_scroll_enabled_ = value; }
-
   enum EventDisposition {
     DID_HANDLE,
     DID_NOT_HANDLE,
@@ -79,19 +78,22 @@ class InputHandlerProxy : public cc::InputHandlerClient,
       base::OnceCallback<void(EventDisposition,
                               WebScopedInputEvent WebInputEvent,
                               const LatencyInfo&,
-                              std::unique_ptr<ui::DidOverscrollParams>)>;
+                              std::unique_ptr<ui::DidOverscrollParams>,
+                              const blink::WebInputEventAttribution&)>;
   void HandleInputEventWithLatencyInfo(WebScopedInputEvent event,
                                        const LatencyInfo& latency_info,
                                        EventDispositionCallback callback);
   void InjectScrollbarGestureScroll(
       const blink::WebInputEvent::Type type,
-      const blink::WebFloatPoint& position_in_widget,
+      const gfx::PointF& position_in_widget,
       const cc::InputHandlerPointerResult& pointer_result,
       const LatencyInfo& latency_info,
       const base::TimeTicks now);
-  EventDisposition RouteToTypeSpecificHandler(
-      const blink::WebInputEvent& event,
-      const LatencyInfo& original_latency_info = LatencyInfo());
+
+  // Attempts to perform attribution of the given WebInputEvent to a target
+  // frame. Intended for simple impl-side hit testing.
+  blink::WebInputEventAttribution PerformEventAttribution(
+      const blink::WebInputEvent& event);
 
   // cc::InputHandlerClient implementation.
   void WillShutdown() override;
@@ -108,24 +110,24 @@ class InputHandlerProxy : public cc::InputHandlerClient,
   void DeliverInputForHighLatencyMode() override;
 
   // SynchronousInputHandlerProxy implementation.
-  void SetOnlySynchronouslyAnimateRootFlings(
+  void SetSynchronousInputHandler(
       SynchronousInputHandler* synchronous_input_handler) override;
-  void SynchronouslyAnimate(base::TimeTicks time) override;
   void SynchronouslySetRootScrollOffset(
       const gfx::ScrollOffset& root_offset) override;
   void SynchronouslyZoomBy(float magnify_delta,
                            const gfx::Point& anchor) override;
 
   // SnapFlingClient implementation.
-  bool GetSnapFlingInfo(const gfx::Vector2dF& natural_displacement,
-                        gfx::Vector2dF* initial_offset,
-                        gfx::Vector2dF* target_offset) const override;
+  bool GetSnapFlingInfoAndSetAnimatingSnapTarget(
+      const gfx::Vector2dF& natural_displacement,
+      gfx::Vector2dF* initial_offset,
+      gfx::Vector2dF* target_offset) const override;
   gfx::Vector2dF ScrollByForSnapFling(const gfx::Vector2dF& delta) override;
-  void ScrollEndForSnapFling() override;
+  void ScrollEndForSnapFling(bool did_finish) override;
   void RequestAnimationForSnapFling() override;
 
   bool gesture_scroll_on_impl_thread_for_testing() const {
-    return gesture_scroll_on_impl_thread_;
+    return handling_gesture_on_impl_thread_;
   }
 
  protected:
@@ -145,17 +147,18 @@ class InputHandlerProxy : public cc::InputHandlerClient,
   void DispatchQueuedInputEvents();
 
   // Helper functions for handling more complicated input events.
-  EventDisposition HandleMouseWheel(
-      const blink::WebMouseWheelEvent& event);
+  EventDisposition HandleMouseWheel(const blink::WebMouseWheelEvent& event);
   EventDisposition HandleGestureScrollBegin(
       const blink::WebGestureEvent& event);
   EventDisposition HandleGestureScrollUpdate(
-      const blink::WebGestureEvent& event);
-  EventDisposition HandleGestureScrollEnd(
-      const blink::WebGestureEvent& event);
+      const blink::WebGestureEvent& event,
+      const blink::WebInputEventAttribution& original_attribution);
+  EventDisposition HandleGestureScrollEnd(const blink::WebGestureEvent& event);
   EventDisposition HandleTouchStart(const blink::WebTouchEvent& event);
   EventDisposition HandleTouchMove(const blink::WebTouchEvent& event);
   EventDisposition HandleTouchEnd(const blink::WebTouchEvent& event);
+
+  void InputHandlerScrollEnd();
 
   // Request a frame of animation from the InputHandler or
   // SynchronousInputHandler. They can provide that by calling Animate().
@@ -165,9 +168,6 @@ class InputHandlerProxy : public cc::InputHandlerClient,
   // params with with event ack.
   void HandleOverscroll(const gfx::PointF& causal_event_viewport_point,
                         const cc::InputHandlerScrollResult& scroll_result);
-
-  // Whether to use a smooth scroll animation for this event.
-  bool ShouldAnimate(bool has_precise_scroll_deltas) const;
 
   // Update the elastic overscroll controller with |gesture_event|.
   void HandleScrollElasticityOverscroll(
@@ -188,20 +188,20 @@ class InputHandlerProxy : public cc::InputHandlerClient,
       bool* is_touching_scrolling_layer,
       cc::TouchAction* white_listed_touch_action);
 
+  EventDisposition RouteToTypeSpecificHandler(
+      EventWithCallback* event_with_callback,
+      const LatencyInfo& original_latency_info,
+      const blink::WebInputEventAttribution& original_attribution);
+
   InputHandlerProxyClient* client_;
   cc::InputHandler* input_handler_;
 
-  // When present, Animates are not requested to the InputHandler, but to this
-  // SynchronousInputHandler instead. And all Animate() calls are expected to
-  // happen via the SynchronouslyAnimate() call instead of coming directly from
-  // the InputHandler.
   SynchronousInputHandler* synchronous_input_handler_;
-  bool allow_root_animate_;
 
-#if DCHECK_IS_ON()
-  bool expect_scroll_update_end_;
-#endif
-  bool gesture_scroll_on_impl_thread_;
+  // This should be true when a pinch is in progress. The sequence of events is
+  // as follows: GSB GPB GSU GPU ... GPE GSE.
+  bool handling_gesture_on_impl_thread_;
+
   bool gesture_pinch_in_progress_ = false;
   bool in_inertial_scrolling_ = false;
   bool scroll_sequence_ignored_;
@@ -209,8 +209,6 @@ class InputHandlerProxy : public cc::InputHandlerClient,
   // Used to animate rubber-band over-scroll effect on Mac.
   std::unique_ptr<InputScrollElasticityController>
       scroll_elasticity_controller_;
-
-  bool smooth_scroll_enabled_;
 
   // The merged result of the last touch event with previous touch events.
   // This value will get returned for subsequent TouchMove events to allow
@@ -227,7 +225,10 @@ class InputHandlerProxy : public cc::InputHandlerClient,
   std::unique_ptr<DidOverscrollParams> current_overscroll_params_;
 
   std::unique_ptr<CompositorThreadEventQueue> compositor_event_queue_;
-  bool has_ongoing_compositor_scroll_or_pinch_;
+
+  // Set only when the compositor input handler is handling a gesture. Tells
+  // which source device is currently performing a gesture based scroll.
+  base::Optional<blink::WebGestureDevice> currently_active_gesture_device_;
 
   // Tracks whether the first scroll update gesture event has been seen after a
   // scroll begin. This is set/reset when scroll gestures are processed in

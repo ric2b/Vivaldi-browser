@@ -4,6 +4,9 @@
 
 #include "chrome/browser/performance_manager/persistence/site_data/site_data_cache_factory.h"
 
+#include <memory>
+#include <utility>
+
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
@@ -23,7 +26,7 @@ TEST_F(SiteDataCacheFactoryTest, EndToEnd) {
   std::unique_ptr<SiteDataCacheFactory> factory =
       std::make_unique<SiteDataCacheFactory>();
   SiteDataCacheFactory* factory_raw = factory.get();
-  PerformanceManagerImpl::GetInstance()->CallOnGraphImpl(
+  PerformanceManagerImpl::CallOnGraphImpl(
       FROM_HERE,
       base::BindOnce(
           [](std::unique_ptr<SiteDataCacheFactory> site_data_cache_factory,
@@ -38,13 +41,12 @@ TEST_F(SiteDataCacheFactoryTest, EndToEnd) {
 
   {
     base::RunLoop run_loop;
-    PerformanceManagerImpl::GetInstance()->CallOnGraphImpl(
+    PerformanceManagerImpl::CallOnGraphImpl(
         FROM_HERE,
         base::BindOnce(
             [](SiteDataCacheFactory* factory,
                const std::string& browser_context_id,
-               base::OnceClosure quit_closure,
-               performance_manager::GraphImpl* graph_unused) {
+               base::OnceClosure quit_closure) {
               DCHECK_NE(nullptr, factory->GetDataCacheForBrowserContext(
                                      browser_context_id));
               DCHECK_NE(nullptr, factory->GetInspectorForBrowserContext(
@@ -60,13 +62,12 @@ TEST_F(SiteDataCacheFactoryTest, EndToEnd) {
                                                             &profile);
   {
     base::RunLoop run_loop;
-    PerformanceManagerImpl::GetInstance()->CallOnGraphImpl(
+    PerformanceManagerImpl::CallOnGraphImpl(
         FROM_HERE,
         base::BindOnce(
             [](SiteDataCacheFactory* factory,
                const std::string& browser_context_id,
-               base::OnceClosure quit_closure,
-               performance_manager::GraphImpl* graph_unused) {
+               base::OnceClosure quit_closure) {
               DCHECK_EQ(nullptr, factory->GetDataCacheForBrowserContext(
                                      browser_context_id));
               DCHECK_EQ(nullptr, factory->GetInspectorForBrowserContext(

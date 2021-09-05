@@ -8,6 +8,7 @@
 #include <tuple>
 #include <utility>
 
+#include "base/rand_util.h"
 #include "crypto/ec_signature_creator.h"
 #include "device/fido/fido_parsing_utils.h"
 #include "third_party/boringssl/src/include/openssl/ec_key.h"
@@ -135,9 +136,10 @@ bool VirtualFidoDevice::State::InjectResidentKey(
                                     /*icon_url=*/base::nullopt));
 }
 
+// VirtualFidoDevice ----------------------------------------------------------
+
 VirtualFidoDevice::VirtualFidoDevice() = default;
 
-// VirtualFidoDevice ----------------------------------------------------------
 
 VirtualFidoDevice::VirtualFidoDevice(scoped_refptr<State> state)
     : state_(std::move(state)) {}
@@ -193,12 +195,14 @@ VirtualFidoDevice::GenerateAttestationCertificate(
       {kTransportTypesOID, false /* not critical */, kTransportTypesContents},
   };
 
+  // https://w3c.github.io/webauthn/#sctn-packed-attestation-cert-requirements
   std::string attestation_cert;
   if (!net::x509_util::CreateSelfSignedCert(
           attestation_private_key->key(), net::x509_util::DIGEST_SHA256,
-          "CN=" + (individual_attestation_requested
-                       ? state_->individual_attestation_cert_common_name
-                       : state_->attestation_cert_common_name),
+          "C=US, O=Chromium, OU=Authenticator Attestation, CN=" +
+              (individual_attestation_requested
+                   ? state_->individual_attestation_cert_common_name
+                   : state_->attestation_cert_common_name),
           kAttestationCertSerialNumber, base::Time::FromTimeT(1500000000),
           base::Time::FromTimeT(1500000000), extensions, &attestation_cert)) {
     DVLOG(2) << "Failed to create attestation certificate";
@@ -211,6 +215,15 @@ VirtualFidoDevice::GenerateAttestationCertificate(
 void VirtualFidoDevice::StoreNewKey(
     base::span<const uint8_t> key_handle,
     VirtualFidoDevice::RegistrationData registration_data) {
+  // Skip storing the registration if this is a dummy request. This prevents
+  // dummy credentials to be returned by the GetCredentials method of the
+  // virtual authenticator API.
+  if (registration_data.application_parameter == device::kBogusAppParam ||
+      registration_data.application_parameter ==
+          fido_parsing_utils::CreateSHA256Hash(kDummyRpID)) {
+    return;
+  }
+
   // Store the registration. Because the key handle is the hashed public key we
   // just generated, no way this should already be registered.
   bool did_insert = false;
@@ -237,17 +250,32 @@ VirtualFidoDevice::RegistrationData* VirtualFidoDevice::FindRegistrationData(
   return &it->second;
 }
 
+bool VirtualFidoDevice::SimulatePress() {
+  if (!state_->simulate_press_callback)
+    return true;
+
+  auto weak_this = GetWeakPtr();
+  bool result = state_->simulate_press_callback.Run(this);
+  // |this| might have been destroyed at this point - accessing state from the
+  // object without checking weak_this is dangerous.
+  return weak_this && result;
+}
+
 void VirtualFidoDevice::TryWink(base::OnceClosure cb) {
   std::move(cb).Run();
 }
 
 std::string VirtualFidoDevice::GetId() const {
-  // Use our heap address to get a unique-ish number. (0xffe1 is a prime).
-  return "VirtualFidoDevice-" + std::to_string((size_t)this % 0xffe1);
+  return id_;
 }
 
 FidoTransportProtocol VirtualFidoDevice::DeviceTransport() const {
   return state_->transport;
+}
+
+// static
+std::string VirtualFidoDevice::MakeVirtualFidoDeviceId() {
+  return "VirtualFidoDevice-" + base::RandBytesAsString(32);
 }
 
 }  // namespace device

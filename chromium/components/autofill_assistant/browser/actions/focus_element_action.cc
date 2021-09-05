@@ -25,12 +25,14 @@ FocusElementAction::~FocusElementAction() {}
 
 void FocusElementAction::InternalProcessAction(ProcessActionCallback callback) {
   const FocusElementProto& focus_element = proto_.focus_element();
-  if (!focus_element.title().empty()) {
+  if (focus_element.has_title()) {
+    // TODO(crbug.com/806868): Deprecate and remove message from this action and
+    // use tell instead.
     delegate_->SetStatusMessage(focus_element.title());
   }
   Selector selector = Selector(focus_element.element()).MustBeVisible();
   if (selector.empty()) {
-    DVLOG(1) << __func__ << ": empty selector";
+    VLOG(1) << __func__ << ": empty selector";
     UpdateProcessedAction(INVALID_SELECTOR);
     std::move(callback).Run(std::move(processed_action_proto_));
     return;

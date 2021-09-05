@@ -105,15 +105,15 @@ void MessagePopupView::Show() {
   // Make the widget explicitly activatable as TYPE_POPUP is not activatable by
   // default but we need focus for the inline reply textarea.
   params.activatable = views::Widget::InitParams::ACTIVATABLE_YES;
-  params.opacity = views::Widget::InitParams::OPAQUE_WINDOW;
+  params.opacity = views::Widget::InitParams::WindowOpacity::kOpaque;
 #else
-  params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
+  params.opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;
 #endif
   params.delegate = this;
   views::Widget* widget = new views::Widget();
   popup_collection_->ConfigureWidgetInitParamsForContainer(widget, &params);
   widget->set_focus_on_creation(false);
-  widget->AddObserver(this);
+  observer_.Add(widget);
 
 #if defined(OS_WIN)
   // We want to ensure that this toast always goes to the native desktop,
@@ -202,6 +202,10 @@ void MessagePopupView::OnWidgetActivationChanged(views::Widget* widget,
                                                  bool active) {
   is_active_ = active;
   popup_collection_->Update();
+}
+
+void MessagePopupView::OnWidgetDestroyed(views::Widget* widget) {
+  observer_.Remove(widget);
 }
 
 bool MessagePopupView::IsWidgetValid() const {

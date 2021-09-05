@@ -63,6 +63,8 @@ class MEDIA_BLINK_EXPORT VideoFrameCompositor : public VideoRendererSink,
   // Used to report back the time when the new frame has been processed.
   using OnNewProcessedFrameCB = base::OnceCallback<void(base::TimeTicks)>;
 
+  using OnNewFramePresentedCB = base::OnceClosure;
+
   // |task_runner| is the task runner on which this class will live,
   // though it may be constructed on any thread.
   VideoFrameCompositor(
@@ -99,7 +101,7 @@ class MEDIA_BLINK_EXPORT VideoFrameCompositor : public VideoRendererSink,
   // it was updated. In certain applications, one might need to periodically
   // call UpdateCurrentFrameIfStale on |task_runner_| to drive the updates.
   // Can be called from any thread.
-  scoped_refptr<VideoFrame> GetCurrentFrameOnAnyThread();
+  virtual scoped_refptr<VideoFrame> GetCurrentFrameOnAnyThread();
 
   // VideoRendererSink implementation. These methods must be called from the
   // same thread (typically the media thread).
@@ -125,6 +127,15 @@ class MEDIA_BLINK_EXPORT VideoFrameCompositor : public VideoRendererSink,
   // callback is only run once and then reset.
   // Must be called on the compositor thread.
   virtual void SetOnNewProcessedFrameCallback(OnNewProcessedFrameCB cb);
+
+  virtual void SetOnFramePresentedCallback(OnNewFramePresentedCB present_cb);
+
+  // Gets the metadata for the last frame that was presented to the compositor.
+  // Used to populate the VideoFrameMetadata of video.requestAnimationFrame()
+  // callbacks. See https://wicg.github.io/video-raf/.
+  // Can be called on any thread.
+  virtual std::unique_ptr<blink::WebMediaPlayer::VideoFramePresentationMetadata>
+  GetLastPresentedFrameMetadata();
 
   // Updates the rotation information for frames given to |submitter_|.
   void UpdateRotation(VideoRotation rotation);
@@ -172,9 +183,11 @@ class MEDIA_BLINK_EXPORT VideoFrameCompositor : public VideoRendererSink,
 
   // Handles setting of |current_frame_|.
   bool ProcessNewFrame(scoped_refptr<VideoFrame> frame,
+                       base::TimeTicks presentation_time,
                        bool repaint_duplicate_frame);
 
-  void SetCurrentFrame(scoped_refptr<VideoFrame> frame);
+  void SetCurrentFrame_Locked(scoped_refptr<VideoFrame> frame,
+                              base::TimeTicks expected_display_time);
 
   // Called by |background_rendering_timer_| when enough time elapses where we
   // haven't seen a Render() call.
@@ -187,6 +200,10 @@ class MEDIA_BLINK_EXPORT VideoFrameCompositor : public VideoRendererSink,
   bool CallRender(base::TimeTicks deadline_min,
                   base::TimeTicks deadline_max,
                   bool background_rendering);
+
+  // Returns |last_interval_| without acquiring a lock.
+  // Can only be called from the compositor thread.
+  base::TimeDelta GetLastIntervalWithoutLock();
 
   // This will run tasks on the compositor thread. If
   // kEnableSurfaceLayerForVideo is enabled, it will instead run tasks on the
@@ -210,22 +227,34 @@ class MEDIA_BLINK_EXPORT VideoFrameCompositor : public VideoRendererSink,
   bool is_background_rendering_ = false;
   bool new_background_frame_ = false;
 
-  // Assume 60Hz before the first UpdateCurrentFrame() call.
-  base::TimeDelta last_interval_ = base::TimeDelta::FromSecondsD(1.0 / 60);
-
   base::TimeTicks last_background_render_;
   OnNewProcessedFrameCB new_processed_frame_cb_;
   cc::UpdateSubmissionStateCB update_submission_state_callback_;
+
+  // Callback used to satisfy video.rAF requests.
+  // Set on the main thread, fired on the compositor thread.
+  OnNewFramePresentedCB new_presented_frame_cb_ GUARDED_BY(current_frame_lock_);
 
   // Set on the compositor thread, but also read on the media thread. Lock is
   // not used when reading |current_frame_| on the compositor thread.
   base::Lock current_frame_lock_;
   scoped_refptr<VideoFrame> current_frame_;
 
+  // Used to fulfill video.requestAnimationFrame() calls.
+  // See https://wicg.github.io/video-raf/.
+  base::TimeTicks last_presentation_time_ GUARDED_BY(current_frame_lock_);
+  base::TimeTicks last_expected_display_time_ GUARDED_BY(current_frame_lock_);
+  uint32_t presentation_counter_ GUARDED_BY(current_frame_lock_) = 0u;
+
   // These values are updated and read from the media and compositor threads.
   base::Lock callback_lock_;
   VideoRendererSink::RenderCallback* callback_ GUARDED_BY(callback_lock_) =
       nullptr;
+
+  // Assume 60Hz before the first UpdateCurrentFrame() call.
+  // Updated/read by the compositor thread, but also read on the media thread.
+  base::TimeDelta last_interval_ GUARDED_BY(callback_lock_) =
+      base::TimeDelta::FromSecondsD(1.0 / 60);
 
   // AutoOpenCloseEvent for begin/end events.
   std::unique_ptr<base::trace_event::AutoOpenCloseEvent<kTracingCategory>>

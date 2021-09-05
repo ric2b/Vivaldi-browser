@@ -348,7 +348,7 @@ TEST_F(WorkspaceControllerTest, ShelfStateUpdated) {
   std::unique_ptr<Window> w1(CreateTestWindow());
   const gfx::Rect w1_bounds(0, 1, 101, 102);
   Shelf* shelf = GetPrimaryShelf();
-  shelf->SetAutoHideBehavior(ash::SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
+  shelf->SetAutoHideBehavior(ShelfAutoHideBehavior::kAlways);
   const gfx::Rect touches_shelf_bounds(
       0, shelf_layout_manager()->GetIdealBounds().y() - 10, 101, 102);
   // Move |w1| to overlap the shelf.
@@ -444,17 +444,19 @@ TEST_F(WorkspaceControllerTest, MinimizeResetsVisibility) {
   // AshTestHelper.
   SessionInfo info;
   info.state = session_manager::SessionState::ACTIVE;
-  ash::Shell::Get()->session_controller()->SetSessionInfo(info);
+  Shell::Get()->session_controller()->SetSessionInfo(info);
 
   std::unique_ptr<Window> w1(CreateTestWindow());
   w1->Show();
   wm::ActivateWindow(w1.get());
   w1->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_MAXIMIZED);
-  EXPECT_EQ(SHELF_BACKGROUND_MAXIMIZED, shelf_widget()->GetBackgroundType());
+  EXPECT_EQ(ShelfBackgroundType::kMaximized,
+            shelf_widget()->GetBackgroundType());
 
   w1->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_MINIMIZED);
   EXPECT_EQ(SHELF_VISIBLE, GetPrimaryShelf()->GetVisibilityState());
-  EXPECT_EQ(SHELF_BACKGROUND_DEFAULT, shelf_widget()->GetBackgroundType());
+  EXPECT_EQ(ShelfBackgroundType::kDefaultBg,
+            shelf_widget()->GetBackgroundType());
 }
 
 // Verifies window visibility during various workspace changes.
@@ -610,7 +612,7 @@ class DontCrashOnChangeAndActivateDelegate
 TEST_F(WorkspaceControllerTest, DontCrashOnChangeAndActivate) {
   // Force the shelf
   Shelf* shelf = GetPrimaryShelf();
-  shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_NEVER);
+  shelf->SetAutoHideBehavior(ShelfAutoHideBehavior::kNever);
 
   DontCrashOnChangeAndActivateDelegate delegate;
   std::unique_ptr<Window> w1(CreateTestWindowInShellWithDelegate(
@@ -626,7 +628,7 @@ TEST_F(WorkspaceControllerTest, DontCrashOnChangeAndActivate) {
 
   // Do this so that when we Show() the window a resize occurs and we make the
   // window active.
-  shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
+  shelf->SetAutoHideBehavior(ShelfAutoHideBehavior::kAlways);
 
   ParentWindowInPrimaryRootWindow(w1.get());
   delegate.set_window(w1.get());
@@ -1003,10 +1005,10 @@ TEST_F(WorkspaceControllerTest, TestRestoreToUserModifiedBounds) {
 
   // A user moved the window.
   std::unique_ptr<WindowResizer> resizer(
-      CreateWindowResizer(window1.get(), gfx::Point(), HTCAPTION,
+      CreateWindowResizer(window1.get(), gfx::PointF(), HTCAPTION,
                           ::wm::WINDOW_MOVE_SOURCE_MOUSE)
           .release());
-  gfx::Point location = resizer->GetInitialLocation();
+  gfx::PointF location = resizer->GetInitialLocation();
   location.Offset(-50, 0);
   resizer->Drag(location, 0);
   resizer->CompleteDrag();
@@ -1317,7 +1319,7 @@ TEST_F(WorkspaceControllerTest, DragWindowKeepsShelfAutohidden) {
   ParentWindowInPrimaryRootWindow(w1.get());
 
   Shelf* shelf = GetPrimaryShelf();
-  shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
+  shelf->SetAutoHideBehavior(ShelfAutoHideBehavior::kAlways);
   EXPECT_EQ(SHELF_AUTO_HIDE_HIDDEN, shelf->GetAutoHideState());
 
   // Drag very little.

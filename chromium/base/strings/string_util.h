@@ -184,11 +184,11 @@ BASE_EXPORT bool RemoveChars(const std::string& input,
 // NOTE: Safe to use the same variable for both |input| and |output|.
 BASE_EXPORT bool ReplaceChars(const string16& input,
                               StringPiece16 replace_chars,
-                              const string16& replace_with,
+                              StringPiece16 replace_with,
                               string16* output);
 BASE_EXPORT bool ReplaceChars(const std::string& input,
                               StringPiece replace_chars,
-                              const std::string& replace_with,
+                              StringPiece replace_with,
                               std::string* output);
 
 enum TrimPositions {
@@ -328,21 +328,23 @@ BASE_EXPORT bool ContainsOnlyChars(StringPiece input, StringPiece characters);
 BASE_EXPORT bool ContainsOnlyChars(StringPiece16 input,
                                    StringPiece16 characters);
 
-// Returns true if the specified string matches the criteria. How can a wide
-// string be 8-bit or UTF8? It contains only characters that are < 256 (in the
-// first case) or characters that use only 8-bits and whose 8-bit
-// representation looks like a UTF-8 string (the second case).
-//
-// Note that IsStringUTF8 checks not only if the input is structurally
-// valid but also if it doesn't contain any non-character codepoint
-// (e.g. U+FFFE). It's done on purpose because all the existing callers want
-// to have the maximum 'discriminating' power from other encodings. If
-// there's a use case for just checking the structural validity, we have to
-// add a new function for that.
-//
-// IsStringASCII assumes the input is likely all ASCII, and does not leave early
-// if it is not the case.
+// Returns true if |str| is structurally valid UTF-8 and also doesn't
+// contain any non-character code point (e.g. U+10FFFE). Prohibiting
+// non-characters increases the likelihood of detecting non-UTF-8 in
+// real-world text, for callers which do not need to accept
+// non-characters in strings.
 BASE_EXPORT bool IsStringUTF8(StringPiece str);
+
+// Returns true if |str| contains valid UTF-8, allowing non-character
+// code points.
+BASE_EXPORT bool IsStringUTF8AllowingNoncharacters(StringPiece str);
+
+// Returns true if |str| contains only valid ASCII character values.
+// Note 1: IsStringASCII executes in time determined solely by the
+// length of the string, not by its contents, so it is robust against
+// timing attacks for all strings of equal length.
+// Note 2: IsStringASCII assumes the input is likely all ASCII, and
+// does not leave early if it is not the case.
 BASE_EXPORT bool IsStringASCII(StringPiece str);
 BASE_EXPORT bool IsStringASCII(StringPiece16 str);
 #if defined(WCHAR_T_IS_UTF32)
@@ -486,9 +488,11 @@ BASE_EXPORT void ReplaceSubstringsAfterOffset(
 BASE_EXPORT char* WriteInto(std::string* str, size_t length_with_null);
 BASE_EXPORT char16* WriteInto(string16* str, size_t length_with_null);
 
-// Does the opposite of SplitString()/SplitStringPiece(). Joins a vector or list
-// of strings into a single string, inserting |separator| (which may be empty)
-// in between all elements.
+// Joins a vector or list of strings into a single string, inserting |separator|
+// (which may be empty) in between all elements.
+//
+// Note this is inverse of SplitString()/SplitStringPiece() defined in
+// string_split.h.
 //
 // If possible, callers should build a vector of StringPieces and use the
 // StringPiece variant, so that they do not create unnecessary copies of
@@ -547,6 +551,8 @@ BASE_EXPORT bool TrimString(WStringPiece input,
 BASE_EXPORT WStringPiece TrimString(WStringPiece input,
                                     WStringPiece trim_chars,
                                     TrimPositions positions);
+
+BASE_EXPORT wchar_t* WriteInto(std::wstring* str, size_t length_with_null);
 #endif
 
 }  // namespace base

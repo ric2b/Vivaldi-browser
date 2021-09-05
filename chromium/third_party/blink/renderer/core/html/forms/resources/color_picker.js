@@ -424,15 +424,16 @@ class ColorPicker extends HTMLElement {
   constructor(initialColor) {
     super();
 
+    if (global.params.isBorderTransparent) {
+      this.style.borderColor = 'transparent';
+    }
+
     this.selectedColor_ = initialColor;
+    this.colorWhenOpened_ = initialColor;
 
     this.visualColorPicker_ = new VisualColorPicker(initialColor);
     this.manualColorPicker_ = new ManualColorPicker(initialColor);
-    this.submissionControls_ = new SubmissionControls(
-        this.onSubmitButtonClick_, this.onCancelButtonClick_);
-    this.append(
-        this.visualColorPicker_, this.manualColorPicker_,
-        this.submissionControls_);
+    this.append(this.visualColorPicker_, this.manualColorPicker_);
 
     this.visualColorPicker_.addEventListener(
         'visual-color-picker-initialized', this.initializeListeners_);
@@ -447,6 +448,8 @@ class ColorPicker extends HTMLElement {
     this.addEventListener('format-change', this.updateFocusableElements_);
 
     document.documentElement.addEventListener('keydown', this.onKeyDown_);
+
+    window.addEventListener('resize', this.onWindowResize_, {once: true});
   }
 
   get selectedColor() {
@@ -480,8 +483,11 @@ class ColorPicker extends HTMLElement {
       this.processingManualColorChange_ = true;
       this.visualColorPicker_.color = newColor;
       this.processingManualColorChange_ = false;
+
+      const selectedValue = newColor.asHex();
+      window.pagePopupController.setValue(selectedValue);
     }
-  }
+  };
 
   /**
    * @param {!Event} event
@@ -492,24 +498,33 @@ class ColorPicker extends HTMLElement {
       if (!this.processingManualColorChange_) {
         this.selectedColor = newColor;
         this.manualColorPicker_.color = newColor;
+
+        const selectedValue = newColor.asHex();
+        window.pagePopupController.setValue(selectedValue);
       } else {
         // We are making a visual color change in response to a manual color
         // change. So we do not overwrite the manually specified values and do
         // not change the selected color.
       }
     }
-  }
+  };
 
   /**
    * @param {!Event} event
    */
   onKeyDown_ = (event) => {
-    switch(event.key) {
+    switch (event.key) {
       case 'Enter':
-        this.submissionControls_.submitButton.click();
+        window.pagePopupController.closePopup();
         break;
       case 'Escape':
-        this.submissionControls_.cancelButton.click();
+        if (this.selectedColor.equals(this.colorWhenOpened_)) {
+          window.pagePopupController.closePopup();
+        } else {
+          this.manualColorPicker_.dispatchEvent(new CustomEvent(
+              'manual-color-change',
+              {bubbles: true, detail: {color: this.colorWhenOpened_}}));
+        }
         break;
       case 'Tab':
         event.preventDefault();
@@ -522,9 +537,8 @@ class ColorPicker extends HTMLElement {
               this.focusableElements_.indexOf(document.activeElement);
           let nextFocusIndex;
           if (event.shiftKey) {
-            nextFocusIndex = (currentFocusIndex > 0) ?
-                currentFocusIndex - 1 :
-                length - 1;
+            nextFocusIndex =
+                (currentFocusIndex > 0) ? currentFocusIndex - 1 : length - 1;
           } else {
             nextFocusIndex = (currentFocusIndex + 1) % length;
           }
@@ -532,27 +546,20 @@ class ColorPicker extends HTMLElement {
         }
         break;
     }
-  }
+  };
 
   updateFocusableElements_ = () => {
     this.focusableElements_ = Array.from(this.querySelectorAll(
         'color-value-container:not(.hidden-color-value-container) > input,' +
         '[tabindex]:not([tabindex=\'-1\'])'));
-  }
-
-  static get COMMIT_DELAY_MS() {
-    return 100;
-  }
-
-  onSubmitButtonClick_ = () => {
-    const selectedValue = this.selectedColor_.asHex();
-    window.setTimeout(function() {
-      window.pagePopupController.setValueAndClosePopup(0, selectedValue);
-    }, ColorPicker.COMMIT_DELAY_MS);
   };
 
-  onCancelButtonClick_ = () => {
-    window.pagePopupController.closePopup();
+  onWindowResize_ = () => {
+    // Set focus on the first focusable element.
+    if (this.focusableElements_ === undefined) {
+      this.updateFocusableElements_();
+    }
+    this.focusableElements_[0].focus({preventScroll: true});
   };
 }
 window.customElements.define('color-picker', ColorPicker);
@@ -602,6 +609,15 @@ class VisualColorPicker extends HTMLElement {
       document.documentElement
           .addEventListener('mousemove', this.onMouseMove_);
       document.documentElement.addEventListener('mouseup', this.onMouseUp_);
+      this.colorWell_
+          .addEventListener('touchstart', this.onColorWellTouchStart_);
+      this.hueSlider_
+          .addEventListener('touchstart', this.onHueSliderTouchStart_);
+      document.documentElement
+          .addEventListener('touchstart', this.onTouchStart_);
+      document.documentElement
+          .addEventListener('touchmove', this.onTouchMove_);
+      document.documentElement.addEventListener('touchend', this.onTouchEnd_);
       document.documentElement.addEventListener('keydown', this.onKeyDown_);
 
       this.dispatchEvent(new CustomEvent('visual-color-picker-initialized'));
@@ -626,7 +642,7 @@ class VisualColorPicker extends HTMLElement {
     event.preventDefault();
     event.stopPropagation();
     this.hueSlider_.focused = false;
-    this.colorWell_.mouseDown(new Point(event.clientX, event.clientY));
+    this.colorWell_.pointerDown(new Point(event.clientX, event.clientY));
   }
 
   /**
@@ -636,7 +652,7 @@ class VisualColorPicker extends HTMLElement {
     event.preventDefault();
     event.stopPropagation();
     this.colorWell_.focused = false;
-    this.hueSlider_.mouseDown(new Point(event.clientX, event.clientY));
+    this.hueSlider_.pointerDown(new Point(event.clientX, event.clientY));
   }
 
   onMouseDown_ = () => {
@@ -649,13 +665,52 @@ class VisualColorPicker extends HTMLElement {
    */
   onMouseMove_ = (event) => {
     var point = new Point(event.clientX, event.clientY);
-    this.colorWell_.mouseMove(point);
-    this.hueSlider_.mouseMove(point);
+    this.colorWell_.pointerMove(point);
+    this.hueSlider_.pointerMove(point);
   }
 
   onMouseUp_ = () => {
-    this.colorWell_.mouseUp();
-    this.hueSlider_.mouseUp();
+    this.colorWell_.pointerUp();
+    this.hueSlider_.pointerUp();
+  }
+
+    /**
+   * @param {!Event} event
+   */
+  onColorWellTouchStart_ = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    this.hueSlider_.focused = false;
+    this.colorWell_.pointerDown(new Point(event.touches[0].clientX, event.touches[0].clientY));
+  }
+
+  /**
+   * @param {!Event} event
+   */
+  onHueSliderTouchStart_ = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    this.colorWell_.focused = false;
+    this.hueSlider_.pointerDown(new Point(event.touches[0].clientX, event.touches[0].clientY));
+  }
+
+  onTouchStart_ = () => {
+    this.colorWell_.focused = false;
+    this.hueSlider_.focused = false;
+  }
+
+  /**
+   * @param {!Event} event
+   */
+  onTouchMove_ = (event) => {
+    var point = new Point(event.touches[0].clientX, event.touches[0].clientY);
+    this.colorWell_.pointerMove(point);
+    this.hueSlider_.pointerMove(point);
+  }
+
+  onTouchEnd_ = () => {
+    this.colorWell_.pointerUp();
+    this.hueSlider_.pointerUp();
   }
 
   /**
@@ -700,7 +755,88 @@ window.customElements.define('visual-color-picker', VisualColorPicker);
  *             implementation.)
  * TODO(http://crbug.com/992297): Implement eye dropper
  */
-class EyeDropper extends HTMLElement {}
+class EyeDropper extends HTMLElement {
+  constructor() {
+    super();
+
+    if (!global.params.isEyeDropperEnabled) {
+      this.classList.add('hidden');
+      return;
+    }
+
+    this.setAttribute('tabIndex', 0);
+    this.innerHTML =
+        '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" ' +
+        'xmlns="http://www.w3.org/2000/svg"><path d="M13.7344 0C14.0469 0 ' +
+        '14.3411 0.0598958 14.6172 0.179688C14.8932 0.299479 15.1328 ' +
+        '0.460938 15.3359 0.664062C15.5391 0.867188 15.7005 1.10677 15.8203 ' +
+        '1.38281C15.9401 1.65885 16 1.95312 16 2.26562C16 2.56771 15.9427 ' +
+        '2.85938 15.8281 3.14062C15.7135 3.41667 15.5495 3.66146 15.3359 ' +
+        '3.875L13.4609 5.75C13.6328 5.91667 13.7656 6.10677 13.8594 ' +
+        '6.32031C13.9531 6.52865 14 6.75521 14 7C14 7.23958 13.9531 7.46354 ' +
+        '13.8594 7.67188C13.7708 7.88021 13.6432 8.06771 13.4766 ' +
+        '8.23438L12.25 9.46094L11 8.20312L4.71094 14.4922L4.50781 ' +
+        '14.5C4.24219 14.5104 4.01302 14.5547 3.82031 14.6328C3.63281 ' +
+        '14.7109 3.46615 14.8073 3.32031 14.9219C3.17969 15.0312 3.04948 ' +
+        '15.1484 2.92969 15.2734C2.8151 15.3984 2.69271 15.5156 2.5625 ' +
+        '15.625C2.43229 15.7344 2.28906 15.8255 2.13281 15.8984C1.97656 ' +
+        '15.9661 1.78646 16 1.5625 16C1.34896 16 1.14583 15.9583 0.953125 ' +
+        '15.875C0.765625 15.7917 0.601562 15.6797 0.460938 15.5391C0.320312 ' +
+        '15.3984 0.208333 15.2344 0.125 15.0469C0.0416667 14.8542 0 14.651 0 ' +
+        '14.4375C0 14.2135 0.0338542 14.0234 0.101562 13.8672C0.174479 ' +
+        '13.7057 0.265625 13.5625 0.375 13.4375C0.484375 13.3073 0.601562 ' +
+        '13.1849 0.726562 13.0703C0.851562 12.9505 0.96875 12.8203 1.07812 ' +
+        '12.6797C1.19271 12.5339 1.28906 12.3672 1.36719 12.1797C1.44531 ' +
+        '11.9922 1.48958 11.763 1.5 11.4922L1.50781 11.2891L7.79688 ' +
+        '5L6.53906 3.75L7.76562 2.52344C7.93229 2.35677 8.11979 2.22917 ' +
+        '8.32812 2.14062C8.53646 2.04688 8.76042 2 9 2C9.24479 2 9.47135 ' +
+        '2.04688 9.67969 2.14062C9.89323 2.23438 10.0833 2.36719 10.25 ' +
+        '2.53906L12.125 0.664062C12.3385 0.450521 12.5833 0.286458 12.8594 ' +
+        '0.171875C13.1406 0.0572917 13.4323 0 13.7344 0ZM10.2891 7.5L8.5 ' +
+        '5.71094L2.49219 11.7188C2.46615 11.9844 2.41667 12.2214 2.34375 ' +
+        '12.4297C2.27083 12.638 2.17708 12.8333 2.0625 13.0156C1.94792 ' +
+        '13.1927 1.8125 13.3646 1.65625 13.5312C1.50521 13.6927 1.34115 ' +
+        '13.8646 1.16406 14.0469C1.05469 14.1562 1 14.2891 1 14.4453C1 ' +
+        '14.5964 1.05469 14.7266 1.16406 14.8359C1.27344 14.9453 1.40365 15 ' +
+        '1.55469 15C1.71094 15 1.84375 14.9453 1.95312 14.8359C2.13542 ' +
+        '14.6589 2.3099 14.4948 2.47656 14.3438C2.64323 14.1875 2.8151 ' +
+        '14.0521 2.99219 13.9375C3.16927 13.8229 3.36198 13.7292 3.57031 ' +
+        '13.6562C3.77865 13.5833 4.01562 13.5339 4.28125 13.5078L10.2891 ' +
+        '7.5ZM14.625 3.16406C14.875 2.91406 15 2.61719 15 2.27344C15 2.10156 ' +
+        '14.9661 1.9375 14.8984 1.78125C14.8307 1.625 14.7396 1.48958 14.625 ' +
+        '1.375C14.5104 1.26042 14.375 1.16927 14.2188 1.10156C14.0625 ' +
+        '1.03385 13.8984 1 13.7266 1C13.3828 1 13.0859 1.125 12.8359 ' +
+        '1.375L10.25 3.95312L9.51562 3.21875C9.36979 3.07292 9.19792 3 9 ' +
+        '3C8.89062 3 8.78646 3.02604 8.6875 3.07812C8.59375 3.13021 8.5026 ' +
+        '3.19531 8.41406 3.27344C8.33073 3.35156 8.25 3.4349 8.17188 ' +
+        '3.52344C8.09375 3.60677 8.02083 3.68229 7.95312 3.75L12.25 ' +
+        '8.04688L12.7812 7.51562C12.9271 7.36979 13 7.19792 13 7C13 6.89583 ' +
+        '12.9792 6.80208 12.9375 6.71875C12.901 6.63021 12.8464 6.54948 ' +
+        '12.7734 6.47656L12.0469 5.75L14.625 3.16406Z" fill="WindowText"/> ' +
+        '</svg>';
+
+    this.addEventListener('click', this.onClick_);
+    this.addEventListener('keydown', this.onKeyDown_);
+  }
+
+  onClick_ = () => {
+    event.preventDefault();
+    event.stopPropagation();
+    this.classList.add('selected');
+    window.pagePopupController.openEyeDropper();
+  };
+
+  /**
+   * @param {!Event} event
+   */
+  onKeyDown_ = (event) => {
+    switch (event.key) {
+      case 'Enter':
+        this.onClick_();
+        break;
+    }
+  };
+}
 window.customElements.define('eye-dropper', EyeDropper);
 
 /**
@@ -766,7 +902,7 @@ class ColorSelectionArea extends HTMLElement {
   /**
    * @param {!Point} point
    */
-  mouseDown(point) {
+  pointerDown(point) {
     this.colorSelectionRing_.focus({preventScroll: true});
     this.colorSelectionRing_.drag = true;
     this.moveColorSelectionRingTo_(point);
@@ -775,13 +911,13 @@ class ColorSelectionArea extends HTMLElement {
   /**
    * @param {!Point} point
    */
-  mouseMove(point) {
+  pointerMove(point) {
     if (this.colorSelectionRing_.drag) {
       this.moveColorSelectionRingTo_(point);
     }
   }
 
-  mouseUp() {
+  pointerUp() {
     this.colorSelectionRing_.drag = false;
   }
 
@@ -1011,6 +1147,7 @@ class ColorSelectionRing extends HTMLElement {
 
   initialize() {
     this.set(this.backingColorPalette_.left, this.backingColorPalette_.top);
+    this.onPositionChange_();
   }
 
   /**
@@ -1585,6 +1722,7 @@ class ChannelValueContainer extends HTMLInputElement {
     this.setValue(initialColor);
 
     this.addEventListener('input', this.onValueChange_);
+    this.addEventListener('blur', this.onBlur_);
   }
 
   get channelValue() {
@@ -1678,6 +1816,31 @@ class ChannelValueContainer extends HTMLInputElement {
           }
           break;
       }
+    }
+  }
+
+  onBlur_ = () => {
+    switch (this.colorChannel_) {
+      case ColorChannel.HEX:
+        if (this.channelValue_ !== Number(this.value.substr(1))) {
+          this.value = '#' + this.channelValue_;
+        }
+        break;
+      case ColorChannel.R:
+      case ColorChannel.G:
+      case ColorChannel.B:
+      case ColorChannel.H:
+        if (this.channelValue_ !== Number(this.value)) {
+          this.value = this.channelValue_;
+        }
+        break;
+      case ColorChannel.S:
+      case ColorChannel.L:
+        if (this.channelValue_ !==
+            Number(this.value.substring(0, this.value.length - 1))) {
+          this.value = this.channelValue_ + '%';
+        }
+        break;
     }
   }
 }
@@ -1847,65 +2010,3 @@ class ChannelLabel extends HTMLElement {
   }
 }
 window.customElements.define('channel-label', ChannelLabel);
-
-/**
- * SubmissionControls: Provides functionality to submit or discard a change.
- */
-class SubmissionControls extends HTMLElement {
-  /**
-   * @param {function} submitCallback executed if the submit button is clicked
-   * @param {function} cancelCallback executed if the cancel button is clicked
-   */
-  constructor(submitCallback, cancelCallback) {
-    super();
-
-    const padding = document.createElement('span');
-    padding.setAttribute('id', 'submission-controls-padding');
-    this.append(padding);
-
-    this.submitButton_ = new SubmissionButton(
-        submitCallback,
-        '<svg width="14" height="10" viewBox="0 0 14 10" fill="none" ' +
-            'xmlns="http://www.w3.org/2000/svg"><path d="M13.3516 ' +
-            '1.35156L5 9.71094L0.648438 5.35156L1.35156 4.64844L5 ' +
-            '8.28906L12.6484 0.648438L13.3516 1.35156Z" fill="WindowText"/></svg>');
-    this.cancelButton_ = new SubmissionButton(
-        cancelCallback,
-        '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" ' +
-            'xmlns="http://www.w3.org/2000/svg"><path d="M7.71094 7L13.1016 ' +
-            '12.3984L12.3984 13.1016L7 7.71094L1.60156 13.1016L0.898438 ' +
-            '12.3984L6.28906 7L0.898438 1.60156L1.60156 0.898438L7 ' +
-            '6.28906L12.3984 0.898438L13.1016 1.60156L7.71094 7Z" ' +
-            'fill="WindowText"/></svg>');
-    this.append(this.submitButton_, this.cancelButton_);
-  }
-
-  get submitButton() {
-    return this.submitButton_;
-  }
-
-  get cancelButton() {
-    return this.cancelButton_;
-  }
-}
-window.customElements.define('submission-controls', SubmissionControls);
-
-/**
- * SubmissionButton: Button with a custom look that can be clicked for
- *                   a submission action.
- */
-class SubmissionButton extends HTMLElement {
-  /**
-   * @param {function} clickCallback executed when the button is clicked
-   * @param {string} htmlString custom look for the button
-   */
-  constructor(clickCallback, htmlString) {
-    super();
-
-    this.setAttribute('tabIndex', '0');
-    this.innerHTML = htmlString;
-
-    this.addEventListener('click', clickCallback);
-  }
-}
-window.customElements.define('submission-button', SubmissionButton);

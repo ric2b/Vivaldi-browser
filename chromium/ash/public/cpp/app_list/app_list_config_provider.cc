@@ -9,6 +9,7 @@
 #include "ash/public/cpp/app_list/app_list_config.h"
 #include "ash/public/cpp/app_list/app_list_features.h"
 #include "base/no_destructor.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace ash {
@@ -61,25 +62,24 @@ void AppListConfigProvider::RemoveObserver(Observer* observer) {
   observers_.RemoveObserver(observer);
 }
 
-AppListConfig* AppListConfigProvider::GetConfigForType(
-    ash::AppListConfigType type,
-    bool can_create) {
+AppListConfig* AppListConfigProvider::GetConfigForType(AppListConfigType type,
+                                                       bool can_create) {
   const auto config_it = configs_.find(type);
   if (config_it != configs_.end())
     return config_it->second.get();
 
   // Assume the shared config always exists.
-  if (type != ash::AppListConfigType::kShared && !can_create)
+  if (type != AppListConfigType::kShared && !can_create)
     return nullptr;
 
-  DCHECK(type == ash::AppListConfigType::kShared ||
+  DCHECK(type == AppListConfigType::kShared ||
          app_list_features::IsScalableAppListEnabled());
 
   auto config = std::make_unique<AppListConfig>(type);
   auto* result = config.get();
   configs_.emplace(type, std::move(config));
 
-  if (type != ash::AppListConfigType::kShared) {
+  if (type != AppListConfigType::kShared) {
     for (auto& observer : observers_)
       observer.OnAppListConfigCreated(type);
   }
@@ -89,8 +89,7 @@ AppListConfig* AppListConfigProvider::GetConfigForType(
 
 std::unique_ptr<AppListConfig> AppListConfigProvider::CreateForAppListWidget(
     const gfx::Size& display_work_area_size,
-    int min_horizontal_margin,
-    int shelf_height,
+    const gfx::Insets& shelf_insets,
     const AppListConfig* current_config) {
   const AppListConfig& base_config =
       GetBaseConfigForDisplaySize(display_work_area_size);
@@ -116,9 +115,10 @@ std::unique_ptr<AppListConfig> AppListConfigProvider::CreateForAppListWidget(
   int non_grid_height = base_config.suggestion_chip_container_top_margin() +
                         base_config.suggestion_chip_container_height();
   // Add search box height.
-  non_grid_height += display_work_area_size.height() - shelf_height >= 600
-                         ? base_config.search_box_height()
-                         : base_config.search_box_height_for_dense_layout();
+  non_grid_height +=
+      display_work_area_size.height() - shelf_insets.height() >= 600
+          ? base_config.search_box_height()
+          : base_config.search_box_height_for_dense_layout();
 
   // Add minimum top margin (which matches the grid fadeout zone when scalable
   // app list is enabled).
@@ -129,7 +129,7 @@ std::unique_ptr<AppListConfig> AppListConfigProvider::CreateForAppListWidget(
   }
 
   const int available_grid_height =
-      display_work_area_size.height() - shelf_height - non_grid_height;
+      display_work_area_size.height() - shelf_insets.height() - non_grid_height;
 
   if (available_grid_height < min_grid_height) {
     scale_y = std::max(
@@ -153,8 +153,8 @@ std::unique_ptr<AppListConfig> AppListConfigProvider::CreateForAppListWidget(
   }
 
   const int available_grid_width =
-      display_work_area_size.width() - 2 * min_horizontal_margin;
-
+      display_work_area_size.width() - shelf_insets.width() -
+      2 * base_config.GetMinGridHorizontalPadding();
   if (available_grid_width < min_grid_width) {
     scale_x =
         std::max(min_config_scale,
@@ -181,8 +181,7 @@ const AppListConfig& AppListConfigProvider::GetBaseConfigForDisplaySize(
   if (!app_list_features::IsScalableAppListEnabled())
     return AppListConfig::instance();
 
-  ash::AppListConfigType type =
-      GetConfigTypeForDisplaySize(display_work_area_size);
+  AppListConfigType type = GetConfigTypeForDisplaySize(display_work_area_size);
   // Ensures that the app list config provider has a config with the same
   // type as the created config - the app list model will use the config owned
   // by the AppListConfigProvider instance to generate folder icons needed by

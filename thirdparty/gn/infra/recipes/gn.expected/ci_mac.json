@@ -21,7 +21,7 @@
       "fetch",
       "--tags",
       "https://gn.googlesource.com/gn",
-      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      "2d72510e447ab60a9728aeea2362d8be2cbd7789"
     ],
     "cwd": "[START_DIR]/gn",
     "infra_step": true,
@@ -50,7 +50,7 @@
       "-root",
       "[START_DIR]/cipd",
       "-ensure-file",
-      "infra/ninja/${platform} version:1.8.2\nfuchsia/clang/${platform} goma",
+      "infra/ninja/${platform} version:1.8.2\nfuchsia/clang/${platform} git_revision:b920a7f65b13237dc4d5b2b836b29a954fff440a",
       "-json-output",
       "/path/to/tmp/json"
     ],
@@ -61,12 +61,12 @@
       "@@@STEP_LOG_LINE@json.output@  \"result\": {@@@",
       "@@@STEP_LOG_LINE@json.output@    \"\": [@@@",
       "@@@STEP_LOG_LINE@json.output@      {@@@",
-      "@@@STEP_LOG_LINE@json.output@        \"instance_id\": \"resolved-instance_id-of-goma------------\", @@@",
-      "@@@STEP_LOG_LINE@json.output@        \"package\": \"fuchsia/clang/${platform}\"@@@",
+      "@@@STEP_LOG_LINE@json.output@        \"instance_id\": \"resolved-instance_id-of-git_revision:b92\", @@@",
+      "@@@STEP_LOG_LINE@json.output@        \"package\": \"fuchsia/clang/resolved-platform\"@@@",
       "@@@STEP_LOG_LINE@json.output@      }, @@@",
       "@@@STEP_LOG_LINE@json.output@      {@@@",
       "@@@STEP_LOG_LINE@json.output@        \"instance_id\": \"resolved-instance_id-of-version:1.8.2---\", @@@",
-      "@@@STEP_LOG_LINE@json.output@        \"package\": \"infra/ninja/${platform}\"@@@",
+      "@@@STEP_LOG_LINE@json.output@        \"package\": \"infra/ninja/resolved-platform\"@@@",
       "@@@STEP_LOG_LINE@json.output@      }@@@",
       "@@@STEP_LOG_LINE@json.output@    ]@@@",
       "@@@STEP_LOG_LINE@json.output@  }@@@",
@@ -93,7 +93,7 @@
       "@@@STEP_LOG_LINE@json.output@    \"\": [@@@",
       "@@@STEP_LOG_LINE@json.output@      {@@@",
       "@@@STEP_LOG_LINE@json.output@        \"instance_id\": \"resolved-instance_id-of-git_revision:434\", @@@",
-      "@@@STEP_LOG_LINE@json.output@        \"package\": \"infra/tools/mac_toolchain/${platform}\"@@@",
+      "@@@STEP_LOG_LINE@json.output@        \"package\": \"infra/tools/mac_toolchain/resolved-platform\"@@@",
       "@@@STEP_LOG_LINE@json.output@      }@@@",
       "@@@STEP_LOG_LINE@json.output@    ]@@@",
       "@@@STEP_LOG_LINE@json.output@  }@@@",
@@ -161,7 +161,7 @@
       "CC": "[START_DIR]/cipd/bin/clang",
       "CFLAGS": "--sysroot=/some/xcode/path",
       "CXX": "[START_DIR]/cipd/bin/clang++",
-      "LDFLAGS": "--sysroot=/some/xcode/path -nostdlib++ [START_DIR]/cipd/lib/libc++.a [START_DIR]/cipd/lib/libc++abi.a [START_DIR]/cipd/lib/libunwind.a"
+      "LDFLAGS": "--sysroot=/some/xcode/path -nostdlib++ [START_DIR]/cipd/lib/libc++.a"
     },
     "name": "debug.build.generate",
     "~followup_annotations": [
@@ -180,7 +180,7 @@
       "CC": "[START_DIR]/cipd/bin/clang",
       "CFLAGS": "--sysroot=/some/xcode/path",
       "CXX": "[START_DIR]/cipd/bin/clang++",
-      "LDFLAGS": "--sysroot=/some/xcode/path -nostdlib++ [START_DIR]/cipd/lib/libc++.a [START_DIR]/cipd/lib/libc++abi.a [START_DIR]/cipd/lib/libunwind.a"
+      "LDFLAGS": "--sysroot=/some/xcode/path -nostdlib++ [START_DIR]/cipd/lib/libc++.a"
     },
     "name": "debug.build.ninja",
     "~followup_annotations": [
@@ -221,7 +221,7 @@
       "CC": "[START_DIR]/cipd/bin/clang",
       "CFLAGS": "--sysroot=/some/xcode/path",
       "CXX": "[START_DIR]/cipd/bin/clang++",
-      "LDFLAGS": "--sysroot=/some/xcode/path -nostdlib++ [START_DIR]/cipd/lib/libc++.a [START_DIR]/cipd/lib/libc++abi.a [START_DIR]/cipd/lib/libunwind.a"
+      "LDFLAGS": "--sysroot=/some/xcode/path -nostdlib++ [START_DIR]/cipd/lib/libc++.a"
     },
     "name": "release.build.generate",
     "~followup_annotations": [
@@ -240,7 +240,7 @@
       "CC": "[START_DIR]/cipd/bin/clang",
       "CFLAGS": "--sysroot=/some/xcode/path",
       "CXX": "[START_DIR]/cipd/bin/clang++",
-      "LDFLAGS": "--sysroot=/some/xcode/path -nostdlib++ [START_DIR]/cipd/lib/libc++.a [START_DIR]/cipd/lib/libc++abi.a [START_DIR]/cipd/lib/libunwind.a"
+      "LDFLAGS": "--sysroot=/some/xcode/path -nostdlib++ [START_DIR]/cipd/lib/libc++.a"
     },
     "name": "release.build.ninja",
     "~followup_annotations": [
@@ -273,6 +273,8 @@
       "{\"data\": [{\"file\": \"gn\"}, {\"version_file\": \".versions/gn.cipd_version\"}], \"install_mode\": \"copy\", \"package\": \"gn/gn/${platform}\", \"root\": \"[START_DIR]/gn/out\"}",
       "-out",
       "[CLEANUP]/gn.cipd",
+      "-hash-algo",
+      "sha256",
       "-json-output",
       "/path/to/tmp/json"
     ],
@@ -281,15 +283,14 @@
       "@@@STEP_LOG_LINE@json.output@{@@@",
       "@@@STEP_LOG_LINE@json.output@  \"result\": {@@@",
       "@@@STEP_LOG_LINE@json.output@    \"instance_id\": \"40-chars-fake-of-the-package-instance_id\", @@@",
-      "@@@STEP_LOG_LINE@json.output@    \"package\": \"gn/gn/${platform}\"@@@",
+      "@@@STEP_LOG_LINE@json.output@    \"package\": \"gn/gn/resolved-platform\"@@@",
       "@@@STEP_LOG_LINE@json.output@  }@@@",
       "@@@STEP_LOG_LINE@json.output@}@@@",
       "@@@STEP_LOG_END@json.output@@@"
     ]
   },
   {
-    "name": "$result",
-    "recipe_result": null,
-    "status_code": 0
+    "jsonResult": null,
+    "name": "$result"
   }
 ]

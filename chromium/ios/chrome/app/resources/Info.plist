@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>UIFileSharingEnabled</key>
+	<true/>
 	<key>UIApplicationShortcutWidget</key>
 	<string>${IOS_BUNDLE_ID_PREFIX}.${CONTENT_WIDGET_EXTENSION_BUNDLE_ID}</string>
 	<key>CFBundleDevelopmentRegion</key>
@@ -82,6 +84,7 @@
 	<key>NSUserActivityTypes</key>
 	<array>
 		<string>${CHROMIUM_HANDOFF_ID}</string>
+		<string>OpenInChromeIntent</string>
 		<string>SearchInChromeIntent</string>
 	</array>
 	<key>UIBackgroundModes</key>

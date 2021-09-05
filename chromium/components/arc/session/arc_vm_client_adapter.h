@@ -7,19 +7,27 @@
 
 #include <memory>
 
+#include "base/callback.h"
 #include "components/arc/session/arc_client_adapter.h"
-
-namespace base {
-class FilePath;
-}  // namespace base
+#include "components/arc/session/file_system_status.h"
 
 namespace arc {
+
+// Enum that describes which native bridge mode is used to run arm binaries on
+// x86.
+enum class ArcBinaryTranslationType {
+  NONE,
+  HOUDINI,
+  NDK_TRANSLATION,
+};
 
 // Returns an adapter for arcvm.
 std::unique_ptr<ArcClientAdapter> CreateArcVmClientAdapter();
 
-// Function(s) below are for testing.
-bool IsAndroidDebuggableForTesting(const base::FilePath& json_path);
+using FileSystemStatusRewriter =
+    base::RepeatingCallback<void(FileSystemStatus*)>;
+std::unique_ptr<ArcClientAdapter> CreateArcVmClientAdapterForTesting(
+    const FileSystemStatusRewriter& rewriter);
 
 }  // namespace arc
 

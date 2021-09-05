@@ -29,9 +29,9 @@ class Animation;
 class AnimationTimeline;
 class ElementAnimations;
 class LayerTreeHost;
-class KeyframeEffect;
 class ScrollOffsetAnimations;
 class ScrollOffsetAnimationsImpl;
+class WorkletAnimation;
 
 enum class ThreadInstance { MAIN, IMPL };
 
@@ -65,10 +65,9 @@ class CC_ANIMATION_EXPORT AnimationHost : public MutatorHost,
   void RemoveAnimationTimeline(scoped_refptr<AnimationTimeline> timeline);
   AnimationTimeline* GetTimelineById(int timeline_id) const;
 
-  void RegisterKeyframeEffectForElement(ElementId element_id,
-                                        KeyframeEffect* keyframe_effect);
-  void UnregisterKeyframeEffectForElement(ElementId element_id,
-                                          KeyframeEffect* keyframe_effect);
+  void RegisterAnimationForElement(ElementId element_id, Animation* animation);
+  void UnregisterAnimationForElement(ElementId element_id,
+                                     Animation* animation);
 
   scoped_refptr<ElementAnimations> GetElementAnimationsForElementId(
       ElementId element_id) const;
@@ -120,6 +119,9 @@ class CC_ANIMATION_EXPORT AnimationHost : public MutatorHost,
   void TickWorkletAnimations() override;
   bool UpdateAnimationState(bool start_ready_animations,
                             MutatorEvents* events) override;
+  void TakeTimeUpdatedEvents(MutatorEvents* events) override;
+  // Should be called when the pending tree is promoted to active, as this may
+  // require updating the ElementId for the ScrollTimeline scroll source.
   void PromoteScrollTimelinesPendingToActive() override;
 
   std::unique_ptr<MutatorEvents> CreateEvents() override;
@@ -178,7 +180,6 @@ class CC_ANIMATION_EXPORT AnimationHost : public MutatorHost,
       base::TimeDelta delayed_by,
       base::TimeDelta animation_start_offset) override;
   bool ImplOnlyScrollAnimationUpdateTarget(
-      ElementId element_id,
       const gfx::Vector2dF& scroll_delta,
       const gfx::ScrollOffset& max_scroll_offset,
       base::TimeTicks frame_monotonic_time,
@@ -186,7 +187,7 @@ class CC_ANIMATION_EXPORT AnimationHost : public MutatorHost,
 
   void ScrollAnimationAbort() override;
 
-  bool IsImplOnlyScrollAnimating() const override;
+  ElementId ImplOnlyScrollAnimatingElement() const override;
 
   // This should only be called from the main thread.
   ScrollOffsetAnimations& scroll_offset_animations() const;
@@ -234,6 +235,10 @@ class CC_ANIMATION_EXPORT AnimationHost : public MutatorHost,
       base::TimeTicks timeline_time,
       const ScrollTree& scroll_tree,
       bool is_active_tree);
+
+  // Returns a pointer to a worklet animation by worklet animation id or null
+  // if there is no match.
+  WorkletAnimation* FindWorkletAnimation(WorkletAnimationId id);
 
   ElementToAnimationsMap element_to_animations_map_;
   AnimationsList ticking_animations_;

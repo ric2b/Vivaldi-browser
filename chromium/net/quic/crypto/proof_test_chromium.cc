@@ -57,7 +57,7 @@ void RunVerification(quic::ProofVerifier* verifier,
                      const uint16_t port,
                      const string& server_config,
                      quic::QuicTransportVersion quic_version,
-                     quic::QuicStringPiece chlo_hash,
+                     quiche::QuicheStringPiece chlo_hash,
                      const std::vector<string>& certs,
                      const string& proof,
                      bool expected_ok) {
@@ -117,16 +117,14 @@ class TestCallback : public quic::ProofSource::Callback {
   quic::QuicCryptoProof* proof_;
 };
 
-class ProofTest : public ::testing::TestWithParam<quic::QuicTransportVersion> {
-};
+class ProofTest : public ::testing::TestWithParam<quic::ParsedQuicVersion> {};
 
 }  // namespace
 
-INSTANTIATE_TEST_SUITE_P(
-    QuicTransportVersion,
-    ProofTest,
-    ::testing::ValuesIn(quic::AllSupportedTransportVersions()),
-    ::testing::PrintToStringParamName());
+INSTANTIATE_TEST_SUITE_P(QuicTransportVersion,
+                         ProofTest,
+                         ::testing::ValuesIn(quic::AllSupportedVersions()),
+                         ::testing::PrintToStringParamName());
 
 TEST_P(ProofTest, Verify) {
   std::unique_ptr<quic::ProofSource> source(
@@ -139,7 +137,7 @@ TEST_P(ProofTest, Verify) {
   const uint16_t port = 8443;
   const string first_chlo_hash = "first chlo hash bytes";
   const string second_chlo_hash = "first chlo hash bytes";
-  const quic::QuicTransportVersion quic_version = GetParam();
+  const quic::QuicTransportVersion quic_version = GetParam().transport_version;
 
   bool called = false;
   bool first_called = false;
@@ -201,7 +199,9 @@ class TestingSignatureCallback : public quic::ProofSource::SignatureCallback {
   TestingSignatureCallback(bool* ok_out, std::string* signature_out)
       : ok_out_(ok_out), signature_out_(signature_out) {}
 
-  void Run(bool ok, std::string signature) override {
+  void Run(bool ok,
+           std::string signature,
+           std::unique_ptr<quic::ProofSource::Details> /*details*/) override {
     *ok_out_ = ok;
     *signature_out_ = std::move(signature);
   }
@@ -285,8 +285,8 @@ TEST_P(ProofTest, UseAfterFree) {
 
   // GetProof here expects the async method to invoke the callback
   // synchronously.
-  source->GetProof(server_addr, hostname, server_config, GetParam(), chlo_hash,
-                   std::move(cb));
+  source->GetProof(server_addr, hostname, server_config,
+                   GetParam().transport_version, chlo_hash, std::move(cb));
   ASSERT_TRUE(called);
   ASSERT_TRUE(ok);
 

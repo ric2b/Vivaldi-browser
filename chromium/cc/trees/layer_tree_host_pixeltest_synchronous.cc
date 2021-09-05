@@ -20,15 +20,15 @@ class LayerTreeHostSynchronousPixelTest
     : public LayerTreePixelTest,
       public ::testing::WithParamInterface<LayerTreeTest::RendererType> {
  protected:
+  LayerTreeHostSynchronousPixelTest() : LayerTreePixelTest(renderer_type()) {}
+
   void InitializeSettings(LayerTreeSettings* settings) override {
     LayerTreePixelTest::InitializeSettings(settings);
     settings->single_thread_proxy_scheduler = false;
-    settings->gpu_rasterization_forced = gpu_rasterization_forced_;
-    settings->gpu_rasterization_disabled = !settings->gpu_rasterization_forced;
     settings->use_zero_copy = use_zero_copy_;
   }
 
-  LayerTreeTest::RendererType renderer_type() { return GetParam(); }
+  RendererType renderer_type() const { return GetParam(); }
 
   void BeginTest() override {
     LayerTreePixelTest::BeginTest();
@@ -47,25 +47,28 @@ class LayerTreeHostSynchronousPixelTest
     root->SetBounds(bounds);
     root->SetIsDrawable(true);
 
-    RunSingleThreadedPixelTest(renderer_type(), root,
+    RunSingleThreadedPixelTest(root,
                                base::FilePath(FILE_PATH_LITERAL("green.png")));
   }
 
-  bool gpu_rasterization_forced_ = false;
   bool use_zero_copy_ = false;
 };
 
+#if !defined(GL_NOT_ON_PLATFORM) || defined(ENABLE_CC_VULKAN_TESTS)
 LayerTreeTest::RendererType const kRendererTypesGpu[] = {
+#if !defined(GL_NOT_ON_PLATFORM)
     LayerTreeTest::RENDERER_GL,
     LayerTreeTest::RENDERER_SKIA_GL,
+#endif  // !defined(GL_NOT_ON_PLATFORM)
 #if defined(ENABLE_CC_VULKAN_TESTS)
     LayerTreeTest::RENDERER_SKIA_VK,
-#endif
+#endif  // defined(ENABLE_CC_VULKAN_TESTS)
 };
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          LayerTreeHostSynchronousPixelTest,
                          ::testing::ValuesIn(kRendererTypesGpu));
+#endif  //  !defined(GL_NOT_ON_PLATFORM) || defined(ENABLE_CC_VULKAN_TESTS)
 
 TEST_P(LayerTreeHostSynchronousPixelTest, OneContentLayerZeroCopy) {
   use_zero_copy_ = true;
@@ -73,7 +76,7 @@ TEST_P(LayerTreeHostSynchronousPixelTest, OneContentLayerZeroCopy) {
 }
 
 TEST_P(LayerTreeHostSynchronousPixelTest, OneContentLayerGpuRasterization) {
-  gpu_rasterization_forced_ = true;
+  set_gpu_rasterization();
   DoContentLayerTest();
 }
 

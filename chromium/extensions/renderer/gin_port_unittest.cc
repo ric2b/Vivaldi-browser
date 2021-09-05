@@ -20,7 +20,6 @@
 #include "gin/data_object_builder.h"
 #include "gin/handle.h"
 #include "testing/gmock/include/gmock/gmock.h"
-#include "third_party/blink/public/web/web_scoped_user_gesture.h"
 
 namespace extensions {
 
@@ -199,6 +198,8 @@ TEST_F(GinPortTest, TestPostMessage) {
     const char kFunction[] =
         "(function(port) { port.postMessage({data: [42]}); })";
     test_post_message(kFunction, port_id, Message(R"({"data":[42]})", false));
+
+    // TODO(mustaq): We need a test with Message.user_gesture == true.
   }
 
   {
@@ -220,21 +221,6 @@ TEST_F(GinPortTest, TestPostMessage) {
     const char kFunction[] =
         "(function(port) { port.postMessage(undefined); })";
     test_post_message(kFunction, port_id, Message("null", false));
-  }
-
-  {
-    // Simple message with user gesture; should succeed.
-    const char kFunction[] =
-        "(function(port) { port.postMessage({data: [42]}); })";
-    blink::WebScopedUserGesture user_gesture(nullptr);
-
-    // With User Activation v2, the activation state belongs to a (Web)Frame.
-    // So the missing frame pointer above means we don't expect activation
-    // below.
-    bool expect_user_gesture =
-        !base::FeatureList::IsEnabled(features::kUserActivationV2);
-    test_post_message(kFunction, port_id,
-                      Message(R"({"data":[42]})", expect_user_gesture));
   }
 
   {

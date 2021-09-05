@@ -44,11 +44,9 @@ class LocalFontFaceSource final : public CSSFontFaceSource,
 
   void BeginLoadIfNeeded() override;
 
-  void Trace(blink::Visitor* visitor) override;
+  void Trace(Visitor* visitor) override;
 
   void NotifyFontUniqueNameLookupReady();
-
-  base::WeakPtr<LocalFontFaceSource> GetWeakPtr();
 
  protected:
   scoped_refptr<SimpleFontData> CreateLoadingFallbackFontData(
@@ -75,7 +73,6 @@ class LocalFontFaceSource final : public CSSFontFaceSource,
 
   AtomicString font_name_;
   LocalFontHistograms histograms_;
-  base::WeakPtrFactory<LocalFontFaceSource> weak_factory_{this};
 };
 
 }  // namespace blink

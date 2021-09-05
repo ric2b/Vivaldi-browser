@@ -4,11 +4,12 @@
 
 #include "chrome/browser/chromeos/login/lock/screen_locker.h"
 
+#include <algorithm>
+
 #include "ash/public/cpp/ash_switches.h"
 #include "ash/public/cpp/login_screen.h"
 #include "ash/public/cpp/login_screen_model.h"
 #include "ash/public/cpp/login_types.h"
-#include "ash/public/mojom/constants.mojom.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/lazy_instance.h"
@@ -65,14 +66,12 @@
 #include "components/user_manager/user_type.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/device_service.h"
 #include "content/public/browser/notification_service.h"
-#include "content/public/browser/system_connector.h"
 #include "content/public/browser/url_data_source.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "services/audio/public/cpp/sounds/sounds_manager.h"
-#include "services/device/public/mojom/constants.mojom.h"
-#include "services/service_manager/public/cpp/connector.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
@@ -187,14 +186,15 @@ ScreenLocker::ScreenLocker(const user_manager::UserList& users)
                       bundle.GetRawDataResource(IDR_SOUND_LOCK_WAV));
   manager->Initialize(SOUND_UNLOCK,
                       bundle.GetRawDataResource(IDR_SOUND_UNLOCK_WAV));
-  content::GetSystemConnector()->Connect(
-      device::mojom::kServiceName, fp_service_.BindNewPipeAndPassReceiver());
+  content::GetDeviceService().BindFingerprint(
+      fp_service_.BindNewPipeAndPassReceiver());
 
   fp_service_->AddFingerprintObserver(
       fingerprint_observer_receiver_.BindNewPipeAndPassRemote());
 
   GetLoginScreenCertProviderService()->pin_dialog_manager()->AddPinDialogHost(
       &security_token_pin_dialog_host_ash_impl_);
+  user_manager::UserManager::Get()->AddSessionStateObserver(this);
 }
 
 void ScreenLocker::Init() {
@@ -264,6 +264,8 @@ void ScreenLocker::OnAuthSuccess(const UserContext& user_context) {
       << "Authentication is disabled for this user.";
 
   incorrect_passwords_count_ = 0;
+  DCHECK(!unlock_started_);
+  unlock_started_ = true;
   if (authentication_start_time_.is_null()) {
     if (user_context.GetAccountId().is_valid())
       LOG(ERROR) << "Start time is not set at authentication success";
@@ -555,6 +557,17 @@ void ScreenLocker::ShowErrorMessage(int error_msg_id,
   delegate_->ShowErrorMessage(error_msg_id, help_topic_id);
 }
 
+user_manager::UserList ScreenLocker::GetUsersToShow() const {
+  user_manager::UserList users_to_show;
+  // Filter out Managed Guest Session users as they should not appear on the UI.
+  std::copy_if(users_.begin(), users_.end(), std::back_inserter(users_to_show),
+               [](const user_manager::User* user) -> bool {
+                 return user->GetType() !=
+                        user_manager::UserType::USER_TYPE_PUBLIC_ACCOUNT;
+               });
+  return users_to_show;
+}
+
 void ScreenLocker::SetLoginStatusConsumer(
     chromeos::AuthStatusConsumer* consumer) {
   auth_status_consumer_ = consumer;
@@ -596,7 +609,8 @@ void ScreenLocker::HandleShowLockScreenRequest() {
     // screen while remaining secure in the case the user walks away during
     // the sign-in steps. See crbug.com/112225 and crbug.com/110933.
     VLOG(1) << "The user session cannot be locked, logging out";
-    SessionTerminationManager::Get()->StopSession();
+    SessionTerminationManager::Get()->StopSession(
+        login_manager::SessionStopReason::FAILED_TO_LOCK);
   }
 }
 
@@ -699,6 +713,7 @@ ScreenLocker::AuthState::~AuthState() = default;
 ScreenLocker::~ScreenLocker() {
   VLOG(1) << "Destroying ScreenLocker " << this;
   DCHECK(base::MessageLoopCurrentForUI::IsSet());
+  user_manager::UserManager::Get()->RemoveSessionStateObserver(this);
 
   GetLoginScreenCertProviderService()
       ->pin_dialog_manager()
@@ -786,13 +801,13 @@ void ScreenLocker::OnAuthScanDone(
   VLOG(1) << "Receive fingerprint auth scan result. scan_result="
           << scan_result;
   unlock_attempt_type_ = AUTH_FINGERPRINT;
-  user_manager::User* active_user =
-      user_manager::UserManager::Get()->GetActiveUser();
+  const user_manager::User* primary_user =
+      user_manager::UserManager::Get()->GetPrimaryUser();
   quick_unlock::QuickUnlockStorage* quick_unlock_storage =
-      quick_unlock::QuickUnlockFactory::GetForUser(active_user);
+      quick_unlock::QuickUnlockFactory::GetForUser(primary_user);
   if (!quick_unlock_storage ||
       !quick_unlock_storage->IsFingerprintAuthenticationAvailable() ||
-      base::Contains(users_with_disabled_auth_, active_user->GetAccountId())) {
+      base::Contains(users_with_disabled_auth_, primary_user->GetAccountId())) {
     return;
   }
 
@@ -802,19 +817,19 @@ void ScreenLocker::OnAuthScanDone(
   if (scan_result != device::mojom::ScanResult::SUCCESS) {
     LOG(ERROR) << "Fingerprint unlock failed because scan_result="
                << scan_result;
-    OnFingerprintAuthFailure(*active_user);
+    OnFingerprintAuthFailure(*primary_user);
     return;
   }
 
-  UserContext user_context(*active_user);
-  if (!base::Contains(matches, active_user->username_hash())) {
-    LOG(ERROR) << "Fingerprint unlock failed because it does not match active"
+  UserContext user_context(*primary_user);
+  if (!base::Contains(matches, primary_user->username_hash())) {
+    LOG(ERROR) << "Fingerprint unlock failed because it does not match primary"
                << " user's record";
-    OnFingerprintAuthFailure(*active_user);
+    OnFingerprintAuthFailure(*primary_user);
     return;
   }
   ash::LoginScreen::Get()->GetModel()->NotifyFingerprintAuthResult(
-      active_user->GetAccountId(), true /*success*/);
+      primary_user->GetAccountId(), true /*success*/);
   VLOG(1) << "Fingerprint unlock is successful.";
   LoginScreenClient::Get()->auth_recorder()->RecordFingerprintAuthSuccess(
       true /*success*/,
@@ -824,6 +839,12 @@ void ScreenLocker::OnAuthScanDone(
 
 void ScreenLocker::OnSessionFailed() {
   LOG(ERROR) << "Fingerprint session failed.";
+}
+
+void ScreenLocker::ActiveUserChanged(user_manager::User* active_user) {
+  // During ScreenLocker lifetime active user could only change when unlock has
+  // started. See https://crbug.com/1022667 for more details.
+  CHECK(unlock_started_);
 }
 
 void ScreenLocker::OnFingerprintAuthFailure(const user_manager::User& user) {

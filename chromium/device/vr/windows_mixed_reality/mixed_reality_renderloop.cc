@@ -10,7 +10,6 @@
 #include <algorithm>
 #include <limits>
 #include <utility>
-#include <vector>
 
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -52,7 +51,7 @@ using Microsoft::WRL::ComPtr;
 
 class MixedRealityWindow : public gfx::WindowImpl {
  public:
-  MixedRealityWindow(base::OnceCallback<void()> on_destroyed)
+  explicit MixedRealityWindow(base::OnceCallback<void()> on_destroyed)
       : gfx::WindowImpl(), on_destroyed_(std::move(on_destroyed)) {
     set_window_style(WS_OVERLAPPED);
   }
@@ -89,8 +88,7 @@ gfx::Transform ConvertToGfxTransform(const Matrix4x4& matrix) {
       matrix.M11, matrix.M21, matrix.M31, matrix.M41,
       matrix.M12, matrix.M22, matrix.M32, matrix.M42,
       matrix.M13, matrix.M23, matrix.M33, matrix.M43,
-      matrix.M14, matrix.M24, matrix.M34, matrix.M44
-    );
+      matrix.M14, matrix.M24, matrix.M34, matrix.M44);
   // clang-format on
 }
 
@@ -512,21 +510,6 @@ void MixedRealityRenderLoop::StartPresenting() {
   ShowWindow(window_->hwnd(), SW_SHOW);
 }
 
-mojom::XRGamepadDataPtr MixedRealityRenderLoop::GetNextGamepadData() {
-  if (!timestamp_) {
-    WMRLogging::TraceError(WMRErrorLocation::kGamepadMissingTimestamp);
-    return nullptr;
-  }
-
-  if (!anchor_origin_) {
-    WMRLogging::TraceError(WMRErrorLocation::kGamepadMissingOrigin);
-    return nullptr;
-  }
-
-  return input_helper_->GetWebVRGamepadData(anchor_origin_.get(),
-                                            timestamp_.get());
-}
-
 struct EyeToWorldDecomposed {
   gfx::Quaternion world_to_eye_rotation;
   gfx::Point3F eye_in_world_space;
@@ -690,18 +673,6 @@ bool MixedRealityRenderLoop::UpdateDisplayInfo() {
     current_display_info_ = mojom::VRDisplayInfo::New();
     current_display_info_->id =
         device::mojom::XRDeviceId::WINDOWS_MIXED_REALITY_ID;
-    current_display_info_->display_name =
-        "Windows Mixed Reality";  // TODO(billorr): share this string.
-    current_display_info_->capabilities = mojom::VRDisplayCapabilities::New(
-        true /* has_position */, true /* has_external_display */,
-        true /* can_present */,
-        false /* can_provide_environment_integration */);
-
-    // TODO(billorr): consider scaling framebuffers after rendering support is
-    // added.
-    current_display_info_->webvr_default_framebuffer_scale = 1.0f;
-    current_display_info_->webxr_default_framebuffer_scale = 1.0f;
-
     changed = true;
   }
 
@@ -902,7 +873,7 @@ mojom::XRFrameDataPtr MixedRealityRenderLoop::GetNextFrameData() {
                                   current_display_info_.Clone()));
   }
 
-  ret->pose->input_state =
+  ret->input_state =
       input_helper_->GetInputState(anchor_origin_.get(), timestamp_.get());
 
   ret->pose->emulated_position = emulated_position_;

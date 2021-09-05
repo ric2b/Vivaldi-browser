@@ -49,7 +49,7 @@ class BluetoothAdvertisementServiceProviderImpl
     DCHECK(bus);
     DCHECK(delegate);
 
-    VLOG(1) << "Creating Bluetooth Advertisement: " << object_path_.value();
+    DVLOG(1) << "Creating Bluetooth Advertisement: " << object_path_.value();
 
     object_path_ = object_path;
     exported_object_ = bus_->GetExportedObject(object_path_);
@@ -80,7 +80,7 @@ class BluetoothAdvertisementServiceProviderImpl
   }
 
   ~BluetoothAdvertisementServiceProviderImpl() override {
-    VLOG(1) << "Cleaning up Bluetooth Advertisement: " << object_path_.value();
+    DVLOG(1) << "Cleaning up Bluetooth Advertisement: " << object_path_.value();
 
     // Unregister the object path so we can reuse with a new agent.
     bus_->UnregisterExportedObject(object_path_);
@@ -106,8 +106,8 @@ class BluetoothAdvertisementServiceProviderImpl
   // the descriptor.
   void Get(dbus::MethodCall* method_call,
            dbus::ExportedObject::ResponseSender response_sender) {
-    VLOG(2) << "BluetoothAdvertisementServiceProvider::Get: "
-            << object_path_.value();
+    DVLOG(2) << "BluetoothAdvertisementServiceProvider::Get: "
+             << object_path_.value();
     DCHECK(OnOriginThread());
 
     dbus::MessageReader reader(method_call);
@@ -119,7 +119,7 @@ class BluetoothAdvertisementServiceProviderImpl
       std::unique_ptr<dbus::ErrorResponse> error_response =
           dbus::ErrorResponse::FromMethodCall(method_call, kErrorInvalidArgs,
                                               "Expected 'ss'.");
-      response_sender.Run(std::move(error_response));
+      std::move(response_sender).Run(std::move(error_response));
       return;
     }
 
@@ -130,7 +130,7 @@ class BluetoothAdvertisementServiceProviderImpl
           dbus::ErrorResponse::FromMethodCall(
               method_call, kErrorInvalidArgs,
               "No such interface: '" + interface_name + "'.");
-      response_sender.Run(std::move(error_response));
+      std::move(response_sender).Run(std::move(error_response));
       return;
     }
 
@@ -171,19 +171,19 @@ class BluetoothAdvertisementServiceProviderImpl
           dbus::ErrorResponse::FromMethodCall(
               method_call, kErrorInvalidArgs,
               "No such property: '" + property_name + "'.");
-      response_sender.Run(std::move(error_response));
+      std::move(response_sender).Run(std::move(error_response));
     }
 
     writer.CloseContainer(&variant_writer);
-    response_sender.Run(std::move(response));
+    std::move(response_sender).Run(std::move(response));
   }
 
   // Called by dbus:: when the Bluetooth daemon fetches all properties of the
   // descriptor.
   void GetAll(dbus::MethodCall* method_call,
               dbus::ExportedObject::ResponseSender response_sender) {
-    VLOG(2) << "BluetoothAdvertisementServiceProvider::GetAll: "
-            << object_path_.value();
+    DVLOG(2) << "BluetoothAdvertisementServiceProvider::GetAll: "
+             << object_path_.value();
     DCHECK(OnOriginThread());
 
     dbus::MessageReader reader(method_call);
@@ -193,7 +193,7 @@ class BluetoothAdvertisementServiceProviderImpl
       std::unique_ptr<dbus::ErrorResponse> error_response =
           dbus::ErrorResponse::FromMethodCall(method_call, kErrorInvalidArgs,
                                               "Expected 's'.");
-      response_sender.Run(std::move(error_response));
+      std::move(response_sender).Run(std::move(error_response));
       return;
     }
 
@@ -204,26 +204,26 @@ class BluetoothAdvertisementServiceProviderImpl
           dbus::ErrorResponse::FromMethodCall(
               method_call, kErrorInvalidArgs,
               "No such interface: '" + interface_name + "'.");
-      response_sender.Run(std::move(error_response));
+      std::move(response_sender).Run(std::move(error_response));
       return;
     }
 
-    response_sender.Run(CreateGetAllResponse(method_call));
+    std::move(response_sender).Run(CreateGetAllResponse(method_call));
   }
 
   // Called by dbus:: when a method is exported.
   void OnExported(const std::string& interface_name,
                   const std::string& method_name,
                   bool success) {
-    LOG_IF(WARNING, !success) << "Failed to export " << interface_name << "."
-                              << method_name;
+    DVLOG_IF(1, !success) << "Failed to export " << interface_name << "."
+                          << method_name;
   }
 
   // Helper for populating the DBus response with the advertisement data.
   std::unique_ptr<dbus::Response> CreateGetAllResponse(
       dbus::MethodCall* method_call) {
-    VLOG(2) << "Descriptor value obtained from delegate. Responding to "
-            << "GetAll.";
+    DVLOG(2) << "Descriptor value obtained from delegate. Responding to "
+             << "GetAll.";
 
     std::unique_ptr<dbus::Response> response =
         dbus::Response::FromMethodCall(method_call);
@@ -248,7 +248,7 @@ class BluetoothAdvertisementServiceProviderImpl
   void OnGet(dbus::MethodCall* method_call,
              dbus::ExportedObject::ResponseSender response_sender,
              const std::vector<uint8_t>& value) {
-    VLOG(2) << "Returning descriptor value obtained from delegate.";
+    DVLOG(2) << "Returning descriptor value obtained from delegate.";
     std::unique_ptr<dbus::Response> response =
         dbus::Response::FromMethodCall(method_call);
     dbus::MessageWriter writer(response.get());
@@ -258,7 +258,7 @@ class BluetoothAdvertisementServiceProviderImpl
     variant_writer.AppendArrayOfBytes(value.data(), value.size());
     writer.CloseContainer(&variant_writer);
 
-    response_sender.Run(std::move(response));
+    std::move(response_sender).Run(std::move(response));
   }
 
   void AppendArrayVariantOfStrings(dbus::MessageWriter* dict_writer,

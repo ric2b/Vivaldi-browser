@@ -39,10 +39,16 @@ class PersistentLocation final {
   base::Location location_;
 };
 
-#if BUILDFLAG(RAW_HEAP_SNAPSHOTS)
+#if !BUILDFLAG(FROM_HERE_USES_LOCATION_BUILTINS) && \
+    BUILDFLAG(RAW_HEAP_SNAPSHOTS)
+#if !BUILDFLAG(ENABLE_LOCATION_SOURCE)
+#define PERSISTENT_FROM_HERE \
+  PersistentLocation(::base::Location::CreateFromHere(__FILE__))
+#else
 #define PERSISTENT_FROM_HERE \
   PersistentLocation(        \
       ::base::Location::CreateFromHere(__func__, __FILE__, __LINE__))
+#endif
 #else
 #define PERSISTENT_FROM_HERE PersistentLocation()
 #endif  // BUILDFLAG(RAW_HEAP_SNAPSHOTS)
@@ -298,13 +304,13 @@ class PersistentBase {
     UninitializeUnsafe();
   }
 
-  void TracePersistent(Visitor* visitor) {
+  void TracePersistent(Visitor* visitor) const {
     static_assert(sizeof(T), "T must be fully defined");
     static_assert(IsGarbageCollectedType<T>::value,
                   "T needs to be a garbage collected object");
     DCHECK(!IsHashTableDeletedValue());
     if (weaknessConfiguration == kWeakPersistentConfiguration) {
-      visitor->RegisterWeakCallback(this, HandleWeakPersistent);
+      visitor->RegisterWeakCallback(HandleWeakPersistent, this);
     } else {
 #if BUILDFLAG(RAW_HEAP_SNAPSHOTS)
       visitor->TraceRoot(raw_, location_.get());
@@ -384,11 +390,13 @@ class PersistentBase {
 #endif
   }
 
-  static void HandleWeakPersistent(Visitor* self, void* persistent_pointer) {
+  static void HandleWeakPersistent(const WeakCallbackInfo&,
+                                   const void* persistent_pointer) {
     using Base =
         PersistentBase<typename std::remove_const<T>::type,
                        weaknessConfiguration, crossThreadnessConfiguration>;
-    Base* persistent = reinterpret_cast<Base*>(persistent_pointer);
+    Base* persistent =
+        reinterpret_cast<Base*>(const_cast<void*>(persistent_pointer));
     T* object = persistent->Get();
     if (object && !ThreadHeap::IsHeapObjectAlive(object))
       ClearWeakPersistent(persistent);

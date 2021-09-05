@@ -29,6 +29,7 @@
 #include "third_party/ocmock/OCMock/OCMock.h"
 #include "ui/base/page_transition_types.h"
 #include "url/scheme_host_port.h"
+#include "url/url_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -75,7 +76,6 @@ class MockNavigationManagerDelegate : public NavigationManagerDelegate {
   MOCK_METHOD0(RecordPageStateInNavigationItem, void());
   MOCK_METHOD2(OnGoToIndexSameDocumentNavigation,
                void(NavigationInitiationType type, bool has_user_gesture));
-  MOCK_METHOD0(WillChangeUserAgentType, void());
   MOCK_METHOD1(LoadCurrentItem, void(NavigationInitiationType type));
   MOCK_METHOD0(LoadIfNecessary, void());
   MOCK_METHOD0(Reload, void());
@@ -129,6 +129,7 @@ class WKBasedNavigationManagerTest : public PlatformTest {
 
  private:
   TestBrowserState browser_state_;
+  url::ScopedSchemeRegistryForTests scoped_registry_;
 };
 
 // Tests that GetItemAtIndex() on an empty manager will sync navigation items to
@@ -667,7 +668,6 @@ TEST_F(WKBasedNavigationManagerTest, RestoreSessionWithHistory) {
 // Tests that restoring session replaces existing history in navigation manager.
 TEST_F(WKBasedNavigationManagerTest, RestoreSessionResetsHistory) {
   EXPECT_EQ(-1, manager_->GetPendingItemIndex());
-  EXPECT_EQ(-1, manager_->GetPreviousItemIndex());
   EXPECT_EQ(-1, manager_->GetLastCommittedItemIndex());
 
   // Sets up the navigation history with 2 entries, and a pending back-forward
@@ -698,7 +698,6 @@ TEST_F(WKBasedNavigationManagerTest, RestoreSessionResetsHistory) {
       web::NavigationManager::UserAgentOverrideOption::INHERIT);
 
   EXPECT_EQ(1, manager_->GetLastCommittedItemIndex());
-  EXPECT_EQ(0, manager_->GetPreviousItemIndex());
   EXPECT_EQ(0, manager_->GetPendingItemIndex());
   EXPECT_TRUE(manager_->GetPendingItem() != nullptr);
 
@@ -717,7 +716,6 @@ TEST_F(WKBasedNavigationManagerTest, RestoreSessionResetsHistory) {
   // loading in the web view. This is not tested here because this test doesn't
   // use real WKWebView.
   EXPECT_EQ(-1, manager_->GetLastCommittedItemIndex());
-  EXPECT_EQ(-1, manager_->GetPreviousItemIndex());
   EXPECT_EQ(-1, manager_->GetPendingItemIndex());
 
   // Check that the only pending item is restore_session.html.
@@ -757,6 +755,9 @@ TEST_F(WKBasedNavigationManagerTest, HideInternalRedirectUrl) {
 // Tests that the virtual URL of a placeholder item is updated to the original
 // URL.
 TEST_F(WKBasedNavigationManagerTest, HideInternalPlaceholderUrl) {
+  if (base::FeatureList::IsEnabled(web::features::kUseJSForErrorPage))
+    return;
+
   GURL original_url = GURL("http://www.1.com?query=special%26chars");
   GURL url = wk_navigation_util::CreatePlaceholderUrlForUrl(original_url);
   NSString* url_spec = base::SysUTF8ToNSString(url.spec());
@@ -795,7 +796,6 @@ TEST_F(WKBasedNavigationManagerTest, EmptyWindowOpenNavigation) {
   EXPECT_EQ(1, manager_->GetIndexForOffset(1));
   EXPECT_EQ(-1, manager_->GetIndexForOffset(-1));
 
-  EXPECT_EQ(-1, manager_->GetPreviousItemIndex());
   EXPECT_EQ(1, manager_->GetItemCount());
   EXPECT_EQ(last_committed_item, manager_->GetItemAtIndex(0));
   EXPECT_FALSE(manager_->GetItemAtIndex(1));
@@ -838,7 +838,6 @@ TEST_F(WKBasedNavigationManagerTest, EmptyWindowOpenNavigation) {
   EXPECT_EQ(1, manager_->GetIndexForOffset(1));
   EXPECT_EQ(-1, manager_->GetIndexForOffset(-1));
 
-  EXPECT_EQ(-1, manager_->GetPreviousItemIndex());
   EXPECT_EQ(1, manager_->GetItemCount());
   EXPECT_EQ(last_committed_item_2, manager_->GetItemAtIndex(0));
   EXPECT_FALSE(manager_->GetItemAtIndex(1));

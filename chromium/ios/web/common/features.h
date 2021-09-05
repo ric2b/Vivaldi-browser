@@ -13,9 +13,6 @@ namespace features {
 // Used to always allow scaling of the web page, regardless of author intent.
 extern const base::Feature kIgnoresViewportScaleLimits;
 
-// Used to enable the WKBackForwardList based navigation manager.
-extern const base::Feature kSlimNavigationManager;
-
 // Used to crash the browser if unexpected URL change is detected.
 // https://crbug.com/841105.
 extern const base::Feature kCrashOnUnexpectedURLChange;
@@ -38,6 +35,29 @@ extern const base::Feature kClearOldNavigationRecordsWorkaround;
 
 // Used to enable committed interstitials for SSL errors.
 extern const base::Feature kSSLCommittedInterstitials;
+
+// Feature flag enabling persistent downloads.
+extern const base::Feature kEnablePersistentDownloads;
+
+// Feature flag for the new error page workflow, using JavaScript.
+extern const base::Feature kUseJSForErrorPage;
+
+// When enabled, for each navigation, the default user agent is chosen by the
+// WebClient GetDefaultUserAgent() method. If it is disabled, the mobile version
+// is requested by default.
+extern const base::Feature kUseDefaultUserAgentInWebClient;
+
+// When enabled, preserves properties of the UIScrollView using CRWPropertyStore
+// when the scroll view is recreated. When disabled, only preserve a small set
+// of properties using hard coded logic.
+extern const base::Feature kPreserveScrollViewProperties;
+
+// When enabled, display an interstitial on lookalike URL navigations.
+extern const base::Feature kIOSLookalikeUrlNavigationSuggestionsUI;
+
+// Level at which battery power is considered low, and some cosmetic features
+// can be turned off.
+const float kLowBatteryLevelThreshold = 0.2;
 
 }  // namespace features
 }  // namespace web

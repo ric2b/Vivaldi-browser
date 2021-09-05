@@ -17,6 +17,7 @@
 #include "base/logging.h"
 #include "base/process/process_metrics.h"
 #include "base/system/sys_info.h"
+#include "base/task/thread_pool.h"
 #include "content/public/browser/browser_thread.h"
 
 namespace {
@@ -214,16 +215,15 @@ void SysInternalsMessageHandler::HandleGetSysInfo(const base::ListValue* args) {
   DCHECK(args);
 
   AllowJavascript();
-  base::span<const base::Value> list = args->GetList();
+  base::Value::ConstListView list = args->GetList();
   if (list.size() != 1 || !list[0].is_string()) {
     NOTREACHED();
     return;
   }
 
   base::Value callback_id = list[0].Clone();
-  base::PostTaskAndReplyWithResult(
-      FROM_HERE, {base::ThreadPool(), base::MayBlock()},
-      base::BindOnce(&GetSysInfo),
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock()}, base::BindOnce(&GetSysInfo),
       base::BindOnce(&SysInternalsMessageHandler::ReplySysInfo,
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback_id)));
 }

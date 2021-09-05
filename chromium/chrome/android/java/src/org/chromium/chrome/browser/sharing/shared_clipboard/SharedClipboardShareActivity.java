@@ -19,9 +19,9 @@ import org.chromium.base.ThreadUtils;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeFeatureList;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.init.AsyncInitializationActivity;
-import org.chromium.chrome.browser.preferences.PreferencesLauncher;
+import org.chromium.chrome.browser.settings.SettingsLauncher;
 import org.chromium.chrome.browser.sharing.SharingAdapter;
 import org.chromium.chrome.browser.sharing.SharingServiceProxy;
 import org.chromium.chrome.browser.sharing.SharingServiceProxy.DeviceInfo;
@@ -78,7 +78,8 @@ public class SharedClipboardShareActivity
         if (!AndroidSyncSettings.get().isChromeSyncEnabled()) {
             chromeSettingsButton.setVisibility(View.VISIBLE);
             chromeSettingsButton.setOnClickListener(view -> {
-                PreferencesLauncher.launchSettingsPage(ContextUtils.getApplicationContext(), null);
+                SettingsLauncher.getInstance().launchSettingsPage(
+                        ContextUtils.getApplicationContext());
             });
         }
 
@@ -95,7 +96,7 @@ public class SharedClipboardShareActivity
     public void finishNativeInitialization() {
         super.finishNativeInitialization();
 
-        mAdapter = new SharingAdapter(SharingSpecificFields.EnabledFeatures.SHARED_CLIPBOARD);
+        mAdapter = new SharingAdapter(SharingSpecificFields.EnabledFeatures.SHARED_CLIPBOARD_V2);
         if (!mAdapter.isEmpty()) {
             findViewById(R.id.device_picker_toolbar).setVisibility(View.VISIBLE);
             SharedClipboardMetrics.recordShowDeviceList();
@@ -128,7 +129,8 @@ public class SharedClipboardShareActivity
         SharedClipboardMetrics.recordDeviceClick(position);
         SharedClipboardMetrics.recordTextSize(text.length());
 
-        SharedClipboardMessageHandler.showSendingNotification(device.guid, device.clientName, text);
+        SharedClipboardMessageHandler.showSendingNotification(
+                device.guid, device.clientName, text, /*retries=*/0);
         finish();
     }
 }

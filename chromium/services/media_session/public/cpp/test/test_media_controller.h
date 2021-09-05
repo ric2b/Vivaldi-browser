@@ -10,8 +10,6 @@
 #include "base/component_export.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
-#include "mojo/public/cpp/bindings/binding.h"
-#include "mojo/public/cpp/bindings/interface_ptr_set.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote_set.h"
 #include "services/media_session/public/mojom/media_controller.mojom.h"
@@ -155,6 +153,8 @@ class COMPONENT_EXPORT(MEDIA_SESSION_TEST_SUPPORT_CPP) TestMediaController
                          observer) override {}
   void SeekTo(base::TimeDelta seek_time) override;
   void ScrubTo(base::TimeDelta seek_time) override {}
+  void EnterPictureInPicture() override;
+  void ExitPictureInPicture() override;
 
   int toggle_suspend_resume_count() const {
     return toggle_suspend_resume_count_;
@@ -193,7 +193,7 @@ class COMPONENT_EXPORT(MEDIA_SESSION_TEST_SUPPORT_CPP) TestMediaController
 
   mojo::RemoteSet<mojom::MediaControllerObserver> observers_;
 
-  mojo::Binding<mojom::MediaController> binding_{this};
+  mojo::Receiver<mojom::MediaController> receiver_{this};
 
   DISALLOW_COPY_AND_ASSIGN(TestMediaController);
 };

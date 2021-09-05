@@ -8,7 +8,6 @@ import static org.chromium.chrome.browser.util.ConversionUtils.BYTES_PER_MEGABYT
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.SysUtils;
-import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.ui.base.DeviceFormFactor;
 
 /** Provides the configuration params required by the download home UI. */
@@ -18,9 +17,6 @@ public class DownloadManagerUiConfig {
 
     /** Whether or not the UI should be shown as part of a separate activity. */
     public final boolean isSeparateActivity;
-
-    /** Whether or not to show the Offline Home UI. */
-    public final boolean showOfflineHome;
 
     /** Whether generic view types should be used wherever possible. Used for low end devices. */
     public final boolean useGenericViewTypes;
@@ -54,14 +50,17 @@ public class DownloadManagerUiConfig {
      */
     public final long justNowThresholdSeconds;
 
-    /** Whether or not rename feature should be shown in UI. */
-    public final boolean isRenameEnabled;
+
+    /** Whether or not grouping items into a single card is supported. */
+    public final boolean supportsGrouping;
+
+    /** Whether or not to show the pagination headers in the list. */
+    public final boolean showPaginationHeaders;
 
     /** Constructor. */
     private DownloadManagerUiConfig(Builder builder) {
         isOffTheRecord = builder.mIsOffTheRecord;
         isSeparateActivity = builder.mIsSeparateActivity;
-        showOfflineHome = builder.mShowOfflineHome;
         useGenericViewTypes = builder.mUseGenericViewTypes;
         supportFullWidthImages = builder.mSupportFullWidthImages;
         useNewDownloadPath = builder.mUseNewDownloadPath;
@@ -69,7 +68,8 @@ public class DownloadManagerUiConfig {
         inMemoryThumbnailCacheSizeBytes = builder.mInMemoryThumbnailCacheSizeBytes;
         maxThumbnailScaleFactor = builder.mMaxThumbnailScaleFactor;
         justNowThresholdSeconds = builder.mJustNowThresholdSeconds;
-        isRenameEnabled = builder.mIsRenameEnabled;
+        supportsGrouping = builder.mSupportsGrouping;
+        showPaginationHeaders = builder.mShowPaginationHeaders;
     }
 
     /** Helper class for building a {@link DownloadManagerUiConfig}. */
@@ -79,25 +79,24 @@ public class DownloadManagerUiConfig {
 
         private static final int IN_MEMORY_THUMBNAIL_CACHE_SIZE_BYTES = 15 * BYTES_PER_MEGABYTE;
 
+        private static final float MAX_THUMBNAIL_SCALE_FACTOR = 1.5f; /* hdpi scale factor. */
+
         private boolean mIsOffTheRecord;
         private boolean mIsSeparateActivity;
-        private boolean mShowOfflineHome;
         private boolean mUseGenericViewTypes;
         private boolean mSupportFullWidthImages;
         private boolean mUseNewDownloadPath;
         private boolean mUseNewDownloadPathThumbnails;
         private int mInMemoryThumbnailCacheSizeBytes = IN_MEMORY_THUMBNAIL_CACHE_SIZE_BYTES;
-        private float mMaxThumbnailScaleFactor = 1.5f; /* hdpi scale factor. */
-        private long mJustNowThresholdSeconds;
-        private boolean mIsRenameEnabled;
+        private float mMaxThumbnailScaleFactor = MAX_THUMBNAIL_SCALE_FACTOR;
+        private long mJustNowThresholdSeconds = JUST_NOW_THRESHOLD_SECONDS;
+        private boolean mSupportsGrouping;
+        private boolean mShowPaginationHeaders;
 
         public Builder() {
-            readParamsFromFinch();
             mSupportFullWidthImages = !DeviceFormFactor.isNonMultiDisplayContextOnTablet(
                     ContextUtils.getApplicationContext());
             mUseGenericViewTypes = SysUtils.isLowEndDevice();
-            mUseNewDownloadPath = ChromeFeatureList.isEnabled(
-                    ChromeFeatureList.DOWNLOAD_OFFLINE_CONTENT_PROVIDER);
         }
 
         public Builder setIsOffTheRecord(boolean isOffTheRecord) {
@@ -107,11 +106,6 @@ public class DownloadManagerUiConfig {
 
         public Builder setIsSeparateActivity(boolean isSeparateActivity) {
             mIsSeparateActivity = isSeparateActivity;
-            return this;
-        }
-
-        public Builder setShowOfflineHome(boolean showOfflineHome) {
-            mShowOfflineHome = showOfflineHome;
             return this;
         }
 
@@ -145,13 +139,18 @@ public class DownloadManagerUiConfig {
             return this;
         }
 
-        public DownloadManagerUiConfig build() {
-            return new DownloadManagerUiConfig(this);
+        public Builder setShowPaginationHeaders(boolean showPaginationHeaders) {
+            mShowPaginationHeaders = showPaginationHeaders;
+            return this;
         }
 
-        private void readParamsFromFinch() {
-            mJustNowThresholdSeconds = JUST_NOW_THRESHOLD_SECONDS;
-            mIsRenameEnabled = ChromeFeatureList.isEnabled(ChromeFeatureList.DOWNLOAD_RENAME);
+        public Builder setSupportsGrouping(boolean supportsGrouping) {
+            mSupportsGrouping = supportsGrouping;
+            return this;
+        }
+
+        public DownloadManagerUiConfig build() {
+            return new DownloadManagerUiConfig(this);
         }
     }
 }

@@ -18,7 +18,7 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/ozone/public/ozone_platform.h"
-#include "ui/platform_window/platform_window_base.h"
+#include "ui/platform_window/platform_window.h"
 #include "ui/platform_window/platform_window_delegate.h"
 #include "ui/platform_window/platform_window_init_properties.h"
 
@@ -61,8 +61,7 @@ class StubPlatformWindowDelegate : public PlatformWindowDelegate {
 class TestCompositorHostOzone : public TestCompositorHost {
  public:
   TestCompositorHostOzone(const gfx::Rect& bounds,
-                          ui::ContextFactory* context_factory,
-                          ui::ContextFactoryPrivate* context_factory_private);
+                          ui::ContextFactory* context_factory);
   ~TestCompositorHostOzone() override;
 
  private:
@@ -72,7 +71,7 @@ class TestCompositorHostOzone : public TestCompositorHost {
 
   gfx::Rect bounds_;
   ui::Compositor compositor_;
-  std::unique_ptr<PlatformWindowBase> window_;
+  std::unique_ptr<PlatformWindow> window_;
   StubPlatformWindowDelegate window_delegate_;
   viz::ParentLocalSurfaceIdAllocator allocator_;
 
@@ -81,12 +80,10 @@ class TestCompositorHostOzone : public TestCompositorHost {
 
 TestCompositorHostOzone::TestCompositorHostOzone(
     const gfx::Rect& bounds,
-    ui::ContextFactory* context_factory,
-    ui::ContextFactoryPrivate* context_factory_private)
+    ui::ContextFactory* context_factory)
     : bounds_(bounds),
-      compositor_(context_factory_private->AllocateFrameSinkId(),
+      compositor_(context_factory->AllocateFrameSinkId(),
                   context_factory,
-                  context_factory_private,
                   base::ThreadTaskRunnerHandle::Get(),
                   false /* enable_pixel_canvas */) {}
 
@@ -121,10 +118,8 @@ ui::Compositor* TestCompositorHostOzone::GetCompositor() {
 // static
 TestCompositorHost* TestCompositorHost::Create(
     const gfx::Rect& bounds,
-    ui::ContextFactory* context_factory,
-    ui::ContextFactoryPrivate* context_factory_private) {
-  return new TestCompositorHostOzone(bounds, context_factory,
-                                     context_factory_private);
+    ui::ContextFactory* context_factory) {
+  return new TestCompositorHostOzone(bounds, context_factory);
 }
 
 }  // namespace ui

@@ -13,6 +13,7 @@
 namespace blink {
 
 class GraphicsContext;
+class LayerAsJSONClient;
 
 // Represents foreign content (produced outside Blink) which draws to a layer.
 // A client supplies a layer which can be unwrapped and inserted into the full
@@ -20,35 +21,60 @@ class GraphicsContext;
 //
 // Before CAP, this content is not painted, but is instead inserted into the
 // GraphicsLayer tree.
-class PLATFORM_EXPORT ForeignLayerDisplayItem final : public DisplayItem {
+class PLATFORM_EXPORT ForeignLayerDisplayItem : public DisplayItem {
  public:
-  ForeignLayerDisplayItem(Type,
+  ForeignLayerDisplayItem(const DisplayItemClient& client,
+                          Type,
                           scoped_refptr<cc::Layer>,
-                          const FloatPoint& offset);
+                          const FloatPoint& offset,
+                          const LayerAsJSONClient*);
   ~ForeignLayerDisplayItem() override;
 
   cc::Layer* GetLayer() const;
 
+  const LayerAsJSONClient* GetLayerAsJSONClient() const;
+
   // DisplayItem
-  bool Equals(const DisplayItem&) const override;
+  bool Equals(const DisplayItem&) const final;
 #if DCHECK_IS_ON()
-  void PropertiesAsJSON(JSONObject&) const override;
+  void PropertiesAsJSON(JSONObject&) const final;
 #endif
 
   FloatPoint Offset() const { return offset_; }
 
  private:
   FloatPoint offset_;
+  const LayerAsJSONClient* json_client_;
+};
+
+// When a foreign layer's debug name is a literal string, define a instance of
+// LiteralDebugNameClient with DEFINE_STATIC_LOCAL() and pass the instance as
+// client to RecordForeignLayer().
+class LiteralDebugNameClient : public DisplayItemClient {
+ public:
+  LiteralDebugNameClient(const char* name) : name_(name) {}
+
+  String DebugName() const override { return name_; }
+  IntRect VisualRect() const override {
+    NOTREACHED();
+    return IntRect();
+  }
+
+ private:
+  const char* name_;
 };
 
 // Records a foreign layer into a GraphicsContext.
 // Use this where you would use a recorder class.
+// |client| provides DebugName and optionally DOMNodeId, while VisualRect will
+// be calculated automatically based on layer bounds and offset.
 PLATFORM_EXPORT void RecordForeignLayer(
-    GraphicsContext&,
-    DisplayItem::Type,
-    scoped_refptr<cc::Layer>,
+    GraphicsContext& context,
+    const DisplayItemClient& client,
+    DisplayItem::Type type,
+    scoped_refptr<cc::Layer> layer,
     const FloatPoint& offset,
-    const base::Optional<PropertyTreeState>& = base::nullopt);
+    const PropertyTreeState* properties = nullptr);
 
 }  // namespace blink
 

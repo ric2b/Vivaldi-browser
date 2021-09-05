@@ -22,20 +22,26 @@ Clipboard* NavigatorClipboard::clipboard(ScriptState* script_state,
     ProvideTo(navigator, supplement);
   }
 
+  if (!supplement->GetSupplementable()->GetFrame())
+    return nullptr;
+
   return supplement->clipboard_;
 }
 
-void NavigatorClipboard::Trace(blink::Visitor* visitor) {
+void NavigatorClipboard::Trace(Visitor* visitor) {
   visitor->Trace(clipboard_);
   Supplement<Navigator>::Trace(visitor);
 }
 
 NavigatorClipboard::NavigatorClipboard(Navigator& navigator)
     : Supplement<Navigator>(navigator) {
+  // TODO(crbug.com/1028591): Figure out how navigator.clipboard is supposed to
+  // behave in a detached execution context.
+  if (!GetSupplementable()->GetFrame())
+    return;
+
   clipboard_ = MakeGarbageCollected<Clipboard>(
-      GetSupplementable()->GetFrame()
-          ? GetSupplementable()->GetFrame()->GetDocument()
-          : nullptr);
+      GetSupplementable()->GetFrame()->GetDocument()->ToExecutionContext());
 }
 
 }  // namespace blink

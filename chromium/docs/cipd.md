@@ -1,9 +1,19 @@
 # CIPD for chromium dependencies
 
-This document outlines how to use [CIPD][1] for managing binary dependencies in
-chromium.
-
 [TOC]
+
+## What is CIPD?
+* CIPD stands for "Chrome Infrastructure Package Deployment".
+* Its code and docs [live within the luci-go project][CIPD].
+* Chromium uses CIPD to avoid checking large binary files into git, which git
+  does not handle well.
+* gclient supports CIPD packages in the same way as git repositories. They are
+  specified in [DEPS] and updated via `gclient sync`.
+* You can [browse Chromium's CIPD repository][browse] online.
+
+[CIPD]: https://chromium.googlesource.com/infra/luci/luci-go/+/master/cipd/README.md
+[DEPS]: /DEPS
+[browse]: https://chrome-infra-packages.appspot.com/p/chromium
 
 ## Adding a new CIPD dependency
 
@@ -26,7 +36,9 @@ create the following:
       README.chromium
 ```
 
-For more on third-party dependencies, see [here][2].
+For more on third-party dependencies, see [adding_to_third_party.md].
+
+[adding_to_third_party.md]: /docs/adding_to_third_party.md
 
 ### 2. Acquire whatever you want to package
 
@@ -110,17 +122,25 @@ data:
   - file: foo.jar
 ```
 
+To create a private (Googler-only) package:
+```
+# Map this to //clank/third_party/sample_cipd_dep.
+package: chrome_internal/third_party/sample_cipd_dep
+```
+
 For more information about the package definition spec, see [the code][3].
 
 > **Note:** Committing the .yaml file to the repository isn't required,
 > but it is recommended. Doing so has benefits for visibility and ease of
 > future updates.
 
+[the code]: https://chromium.googlesource.com/infra/luci/luci-go/+/master/cipd/client/cipd/builder/pkgdef.go
+
 ### 4. Create your CIPD package
 
 To actually create your package, you'll need:
 
- - the cipd.yaml file (described above)
+ - the `cipd.yaml` file (described above)
  - [permission](#permissions-in-cipd).
 
 Once you have those, you can create your package like so:
@@ -142,7 +162,7 @@ You'll be adding it to DEPS momentarily.
 
 ### 5. Add your CIPD package to DEPS
 
-You can add your package to DEPS by adding an entry of the following form to
+You can add your package to `DEPS` by adding an entry of the following form to
 the `deps` dict:
 
 ```
@@ -198,7 +218,7 @@ $ cipd acl-list chromium
 ...
 ```
 
-By default, [cria/project-chromium-cipd-owners][4] own all CIPD packages
+By default, [cria/project-chromium-cipd-owners][cria] own all CIPD packages
 under `chromium/`. If you're adding a package, talk to one of them.
 
 To obtain write access to a new package, ask an owner to run:
@@ -206,6 +226,8 @@ To obtain write access to a new package, ask an owner to run:
 ```
 $ cipd acl-edit chromium/third_party/sample_cipd_dep -owner user:email@address.com
 ```
+
+[cria]: https://chrome-infra-auth.appspot.com/auth/groups/project-chromium-cipd-owners
 
 ## Troubleshooting
 
@@ -219,8 +241,3 @@ To clear the cache and force a full reinstallation, delete your
 
 Note that there is a [bug](https://crbug.com/794764) on file to add a mode to CIPD
 that is not so trusting of its own cache.
-
-[1]: https://chromium.googlesource.com/infra/luci/luci-go/+/master/cipd/
-[2]: /docs/adding_to_third_party.md
-[3]: https://chromium.googlesource.com/infra/luci/luci-go/+/master/cipd/client/cipd/builder/pkgdef.go
-[4]: https://chrome-infra-auth.appspot.com/auth/groups/project-chromium-cipd-owners

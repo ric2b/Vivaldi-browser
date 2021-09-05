@@ -11,13 +11,13 @@
 #include "third_party/blink/renderer/bindings/core/v8/string_or_performance_measure_options.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_testing.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_performance_observer_callback.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_performance_observer_init.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/testing/null_execution_context.h"
 #include "third_party/blink/renderer/core/testing/page_test_base.h"
 #include "third_party/blink/renderer/core/timing/performance.h"
 #include "third_party/blink/renderer/core/timing/performance_long_task_timing.h"
 #include "third_party/blink/renderer/core/timing/performance_observer.h"
-#include "third_party/blink/renderer/core/timing/performance_observer_init.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_response.h"
 
 namespace blink {
@@ -40,7 +40,7 @@ class TestPerformance : public Performance {
     return HasObserverFor(entry_type);
   }
 
-  void Trace(blink::Visitor* visitor) override { Performance::Trace(visitor); }
+  void Trace(Visitor* visitor) override { Performance::Trace(visitor); }
 };
 
 class PerformanceTest : public PageTestBase {
@@ -119,13 +119,12 @@ TEST_F(PerformanceTest, Activate) {
 TEST_F(PerformanceTest, AddLongTaskTiming) {
   V8TestingScope scope;
   Initialize(scope.GetScriptState());
-  SubTaskAttribution::EntriesVector sub_task_attributions;
 
   // Add a long task entry, but no observer registered.
   base_->AddLongTaskTiming(
       base::TimeTicks() + base::TimeDelta::FromSecondsD(1234),
-      base::TimeTicks() + base::TimeDelta::FromSecondsD(5678), "same-origin",
-      "www.foo.com/bar", "", "", sub_task_attributions);
+      base::TimeTicks() + base::TimeDelta::FromSecondsD(5678), "window",
+      "same-origin", "www.foo.com/bar", "", "");
   EXPECT_FALSE(base_->HasPerformanceObserverFor(PerformanceEntry::kLongTask));
   EXPECT_EQ(0, NumPerformanceEntriesInObserver());  // has no effect
 
@@ -141,8 +140,8 @@ TEST_F(PerformanceTest, AddLongTaskTiming) {
   // Add a long task entry
   base_->AddLongTaskTiming(
       base::TimeTicks() + base::TimeDelta::FromSecondsD(1234),
-      base::TimeTicks() + base::TimeDelta::FromSecondsD(5678), "same-origin",
-      "www.foo.com/bar", "", "", sub_task_attributions);
+      base::TimeTicks() + base::TimeDelta::FromSecondsD(5678), "window",
+      "same-origin", "www.foo.com/bar", "", "");
   EXPECT_EQ(1, NumPerformanceEntriesInObserver());  // added an entry
 }
 

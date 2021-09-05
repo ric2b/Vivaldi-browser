@@ -15,14 +15,13 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/ozone/platform/drm/host/gpu_thread_observer.h"
-#include "ui/platform_window/platform_window_base.h"
+#include "ui/platform_window/platform_window.h"
 #include "ui/platform_window/platform_window_delegate.h"
 
 namespace ui {
 
-class DrmDisplayHostManager;
 class DrmCursor;
-class DrmOverlayManager;
+class DrmDisplayHostManager;
 class DrmWindowHostManager;
 class EventFactoryEvdev;
 class GpuThreadAdapter;
@@ -37,7 +36,7 @@ class GpuThreadAdapter;
 // State propagation needs to happen before the state change is acknowledged to
 // |delegate_| as |delegate_| is responsible for initializing the surface
 // associated with the window (the surface is created on the GPU process).
-class DrmWindowHost : public PlatformWindowBase,
+class DrmWindowHost : public PlatformWindow,
                       public PlatformEventDispatcher,
                       public GpuThreadObserver {
  public:
@@ -47,8 +46,7 @@ class DrmWindowHost : public PlatformWindowBase,
                 EventFactoryEvdev* event_factory,
                 DrmCursor* cursor,
                 DrmWindowHostManager* window_manager,
-                DrmDisplayHostManager* display_manager,
-                DrmOverlayManager* overlay_manager);
+                DrmDisplayHostManager* display_manager);
   ~DrmWindowHost() override;
 
   void Initialize();
@@ -107,8 +105,6 @@ class DrmWindowHost : public PlatformWindowBase,
   DrmCursor* const cursor_;                       // Not owned.
   DrmWindowHostManager* const window_manager_;    // Not owned.
   DrmDisplayHostManager* const display_manager_;  // Not owned.
-  // TODO(crbug.com/936425): Remove after VizDisplayCompositor feature launches.
-  DrmOverlayManager* const overlay_manager_;  // Not owned.
 
   gfx::Rect bounds_;
   const gfx::AcceleratedWidget widget_;

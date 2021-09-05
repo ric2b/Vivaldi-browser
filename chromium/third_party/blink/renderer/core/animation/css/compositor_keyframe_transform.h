@@ -19,11 +19,6 @@ class CORE_EXPORT CompositorKeyframeTransform final
       : transform_(transform), zoom_(zoom) {}
   ~CompositorKeyframeTransform() override = default;
 
-  static CompositorKeyframeTransform* Create(
-      const TransformOperations& transform,
-      double zoom) {
-    return MakeGarbageCollected<CompositorKeyframeTransform>(transform, zoom);
-  }
   const TransformOperations& GetTransformOperations() const {
     return transform_;
   }
@@ -36,8 +31,12 @@ class CORE_EXPORT CompositorKeyframeTransform final
   const double zoom_;
 };
 
-DEFINE_COMPOSITOR_KEYFRAME_VALUE_TYPE_CASTS(CompositorKeyframeTransform,
-                                            IsTransform());
+template <>
+struct DowncastTraits<CompositorKeyframeTransform> {
+  static bool AllowFrom(const CompositorKeyframeValue& value) {
+    return value.IsTransform();
+  }
+};
 
 }  // namespace blink
 

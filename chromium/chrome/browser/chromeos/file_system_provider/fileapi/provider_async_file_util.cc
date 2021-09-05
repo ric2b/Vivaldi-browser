@@ -4,20 +4,24 @@
 
 #include "chrome/browser/chromeos/file_system_provider/fileapi/provider_async_file_util.h"
 
+#include <algorithm>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/stl_util.h"
 #include "base/task/post_task.h"
 #include "chrome/browser/chromeos/file_system_provider/mount_path_util.h"
 #include "chrome/browser/chromeos/file_system_provider/provided_file_system_interface.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "storage/browser/blob/shareable_file_reference.h"
-#include "storage/browser/fileapi/file_system_operation_context.h"
-#include "storage/browser/fileapi/file_system_url.h"
+#include "storage/browser/file_system/file_system_operation_context.h"
+#include "storage/browser/file_system/file_system_url.h"
 
 using content::BrowserThread;
 
@@ -70,7 +74,7 @@ void OnGetFileInfo(int fields,
   if (fields & storage::FileSystemOperation::GET_METADATA_FIELD_IS_DIRECTORY)
     file_info.is_directory = *metadata->is_directory;
   if (fields & storage::FileSystemOperation::GET_METADATA_FIELD_SIZE)
-    file_info.size = *metadata->size;
+    file_info.size = std::max(int64_t{0}, *metadata->size);
 
   if (fields & storage::FileSystemOperation::GET_METADATA_FIELD_LAST_MODIFIED) {
     file_info.last_modified = *metadata->modification_time;
@@ -108,6 +112,23 @@ void OnReadDirectory(storage::AsyncFileUtil::ReadDirectoryCallback callback,
                      base::File::Error result,
                      storage::AsyncFileUtil::EntryList entry_list,
                      bool has_more) {
+  auto new_end_it =
+      std::remove_if(entry_list.begin(), entry_list.end(),
+                     [](const filesystem::mojom::DirectoryEntry& entry) {
+                       if (!filesystem::mojom::IsKnownEnumValue(entry.type)) {
+                         return true;
+                       }
+                       if (entry.name.empty() || entry.name.value() == "." ||
+                           entry.name.value() == ".." ||
+                           base::Contains(entry.name.value(), '\0') ||
+                           base::Contains(entry.name.value(), '/') ||
+                           base::Contains(entry.name.value(), '\\')) {
+                         return true;
+                       }
+                       return false;
+                     });
+  entry_list.erase(new_end_it, entry_list.end());
+
   base::PostTask(
       FROM_HERE, {BrowserThread::IO},
       base::BindOnce(callback, result, std::move(entry_list), has_more));
@@ -308,11 +329,10 @@ void ProviderAsyncFileUtil::EnsureFileExists(
     const storage::FileSystemURL& url,
     EnsureFileExistsCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  base::PostTask(
-      FROM_HERE, {BrowserThread::UI},
-      base::BindOnce(&CreateFileOnUIThread, base::Passed(&context), url,
-                     base::BindOnce(&OnCreateFileForEnsureFileExists,
-                                    std::move(callback))));
+  base::PostTask(FROM_HERE, {BrowserThread::UI},
+                 base::BindOnce(&CreateFileOnUIThread, std::move(context), url,
+                                base::BindOnce(&OnCreateFileForEnsureFileExists,
+                                               std::move(callback))));
 }
 
 void ProviderAsyncFileUtil::CreateDirectory(
@@ -322,12 +342,11 @@ void ProviderAsyncFileUtil::CreateDirectory(
     bool recursive,
     StatusCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  base::PostTask(
-      FROM_HERE, {BrowserThread::UI},
-      base::BindOnce(
-          &CreateDirectoryOnUIThread, base::Passed(&context), url, exclusive,
-          recursive,
-          base::BindOnce(&OnCreateDirectory, exclusive, std::move(callback))));
+  base::PostTask(FROM_HERE, {BrowserThread::UI},
+                 base::BindOnce(&CreateDirectoryOnUIThread, std::move(context),
+                                url, exclusive, recursive,
+                                base::BindOnce(&OnCreateDirectory, exclusive,
+                                               std::move(callback))));
 }
 
 void ProviderAsyncFileUtil::GetFileInfo(
@@ -339,7 +358,7 @@ void ProviderAsyncFileUtil::GetFileInfo(
   base::PostTask(
       FROM_HERE, {BrowserThread::UI},
       base::BindOnce(
-          &GetFileInfoOnUIThread, base::Passed(&context), url, fields,
+          &GetFileInfoOnUIThread, std::move(context), url, fields,
           base::Bind(&OnGetFileInfo, fields, base::Passed(&callback))));
 }
 
@@ -372,7 +391,7 @@ void ProviderAsyncFileUtil::Truncate(
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   base::PostTask(
       FROM_HERE, {BrowserThread::UI},
-      base::BindOnce(&TruncateOnUIThread, base::Passed(&context), url, length,
+      base::BindOnce(&TruncateOnUIThread, std::move(context), url, length,
                      base::BindOnce(&OnTruncate, std::move(callback))));
 }
 
@@ -388,7 +407,7 @@ void ProviderAsyncFileUtil::CopyFileLocal(
   // time) as well as the progress callback.
   base::PostTask(
       FROM_HERE, {BrowserThread::UI},
-      base::BindOnce(&CopyEntryOnUIThread, base::Passed(&context), src_url,
+      base::BindOnce(&CopyEntryOnUIThread, std::move(context), src_url,
                      dest_url,
                      base::BindOnce(&OnCopyEntry, std::move(callback))));
 }
@@ -404,7 +423,7 @@ void ProviderAsyncFileUtil::MoveFileLocal(
   // time) as well as the progress callback.
   base::PostTask(
       FROM_HERE, {BrowserThread::UI},
-      base::BindOnce(&MoveEntryOnUIThread, base::Passed(&context), src_url,
+      base::BindOnce(&MoveEntryOnUIThread, std::move(context), src_url,
                      dest_url,
                      base::BindOnce(&OnMoveEntry, std::move(callback))));
 }
@@ -425,7 +444,7 @@ void ProviderAsyncFileUtil::DeleteFile(
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   base::PostTask(
       FROM_HERE, {BrowserThread::UI},
-      base::BindOnce(&DeleteEntryOnUIThread, base::Passed(&context), url,
+      base::BindOnce(&DeleteEntryOnUIThread, std::move(context), url,
                      false,  // recursive
                      base::BindOnce(&OnDeleteEntry, std::move(callback))));
 }
@@ -437,7 +456,7 @@ void ProviderAsyncFileUtil::DeleteDirectory(
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   base::PostTask(
       FROM_HERE, {BrowserThread::UI},
-      base::BindOnce(&DeleteEntryOnUIThread, base::Passed(&context), url,
+      base::BindOnce(&DeleteEntryOnUIThread, std::move(context), url,
                      false,  // recursive
                      base::BindOnce(&OnDeleteEntry, std::move(callback))));
 }
@@ -449,7 +468,7 @@ void ProviderAsyncFileUtil::DeleteRecursively(
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   base::PostTask(
       FROM_HERE, {BrowserThread::UI},
-      base::BindOnce(&DeleteEntryOnUIThread, base::Passed(&context), url,
+      base::BindOnce(&DeleteEntryOnUIThread, std::move(context), url,
                      true,  // recursive
                      base::BindOnce(&OnDeleteEntry, std::move(callback))));
 }

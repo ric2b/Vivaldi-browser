@@ -11,25 +11,16 @@
 #include "base/metrics/field_trial.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
+#include "components/prefs/pref_registry_simple.h"
 #include "components/security_state/core/features.h"
+#include "components/security_state/core/security_state_pref_names.h"
 #include "net/ssl/ssl_cipher_suite_names.h"
 #include "net/ssl/ssl_connection_status_flags.h"
+#include "services/network/public/cpp/is_potentially_trustworthy.h"
 
 namespace security_state {
 
 namespace {
-
-// Returns true if |url| is a blob: URL and its path parses as a GURL with a
-// nonsecure origin, and false otherwise. See
-// https://url.spec.whatwg.org/#origin.
-bool IsNonsecureBlobUrl(
-    const GURL& url,
-    const IsOriginSecureCallback& is_origin_secure_callback) {
-  if (!url.SchemeIs(url::kBlobScheme))
-    return false;
-  GURL inner_url(url.path());
-  return !is_origin_secure_callback.Run(inner_url);
-}
 
 // For nonsecure pages, returns a SecurityLevel based on the
 // provided information and the kMarkHttpAsFeature field trial.
@@ -52,6 +43,14 @@ SecurityLevel GetSecurityLevelForNonSecureFieldTrial(
   // Default to dangerous on editing form fields and otherwise
   // warning.
   return input_events.insecure_field_edited ? DANGEROUS : WARNING;
+}
+
+SecurityLevel GetSecurityLevelForDisplayedMixedContent(bool suppress_warning) {
+  if (base::FeatureList::IsEnabled(features::kPassiveMixedContentWarning) &&
+      !suppress_warning) {
+    return kDisplayedInsecureContentWarningLevel;
+  }
+  return kDisplayedInsecureContentLevel;
 }
 
 std::string GetHistogramSuffixForSecurityLevel(
@@ -90,8 +89,7 @@ std::string GetHistogramSuffixForSafetyTipStatus(
     case security_state::SafetyTipStatus::kLookalikeIgnored:
       return "SafetyTip_LookalikeIgnored";
     case security_state::SafetyTipStatus::kBadKeyword:
-      NOTREACHED();
-      return std::string();
+      return "SafetyTip_BadKeyword";
   }
   NOTREACHED();
   return std::string();
@@ -127,8 +125,7 @@ bool ShouldSetSecurityLevelFromSafetyTip(security_state::SafetyTipStatus status,
 
 SecurityLevel GetSecurityLevel(
     const VisibleSecurityState& visible_security_state,
-    bool used_policy_installed_certificate,
-    IsOriginSecureCallback is_origin_secure_callback) {
+    bool used_policy_installed_certificate) {
   // Override the connection security information if the website failed the
   // browser's malware checks.
   if (visible_security_state.malicious_content_status !=
@@ -163,6 +160,14 @@ SecurityLevel GetSecurityLevel(
     return NONE;
   }
 
+  // Downgrade the security level for active insecure subresources. This comes
+  // before handling non-cryptographic schemes below, because secure pages with
+  // non-cryptographic schemes (e.g., about:blank) can still have mixed content.
+  if (visible_security_state.ran_mixed_content ||
+      visible_security_state.ran_content_with_cert_errors) {
+    return kRanInsecureContentLevel;
+  }
+
   // Choose the appropriate security level for requests to HTTP and remaining
   // pseudo URLs (blob:, filesystem:). filesystem: is a standard scheme so does
   // not need to be explicitly listed here.
@@ -172,20 +177,21 @@ SecurityLevel GetSecurityLevel(
       visible_security_state.certificate;
   if (!is_cryptographic_with_certificate) {
     if (!visible_security_state.is_error_page &&
-        !is_origin_secure_callback.Run(url) &&
-        (url.IsStandard() ||
-         IsNonsecureBlobUrl(url, is_origin_secure_callback))) {
+        !network::IsUrlPotentiallyTrustworthy(url) &&
+        (url.IsStandard() || url.SchemeIs(url::kBlobScheme))) {
+      // Display ReaderMode pages as neutral even if the original URL was
+      // secure, because Chrome has modified the content so we don't want to
+      // present it as the actual content that the server sent. Distilled pages
+      // do not contain forms, payment handlers, or other JS from the original
+      // URL, so they won't be affected by a downgraded security level.
+      if (visible_security_state.is_reader_mode) {
+        return NONE;
+      }
       return GetSecurityLevelForNonSecureFieldTrial(
           visible_security_state.is_error_page,
           visible_security_state.insecure_input_events);
     }
     return NONE;
-  }
-
-  // Downgrade the security level for active insecure subresources.
-  if (visible_security_state.ran_mixed_content ||
-      visible_security_state.ran_content_with_cert_errors) {
-    return kRanInsecureContentLevel;
   }
 
   // Downgrade the security level for pages loaded over legacy TLS versions.
@@ -214,8 +220,12 @@ SecurityLevel GetSecurityLevel(
   DCHECK(!visible_security_state.ran_mixed_content);
   DCHECK(!visible_security_state.ran_content_with_cert_errors);
 
+  if (visible_security_state.displayed_mixed_content) {
+    return GetSecurityLevelForDisplayedMixedContent(
+        visible_security_state.should_suppress_mixed_content_warning);
+  }
+
   if (visible_security_state.contained_mixed_form ||
-      visible_security_state.displayed_mixed_content ||
       visible_security_state.displayed_content_with_cert_errors) {
     return kDisplayedInsecureContentLevel;
   }
@@ -253,6 +263,11 @@ bool HasMajorCertificateError(
   return is_cryptographic_with_certificate && is_major_cert_error;
 }
 
+void RegisterProfilePrefs(PrefRegistrySimple* registry) {
+  registry->RegisterBooleanPref(prefs::kStricterMixedContentTreatmentEnabled,
+                                true);
+}
+
 VisibleSecurityState::VisibleSecurityState()
     : malicious_content_status(MALICIOUS_CONTENT_STATUS_NONE),
       connection_info_initialized(false),
@@ -269,8 +284,10 @@ VisibleSecurityState::VisibleSecurityState()
       is_error_page(false),
       is_view_source(false),
       is_devtools(false),
+      is_reader_mode(false),
       connection_used_legacy_tls(false),
-      should_suppress_legacy_tls_warning(false) {}
+      should_suppress_legacy_tls_warning(false),
+      should_suppress_mixed_content_warning(false) {}
 
 VisibleSecurityState::VisibleSecurityState(const VisibleSecurityState& other) =
     default;
@@ -323,6 +340,15 @@ bool IsSHA1InChain(const VisibleSecurityState& visible_security_state) {
   return visible_security_state.certificate &&
          (visible_security_state.cert_status &
           net::CERT_STATUS_SHA1_SIGNATURE_PRESENT);
+}
+
+// TODO(crbug.com/1015626): Clean this up once the experiment is fully
+// launched.
+bool ShouldShowDangerTriangleForWarningLevel() {
+  return base::GetFieldTrialParamValueByFeature(
+             features::kMarkHttpAsFeature,
+             features::kMarkHttpAsFeatureParameterName) ==
+         security_state::features::kMarkHttpAsParameterDangerWarning;
 }
 
 }  // namespace security_state

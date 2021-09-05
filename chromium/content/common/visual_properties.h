@@ -7,6 +7,7 @@
 
 #include "base/optional.h"
 #include "base/time/time.h"
+#include "cc/trees/browser_controls_params.h"
 #include "components/viz/common/surfaces/local_surface_id_allocation.h"
 #include "content/common/content_export.h"
 #include "content/public/common/screen_info.h"
@@ -71,33 +72,35 @@ struct CONTENT_EXPORT VisualProperties {
   // The size for the widget in DIPs.
   gfx::Size new_size;
 
-  // The rect of compositor's viewport in pixels. Note that this may differ in
-  // size from a ScaleToCeiledSize of |new_size| due to Android's keyboard or
-  // due to rounding particulars.
+  // The size of the area of the widget that is visible to the user, in DIPs.
+  // The visible area may be empty if the visible area does not intersect with
+  // the widget, for example in the case of a child frame that is entirely
+  // scrolled out of the main frame's viewport. It may also be smaller than the
+  // widget's size in |new_size| due to the UI hiding part of the widget, such
+  // as with an on-screen keyboard.
+  gfx::Size visible_viewport_size;
+
+  // The rect of compositor's viewport in pixels. Note that for top level
+  // widgets this is roughly the DSF scaled new_size put into a rect. For child
+  // frame widgets it is a pixel-perfect bounds of the visible region of the
+  // widget. The size would be similar to visible_viewport_size, but in physical
+  // pixels and computed via very different means.
+  // TODO(danakj): It would be super nice to remove one of |new_size|,
+  // |visible_viewport_size| and |compositor_viewport_pixel_rect|. Their values
+  // overlap in purpose, creating a very confusing situation about which to use
+  // for what, and how they should relate or not.
   gfx::Rect compositor_viewport_pixel_rect;
 
-  // Whether or not Blink's viewport size should be shrunk by the height of the
-  // URL-bar (always false on platforms where URL-bar hiding isn't supported).
-  bool browser_controls_shrink_blink_size = false;
+  // Browser controls params such as top and bottom controls heights, whether
+  // controls shrink blink size etc.
+  cc::BrowserControlsParams browser_controls_params;
 
   // Whether or not the focused node should be scrolled into view after the
   // resize.
   bool scroll_focused_node_into_view = false;
 
-  // The height of the top controls (always 0 on platforms where URL-bar hiding
-  // isn't supported).
-  float top_controls_height = 0.f;
-
-  // The height of the bottom controls.
-  float bottom_controls_height = 0.f;
-
   // The local surface ID to use (if valid) and its allocation time.
   base::Optional<viz::LocalSurfaceIdAllocation> local_surface_id_allocation;
-
-  // The size of the visible viewport, which may be smaller than the view if the
-  // view is partially occluded (e.g. by a virtual keyboard).  The size is in
-  // DPI-adjusted pixels.
-  gfx::Size visible_viewport_size;
 
   // Indicates whether tab-initiated fullscreen was granted.
   bool is_fullscreen_granted = false;

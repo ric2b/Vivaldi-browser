@@ -7,14 +7,9 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/first_run/first_run.h"
-#include "components/os_crypt/encryption_key_creation_util_mac.h"
 #include "components/os_crypt/keychain_password_mac.h"
 #include "components/os_crypt/os_crypt.h"
 #include "crypto/apple_keychain.h"
-
-namespace os_crypt {
-class EncryptionKeyCreationUtil;
-}
 
 namespace vivaldi {
 
@@ -30,13 +25,7 @@ void MaybeSetupVivaldiKeychain() {
     // path create the vivaldi keychain by requesting the password
     LOG(INFO) << "First run, create vivaldi keychain with random key if needed";
     base::AutoLock auto_lock(g_lock.Get());
-    os_crypt::EncryptionKeyCreationUtil* key_creation_util =
-        new os_crypt::EncryptionKeyCreationUtilMac(
-            g_browser_process->local_state(),
-            base::ThreadTaskRunnerHandle::Get());
-    KeychainPassword encryptor_password(
-        keychain_,
-        std::unique_ptr<EncryptionKeyCreationUtil>(key_creation_util));
+    KeychainPassword encryptor_password(keychain_);
     encryptor_password.GetPassword();
     return;
   }

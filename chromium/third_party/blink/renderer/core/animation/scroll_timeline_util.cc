@@ -6,6 +6,7 @@
 
 #include "third_party/blink/renderer/bindings/core/v8/double_or_scroll_timeline_auto_keyword.h"
 #include "third_party/blink/renderer/core/animation/animation_timeline.h"
+#include "third_party/blink/renderer/core/animation/document_timeline.h"
 #include "third_party/blink/renderer/core/dom/node.h"
 #include "third_party/blink/renderer/core/layout/layout_box.h"
 #include "third_party/blink/renderer/platform/graphics/compositor_element_id.h"
@@ -14,12 +15,12 @@ namespace blink {
 
 namespace scroll_timeline_util {
 
-std::unique_ptr<CompositorScrollTimeline> ToCompositorScrollTimeline(
+scoped_refptr<CompositorScrollTimeline> ToCompositorScrollTimeline(
     AnimationTimeline* timeline) {
-  if (!timeline || timeline->IsDocumentTimeline())
+  if (!timeline || IsA<DocumentTimeline>(timeline))
     return nullptr;
 
-  ScrollTimeline* scroll_timeline = ToScrollTimeline(timeline);
+  auto* scroll_timeline = To<ScrollTimeline>(timeline);
   Node* scroll_source = scroll_timeline->ResolvedScrollSource();
   base::Optional<CompositorElementId> element_id =
       GetCompositorScrollElementId(scroll_source);
@@ -29,7 +30,8 @@ std::unique_ptr<CompositorScrollTimeline> ToCompositorScrollTimeline(
   // TODO(smcgruer): Handle 'auto' time range value.
   DCHECK(time_range.IsDouble());
 
-  LayoutBox* box = scroll_source ? scroll_source->GetLayoutBox() : nullptr;
+  LayoutBox* box =
+      scroll_timeline->IsActive() ? scroll_source->GetLayoutBox() : nullptr;
 
   CompositorScrollTimeline::ScrollDirection orientation = ConvertOrientation(
       scroll_timeline->GetOrientation(), box ? box->Style() : nullptr);
@@ -50,9 +52,9 @@ std::unique_ptr<CompositorScrollTimeline> ToCompositorScrollTimeline(
     end_scroll_offset = resolved_end_scroll_offset;
   }
 
-  return std::make_unique<CompositorScrollTimeline>(
+  return CompositorScrollTimeline::Create(
       element_id, orientation, start_scroll_offset, end_scroll_offset,
-      time_range.GetAsDouble(), scroll_timeline->GetFillMode());
+      time_range.GetAsDouble());
 }
 
 base::Optional<CompositorElementId> GetCompositorScrollElementId(

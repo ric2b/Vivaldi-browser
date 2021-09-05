@@ -16,29 +16,33 @@
 
 #include "base/containers/circular_deque.h"
 #include "base/macros.h"
-#include "base/memory/shared_memory.h"
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "content/common/content_export.h"
 #include "content/public/common/previews_state.h"
-#include "content/public/common/resource_load_info.mojom.h"
-#include "content/public/common/resource_type.h"
 #include "mojo/public/cpp/system/data_pipe.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/net_errors.h"
 #include "net/base/request_priority.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
-#include "services/network/public/mojom/url_loader.mojom.h"
+#include "services/network/public/mojom/fetch_api.mojom-forward.h"
+#include "services/network/public/mojom/url_loader.mojom-forward.h"
 #include "services/network/public/mojom/url_response_head.mojom-forward.h"
 #include "third_party/blink/public/common/loader/url_loader_throttle.h"
-#include "third_party/blink/public/mojom/blob/blob_registry.mojom.h"
+#include "third_party/blink/public/mojom/blob/blob_registry.mojom-forward.h"
+#include "third_party/blink/public/mojom/loader/resource_load_info.mojom-shared.h"
+#include "third_party/blink/public/mojom/loader/resource_load_info.mojom.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "url/gurl.h"
 
 namespace base {
 class WaitableEvent;
+}
+
+namespace blink {
+class ThrottlingURLLoader;
 }
 
 namespace net {
@@ -58,7 +62,6 @@ struct NavigationResponseOverrideParameters;
 class RequestPeer;
 class ResourceDispatcherDelegate;
 struct SyncLoadResponse;
-class ThrottlingURLLoader;
 class URLLoaderClientImpl;
 
 // This class serves as a communication interface to the ResourceDispatcherHost
@@ -96,6 +99,7 @@ class CONTENT_EXPORT ResourceDispatcher {
       std::unique_ptr<network::ResourceRequest> request,
       int routing_id,
       const net::NetworkTrafficAnnotationTag& traffic_annotation,
+      uint32_t loader_options,
       SyncLoadResponse* response,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       std::vector<std::unique_ptr<blink::URLLoaderThrottle>> throttles,
@@ -117,7 +121,7 @@ class CONTENT_EXPORT ResourceDispatcher {
       int routing_id,
       scoped_refptr<base::SingleThreadTaskRunner> loading_task_runner,
       const net::NetworkTrafficAnnotationTag& traffic_annotation,
-      bool is_sync,
+      uint32_t loader_options,
       std::unique_ptr<RequestPeer> peer,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       std::vector<std::unique_ptr<blink::URLLoaderThrottle>> throttles,
@@ -171,7 +175,7 @@ class CONTENT_EXPORT ResourceDispatcher {
 
   struct PendingRequestInfo {
     PendingRequestInfo(std::unique_ptr<RequestPeer> peer,
-                       ResourceType resource_type,
+                       network::mojom::RequestDestination request_destination,
                        int render_frame_id,
                        const GURL& request_url,
                        std::unique_ptr<NavigationResponseOverrideParameters>
@@ -180,7 +184,7 @@ class CONTENT_EXPORT ResourceDispatcher {
     ~PendingRequestInfo();
 
     std::unique_ptr<RequestPeer> peer;
-    ResourceType resource_type;
+    network::mojom::RequestDestination request_destination;
     int render_frame_id;
     bool is_deferred = false;
     // Original requested url.
@@ -204,10 +208,10 @@ class CONTENT_EXPORT ResourceDispatcher {
     PreviewsState previews_state = PreviewsTypes::PREVIEWS_UNSPECIFIED;
 
     // These stats will be sent to the browser process.
-    mojom::ResourceLoadInfoPtr resource_load_info;
+    blink::mojom::ResourceLoadInfoPtr resource_load_info;
 
     // For mojo loading.
-    std::unique_ptr<ThrottlingURLLoader> url_loader;
+    std::unique_ptr<blink::ThrottlingURLLoader> url_loader;
     std::unique_ptr<URLLoaderClientImpl> url_loader_client;
   };
   using PendingRequestMap = std::map<int, std::unique_ptr<PendingRequestInfo>>;

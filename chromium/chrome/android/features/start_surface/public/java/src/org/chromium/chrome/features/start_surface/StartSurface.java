@@ -4,10 +4,21 @@
 
 package org.chromium.chrome.features.start_surface;
 
+import android.os.SystemClock;
+
+import org.chromium.chrome.browser.compositor.layouts.OverviewModeState;
 import org.chromium.chrome.browser.tasks.tab_management.TabSwitcher;
 
 /** Interface to communicate with the start surface. */
 public interface StartSurface {
+    /**
+     * Called to initialize this interface.
+     * It should be called before showing.
+     * It should not be called in the critical startup process since it will do expensive work.
+     * It might be called many times.
+     */
+    void initialize();
+
     /**
      * An observer that is notified when the start surface internal state, excluding
      * the states notified in {@link OverviewModeObserver}, is changed.
@@ -15,9 +26,11 @@ public interface StartSurface {
     interface StateObserver {
         /**
          * Called when the internal state is changed.
+         * @param overviewModeState the {@link OverviewModeState}.
          * @param shouldShowTabSwitcherToolbar Whether or not should show the Tab switcher toolbar.
          */
-        void onStateChanged(boolean shouldShowTabSwitcherToolbar);
+        void onStateChanged(
+                @OverviewModeState int overviewModeState, boolean shouldShowTabSwitcherToolbar);
     }
 
     /**
@@ -37,6 +50,11 @@ public interface StartSurface {
      * @param listener The {@link OnTabSelectingListener} to use.
      */
     void setOnTabSelectingListener(OnTabSelectingListener listener);
+
+    /**
+     * Called when native initialization is completed.
+     */
+    void initWithNative();
 
     /**
      * An observer that is notified when the StartSurface view state changes.
@@ -95,10 +113,22 @@ public interface StartSurface {
         void showOverview(boolean animate);
 
         /**
+         * Sets the state {@link OverviewModeState}.
+         * @param state the {@link OverviewModeState} to show.
+         */
+        void setOverviewState(@OverviewModeState int state);
+
+        /**
          * Called by the TabSwitcherLayout when the system back button is pressed.
          * @return Whether or not the TabSwitcher consumed the event.
          */
         boolean onBackPressed();
+
+        /**
+         * Enable recording the first meaningful paint event of StartSurface.
+         * @param activityCreateTimeMs {@link SystemClock#elapsedRealtime} at activity creation.
+         */
+        void enableRecordingFirstMeaningfulPaint(long activityCreateTimeMs);
     }
 
     /**

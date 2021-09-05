@@ -29,9 +29,8 @@ namespace chromeos {
 // http://git.chromium.org/gitweb/?p=chromiumos/platform/permission_broker.git
 class COMPONENT_EXPORT(PERMISSION_BROKER) PermissionBrokerClient {
  public:
-  // The ResultCallback is used for both the RequestPathAccess and
-  // RequestUsbAccess methods. Its boolean parameter represents the result of
-  // the operation that it was submitted alongside.
+  // The ResultCallback's boolean parameter represents the result of the
+  // operation that it was submitted alongside.
   using ResultCallback = base::OnceCallback<void(bool)>;
 
   // An OpenPathCallback callback is run when an OpenPath request is completed.
@@ -103,6 +102,50 @@ class COMPONENT_EXPORT(PERMISSION_BROKER) PermissionBrokerClient {
   virtual void ReleaseUdpPort(uint16_t port,
                               const std::string& interface,
                               ResultCallback callback) = 0;
+
+  // Requests that |in_port| on |in_interface| be opened for and forward TCP
+  // traffic to |dst_ip| on |dst_port|. One end of an open pipe must be passed
+  // as |lifeline_fd| so that the permission broker can monitor the lifetime of
+  // the calling process by being notified when the other end is closed. This
+  // method duplicates |lifeline_fd| so it's OK to close it without waiting for
+  // the result.
+  // See PortTracker::ValidatePortRule in permission_broker for the restrictions
+  // on port forwarding requests.
+  virtual void RequestTcpPortForward(uint16_t in_port,
+                                     const std::string& in_interface,
+                                     const std::string& dst_ip,
+                                     uint16_t dst_port,
+                                     int lifeline_fd,
+                                     ResultCallback callback) = 0;
+
+  // Requests that |in_port| on |in_interface| be opened for and forward UDP
+  // traffic to |dst_ip| on |dst_port|. One end of an open pipe must be passed
+  // as |lifeline_fd| so that the permission broker can monitor the lifetime of
+  // the calling process by being notified when the other end is closed. This
+  // method duplicates |lifeline_fd| so it's OK to close it without waiting for
+  // the result.
+  // See PortTracker::ValidatePortRule in permission_broker for the restrictions
+  // on port forwarding requests.
+  virtual void RequestUdpPortForward(uint16_t in_port,
+                                     const std::string& in_interface,
+                                     const std::string& dst_ip,
+                                     uint16_t dst_port,
+                                     int lifeline_fd,
+                                     ResultCallback callback) = 0;
+
+  // Releases a request for an open forwarding rule for TCP packets. The
+  // |in_port| and |in_interface| parameters must be the same as a previous call
+  // to RequestUdpPortForward.
+  virtual void ReleaseTcpPortForward(uint16_t in_port,
+                                     const std::string& in_interface,
+                                     ResultCallback callback) = 0;
+
+  // Releases a request for an open forwarding rule for UDP packets. The
+  // |in_port| and |in_interface| parameters must be the same as a previous call
+  // to RequestUdpPortForward.
+  virtual void ReleaseUdpPortForward(uint16_t in_port,
+                                     const std::string& in_interface,
+                                     ResultCallback callback) = 0;
 
  protected:
   // Initialize/Shutdown should be used instead.

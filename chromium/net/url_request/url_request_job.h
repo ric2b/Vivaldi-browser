@@ -72,7 +72,7 @@ class NET_EXPORT URLRequestJob {
   virtual void SetPriority(RequestPriority priority);
 
   // If any error occurs while starting the Job, NotifyStartError should be
-  // called.
+  // called asynchronously.
   // This helps ensure that all errors follow more similar notification code
   // paths, which should simplify testing.
   virtual void Start() = 0;
@@ -242,11 +242,19 @@ class NET_EXPORT URLRequestJob {
   // from the remote party with the actual response headers recieved.
   virtual void SetResponseHeadersCallback(ResponseHeadersCallback callback) {}
 
-  // Given |policy|, |referrer|, and |destination|, returns the
+  // Given |policy|, |original_referrer|, and |destination|, returns the
   // referrer URL mandated by |request|'s referrer policy.
-  static GURL ComputeReferrerForPolicy(URLRequest::ReferrerPolicy policy,
-                                       const GURL& original_referrer,
-                                       const GURL& destination);
+  //
+  // If |same_origin_out_for_metrics| is non-null, saves to
+  // |*same_origin_out_for_metrics| whether |original_referrer| and
+  // |destination| are cross-origin.
+  // (This allows reporting in a UMA whether the request is same-origin, without
+  // recomputing that information.)
+  static GURL ComputeReferrerForPolicy(
+      URLRequest::ReferrerPolicy policy,
+      const GURL& original_referrer,
+      const GURL& destination,
+      bool* same_origin_out_for_metrics = nullptr);
 
  protected:
   // Notifies the job that a certificate is requested.
@@ -275,6 +283,7 @@ class NET_EXPORT URLRequestJob {
   void NotifyFinalHeadersReceived();
 
   // Notifies the request that a start error has occurred.
+  // NOTE: Must not be called synchronously from |Start|.
   void NotifyStartError(const URLRequestStatus& status);
 
   // Used as an asynchronous callback for Kill to notify the URLRequest

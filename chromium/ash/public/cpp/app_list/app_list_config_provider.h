@@ -13,6 +13,7 @@
 #include "base/observer_list.h"
 
 namespace gfx {
+class Insets;
 class Size;
 }
 
@@ -31,7 +32,7 @@ class ASH_PUBLIC_EXPORT AppListConfigProvider {
     // for AppListConfigType::kShared configs, as they're assumed to always
     // exist.
     // |config_type| - The created config's type.
-    virtual void OnAppListConfigCreated(ash::AppListConfigType config_type) = 0;
+    virtual void OnAppListConfigCreated(AppListConfigType config_type) = 0;
   };
 
   static AppListConfigProvider& Get();
@@ -47,16 +48,14 @@ class ASH_PUBLIC_EXPORT AppListConfigProvider {
   // is set. Returns nullptr if the config does not exist and cannot be created.
   // NOTE: |can_create| has effect only on config types different than kShared.
   //     A new kShared config will always be created if it does not yet exist.
-  AppListConfig* GetConfigForType(ash::AppListConfigType type, bool can_create);
+  AppListConfig* GetConfigForType(AppListConfigType type, bool can_create);
 
   // Returns the app list config that should be used by an app list instance
   // based on the app list display, and available size for the apps grid.
   // Returns nullptr if the new app list config is the same as |current_config|.
   // |work_area_size|: The work area size of the display showing the app list.
-  // |min_horizontal_margin|: The minimum horizontal margins that the apps grid
-  //     has to respect (the apps grid width should fit into the space
-  //     restricted by these margins).
-  // |shelf_height|: The current shelf height.
+  // |shelf_insets|: The insets added to app list content to accommodate the
+  // shelf.
   // |current_config|: If not null, the app list config currently used by the
   //     app list.
   // TODO(crbug.com/976947): Once ScalableAppList feature is removed (and
@@ -65,8 +64,7 @@ class ASH_PUBLIC_EXPORT AppListConfigProvider {
   // configs will be restricted to the number of supported config types.
   std::unique_ptr<AppListConfig> CreateForAppListWidget(
       const gfx::Size& display_work_area_size,
-      int min_horizontal_margin,
-      int shelf_height,
+      const gfx::Insets& shelf_insets,
       const AppListConfig* current_config);
 
   // Clears the set of configs owned by the provider.
@@ -76,7 +74,7 @@ class ASH_PUBLIC_EXPORT AppListConfigProvider {
   const AppListConfig& GetBaseConfigForDisplaySize(
       const gfx::Size& display_work_area_size);
 
-  std::map<ash::AppListConfigType, std::unique_ptr<AppListConfig>> configs_;
+  std::map<AppListConfigType, std::unique_ptr<AppListConfig>> configs_;
 
   base::ObserverList<Observer>::Unchecked observers_;
 

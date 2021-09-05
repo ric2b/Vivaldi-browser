@@ -19,8 +19,10 @@
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/platform_shared_memory_region.h"
-#include "base/memory/shared_memory.h"
+#include "base/memory/read_only_shared_memory_region.h"
 #include "base/memory/shared_memory_mapping.h"
+#include "base/memory/unsafe_shared_memory_region.h"
+#include "base/memory/writable_shared_memory_region.h"
 #include "base/message_loop/message_pump_type.h"
 #include "base/optional.h"
 #include "base/path_service.h"
@@ -996,7 +998,7 @@ class ListenerWithIndirectProxyAssociatedInterface
       public IPC::mojom::IndirectTestDriver,
       public IPC::mojom::PingReceiver {
  public:
-  ListenerWithIndirectProxyAssociatedInterface() : driver_binding_(this) {}
+  ListenerWithIndirectProxyAssociatedInterface() = default;
   ~ListenerWithIndirectProxyAssociatedInterface() override = default;
 
   // IPC::Listener:
@@ -1005,9 +1007,9 @@ class ListenerWithIndirectProxyAssociatedInterface
   void OnAssociatedInterfaceRequest(
       const std::string& interface_name,
       mojo::ScopedInterfaceEndpointHandle handle) override {
-    DCHECK(!driver_binding_.is_bound());
+    DCHECK(!driver_receiver_.is_bound());
     DCHECK_EQ(interface_name, IPC::mojom::IndirectTestDriver::Name_);
-    driver_binding_.Bind(
+    driver_receiver_.Bind(
         mojo::PendingAssociatedReceiver<IPC::mojom::IndirectTestDriver>(
             std::move(handle)));
   }
@@ -1029,7 +1031,8 @@ class ListenerWithIndirectProxyAssociatedInterface
     ping_handler_.Run();
   }
 
-  mojo::AssociatedBinding<IPC::mojom::IndirectTestDriver> driver_binding_;
+  mojo::AssociatedReceiver<IPC::mojom::IndirectTestDriver> driver_receiver_{
+      this};
   mojo::AssociatedReceiver<IPC::mojom::PingReceiver> ping_receiver_receiver_{
       this};
 
@@ -1472,65 +1475,6 @@ DEFINE_IPC_CHANNEL_MOJO_TEST_CLIENT_WITH_CUSTOM_FIXTURE(DropAssociatedRequest,
 #if !defined(OS_MACOSX)
 // TODO(wez): On Mac we need to set up a MachPortBroker before we can transfer
 // Mach ports (which underpin Sharedmemory on Mac) across IPC.
-
-class ListenerThatExpectsSharedMemory : public TestListenerBase {
- public:
-  ListenerThatExpectsSharedMemory(base::OnceClosure quit_closure)
-      : TestListenerBase(std::move(quit_closure)) {}
-
-  bool OnMessageReceived(const IPC::Message& message) override {
-    base::PickleIterator iter(message);
-
-    base::SharedMemoryHandle shared_memory;
-    EXPECT_TRUE(IPC::ReadParam(&message, &iter, &shared_memory));
-    EXPECT_TRUE(shared_memory.IsValid());
-    shared_memory.Close();
-
-    ListenerThatExpectsOK::SendOK(sender());
-    return true;
-  }
-};
-
-TEST_F(IPCChannelMojoTest, SendSharedMemory) {
-  Init("IPCChannelMojoTestSendSharedMemoryClient");
-
-  // Create some shared-memory to share.
-  base::SharedMemoryCreateOptions options;
-  options.size = 1004;
-
-  base::SharedMemory shmem;
-  ASSERT_TRUE(shmem.Create(options));
-
-  // Create a success listener, and launch the child process.
-  base::RunLoop run_loop;
-  ListenerThatExpectsOK listener(run_loop.QuitClosure());
-  CreateChannel(&listener);
-  ASSERT_TRUE(ConnectChannel());
-
-  // Send the child process an IPC with |shmem| attached, to verify
-  // that is is correctly wrapped, transferred and unwrapped.
-  IPC::Message* message = new IPC::Message(0, 2, IPC::Message::PRIORITY_NORMAL);
-  IPC::WriteParam(message, shmem.handle());
-  ASSERT_TRUE(channel()->Send(message));
-
-  run_loop.Run();
-
-  channel()->Close();
-
-  EXPECT_TRUE(WaitForClientShutdown());
-  DestroyChannel();
-}
-
-DEFINE_IPC_CHANNEL_MOJO_TEST_CLIENT(IPCChannelMojoTestSendSharedMemoryClient) {
-  base::RunLoop run_loop;
-  ListenerThatExpectsSharedMemory listener(run_loop.QuitClosure());
-  Connect(&listener);
-  listener.set_sender(channel());
-
-  run_loop.Run();
-
-  Close();
-}
 
 template <class SharedMemoryRegionType>
 class IPCChannelMojoSharedMemoryRegionTypedTest : public IPCChannelMojoTest {};

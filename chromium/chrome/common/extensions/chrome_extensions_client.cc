@@ -251,6 +251,14 @@ void ChromeExtensionsClient::AddOriginAccessPermissions(
         network::mojom::CorsPortMatchMode::kAllowAnyPort,
         network::mojom::CorsOriginAccessMatchPriority::kMaxPriority));
   }
+  if (vivaldi::IsVivaldiApp(extension.id())) {
+    // The vivaldi app always has these permissions.
+    origin_patterns->push_back(network::mojom::CorsOriginPattern::New(
+      content::kChromeUIScheme, chrome::kChromeUIThemeHost, /*port=*/0,
+      network::mojom::CorsDomainMatchMode::kDisallowSubdomains,
+      network::mojom::CorsPortMatchMode::kAllowAnyPort,
+      network::mojom::CorsOriginAccessMatchPriority::kMaxPriority));
+  }
 
   // TODO(jstritar): We should try to remove this special case. Also, these
   // whitelist entries need to be updated when the kManagement permission

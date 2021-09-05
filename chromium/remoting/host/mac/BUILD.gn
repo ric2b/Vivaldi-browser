@@ -4,6 +4,16 @@
 
 import("//remoting/build/config/remoting_build.gni")
 
+if (icu_use_data_file) {
+  bundle_data("icu_data") {
+    sources = [ "$root_out_dir/icudtl.dat" ]
+
+    outputs = [ "{{bundle_resources_dir}}/{{source_file_part}}" ]
+
+    public_deps = [ "//third_party/icu:icudata" ]
+  }
+}
+
 source_set("constants") {
   defines = [
     "HOST_BUNDLE_NAME=\"" + me2me_host_bundle_name + "\"",
@@ -15,15 +25,29 @@ source_set("constants") {
     "constants_mac.h",
   ]
 
+  deps = [ "//remoting/host:remoting_version" ]
+}
+
+source_set("permission_checking") {
+  sources = [
+    "permission_checker.cc",
+    "permission_checker.h",
+    "permission_process_utils.cc",
+    "permission_process_utils.h",
+    "permission_utils.h",
+    "permission_utils.mm",
+    "permission_wizard.h",
+    "permission_wizard.mm",
+  ]
+
   deps = [
-    "//remoting/host:remoting_version",
+    ":constants",
+    "//remoting/resources",
   ]
 }
 
 executable("remoting_me2me_host_service") {
-  sources = [
-    "host_service_main.cc",
-  ]
+  sources = [ "host_service_main.cc" ]
   configs += [ "//remoting/build/config:version" ]
   deps = [
     ":constants",
@@ -34,50 +58,29 @@ executable("remoting_me2me_host_service") {
 }
 
 bundle_data("remoting_me2me_host_service_bundle_data") {
-  sources = [
-    "$root_out_dir/remoting_me2me_host_service",
-  ]
-  outputs = [
-    "{{bundle_executable_dir}}/{{source_file_part}}",
-  ]
-  public_deps = [
-    ":remoting_me2me_host_service",
-  ]
+  sources = [ "$root_out_dir/remoting_me2me_host_service" ]
+  outputs = [ "{{bundle_executable_dir}}/{{source_file_part}}" ]
+  public_deps = [ ":remoting_me2me_host_service" ]
 }
 
 # remoting_me2me_host-InfoPlist.strings
 foreach(locale, remoting_locales_with_underscores) {
   bundle_data("remoting_me2me_host_strings_${locale}_bundle_data") {
-    sources = [
-      "$root_gen_dir/remoting/host/remoting_me2me_host-InfoPlist.strings/$locale.lproj/InfoPlist.strings",
-    ]
-    outputs = [
-      "{{bundle_resources_dir}}/$locale.lproj/{{source_file_part}}",
-    ]
-    deps = [
-      "//remoting/host:remoting_infoplist_strings",
-    ]
+    sources = [ "$root_gen_dir/remoting/host/remoting_me2me_host-InfoPlist.strings/$locale.lproj/InfoPlist.strings" ]
+    outputs = [ "{{bundle_resources_dir}}/$locale.lproj/{{source_file_part}}" ]
+    deps = [ "//remoting/host:remoting_infoplist_strings" ]
   }
 }
 
 bundle_data("remoting_host_resources") {
   sources = [
     "$root_gen_dir/remoting/CREDITS.txt",
-    "remoting_me2me_host.icns",
+    "remoting_host.icns",
   ]
 
-  outputs = [
-    "{{bundle_resources_dir}}/{{source_file_part}}",
-  ]
+  outputs = [ "{{bundle_resources_dir}}/{{source_file_part}}" ]
 
-  public_deps = [
-    "//remoting/host/installer:credits",
-  ]
-
-  if (icu_use_data_file) {
-    sources += [ "$root_out_dir/icudtl.dat" ]
-    public_deps += [ "//third_party/icu:icudata" ]
-  }
+  public_deps = [ "//remoting/host/installer:credits" ]
 }
 
 target("mac_app_bundle", "remoting_me2me_host") {
@@ -95,12 +98,8 @@ target("mac_app_bundle", "remoting_me2me_host") {
   #   defines = [ "REMOTING_ENABLE_BREAKPAD" ]
   # }
 
-  sources = [
-    "permission_utils.h",
-    "permission_utils.mm",
-  ]
-
   deps = [
+    ":permission_checking",
     "//remoting/base:breakpad",
     "//remoting/host:main",
     "//remoting/host:remoting_me2me_host_static",
@@ -120,39 +119,33 @@ target("mac_app_bundle", "remoting_me2me_host") {
     "//remoting/host:remoting_infoplist_strings",
     "//remoting/resources:copy_locales",
   ]
+
+  if (icu_use_data_file) {
+    deps += [ ":icu_data" ]
+  }
 }
 
 foreach(locale, remoting_locales_with_underscores) {
   bundle_data("remoting_host_locale_${locale}_bundle_data") {
-    sources = [
-      "$root_build_dir/remoting/resources/$locale.lproj/locale.pak",
-    ]
-    outputs = [
-      "{{bundle_resources_dir}}/$locale.lproj/{{source_file_part}}",
-    ]
-    deps = [
-      "//remoting/resources:copy_locales",
-    ]
+    sources = [ "$root_build_dir/remoting/resources/$locale.lproj/locale.pak" ]
+    outputs = [ "{{bundle_resources_dir}}/$locale.lproj/{{source_file_part}}" ]
+    deps = [ "//remoting/resources:copy_locales" ]
   }
 }
 
 # native_messaging_host-InfoPlist.strings
 foreach(locale, remoting_locales_with_underscores) {
   bundle_data("native_messaging_host_strings_${locale}_bundle_data") {
-    sources = [
-      "$root_gen_dir/remoting/host/native_messaging_host-InfoPlist.strings/$locale.lproj/InfoPlist.strings",
-    ]
-    outputs = [
-      "{{bundle_resources_dir}}/$locale.lproj/{{source_file_part}}",
-    ]
-    deps = [
-      "//remoting/host:remoting_infoplist_strings",
-    ]
+    sources = [ "$root_gen_dir/remoting/host/native_messaging_host-InfoPlist.strings/$locale.lproj/InfoPlist.strings" ]
+    outputs = [ "{{bundle_resources_dir}}/$locale.lproj/{{source_file_part}}" ]
+    deps = [ "//remoting/host:remoting_infoplist_strings" ]
   }
 }
 
 bundle_data("remoting_native_messaging_host_resources") {
   sources = [
+    "remoting_host.icns",
+
     # This image is used to badge the lock icon in the authentication dialogs,
     # used for elevating privileges to set up the host. The exact filename is
     # required by base::mac::GetAuthorizationRightsWithPrompt().
@@ -161,9 +154,11 @@ bundle_data("remoting_native_messaging_host_resources") {
     # uses. Also, Authorization Services can't deal with .icns files.
     "//remoting/resources/product_logo_32.png",
   ]
-  outputs = [
-    "{{bundle_resources_dir}}/{{source_file_part}}",
-  ]
+  outputs = [ "{{bundle_resources_dir}}/{{source_file_part}}" ]
+
+  if (icu_use_data_file) {
+    deps = [ ":icu_data" ]
+  }
 }
 
 target("mac_app_bundle", "remoting_native_messaging_host") {
@@ -175,6 +170,7 @@ target("mac_app_bundle", "remoting_native_messaging_host") {
     "VERSION_FULL=$remoting_version_full",
     "VERSION_SHORT=$remoting_version_short",
     "MACOSX_DEPLOYMENT_TARGET=10.7",
+    "HOST_NAME=$host_name",
   ]
 
   sources = [

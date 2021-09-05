@@ -84,6 +84,7 @@ class FakePasswordAutofillAgent
 
   // autofill::mojom::PasswordAutofillAgent:
   MOCK_METHOD1(FillPasswordForm, void(const PasswordFormFillData&));
+  MOCK_METHOD0(InformNoSavedCredentials, void());
   MOCK_METHOD2(FillIntoFocusedField, void(bool, const base::string16&));
   MOCK_METHOD1(TouchToFillClosed, void(bool));
   MOCK_METHOD1(AnnotateFieldsWithParsingResult, void(const ParsingResult&));
@@ -118,7 +119,6 @@ PasswordFormFillData GetTestPasswordFormFillData() {
   preferred_match.username_value = ASCIIToUTF16("test@gmail.com");
   preferred_match.password_element = ASCIIToUTF16("password");
   preferred_match.password_value = ASCIIToUTF16("test");
-  preferred_match.preferred = true;
 
   std::vector<const PasswordForm*> matches;
   PasswordForm non_preferred_match = preferred_match;
@@ -155,8 +155,8 @@ class ContentPasswordManagerDriverTest
         web_contents()->GetMainFrame()->GetRemoteAssociatedInterfaces();
     remote_interfaces->OverrideBinderForTesting(
         autofill::mojom::PasswordAutofillAgent::Name_,
-        base::Bind(&FakePasswordAutofillAgent::BindPendingReceiver,
-                   base::Unretained(&fake_agent_)));
+        base::BindRepeating(&FakePasswordAutofillAgent::BindPendingReceiver,
+                            base::Unretained(&fake_agent_)));
   }
 
   bool WasLoggingActivationMessageSent(bool* activation_flag) {
@@ -241,7 +241,7 @@ TEST_F(ContentPasswordManagerDriverTest, NotInformAboutBlacklistedForm) {
   driver->FillPasswordForm(fill_data);
 }
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          ContentPasswordManagerDriverTest,
                          testing::Values(true, false));
 

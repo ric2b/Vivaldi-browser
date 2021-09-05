@@ -19,9 +19,10 @@ import android.view.inputmethod.ExtractedText;
 import android.view.inputmethod.ExtractedTextRequest;
 import android.view.inputmethod.InputConnection;
 
+import androidx.annotation.VisibleForTesting;
+
 import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.base.task.PostTask;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 
@@ -40,7 +41,7 @@ import java.util.concurrent.LinkedBlockingQueue;
  * details.
  */
 class ThreadedInputConnection extends BaseInputConnection implements ChromiumBaseInputConnection {
-    private static final String TAG = "cr_Ime";
+    private static final String TAG = "Ime";
     private static final boolean DEBUG_LOGS = false;
 
     private static final TextInputState UNBLOCKER = new TextInputState(
@@ -205,8 +206,12 @@ class ThreadedInputConnection extends BaseInputConnection implements ChromiumBas
             final ExtractedText extractedText = convertToExtractedText(textInputState);
             mImeAdapter.updateExtractedText(mCurrentExtractedTextRequestToken, extractedText);
         }
-        mImeAdapter.updateSelection(
-                selection.start(), selection.end(), composition.start(), composition.end());
+        // This leads to containerView#onCheckIsTextEditor(). Run it on UI thread.
+        // See https://crbug.com/1060361.
+        PostTask.postTask(UiThreadTaskTraits.DEFAULT, () -> {
+            mImeAdapter.updateSelection(
+                    selection.start(), selection.end(), composition.start(), composition.end());
+        });
     }
 
     private TextInputState requestAndWaitForTextInputState() {

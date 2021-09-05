@@ -122,6 +122,7 @@ struct ScopedMockTransaction : MockTransaction {
 class MockHttpRequest : public HttpRequestInfo {
  public:
   explicit MockHttpRequest(const MockTransaction& t);
+  std::string CacheKey();
 };
 
 //-----------------------------------------------------------------------------
@@ -231,9 +232,6 @@ class MockNetworkTransaction
 
   void SetBeforeNetworkStartCallback(
       const BeforeNetworkStartCallback& callback) override;
-
-  void SetBeforeHeadersSentCallback(
-      const BeforeHeadersSentCallback& callback) override;
 
   void SetRequestHeadersCallback(RequestHeadersCallback callback) override {}
   void SetResponseHeadersCallback(ResponseHeadersCallback) override {}

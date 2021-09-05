@@ -14,7 +14,8 @@ LiveTab* LiveTabContext::AddRestoredTab(
     int tab_index,
     int selected_navigation,
     const std::string& extension_app_id,
-    base::Optional<base::Token> group,
+    base::Optional<tab_groups::TabGroupId> group,
+    const tab_groups::TabGroupVisualData& group_visual_data,
     bool select,
     bool pin,
     bool from_last_session,
@@ -22,8 +23,9 @@ LiveTab* LiveTabContext::AddRestoredTab(
     const std::string& user_agent_override) {
   const std::string dummy_ext_data;
   return AddRestoredTab(navigations, tab_index, selected_navigation,
-                        extension_app_id, group, select, pin, from_last_session,
-                        tab_platform_data, user_agent_override, dummy_ext_data);
+                        extension_app_id, group, group_visual_data, select, pin,
+                        from_last_session, tab_platform_data,
+                        user_agent_override, dummy_ext_data);
 }
 
 LiveTab* LiveTabContext::AddRestoredTab(
@@ -31,7 +33,8 @@ LiveTab* LiveTabContext::AddRestoredTab(
     int tab_index,
     int selected_navigation,
     const std::string& extension_app_id,
-    base::Optional<base::Token> group,
+    base::Optional<tab_groups::TabGroupId> group,
+    const tab_groups::TabGroupVisualData& group_visual_data,
     bool select,
     bool pin,
     bool from_last_session,
@@ -39,13 +42,14 @@ LiveTab* LiveTabContext::AddRestoredTab(
     const std::string& user_agent_override,
     const std::string& ext_data) {
   return AddRestoredTab(navigations, tab_index, selected_navigation,
-                        extension_app_id, group, select, pin, from_last_session,
-                        tab_platform_data, user_agent_override);
+                        extension_app_id, group, group_visual_data, select, pin,
+                        from_last_session, tab_platform_data,
+                        user_agent_override);
 }
 
 LiveTab* LiveTabContext::ReplaceRestoredTab(
     const std::vector<SerializedNavigationEntry>& navigations,
-    base::Optional<base::Token> group,
+    base::Optional<tab_groups::TabGroupId> group,
     int selected_navigation,
     bool from_last_session,
     const std::string& extension_app_id,
@@ -59,7 +63,7 @@ LiveTab* LiveTabContext::ReplaceRestoredTab(
 
 LiveTab* LiveTabContext::ReplaceRestoredTab(
     const std::vector<SerializedNavigationEntry>& navigations,
-    base::Optional<base::Token> group,
+    base::Optional<tab_groups::TabGroupId> group,
     int selected_navigation,
     bool from_last_session,
     const std::string& extension_app_id,

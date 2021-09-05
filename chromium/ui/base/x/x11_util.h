@@ -303,6 +303,10 @@ COMPONENT_EXPORT(UI_BASE_X) WindowManagerName GuessWindowManager();
 // can't determine it, return "Unknown".
 COMPONENT_EXPORT(UI_BASE_X) std::string GuessWindowManagerName();
 
+// Returns a buest-effort guess as to whether |window_manager| is tiling (true)
+// or stacking (false).
+COMPONENT_EXPORT(UI_BASE_X) bool IsWmTiling(WindowManagerName window_manager);
+
 // Returns true if a compositing manager is present.
 COMPONENT_EXPORT(UI_BASE_X) bool IsCompositingManagerPresent();
 
@@ -323,6 +327,11 @@ gfx::ICCProfile GetICCProfileForMonitor(int monitor);
 
 // Return true if the display supports SYNC extension.
 COMPONENT_EXPORT(UI_BASE_X) bool IsSyncExtensionAvailable();
+
+// Returns the preferred Skia colortype for an X11 visual.  LOG(FATAL)'s if
+// there isn't a suitable colortype.
+COMPONENT_EXPORT(UI_BASE_X)
+SkColorType ColorTypeForVisual(void* visual);
 
 // Manages a piece of X11 allocated memory as a RefCountedMemory segment. This
 // object takes ownership over the passed in memory and will free it with the

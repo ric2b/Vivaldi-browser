@@ -10,38 +10,37 @@
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 
 #include "device/vr/public/mojom/vr_service.mojom-blink-forward.h"
-#include "third_party/blink/renderer/platform/transforms/transformation_matrix.h"
 
 namespace blink {
 
-class XRHitTestOptions;
+class ExceptionState;
 class XRHitTestResult;
+class XRSession;
 
 class XRHitTestSource : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  XRHitTestSource(uint32_t id, XRHitTestOptions* options);
+  XRHitTestSource(uint64_t id, XRSession* xr_session);
 
-  uint32_t id() const;
+  uint64_t id() const;
 
-  XRHitTestOptions* hitTestOptions() const;
+  void cancel(ExceptionState& exception_state);
 
   // Returns a vector of XRHitTestResults that were obtained during last frame
   // update. This method is not exposed to JavaScript.
   HeapVector<Member<XRHitTestResult>> Results();
 
-  void Update(const WTF::Vector<device::mojom::blink::XRHitResultPtr>&
-                  hit_test_results);
+  void Update(
+      const Vector<device::mojom::blink::XRHitResultPtr>& hit_test_results);
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  private:
-  const uint32_t id_;
+  const uint64_t id_;
+  Member<XRSession> xr_session_;
 
-  Member<XRHitTestOptions> options_;
-
-  Vector<std::unique_ptr<TransformationMatrix>> last_frame_results_;
+  Vector<device::mojom::blink::XRHitResult> last_frame_results_;
 };
 
 }  // namespace blink

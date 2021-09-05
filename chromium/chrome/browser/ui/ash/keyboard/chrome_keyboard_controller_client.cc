@@ -9,7 +9,6 @@
 #include "ash/keyboard/ui/keyboard_ui_controller.h"
 #include "ash/keyboard/ui/resources/keyboard_resource_util.h"
 #include "ash/public/cpp/keyboard/keyboard_switches.h"
-#include "ash/public/mojom/constants.mojom.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/command_line.h"
@@ -181,7 +180,9 @@ bool ChromeKeyboardControllerClient::IsEnableFlagSet(
 }
 
 void ChromeKeyboardControllerClient::ReloadKeyboardIfNeeded() {
-  keyboard_controller_->ReloadKeyboardIfNeeded();
+  // |keyboard_controller_| may be null if the keyboard reloads during shutdown.
+  if (keyboard_controller_)
+    keyboard_controller_->ReloadKeyboardIfNeeded();
 }
 
 void ChromeKeyboardControllerClient::RebuildKeyboardIfEnabled() {
@@ -216,6 +217,11 @@ void ChromeKeyboardControllerClient::SetOccludedBounds(
 void ChromeKeyboardControllerClient::SetHitTestBounds(
     const std::vector<gfx::Rect>& bounds) {
   keyboard_controller_->SetHitTestBounds(bounds);
+}
+
+bool ChromeKeyboardControllerClient::SetAreaToRemainOnScreen(
+    const gfx::Rect& bounds) {
+  return keyboard_controller_->SetAreaToRemainOnScreen(bounds);
 }
 
 void ChromeKeyboardControllerClient::SetDraggableArea(const gfx::Rect& bounds) {

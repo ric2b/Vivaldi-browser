@@ -4,16 +4,18 @@
 
 package org.chromium.chrome.browser.customtabs;
 
+import static org.chromium.chrome.browser.ui.system.StatusBarColorController.DEFAULT_STATUS_BAR_COLOR;
 import static org.chromium.chrome.browser.ui.system.StatusBarColorController.UNDEFINED_STATUS_BAR_COLOR;
 
-import android.content.res.Resources;
+import androidx.annotation.VisibleForTesting;
 
-import org.chromium.chrome.browser.customtabs.content.CustomTabActivityTabProvider;
+import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider;
+import org.chromium.chrome.browser.customtabs.features.toolbar.CustomTabToolbarColorController;
+import org.chromium.chrome.browser.customtabs.features.toolbar.CustomTabToolbarColorController.ToolbarColorType;
 import org.chromium.chrome.browser.dependency_injection.ActivityScope;
+import org.chromium.chrome.browser.previews.Previews;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tab.TabThemeColorHelper;
 import org.chromium.chrome.browser.ui.system.StatusBarColorController;
-import org.chromium.chrome.browser.util.ColorUtils;
 
 import javax.inject.Inject;
 
@@ -22,43 +24,16 @@ import javax.inject.Inject;
  */
 @ActivityScope
 public class CustomTabStatusBarColorProvider {
-    private final Resources mResources;
-    private final CustomTabIntentDataProvider mIntentDataProvider;
-    private final CustomTabActivityTabProvider mCustomTabActivityTabProvider;
+    private final BrowserServicesIntentDataProvider mIntentDataProvider;
     private final StatusBarColorController mStatusBarColorController;
-    private final TabThemeColorHelperWrapper mTabThemeColorHelperWrapper;
 
     private boolean mUseTabThemeColor;
-    private boolean mCachedIsFallbackColorDefault;
 
-    /** Wrapper class to help unit testing. */
-    static class TabThemeColorHelperWrapper {
-        boolean isDefaultColorUsed(Tab tab) {
-            return TabThemeColorHelper.isDefaultColorUsed(tab);
-        }
-    }
-
-    /** Constructor for production use. */
     @Inject
-    public CustomTabStatusBarColorProvider(Resources resources,
-            CustomTabIntentDataProvider intentDataProvider,
-            CustomTabActivityTabProvider customTabActivityTabProvider,
+    public CustomTabStatusBarColorProvider(BrowserServicesIntentDataProvider intentDataProvider,
             StatusBarColorController statusBarColorController) {
-        this(resources, intentDataProvider, customTabActivityTabProvider, statusBarColorController,
-                new TabThemeColorHelperWrapper());
-    }
-
-    /** Constructor for unit testing that allows using a custom TabThemeColorHelperWrapper. */
-    public CustomTabStatusBarColorProvider(Resources resources,
-            CustomTabIntentDataProvider intentDataProvider,
-            CustomTabActivityTabProvider customTabActivityTabProvider,
-            StatusBarColorController statusBarColorController,
-            TabThemeColorHelperWrapper tabThemeColorHelperWrapper) {
-        mResources = resources;
         mIntentDataProvider = intentDataProvider;
-        mCustomTabActivityTabProvider = customTabActivityTabProvider;
         mStatusBarColorController = statusBarColorController;
-        mTabThemeColorHelperWrapper = tabThemeColorHelperWrapper;
     }
 
     /**
@@ -69,50 +44,28 @@ public class CustomTabStatusBarColorProvider {
         if (mUseTabThemeColor == useTabThemeColor) return;
 
         mUseTabThemeColor = useTabThemeColor;
-
-        // We keep the last value that {@link #isStatusBarDefaultThemeColor} was called with so we
-        // can use it here. Getting the live value would be somewhat complicated - we'd need to call
-        // isStatusBarDefaultThemeColor on the ChromeActivity, not the CustomTabActivity. At the
-        // time of writing I don't believe this is worth the complexity as:
-        // - ChromeActivity#isStatusBarDefaultThemeColor always returns false.
-        // - Our isStatusBarDefaultThemeColor method only uses the fallback color when the custom
-        //   tab is opened by Chrome, and we don't call setUseTabThemeColor in this case.
-        mStatusBarColorController.updateStatusBarColor(
-                isStatusBarDefaultThemeColor(mCachedIsFallbackColorDefault));
+        mStatusBarColorController.updateStatusBarColor();
     }
 
-    int getBaseStatusBarColor(int fallbackStatusBarColor) {
+    int getBaseStatusBarColor(Tab tab, int fallbackStatusBarColor) {
         if (mIntentDataProvider.isOpenedByChrome()) return fallbackStatusBarColor;
 
-        Tab tab = mCustomTabActivityTabProvider.getTab();
-        if (tab != null) {
-            if (tab.isPreview()) return ColorUtils.getDefaultThemeColor(mResources, false);
-
-            // Returning the color as undefined causes the Tab's theme color to be used.
-            if (mUseTabThemeColor && !mTabThemeColorHelperWrapper.isDefaultColorUsed(tab)) {
+        @ToolbarColorType
+        int toolbarColorType = CustomTabToolbarColorController.computeToolbarColorType(
+                mIntentDataProvider, mUseTabThemeColor, tab, () -> isPreview(tab));
+        switch (toolbarColorType) {
+            case ToolbarColorType.THEME_COLOR:
                 return UNDEFINED_STATUS_BAR_COLOR;
-            }
+            case ToolbarColorType.DEFAULT_COLOR:
+                return DEFAULT_STATUS_BAR_COLOR;
+            case ToolbarColorType.INTENT_TOOLBAR_COLOR:
+                return mIntentDataProvider.getToolbarColor();
         }
-
-        return mIntentDataProvider.getToolbarColor();
+        return DEFAULT_STATUS_BAR_COLOR;
     }
 
-    boolean isStatusBarDefaultThemeColor(boolean isFallbackColorDefault) {
-        mCachedIsFallbackColorDefault = isFallbackColorDefault;
-        if (mIntentDataProvider.isOpenedByChrome()) return isFallbackColorDefault;
-
-        if (mUseTabThemeColor) {
-            Tab tab = mCustomTabActivityTabProvider.getTab();
-            if (tab != null) return mTabThemeColorHelperWrapper.isDefaultColorUsed(tab);
-        }
-
-        return false;
-    }
-
-    /**
-     * Called when toolbar color is changed so that the status bar can adapt.
-     */
-    public void onToolbarColorChanged() {
-        mStatusBarColorController.updateStatusBarColor(false);
+    @VisibleForTesting
+    boolean isPreview(Tab tab) {
+        return Previews.isPreview(tab);
     }
 }

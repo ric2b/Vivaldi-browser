@@ -5,6 +5,7 @@
 // Note: The API should stay in sync with the IDL definitions in
 // third_party/WebKit/Source/core/mojo
 
+// eslint-disable-next-line no-var
 var Mojo = Mojo || {};
 
 /**
@@ -38,7 +39,7 @@ Mojo.RESULT_SHOULD_WAIT = 17;
 Mojo.createMessagePipe = function() {
   const result =
       Mojo.internal.sendMessage({name: 'Mojo.createMessagePipe', args: {}});
-  if (result.result == Mojo.RESULT_OK) {
+  if (result.result === Mojo.RESULT_OK) {
     result.handle0 = new MojoHandle(result.handle0);
     result.handle1 = new MojoHandle(result.handle1);
   }
@@ -175,7 +176,7 @@ MojoHandle.prototype.readMessage = function() {
   const result = Mojo.internal.sendMessage(
       {name: 'MojoHandle.readMessage', args: {handle: this.nativeHandle_}});
 
-  if (result.result == Mojo.RESULT_OK) {
+  if (result.result === Mojo.RESULT_OK) {
     result.buffer = new Uint8Array(result.buffer).buffer;
     result.handles = result.handles.map(function(handle) {
       return new MojoHandle(handle);

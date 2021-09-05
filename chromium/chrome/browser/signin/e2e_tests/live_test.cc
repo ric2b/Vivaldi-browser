@@ -31,6 +31,8 @@ void LiveTest::SetUp() {
   // Only run live tests when specified.
   auto* cmd_line = base::CommandLine::ForCurrentProcess();
   if (!cmd_line->HasSwitch(kRunLiveTestFlag)) {
+    LOG(INFO) << "This test should get skipped.";
+    skip_test_ = true;
     GTEST_SKIP();
   }
   base::FilePath root_path;
@@ -41,5 +43,19 @@ void LiveTest::SetUp() {
   InProcessBrowserTest::SetUp();
 }
 
+void LiveTest::TearDown() {
+  // This test was skipped, no need to tear down.
+  if (skip_test_)
+    return;
+  InProcessBrowserTest::TearDown();
+}
+
+void LiveTest::PostRunTestOnMainThread() {
+  // This test was skipped. Running PostRunTestOnMainThread can cause
+  // TIMED_OUT on Win7.
+  if (skip_test_)
+    return;
+  InProcessBrowserTest::PostRunTestOnMainThread();
+}
 }  // namespace test
 }  // namespace signin

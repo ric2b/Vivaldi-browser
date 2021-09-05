@@ -21,8 +21,8 @@ const int kDelayOneHour = kDelayOneMinute * 60;
 
 class ComponentUpdaterConfiguratorImplTest : public testing::Test {
  public:
-  ComponentUpdaterConfiguratorImplTest() {}
-  ~ComponentUpdaterConfiguratorImplTest() override {}
+  ComponentUpdaterConfiguratorImplTest() = default;
+  ~ComponentUpdaterConfiguratorImplTest() override = default;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ComponentUpdaterConfiguratorImplTest);
@@ -33,7 +33,7 @@ TEST_F(ComponentUpdaterConfiguratorImplTest, FastUpdate) {
   base::CommandLine cmdline(base::CommandLine::NO_PROGRAM);
   std::unique_ptr<ConfiguratorImpl> config = std::make_unique<ConfiguratorImpl>(
       ComponentUpdaterCommandLineConfigPolicy(&cmdline), false);
-  CHECK_EQ(6 * kDelayOneMinute, config->InitialDelay());
+  CHECK_EQ(kDelayOneMinute, config->InitialDelay());
   CHECK_EQ(5 * kDelayOneHour, config->NextCheckDelay());
   CHECK_EQ(30 * kDelayOneMinute, config->OnDemandDelay());
   CHECK_EQ(15 * kDelayOneMinute, config->UpdateDelay());
@@ -54,7 +54,7 @@ TEST_F(ComponentUpdaterConfiguratorImplTest, FastUpdateWithCustomPolicy) {
   class DefaultCommandLineConfigPolicy
       : public update_client::CommandLineConfigPolicy {
    public:
-    DefaultCommandLineConfigPolicy() {}
+    DefaultCommandLineConfigPolicy() = default;
 
     // update_client::CommandLineConfigPolicy overrides.
     bool BackgroundDownloadsEnabled() const override { return false; }
@@ -67,7 +67,7 @@ TEST_F(ComponentUpdaterConfiguratorImplTest, FastUpdateWithCustomPolicy) {
 
   std::unique_ptr<ConfiguratorImpl> config = std::make_unique<ConfiguratorImpl>(
       DefaultCommandLineConfigPolicy(), false);
-  CHECK_EQ(6 * kDelayOneMinute, config->InitialDelay());
+  CHECK_EQ(kDelayOneMinute, config->InitialDelay());
   CHECK_EQ(5 * kDelayOneHour, config->NextCheckDelay());
   CHECK_EQ(30 * kDelayOneMinute, config->OnDemandDelay());
   CHECK_EQ(15 * kDelayOneMinute, config->UpdateDelay());
@@ -76,7 +76,7 @@ TEST_F(ComponentUpdaterConfiguratorImplTest, FastUpdateWithCustomPolicy) {
   class FastUpdateCommandLineConfigurator
       : public DefaultCommandLineConfigPolicy {
    public:
-    FastUpdateCommandLineConfigurator() {}
+    FastUpdateCommandLineConfigurator() = default;
 
     bool FastUpdate() const override { return true; }
   };
@@ -91,12 +91,12 @@ TEST_F(ComponentUpdaterConfiguratorImplTest, FastUpdateWithCustomPolicy) {
 TEST_F(ComponentUpdaterConfiguratorImplTest, InitialDelay) {
   std::unique_ptr<ConfiguratorImpl> config = std::make_unique<ConfiguratorImpl>(
       update_client::CommandLineConfigPolicy(), false);
-  CHECK_EQ(6 * kDelayOneMinute, config->InitialDelay());
+  CHECK_EQ(kDelayOneMinute, config->InitialDelay());
 
   class CommandLineConfigPolicy
       : public update_client::CommandLineConfigPolicy {
    public:
-    CommandLineConfigPolicy() {}
+    CommandLineConfigPolicy() = default;
 
     // update_client::CommandLineConfigPolicy overrides.
     bool BackgroundDownloadsEnabled() const override { return false; }
@@ -128,14 +128,14 @@ TEST_F(ComponentUpdaterConfiguratorImplTest, InitialDelay) {
     CommandLineConfigPolicy clcp;
     clcp.set_fast_update(false);
     config = std::make_unique<ConfiguratorImpl>(clcp, false);
-    CHECK_EQ(6 * kDelayOneMinute, config->InitialDelay());
+    CHECK_EQ(kDelayOneMinute, config->InitialDelay());
   }
 
   {
     CommandLineConfigPolicy clcp;
-    clcp.set_initial_delay(kDelayOneMinute);
+    clcp.set_initial_delay(2 * kDelayOneMinute);
     config = std::make_unique<ConfiguratorImpl>(clcp, false);
-    CHECK_EQ(kDelayOneMinute, config->InitialDelay());
+    CHECK_EQ(2 * kDelayOneMinute, config->InitialDelay());
   }
 }
 

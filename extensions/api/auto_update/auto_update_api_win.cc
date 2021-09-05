@@ -103,4 +103,14 @@ AutoUpdateDisableUpdateNotifierFunction::Run() {
   return RespondNow(NoArguments());
 }
 
+ExtensionFunction::ResponseAction
+AutoUpdateGetAutoInstallUpdatesFunction::Run() {
+  return RespondNow(Error("Not implemented"));
+}
+
+ExtensionFunction::ResponseAction
+AutoUpdateSetAutoInstallUpdatesFunction::Run() {
+  return RespondNow(Error("Not implemented"));
+}
+
 }  // namespace extensions

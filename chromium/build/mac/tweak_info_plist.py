@@ -239,7 +239,7 @@ def _AddSparkleKeys(plist, vivaldi_release_kind):
   """Adds the Sparkle keys."""
   plist['SUScheduledCheckInterval'] = 86400
   plist['SUEnableAutomaticChecks'] = 'YES'
-  plist['SUAllowsAutomaticUpdates'] = 'NO'
+  plist['SUAllowsAutomaticUpdates'] = 'YES'
   if vivaldi_release_kind == 'vivaldi_final':
     plist['SUFeedURL'] = 'https://update.vivaldi.com/update/1.0/public/mac/appcast.xml'
   elif vivaldi_release_kind == 'vivaldi_snapshot':

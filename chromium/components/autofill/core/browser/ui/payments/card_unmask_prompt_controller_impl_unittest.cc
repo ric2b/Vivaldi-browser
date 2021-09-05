@@ -13,6 +13,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
+#include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_client.h"
 #include "components/autofill/core/browser/autofill_metrics.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
@@ -40,6 +41,7 @@ class TestCardUnmaskDelegate : public CardUnmaskDelegate {
     details_ = details;
   }
   void OnUnmaskPromptClosed() override {}
+  bool ShouldOfferFidoAuth() const override { return false; }
 
   const UserProvidedUnmaskDetails& details() { return details_; }
 
@@ -72,8 +74,13 @@ class TestCardUnmaskPromptController : public CardUnmaskPromptControllerImpl {
             features::kAutofillNoLocalSaveOnUnmaskSuccess)) {}
 
   bool CanStoreLocally() const override { return can_store_locally_; }
-
+#if defined(OS_ANDROID)
+  bool ShouldOfferWebauthn() const override { return should_offer_webauthn_; }
+#endif
   void set_can_store_locally(bool can) { can_store_locally_ = can; }
+  void set_should_offer_webauthn(bool should) {
+    should_offer_webauthn_ = should;
+  }
 
   void SetCreditCardForTesting(CreditCard card) {
     CardUnmaskPromptControllerImpl::SetCreditCardForTesting(card);
@@ -85,6 +92,7 @@ class TestCardUnmaskPromptController : public CardUnmaskPromptControllerImpl {
 
  private:
   bool can_store_locally_;
+  bool should_offer_webauthn_;
   base::WeakPtrFactory<TestCardUnmaskPromptController> weak_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(TestCardUnmaskPromptController);
@@ -96,14 +104,20 @@ class CardUnmaskPromptControllerImplGenericTest {
 
   void ShowPrompt() {
     controller_->ShowPrompt(
-        test_unmask_prompt_view_.get(), test::GetMaskedServerCard(),
-        AutofillClient::UNMASK_FOR_AUTOFILL, delegate_->GetWeakPtr());
+        base::BindOnce(
+            &CardUnmaskPromptControllerImplGenericTest::GetCardUnmaskPromptView,
+            base::Unretained(this)),
+        test::GetMaskedServerCard(), AutofillClient::UNMASK_FOR_AUTOFILL,
+        delegate_->GetWeakPtr());
   }
 
   void ShowPromptAmex() {
     controller_->ShowPrompt(
-        test_unmask_prompt_view_.get(), test::GetMaskedServerCardAmex(),
-        AutofillClient::UNMASK_FOR_AUTOFILL, delegate_->GetWeakPtr());
+        base::BindOnce(
+            &CardUnmaskPromptControllerImplGenericTest::GetCardUnmaskPromptView,
+            base::Unretained(this)),
+        test::GetMaskedServerCardAmex(), AutofillClient::UNMASK_FOR_AUTOFILL,
+        delegate_->GetWeakPtr());
   }
 
   void ShowPromptAndSimulateResponse(bool should_store_pan,
@@ -130,6 +144,10 @@ class CardUnmaskPromptControllerImplGenericTest {
   std::unique_ptr<TestCardUnmaskDelegate> delegate_;
 
  private:
+  CardUnmaskPromptView* GetCardUnmaskPromptView() {
+    return test_unmask_prompt_view_.get();
+  }
+
   DISALLOW_COPY_AND_ASSIGN(CardUnmaskPromptControllerImplGenericTest);
 };
 
@@ -258,67 +276,6 @@ TEST_F(CardUnmaskPromptControllerImplTest, LogUnmaskedCardAfterFailure) {
       AutofillMetrics::UNMASK_PROMPT_UNMASKED_CARD_AFTER_FAILED_ATTEMPTS, 1);
 }
 
-TEST_F(CardUnmaskPromptControllerImplTest, LogSavedCardLocally) {
-  ShowPromptAndSimulateResponse(/*should_store_pan=*/true,
-                                /*enable_fido_auth=*/false);
-  base::HistogramTester histogram_tester;
-
-  controller_->OnVerificationResult(AutofillClient::SUCCESS);
-  controller_->OnUnmaskDialogClosed();
-
-  histogram_tester.ExpectBucketCount(
-      "Autofill.UnmaskPrompt.Events",
-      AutofillMetrics::UNMASK_PROMPT_SAVED_CARD_LOCALLY, 1);
-}
-
-TEST_F(CardUnmaskPromptControllerImplTest, LogDidOptIn) {
-  SetImportCheckboxState(false);
-  ShowPromptAndSimulateResponse(/*should_store_pan=*/true,
-                                /*enable_fido_auth=*/false);
-  base::HistogramTester histogram_tester;
-  controller_->OnUnmaskDialogClosed();
-
-  histogram_tester.ExpectBucketCount(
-      "Autofill.UnmaskPrompt.Events",
-      AutofillMetrics::UNMASK_PROMPT_LOCAL_SAVE_DID_OPT_IN, 1);
-}
-
-TEST_F(CardUnmaskPromptControllerImplTest, LogDidNotOptIn) {
-  SetImportCheckboxState(false);
-  ShowPromptAndSimulateResponse(/*should_store_pan=*/false,
-                                /*enable_fido_auth=*/false);
-  base::HistogramTester histogram_tester;
-  controller_->OnUnmaskDialogClosed();
-
-  histogram_tester.ExpectBucketCount(
-      "Autofill.UnmaskPrompt.Events",
-      AutofillMetrics::UNMASK_PROMPT_LOCAL_SAVE_DID_NOT_OPT_IN, 1);
-}
-
-TEST_F(CardUnmaskPromptControllerImplTest, LogDidOptOut) {
-  SetImportCheckboxState(true);
-  ShowPromptAndSimulateResponse(/*should_store_pan=*/false,
-                                /*enable_fido_auth=*/false);
-  base::HistogramTester histogram_tester;
-  controller_->OnUnmaskDialogClosed();
-
-  histogram_tester.ExpectBucketCount(
-      "Autofill.UnmaskPrompt.Events",
-      AutofillMetrics::UNMASK_PROMPT_LOCAL_SAVE_DID_OPT_OUT, 1);
-}
-
-TEST_F(CardUnmaskPromptControllerImplTest, LogDidNotOptOut) {
-  SetImportCheckboxState(true);
-  ShowPromptAndSimulateResponse(/*should_store_pan=*/true,
-                                /*enable_fido_auth=*/false);
-  base::HistogramTester histogram_tester;
-  controller_->OnUnmaskDialogClosed();
-
-  histogram_tester.ExpectBucketCount(
-      "Autofill.UnmaskPrompt.Events",
-      AutofillMetrics::UNMASK_PROMPT_LOCAL_SAVE_DID_NOT_OPT_OUT, 1);
-}
-
 TEST_F(CardUnmaskPromptControllerImplTest, DontLogForHiddenCheckbox) {
   controller_->set_can_store_locally(false);
   ShowPromptAndSimulateResponse(/*should_store_pan=*/false,
@@ -354,6 +311,17 @@ TEST_F(CardUnmaskPromptControllerImplTest,
                                 /*enable_fido_auth=*/false);
   EXPECT_FALSE(pref_service_->GetBoolean(
       prefs::kAutofillCreditCardFidoAuthOfferCheckboxState));
+}
+
+TEST_F(CardUnmaskPromptControllerImplTest,
+       PopulateCheckboxToUserProvidedUnmaskDetails) {
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kAutofillCreditCardAuthentication);
+  controller_->set_can_store_locally(false);
+  ShowPromptAndSimulateResponse(/*should_store_pan=*/false,
+                                /*enable_fido_auth=*/true);
+
+  EXPECT_TRUE(delegate_->details().enable_fido_auth);
 }
 
 TEST_F(CardUnmaskPromptControllerImplTest, LogDurationNoAttempts) {

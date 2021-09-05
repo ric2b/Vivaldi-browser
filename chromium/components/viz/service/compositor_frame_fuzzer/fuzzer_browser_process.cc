@@ -7,6 +7,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/bind_helpers.h"
 #include "base/run_loop.h"
 #include "components/viz/common/quads/solid_color_draw_quad.h"
 #include "components/viz/common/quads/surface_draw_quad.h"
@@ -103,11 +104,11 @@ FuzzerBrowserProcess::BuildRootCompositorFrameSinkParams() {
   params->compositor_frame_sink_client =
       root_compositor_frame_sink_client_.BindInterfaceRemote();
   params->display_private =
-      MakeRequestAssociatedWithDedicatedPipe(&display_private_);
-  params->display_client = display_client_.BindInterfacePtr().PassInterface();
+      display_private_.BindNewEndpointAndPassDedicatedReceiverForTesting();
+  params->display_client = display_client_.BindRemote();
   params->external_begin_frame_controller =
-      MakeRequestAssociatedWithDedicatedPipe(
-          &external_begin_frame_controller_ptr_);
+      external_begin_frame_controller_remote_
+           .BindNewEndpointAndPassDedicatedReceiverForTesting();
   return params;
 }
 
@@ -116,9 +117,8 @@ CompositorFrame FuzzerBrowserProcess::BuildBrowserUICompositorFrame(
   CompositorFrame frame;
 
   frame.metadata.frame_token = ++next_frame_token_;
-  frame.metadata.begin_frame_ack.source_id = BeginFrameArgs::kManualSourceId;
-  frame.metadata.begin_frame_ack.sequence_number =
-      BeginFrameArgs::kStartingFrameNumber;
+  frame.metadata.begin_frame_ack.frame_id = BeginFrameId(
+      BeginFrameArgs::kManualSourceId, BeginFrameArgs::kStartingFrameNumber);
   frame.metadata.device_scale_factor = 1;
   frame.metadata.local_surface_id_allocation_time = base::TimeTicks::Now();
   frame.metadata.referenced_surfaces.push_back(
@@ -141,8 +141,7 @@ CompositorFrame FuzzerBrowserProcess::BuildBrowserUICompositorFrame(
                        gfx::Rect(kRendererFrameSize),
                        SurfaceRange(base::nullopt, renderer_surface_id),
                        SK_ColorWHITE,
-                       /*stretch_content_to_fill_bounds=*/false,
-                       /*ignores_input_event=*/false);
+                       /*stretch_content_to_fill_bounds=*/false);
 
   auto* toolbar_sqs = pass->CreateAndAppendSharedQuadState();
   toolbar_sqs->SetAll(

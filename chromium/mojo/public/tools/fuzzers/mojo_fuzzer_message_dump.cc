@@ -14,6 +14,7 @@
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "mojo/core/embedder/embedder.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/tools/fuzzers/fuzz.mojom.h"
 #include "mojo/public/tools/fuzzers/fuzz_impl.h"
 
@@ -110,6 +111,13 @@ auto GetComplexFuzzUnion(fuzz::mojom::FuzzUnionPtr in) {
 }
 
 /* Returns a populated value for FuzzStruct->fuzz_primitive_array. */
+auto GetFuzzStructBoolArrayValue() {
+  decltype(fuzz::mojom::FuzzStruct::fuzz_bool_array) bool_array;
+  bool_array = {true, true, false, false, true, true, false, true, false};
+  return bool_array;
+}
+
+/* Returns a populated value for FuzzStruct->fuzz_primitive_array. */
 auto GetFuzzStructPrimitiveArrayValue() {
   decltype(fuzz::mojom::FuzzStruct::fuzz_primitive_array) primitive_array;
   primitive_array = {'f', 'u', 'z', 'z'};
@@ -186,6 +194,7 @@ fuzz::mojom::FuzzStructPtr GetPopulatedFuzzStruct() {
   auto union_complex = GetComplexFuzzUnion(std::move(union_bool));
 
   /* Prepare the nontrivial fields for the struct. */
+  auto fuzz_bool_array = GetFuzzStructBoolArrayValue();
   auto fuzz_primitive_array = GetFuzzStructPrimitiveArrayValue();
   auto fuzz_primitive_map = GetFuzzStructPrimitiveMapValue();
   auto fuzz_array_map = GetFuzzStructArrayMapValue();
@@ -211,6 +220,7 @@ fuzz::mojom::FuzzStructPtr GetPopulatedFuzzStruct() {
       1.0,                             /* fuzz_float */
       1.0,                             /* fuzz_double */
       "fuzz",                          /* fuzz_string */
+      std::move(fuzz_bool_array),      /* fuzz_bool_array */
       std::move(fuzz_primitive_array), /* fuzz_primitive_array */
       std::move(fuzz_primitive_map),   /* fuzz_primitive_map */
       std::move(fuzz_array_map),       /* fuzz_array_map */
@@ -227,29 +237,33 @@ void FuzzCallback() {}
 /* Invokes each method in the FuzzInterface and dumps the messages to the
  * supplied directory. */
 void DumpMessages(std::string output_directory) {
-  fuzz::mojom::FuzzInterfacePtr fuzz;
+  mojo::Remote<fuzz::mojom::FuzzInterface> fuzz;
   mojo::AssociatedRemote<fuzz::mojom::FuzzDummyInterface> dummy;
 
   /* Create the impl and add a MessageDumper to the filter chain. */
-  env->impl = std::make_unique<FuzzImpl>(MakeRequest(&fuzz));
-  env->impl->binding_.RouterForTesting()->SetIncomingMessageFilter(
-      std::make_unique<MessageDumper>(output_directory));
+  env->impl = std::make_unique<FuzzImpl>(fuzz.BindNewPipeAndPassReceiver());
+  env->impl->receiver_.internal_state()
+      ->RouterForTesting()
+      ->SetIncomingMessageFilter(
+          std::make_unique<MessageDumper>(output_directory));
 
   /* Call methods in various ways to generate interesting messages. */
   fuzz->FuzzBasic();
-  fuzz->FuzzBasicResp(base::Bind(FuzzCallback));
+  fuzz->FuzzBasicResp(base::BindOnce(FuzzCallback));
   fuzz->FuzzBasicSyncResp();
   fuzz->FuzzArgs(fuzz::mojom::FuzzStruct::New(),
                  fuzz::mojom::FuzzStructPtr(nullptr));
   fuzz->FuzzArgs(fuzz::mojom::FuzzStruct::New(), GetPopulatedFuzzStruct());
   fuzz->FuzzArgsResp(fuzz::mojom::FuzzStruct::New(), GetPopulatedFuzzStruct(),
-                     base::Bind(FuzzCallback));
+                     base::BindOnce(FuzzCallback));
   fuzz->FuzzArgsResp(fuzz::mojom::FuzzStruct::New(), GetPopulatedFuzzStruct(),
-                     base::Bind(FuzzCallback));
+                     base::BindOnce(FuzzCallback));
   fuzz->FuzzArgsSyncResp(fuzz::mojom::FuzzStruct::New(),
-                         GetPopulatedFuzzStruct(), base::Bind(FuzzCallback));
+                         GetPopulatedFuzzStruct(),
+                         base::BindOnce(FuzzCallback));
   fuzz->FuzzArgsSyncResp(fuzz::mojom::FuzzStruct::New(),
-                         GetPopulatedFuzzStruct(), base::Bind(FuzzCallback));
+                         GetPopulatedFuzzStruct(),
+                         base::BindOnce(FuzzCallback));
   fuzz->FuzzAssociated(dummy.BindNewEndpointAndPassReceiver());
   dummy->Ping();
 }

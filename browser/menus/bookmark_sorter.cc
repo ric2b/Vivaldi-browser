@@ -3,7 +3,10 @@
 #include "browser/menus/bookmark_sorter.h"
 
 #include "base/i18n/string_compare.h"
+#include "base/strings/utf_string_conversions.h"
 #include "components/bookmarks/browser/bookmark_model.h"
+
+#include "components/bookmarks/vivaldi_bookmark_kit.h"
 
 namespace vivaldi {
 
@@ -34,8 +37,10 @@ void BookmarkSorter::sort(std::vector<bookmarks::BookmarkNode*>& vector) {
         if ((b1->type() == b2->type()) || !group_folders_) {
           const icu::Collator* collator = collator_.get();
 
-          int l1 = b1->GetTitle().length();
-          int l2 = b2->GetTitle().length();
+          std::string n1 = vivaldi_bookmark_kit::GetNickname(b1);
+          std::string n2 = vivaldi_bookmark_kit::GetNickname(b2);
+          size_t l1 = n1.length();
+          size_t l2 = n2.length();
           if (l1 == 0 || l2 == 0) {
             return fallbackToTitleSort(collator, b1, b2, l1, l2);
           }
@@ -77,18 +82,22 @@ void BookmarkSorter::sort(std::vector<bookmarks::BookmarkNode*>& vector) {
         if ((b1->type() == b2->type()) || !group_folders_) {
           const icu::Collator* collator = collator_.get();
 
-          int l1 = b1->GetNickName().length();
-          int l2 = b2->GetNickName().length();
+          std::string n1 = vivaldi_bookmark_kit::GetNickname(b1);
+          std::string n2 = vivaldi_bookmark_kit::GetNickname(b2);
+          size_t l1 = n1.length();
+          size_t l2 = n2.length();
           if (l1 == 0 || l2 == 0) {
             return fallbackToTitleSort(collator, b1, b2, l1, l2);
           }
 
           if (sort_order_ == ORDER_ASCENDING) {
             return base::i18n::CompareString16WithCollator(
-                *collator, b1->GetNickName(), b2->GetNickName()) == UCOL_LESS;
+                       *collator, base::UTF8ToUTF16(n1),
+                       base::UTF8ToUTF16(n2)) == UCOL_LESS;
           } else {
             return base::i18n::CompareString16WithCollator(
-                *collator, b2->GetNickName(), b1->GetNickName()) == UCOL_LESS;
+                       *collator, base::UTF8ToUTF16(n2),
+                       base::UTF8ToUTF16(n1)) == UCOL_LESS;
           }
         }
         return b1->is_folder();
@@ -100,20 +109,22 @@ void BookmarkSorter::sort(std::vector<bookmarks::BookmarkNode*>& vector) {
         if ((b1->type() == b2->type()) || !group_folders_) {
           const icu::Collator* collator = collator_.get();
 
-          int l1 = b1->GetDescription().length();
-          int l2 = b2->GetDescription().length();
+          std::string d1 = vivaldi_bookmark_kit::GetDescription(b1);
+          std::string d2 = vivaldi_bookmark_kit::GetDescription(b2);
+          size_t l1 = d1.length();
+          size_t l2 = d2.length();
           if (l1 == 0 || l2 == 0) {
             return fallbackToTitleSort(collator, b1, b2, l1, l2);
           }
 
           if (sort_order_ == ORDER_ASCENDING) {
             return base::i18n::CompareString16WithCollator(
-                *collator, b1->GetDescription(), b2->GetDescription())
-                    == UCOL_LESS;
+                       *collator, base::UTF8ToUTF16(d1),
+                       base::UTF8ToUTF16(d2)) == UCOL_LESS;
           } else {
             return base::i18n::CompareString16WithCollator(
-                *collator, b2->GetDescription(), b1->GetDescription())
-                    == UCOL_LESS;
+                       *collator, base::UTF8ToUTF16(d2),
+                       base::UTF8ToUTF16(d1)) == UCOL_LESS;
           }
         }
         return b1->is_folder();
@@ -141,8 +152,8 @@ void BookmarkSorter::sort(std::vector<bookmarks::BookmarkNode*>& vector) {
 bool BookmarkSorter::fallbackToTitleSort(const icu::Collator* collator,
                                          bookmarks::BookmarkNode *b1,
                                          bookmarks::BookmarkNode *b2,
-                                         int l1,
-                                         int l2) {
+                                         size_t l1,
+                                         size_t l2) {
   if (l1 == 0 && l2 == 0) {
     l1 = b1->GetTitle().length();
     l2 = b2->GetTitle().length();
@@ -166,8 +177,8 @@ bool BookmarkSorter::fallbackToTitleSort(const icu::Collator* collator,
 
 bool BookmarkSorter::fallbackToDateSort(bookmarks::BookmarkNode *b1,
                                         bookmarks::BookmarkNode *b2,
-                                        int l1,
-                                        int l2) {
+                                        size_t l1,
+                                        size_t l2) {
   if (l1 == 0 && l2 == 0) {
     if (sort_order_ == ORDER_ASCENDING) {
       return b1->date_added() < b2->date_added();

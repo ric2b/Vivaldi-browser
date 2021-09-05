@@ -7,6 +7,8 @@ package org.chromium.components.gcm_driver;
 import android.content.Context;
 import android.content.SharedPreferences;
 
+import androidx.annotation.VisibleForTesting;
+
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -14,8 +16,7 @@ import org.json.JSONObject;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.StrictModeContext;
-import org.chromium.base.VisibleForTesting;
-import org.chromium.base.metrics.CachedMetrics;
+import org.chromium.base.metrics.RecordHistogram;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -215,10 +216,8 @@ public class LazySubscriptionsManager {
                 queueJSON = filterMessageBasedOnCollapseKey(queueJSON, message.getCollapseKey());
             }
 
-            // Use {@link CachedMetrics} so this gets reported when native is
-            // loaded instead of calling native right away.
-            new CachedMetrics.Count100HistogramSample("PushMessaging.QueuedMessagesCount")
-                    .record(queueJSON.length());
+            RecordHistogram.recordCount100Histogram(
+                    "PushMessaging.QueuedMessagesCount", queueJSON.length());
 
             // If the queue is full remove the oldest message.
             if (queueJSON.length() == MESSAGES_QUEUE_SIZE) {

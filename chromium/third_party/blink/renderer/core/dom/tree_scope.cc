@@ -34,7 +34,6 @@
 #include "third_party/blink/renderer/core/dom/element_traversal.h"
 #include "third_party/blink/renderer/core/dom/events/event_path.h"
 #include "third_party/blink/renderer/core/dom/id_target_observer_registry.h"
-#include "third_party/blink/renderer/core/dom/node_child_removal_tracker.h"
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/dom/tree_scope_adopter.h"
@@ -56,8 +55,6 @@
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
 namespace blink {
-
-using namespace html_names;
 
 TreeScope::TreeScope(ContainerNode& root_node, Document& document)
     : root_node_(&root_node),
@@ -117,13 +114,7 @@ Element* TreeScope::getElementById(const AtomicString& element_id) const {
     return nullptr;
   if (!elements_by_id_)
     return nullptr;
-  Element* element = elements_by_id_->GetElementById(element_id, *this);
-  if (element && &RootNode() == &GetDocument() &&
-      GetDocument().InDOMNodeRemovedHandler()) {
-    if (NodeChildRemovalTracker::IsBeingRemoved(*element))
-      GetDocument().CountDetachingNodeAccessInDOMNodeRemovedHandler();
-  }
-  return element;
+  return elements_by_id_->GetElementById(element_id, *this);
 }
 
 const HeapVector<Member<Element>>& TreeScope::GetAllElementsById(
@@ -209,7 +200,7 @@ static bool PointInFrameContentIfVisible(Document& document,
     return false;
 
   // The VisibleContentRect check below requires that scrollbars are up-to-date.
-  document.UpdateStyleAndLayout();
+  document.UpdateStyleAndLayout(DocumentUpdateReason::kHitTest);
 
   auto* scrollable_area = frame_view->LayoutViewport();
   IntRect visible_frame_rect(IntPoint(),
@@ -291,7 +282,7 @@ HeapVector<Member<Element>> TreeScope::ElementsFromHitTestResult(
     HitTestResult& result) const {
   HeapVector<Member<Element>> elements;
   Node* last_node = nullptr;
-  for (const auto rect_based_node : result.ListBasedTestResult()) {
+  for (const auto& rect_based_node : result.ListBasedTestResult()) {
     Node* node = rect_based_node.Get();
     if (!node->IsElementNode() && !ShouldAcceptNonElementNode(*node))
       continue;
@@ -594,8 +585,8 @@ Element* TreeScope::GetElementByAccessKey(const String& key) const {
   Element* result = nullptr;
   Node& root = RootNode();
   for (Element& element : ElementTraversal::DescendantsOf(root)) {
-    if (DeprecatedEqualIgnoringCase(element.FastGetAttribute(kAccesskeyAttr),
-                                    key))
+    if (DeprecatedEqualIgnoringCase(
+            element.FastGetAttribute(html_names::kAccesskeyAttr), key))
       result = &element;
     if (ShadowRoot* shadow_root = element.GetShadowRoot()) {
       if (Element* shadow_result = shadow_root->GetElementByAccessKey(key))

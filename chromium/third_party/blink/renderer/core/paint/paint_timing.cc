@@ -99,12 +99,6 @@ void PaintTiming::SetFirstMeaningfulPaint(
       "loading,rail,devtools.timeline", "firstMeaningfulPaint", swap_stamp,
       "frame", ToTraceValue(GetFrame()), "afterUserInput", had_input);
 
-  InteractiveDetector* interactive_detector(
-      InteractiveDetector::From(*GetSupplementable()));
-  if (interactive_detector) {
-    interactive_detector->OnFirstMeaningfulPaintDetected(swap_stamp, had_input);
-  }
-
   // Notify FMP for UMA only if there's no user input before FMP, so that layout
   // changes caused by user interactions wouldn't be considered as FMP.
   if (had_input == FirstMeaningfulPaintDetector::kNoUserInput) {
@@ -129,7 +123,7 @@ void PaintTiming::SetTickClockForTesting(const base::TickClock* clock) {
   clock_ = clock;
 }
 
-void PaintTiming::Trace(blink::Visitor* visitor) {
+void PaintTiming::Trace(Visitor* visitor) {
   visitor->Trace(fmp_detector_);
   Supplement<Document>::Trace(visitor);
 }
@@ -163,13 +157,13 @@ void PaintTiming::SetFirstContentfulPaint(base::TimeTicks stamp) {
   RegisterNotifySwapTime(PaintEvent::kFirstContentfulPaint);
 
   // Restart commits that may have been deferred.
-  if (!GetFrame() || !GetFrame()->IsMainFrame())
+  LocalFrame* frame = GetFrame();
+  if (!frame || !frame->IsMainFrame())
     return;
-  GetFrame()->GetPage()->GetChromeClient().StopDeferringCommits(
-      *GetFrame(), cc::PaintHoldingCommitTrigger::kFirstContentfulPaint);
+  frame->View()->OnFirstContentfulPaint();
 
-  if (GetFrame()->GetFrameScheduler())
-    GetFrame()->GetFrameScheduler()->OnFirstContentfulPaint();
+  if (frame->GetFrameScheduler())
+    frame->GetFrameScheduler()->OnFirstContentfulPaint();
 }
 
 void PaintTiming::RegisterNotifySwapTime(PaintEvent event) {
@@ -190,11 +184,11 @@ void PaintTiming::RegisterNotifySwapTime(PaintEvent event,
 }
 
 void PaintTiming::ReportSwapTime(PaintEvent event,
-                                 WebWidgetClient::SwapResult result,
+                                 WebSwapResult result,
                                  base::TimeTicks timestamp) {
   DCHECK(IsMainThread());
   // If the swap fails for any reason, we use the timestamp when the SwapPromise
-  // was broken. |result| == WebWidgetClient::SwapResult::kDidNotSwapSwapFails
+  // was broken. |result| == WebSwapResult::kDidNotSwapSwapFails
   // usually means the compositor decided not swap because there was no actual
   // damage, which can happen when what's being painted isn't visible. In this
   // case, the timestamp will be consistent with the case where the swap
@@ -246,6 +240,11 @@ void PaintTiming::SetFirstContentfulPaintSwap(base::TimeTicks stamp) {
     GetFrame()->Loader().Progress().DidFirstContentfulPaint();
   NotifyPaintTimingChanged();
   fmp_detector_->NotifyFirstContentfulPaint(first_contentful_paint_swap_);
+  InteractiveDetector* interactive_detector =
+      InteractiveDetector::From(*GetSupplementable());
+  if (interactive_detector) {
+    interactive_detector->OnFirstContentfulPaint(first_contentful_paint_swap_);
+  }
 }
 
 void PaintTiming::SetFirstImagePaintSwap(base::TimeTicks stamp) {
@@ -256,12 +255,12 @@ void PaintTiming::SetFirstImagePaintSwap(base::TimeTicks stamp) {
   NotifyPaintTimingChanged();
 }
 
-void PaintTiming::ReportSwapResultHistogram(
-    WebWidgetClient::SwapResult result) {
-  DEFINE_STATIC_LOCAL(EnumerationHistogram, did_swap_histogram,
-                      ("PageLoad.Internal.Renderer.PaintTiming.SwapResult",
-                       WebWidgetClient::SwapResult::kSwapResultMax));
-  did_swap_histogram.Count(result);
+void PaintTiming::ReportSwapResultHistogram(WebSwapResult result) {
+  DEFINE_STATIC_LOCAL(
+      EnumerationHistogram, did_swap_histogram,
+      ("PageLoad.Internal.Renderer.PaintTiming.SwapResult",
+       static_cast<uint32_t>(WebSwapResult::kSwapResultLast) + 1));
+  did_swap_histogram.Count(static_cast<uint32_t>(result));
 }
 
 }  // namespace blink

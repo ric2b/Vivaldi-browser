@@ -4,6 +4,8 @@
 
 #include "ui/views/corewm/tooltip_controller.h"
 
+#include <utility>
+
 #include "base/at_exit.h"
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
@@ -11,20 +13,17 @@
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/aura/client/cursor_client.h"
-#include "ui/aura/client/screen_position_client.h"
 #include "ui/aura/client/window_types.h"
-#include "ui/aura/env.h"
 #include "ui/aura/test/aura_test_base.h"
-#include "ui/aura/test/test_screen.h"
 #include "ui/aura/test/test_window_delegate.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
-#include "ui/display/screen.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/gfx/font.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/render_text.h"
 #include "ui/gfx/text_elider.h"
+#include "ui/views/buildflags.h"
 #include "ui/views/corewm/test/tooltip_aura_test_api.h"
 #include "ui/views/corewm/tooltip_aura.h"
 #include "ui/views/corewm/tooltip_controller_test_helper.h"
@@ -35,17 +34,14 @@
 #include "ui/views/view.h"
 #include "ui/views/widget/tooltip_manager.h"
 #include "ui/views/widget/widget.h"
-#include "ui/wm/core/default_activation_client.h"
-#include "ui/wm/core/default_screen_position_client.h"
 #include "ui/wm/public/tooltip_client.h"
 
 #if defined(OS_WIN)
 #include "ui/base/win/scoped_ole_initializer.h"
 #endif
 
-#if !defined(OS_CHROMEOS)
+#if BUILDFLAG(ENABLE_DESKTOP_AURA)
 #include "ui/views/widget/desktop_aura/desktop_native_widget_aura.h"
-#include "ui/views/widget/desktop_aura/desktop_screen.h"
 #endif
 
 using base::ASCIIToUTF16;
@@ -61,7 +57,7 @@ views::Widget* CreateWidget(aura::Window* root) {
   params.type = views::Widget::InitParams::TYPE_WINDOW_FRAMELESS;
   params.accept_events = true;
   params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
-#if defined(OS_CHROMEOS) || defined(OS_WIN)
+#if !BUILDFLAG(ENABLE_DESKTOP_AURA) || defined(OS_WIN)
   params.parent = root;
 #endif
   params.bounds = gfx::Rect(0, 0, 200, 100);
@@ -83,17 +79,14 @@ class TooltipControllerTest : public ViewsTestBase {
   ~TooltipControllerTest() override = default;
 
   void SetUp() override {
-#if !defined(OS_CHROMEOS)
+#if BUILDFLAG(ENABLE_DESKTOP_AURA)
     set_native_widget_type(NativeWidgetType::kDesktop);
 #endif
 
     ViewsTestBase::SetUp();
 
     aura::Window* root_window = GetContext();
-
-    if (root_window)
-      new wm::DefaultActivationClient(root_window);
-#if defined(OS_CHROMEOS) || defined(OS_WIN)
+#if !BUILDFLAG(ENABLE_DESKTOP_AURA) || defined(OS_WIN)
     if (root_window) {
       tooltip_aura_ = new views::corewm::TooltipAura();
       controller_ = std::make_unique<TooltipController>(
@@ -113,11 +106,11 @@ class TooltipControllerTest : public ViewsTestBase {
   }
 
   void TearDown() override {
-#if defined(OS_CHROMEOS) || defined(OS_WIN)
+#if !BUILDFLAG(ENABLE_DESKTOP_AURA) || defined(OS_WIN)
     aura::Window* root_window = GetContext();
     if (root_window) {
       root_window->RemovePreTargetHandler(controller_.get());
-      wm::SetTooltipClient(root_window, NULL);
+      wm::SetTooltipClient(root_window, nullptr);
       controller_.reset();
     }
 #endif
@@ -128,13 +121,9 @@ class TooltipControllerTest : public ViewsTestBase {
   }
 
  protected:
-  aura::Window* GetWindow() {
-    return widget_->GetNativeWindow();
-  }
+  aura::Window* GetWindow() { return widget_->GetNativeWindow(); }
 
-  aura::Window* GetRootWindow() {
-    return GetWindow()->GetRootWindow();
-  }
+  aura::Window* GetRootWindow() { return GetWindow()->GetRootWindow(); }
 
   aura::Window* CreateNormalWindow(int id,
                                    aura::Window* parent,
@@ -165,7 +154,7 @@ class TooltipControllerTest : public ViewsTestBase {
   std::unique_ptr<ui::test::EventGenerator> generator_;
 
  protected:
-#if defined(OS_CHROMEOS) || defined(OS_WIN)
+#if !BUILDFLAG(ENABLE_DESKTOP_AURA) || defined(OS_WIN)
   TooltipAura* tooltip_aura_;  // not owned.
 #endif
 
@@ -237,7 +226,7 @@ TEST_F(TooltipControllerTest, DontShowTooltipOnTouch) {
   EXPECT_EQ(GetWindow(), helper_->GetTooltipWindow());
 }
 
-#if defined(OS_CHROMEOS) || defined(OS_WIN)
+#if !BUILDFLAG(ENABLE_DESKTOP_AURA) || defined(OS_WIN)
 // crbug.com/664370.
 TEST_F(TooltipControllerTest, MaxWidth) {
   base::string16 text = base::ASCIIToUTF16(
@@ -478,38 +467,16 @@ namespace {
 int IndexInParent(const aura::Window* window) {
   auto i = std::find(window->parent()->children().begin(),
                      window->parent()->children().end(), window);
-  return i == window->parent()->children().end() ? -1 :
-      static_cast<int>(i - window->parent()->children().begin());
+  return i == window->parent()->children().end()
+             ? -1
+             : static_cast<int>(i - window->parent()->children().begin());
 }
 
 }  // namespace
 
-class TooltipControllerCaptureTest : public TooltipControllerTest {
- public:
-  TooltipControllerCaptureTest() = default;
-  ~TooltipControllerCaptureTest() override = default;
-
-  void SetUp() override {
-    TooltipControllerTest::SetUp();
-    aura::client::SetScreenPositionClient(GetRootWindow(),
-                                          &screen_position_client_);
-  }
-
-  void TearDown() override {
-    aura::client::SetScreenPositionClient(GetRootWindow(), nullptr);
-    TooltipControllerTest::TearDown();
-  }
-
- private:
-  wm::DefaultScreenPositionClient screen_position_client_;
-  std::unique_ptr<display::Screen> desktop_screen_;
-
-  DISALLOW_COPY_AND_ASSIGN(TooltipControllerCaptureTest);
-};
-
 // Verifies when capture is released the TooltipController resets state.
 // Flaky on all builders.  http://crbug.com/388268
-TEST_F(TooltipControllerCaptureTest, DISABLED_CloseOnCaptureLost) {
+TEST_F(TooltipControllerTest, DISABLED_CloseOnCaptureLost) {
   view_->GetWidget()->SetCapture(view_);
   RunPendingMessages();
   view_->set_tooltip_text(ASCIIToUTF16("Tooltip Text"));
@@ -534,7 +501,7 @@ TEST_F(TooltipControllerCaptureTest, DISABLED_CloseOnCaptureLost) {
 #define MAYBE_Capture Capture
 #endif
 // Verifies the correct window is found for tooltips when there is a capture.
-TEST_F(TooltipControllerCaptureTest, MAYBE_Capture) {
+TEST_F(TooltipControllerTest, MAYBE_Capture) {
   const base::string16 tooltip_text(ASCIIToUTF16("1"));
   const base::string16 tooltip_text2(ASCIIToUTF16("2"));
 
@@ -587,9 +554,7 @@ class TestTooltip : public Tooltip {
   const base::string16& tooltip_text() const { return tooltip_text_; }
 
   // Tooltip:
-  int GetMaxWidth(const gfx::Point& location) const override {
-    return 100;
-  }
+  int GetMaxWidth(const gfx::Point& location) const override { return 100; }
   void SetText(aura::Window* window,
                const base::string16& tooltip_text,
                const gfx::Point& location) override {
@@ -620,7 +585,6 @@ class TooltipControllerTest2 : public aura::test::AuraTestBase {
   void SetUp() override {
     at_exit_manager_ = std::make_unique<base::ShadowingAtExitManager>();
     aura::test::AuraTestBase::SetUp();
-    new wm::DefaultActivationClient(root_window());
     controller_ = std::make_unique<TooltipController>(
         std::unique_ptr<corewm::Tooltip>(test_tooltip_));
     root_window()->AddPreTargetHandler(controller_.get());
@@ -693,14 +657,13 @@ class TooltipControllerTest3 : public ViewsTestBase {
   ~TooltipControllerTest3() override = default;
 
   void SetUp() override {
-#if !defined(OS_CHROMEOS)
+#if BUILDFLAG(ENABLE_DESKTOP_AURA)
     set_native_widget_type(NativeWidgetType::kDesktop);
 #endif
 
     ViewsTestBase::SetUp();
 
     aura::Window* root_window = GetContext();
-    new wm::DefaultActivationClient(root_window);
 
     widget_.reset(CreateWidget(root_window));
     widget_->SetContentsView(new View);

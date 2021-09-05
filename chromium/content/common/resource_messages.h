@@ -12,7 +12,6 @@
 
 #include <stdint.h>
 
-#include "base/memory/shared_memory.h"
 #include "base/process/process.h"
 #include "content/common/content_param_traits_macros.h"
 #include "content/common/navigation_params.h"
@@ -30,6 +29,6 @@
 #endif  // INTERNAL_CONTENT_COMMON_RESOURCE_MESSAGES_H_
 
 IPC_ENUM_TRAITS_MAX_VALUE(blink::WebMixedContentContextType,
-                          blink::WebMixedContentContextType::kLast)
+                          blink::WebMixedContentContextType::kMaxValue)
 
 #endif  // CONTENT_COMMON_RESOURCE_MESSAGES_H_

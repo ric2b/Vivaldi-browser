@@ -5,22 +5,21 @@
 #ifndef DEVICE_BLUETOOTH_BLUETOOTH_LOW_ENERGY_DEVICE_MAC_H_
 #define DEVICE_BLUETOOTH_BLUETOOTH_LOW_ENERGY_DEVICE_MAC_H_
 
-#if defined(OS_IOS)
 #import <CoreBluetooth/CoreBluetooth.h>
-#else  // !defined(OS_IOS)
-#import <IOBluetooth/IOBluetooth.h>
-#endif  // defined(OS_IOS)
-
 #include <stdint.h>
 
 #include <set>
 
 #include "base/mac/scoped_nsobject.h"
-#include "base/mac/sdk_forward_declarations.h"
 #include "base/macros.h"
+#include "base/optional.h"
 #include "build/build_config.h"
 #include "crypto/sha2.h"
 #include "device/bluetooth/bluetooth_device_mac.h"
+
+#if !defined(OS_IOS)
+#import <IOBluetooth/IOBluetooth.h>
+#endif
 
 @class BluetoothLowEnergyPeripheralDelegate;
 
@@ -30,6 +29,7 @@ class BluetoothAdapterMac;
 class BluetoothRemoteGattServiceMac;
 class BluetoothRemoteGattCharacteristicMac;
 class BluetoothRemoteGattDescriptorMac;
+class BluetoothUUID;
 
 class DEVICE_BLUETOOTH_EXPORT BluetoothLowEnergyDeviceMac
     : public BluetoothDeviceMac {
@@ -61,8 +61,8 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothLowEnergyDeviceMac
                             const base::Closure& callback,
                             const ErrorCallback& error_callback) override;
   void Connect(PairingDelegate* pairing_delegate,
-               const base::Closure& callback,
-               const ConnectErrorCallback& error_callback) override;
+               base::OnceClosure callback,
+               ConnectErrorCallback error_callback) override;
   void SetPinCode(const std::string& pincode) override;
   void SetPasskey(uint32_t passkey) override;
   void ConfirmPairing() override;
@@ -83,7 +83,8 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothLowEnergyDeviceMac
 
  protected:
   // BluetoothDevice override.
-  void CreateGattConnectionImpl() override;
+  void CreateGattConnectionImpl(
+      base::Optional<BluetoothUUID> serivce_uuid) override;
   void DisconnectGatt() override;
 
   // Methods used by BluetoothLowEnergyPeripheralBridge.

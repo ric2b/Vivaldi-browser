@@ -4,6 +4,7 @@
 
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
 #include "base/values.h"
@@ -132,8 +133,8 @@ ExtensionFunction::ResponseAction MailPrivateGetPathsFunction::Run() {
   base::PostTaskAndReplyWithResult(
       FROM_HERE,
       {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
-      base::Bind(&FindMailFiles, file_path),
-      base::Bind(&MailPrivateGetPathsFunction::OnFinished, this));
+      base::BindOnce(&FindMailFiles, file_path),
+      base::BindOnce(&MailPrivateGetPathsFunction::OnFinished, this));
 
   return RespondLater();
 }
@@ -232,8 +233,8 @@ ExtensionFunction::ResponseAction MailPrivateSaveFunction::Run() {
   base::PostTaskAndReplyWithResult(
       FROM_HERE,
       {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
-      base::Bind(&Save, file_path, string_paths, file_name, data),
-      base::Bind(&MailPrivateSaveFunction::OnFinished, this));
+      base::BindOnce(&Save, file_path, string_paths, file_name, data),
+      base::BindOnce(&MailPrivateSaveFunction::OnFinished, this));
 
   return RespondLater();
 }
@@ -262,8 +263,9 @@ ExtensionFunction::ResponseAction MailPrivateSaveBufferFunction::Run() {
   base::PostTaskAndReplyWithResult(
       FROM_HERE,
       {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
-      base::Bind(&SaveBuffer, file_path, string_paths, file_name, params->raw),
-      base::Bind(&MailPrivateSaveBufferFunction::OnFinished, this));
+      base::BindOnce(&SaveBuffer, file_path, string_paths, file_name,
+                     params->raw),
+      base::BindOnce(&MailPrivateSaveBufferFunction::OnFinished, this));
 
   return RespondLater();
 }
@@ -301,8 +303,8 @@ ExtensionFunction::ResponseAction MailPrivateDeleteFunction::Run() {
   base::PostTaskAndReplyWithResult(
       FROM_HERE,
       {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
-      base::Bind(&Delete, file_path, file_name),
-      base::Bind(&MailPrivateDeleteFunction::OnFinished, this));
+      base::BindOnce(&Delete, file_path, file_name),
+      base::BindOnce(&MailPrivateDeleteFunction::OnFinished, this));
 
   return RespondLater();
 }
@@ -360,8 +362,8 @@ ExtensionFunction::ResponseAction MailPrivateReadFunction::Run() {
   base::PostTaskAndReplyWithResult(
       FROM_HERE,
       {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
-      base::Bind(&Read, file_path),
-      base::Bind(&MailPrivateReadFunction::OnFinished, this));
+      base::BindOnce(&Read, file_path),
+      base::BindOnce(&MailPrivateReadFunction::OnFinished, this));
 
   return RespondLater();
 }
@@ -400,8 +402,8 @@ ExtensionFunction::ResponseAction MailPrivateReadBufferFunction::Run() {
   base::PostTaskAndReplyWithResult(
       FROM_HERE,
       {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
-      base::Bind(&Read, file_path),
-      base::Bind(&MailPrivateReadBufferFunction::OnFinished, this));
+      base::BindOnce(&Read, file_path),
+      base::BindOnce(&MailPrivateReadBufferFunction::OnFinished, this));
 
   return RespondLater();
 }
@@ -427,8 +429,8 @@ ExtensionFunction::ResponseAction MailPrivateReadFileFunction::Run() {
   base::PostTaskAndReplyWithResult(
       FROM_HERE,
       {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
-      base::Bind(&Read, file_path),
-      base::Bind(&MailPrivateReadFileFunction::OnFinished, this));
+      base::BindOnce(&Read, file_path),
+      base::BindOnce(&MailPrivateReadFileFunction::OnFinished, this));
 
   return RespondLater();
 }
@@ -475,8 +477,9 @@ ExtensionFunction::ResponseAction MailPrivateGetDataDirectoryFunction::Run() {
   base::PostTaskAndReplyWithResult(
       FROM_HERE,
       {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
-      base::Bind(&GetDataDirectory, file_path),
-      base::Bind(&MailPrivateGetDataDirectoryFunction::OnFinished, this));
+      base::BindOnce(&GetDataDirectory, file_path),
+      base::BindOnce(&MailPrivateGetDataDirectoryFunction::OnFinished,
+                         this));
 
   return RespondLater();
 }
@@ -506,8 +509,9 @@ MailPrivateCreateDataDirectoryFunction::Run() {
   base::PostTaskAndReplyWithResult(
       FROM_HERE,
       {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
-      base::Bind(&CreateDirectory, file_path, hashed_account_id),
-      base::Bind(&MailPrivateCreateDataDirectoryFunction::OnFinished, this));
+      base::BindOnce(&CreateDirectory, file_path, hashed_account_id),
+      base::BindOnce(&MailPrivateCreateDataDirectoryFunction::OnFinished,
+                     this));
 
   return RespondLater();
 }
@@ -551,8 +555,8 @@ ExtensionFunction::ResponseAction MailPrivateRenameFunction::Run() {
   base::PostTaskAndReplyWithResult(
       FROM_HERE,
       {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
-      base::Bind(&Rename, file_path, file_name, new_file_name),
-      base::Bind(&MailPrivateRenameFunction::OnFinished, this));
+      base::BindOnce(&Rename, file_path, file_name, new_file_name),
+      base::BindOnce(&MailPrivateRenameFunction::OnFinished, this));
 
   return RespondLater();
 }

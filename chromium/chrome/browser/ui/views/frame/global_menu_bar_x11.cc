@@ -26,6 +26,7 @@
 #include "chrome/browser/history/top_sites_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/profiles/profile_metrics.h"
 #include "chrome/browser/profiles/profile_window.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
 #include "chrome/browser/ui/browser.h"
@@ -269,7 +270,8 @@ void GlobalMenuBarX11::Initialize(DbusMenu::InitializedCallback callback) {
   ProfileManager* profile_manager = g_browser_process->profile_manager();
   DCHECK(profile_manager);
   avatar_menu_ = std::make_unique<AvatarMenu>(
-      &profile_manager->GetProfileAttributesStorage(), this, nullptr);
+      &profile_manager->GetProfileAttributesStorage(), this,
+      BrowserList::GetInstance()->GetLastActive());
   avatar_menu_->RebuildMenu();
   BrowserList::AddObserver(this);
 
@@ -569,8 +571,7 @@ void GlobalMenuBarX11::ExecuteCommand(int command_id, int event_flags) {
                                  ui::PAGE_TRANSITION_AUTO_BOOKMARK, false));
     }
   } else if (base::Contains(profile_commands_, command_id)) {
-    avatar_menu_->SwitchToProfile(profile_commands_[command_id], false,
-                                  ProfileMetrics::SWITCH_PROFILE_MENU);
+    avatar_menu_->SwitchToProfile(profile_commands_[command_id], false);
   }
 }
 

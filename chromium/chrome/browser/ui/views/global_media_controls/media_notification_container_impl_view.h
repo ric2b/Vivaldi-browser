@@ -11,7 +11,7 @@
 #include "base/observer_list.h"
 #include "chrome/browser/ui/global_media_controls/media_notification_container_impl.h"
 #include "components/media_message_center/media_notification_container.h"
-#include "components/media_message_center/media_notification_view.h"
+#include "components/media_message_center/media_notification_view_impl.h"
 #include "ui/views/animation/slide_out_controller_delegate.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/focus/focus_manager.h"
@@ -21,6 +21,7 @@ class MediaNotificationItem;
 }  // namespace media_message_center
 
 namespace views {
+class ImageButton;
 class SlideOutController;
 }  // namespace views
 
@@ -45,6 +46,9 @@ class MediaNotificationContainerImplView
   // views::Button:
   void AddedToWidget() override;
   void RemovedFromWidget() override;
+  bool OnMousePressed(const ui::MouseEvent& event) override;
+  bool OnMouseDragged(const ui::MouseEvent& event) override;
+  void OnMouseReleased(const ui::MouseEvent& event) override;
   void OnMouseEntered(const ui::MouseEvent& event) override;
   void OnMouseExited(const ui::MouseEvent& event) override;
 
@@ -60,7 +64,7 @@ class MediaNotificationContainerImplView
       const media_session::mojom::MediaSessionInfoPtr& session_info) override {}
   void OnMediaSessionMetadataChanged() override;
   void OnVisibleActionsChanged(
-      const std::set<media_session::mojom::MediaSessionAction>& actions)
+      const base::flat_set<media_session::mojom::MediaSessionAction>& actions)
       override;
   void OnMediaArtworkChanged(const gfx::ImageSkia& image) override;
   void OnColorsChanged(SkColor foreground, SkColor background) override;
@@ -79,10 +83,14 @@ class MediaNotificationContainerImplView
   void AddObserver(MediaNotificationContainerObserver* observer) override;
   void RemoveObserver(MediaNotificationContainerObserver* observer) override;
 
+  // Sets up the notification to be ready to display in an overlay instead of
+  // the dialog.
+  void PopOut();
+
   views::ImageButton* GetDismissButtonForTesting();
 
-  media_message_center::MediaNotificationView* view_for_testing() {
-    return view_.get();
+  media_message_center::MediaNotificationViewImpl* view_for_testing() {
+    return view_;
   }
 
  private:
@@ -102,26 +110,46 @@ class MediaNotificationContainerImplView
   // Notify observers that we've been clicked.
   void ContainerClicked();
 
+  // True if we should handle the given mouse event for dragging purposes.
+  bool ShouldHandleMouseEvent(const ui::MouseEvent& event, bool is_press);
+
   const std::string id_;
-  std::unique_ptr<views::View> swipeable_container_;
+  views::View* swipeable_container_ = nullptr;
 
   // Always "visible" so that it reserves space in the header so that the
   // dismiss button can appear without forcing things to shift.
-  std::unique_ptr<views::View> dismiss_button_placeholder_;
+  views::View* dismiss_button_placeholder_ = nullptr;
 
   // Shows the colored circle background behind the dismiss button to give it
   // proper contrast against the artwork. The background can't be on the dismiss
   // button itself because it messes up the ink drop.
-  std::unique_ptr<views::View> dismiss_button_container_;
+  views::View* dismiss_button_container_ = nullptr;
 
-  DismissButton* dismiss_button_;
-  std::unique_ptr<media_message_center::MediaNotificationView> view_;
+  DismissButton* dismiss_button_ = nullptr;
+  media_message_center::MediaNotificationViewImpl* view_ = nullptr;
 
   SkColor foreground_color_;
   SkColor background_color_;
 
   bool has_artwork_ = false;
   bool has_many_actions_ = false;
+
+  // True if we've been dragged out of the dialog and into an overlay.
+  bool dragged_out_ = false;
+
+  // True if we're currently tracking a mouse drag. Used for dragging
+  // notifications out into an overlay notification, not for swiping to dismiss
+  // (see |slide_out_controller_| for swiping to dismiss).
+  bool is_mouse_pressed_ = false;
+
+  // The start point of a mouse drag. Used for dragging notifications out into
+  // an overlay notification, not for swiping to dismiss (see
+  // |slide_out_controller_| for swiping to dismiss).
+  gfx::Point initial_drag_location_;
+
+  // True if the current mouse press has been dragged enough to be considered a
+  // drag instead of a button click.
+  bool is_dragging_ = false;
 
   base::ObserverList<MediaNotificationContainerObserver> observers_;
 

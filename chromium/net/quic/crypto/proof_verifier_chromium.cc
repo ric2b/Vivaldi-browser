@@ -66,7 +66,7 @@ class ProofVerifierChromium::Job {
       const uint16_t port,
       const std::string& server_config,
       quic::QuicTransportVersion quic_version,
-      quic::QuicStringPiece chlo_hash,
+      quiche::QuicheStringPiece chlo_hash,
       const std::vector<std::string>& certs,
       const std::string& cert_sct,
       const std::string& signature,
@@ -116,9 +116,11 @@ class ProofVerifierChromium::Job {
 
   bool VerifySignature(const std::string& signed_data,
                        quic::QuicTransportVersion quic_version,
-                       quic::QuicStringPiece chlo_hash,
+                       quiche::QuicheStringPiece chlo_hash,
                        const std::string& signature,
                        const std::string& cert);
+
+  bool ShouldAllowUnknownRootForHost(const std::string& hostname);
 
   // Proof verifier to notify when this jobs completes.
   ProofVerifierChromium* proof_verifier_;
@@ -206,7 +208,7 @@ quic::QuicAsyncStatus ProofVerifierChromium::Job::VerifyProof(
     const uint16_t port,
     const string& server_config,
     quic::QuicTransportVersion quic_version,
-    quic::QuicStringPiece chlo_hash,
+    quiche::QuicheStringPiece chlo_hash,
     const std::vector<string>& certs,
     const std::string& cert_sct,
     const string& signature,
@@ -299,9 +301,9 @@ bool ProofVerifierChromium::Job::GetX509Certificate(
   }
 
   // Convert certs to X509Certificate.
-  std::vector<quic::QuicStringPiece> cert_pieces(certs.size());
+  std::vector<quiche::QuicheStringPiece> cert_pieces(certs.size());
   for (unsigned i = 0; i < certs.size(); i++) {
-    cert_pieces[i] = quic::QuicStringPiece(certs[i]);
+    cert_pieces[i] = quiche::QuicheStringPiece(certs[i]);
   }
   cert_ = X509Certificate::CreateFromDERCertChain(cert_pieces);
   if (!cert_.get()) {
@@ -388,6 +390,15 @@ int ProofVerifierChromium::Job::DoVerifyCert(int result) {
       base::BindOnce(&ProofVerifierChromium::Job::OnIOComplete,
                      base::Unretained(this)),
       &cert_verifier_request_, net_log_);
+}
+
+bool ProofVerifierChromium::Job::ShouldAllowUnknownRootForHost(
+    const std::string& hostname) {
+  if (base::Contains(proof_verifier_->hostnames_to_allow_unknown_roots_, "")) {
+    return true;
+  }
+  return base::Contains(proof_verifier_->hostnames_to_allow_unknown_roots_,
+                        hostname);
 }
 
 int ProofVerifierChromium::Job::DoVerifyCertComplete(int result) {
@@ -504,13 +515,13 @@ int ProofVerifierChromium::Job::DoVerifyCertComplete(int result) {
 
   if (result == OK &&
       !verify_details_->cert_verify_result.is_issued_by_known_root &&
-      !base::Contains(proof_verifier_->hostnames_to_allow_unknown_roots_,
-                      hostname_)) {
+      !ShouldAllowUnknownRootForHost(hostname_)) {
     result = ERR_QUIC_CERT_ROOT_NOT_KNOWN;
   }
 
   verify_details_->is_fatal_cert_error =
       IsCertStatusError(cert_status) &&
+      result != ERR_CERT_KNOWN_INTERCEPTION_BLOCKED &&
       transport_security_state_->ShouldSSLErrorsBeFatal(hostname_);
 
   if (result != OK) {
@@ -528,7 +539,7 @@ int ProofVerifierChromium::Job::DoVerifyCertComplete(int result) {
 bool ProofVerifierChromium::Job::VerifySignature(
     const string& signed_data,
     quic::QuicTransportVersion quic_version,
-    quic::QuicStringPiece chlo_hash,
+    quiche::QuicheStringPiece chlo_hash,
     const string& signature,
     const string& cert) {
   size_t size_bits;
@@ -595,7 +606,7 @@ quic::QuicAsyncStatus ProofVerifierChromium::VerifyProof(
     const uint16_t port,
     const std::string& server_config,
     quic::QuicTransportVersion quic_version,
-    quic::QuicStringPiece chlo_hash,
+    quiche::QuicheStringPiece chlo_hash,
     const std::vector<std::string>& certs,
     const std::string& cert_sct,
     const std::string& signature,

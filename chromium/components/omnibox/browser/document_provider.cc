@@ -48,7 +48,6 @@
 #include "components/search_engines/template_url_service.h"
 #include "components/strings/grit/components_strings.h"
 #include "net/base/url_util.h"
-#include "services/network/public/cpp/resource_response.h"
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "third_party/re2/src/re2/re2.h"
@@ -91,6 +90,8 @@ AutocompleteMatch::DocumentType GetIconForMIMEType(
           {"image/gif", AutocompleteMatch::DocumentType::DRIVE_IMAGE},
           {"application/pdf", AutocompleteMatch::DocumentType::DRIVE_PDF},
           {"video/mp4", AutocompleteMatch::DocumentType::DRIVE_VIDEO},
+          {"application/vnd.google-apps.folder",
+           AutocompleteMatch::DocumentType::DRIVE_FOLDER},
       };
 
   const auto& iterator = kIconMap.find(mimetype);
@@ -191,7 +192,7 @@ std::vector<const std::string*> ExtractResultList(
   if (!values)
     return {};
 
-  base::span<const base::Value> list = values->GetList();
+  base::Value::ConstListView list = values->GetList();
   std::vector<const std::string*> extracted(list.size());
   std::transform(list.begin(), list.end(), extracted.begin(),
                  [field_path](const auto& value) {
@@ -345,6 +346,10 @@ base::string16 TitleForAutocompletion(AutocompleteMatch match) {
          base::UTF8ToUTF16(" - " + match.destination_url.spec());
 }
 
+bool WithinBounds(int value, int min, int max) {
+  return value >= min && (value < max || max == -1);
+}
+
 }  // namespace
 
 // static
@@ -454,14 +459,17 @@ void DocumentProvider::Start(const AutocompleteInput& input,
     return;
   }
 
-  if (input.type() == metrics::OmniboxInputType::EMPTY) {
+  // There should be no document suggestions fetched for on-focus suggestion
+  // requests, or if the input is empty.
+  if (input.from_omnibox_focus() ||
+      input.type() == metrics::OmniboxInputType::EMPTY) {
     return;
   }
 
   // Experiment: don't issue queries for inputs under some length.
-  if (input.text().length() < min_query_length_) {
+  if (!WithinBounds(input.text().length(), min_query_length_,
+                    max_query_length_))
     return;
-  }
 
   // Don't issue queries for input likely to be a URL.
   if (IsInputLikelyURL(input)) {
@@ -480,9 +488,14 @@ void DocumentProvider::Start(const AutocompleteInput& input,
   }
 
   done_ = false;  // Set true in callbacks.
+  debouncer_->RequestRun(
+      base::BindOnce(&DocumentProvider::Run, base::Unretained(this)));
+}
+
+void DocumentProvider::Run() {
   client_->GetDocumentSuggestionsService(/*create_if_necessary=*/true)
       ->CreateDocumentSuggestionsRequest(
-          input.text(), client_->IsOffTheRecord(),
+          input_.text(), client_->IsOffTheRecord(),
           base::BindOnce(
               &DocumentProvider::OnDocumentSuggestionsLoaderAvailable,
               weak_ptr_factory_.GetWeakPtr()),
@@ -494,6 +507,7 @@ void DocumentProvider::Start(const AutocompleteInput& input,
 void DocumentProvider::Stop(bool clear_cached_results,
                             bool due_to_user_inactivity) {
   TRACE_EVENT0("omnibox", "DocumentProvider::Stop");
+  debouncer_->CancelRequest();
   if (loader_)
     LogOmniboxDocumentRequest(DOCUMENT_REQUEST_INVALIDATED);
   loader_.reset();
@@ -549,18 +563,50 @@ DocumentProvider::DocumentProvider(AutocompleteProviderClient* client,
               omnibox::kDocumentProvider,
               "DocumentProviderMinQueryLength",
               4))),
+      max_query_length_(
+          static_cast<size_t>(base::GetFieldTrialParamByFeatureAsInt(
+              omnibox::kDocumentProvider,
+              "DocumentProviderMaxQueryLength",
+              -1))),
       min_query_show_length_(
           static_cast<size_t>(base::GetFieldTrialParamByFeatureAsInt(
               omnibox::kDocumentProvider,
               "DocumentProviderMinQueryShowLength",
               min_query_length_))),
+      max_query_show_length_(
+          static_cast<size_t>(base::GetFieldTrialParamByFeatureAsInt(
+              omnibox::kDocumentProvider,
+              "DocumentProviderMaxQueryShowLength",
+              max_query_length_))),
+      min_query_log_length_(
+          static_cast<size_t>(base::GetFieldTrialParamByFeatureAsInt(
+              omnibox::kDocumentProvider,
+              "DocumentProviderMinQueryLogLength",
+              min_query_length_))),
+      max_query_log_length_(
+          static_cast<size_t>(base::GetFieldTrialParamByFeatureAsInt(
+              omnibox::kDocumentProvider,
+              "DocumentProviderMaxQueryLogLength",
+              max_query_length_))),
       field_trial_triggered_(false),
       field_trial_triggered_in_session_(false),
       backoff_for_session_(false),
       client_(client),
       listener_(listener),
       cache_size_(cache_size),
-      matches_cache_(MatchesCache::NO_AUTO_EVICT) {}
+      matches_cache_(MatchesCache::NO_AUTO_EVICT) {
+  if (base::FeatureList::IsEnabled(omnibox::kDebounceDocumentProvider)) {
+    bool from_last_run = base::GetFieldTrialParamByFeatureAsBool(
+        omnibox::kDebounceDocumentProvider,
+        "DebounceDocumentProviderFromLastRun", true);
+    int delay_ms = base::GetFieldTrialParamByFeatureAsInt(
+        omnibox::kDebounceDocumentProvider, "DebounceDocumentProviderDelayMs",
+        100);
+    debouncer_ = std::make_unique<AutocompleteProviderDebouncer>(from_last_run,
+                                                                 delay_ms);
+  } else
+    debouncer_ = std::make_unique<AutocompleteProviderDebouncer>(false, 0);
+}
 
 DocumentProvider::~DocumentProvider() {}
 
@@ -640,7 +686,8 @@ base::string16 DocumentProvider::GenerateLastModifiedString(
 }
 
 // static
-base::string16 GetProductDescriptionString(const std::string& mimetype) {
+base::string16 DocumentProvider::GetProductDescriptionString(
+    const std::string& mimetype) {
   if (mimetype == kDocumentMimetype)
     return l10n_util::GetStringUTF16(IDS_DRIVE_SUGGESTION_DOCUMENT);
   if (mimetype == kFormMimetype)
@@ -651,6 +698,30 @@ base::string16 GetProductDescriptionString(const std::string& mimetype) {
     return l10n_util::GetStringUTF16(IDS_DRIVE_SUGGESTION_PRESENTATION);
   // Fallback to "Drive" for other filetypes.
   return l10n_util::GetStringUTF16(IDS_DRIVE_SUGGESTION_GENERAL);
+}
+
+// static
+base::string16 DocumentProvider::GetMatchDescription(
+    const std::string& update_time,
+    const std::string& mimetype,
+    const std::string& owner) {
+  base::string16 mime_desc = GetProductDescriptionString(mimetype);
+  if (!update_time.empty()) {
+    base::string16 date_desc =
+        GenerateLastModifiedString(update_time, base::Time::Now());
+    return owner.empty()
+               ? l10n_util::GetStringFUTF16(
+                     IDS_DRIVE_SUGGESTION_DESCRIPTION_TEMPLATE_WITHOUT_OWNER,
+                     date_desc, mime_desc)
+               : l10n_util::GetStringFUTF16(
+                     IDS_DRIVE_SUGGESTION_DESCRIPTION_TEMPLATE, date_desc,
+                     base::UTF8ToUTF16(owner), mime_desc);
+  }
+  return owner.empty()
+             ? mime_desc
+             : l10n_util::GetStringFUTF16(
+                   IDS_DRIVE_SUGGESTION_DESCRIPTION_TEMPLATE_WITHOUT_DATE,
+                   base::UTF8ToUTF16(owner), mime_desc);
 }
 
 ACMatches DocumentProvider::ParseDocumentSearchResults(
@@ -719,8 +790,21 @@ ACMatches DocumentProvider::ParseDocumentSearchResults(
   // - Inputs of length 5 or more will make drive requests; if drive suggestions
   // are returned, field_trial_triggered will be logged, and, if not in
   // counterfactual, the suggestions will be shown.
-  bool show_doc_suggestions = !in_counterfactual_group &&
-                              input_.text().length() >= min_query_show_length_;
+  bool show_doc_suggestions =
+      !in_counterfactual_group &&
+      WithinBounds(input_.text().length(), min_query_show_length_,
+                   max_query_show_length_);
+  // In order to compare small slices of input length while excluding noise from
+  // the larger group of all input lenghts, |min_query_log_length_| and
+  // |max_query_log_length_| specify the queries that will log
+  // field_trial_triggered. E.g., if |min_query_log_length_| is 50 and
+  // |max_query_log_length_| is -1, only inputs of length 50 or greater which
+  // return a drive suggestions will log field_trial_triggered are returned
+  // while shorter queries will continue to make requests and show suggestions.
+  // This allows an uninterrupted user experience for short queries while
+  // allowing focused analysis of long queries.
+  bool trigger_field_trial = WithinBounds(
+      input_.text().length(), min_query_log_length_, max_query_log_length_);
 
   // Ensure server's suggestions are added with monotonically decreasing scores.
   int previous_score = INT_MAX;
@@ -776,7 +860,6 @@ ACMatches DocumentProvider::ParseDocumentSearchResults(
     match.fill_into_edit = url;
     match.destination_url = GURL(url);
     base::string16 original_url;
-    std::string mimetype;
     if (result->GetString("originalUrl", &original_url)) {
       GURL stripped_url = GetURLForDeduping(GURL(original_url));
       if (stripped_url.is_valid())
@@ -786,6 +869,7 @@ ACMatches DocumentProvider::ParseDocumentSearchResults(
     match.contents_class = Classify(match.contents, input_.text());
     const base::DictionaryValue* metadata = nullptr;
     if (result->GetDictionary("metadata", &metadata)) {
+      std::string mimetype;
       if (metadata->GetString("mimeType", &mimetype)) {
         match.document_type = GetIconForMIMEType(mimetype);
         match.RecordAdditionalInfo(
@@ -794,17 +878,29 @@ ACMatches DocumentProvider::ParseDocumentSearchResults(
       }
       std::string update_time;
       metadata->GetString("updateTime", &update_time);
-      if (!update_time.empty()) {
-        match.description = l10n_util::GetStringFUTF16(
-            IDS_DRIVE_SUGGESTION_DESCRIPTION_TEMPLATE,
-            GenerateLastModifiedString(update_time, base::Time::Now()),
-            GetProductDescriptionString(mimetype));
-      } else {
-        match.description = GetProductDescriptionString(mimetype);
-      }
+      bool display_owner = base::GetFieldTrialParamByFeatureAsBool(
+          omnibox::kDocumentProvider, "DisplayOwner", false);
+      auto owners = ExtractResultList(result, "metadata.owner.personNames",
+                                      "displayName");
+      if (!owners.empty())
+        match.RecordAdditionalInfo("document owner", *owners[0]);
+      match.description = GetMatchDescription(
+          update_time, mimetype,
+          display_owner && !owners.empty() ? *owners[0] : "");
       AutocompleteMatch::AddLastClassificationIfNecessary(
           &match.description_class, 0, ACMatchClassification::DIM);
+      // Exclude date from description_for_shortcut to avoid showing stale dates
+      // from the shortcuts provider.
+      match.description_for_shortcuts = GetMatchDescription(
+          "", mimetype, display_owner && !owners.empty() ? *owners[0] : "");
+      AutocompleteMatch::AddLastClassificationIfNecessary(
+          &match.description_class_for_shortcuts, 0,
+          ACMatchClassification::DIM);
+      match.RecordAdditionalInfo(
+          "description_for_shortcuts",
+          base::UTF16ToUTF8(match.description_for_shortcuts));
     }
+
     match.TryAutocompleteWithTitle(TitleForAutocompletion(match), input_);
     match.transition = ui::PAGE_TRANSITION_GENERATED;
     match.RecordAdditionalInfo("client score", client_score);
@@ -814,11 +910,12 @@ ACMatches DocumentProvider::ParseDocumentSearchResults(
     const std::string* snippet = result->FindStringPath("snippet.snippet");
     if (snippet)
       match.RecordAdditionalInfo("snippet", *snippet);
-    if (show_doc_suggestions) {
+    if (show_doc_suggestions)
       matches.push_back(match);
+    if (trigger_field_trial) {
+      field_trial_triggered_ = true;
+      field_trial_triggered_in_session_ = true;
     }
-    field_trial_triggered_ = true;
-    field_trial_triggered_in_session_ = true;
   }
   return matches;
 }

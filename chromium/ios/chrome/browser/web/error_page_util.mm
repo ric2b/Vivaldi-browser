@@ -45,13 +45,17 @@ NSString* GetErrorPage(const GURL& url,
     NOTREACHED();
   }
 
+  // Secure DNS is not supported on iOS, so we can assume there is no secure
+  // DNS network error when fetching the page state.
   error_page::LocalizedError::PageState page_state =
       error_page::LocalizedError::GetPageState(
           net_error, error_page::Error::kNetErrorDomain, url, is_post,
+          /*is_secure_dns_network_error=*/false,
           /*stale_copy_in_cache=*/false,
           /*can_show_network_diagnostics_dialog=*/false, is_off_the_record,
           /*offline_content_feature_enabled=*/false,
           /*auto_fetch_feature_enabled=*/false,
+          /*is_kiosk_mode=*/false,
           GetApplicationContext()->GetApplicationLocale(),
           /*params=*/nullptr);
 
@@ -59,7 +63,7 @@ NSString* GetErrorPage(const GURL& url,
       ui::ResourceBundle::GetSharedInstance().GetMaxScaleFactor();
 
   std::string extracted_string =
-      ui::ResourceBundle::GetSharedInstance().DecompressDataResourceScaled(
+      ui::ResourceBundle::GetSharedInstance().LoadDataResourceStringForScale(
           IDR_NET_ERROR_HTML, scale_factor);
   base::StringPiece template_html(extracted_string.data(),
                                   extracted_string.size());

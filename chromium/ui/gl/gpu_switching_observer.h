@@ -6,13 +6,20 @@
 #define UI_GL_GPU_SWITCHING_OBSERVER_H_
 
 #include "ui/gl/gl_export.h"
+#include "ui/gl/gpu_preference.h"
 
 namespace ui {
 
 class GL_EXPORT GpuSwitchingObserver {
  public:
   // Called for any observer when the system switches to a different GPU.
-  virtual void OnGpuSwitched() {}
+  virtual void OnGpuSwitched(gl::GpuPreference active_gpu_heuristic) {}
+
+  // Called for any observer when a monitor is plugged in.
+  virtual void OnDisplayAdded() {}
+
+  // Called for any observer when a monitor is unplugged.
+  virtual void OnDisplayRemoved() {}
 };
 
 }  // namespace ui

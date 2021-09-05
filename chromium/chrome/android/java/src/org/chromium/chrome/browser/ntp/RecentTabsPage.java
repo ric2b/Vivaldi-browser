@@ -8,28 +8,31 @@ import android.app.Activity;
 import android.content.res.Resources;
 import android.graphics.Canvas;
 import android.graphics.Color;
-import android.os.SystemClock;
-import android.support.v4.view.ViewCompat;
 import android.view.ContextMenu;
 import android.view.ContextMenu.ContextMenuInfo;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.ExpandableListView;
+
+import androidx.core.view.ViewCompat;
 
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
-import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.compositor.layouts.content.InvalidationAwareThumbnailProvider;
 import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
-import org.chromium.chrome.browser.gesturenav.HistoryNavigationLayout;
-import org.chromium.chrome.browser.native_page.NativePage;
-import org.chromium.chrome.browser.native_page.NativePageHost;
-import org.chromium.chrome.browser.util.UrlConstants;
-import org.chromium.chrome.browser.util.ViewUtils;
+import org.chromium.chrome.browser.ui.native_page.NativePage;
+import org.chromium.chrome.browser.ui.native_page.NativePageHost;
+import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.ui.base.DeviceFormFactor;
+import org.chromium.ui.base.ViewUtils;
 
+import org.chromium.chrome.browser.ChromeTabbedActivity;
+import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+import org.vivaldi.browser.common.VivaldiUtils;
+import org.vivaldi.browser.preferences.VivaldiPreferences;
 import org.vivaldi.browser.preferences.VivaldiSyncActivity;
 import org.vivaldi.browser.sync.VivaldiProfileSyncService;
 import org.vivaldi.browser.vivaldi_account_manager.VivaldiAccountManager;
@@ -49,7 +52,7 @@ public class RecentTabsPage
     private final ChromeFullscreenManager mFullscreenManager;
     private final ExpandableListView mListView;
     private final String mTitle;
-    private final HistoryNavigationLayout mView;
+    private final ViewGroup mView;
 
     private RecentTabsManager mRecentTabsManager;
     private RecentTabsRowAdapter mAdapter;
@@ -71,15 +74,9 @@ public class RecentTabsPage
      */
     private boolean mIsAttachedToWindow;
 
-    /**
-     * The time, whichever is most recent, that the page:
-     * - Moved to the foreground
-     * - Became visible
-     */
-    private long mForegroundTimeMs;
-
     //** Vivaldi */
     private VivaldiAccountManager.AccountStateObserver mAccountObserver;
+    private SharedPreferencesManager.Observer mPreferenceObserver;
 
     /**
      * Constructor returns an instance of RecentTabsPage.
@@ -98,7 +95,7 @@ public class RecentTabsPage
         mTitle = resources.getString(R.string.recent_tabs);
         mRecentTabsManager.setUpdatedCallback(this);
         LayoutInflater inflater = LayoutInflater.from(activity);
-        mView = (HistoryNavigationLayout) inflater.inflate(R.layout.recent_tabs_page, null);
+        mView = (ViewGroup) inflater.inflate(R.layout.recent_tabs_page, null);
         mListView = (ExpandableListView) mView.findViewById(R.id.odp_listview);
         mAdapter = new RecentTabsRowAdapter(activity, recentTabsManager);
         mListView.setAdapter(mAdapter);
@@ -115,17 +112,35 @@ public class RecentTabsPage
         if (!DeviceFormFactor.isNonMultiDisplayContextOnTablet(mActivity)) {
             mFullscreenManager = activity.getFullscreenManager();
             mFullscreenManager.addListener(this);
-            onBottomControlsHeightChanged(mFullscreenManager.getBottomControlsHeight());
+            onBottomControlsHeightChanged(mFullscreenManager.getBottomControlsHeight(),
+                    mFullscreenManager.getBottomControlsMinHeight());
         } else {
             mFullscreenManager = null;
         }
 
-        if (mPageHost != null)  // Vivaldi
-        mView.setNavigationDelegate(mPageHost.createHistoryNavigationDelegate());
         onUpdated();
 
-        //** Vivaldi */
+        // Vivaldi
         mAccountObserver = () -> onUpdated();
+        // Note(david@vivaldi.com): We need to adjust the margin when using tab strip.
+        int initialHeight =
+                ((ChromeTabbedActivity) mActivity).getFullscreenManager().getTopControlsHeight();
+        int toolbarHeight =
+                ((ChromeTabbedActivity) mActivity).getToolbarManager().getToolbar().getHeight();
+        int tabStripHeight = (int) mActivity.getResources().getDimension(
+                R.dimen.tab_strip_height_phone_with_tabs);
+        mPreferenceObserver = key -> {
+            if (VivaldiPreferences.SHOW_TAB_STRIP.equals(key)) {
+                if (mRecentTabsManager.getVivaldiRecentTabsManager() == null) {
+                    int marginTop = SharedPreferencesManager.getInstance().readBoolean(
+                            VivaldiPreferences.SHOW_TAB_STRIP, true)
+                            ? (initialHeight > toolbarHeight) ? 0 : tabStripHeight
+                            : (initialHeight > toolbarHeight) ? -tabStripHeight : 0;
+                    VivaldiUtils.updateTopMarginForTabsOnPhoneUI(mView, marginTop);
+                }
+            }
+        };
+        SharedPreferencesManager.getInstance().addObserver(mPreferenceObserver);
     }
 
     /**
@@ -134,6 +149,16 @@ public class RecentTabsPage
      * no longer in the foreground, records the time that the page spent in the foreground to UMA.
      */
     private void updateForegroundState() {
+        // Note(david@vivaldi.com): We need to adjust the margin when using tab strip.
+        if (mRecentTabsManager.getVivaldiRecentTabsManager() != null) {
+            VivaldiUtils.updateTopMarginForTabsOnPhoneUI(mView,
+                    SharedPreferencesManager.getInstance().readBoolean(
+                            VivaldiPreferences.SHOW_TAB_STRIP, true)
+                            ? -(int) mActivity.getResources().getDimension(
+                                      R.dimen.tab_strip_height_phone_with_tabs)
+                            : 0);
+        }
+
         boolean inForeground = mIsAttachedToWindow
                 && ApplicationStatus.getStateForActivity(mActivity) == ActivityState.RESUMED;
         if (mInForeground == inForeground) {
@@ -142,11 +167,7 @@ public class RecentTabsPage
 
         mInForeground = inForeground;
         if (mInForeground) {
-            mForegroundTimeMs = SystemClock.elapsedRealtime();
             mRecentTabsManager.recordRecentTabMetrics();
-        } else {
-            RecordHistogram.recordLongTimesHistogram("NewTabPage.RecentTabsPage.TimeVisibleAndroid",
-                    SystemClock.elapsedRealtime() - mForegroundTimeMs);
         }
     }
 
@@ -195,6 +216,9 @@ public class RecentTabsPage
         mView.removeOnAttachStateChangeListener(this);
         ApplicationStatus.unregisterActivityStateListener(this);
         if (mFullscreenManager != null) mFullscreenManager.removeListener(this);
+
+        // Vivaldi
+        SharedPreferencesManager.getInstance().removeObserver(mPreferenceObserver);
     }
 
     @Override
@@ -270,7 +294,7 @@ public class RecentTabsPage
                             R.layout.sign_in_for_sync_tabs, null);
                     view.findViewById(R.id.no_sync_sign_in_button)
                             .setOnClickListener(v -> VivaldiSyncActivity.start(mView.getContext()));
-                    mView.addView(view);
+                    if (mView.indexOfChild(view) == -1) mView.addView(view);
                 }
                 if (VivaldiAccountManager.get().getSimplifiedState()
                         == VivaldiAccountManager.SimplifiedState.LOGGED_IN) {
@@ -280,10 +304,12 @@ public class RecentTabsPage
                         ((android.widget.TextView) mView.findViewById(R.id.no_sync_text))
                                 .setText(R.string.vivaldi_sync_in_progress_text);
                         return;
-                    } else if (view != null)
-                        mView.removeView(view);
+                    }
+                    mView.removeView(view);
                 } else
                     return;
+                // Once we get here, remove the sign in view.
+                mView.removeView(view);
             }
         }
 
@@ -347,16 +373,24 @@ public class RecentTabsPage
     public void onContentOffsetChanged(int offset) {}
 
     @Override
-    public void onControlsOffsetChanged(int topOffset, int bottomOffset, boolean needsAnimate) {}
+    public void onControlsOffsetChanged(int topOffset, int topControlsMinHeightOffset,
+            int bottomOffset, int bottomControlsMinHeightOffset, boolean needsAnimate) {}
 
     @Override
-    public void onToggleOverlayVideoMode(boolean enabled) {}
+    public void onBottomControlsHeightChanged(
+            int bottomControlsHeight, int bottomControlsMinHeight) {
+        updatePadding();
+    }
 
     @Override
-    public void onBottomControlsHeightChanged(int bottomControlsHeight) {
+    public void onTopControlsHeightChanged(int topControlsHeight, int topControlsMinHeight) {
+        updatePadding();
+    }
+
+    private void updatePadding() {
         final View recentTabsRoot = mView.findViewById(R.id.recent_tabs_root);
         ViewCompat.setPaddingRelative(recentTabsRoot, ViewCompat.getPaddingStart(recentTabsRoot),
                 mFullscreenManager.getTopControlsHeight(), ViewCompat.getPaddingEnd(recentTabsRoot),
-                bottomControlsHeight);
+                mFullscreenManager.getBottomControlsHeight());
     }
 }

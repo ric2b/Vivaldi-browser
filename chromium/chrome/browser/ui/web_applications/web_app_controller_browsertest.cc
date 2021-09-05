@@ -6,18 +6,33 @@
 
 #include "chrome/browser/apps/app_service/app_launch_params.h"
 #include "chrome/browser/apps/launch_service/launch_service.h"
+#include "chrome/browser/banners/test_app_banner_manager_desktop.h"
 #include "chrome/browser/extensions/browsertest_util.h"
 #include "chrome/browser/predictors/loading_predictor_config.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
+#include "chrome/browser/web_applications/components/app_shortcut_manager.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/common/chrome_features.h"
+#include "chrome/common/chrome_switches.h"
 #include "chrome/common/web_application_info.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/browser/notification_service.h"
 #include "net/dns/mock_host_resolver.h"
 
 namespace web_app {
+
+std::string ControllerTypeParamToString(
+    const ::testing::TestParamInfo<ControllerType>& controller_type) {
+  switch (controller_type.param) {
+    case ControllerType::kHostedAppController:
+      return "HostedAppController";
+    case ControllerType::kUnifiedControllerWithBookmarkApp:
+      return "UnifiedControllerWithBookmarkApp";
+    case ControllerType::kUnifiedControllerWithWebApp:
+      return "UnifiedControllerWithWebApp";
+  }
+}
 
 WebAppControllerBrowserTestBase::WebAppControllerBrowserTestBase() {
   if (GetParam() == ControllerType::kUnifiedControllerWithWebApp) {
@@ -54,9 +69,34 @@ Browser* WebAppControllerBrowserTestBase::LaunchWebAppBrowser(
   return web_app::LaunchWebAppBrowser(profile(), app_id);
 }
 
+Browser* WebAppControllerBrowserTestBase::LaunchWebAppBrowserAndWait(
+    const AppId& app_id) {
+  return web_app::LaunchWebAppBrowserAndWait(profile(), app_id);
+}
+
 Browser* WebAppControllerBrowserTestBase::LaunchBrowserForWebAppInTab(
     const AppId& app_id) {
   return web_app::LaunchBrowserForWebAppInTab(profile(), app_id);
+}
+
+// static
+bool WebAppControllerBrowserTestBase::NavigateAndAwaitInstallabilityCheck(
+    Browser* browser,
+    const GURL& url) {
+  auto* manager = banners::TestAppBannerManagerDesktop::FromWebContents(
+      browser->tab_strip_model()->GetActiveWebContents());
+  NavigateToURLAndWait(browser, url);
+  return manager->WaitForInstallableCheck();
+}
+
+Browser*
+WebAppControllerBrowserTestBase::NavigateInNewWindowAndAwaitInstallabilityCheck(
+    const GURL& url) {
+  Browser* new_browser =
+      new Browser(Browser::CreateParams(Browser::TYPE_NORMAL, profile(), true));
+  AddBlankTabAndShow(new_browser);
+  NavigateAndAwaitInstallabilityCheck(new_browser, url);
+  return new_browser;
 }
 
 base::Optional<AppId> WebAppControllerBrowserTestBase::FindAppWithUrlInScope(
@@ -76,6 +116,7 @@ WebAppControllerBrowserTest::~WebAppControllerBrowserTest() = default;
 
 void WebAppControllerBrowserTest::SetUp() {
   https_server_.AddDefaultHandlers(GetChromeTestDataDir());
+  banners::TestAppBannerManagerDesktop::SetUp();
 
   extensions::ExtensionBrowserTest::SetUp();
 }
@@ -98,6 +139,15 @@ content::WebContents* WebAppControllerBrowserTest::OpenApplication(
   return contents;
 }
 
+GURL WebAppControllerBrowserTest::GetInstallableAppURL() {
+  return https_server()->GetURL("/banners/manifest_test_page.html");
+}
+
+// static
+const char* WebAppControllerBrowserTest::GetInstallableAppName() {
+  return "Manifest test app";
+}
+
 void WebAppControllerBrowserTest::SetUpInProcessBrowserTestFixture() {
   extensions::ExtensionBrowserTest::SetUpInProcessBrowserTestFixture();
   cert_verifier_.SetUpInProcessBrowserTestFixture();
@@ -111,15 +161,22 @@ void WebAppControllerBrowserTest::TearDownInProcessBrowserTestFixture() {
 void WebAppControllerBrowserTest::SetUpCommandLine(
     base::CommandLine* command_line) {
   extensions::ExtensionBrowserTest::SetUpCommandLine(command_line);
+  // Browser will both run and display insecure content.
+  command_line->AppendSwitch(switches::kAllowRunningInsecureContent);
   cert_verifier_.SetUpCommandLine(command_line);
 }
 
 void WebAppControllerBrowserTest::SetUpOnMainThread() {
   extensions::ExtensionBrowserTest::SetUpOnMainThread();
   host_resolver()->AddRule("*", "127.0.0.1");
+  ASSERT_TRUE(https_server()->Start());
 
   // By default, all SSL cert checks are valid. Can be overridden in tests.
   cert_verifier_.mock_cert_verifier()->set_default_result(net::OK);
+
+  web_app::WebAppProviderBase::GetProviderBase(profile())
+      ->shortcut_manager()
+      .SuppressShortcutsForTesting();
 }
 
 }  // namespace web_app

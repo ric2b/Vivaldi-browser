@@ -11,7 +11,11 @@ import android.view.View;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.util.ColorUtils;
+import org.chromium.components.browser_ui.styles.ChromeColors;
+
+import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+import org.vivaldi.browser.common.VivaldiUtils;
+import org.vivaldi.browser.preferences.VivaldiPreferences;
 
 /**
  * A phone specific version of the {@link FindToolbar}.
@@ -30,6 +34,15 @@ public class FindToolbarPhone extends FindToolbar {
     protected void handleActivate() {
         assert isWebContentAvailable();
         setVisibility(View.VISIBLE);
+
+        // Note(david@vivaldi.com): We need to adjust the margin when using tab strip.
+        VivaldiUtils.updateTopMarginForTabsOnPhoneUI(this,
+                SharedPreferencesManager.getInstance().readBoolean(
+                        VivaldiPreferences.SHOW_TAB_STRIP, true)
+                        ? (int) getResources().getDimension(
+                                  R.dimen.tab_strip_height_phone_with_tabs)
+                        : 0);
+
         super.handleActivate();
     }
 
@@ -45,8 +58,8 @@ public class FindToolbarPhone extends FindToolbar {
         int queryHintTextColorId;
         int dividerColorId;
         if (isIncognito) {
-            setBackgroundColor(ColorUtils.getDefaultThemeColor(getResources(), true));
-            ColorStateList white = ColorUtils.getIconTint(getContext(), true);
+            setBackgroundColor(ChromeColors.getDefaultThemeColor(getResources(), true));
+            ColorStateList white = ChromeColors.getPrimaryIconTint(getContext(), true);
             ApiCompatibilityUtils.setImageTintList(mFindNextButton, white);
             ApiCompatibilityUtils.setImageTintList(mFindPrevButton, white);
             ApiCompatibilityUtils.setImageTintList(mCloseFindButton, white);
@@ -54,14 +67,14 @@ public class FindToolbarPhone extends FindToolbar {
             queryHintTextColorId = R.color.find_in_page_query_incognito_hint_color;
             dividerColorId = R.color.white_alpha_12;
         } else {
-            setBackgroundColor(ColorUtils.getDefaultThemeColor(getResources(), false));
-            ColorStateList dark = ColorUtils.getIconTint(getContext(), false);
+            setBackgroundColor(ChromeColors.getDefaultThemeColor(getResources(), false));
+            ColorStateList dark = ChromeColors.getPrimaryIconTint(getContext(), false);
             ApiCompatibilityUtils.setImageTintList(mFindNextButton, dark);
             ApiCompatibilityUtils.setImageTintList(mFindPrevButton, dark);
             ApiCompatibilityUtils.setImageTintList(mCloseFindButton, dark);
             queryTextColorId = R.color.default_text_color;
             queryHintTextColorId = R.color.find_in_page_query_default_hint_color;
-            dividerColorId = R.color.divider_bg_color;
+            dividerColorId = R.color.divider_line_bg_color;
         }
         mFindQuery.setTextColor(
                 ApiCompatibilityUtils.getColor(getContext().getResources(), queryTextColorId));

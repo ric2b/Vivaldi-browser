@@ -18,13 +18,10 @@
 #include "components/invalidation/impl/profile_invalidation_provider.h"
 #include "components/keyed_service/core/service_access_type.h"
 #include "components/password_manager/core/browser/password_store.h"
-#include "components/password_manager/core/browser/sync/password_model_worker.h"
 #include "components/sync/driver/data_type_controller.h"
 #include "components/sync/driver/sync_api_component_factory.h"
 #include "components/sync/driver/sync_util.h"
 #include "components/sync/engine/passive_model_worker.h"
-#include "components/sync/engine/sequenced_model_worker.h"
-#include "components/sync/engine/ui_model_worker.h"
 #include "components/sync_user_events/user_event_service.h"
 #include "components/version_info/version_info.h"
 #include "components/version_info/version_string.h"
@@ -32,6 +29,7 @@
 #include "ios/web/public/thread/web_thread.h"
 #include "ios/web_view/internal/passwords/web_view_password_store_factory.h"
 #include "ios/web_view/internal/pref_names.h"
+#include "ios/web_view/internal/signin/web_view_identity_manager_factory.h"
 #import "ios/web_view/internal/sync/web_view_device_info_sync_service_factory.h"
 #import "ios/web_view/internal/sync/web_view_model_type_store_service_factory.h"
 #import "ios/web_view/internal/sync/web_view_profile_invalidation_provider_factory.h"
@@ -47,6 +45,7 @@ namespace ios_web_view {
 namespace {
 syncer::ModelTypeSet GetDisabledTypes() {
   syncer::ModelTypeSet disabled_types = syncer::UserTypes();
+  disabled_types.Remove(syncer::AUTOFILL);
   disabled_types.Remove(syncer::AUTOFILL_WALLET_DATA);
   disabled_types.Remove(syncer::AUTOFILL_WALLET_METADATA);
   disabled_types.Remove(syncer::AUTOFILL_PROFILE);
@@ -89,6 +88,11 @@ WebViewSyncClient::~WebViewSyncClient() {}
 PrefService* WebViewSyncClient::GetPrefService() {
   DCHECK_CURRENTLY_ON(web::WebThread::UI);
   return browser_state_->GetPrefs();
+}
+
+signin::IdentityManager* WebViewSyncClient::GetIdentityManager() {
+  DCHECK_CURRENTLY_ON(web::WebThread::UI);
+  return WebViewIdentityManagerFactory::GetForBrowserState(browser_state_);
 }
 
 base::FilePath WebViewSyncClient::GetLocalSyncBackendFolder() {
@@ -135,7 +139,7 @@ base::RepeatingClosure WebViewSyncClient::GetPasswordStateChangedCallback() {
 syncer::DataTypeController::TypeVector
 WebViewSyncClient::CreateDataTypeControllers(
     syncer::SyncService* sync_service) {
-  // iOS WebView uses butter sync and so has no need to record user consents.
+  // //ios/web_view clients are supposed to record their own consents.
   syncer::DataTypeController::TypeVector type_vector =
       component_factory_->CreateCommonDataTypeControllers(GetDisabledTypes(),
                                                           sync_service);
@@ -172,14 +176,8 @@ WebViewSyncClient::GetExtensionsActivity() {
 
 base::WeakPtr<syncer::SyncableService>
 WebViewSyncClient::GetSyncableServiceForType(syncer::ModelType type) {
-  switch (type) {
-    case syncer::PASSWORDS:
-      return password_store_ ? password_store_->GetPasswordSyncableService()
-                             : base::WeakPtr<syncer::SyncableService>();
-    default:
-      NOTREACHED();
-      return base::WeakPtr<syncer::SyncableService>();
-  }
+  NOTREACHED();
+  return base::WeakPtr<syncer::SyncableService>();
 }
 
 base::WeakPtr<syncer::ModelTypeControllerDelegate>
@@ -197,15 +195,8 @@ scoped_refptr<syncer::ModelSafeWorker>
 WebViewSyncClient::CreateModelWorkerForGroup(syncer::ModelSafeGroup group) {
   DCHECK_CURRENTLY_ON(web::WebThread::UI);
   switch (group) {
-    case syncer::GROUP_UI:
-      return new syncer::UIModelWorker(
-          base::CreateSingleThreadTaskRunner({web::WebThread::UI}));
     case syncer::GROUP_PASSIVE:
       return new syncer::PassiveModelWorker();
-    case syncer::GROUP_PASSWORD:
-      if (!password_store_)
-        return nullptr;
-      return new browser_sync::PasswordModelWorker(password_store_);
     default:
       return nullptr;
   }

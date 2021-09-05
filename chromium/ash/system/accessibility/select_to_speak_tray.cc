@@ -24,13 +24,13 @@ class ImageView;
 namespace ash {
 
 // This constant must be kept the same as SELECT_TO_SPEAK_TRAY_CLASS_NAME in
-// chrome/browser/resources/chromeos/select_to_speak/select_to_speak.js.
+// chrome/browser/resources/chromeos/accessibility/select_to_speak/
+// select_to_speak.js.
 const char kSelectToSpeakTrayClassName[] =
     "tray/TrayBackgroundView/SelectToSpeakTray";
 
 SelectToSpeakTray::SelectToSpeakTray(Shelf* shelf)
     : TrayBackgroundView(shelf), icon_(new views::ImageView()) {
-  SetInkDropMode(InkDropMode::ON);
 
   UpdateIconsForSession();
   icon_->SetImage(inactive_image_);
@@ -90,29 +90,29 @@ void SelectToSpeakTray::UpdateIconsForSession() {
 
 void SelectToSpeakTray::CheckStatusAndUpdateIcon() {
   if (!Shell::Get()->accessibility_controller()->select_to_speak_enabled()) {
-    SetVisible(false);
+    SetVisiblePreferred(false);
     return;
   }
 
-  ash::SelectToSpeakState state =
+  SelectToSpeakState state =
       Shell::Get()->accessibility_controller()->GetSelectToSpeakState();
   switch (state) {
-    case ash::SelectToSpeakState::kSelectToSpeakStateInactive:
+    case SelectToSpeakState::kSelectToSpeakStateInactive:
       icon_->SetImage(inactive_image_);
       SetIsActive(false);
       break;
-    case ash::SelectToSpeakState::kSelectToSpeakStateSelecting:
+    case SelectToSpeakState::kSelectToSpeakStateSelecting:
       // Activate the start selection button during selection.
       icon_->SetImage(selecting_image_);
       SetIsActive(true);
       break;
-    case ash::SelectToSpeakState::kSelectToSpeakStateSpeaking:
+    case SelectToSpeakState::kSelectToSpeakStateSpeaking:
       icon_->SetImage(speaking_image_);
       SetIsActive(true);
       break;
   }
 
-  SetVisible(true);
+  SetVisiblePreferred(true);
 }
 
 }  // namespace ash

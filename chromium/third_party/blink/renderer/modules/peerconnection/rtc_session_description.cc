@@ -32,9 +32,9 @@
 
 #include "third_party/blink/renderer/bindings/core/v8/script_value.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_object_builder.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_rtc_session_description_init.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
-#include "third_party/blink/renderer/modules/peerconnection/rtc_session_description_init.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 
 namespace blink {
@@ -55,32 +55,33 @@ RTCSessionDescription* RTCSessionDescription::Create(
     UseCounter::Count(context, WebFeature::kRTCSessionDescriptionInitNoSdp);
 
   return MakeGarbageCollected<RTCSessionDescription>(
-      WebRTCSessionDescription(type, sdp));
+      MakeGarbageCollected<RTCSessionDescriptionPlatform>(type, sdp));
 }
 
 RTCSessionDescription* RTCSessionDescription::Create(
-    WebRTCSessionDescription web_session_description) {
-  return MakeGarbageCollected<RTCSessionDescription>(web_session_description);
+    RTCSessionDescriptionPlatform* platform_session_description) {
+  return MakeGarbageCollected<RTCSessionDescription>(
+      platform_session_description);
 }
 
 RTCSessionDescription::RTCSessionDescription(
-    WebRTCSessionDescription web_session_description)
-    : web_session_description_(web_session_description) {}
+    RTCSessionDescriptionPlatform* platform_session_description)
+    : platform_session_description_(platform_session_description) {}
 
 String RTCSessionDescription::type() const {
-  return web_session_description_.GetType();
+  return platform_session_description_->GetType();
 }
 
 void RTCSessionDescription::setType(const String& type) {
-  web_session_description_.SetType(type);
+  platform_session_description_->SetType(type);
 }
 
 String RTCSessionDescription::sdp() const {
-  return web_session_description_.Sdp();
+  return platform_session_description_->Sdp();
 }
 
 void RTCSessionDescription::setSdp(const String& sdp) {
-  web_session_description_.SetSDP(sdp);
+  platform_session_description_->SetSdp(sdp);
 }
 
 ScriptValue RTCSessionDescription::toJSONForBinding(ScriptState* script_state) {
@@ -90,8 +91,13 @@ ScriptValue RTCSessionDescription::toJSONForBinding(ScriptState* script_state) {
   return result.GetScriptValue();
 }
 
-WebRTCSessionDescription RTCSessionDescription::WebSessionDescription() {
-  return web_session_description_;
+RTCSessionDescriptionPlatform* RTCSessionDescription::WebSessionDescription() {
+  return platform_session_description_;
+}
+
+void RTCSessionDescription::Trace(Visitor* visitor) {
+  visitor->Trace(platform_session_description_);
+  ScriptWrappable::Trace(visitor);
 }
 
 }  // namespace blink

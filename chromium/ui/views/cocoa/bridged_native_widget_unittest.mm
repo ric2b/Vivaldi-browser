@@ -13,7 +13,6 @@
 #import "base/mac/foundation_util.h"
 #import "base/mac/mac_util.h"
 #import "base/mac/scoped_objc_class_swizzler.h"
-#import "base/mac/sdk_forward_declarations.h"
 #include "base/macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
@@ -25,7 +24,6 @@
 #import "testing/gtest_mac.h"
 #import "ui/base/cocoa/window_size_constants.h"
 #include "ui/base/ime/input_method.h"
-#include "ui/base/material_design/material_design_controller.h"
 #import "ui/base/test/cocoa_helper.h"
 #include "ui/events/test/cocoa_test_event_utils.h"
 #import "ui/gfx/mac/coordinate_conversion.h"
@@ -259,8 +257,8 @@ NSTextInputContext* g_fake_current_input_context = nullptr;
 // windowDidFailToEnterFullScreen:.
 @interface BridgedNativeWidgetTestWindow : NativeWidgetMacNSWindow {
  @private
-  BOOL ignoreToggleFullScreen_;
-  int ignoredToggleFullScreenCount_;
+  BOOL _ignoreToggleFullScreen;
+  int _ignoredToggleFullScreenCount;
 }
 @property(assign, nonatomic) BOOL ignoreToggleFullScreen;
 @property(readonly, nonatomic) int ignoredToggleFullScreenCount;
@@ -268,8 +266,8 @@ NSTextInputContext* g_fake_current_input_context = nullptr;
 
 @implementation BridgedNativeWidgetTestWindow
 
-@synthesize ignoreToggleFullScreen = ignoreToggleFullScreen_;
-@synthesize ignoredToggleFullScreenCount = ignoredToggleFullScreenCount_;
+@synthesize ignoreToggleFullScreen = _ignoreToggleFullScreen;
+@synthesize ignoredToggleFullScreenCount = _ignoredToggleFullScreenCount;
 
 - (void)performSelector:(SEL)aSelector
              withObject:(id)anArgument
@@ -277,15 +275,15 @@ NSTextInputContext* g_fake_current_input_context = nullptr;
   // This is used in simulations without a message loop. Don't start a message
   // loop since that would expose the tests to system notifications and
   // potential flakes. Instead, just pretend the message loop is flushed here.
-  if (ignoreToggleFullScreen_ && aSelector == @selector(toggleFullScreen:))
+  if (_ignoreToggleFullScreen && aSelector == @selector(toggleFullScreen:))
     [self toggleFullScreen:anArgument];
   else
     [super performSelector:aSelector withObject:anArgument afterDelay:delay];
 }
 
 - (void)toggleFullScreen:(id)sender {
-  if (ignoreToggleFullScreen_)
-    ++ignoredToggleFullScreenCount_;
+  if (_ignoreToggleFullScreen)
+    ++_ignoredToggleFullScreenCount;
   else
     [super toggleFullScreen:sender];
 }
@@ -318,14 +316,15 @@ class MockNativeWidgetMac : public NativeWidgetMac {
             NativeWidgetMacNSWindowHost::GetFromNativeView(params.parent)) {
       GetNSWindowHost()->SetParent(parent);
     }
-    GetNSWindowHost()->InitWindow(params);
+    GetNSWindowHost()->InitWindow(params,
+                                  ConvertBoundsToScreenIfNeeded(params.bounds));
 
     // Usually the bridge gets initialized here. It is skipped to run extra
     // checks in tests, and so that a second window isn't created.
     delegate()->OnNativeWidgetCreated();
 
     // To allow events to dispatch to a view, it needs a way to get focus.
-    GetNSWindowHost()->SetFocusManager(GetWidget()->GetFocusManager());
+    SetFocusManager(GetWidget()->GetFocusManager());
   }
 
   void ReorderNativeViews() override {
@@ -375,8 +374,6 @@ class BridgedNativeWidgetTestBase : public ui::CocoaTest {
   void SetUp() override {
     ui::CocoaTest::SetUp();
 
-    ui::MaterialDesignController::Initialize();
-
     Widget::InitParams init_params;
     init_params.native_widget = native_widget_mac_;
     init_params.type = type_;
@@ -416,10 +413,10 @@ class BridgedNativeWidgetTestBase : public ui::CocoaTest {
       Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   // Opacity defaults to "infer" which is usually updated by ViewsDelegate.
   Widget::InitParams::WindowOpacity opacity_ =
-      Widget::InitParams::OPAQUE_WINDOW;
+      Widget::InitParams::WindowOpacity::kOpaque;
   gfx::Rect bounds_ = gfx::Rect(100, 100, 100, 100);
   Widget::InitParams::ShadowType shadow_type_ =
-      Widget::InitParams::SHADOW_TYPE_DEFAULT;
+      Widget::InitParams::ShadowType::kDefault;
 
  private:
   TestViewsDelegate test_views_delegate_;
@@ -621,7 +618,7 @@ void BridgedNativeWidgetTest::MakeSelection(int start, int end) {
 }
 
 void BridgedNativeWidgetTest::SetKeyDownEvent(NSEvent* event) {
-  [ns_view_ setValue:event forKey:@"keyDownEvent_"];
+  ns_view_.keyDownEventForTesting = event;
 }
 
 void BridgedNativeWidgetTest::SetHandleKeyEventCallback(
@@ -854,7 +851,7 @@ TEST_F(BridgedNativeWidgetTest, ViewSizeTracksWindow) {
 }
 
 TEST_F(BridgedNativeWidgetTest, GetInputMethodShouldNotReturnNull) {
-  EXPECT_TRUE(GetNSWindowHost()->GetInputMethod());
+  EXPECT_TRUE(native_widget_mac_->GetInputMethod());
 }
 
 // A simpler test harness for testing initialization flows.
@@ -898,11 +895,13 @@ TEST_F(BridgedNativeWidgetInitTest, InitNotCalled) {
 }
 
 // Tests the shadow type given in InitParams.
-TEST_F(BridgedNativeWidgetInitTest, ShadowType) {
+// Disabled because shadows are disabled on the bots - see
+// https://crbug.com/899286.
+TEST_F(BridgedNativeWidgetInitTest, DISABLED_ShadowType) {
   // Verify Widget::InitParam defaults and arguments added from SetUp().
   EXPECT_EQ(Widget::InitParams::TYPE_WINDOW_FRAMELESS, type_);
-  EXPECT_EQ(Widget::InitParams::OPAQUE_WINDOW, opacity_);
-  EXPECT_EQ(Widget::InitParams::SHADOW_TYPE_DEFAULT, shadow_type_);
+  EXPECT_EQ(Widget::InitParams::WindowOpacity::kOpaque, opacity_);
+  EXPECT_EQ(Widget::InitParams::ShadowType::kDefault, shadow_type_);
 
   CreateNewWidgetToInit();
   EXPECT_FALSE(
@@ -912,10 +911,10 @@ TEST_F(BridgedNativeWidgetInitTest, ShadowType) {
   // Borderless is 0, so isn't really a mask. Check that nothing is set.
   EXPECT_EQ(NSBorderlessWindowMask, [bridge_window() styleMask]);
   EXPECT_TRUE(
-      [bridge_window() hasShadow]);  // SHADOW_TYPE_DEFAULT means a shadow.
+      [bridge_window() hasShadow]);  // ShadowType::kDefault means a shadow.
 
   CreateNewWidgetToInit();
-  shadow_type_ = Widget::InitParams::SHADOW_TYPE_NONE;
+  shadow_type_ = Widget::InitParams::ShadowType::kNone;
   PerformInit();
   EXPECT_FALSE([bridge_window() hasShadow]);  // Preserves lack of shadow.
 
@@ -923,9 +922,9 @@ TEST_F(BridgedNativeWidgetInitTest, ShadowType) {
   CreateNewWidgetToInit();
   PerformInit();
   EXPECT_FALSE(
-      [bridge_window() hasShadow]);  // SHADOW_TYPE_NONE removes shadow.
+      [bridge_window() hasShadow]);  // ShadowType::kNone removes shadow.
 
-  shadow_type_ = Widget::InitParams::SHADOW_TYPE_DEFAULT;
+  shadow_type_ = Widget::InitParams::ShadowType::kDefault;
   CreateNewWidgetToInit();
   PerformInit();
   EXPECT_TRUE([bridge_window() hasShadow]);  // Preserves shadow.

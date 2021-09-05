@@ -3,15 +3,17 @@
 <translationbundle lang="et">
 <translation id="1033008476608128425">Maastik 3</translation>
 <translation id="1118377629180821201">Maastik 12</translation>
-<translation id="1276145862619442150">Kiirvalimised</translation>
+<translation id="1276145862619442150">Kiirvalimislehed</translation>
 <translation id="1281950884873973195">Loom 5</translation>
 <translation id="1411638389238344450">Saada link meiliga</translation>
 <translation id="1657174850639146440">Koll 9</translation>
 <translation id="1676595396635191120">Uus privaatne aken</translation>
+<translation id="1728549374069268714">Aseta ja mine</translation>
 <translation id="1756026472674246267">Ava link uuel kaardil</translation>
 <translation id="1759842336958782510">Chrome</translation>
 <translation id="1769904678986817931">Pildi omadused...</translation>
 <translation id="1920297417712412573">Kopeeri uueks märkmeks</translation>
+<translation id="1921101374471252440">Laadi pilt uuesti</translation>
 <translation id="1924750141060565109">Maastik 15</translation>
 <translation id="19598411548897379">Üldine</translation>
 <translation id="2441056087170876076">Koll 2</translation>
@@ -20,6 +22,7 @@
 <translation id="2848085334714181751">Loom 3</translation>
 <translation id="2873951654529031587">Prügikast</translation>
 <translation id="292258461174562431">Koll 4</translation>
+<translation id="2923448633003185837">Aseta ja mine</translation>
 <translation id="2977472760057091832">Ava link uues privaatses aknas</translation>
 <translation id="2989805286512600854">Ava uuel kaardil</translation>
 <translation id="3027988479108856431">Yandexi töötamise ajal pole sinu seaded kahjuks kättesaadavad. Nende Vivaldisse importimiseks salvesta oma töö ja sulge kõik Yandexi aknad. Seejärel klõpsa „Jätka”.</translation>
@@ -36,7 +39,6 @@
 <translation id="3542768452570884558">Ava link uues aknas</translation>
 <translation id="3588820906588687999">Ava pilt uuel kaardil</translation>
 <translation id="3601066750251199488">Koll 3</translation>
-<translation id="366643050267431920">Lisa sündmusena</translation>
 <translation id="3732157130969736834">Lisa link järjehoidjatesse</translation>
 <translation id="3732388226447288666">Loom 2</translation>
 <translation id="3732439195215136813">Loom 5</translation>
@@ -54,10 +56,11 @@
 <translation id="4512900838580567989">Ava link uuel taustakaardil</translation>
 <translation id="4515472507709384008">Opera versioon 15+</translation>
 <translation id="4548358047305717967">Ava pilt uuel taustakaardil</translation>
+<translation id="4582480609585453144">Ava link taustakaardil</translation>
 <translation id="4636708767492582204">Saada meiliga</translation>
 <translation id="4677434526832593569">Loom 5</translation>
 <translation id="4881695831933465202">Ava</translation>
-<translation id="5014281392052865061">Imporditud kiirvalimine</translation>
+<translation id="5014281392052865061">Imporditud kiirvalimisleht</translation>
 <translation id="5092656712000637858">Lisa leht veebipaneelina</translation>
 <translation id="5177818338935286353">Koll 7</translation>
 <translation id="5213743983876949565">Loom 1</translation>
@@ -74,9 +77,11 @@
 <translation id="5916080360077521750">Chrome’i töötamise ajal pole sinu seaded kahjuks kättesaadavad. Nende Vivaldisse importimiseks salvesta oma töö ja sulge kõik Chrome’i aknad. Seejärel klõpsa „Jätka”.</translation>
 <translation id="6234173136417926046">Kasuta pilti avalehe taustana</translation>
 <translation id="630690498669249215">Opera järjehoidjate fail</translation>
+<translation id="6339818817272922368">Kohalik konto</translation>
 <translation id="6438786710866753178">Maastik 4</translation>
 <translation id="6477028720702061455">Imporditava Opera profiilikausta valimine</translation>
 <translation id="6510706699590490869">&amp;Uuenda Vivaldi</translation>
+<translation id="6538338088414940408">Ava link taustakaardil</translation>
 <translation id="6551219277044048123">Lisa otsingumootorina...</translation>
 <translation id="6630781781151951863">Maastik 18</translation>
 <translation id="6804831687363620480">Opera (15+) töötamise ajal pole sinu seaded kahjuks kättesaadavad. Nende Vivaldisse importimiseks salvesta oma töö ja sulge kõik Opera (15+) aknad. Seejärel klõpsa „Jätka”.</translation>
@@ -84,8 +89,10 @@
 <translation id="7086554968911045110">Maastik 7</translation>
 <translation id="7111492742514999492">Maastik 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
+<translation id="7496505986576158197">Vivaldi on loodud avatud lähtekoodiga <ph name="BEGIN_LINK_CHROMIUM" />Chromiumi projekti<ph name="END_LINK_CHROMIUM" /> ja hulga <ph name="BEGIN_LINK_OSS" />muu avatud lähtekoodiga tarkvara<ph name="END_LINK_OSS" /> põhjal.</translation>
 <translation id="7715497554424665066">&amp;Eira uuendust</translation>
 <translation id="7724603315864178912">Lõika</translation>
+<translation id="7793738202466490491">Lisa kalendrisündmusena</translation>
 <translation id="7957213167373139414">Minu kalender</translation>
 <translation id="8027581147000338959">Ava uues aknas</translation>
 <translation id="8099620695029051217">Kopeeri lehe aadress</translation>
@@ -94,7 +101,9 @@
 <translation id="8331671104904436324">Ava taustakaardil</translation>
 <translation id="8373293945112511707">Maastik 1</translation>
 <translation id="8427094907586191051">Maastik 17</translation>
+<translation id="8446668873108041390">JavaScripti käitamine AppleScripti kaudu on välja lülitatud. Selle sisselülitamiseks ava Seaded &gt; Privaatsus &gt; Apple Events ja märgi ruut „Apple Eventsi JavaScripti lubamine”.</translation>
 <translation id="8539196077526389150">Maastik 13</translation>
+<translation id="8624587806981488221">Laadi pilt uuesti</translation>
 <translation id="864444594187862076">Opera versioon 15+ (arendus)</translation>
 <translation id="8651348004684669199">Lisa aktiivne kaart</translation>
 <translation id="8669345741879513971">Koll 10</translation>

@@ -33,7 +33,7 @@ namespace device {
 namespace {
 
 const char kNetworkLocationBaseUrl[] =
-    "https://location.services.mozilla.com/v1/geolocate";
+    "https://location.vivaldi.com/lookup";
 
 const char kLocationString[] = "location";
 const char kLatitudeString[] = "lat";
@@ -111,8 +111,8 @@ NetworkLocationRequest::NetworkLocationRequest(
     LocationResponseCallback callback)
     : url_loader_factory_(std::move(url_loader_factory)),
       api_key_(
-          // Use Mozilla Location Services API key.
-          "c18ef960-6b92-4abc-91b8-fc7e954062ee"
+          // Currently not using a valid location service
+          "NotUsed"
         ),
       location_response_callback_(std::move(callback)) {}
 

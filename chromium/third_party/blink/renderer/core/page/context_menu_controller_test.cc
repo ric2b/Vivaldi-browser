@@ -5,20 +5,26 @@
 #include "third_party/blink/renderer/core/page/context_menu_controller.h"
 
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/context_menu_data/edit_flags.h"
+#include "third_party/blink/public/common/input/web_menu_source_type.h"
 #include "third_party/blink/public/platform/web_media_stream.h"
 #include "third_party/blink/public/platform/web_media_stream_track.h"
-#include "third_party/blink/public/platform/web_menu_source_type.h"
+#include "third_party/blink/public/platform/web_rect.h"
 #include "third_party/blink/public/web/web_context_menu_data.h"
+#include "third_party/blink/renderer/core/dom/xml_document.h"
 #include "third_party/blink/renderer/core/editing/frame_selection.h"
 #include "third_party/blink/renderer/core/frame/frame_test_helpers.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
 #include "third_party/blink/renderer/core/geometry/dom_rect.h"
+#include "third_party/blink/renderer/core/html/html_document.h"
 #include "third_party/blink/renderer/core/html/media/html_video_element.h"
 #include "third_party/blink/renderer/core/input/context_menu_allowed_scope.h"
 #include "third_party/blink/renderer/core/page/context_menu_controller.h"
+#include "third_party/blink/renderer/platform/geometry/int_rect.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/testing/empty_web_media_player.h"
 #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
+#include "third_party/blink/renderer/platform/wtf/casting.h"
 
 using testing::Return;
 
@@ -70,7 +76,7 @@ class ContextMenuControllerTest : public testing::Test {
     WebLocalFrameImpl* local_main_frame = web_view_helper_.LocalMainFrame();
     local_main_frame->ViewImpl()->MainFrameWidget()->Resize(WebSize(640, 480));
     local_main_frame->ViewImpl()->MainFrameWidget()->UpdateAllLifecyclePhases(
-        WebWidget::LifecycleUpdateReason::kTest);
+        DocumentUpdateReason::kTest);
   }
 
   bool ShowContextMenu(const PhysicalOffset& location,
@@ -147,7 +153,7 @@ TEST_F(ContextMenuControllerTest, VideoNotLoaded) {
   // Context menu info are sent to the WebLocalFrameClient.
   WebContextMenuData context_menu_data =
       GetWebFrameClient().GetContextMenuData();
-  EXPECT_EQ(WebContextMenuData::kMediaTypeVideo, context_menu_data.media_type);
+  EXPECT_EQ(ContextMenuDataMediaType::kVideo, context_menu_data.media_type);
   EXPECT_EQ(video_url, context_menu_data.src_url.GetString());
 
   const Vector<std::pair<WebContextMenuData::MediaFlags, bool>>
@@ -208,7 +214,7 @@ TEST_F(ContextMenuControllerTest, VideoWithAudioOnly) {
   // Context menu info are sent to the WebLocalFrameClient.
   WebContextMenuData context_menu_data =
       GetWebFrameClient().GetContextMenuData();
-  EXPECT_EQ(WebContextMenuData::kMediaTypeAudio, context_menu_data.media_type);
+  EXPECT_EQ(ContextMenuDataMediaType::kAudio, context_menu_data.media_type);
   EXPECT_EQ(video_url, context_menu_data.src_url.GetString());
 
   const Vector<std::pair<WebContextMenuData::MediaFlags, bool>>
@@ -265,7 +271,7 @@ TEST_F(ContextMenuControllerTest, PictureInPictureEnabledVideoLoaded) {
   // Context menu info are sent to the WebLocalFrameClient.
   WebContextMenuData context_menu_data =
       GetWebFrameClient().GetContextMenuData();
-  EXPECT_EQ(WebContextMenuData::kMediaTypeVideo, context_menu_data.media_type);
+  EXPECT_EQ(ContextMenuDataMediaType::kVideo, context_menu_data.media_type);
   EXPECT_EQ(video_url, context_menu_data.src_url.GetString());
 
   const Vector<std::pair<WebContextMenuData::MediaFlags, bool>>
@@ -322,7 +328,7 @@ TEST_F(ContextMenuControllerTest, PictureInPictureDisabledVideoLoaded) {
   // Context menu info are sent to the WebLocalFrameClient.
   WebContextMenuData context_menu_data =
       GetWebFrameClient().GetContextMenuData();
-  EXPECT_EQ(WebContextMenuData::kMediaTypeVideo, context_menu_data.media_type);
+  EXPECT_EQ(ContextMenuDataMediaType::kVideo, context_menu_data.media_type);
   EXPECT_EQ(video_url, context_menu_data.src_url.GetString());
 
   const Vector<std::pair<WebContextMenuData::MediaFlags, bool>>
@@ -381,7 +387,7 @@ TEST_F(ContextMenuControllerTest, MediaStreamVideoLoaded) {
   // Context menu info are sent to the WebLocalFrameClient.
   WebContextMenuData context_menu_data =
       GetWebFrameClient().GetContextMenuData();
-  EXPECT_EQ(WebContextMenuData::kMediaTypeVideo, context_menu_data.media_type);
+  EXPECT_EQ(ContextMenuDataMediaType::kVideo, context_menu_data.media_type);
 
   const Vector<std::pair<WebContextMenuData::MediaFlags, bool>>
       expected_media_flags = {
@@ -443,7 +449,7 @@ TEST_F(ContextMenuControllerTest, InfiniteDurationVideoLoaded) {
   // Context menu info are sent to the WebLocalFrameClient.
   WebContextMenuData context_menu_data =
       GetWebFrameClient().GetContextMenuData();
-  EXPECT_EQ(WebContextMenuData::kMediaTypeVideo, context_menu_data.media_type);
+  EXPECT_EQ(ContextMenuDataMediaType::kVideo, context_menu_data.media_type);
   EXPECT_EQ(video_url, context_menu_data.src_url.GetString());
 
   const Vector<std::pair<WebContextMenuData::MediaFlags, bool>>
@@ -490,7 +496,7 @@ TEST_F(ContextMenuControllerTest, EditingActionsEnabledInSVGDocument) {
   ASSERT_TRUE(document->IsSVGDocument());
 
   Element* text_element = document->getElementById("t");
-  document->UpdateStyleAndLayout();
+  document->UpdateStyleAndLayout(DocumentUpdateReason::kTest);
   FrameSelection& selection = document->GetFrame()->Selection();
 
   // <text> element
@@ -499,8 +505,8 @@ TEST_F(ContextMenuControllerTest, EditingActionsEnabledInSVGDocument) {
 
   WebContextMenuData context_menu_data =
       GetWebFrameClient().GetContextMenuData();
-  EXPECT_EQ(context_menu_data.media_type, WebContextMenuData::kMediaTypeNone);
-  EXPECT_EQ(context_menu_data.edit_flags, WebContextMenuData::kCanCopy);
+  EXPECT_EQ(context_menu_data.media_type, ContextMenuDataMediaType::kNone);
+  EXPECT_EQ(context_menu_data.edit_flags, ContextMenuDataEditFlags::kCanCopy);
   EXPECT_EQ(context_menu_data.selected_text, "able tex");
 
   // <div contenteditable=true>
@@ -509,11 +515,13 @@ TEST_F(ContextMenuControllerTest, EditingActionsEnabledInSVGDocument) {
   EXPECT_TRUE(ShowContextMenuForElement(editable_element, kMenuSourceMouse));
 
   context_menu_data = GetWebFrameClient().GetContextMenuData();
-  EXPECT_EQ(context_menu_data.media_type, WebContextMenuData::kMediaTypeNone);
+  EXPECT_EQ(context_menu_data.media_type, ContextMenuDataMediaType::kNone);
   EXPECT_EQ(context_menu_data.edit_flags,
-            WebContextMenuData::kCanCut | WebContextMenuData::kCanCopy |
-                WebContextMenuData::kCanPaste | WebContextMenuData::kCanDelete |
-                WebContextMenuData::kCanEditRichly);
+            ContextMenuDataEditFlags::kCanCut |
+                ContextMenuDataEditFlags::kCanCopy |
+                ContextMenuDataEditFlags::kCanPaste |
+                ContextMenuDataEditFlags::kCanDelete |
+                ContextMenuDataEditFlags::kCanEditRichly);
 }
 
 TEST_F(ContextMenuControllerTest, EditingActionsEnabledInXMLDocument) {
@@ -527,11 +535,11 @@ TEST_F(ContextMenuControllerTest, EditingActionsEnabledInXMLDocument) {
   )XML");
 
   Document* document = GetDocument();
-  ASSERT_TRUE(document->IsXMLDocument());
-  ASSERT_FALSE(document->IsHTMLDocument());
+  ASSERT_TRUE(IsA<XMLDocument>(document));
+  ASSERT_FALSE(IsA<HTMLDocument>(document));
 
   Element* text_element = document->getElementById("t");
-  document->UpdateStyleAndLayout();
+  document->UpdateStyleAndLayout(DocumentUpdateReason::kTest);
   FrameSelection& selection = document->GetFrame()->Selection();
 
   selection.SelectAll();
@@ -539,25 +547,25 @@ TEST_F(ContextMenuControllerTest, EditingActionsEnabledInXMLDocument) {
 
   WebContextMenuData context_menu_data =
       GetWebFrameClient().GetContextMenuData();
-  EXPECT_EQ(context_menu_data.media_type, WebContextMenuData::kMediaTypeNone);
-  EXPECT_EQ(context_menu_data.edit_flags, WebContextMenuData::kCanCopy);
+  EXPECT_EQ(context_menu_data.media_type, ContextMenuDataMediaType::kNone);
+  EXPECT_EQ(context_menu_data.edit_flags, ContextMenuDataEditFlags::kCanCopy);
   EXPECT_EQ(context_menu_data.selected_text, "Blue text");
 }
 
 TEST_F(ContextMenuControllerTest, ShowNonLocatedContextMenuEvent) {
-  GetDocument()->documentElement()->SetInnerHTMLFromString(
+  GetDocument()->documentElement()->setInnerHTML(
       "<input id='sample' type='text' size='5' value='Sample Input Text'>");
 
   Document* document = GetDocument();
   Element* input_element = document->getElementById("sample");
-  document->UpdateStyleAndLayout();
+  document->UpdateStyleAndLayout(DocumentUpdateReason::kTest);
 
   // Select the 'Sample' of |input|.
   DOMRect* rect = input_element->getBoundingClientRect();
   WebGestureEvent gesture_event(
       WebInputEvent::kGestureLongPress, WebInputEvent::kNoModifiers,
       base::TimeTicks::Now(), WebGestureDevice::kTouchscreen);
-  gesture_event.SetPositionInWidget(WebFloatPoint(rect->left(), rect->top()));
+  gesture_event.SetPositionInWidget(gfx::PointF(rect->left(), rect->top()));
   GetWebView()->MainFrameWidget()->HandleInputEvent(
       WebCoalescedInputEvent(gesture_event));
 
@@ -569,7 +577,7 @@ TEST_F(ContextMenuControllerTest, ShowNonLocatedContextMenuEvent) {
   LayoutPoint middle_point((rect->left() + rect->right()) / 2,
                            (rect->top() + rect->bottom()) / 2);
   LocalMainFrame()->MoveRangeSelectionExtent(
-      WebPoint(middle_point.X().ToInt(), middle_point.Y().ToInt()));
+      gfx::Point(middle_point.X().ToInt(), middle_point.Y().ToInt()));
   GetWebView()->MainFrameWidget()->ShowContextMenu(kMenuSourceTouchHandle);
 
   context_menu_data = GetWebFrameClient().GetContextMenuData();
@@ -581,11 +589,65 @@ TEST_F(ContextMenuControllerTest, ShowNonLocatedContextMenuEvent) {
   // Select all the value of |input| to ensure the start of selection is
   // invisible.
   LocalMainFrame()->MoveRangeSelectionExtent(
-      WebPoint(rect->right(), rect->bottom()));
+      gfx::Point(rect->right(), rect->bottom()));
   GetWebView()->MainFrameWidget()->ShowContextMenu(kMenuSourceTouchHandle);
 
   context_menu_data = GetWebFrameClient().GetContextMenuData();
   EXPECT_EQ(context_menu_data.selected_text, "Sample Input Text");
+}
+
+TEST_F(ContextMenuControllerTest, SelectionRectClipped) {
+  GetDocument()->documentElement()->setInnerHTML(
+      "<textarea id='text-area' cols=6 rows=2>Sample editable text</textarea>");
+
+  Document* document = GetDocument();
+  Element* editable_element = document->getElementById("text-area");
+  document->UpdateStyleAndLayout(DocumentUpdateReason::kTest);
+  FrameSelection& selection = document->GetFrame()->Selection();
+
+  // Select the 'Sample' of |textarea|.
+  DOMRect* rect = editable_element->getBoundingClientRect();
+  WebGestureEvent gesture_event(
+      WebInputEvent::kGestureLongPress, WebInputEvent::kNoModifiers,
+      base::TimeTicks::Now(), WebGestureDevice::kTouchscreen);
+  gesture_event.SetPositionInWidget(gfx::PointF(rect->left(), rect->top()));
+  GetWebView()->MainFrameWidget()->HandleInputEvent(
+      WebCoalescedInputEvent(gesture_event));
+
+  WebContextMenuData context_menu_data =
+      GetWebFrameClient().GetContextMenuData();
+  EXPECT_EQ(context_menu_data.selected_text, "Sample");
+
+  // The selection rect is not clipped.
+  IntRect anchor, focus;
+  selection.ComputeAbsoluteBounds(anchor, focus);
+  anchor = document->GetFrame()->View()->FrameToViewport(anchor);
+  focus = document->GetFrame()->View()->FrameToViewport(focus);
+  int left = std::min(focus.X(), anchor.X());
+  int top = std::min(focus.Y(), anchor.Y());
+  int right = std::max(focus.MaxX(), anchor.MaxX());
+  int bottom = std::max(focus.MaxY(), anchor.MaxY());
+  WebRect selection_rect(left, top, right - left, bottom - top);
+  EXPECT_EQ(context_menu_data.selection_rect, selection_rect);
+
+  // Select all the content of |textarea|.
+  selection.SelectAll();
+  EXPECT_TRUE(ShowContextMenuForElement(editable_element, kMenuSourceMouse));
+
+  context_menu_data = GetWebFrameClient().GetContextMenuData();
+  EXPECT_EQ(context_menu_data.selected_text, "Sample editable text");
+
+  // The selection rect is clipped by the editable box.
+  IntRect clip_bound = editable_element->VisibleBoundsInVisualViewport();
+  selection.ComputeAbsoluteBounds(anchor, focus);
+  anchor = document->GetFrame()->View()->FrameToViewport(anchor);
+  focus = document->GetFrame()->View()->FrameToViewport(focus);
+  left = std::max(clip_bound.X(), std::min(focus.X(), anchor.X()));
+  top = std::max(clip_bound.Y(), std::min(focus.Y(), anchor.Y()));
+  right = std::min(clip_bound.MaxX(), std::max(focus.MaxX(), anchor.MaxX()));
+  bottom = std::min(clip_bound.MaxY(), std::max(focus.MaxY(), anchor.MaxY()));
+  selection_rect = WebRect(left, top, right - left, bottom - top);
+  EXPECT_EQ(context_menu_data.selection_rect, selection_rect);
 }
 
 }  // namespace blink

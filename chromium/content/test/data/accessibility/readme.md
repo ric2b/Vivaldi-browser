@@ -155,12 +155,23 @@ then run the test with the `--generate-accessibility-test-expectations`
 argument, for example:
 ```
   out/Debug/content_browsertests \
-    --generate-accessibility-test-expectations
-    --gtest_filter="DumpAccessibilityTreeTest.AccessibilityAriaAtomic/*"
+    --generate-accessibility-test-expectations \
+    --gtest_filter="All/DumpAccessibilityTreeTest.AccessibilityAriaAtomic/*"
 ```
 This will replace the `-expected-*.txt` file with the current output. It's
 a great way to rebaseline a bunch of tests after making a change. Please
 manually check the diff, of course!
+
+The * is a wildcard and will match any substring, in this case all platforms.
+To run on a single platform, replace the wildcard, e.g.:
+```
+  --gtest_filter="All/DumpAccessibilityTreeTest.AccessibilityAriaAtomic/linux"
+```
+
+For more information, see the detailed help with:
+```
+  out/Debug/content_browsertests --gtest_help
+```
 
 ## Adding a new test:
 
@@ -186,3 +197,8 @@ accessibility event - one you're unlikely to generate in your test. It uses
 that event to know when to "stop" dumping events. There isn't currently a
 way to test events that occur after some delay, just ones that happen as
 a direct result of calling `go()`.
+
+### Duplicate Events on UIA
+Windows will "translate" some IA2 events to UIA, and it is not
+possible to turn this feature off. Therefore as our UIA behavior is in addition
+to IA2, we will receive duplicated events for Focus, MenuOpened and MenuClosed.

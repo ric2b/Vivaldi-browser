@@ -11,7 +11,7 @@
 
 namespace ui {
 
-ColorMixer* ColorProvider::AddMixer() {
+ColorMixer& ColorProvider::AddMixer() {
   // Adding a mixer could change any of the result colors.
   cache_.clear();
 
@@ -20,10 +20,10 @@ ColorMixer* ColorProvider::AddMixer() {
   // mixer for its result, and trust mixers to query each other back up the
   // chain as needed.
   mixers_.emplace_front(mixers_.empty() ? nullptr : &mixers_.front());
-  return &mixers_.front();
+  return mixers_.front();
 }
 
-SkColor ColorProvider::GetColor(ColorId id, ColorVariant variant) const {
+SkColor ColorProvider::GetColor(ColorId id) const {
   DCHECK_COLOR_ID_VALID(id);
 
   if (mixers_.empty())

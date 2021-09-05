@@ -14,6 +14,7 @@
 #include "base/observer_list.h"
 #include "base/sequenced_task_runner.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/task_runner_util.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "base/values.h"
@@ -39,8 +40,9 @@ struct TaskResults {
 
 // Parses |data|, a JSON blob, into a vector of PrintServers.  If |data| cannot
 // be parsed, returns data with empty list of servers.
-// This needs to run on a sequence that may block as it can be very slow.
+// This needs to not run on UI thread as it can be very slow.
 TaskResults ParseData(int task_id, std::unique_ptr<std::string> data) {
+  DCHECK(!content::BrowserThread::CurrentlyOn(content::BrowserThread::UI));
   TaskResults task_data;
   task_data.task_id = task_id;
 
@@ -49,12 +51,9 @@ TaskResults ParseData(int task_id, std::unique_ptr<std::string> data) {
     return task_data;
   }
 
-  // This could be really slow.
-  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
-                                                base::BlockingType::MAY_BLOCK);
   base::JSONReader::ValueWithError value_with_error =
       base::JSONReader::ReadAndReturnValueWithError(
-          *data, base::JSONParserOptions::JSON_PARSE_RFC);
+          *data, base::JSONParserOptions::JSON_ALLOW_TRAILING_COMMAS);
   if (value_with_error.error_code != base::JSONReader::JSON_NO_ERROR) {
     LOG(WARNING) << "Failed to parse print servers policy ("
                  << value_with_error.error_message << ") on line "
@@ -70,11 +69,10 @@ TaskResults ParseData(int task_id, std::unique_ptr<std::string> data) {
     return task_data;
   }
 
-  base::Value::ListStorage& json_list = json_blob.GetList();
   std::set<std::string> print_server_ids;
   std::set<GURL> print_server_urls;
-  task_data.servers.reserve(json_list.size());
-  for (const base::Value& val : json_list) {
+  task_data.servers.reserve(json_blob.GetList().size());
+  for (const base::Value& val : json_blob.GetList()) {
     if (!val.is_dict()) {
       LOG(WARNING) << "Entry in print servers policy skipped. "
                    << "Not a dictionary.";
@@ -148,9 +146,9 @@ TaskResults ParseData(int task_id, std::unique_ptr<std::string> data) {
 class PrintServersProviderImpl : public PrintServersProvider {
  public:
   PrintServersProviderImpl()
-      : task_runner_(base::CreateSequencedTaskRunner(
-            {base::ThreadPool(), base::TaskPriority::BEST_EFFORT,
-             base::MayBlock(), base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})) {
+      : task_runner_(base::ThreadPool::CreateSequencedTaskRunner(
+            {base::TaskPriority::BEST_EFFORT, base::MayBlock(),
+             base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})) {
     DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   }
 

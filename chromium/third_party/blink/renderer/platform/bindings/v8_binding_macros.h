@@ -34,6 +34,16 @@
 #include "third_party/blink/renderer/platform/wtf/assertions.h"
 #include "v8/include/v8.h"
 
+#if defined(OS_WIN)
+#if !defined(alloca)
+// Windows uses _alloca instead of alloca, but only #define's alloca to _alloca
+// in malloc.h if _CRT_INTERNAL_NONSTDC_NAMES is defined. If that doesn't happen
+// (e.g. on Windows on Arm), fix up the definition.
+#include <malloc.h>
+#define alloca _alloca
+#endif
+#endif
+
 namespace blink {
 
 // type is an instance of class template V8StringResource<>,
@@ -48,16 +58,6 @@ namespace blink {
   type var(value);                                 \
   if (UNLIKELY(!var.Prepare()))                    \
     return retVal;
-
-// Checks for a given v8::Value (value) whether it is an ArrayBufferView and
-// below a certain size limit. If below the limit, memory is allocated on the
-// stack to hold the actual payload. Keep the limit in sync with V8's
-// typed_array_max_size.
-#define allocateFlexibleArrayBufferViewStorage(value)            \
-  (value->IsArrayBufferView() &&                                 \
-           (value.As<v8::ArrayBufferView>()->ByteLength() <= 64) \
-       ? alloca(value.As<v8::ArrayBufferView>()->ByteLength())   \
-       : nullptr)
 
 }  // namespace blink
 

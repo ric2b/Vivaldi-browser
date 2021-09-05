@@ -504,6 +504,13 @@ void ViscaWebcam::Reset(bool pan,
   }
 }
 
+void ViscaWebcam::SetHome(const SetPTZCompleteCallback& callback) {}
+
+void ViscaWebcam::RestoreCameraPreset(int preset_number,
+                                      const SetPTZCompleteCallback& callback) {}
+void ViscaWebcam::SetCameraPreset(int preset_number,
+                                  const SetPTZCompleteCallback& callback) {}
+
 void ViscaWebcam::OpenForTesting(
     std::unique_ptr<SerialConnection> serial_connection) {
   serial_connection_ = std::move(serial_connection);

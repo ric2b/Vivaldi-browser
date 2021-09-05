@@ -33,23 +33,22 @@
 
 #include <memory>
 
+#include "base/optional.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
+#include "services/network/public/mojom/content_security_policy.mojom-blink-forward.h"
 #include "services/network/public/mojom/ip_address_space.mojom-blink-forward.h"
 #include "third_party/blink/public/common/feature_policy/feature_policy.h"
 #include "third_party/blink/public/common/loader/loading_behavior_flag.h"
 #include "third_party/blink/public/common/navigation/triggering_event_info.h"
-#include "third_party/blink/public/common/sudden_termination_disabler_type.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 #include "third_party/blink/public/mojom/frame/navigation_initiator.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/portal/portal.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/use_counter/css_property_id.mojom-blink-forward.h"
 #include "third_party/blink/public/platform/scheduler/web_scoped_virtual_time_pauser.h"
-#include "third_party/blink/public/platform/web_content_security_policy_struct.h"
 #include "third_party/blink/public/platform/web_content_settings_client.h"
 #include "third_party/blink/public/platform/web_effective_connection_type.h"
-#include "third_party/blink/public/platform/web_insecure_request_policy.h"
 #include "third_party/blink/public/platform/web_worker_fetch_context.h"
 #include "third_party/blink/public/web/web_frame_load_type.h"
 #include "third_party/blink/public/web/web_history_commit_type.h"
@@ -77,20 +76,13 @@
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 #include "v8/include/v8.h"
 
-namespace service_manager {
-class InterfaceProvider;
-}  // namespace service_manager
-
 namespace blink {
 namespace mojom {
 enum class WebFeature : int32_t;
-
-namespace blink {
-class DocumentInterfaceBroker;
-}  // namespace blink
 }  // namespace mojom
 
 class AssociatedInterfaceProvider;
+class ContentSecurityPolicy;
 class Document;
 class DocumentLoader;
 class HTMLFormElement;
@@ -111,12 +103,9 @@ class WebLocalFrame;
 class WebMediaPlayer;
 class WebMediaPlayerClient;
 class WebMediaPlayerSource;
-class WebRTCPeerConnectionHandler;
 class WebRemotePlaybackClient;
-struct WebResourceTimingInfo;
 class WebServiceWorkerProvider;
 class WebSpellCheckPanelHostClient;
-struct WebScrollIntoViewParams;
 class WebTextCheckClient;
 
 class CORE_EXPORT LocalFrameClient : public FrameClient {
@@ -141,9 +130,7 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
   virtual void DidFinishSameDocumentNavigation(HistoryItem*,
                                                WebHistoryCommitType,
                                                bool content_initiated) {}
-  virtual void DispatchDidStartProvisionalLoad(DocumentLoader*) = 0;
   virtual void DispatchDidReceiveTitle(const String&) = 0;
-  virtual void DispatchDidChangeIcons(IconType) = 0;
   virtual void DispatchDidCommitLoad(HistoryItem*,
                                      WebHistoryCommitType,
                                      GlobalObjectReusePolicy) = 0;
@@ -151,11 +138,10 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
                                    WebHistoryCommitType) = 0;
   virtual void DispatchDidFinishDocumentLoad() = 0;
   virtual void DispatchDidFinishLoad() = 0;
-  virtual void DispatchDidChangeThemeColor() = 0;
 
   virtual void BeginNavigation(
       const ResourceRequest&,
-      network::mojom::RequestContextFrameType,
+      mojom::RequestContextFrameType,
       Document* origin_document,
       DocumentLoader*,
       WebNavigationType,
@@ -165,39 +151,23 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
       bool is_client_redirect,
       TriggeringEventInfo,
       HTMLFormElement*,
-      ContentSecurityPolicyDisposition
+      network::mojom::CSPDisposition
           should_check_main_world_content_security_policy,
       mojo::PendingRemote<mojom::blink::BlobURLToken>,
       base::TimeTicks input_start_time,
       const String& href_translate,
-      WebContentSecurityPolicyList,
+      WTF::Vector<network::mojom::blink::ContentSecurityPolicyPtr>
+          initiator_csp,
+      network::mojom::blink::CSPSourcePtr initiator_self_source,
       network::mojom::IPAddressSpace,
       mojo::PendingRemote<mojom::blink::NavigationInitiator>) = 0;
 
   virtual void DispatchWillSendSubmitEvent(HTMLFormElement*) = 0;
 
   virtual void DidStartLoading() = 0;
-  virtual void ProgressEstimateChanged(double progress_estimate) = 0;
   virtual void DidStopLoading() = 0;
 
-  virtual void ForwardResourceTimingToParent(const WebResourceTimingInfo&) = 0;
-
-  virtual void DownloadURL(const ResourceRequest&,
-                           network::mojom::RedirectMode) = 0;
-
   virtual bool NavigateBackForward(int offset) const = 0;
-
-  // Another page has accessed the initial empty document of this frame. It is
-  // no longer safe to display a provisional URL, since a URL spoof is now
-  // possible.
-  virtual void DidAccessInitialDocument() {}
-
-  // This frame has displayed inactive content (such as an image) from an
-  // insecure source.  Inactive content cannot spread to other frames.
-  virtual void DidDisplayInsecureContent() = 0;
-
-  // This frame contains a form that submits to an insecure target url.
-  virtual void DidContainInsecureFormAction() = 0;
 
   // The indicated security origin has run active content (such as a script)
   // from an insecure source.  Note that the insecure content can spread to
@@ -212,14 +182,11 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
 
   // Will be called when |PerformanceTiming| events are updated
   virtual void DidChangePerformanceTiming() {}
+  // Will be called when an |InputEvent| is observed.
+  virtual void DidObserveInputDelay(base::TimeDelta input_delay) {}
 
   // Will be called when |CpuTiming| events are updated
   virtual void DidChangeCpuTiming(base::TimeDelta time) {}
-
-  // Will be called when the list of active features tracked by the scheduler is
-  // updated.
-  virtual void DidChangeActiveSchedulerTrackedFeatures(uint64_t features_mask) {
-  }
 
   // Will be called when a particular loading code path has been used. This
   // propogates renderer loading behavior to the browser process for histograms.
@@ -259,6 +226,7 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
   virtual DocumentLoader* CreateDocumentLoader(
       LocalFrame*,
       WebNavigationType,
+      ContentSecurityPolicy*,
       std::unique_ptr<WebNavigationParams> navigation_params,
       std::unique_ptr<WebDocumentLoader::ExtraData> extra_data) = 0;
 
@@ -267,7 +235,7 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
       std::unique_ptr<WebDocumentLoader::ExtraData> extra_data) = 0;
 
   virtual String UserAgent() = 0;
-  virtual blink::UserAgentMetadata UserAgentMetadata() = 0;
+  virtual base::Optional<blink::UserAgentMetadata> UserAgentMetadata() = 0;
 
   virtual String DoNotTrackValue() = 0;
 
@@ -311,7 +279,8 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
   virtual WebRemotePlaybackClient* CreateWebRemotePlaybackClient(
       HTMLMediaElement&) = 0;
 
-  virtual void DidCreateNewDocument() = 0;
+  virtual void DidCreateInitialEmptyDocument() = 0;
+  virtual void DidCommitJavascriptUrlNavigation(DocumentLoader*) = 0;
   virtual void DispatchDidClearWindowObjectInMainWorld() = 0;
   virtual void DocumentElementAvailable() = 0;
   virtual void RunScriptsAtDocumentElementAvailable() = 0;
@@ -335,28 +304,14 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
 
   virtual void DidChangeName(const String&) {}
 
-  virtual void DidEnforceInsecureRequestPolicy(WebInsecureRequestPolicy) {}
-  virtual void DidEnforceInsecureNavigationsSet(const WebVector<unsigned>&) {}
-
   virtual void DidChangeFramePolicy(Frame* child_frame, const FramePolicy&) {}
 
   virtual void DidSetFramePolicyHeaders(
-      WebSandboxFlags,
-      const ParsedFeaturePolicy& parsed_header) {}
-
-  // Called when a set of new Content Security Policies is added to the frame's
-  // document. This can be triggered by handling of HTTP headers, handling of
-  // <meta> element, or by inheriting CSP from the parent (in case of
-  // about:blank).
-  virtual void DidAddContentSecurityPolicies(
-      const blink::WebVector<WebContentSecurityPolicy>&) {}
+      mojom::blink::WebSandboxFlags,
+      const ParsedFeaturePolicy& feature_policy_header,
+      const DocumentPolicy::FeatureState& document_policy_header) {}
 
   virtual void DidChangeFrameOwnerProperties(HTMLFrameOwnerElement*) {}
-
-  virtual void DispatchWillStartUsingPeerConnectionHandler(
-      WebRTCPeerConnectionHandler*) {}
-
-  virtual bool ShouldBlockWebGL() { return false; }
 
   virtual std::unique_ptr<WebServiceWorkerProvider>
   CreateServiceWorkerProvider() = 0;
@@ -369,55 +324,18 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
 
   virtual bool IsLocalFrameClientImpl() const { return false; }
 
-  virtual void SuddenTerminationDisablerChanged(bool present,
-                                                SuddenTerminationDisablerType) {
-  }
-
   // Overwrites the given URL to use an HTML5 embed if possible. An empty URL is
   // returned if the URL is not overriden.
   virtual KURL OverrideFlashEmbedWithHTML(const KURL&) { return KURL(); }
 
   virtual BlameContext* GetFrameBlameContext() { return nullptr; }
 
-  virtual service_manager::InterfaceProvider* GetInterfaceProvider() {
-    return nullptr;
-  }
-
-  // Binds |js_handle| to the currently bound implementation of
-  // DocumentInterfaceBroker to share the same broker between C++ and JavaScript
-  // clients.
-  virtual void BindDocumentInterfaceBroker(
-      mojo::ScopedMessagePipeHandle js_handle) {}
-
-  virtual mojom::blink::DocumentInterfaceBroker* GetDocumentInterfaceBroker() {
-    return nullptr;
-  }
-
   virtual BrowserInterfaceBrokerProxy& GetBrowserInterfaceBroker() = 0;
-
-  // Used in tests to set a custom override for DocumentInterfaceBroker methods.
-  // |blink_handle| is bound to the test implementation on the caller side.
-  // Returns the handle to the previously bound 'production' implementation,
-  // which will be used to forward the calls to methods that have not been
-  // overridden.
-  virtual mojo::ScopedMessagePipeHandle SetDocumentInterfaceBrokerForTesting(
-      mojo::ScopedMessagePipeHandle blink_handle) {
-    return mojo::ScopedMessagePipeHandle();
-  }
 
   virtual AssociatedInterfaceProvider*
   GetRemoteNavigationAssociatedInterfaces() = 0;
 
-  // Notify the embedder that the associated frame has user activation so that
-  // the replicated states in the browser and other renderers can be updated.
-  virtual void NotifyUserActivation(bool need_browser_verification) {}
-
-  // Tell the embedder that the associated frame has consumed user activation so
-  // that the replicated states in the browser and other renderers can be
-  // updated.
-  virtual void ConsumeUserActivation() {}
-
-  virtual void SetHasReceivedUserGestureBeforeNavigation(bool value) {}
+  virtual void NotifyUserActivation() {}
 
   virtual void AbortClientNavigation() {}
 
@@ -428,20 +346,6 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
   virtual std::unique_ptr<WebURLLoaderFactory> CreateURLLoaderFactory() = 0;
 
   virtual void AnnotatedRegionsChanged() = 0;
-
-  virtual void DidBlockNavigation(const KURL& blocked_url,
-                                  const KURL& initiator_urk,
-                                  blink::NavigationBlockedReason reason) {}
-
-  // Called when the corresponding frame should be scrolled in a remote parent
-  // frame.
-  virtual void ScrollRectToVisibleInParentFrame(
-      const WebRect&,
-      const WebScrollIntoViewParams&) {}
-
-  virtual void BubbleLogicalScrollInParentFrame(
-      ScrollDirection direction,
-      ScrollGranularity granularity) = 0;
 
   virtual void SetVirtualTimePauser(
       WebScopedVirtualTimePauser virtual_time_pauser) {}
@@ -458,7 +362,7 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
 
   virtual void FrameRectsChanged(const IntRect&) {}
 
-  virtual void LifecycleStateChanged(mojom::FrameLifecycleState state) {}
+  virtual void FocusedElementChanged(Element* element) {}
 
   // Returns true when the contents of plugin are handled externally. This means
   // the plugin element will own a content frame but the frame is than used
@@ -503,12 +407,7 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
 
   // AppCache ------------------------------------------------------------
   virtual void UpdateSubresourceFactory(
-      std::unique_ptr<blink::URLLoaderFactoryBundleInfo> info) {}
-
-  virtual void EvictFromBackForwardCache() = 0;
-
-  // VB-6063:
-  virtual void extendedProgressEstimateChanged(double progressEstimate, double loaded_bytes, int loaded_elements, int total_elements) {}
+      std::unique_ptr<blink::PendingURLLoaderFactoryBundle> pending_factory) {}
 };
 
 }  // namespace blink

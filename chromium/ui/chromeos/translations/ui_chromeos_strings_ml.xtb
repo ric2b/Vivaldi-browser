@@ -29,6 +29,7 @@
 <translation id="1243314992276662751">അപ്‌ലോഡുചെയ്യുക</translation>
 <translation id="1249250836236328755">വിഭാഗം</translation>
 <translation id="1278813325885878377">ഹംഗേറിയൻ ക്വെർട്ടി കീബോർഡ്</translation>
+<translation id="1293556467332435079">ഫയലുകള്‍</translation>
 <translation id="1297922636971898492">Google ഡ്രൈവ് ഇപ്പോൾ ലഭ്യമല്ല. ലഭ്യമായിക്കഴിഞ്ഞാൽ, അപ്‌ലോഡ് ചെയ്യുന്നത് സ്വമേധയാ പുനരാരംഭിക്കും.</translation>
 <translation id="1307931752636661898">Linux ഫയലുകൾ കാണാനാവുന്നില്ല</translation>
 <translation id="1310751437842832374">ലിപ്യന്തരണം (mausam → ନମସ୍ତେ)</translation>
@@ -80,6 +81,7 @@
 <translation id="1847880352285315359">സംരക്ഷിച്ചു</translation>
 <translation id="1864756863218646478">ഫയൽ കണ്ടെത്താൻ കഴിഞ്ഞില്ല.</translation>
 <translation id="1921986354447415460">ടർക്കിഷ്-എഫ് കീബോർഡ്</translation>
+<translation id="1924372192547904021"><ph name="DRIVE_NAME" /> ഫോർമാറ്റ് ചെയ്തു</translation>
 <translation id="1931134289871235022">സ്ലോവാക്</translation>
 <translation id="1933345018156373194">അപ്രതീക്ഷിത പിശക് കാരണം നീക്കാനായില്ല: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="1936717151811561466">ഫിന്നിഷ്</translation>
@@ -132,7 +134,7 @@
 <translation id="2542049655219295786">Google പട്ടിക</translation>
 <translation id="2547921442987553570"><ph name="EXTENSION_NAME" />-ൽ ചേർക്കുക</translation>
 <translation id="255937426064304553">യുഎസ് ഇന്റർനാഷണൽ</translation>
-<translation id="2562685439590298522">ഡോക്‌സ്</translation>
+<translation id="2562685439590298522">Docs</translation>
 <translation id="2563185590376525700">തവള</translation>
 <translation id="2614589611416690597"><ph name="VIDEO_TYPE" /> വീഡിയോ</translation>
 <translation id="2620090360073999360">Google ഡ്രൈവിൽ ഇപ്പോൾ എത്തിച്ചേരാൻ കഴിയില്ല.</translation>
@@ -163,6 +165,7 @@
 <translation id="2942290791863759244">ജര്‍മ്മന്‍ നിയോ 2 കീബോർഡ്</translation>
 <translation id="2943400156390503548">സ്ലൈഡുകള്‍</translation>
 <translation id="2943503720238418293">ഇതിലും ചെറിയൊരു പേര് നൽകുക</translation>
+<translation id="2949781154072577687"><ph name="DRIVE_NAME" /> ഫോർമാറ്റ് ചെയ്യുന്നു...</translation>
 <translation id="2951236788251446349">ജെല്ലിഫിഷ്</translation>
 <translation id="2963783323012015985">ടര്‍ക്കിഷ് കീബോര്‍ഡ്</translation>
 <translation id="2966459079597787514">സ്വീഡിഷ് കീബോര്‍ഡ്</translation>
@@ -275,6 +278,7 @@
 <translation id="4336032328163998280">പകർത്താനായില്ല. <ph name="ERROR_MESSAGE" /></translation>
 <translation id="4364327530094270451">മത്തങ്ങ</translation>
 <translation id="4372884569765913867">1x1</translation>
+<translation id="4394214039309501350">ബാഹ്യ ലിങ്ക്</translation>
 <translation id="4425149324548788773">എന്റെ ഡ്രൈവ്</translation>
 <translation id="4465830120256509958">ബ്രസീലിയന്‍ കീബോര്‍ഡ്</translation>
 <translation id="4470564870223067757">ഹാംഗുൽ 2 സെറ്റ് മോഡ്</translation>
@@ -505,6 +509,7 @@
 <translation id="6878261347041253038">ദേവനാഗരി കീബോർഡ് (സ്വരസൂചകം)</translation>
 <translation id="6885780034956018177">ഒച്ച്</translation>
 <translation id="6896758677409633944">പകര്‍ത്തുക</translation>
+<translation id="6898028766943174120">കൂടുതൽ ഉപ ഫോൾഡറുകൾ...</translation>
 <translation id="691516599546977041"><ph name="FOLDER_NAME" />-ലേക്ക് സംരക്ഷിക്കാനാവില്ല. എഡിറ്റ് ചെയ്‌ത ചിത്രങ്ങൾ, 'ഡൗൺലോഡുകള്‍' ഫോൾഡറിൽ സംരക്ഷിക്കപ്പെടും.</translation>
 <translation id="6915678159055240887">Chromebox</translation>
 <translation id="6918340160281024199">യുഎസ് വർക്ക്‌മാൻ</translation>
@@ -517,6 +522,7 @@
 <translation id="696203921837389374">മൊബൈൽ ഡാറ്റയിലൂടെയുള്ള സമന്വയം പ്രവർത്തനക്ഷമമാക്കുക</translation>
 <translation id="6965382102122355670">ശരി</translation>
 <translation id="6970230597523682626">ബള്‍ഗേറിയന്‍</translation>
+<translation id="6973630695168034713">ഫോൾഡറുകൾ</translation>
 <translation id="6978611942794658017">ഈ ഫയൽ, Windows സോഫ്‌റ്റ്‌വെയർ ഉപയോഗിക്കുന്ന PC-‌യ്ക്കായി രൂപകൽപ്പന ചെയ്‌തിരിക്കുന്നു. ഇത് Chrome OS പ്രവർത്തിക്കുന്ന നിങ്ങളുടെ ഉപകരണത്തിന് അനുയോജ്യമായതല്ല. അനുയോജ്യമായ മറ്റൊരു ആപ്പിനായി Chrome വെബ് സ്‌റ്റോറിൽ തിരയുക.</translation>
 <translation id="6979158407327259162">Google ഡ്രൈവ്</translation>
 <translation id="6990081529015358884">നിങ്ങൾക്ക് മതിയായ ഇടമില്ല</translation>
@@ -564,9 +570,11 @@
 <translation id="7589661784326793847">ഒരു നിമിഷം കാത്തിരിക്കുക</translation>
 <translation id="7603724359189955920">ഗ്രിഡുകൾ</translation>
 <translation id="7627790789328695202">ക്ഷമിക്കണം, <ph name="FILE_NAME" /> ഇതിനകം നിലവിലുണ്ട്. അതിന്റെ പേരുമാറ്റി വീണ്ടും ശ്രമിക്കുക.</translation>
+<translation id="7628656427739290098"><ph name="PERCENT" />% പൂർത്തിയായി.</translation>
 <translation id="7649070708921625228">സഹായം</translation>
 <translation id="7654209398114106148"><ph name="NUMBER_OF_ITEMS" /> ഇനങ്ങൾ നീക്കുന്നു...</translation>
 <translation id="7658239707568436148">റദ്ദാക്കൂ</translation>
+<translation id="7695430100978772476"><ph name="DRIVE_NAME" /> ഫോർമാറ്റ് ചെയ്യാനായില്ല</translation>
 <translation id="770015031906360009">ഗ്രീക്ക്</translation>
 <translation id="7706319470528945664">പോര്‍ച്ചുഗീസ് കീബോര്‍ഡ്</translation>
 <translation id="7711920809702896782">ചിത്രത്തിന്റെ വിവരം</translation>

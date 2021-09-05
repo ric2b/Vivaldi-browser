@@ -5,6 +5,7 @@
 #include "media/gpu/android/video_frame_factory_impl.h"
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/single_thread_task_runner.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/test/mock_callback.h"
@@ -108,9 +109,9 @@ class VideoFrameFactoryImplTest : public testing::Test {
     output_buffer_raw_ = output_buffer.get();
     EXPECT_CALL(*image_provider_raw_, MockRequestImage());
 
-    impl_->CreateVideoFrame(
-        std::move(output_buffer), base::TimeDelta(), natural_size,
-        PromotionHintAggregator::NotifyPromotionHintCB(), output_cb_.Get());
+    impl_->CreateVideoFrame(std::move(output_buffer), base::TimeDelta(),
+                            natural_size, base::NullCallback(),
+                            output_cb_.Get());
     base::RunLoop().RunUntilIdle();
   }
 
@@ -145,7 +146,7 @@ class VideoFrameFactoryImplTest : public testing::Test {
   CodecOutputBuffer* output_buffer_raw_ = nullptr;
 
   // Sent to |impl_| by RequestVideoFrame..
-  base::MockCallback<VideoFrameFactory::OnceOutputCb> output_cb_;
+  base::MockCallback<VideoFrameFactory::OnceOutputCB> output_cb_;
 
   MockYCbCrHelper* ycbcr_helper_raw_ = nullptr;
   std::unique_ptr<DestructionObserver> ycbcr_destruction_observer_;
@@ -159,7 +160,7 @@ TEST_F(VideoFrameFactoryImplTest, ImageProviderInitFailure) {
   EXPECT_CALL(*image_provider_raw_, Initialize_(_))
       .Times(1)
       .WillOnce(RunOnceCallback<0>(nullptr));
-  base::MockCallback<VideoFrameFactory::InitCb> init_cb;
+  base::MockCallback<VideoFrameFactory::InitCB> init_cb;
   EXPECT_CALL(init_cb, Run(scoped_refptr<gpu::TextureOwner>(nullptr)));
   impl_->Initialize(VideoFrameFactory::OverlayMode::kDontRequestPromotionHints,
                     init_cb.Get());
@@ -195,13 +196,12 @@ TEST_F(VideoFrameFactoryImplTest, CreateVideoFrameFailsIfUnsupportedFormat) {
                                          visible_rect, natural_size));
 
   // We should get a call to the output callback, but no calls to the provider.
-  base::MockCallback<VideoFrameFactory::OnceOutputCb> output_cb;
+  base::MockCallback<VideoFrameFactory::OnceOutputCB> output_cb;
   EXPECT_CALL(output_cb, Run(scoped_refptr<VideoFrame>(nullptr)));
   EXPECT_CALL(*image_provider_raw_, MockRequestImage()).Times(0);
 
-  impl_->CreateVideoFrame(
-      std::move(output_buffer), base::TimeDelta(), natural_size,
-      PromotionHintAggregator::NotifyPromotionHintCB(), output_cb.Get());
+  impl_->CreateVideoFrame(std::move(output_buffer), base::TimeDelta(),
+                          natural_size, base::NullCallback(), output_cb.Get());
   base::RunLoop().RunUntilIdle();
 }
 

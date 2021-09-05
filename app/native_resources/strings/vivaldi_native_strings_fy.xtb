@@ -45,7 +45,6 @@
 <translation id="3542768452570884558">Keppeling yn nije finster iepenje</translation>
 <translation id="3588820906588687999">Ofbylding yn nije ljepper iepenje</translation>
 <translation id="3601066750251199488">Meunster 3</translation>
-<translation id="366643050267431920">As barren taheakje</translation>
 <translation id="3732157130969736834">Keppeling as blêdwizer taheakje</translation>
 <translation id="3732388226447288666">Bist 2</translation>
 <translation id="3732439195215136813">Bist 5</translation>
@@ -68,7 +67,6 @@
 <translation id="4636708767492582204">Mei e-post stjoere</translation>
 <translation id="4677434526832593569">Bist 8</translation>
 <translation id="4881695831933465202">Iepenje</translation>
-<translation id="4973311370126107785">It útfieren fan JavaSkript troch AppleSkript is útskeakele. Om it yn te skeakeljen, yn de menubalke, gean nei Ark &gt; JavaSkript fan Apple Events tastean.</translation>
 <translation id="5014281392052865061">Ymportearre fluchkiezer</translation>
 <translation id="5092656712000637858">Side oan webpaniel taheakje</translation>
 <translation id="5177818338935286353">Meunster 7</translation>
@@ -89,6 +87,7 @@
 <translation id="6229528619562190452">Klik hjir om Vivaldi te fernijen.</translation>
 <translation id="6234173136417926046">Ofbylding as startside eftergrûn brûke</translation>
 <translation id="630690498669249215">Opera blêdwizer triem</translation>
+<translation id="6339818817272922368">Lokaal akkount</translation>
 <translation id="6438786710866753178">Lânskip 4</translation>
 <translation id="6477028720702061455">Selektearje Opera profyl map foar ymportearjen</translation>
 <translation id="6510706699590490869">Vivaldi &amp;fernije</translation>
@@ -103,6 +102,7 @@
 <translation id="7496505986576158197">Vivaldi wurdt mooglik makke troch it <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> iepen boarne projekt en oare <ph name="BEGIN_LINK_OSS" />iepen boarne sêftguod<ph name="END_LINK_OSS" />.</translation>
 <translation id="7715497554424665066">Fernijing &amp;negearje</translation>
 <translation id="7724603315864178912">Knippe</translation>
+<translation id="7793738202466490491">Taheakje as kalinder barren</translation>
 <translation id="7865983598101744945">Utgong befêstigje</translation>
 <translation id="7957213167373139414">Myn kalinder</translation>
 <translation id="8027581147000338959">Iepenje yn nij finster</translation>
@@ -112,6 +112,7 @@
 <translation id="8331671104904436324">Iepenje op 'e eftergrûn ljepper</translation>
 <translation id="8373293945112511707">Lânskip 1</translation>
 <translation id="8427094907586191051">Lânskip 17</translation>
+<translation id="8446668873108041390">it útfieren fan JavaSkript troch AppleSkript is útskeakele. By Ynstellingen &gt; Privacy &gt; Apple barren stiet in ynstelling om JavaSkript fanút Apple barren ta te stean.</translation>
 <translation id="8539196077526389150">Lânskip 13</translation>
 <translation id="8624587806981488221">&amp;Ofbylding op 'e nij lade</translation>
 <translation id="864444594187862076">Opera ferzje 15+ (Untwikkelder)</translation>

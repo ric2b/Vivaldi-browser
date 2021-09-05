@@ -6,9 +6,10 @@ package org.chromium.content_shell.browsertests;
 
 import android.content.Context;
 import android.net.Uri;
-import android.support.v4.content.FileProvider;
 import android.view.Window;
 import android.view.WindowManager;
+
+import androidx.core.content.FileProvider;
 
 import org.chromium.base.ContentUriUtils;
 import org.chromium.base.ContextUtils;
@@ -27,8 +28,7 @@ import java.io.File;
 
 /** An Activity base class for running browser tests against ContentShell. */
 public abstract class ContentShellBrowserTestActivity extends NativeBrowserTestActivity {
-
-    private static final String TAG = "cr.native_test";
+    private static final String TAG = "native_test";
 
     private ShellManager mShellManager;
     private WindowAndroid mWindowAndroid;
@@ -53,7 +53,7 @@ public abstract class ContentShellBrowserTestActivity extends NativeBrowserTestA
     @Override
     protected void initializeBrowserProcess() {
         try (StrictModeContext ignored = StrictModeContext.allowDiskReads()) {
-            LibraryLoader.getInstance().ensureInitialized(LibraryProcessType.PROCESS_BROWSER);
+            LibraryLoader.getInstance().ensureInitialized();
         }
 
         ContentUriUtils.setFileProviderUtil(new FileProviderHelper());
@@ -67,15 +67,14 @@ public abstract class ContentShellBrowserTestActivity extends NativeBrowserTestA
         wind.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED);
         wind.addFlags(WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON);
 
-        BrowserStartupController.get(LibraryProcessType.PROCESS_BROWSER)
-                .setContentMainCallbackForTests(() -> {
-                    // This jumps into C++ to set up and run the test harness. The test harness runs
-                    // ContentMain()-equivalent code, and then waits for javaStartupTasksComplete()
-                    // to be called.
-                    runTests();
-                });
-        BrowserStartupController.get(LibraryProcessType.PROCESS_BROWSER)
-                .startBrowserProcessesAsync(false, false, new StartupCallback() {
+        BrowserStartupController.getInstance().setContentMainCallbackForTests(() -> {
+            // This jumps into C++ to set up and run the test harness. The test harness runs
+            // ContentMain()-equivalent code, and then waits for javaStartupTasksComplete()
+            // to be called.
+            runTests();
+        });
+        BrowserStartupController.getInstance().startBrowserProcessesAsync(
+                LibraryProcessType.PROCESS_BROWSER, false, false, new StartupCallback() {
                     @Override
                     public void onSuccess() {
                         // The C++ test harness is running thanks to runTests() above, but it

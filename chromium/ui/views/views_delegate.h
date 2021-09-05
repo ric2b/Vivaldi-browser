@@ -20,18 +20,21 @@
 #include "build/build_config.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/gfx/native_widget_types.h"
+#include "ui/views/buildflags.h"
 #include "ui/views/views_export.h"
 #include "ui/views/widget/widget.h"
 
 namespace gfx {
 class ImageSkia;
 class Rect;
-}
+}  // namespace gfx
 
 namespace ui {
+#if defined(OS_MACOSX)
 class ContextFactory;
+#endif
 class TouchEditingControllerFactory;
-}
+}  // namespace ui
 
 namespace views {
 
@@ -60,10 +63,10 @@ class VIEWS_EXPORT ViewsDelegate {
                                             internal::NativeWidgetDelegate*)>;
 #if defined(OS_WIN)
   enum AppbarAutohideEdge {
-    EDGE_TOP    = 1 << 0,
-    EDGE_LEFT   = 1 << 1,
+    EDGE_TOP = 1 << 0,
+    EDGE_LEFT = 1 << 1,
     EDGE_BOTTOM = 1 << 2,
-    EDGE_RIGHT  = 1 << 3,
+    EDGE_RIGHT = 1 << 3,
   };
 #endif
 
@@ -130,7 +133,7 @@ class VIEWS_EXPORT ViewsDelegate {
   // Returns true if the window passed in is in the Windows 8 metro
   // environment.
   virtual bool IsWindowInMetro(gfx::NativeWindow window) const;
-#elif defined(OS_LINUX) && !defined(OS_CHROMEOS)
+#elif defined(OS_LINUX) && BUILDFLAG(ENABLE_DESKTOP_AURA)
   virtual gfx::ImageSkia* GetDefaultWindowIcon() const;
 #endif
 
@@ -157,11 +160,10 @@ class VIEWS_EXPORT ViewsDelegate {
   // maximized windows; otherwise to restored windows.
   virtual bool WindowManagerProvidesTitleBar(bool maximized);
 
+#if defined(OS_MACOSX)
   // Returns the context factory for new windows.
   virtual ui::ContextFactory* GetContextFactory();
-
-  // Returns the privileged context factory for new windows.
-  virtual ui::ContextFactoryPrivate* GetContextFactoryPrivate();
+#endif
 
   // Returns the user-visible name of the application.
   virtual std::string GetApplicationName();

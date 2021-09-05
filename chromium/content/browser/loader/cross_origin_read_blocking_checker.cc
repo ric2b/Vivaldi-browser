@@ -11,16 +11,16 @@
 #include "net/base/mime_sniffer.h"
 #include "services/network/cross_origin_read_blocking.h"
 #include "services/network/public/cpp/resource_request.h"
-#include "services/network/public/cpp/resource_response.h"
+#include "services/network/public/mojom/url_response_head.mojom.h"
 #include "storage/browser/blob/blob_data_handle.h"
 #include "storage/browser/blob/blob_reader.h"
 #include "url/origin.h"
 
 namespace content {
 
-// When NavigationLoaderOnUI is enabled, the CrossOriginReadBlockingChecker
-// lives on the UI thread, but blobs must be read on IO. This class handles all
-// blob access for CrossOriginReadBlockingChecker.
+// The CrossOriginReadBlockingChecker lives on the UI thread, but blobs must be
+// read on IO. This class handles all blob access for
+// CrossOriginReadBlockingChecker.
 class CrossOriginReadBlockingChecker::BlobIOState {
  public:
   BlobIOState(base::WeakPtr<CrossOriginReadBlockingChecker> checker,
@@ -95,7 +95,7 @@ class CrossOriginReadBlockingChecker::BlobIOState {
 
 CrossOriginReadBlockingChecker::CrossOriginReadBlockingChecker(
     const network::ResourceRequest& request,
-    const network::ResourceResponseHead& response,
+    const network::mojom::URLResponseHead& response,
     const url::Origin& request_initiator_site_lock,
     const storage::BlobDataHandle& blob_data_handle,
     base::OnceCallback<void(Result)> callback)
@@ -103,10 +103,20 @@ CrossOriginReadBlockingChecker::CrossOriginReadBlockingChecker(
   DCHECK(!callback_.is_null());
   network::CrossOriginReadBlocking::LogAction(
       network::CrossOriginReadBlocking::Action::kResponseStarted);
+
+  // |isolated_world_origin| and |network| are only used for UMA and Rappor
+  // logging related to the OOR-CORS feature.  Since OOR-CORS is not used in
+  // scenarios relevant to CrossOriginReadBlockingChecker, we can just use
+  // |base::nullopt| and |nullptr| here.
+  const base::Optional<url::Origin> isolated_world_origin = base::nullopt;
+  constexpr network::mojom::NetworkServiceClient* network_service_client =
+      nullptr;
+
   corb_analyzer_ =
       std::make_unique<network::CrossOriginReadBlocking::ResponseAnalyzer>(
           request.url, request.request_initiator, response,
-          request_initiator_site_lock, request.mode);
+          request_initiator_site_lock, request.mode, isolated_world_origin,
+          network_service_client);
   if (corb_analyzer_->ShouldBlock()) {
     OnBlocked();
     return;
@@ -127,8 +137,7 @@ CrossOriginReadBlockingChecker::CrossOriginReadBlockingChecker(
 }
 
 CrossOriginReadBlockingChecker::~CrossOriginReadBlockingChecker() {
-  BrowserThread::DeleteSoon(BrowserThread::IO, FROM_HERE,
-                            std::move(blob_io_state_));
+  base::DeleteSoon(FROM_HERE, {BrowserThread::IO}, std::move(blob_io_state_));
 }
 
 int CrossOriginReadBlockingChecker::GetNetError() {

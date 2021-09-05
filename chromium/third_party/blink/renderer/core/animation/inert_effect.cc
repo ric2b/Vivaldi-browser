@@ -37,7 +37,7 @@ namespace blink {
 InertEffect::InertEffect(KeyframeEffectModelBase* model,
                          const Timing& timing,
                          bool paused,
-                         double inherited_time)
+                         base::Optional<double> inherited_time)
     : AnimationEffect(timing),
       model_(model),
       paused_(paused),
@@ -57,13 +57,14 @@ void InertEffect::Sample(HeapVector<Member<Interpolation>>& result) const {
                  SpecifiedTiming().IterationDuration(), result);
 }
 
-AnimationTimeDelta InertEffect::CalculateTimeToEffectChange(bool,
-                                                            double,
-                                                            double) const {
+AnimationTimeDelta InertEffect::CalculateTimeToEffectChange(
+    bool,
+    base::Optional<double>,
+    AnimationTimeDelta) const {
   return AnimationTimeDelta::Max();
 }
 
-void InertEffect::Trace(blink::Visitor* visitor) {
+void InertEffect::Trace(Visitor* visitor) {
   visitor->Trace(model_);
   AnimationEffect::Trace(visitor);
 }

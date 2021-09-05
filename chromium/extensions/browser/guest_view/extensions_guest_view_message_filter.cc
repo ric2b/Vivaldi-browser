@@ -4,6 +4,8 @@
 
 #include "extensions/browser/guest_view/extensions_guest_view_message_filter.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/guid.h"
 #include "base/stl_util.h"
@@ -17,7 +19,6 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/mime_handler_view_mode.h"
 #include "extensions/browser/api/extensions_api_client.h"
 #include "extensions/browser/bad_message.h"
 #include "extensions/browser/extension_registry.h"
@@ -209,7 +210,7 @@ void ExtensionsGuestViewMessageFilter::CreateEmbeddedMimeHandlerViewGuest(
                                       CreateEmbeddedMimeHandlerViewGuest,
                                   this, render_frame_id, tab_id, original_url,
                                   element_instance_id, element_size,
-                                  base::Passed(&transferrable_url_loader)));
+                                  std::move(transferrable_url_loader)));
     return;
   }
 
@@ -288,12 +289,6 @@ void ExtensionsGuestViewMessageFilter::MimeHandlerViewGuestCreatedCallback(
   }
   manager->AttachGuest(embedder_render_process_id, element_instance_id,
                        guest_instance_id, attach_params);
-
-  if (!content::MimeHandlerViewMode::UsesCrossProcessFrame()) {
-    rfh->Send(new ExtensionsGuestViewMsg_CreateMimeHandlerViewGuestACK(
-        element_instance_id));
-    return;
-  }
 }
 
 }  // namespace extensions

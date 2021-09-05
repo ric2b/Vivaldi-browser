@@ -13,7 +13,7 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind_helpers.h"
+#include "base/callback_forward.h"
 #include "base/containers/mru_cache.h"
 #include "base/containers/queue.h"
 #include "base/memory/scoped_refptr.h"
@@ -23,73 +23,61 @@
 #include "base/sequenced_task_runner.h"
 #include "base/threading/thread.h"
 #include "base/time/time.h"
-#include "media/base/video_decoder.h"
-#include "media/base/video_frame_layout.h"
 #include "media/base/video_types.h"
+#include "media/gpu/chromeos/gpu_buffer_layout.h"
+#include "media/gpu/chromeos/video_decoder_pipeline.h"
 #include "media/gpu/media_gpu_export.h"
 #include "media/gpu/v4l2/v4l2_device.h"
 #include "media/gpu/v4l2/v4l2_video_decoder_backend.h"
 #include "media/video/supported_video_decoder_config.h"
+#include "ui/gfx/geometry/size.h"
 
 namespace media {
 
 class DmabufVideoFramePool;
 
 class MEDIA_GPU_EXPORT V4L2SliceVideoDecoder
-    : public VideoDecoder,
+    : public DecoderInterface,
       public V4L2VideoDecoderBackend::Client {
  public:
-  using GetFramePoolCB = base::RepeatingCallback<DmabufVideoFramePool*()>;
-
   // Create V4L2SliceVideoDecoder instance. The success of the creation doesn't
   // ensure V4L2SliceVideoDecoder is available on the device. It will be
   // determined in Initialize().
-  static std::unique_ptr<VideoDecoder> Create(
-      scoped_refptr<base::SequencedTaskRunner> client_task_runner,
+  static std::unique_ptr<DecoderInterface> Create(
       scoped_refptr<base::SequencedTaskRunner> decoder_task_runner,
-      GetFramePoolCB get_pool_cb);
+      base::WeakPtr<DecoderInterface::Client> client);
 
   static SupportedVideoDecoderConfigs GetSupportedConfigs();
 
-  // VideoDecoder implementation.
-  std::string GetDisplayName() const override;
-  bool IsPlatformDecoder() const override;
-  int GetMaxDecodeRequests() const override;
-  bool NeedsBitstreamConversion() const override;
-  bool CanReadWithoutStalling() const override;
-
+  // DecoderInterface implementation.
   void Initialize(const VideoDecoderConfig& config,
-                  bool low_delay,
-                  CdmContext* cdm_context,
                   InitCB init_cb,
-                  const OutputCB& output_cb,
-                  const WaitingCB& waiting_cb) override;
+                  const OutputCB& output_cb) override;
   void Reset(base::OnceClosure closure) override;
   void Decode(scoped_refptr<DecoderBuffer> buffer, DecodeCB decode_cb) override;
+  void OnPipelineFlushed() override;
 
   // V4L2VideoDecoderBackend::Client implementation
   void OnBackendError() override;
   bool IsDecoding() const override;
   void InitiateFlush() override;
   void CompleteFlush() override;
-  bool ChangeResolution(gfx::Size pic_size,
+  void ChangeResolution(gfx::Size pic_size,
                         gfx::Rect visible_rect,
                         size_t num_output_frames) override;
-  void RunDecodeCB(DecodeCB cb, DecodeStatus status) override;
   void OutputFrame(scoped_refptr<VideoFrame> frame,
                    const gfx::Rect& visible_rect,
                    base::TimeDelta timestamp) override;
+  DmabufVideoFramePool* GetVideoFramePool() const override;
 
  private:
   friend class V4L2SliceVideoDecoderTest;
 
   V4L2SliceVideoDecoder(
-      scoped_refptr<base::SequencedTaskRunner> client_task_runner,
       scoped_refptr<base::SequencedTaskRunner> decoder_task_runner,
-      scoped_refptr<V4L2Device> device,
-      GetFramePoolCB get_pool_cb);
+      base::WeakPtr<DecoderInterface::Client> client,
+      scoped_refptr<V4L2Device> device);
   ~V4L2SliceVideoDecoder() override;
-  void Destroy() override;
 
   enum class State {
     // Initial state. Transitions to |kDecoding| if Initialize() is successful,
@@ -119,42 +107,15 @@ class MEDIA_GPU_EXPORT V4L2SliceVideoDecoder
     SEQUENCE_CHECKER(sequence_checker_);
   };
 
-  // Initialize on decoder thread.
-  void InitializeTask(const VideoDecoderConfig& config,
-                      InitCB init_cb,
-                      const OutputCB& output_cb);
   // Setup format for input queue.
   bool SetupInputFormat(uint32_t input_format_fourcc);
-
-  // Set the coded size on the input queue.
-  // Return true if the successful, false otherwise.
-  bool SetCodedSizeOnInputQueue(const gfx::Size& size);
 
   // Setup format for output queue. This function sets output format on output
   // queue that is supported by a v4l2 driver, can be allocatable by
   // VideoFramePool and can be composited by chrome. This also updates format
-  // in VideoFramePool. The returned VideoFrameLayout is one of VideoFrame that
-  // VideoFramePool will allocate. Returns base::nullopt on failure of if there
-  // is no format that satisfies the above conditions.
-  base::Optional<VideoFrameLayout> SetupOutputFormat(
-      const gfx::Size& size,
-      const gfx::Rect& visible_rect);
-  // Update the format of frames in |frame_pool_| with |output_format_fourcc|,
-  // |size| and |visible_rect|.
-  base::Optional<VideoFrameLayout> UpdateVideoFramePoolFormat(
-      uint32_t output_format_fourcc,
-      const gfx::Size& size,
-      const gfx::Rect& visible_rect);
+  // in VideoFramePool. Return true if the setup is successful.
+  bool SetupOutputFormat(const gfx::Size& size, const gfx::Rect& visible_rect);
 
-  // Destroy on decoder thread.
-  void DestroyTask();
-  // Reset on decoder thread.
-  void ResetTask(base::OnceClosure closure);
-
-  // Enqueue |buffer| to be decoded. |decode_cb| will be called once |buffer|
-  // is no longer used.
-  void EnqueueDecodeTask(scoped_refptr<DecoderBuffer> buffer,
-                         V4L2SliceVideoDecoder::DecodeCB decode_cb);
   // Start streaming V4L2 input and output queues. Attempt to start
   // |device_poll_thread_| before starting streaming.
   bool StartStreamV4L2Queue();
@@ -163,6 +124,12 @@ class MEDIA_GPU_EXPORT V4L2SliceVideoDecoder
   bool StopStreamV4L2Queue();
   // Try to dequeue input and output buffers from device.
   void ServiceDeviceTask(bool event);
+
+  // After the pipeline finished flushing frames, reconfigure the resolution
+  // setting of V4L2 device and the frame pool.
+  void ContinueChangeResolution(const gfx::Size& pic_size,
+                                const gfx::Rect& visible_rect,
+                                const size_t num_output_frames);
 
   // Change the state and check the state transition is valid.
   void SetState(State new_state);
@@ -173,22 +140,17 @@ class MEDIA_GPU_EXPORT V4L2SliceVideoDecoder
 
   // V4L2 device in use.
   scoped_refptr<V4L2Device> device_;
-  // VideoFrame manager used to allocate and recycle video frame.
-  GetFramePoolCB get_pool_cb_;
-  DmabufVideoFramePool* frame_pool_ = nullptr;
 
-  // Client task runner. All public methods of VideoDecoder interface are
-  // executed at this task runner.
-  const scoped_refptr<base::SequencedTaskRunner> client_task_runner_;
-  // Thread to communicate with the device on. Most of internal methods and data
-  // members are manipulated on this thread.
-  const scoped_refptr<base::SequencedTaskRunner> decoder_task_runner_;
+  // Callback to change resolution, called after the pipeline is flushed.
+  base::OnceClosure continue_change_resolution_cb_;
 
   // State of the instance.
   State state_ = State::kUninitialized;
 
-  // Parameters for generating output VideoFrame.
-  base::Optional<VideoFrameLayout> frame_layout_;
+  // Number of output frames requested to |frame_pool_|.
+  // The default value is only used at the first time of
+  // DmabufVideoFramePool::Initialize() during Initialize().
+  size_t num_output_frames_ = 1;
   // Ratio of natural_size to visible_rect of the output frame.
   double pixel_aspect_ratio_ = 0.0;
 
@@ -201,10 +163,6 @@ class MEDIA_GPU_EXPORT V4L2SliceVideoDecoder
 
   BitstreamIdGenerator bitstream_id_generator_;
 
-  // True if the decoder needs bitstream conversion before decoding.
-  bool needs_bitstream_conversion_ = false;
-
-  SEQUENCE_CHECKER(client_sequence_checker_);
   SEQUENCE_CHECKER(decoder_sequence_checker_);
 
   // |weak_this_| must be dereferenced and invalidated on

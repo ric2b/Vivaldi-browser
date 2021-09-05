@@ -30,7 +30,6 @@
 #include "net/base/network_change_notifier.h"
 #include "net/http/http_response_info.h"
 #include "net/socket/connection_attempts.h"
-#include "net/url_request/url_request_status.h"
 
 namespace base {
 class Value;
@@ -46,10 +45,30 @@ namespace domain_reliability {
 
 // The top-level object that measures requests and hands off the measurements
 // to the proper |DomainReliabilityContext|.
+// To initialize this object fully, you need to call InitURLRequestContext(),
+// AddBakedInConfigs(), and SetDiscardUploads() before using this.
 class DOMAIN_RELIABILITY_EXPORT DomainReliabilityMonitor
-    : public net::NetworkChangeNotifier::NetworkChangeObserver,
-      DomainReliabilityContext::Factory {
+    : public net::NetworkChangeNotifier::NetworkChangeObserver {
  public:
+  struct DOMAIN_RELIABILITY_EXPORT RequestInfo {
+    RequestInfo();
+    RequestInfo(const net::URLRequest& request, int net_error);
+    RequestInfo(const RequestInfo& other);
+    ~RequestInfo();
+
+    static bool ShouldReportRequest(const RequestInfo& request);
+
+    GURL url;
+    int net_error;
+    net::HttpResponseInfo response_info;
+    int load_flags;
+    net::LoadTimingInfo load_timing_info;
+    net::ConnectionAttempts connection_attempts;
+    net::IPEndPoint remote_endpoint;
+    int upload_depth;
+    net::NetErrorDetails details;
+  };
+
   // Creates a Monitor.
   DomainReliabilityMonitor(
       const std::string& upload_reporter_string,
@@ -78,6 +97,8 @@ class DOMAIN_RELIABILITY_EXPORT DomainReliabilityMonitor
   void Shutdown();
 
   // Populates the monitor with contexts that were configured at compile time.
+  // Note: This is separate from the Google configs, which are created
+  // on demand at runtime.
   void AddBakedInConfigs();
 
   // Sets whether the uploader will discard uploads. Must be called after
@@ -91,9 +112,10 @@ class DOMAIN_RELIABILITY_EXPORT DomainReliabilityMonitor
 
   // Should be called when |request| is complete. Will examine and possibly
   // log the (final) request. |started| should be true if the request was
-  // actually started before it was terminated. Must be called after
+  // actually started before it was terminated. |net_error| should be the
+  // final result of the network request. Must be called after
   // |SetDiscardUploads|.
-  void OnCompleted(net::URLRequest* request, bool started);
+  void OnCompleted(net::URLRequest* request, bool started, int net_error);
 
   // net::NetworkChangeNotifier::NetworkChangeObserver implementation:
   void OnNetworkChanged(
@@ -106,13 +128,14 @@ class DOMAIN_RELIABILITY_EXPORT DomainReliabilityMonitor
   // as an always-true filter, indicating complete deletion.
   void ClearBrowsingData(
       DomainReliabilityClearMode mode,
-      const base::Callback<bool(const GURL&)>& origin_filter);
+      const base::RepeatingCallback<bool(const GURL&)>& origin_filter);
 
   // Gets a Value containing data that can be formatted into a web page for
   // debugging purposes.
   std::unique_ptr<base::Value> GetWebUIData() const;
 
-  DomainReliabilityContext* AddContextForTesting(
+  // Returns pointer to the added context.
+  const DomainReliabilityContext* AddContextForTesting(
       std::unique_ptr<const DomainReliabilityConfig> config);
 
   size_t contexts_size_for_testing() const {
@@ -123,55 +146,21 @@ class DOMAIN_RELIABILITY_EXPORT DomainReliabilityMonitor
   // yet passed.
   void ForceUploadsForTesting();
 
-  // DomainReliabilityContext::Factory implementation:
-  std::unique_ptr<DomainReliabilityContext> CreateContextForConfig(
-      std::unique_ptr<const DomainReliabilityConfig> config) override;
+  void OnRequestLegCompleteForTesting(const RequestInfo& info);
+
+  const DomainReliabilityContext* LookupContextForTesting(
+      const std::string& hostname) const;
 
  private:
-  friend class DomainReliabilityMonitorTest;
-  friend class DomainReliabilityServiceTest;
-  // Allow the Service to call |MakeWeakPtr|.
-  friend class DomainReliabilityServiceImpl;
-
-  typedef std::map<std::string, DomainReliabilityContext*> ContextMap;
-
-  struct DOMAIN_RELIABILITY_EXPORT RequestInfo {
-    RequestInfo();
-    explicit RequestInfo(const net::URLRequest& request);
-    RequestInfo(const RequestInfo& other);
-    ~RequestInfo();
-
-    static bool ShouldReportRequest(const RequestInfo& request);
-
-    GURL url;
-    net::URLRequestStatus status;
-    net::HttpResponseInfo response_info;
-    int load_flags;
-    net::LoadTimingInfo load_timing_info;
-    net::ConnectionAttempts connection_attempts;
-    net::IPEndPoint remote_endpoint;
-    int upload_depth;
-    net::NetErrorDetails details;
-  };
-
   void OnRequestLegComplete(const RequestInfo& info);
 
-  void MaybeHandleHeader(const RequestInfo& info);
-
-  base::WeakPtr<DomainReliabilityMonitor> MakeWeakPtr();
-
   std::unique_ptr<MockableTime> time_;
-  base::TimeTicks last_network_change_time_;
-  const std::string upload_reporter_string_;
-  DomainReliabilityContext::UploadAllowedCallback upload_allowed_callback_;
   DomainReliabilityScheduler::Params scheduler_params_;
   DomainReliabilityDispatcher dispatcher_;
   std::unique_ptr<DomainReliabilityUploader> uploader_;
   DomainReliabilityContextManager context_manager_;
 
   bool discard_uploads_set_;
-
-  base::WeakPtrFactory<DomainReliabilityMonitor> weak_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(DomainReliabilityMonitor);
 };

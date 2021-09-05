@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="ru">
+<translation id="1169602411434249000">От слежки</translation>
 <translation id="1397811292916898096">Поиск в <ph name="PRODUCT_NAME" /></translation>
+<translation id="1598449788754183301">Обычные/приватные вкладки</translation>
 <translation id="1644574205037202324">История</translation>
 <translation id="17513872634828108">Открыть вкладки</translation>
 <translation id="1829244130665387512">Найти на странице</translation>
@@ -10,9 +12,11 @@
 <translation id="2633278372998075009">Приватные вкладки</translation>
 <translation id="3076631378407175873">© Vivaldi Technologies AS, <ph name="YEAR" />. Все права защищены.</translation>
 <translation id="3234355010754616171">Приватная вкладка</translation>
+<translation id="3518985090088779359">Принять и продолжить</translation>
 <translation id="3700829948786686853">Добро пожаловать в Vivaldi</translation>
 <translation id="4121750346708795461">Используя это приложение, вы принимаете <ph name="BEGIN_LINK1" />Условия использования<ph name="END_LINK1" /> и <ph name="BEGIN_LINK2" />Политику безопасности<ph name="END_LINK2" /> Vivaldi.</translation>
 <translation id="4243710787042215766">Открыть в приватной вкладке</translation>
+<translation id="4526803704855831732">Приватные вкладки</translation>
 <translation id="4883379392681899581">Выйти из приватного режима</translation>
 <translation id="4943872375798546930">Нет результатов</translation>
 <translation id="5118676864324397542">Хранилище <ph name="APP_NAME" /></translation>
@@ -31,7 +35,6 @@
 <translation id="7519434535192513364">Быстрый поиск работает в Vivaldi только с Google поиском, назначенным по умолчанию. Выбранное слово будет отправлено в поисковый сервис вместе с контекстом. Отключить эту функцию можно в <ph name="BEGIN_LINK" />настройках<ph name="END_LINK" />.</translation>
 <translation id="7649070708921625228">Справка</translation>
 <translation id="804786196054284061">Условия использования Vivaldi</translation>
-<translation id="8428213095426709021">Настройки</translation>
 <translation id="8820817407110198400">Закладки</translation>
 <translation id="9063523880881406963">Выключить полную версию сайта</translation>
 <translation id="9080642952018487277">Работать приватно</translation>

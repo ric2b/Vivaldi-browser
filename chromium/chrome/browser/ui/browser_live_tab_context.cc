@@ -7,21 +7,26 @@
 #include <memory>
 #include <utility>
 
+#include "base/feature_list.h"
 #include "base/token.h"
+#include "chrome/browser/apps/app_service/launch_utils.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_tabrestore.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/tabs/tab_group_id.h"
+#include "chrome/browser/ui/tabs/tab_group.h"
+#include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "components/sessions/content/content_live_tab.h"
 #include "components/sessions/content/content_platform_specific_tab_data.h"
+#include "components/tab_groups/tab_group_id.h"
+#include "components/tab_groups/tab_group_visual_data.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/session_storage_namespace.h"
-#include "extensions/browser/extension_registry.h"
 
 #if BUILDFLAG(ENABLE_SESSION_SERVICE)
 #include "chrome/browser/sessions/tab_loader.h"
@@ -45,16 +50,13 @@ bool ShouldCreateAppWindowForAppName(Profile* profile,
   if (app_name.empty())
     return false;
 
-  // Only need to check that the app is installed if |app_name| is for an
-  // extension. (|app_name| could also be for a devtools windows.)
+  // Only need to check that the app is installed if |app_name| is for a
+  // platform app or web app. (|app_name| could also be for a devtools window.)
   const std::string app_id = web_app::GetAppIdFromApplicationName(app_name);
   if (app_id.empty())
     return true;
 
-  const extensions::Extension* extension =
-      extensions::ExtensionRegistry::Get(profile)->GetInstalledExtension(
-          app_id);
-  return extension;
+  return apps::IsInstalledApp(profile, app_id);
 }
 
 }  // namespace
@@ -97,21 +99,25 @@ bool BrowserLiveTabContext::IsTabPinned(int index) const {
   return browser_->tab_strip_model()->IsTabPinned(index);
 }
 
-base::Optional<base::Token> BrowserLiveTabContext::GetTabGroupForTab(
+base::Optional<tab_groups::TabGroupId> BrowserLiveTabContext::GetTabGroupForTab(
     int index) const {
-  const base::Optional<TabGroupId> group_id =
-      browser_->tab_strip_model()->GetTabGroupForTab(index);
-  return group_id.has_value() ? base::make_optional(group_id.value().token())
-                              : base::nullopt;
+  return browser_->tab_strip_model()->GetTabGroupForTab(index);
 }
 
-BrowserLiveTabContext::TabGroupMetadata
-BrowserLiveTabContext::GetTabGroupMetadata(base::Token group) const {
-  const TabGroupVisualData* metadata =
-      browser_->tab_strip_model()->GetVisualDataForGroup(
-          TabGroupId::FromRawToken(group));
-  DCHECK(metadata);
-  return TabGroupMetadata{metadata->title(), metadata->color()};
+const tab_groups::TabGroupVisualData*
+BrowserLiveTabContext::GetVisualDataForGroup(
+    const tab_groups::TabGroupId& group) const {
+  return browser_->tab_strip_model()
+      ->group_model()
+      ->GetTabGroup(group)
+      ->visual_data();
+}
+
+void BrowserLiveTabContext::SetVisualDataForGroup(
+    const tab_groups::TabGroupId& group,
+    const tab_groups::TabGroupVisualData& visual_data) {
+  browser_->tab_strip_model()->group_model()->GetTabGroup(group)->SetVisualData(
+      std::move(visual_data));
 }
 
 const gfx::Rect BrowserLiveTabContext::GetRestoredBounds() const {
@@ -131,7 +137,8 @@ sessions::LiveTab* BrowserLiveTabContext::AddRestoredTab(
     int tab_index,
     int selected_navigation,
     const std::string& extension_app_id,
-    base::Optional<base::Token> group,
+    base::Optional<tab_groups::TabGroupId> group,
+    const tab_groups::TabGroupVisualData& group_visual_data,
     bool select,
     bool pin,
     bool from_last_session,
@@ -145,11 +152,26 @@ sessions::LiveTab* BrowserLiveTabContext::AddRestoredTab(
                 ->session_storage_namespace()
           : nullptr;
 
+  TabGroupModel* group_model = browser_->tab_strip_model()->group_model();
+  const bool first_tab_in_group =
+      group.has_value() ? !group_model->ContainsTabGroup(group.value()) : false;
+
   WebContents* web_contents = chrome::AddRestoredTab(
       browser_, navigations, tab_index, selected_navigation, extension_app_id,
-      group, select, pin, from_last_session, base::TimeTicks(),
-      storage_namespace, user_agent_override, false /* from_session_restore */,
+      base::FeatureList::IsEnabled(features::kTabGroups) ? group
+                                                         : base::nullopt,
+      select, pin, from_last_session, base::TimeTicks(), storage_namespace,
+      user_agent_override, false /* from_session_restore */,
       ext_data);
+
+  // Only update the metadata if the group doesn't already exist since the
+  // existing group has the latest metadata, which may have changed from the
+  // time the tab was closed.
+  if (base::FeatureList::IsEnabled(features::kTabGroups) &&
+      first_tab_in_group) {
+    group_model->GetTabGroup(group.value())
+        ->SetVisualData(std::move(group_visual_data));
+  }
 
 #if BUILDFLAG(ENABLE_SESSION_SERVICE)
   // The focused tab will be loaded by Browser, and TabLoader will load the
@@ -182,7 +204,7 @@ sessions::LiveTab* BrowserLiveTabContext::AddRestoredTab(
 
 sessions::LiveTab* BrowserLiveTabContext::ReplaceRestoredTab(
     const std::vector<sessions::SerializedNavigationEntry>& navigations,
-    base::Optional<base::Token> group,
+    base::Optional<tab_groups::TabGroupId> group,
     int selected_navigation,
     bool from_last_session,
     const std::string& extension_app_id,
@@ -206,15 +228,6 @@ sessions::LiveTab* BrowserLiveTabContext::ReplaceRestoredTab(
 
 void BrowserLiveTabContext::CloseTab() {
   chrome::CloseTab(browser_);
-}
-
-void BrowserLiveTabContext::SetTabGroupMetadata(
-    base::Token group,
-    TabGroupMetadata group_metadata) {
-  TabGroupVisualData restored_data(std::move(group_metadata.title),
-                                   group_metadata.color);
-  browser_->tab_strip_model()->SetVisualDataForGroup(
-      TabGroupId::FromRawToken(group), std::move(restored_data));
 }
 
 // static

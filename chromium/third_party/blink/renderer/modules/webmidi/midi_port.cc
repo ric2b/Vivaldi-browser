@@ -51,7 +51,7 @@ MIDIPort::MIDIPort(MIDIAccess* access,
                    TypeCode type,
                    const String& version,
                    PortState state)
-    : ContextLifecycleObserver(access->GetExecutionContext()),
+    : ExecutionContextLifecycleObserver(access->GetExecutionContext()),
       id_(id),
       manufacturer_(manufacturer),
       name_(name),
@@ -183,15 +183,15 @@ bool MIDIPort::HasPendingActivity() const {
   return connection_ != kConnectionStateClosed;
 }
 
-void MIDIPort::ContextDestroyed(ExecutionContext*) {
+void MIDIPort::ContextDestroyed() {
   // Should be "closed" to assume there are no pending activities.
   connection_ = kConnectionStateClosed;
 }
 
-void MIDIPort::Trace(blink::Visitor* visitor) {
+void MIDIPort::Trace(Visitor* visitor) {
   visitor->Trace(access_);
   EventTargetWithInlineData::Trace(visitor);
-  ContextLifecycleObserver::Trace(visitor);
+  ExecutionContextLifecycleObserver::Trace(visitor);
 }
 
 void MIDIPort::OpenAsynchronously(ScriptPromiseResolver* resolver) {
@@ -200,7 +200,7 @@ void MIDIPort::OpenAsynchronously(ScriptPromiseResolver* resolver) {
   if (!GetExecutionContext())
     return;
 
-  UseCounter::Count(*To<Document>(GetExecutionContext()),
+  UseCounter::Count(*Document::From(GetExecutionContext()),
                     WebFeature::kMIDIPortOpen);
   DCHECK_NE(0u, running_open_count_);
   running_open_count_--;

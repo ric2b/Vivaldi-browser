@@ -45,22 +45,22 @@ class MockCallback : public base::RefCountedThreadSafe<MockCallback> {
 MockCallback::MockCallback() = default;
 MockCallback::~MockCallback() = default;
 
-base::Closure NewExpectedClosure() {
+base::OnceClosure NewExpectedClosure() {
   StrictMock<MockCallback>* callback = new StrictMock<MockCallback>();
   EXPECT_CALL(*callback, Run());
-  return base::Bind(&MockCallback::Run, WrapRefCounted(callback));
+  return base::BindOnce(&MockCallback::Run, WrapRefCounted(callback));
 }
 
-base::Callback<void(bool)> NewExpectedBoolCB(bool success) {
+base::OnceCallback<void(bool)> NewExpectedBoolCB(bool success) {
   StrictMock<MockCallback>* callback = new StrictMock<MockCallback>();
   EXPECT_CALL(*callback, RunWithBool(success));
-  return base::Bind(&MockCallback::RunWithBool, WrapRefCounted(callback));
+  return base::BindOnce(&MockCallback::RunWithBool, WrapRefCounted(callback));
 }
 
-PipelineStatusCB NewExpectedStatusCB(PipelineStatus status) {
+PipelineStatusCallback NewExpectedStatusCB(PipelineStatus status) {
   StrictMock<MockCallback>* callback = new StrictMock<MockCallback>();
   EXPECT_CALL(*callback, RunWithStatus(status));
-  return base::Bind(&MockCallback::RunWithStatus, WrapRefCounted(callback));
+  return base::BindOnce(&MockCallback::RunWithStatus, WrapRefCounted(callback));
 }
 
 WaitableMessageLoopEvent::WaitableMessageLoopEvent()
@@ -73,17 +73,16 @@ WaitableMessageLoopEvent::~WaitableMessageLoopEvent() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 }
 
-base::Closure WaitableMessageLoopEvent::GetClosure() {
+base::OnceClosure WaitableMessageLoopEvent::GetClosure() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  return BindToCurrentLoop(base::Bind(
-      &WaitableMessageLoopEvent::OnCallback, base::Unretained(this),
-      PIPELINE_OK));
+  return BindToCurrentLoop(base::BindOnce(&WaitableMessageLoopEvent::OnCallback,
+                                          base::Unretained(this), PIPELINE_OK));
 }
 
-PipelineStatusCB WaitableMessageLoopEvent::GetPipelineStatusCB() {
+PipelineStatusCallback WaitableMessageLoopEvent::GetPipelineStatusCB() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  return BindToCurrentLoop(base::Bind(
-      &WaitableMessageLoopEvent::OnCallback, base::Unretained(this)));
+  return BindToCurrentLoop(base::BindOnce(&WaitableMessageLoopEvent::OnCallback,
+                                          base::Unretained(this)));
 }
 
 void WaitableMessageLoopEvent::RunAndWait() {
@@ -100,9 +99,9 @@ void WaitableMessageLoopEvent::RunAndWaitForStatus(PipelineStatus expected) {
 
   run_loop_.reset(new base::RunLoop());
   base::OneShotTimer timer;
-  timer.Start(
-      FROM_HERE, timeout_,
-      base::Bind(&WaitableMessageLoopEvent::OnTimeout, base::Unretained(this)));
+  timer.Start(FROM_HERE, timeout_,
+              base::BindOnce(&WaitableMessageLoopEvent::OnTimeout,
+                             base::Unretained(this)));
 
   run_loop_->Run();
   EXPECT_TRUE(signaled_);
@@ -139,7 +138,7 @@ static VideoDecoderConfig GetTestConfig(VideoCodec codec,
       codec, profile, VideoDecoderConfig::AlphaMode::kIsOpaque, color_space,
       VideoTransformation(rotation), coded_size, visible_rect, natural_size,
       EmptyExtraData(),
-      is_encrypted ? AesCtrEncryptionScheme() : Unencrypted());
+      is_encrypted ? EncryptionScheme::kCenc : EncryptionScheme::kUnencrypted);
 }
 
 static VideoCodecProfile MinProfile(VideoCodec codec) {
@@ -243,13 +242,13 @@ gfx::Size TestVideoConfig::LargeCodedSize() {
 AudioDecoderConfig TestAudioConfig::Normal() {
   return AudioDecoderConfig(kCodecVorbis, kSampleFormatPlanarF32,
                             CHANNEL_LAYOUT_STEREO, 44100, EmptyExtraData(),
-                            Unencrypted());
+                            EncryptionScheme::kUnencrypted);
 }
 
 AudioDecoderConfig TestAudioConfig::NormalEncrypted() {
   return AudioDecoderConfig(kCodecVorbis, kSampleFormatPlanarF32,
                             CHANNEL_LAYOUT_STEREO, 44100, EmptyExtraData(),
-                            AesCtrEncryptionScheme());
+                            EncryptionScheme::kCenc);
 }
 
 // static

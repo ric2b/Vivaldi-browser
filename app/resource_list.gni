@@ -152,7 +152,7 @@ CHROMIUM_VIVALDI_RESOURCE_LIST = [
 
 ANDROID_VIVALDI_RESOURCE_LIST = [
   [
-    "//chrome/android:chrome_strings_grd__grit",
+    "//chrome/browser/ui/android/strings:ui_strings_grd__grit",
     "//vivaldi/app/resources/android/vivaldi_android_chrome_strings.grd",
     {
       have_strings_flag = true
@@ -160,7 +160,7 @@ ANDROID_VIVALDI_RESOURCE_LIST = [
       pak_file_locale_prefix="values-"
       pak_file_prefix="android_chrome_strings"
       pak_file_extension = "xml"
-      source = "java/strings/android_chrome_strings.grd"
+      source = "android_chrome_strings.grd"
       vivaldi_translation_dir_setting = "strings"
       string_file_prefix="android_chrome_strings_"
     },

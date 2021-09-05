@@ -15,9 +15,9 @@ namespace vivaldi {
 NotesModelLoadedObserver::NotesModelLoadedObserver(Profile* profile)
     : profile_(profile) {}
 
-void NotesModelLoadedObserver::NotesModelLoaded(Notes_Model* model,
+void NotesModelLoadedObserver::NotesModelLoaded(NotesModel* model,
                                                 bool ids_reassigned) {
-  if (vivaldi::IsVivaldiRunning()) {
+  if (vivaldi::IsVivaldiRunning() || vivaldi::ForcedVivaldiRunning()) {
     // Causes lazy-load if sync is enabled.
     ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile_);
   }
@@ -25,7 +25,7 @@ void NotesModelLoadedObserver::NotesModelLoaded(Notes_Model* model,
   delete this;
 }
 
-void NotesModelLoadedObserver::NotesModelBeingDeleted(Notes_Model* model) {
+void NotesModelLoadedObserver::NotesModelBeingDeleted(NotesModel* model) {
   model->RemoveObserver(this);
   delete this;
 }

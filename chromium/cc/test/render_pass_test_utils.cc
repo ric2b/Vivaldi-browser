@@ -321,7 +321,7 @@ void AddOneOfEveryQuadTypeInDisplayResourceProvider(
 
   std::vector<viz::ReturnedResource> returned_to_child;
   int child_id = resource_provider->CreateChild(
-      base::BindRepeating(&CollectResources, &returned_to_child), true);
+      base::BindRepeating(&CollectResources, &returned_to_child));
 
   // Transfer resource to the parent.
   std::vector<viz::TransferableResource> list;
@@ -414,8 +414,8 @@ void AddOneOfEveryQuadTypeInDisplayResourceProvider(
 
   viz::SharedQuadState* shared_state2 =
       to_pass->CreateAndAppendSharedQuadState();
-  shared_state->SetAll(gfx::Transform(), rect, rect, gfx::RRectF(), rect, false,
-                       false, 1, SkBlendMode::kSrcOver, 0);
+  shared_state2->SetAll(gfx::Transform(), rect, rect, gfx::RRectF(), rect,
+                        false, false, 1, SkBlendMode::kSrcOver, 0);
 
   viz::TileDrawQuad* tile_quad =
       to_pass->CreateAndAppendDrawQuad<viz::TileDrawQuad>();

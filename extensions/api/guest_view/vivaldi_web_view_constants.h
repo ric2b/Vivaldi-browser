@@ -12,6 +12,7 @@ extern const char kEventPasteAndGo[];
 extern const char kEventSimpleAction[];
 extern const char kAttributeExtensionHost[];
 extern const char kEventOnFullscreen[];
+extern const char kEventContentAllowed[];
 extern const char kEventContentBlocked[];
 extern const char kEventWebContentsCreated[];
 

@@ -15,6 +15,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
+#include "base/test/gmock_callback_support.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/thread.h"
@@ -50,10 +51,10 @@
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "media/capture/video/chromeos/camera_buffer_factory.h"
 #include "media/capture/video/chromeos/camera_hal_dispatcher_impl.h"
-#include "media/capture/video/chromeos/local_gpu_memory_buffer_manager.h"
 #include "media/capture/video/chromeos/public/cros_features.h"
 #include "media/capture/video/chromeos/video_capture_device_chromeos_halv3.h"
 #include "media/capture/video/chromeos/video_capture_device_factory_chromeos.h"
+#include "media/gpu/test/local_gpu_memory_buffer_manager.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #endif
 
@@ -129,17 +130,14 @@
 #define WRAPPED_TEST_P(test_case_name, test_name) \
   TEST_P(test_case_name, test_name)
 
+using base::test::RunClosure;
 using ::testing::_;
 using ::testing::Invoke;
-using ::testing::SaveArg;
 using ::testing::Return;
+using ::testing::SaveArg;
 
 namespace media {
 namespace {
-
-ACTION_P(RunClosure, closure) {
-  closure.Run();
-}
 
 void DumpError(media::VideoCaptureError,
                const base::Location& location,
@@ -164,15 +162,17 @@ class MockMFPhotoCallback final : public IMFCaptureEngineOnSampleCallback {
   MOCK_METHOD0(DoRelease, ULONG(void));
   MOCK_METHOD1(DoOnSample, HRESULT(IMFSample*));
 
-  STDMETHOD(QueryInterface)(REFIID riid, void** object) override {
+  IFACEMETHODIMP QueryInterface(REFIID riid, void** object) override {
     return DoQueryInterface(riid, object);
   }
 
-  STDMETHOD_(ULONG, AddRef)() override { return DoAddRef(); }
+  IFACEMETHODIMP_(ULONG) AddRef() override { return DoAddRef(); }
 
-  STDMETHOD_(ULONG, Release)() override { return DoRelease(); }
+  IFACEMETHODIMP_(ULONG) Release() override { return DoRelease(); }
 
-  STDMETHOD(OnSample)(IMFSample* sample) override { return DoOnSample(sample); }
+  IFACEMETHODIMP OnSample(IMFSample* sample) override {
+    return DoOnSample(sample);
+  }
 };
 #endif
 
@@ -354,6 +354,10 @@ class VideoCaptureDeviceTest
     video_capture_device_factory_->GetDeviceDescriptors(
         device_descriptors_.get());
 
+    if (device_descriptors_->empty()) {
+      DLOG(WARNING) << "No camera found";
+      return nullptr;
+    }
 #if defined(OS_ANDROID)
     for (const auto& descriptor : *device_descriptors_) {
       // Android deprecated/legacy devices capture on a single thread, which is
@@ -368,25 +372,11 @@ class VideoCaptureDeviceTest
     }
     DLOG(WARNING) << "No usable camera found";
     return nullptr;
-#endif
-
-    if (device_descriptors_->empty()) {
-      DLOG(WARNING) << "No camera found";
-      return nullptr;
-    }
-#if defined(OS_WIN)
-    // Dump the camera model to help debugging.
-    // TODO(alaoui.rda@gmail.com): remove after http://crbug.com/730068 is
-    // fixed.
-    LOG(INFO) << "Using camera "
-              << device_descriptors_->front().GetNameAndModel();
 #else
-    DLOG(INFO) << "Using camera "
-               << device_descriptors_->front().GetNameAndModel();
+    const auto& descriptor = device_descriptors_->front();
+    DLOG(INFO) << "Using camera " << descriptor.GetNameAndModel();
+    return std::make_unique<VideoCaptureDeviceDescriptor>(descriptor);
 #endif
-
-    return std::make_unique<VideoCaptureDeviceDescriptor>(
-        device_descriptors_->front());
   }
 
   const VideoCaptureFormat& last_format() const { return last_format_; }
@@ -761,7 +751,8 @@ void VideoCaptureDeviceTest::RunTakePhotoTestCase() {
       &MockImageCaptureClient::DoOnPhotoTaken, image_capture_client_);
 
   base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
-  base::Closure quit_closure = BindToCurrentLoop(run_loop.QuitClosure());
+  base::RepeatingClosure quit_closure =
+      BindToCurrentLoop(run_loop.QuitClosure());
   EXPECT_CALL(*image_capture_client_.get(), OnCorrectPhotoTaken())
       .Times(1)
       .WillOnce(RunClosure(quit_closure));
@@ -814,7 +805,8 @@ void VideoCaptureDeviceTest::RunGetPhotoStateTestCase() {
   // first frame.
   WaitForCapturedFrame();
   base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
-  base::Closure quit_closure = BindToCurrentLoop(run_loop.QuitClosure());
+  base::RepeatingClosure quit_closure =
+      BindToCurrentLoop(run_loop.QuitClosure());
   EXPECT_CALL(*image_capture_client_.get(), OnCorrectGetPhotoState())
       .Times(1)
       .WillOnce(RunClosure(quit_closure));

@@ -14,6 +14,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
 #include "base/observer_list.h"
+#include "base/scoped_observer.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -22,13 +23,18 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/arc/arc_migration_guide_notification.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/arc/boot_phase_monitor/arc_boot_phase_monitor_bridge.h"
 #include "chrome/browser/chromeos/arc/notification/arc_supervision_transition_notification.h"
 #include "chrome/browser/chromeos/arc/session/arc_session_manager.h"
+#include "chrome/browser/chromeos/policy/powerwash_requirements_checker.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_observer.h"
+#include "chrome/browser/ui/app_list/app_list_client_impl.h"
+#include "chrome/browser/ui/app_list/search/search_controller.h"
+#include "chrome/browser/ui/app_list/search/search_result_ranker/app_launch_data.h"
+#include "chrome/browser/ui/app_list/search/search_result_ranker/ranking_item_util.h"
 #include "chrome/browser/ui/ash/launcher/arc_app_shelf_id.h"
 #include "chrome/browser/ui/ash/launcher/arc_shelf_spinner_item_controller.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
@@ -43,10 +49,6 @@
 #include "components/language/core/browser/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_context.h"
-#include "content/public/browser/notification_observer.h"
-#include "content/public/browser/notification_registrar.h"
-#include "content/public/browser/notification_service.h"
-#include "content/public/browser/notification_source.h"
 #include "ui/aura/window.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
@@ -81,8 +83,6 @@ constexpr char kIntentHelperClassName[] =
     "org.chromium.arc.intent_helper.SettingsReceiver";
 constexpr char kSetInTouchModeIntent[] =
     "org.chromium.arc.intent_helper.SET_IN_TOUCH_MODE";
-constexpr char kShowTalkbackSettingsIntent[] =
-    "org.chromium.arc.intent_helper.SHOW_TALKBACK_SETTINGS";
 
 constexpr char kAction[] = "action";
 constexpr char kActionMain[] = "android.intent.action.MAIN";
@@ -99,7 +99,6 @@ constexpr char kAndroidContactsAppId[] = "kipfkokfekalckplgaikemhghlbkgpfl";
 
 constexpr char const* kAppIdsHiddenInLauncher[] = {
     kAndroidClockAppId,   kSettingsAppId,     kAndroidFilesAppId,
-    kCameraAppId,         kLegacyCameraAppId, kCameraMigrationAppId,
     kAndroidContactsAppId};
 
 // Returns true if |event_flags| came from a mouse or touch event.
@@ -112,36 +111,10 @@ bool IsMouseOrTouchEventFromFlags(int event_flags) {
 using AppLaunchObserverMap =
     std::map<content::BrowserContext*, base::ObserverList<AppLaunchObserver>>;
 
-AppLaunchObserverMap* GetAppLaunchObserverMap();
-
-content::NotificationObserver* GetNotificationObserver() {
-  class ProfileDestroyedObserver : public content::NotificationObserver {
-   public:
-    void Observe(int type,
-                 const content::NotificationSource& source,
-                 const content::NotificationDetails& details) override {
-      if (type == chrome::NOTIFICATION_PROFILE_DESTROYED) {
-        GetAppLaunchObserverMap()->erase(
-            content::Source<Profile>(source).ptr());
-      }
-    }
-  };
-  static base::NoDestructor<ProfileDestroyedObserver> observer;
-  return observer.get();
-}
-
 AppLaunchObserverMap* GetAppLaunchObserverMap() {
   static base::NoDestructor<
       std::map<content::BrowserContext*, base::ObserverList<AppLaunchObserver>>>
       instance;
-  static base::NoDestructor<content::NotificationRegistrar> registrar;
-  if (!registrar->IsRegistered(
-          GetNotificationObserver(), chrome::NOTIFICATION_PROFILE_DESTROYED,
-          content::NotificationService::AllBrowserContextsAndSources())) {
-    registrar->Add(
-        GetNotificationObserver(), chrome::NOTIFICATION_PROFILE_DESTROYED,
-        content::NotificationService::AllBrowserContextsAndSources());
-  }
   return instance.get();
 }
 
@@ -184,18 +157,8 @@ bool Launch(content::BrowserContext* context,
     return false;
   }
 
-  arc::mojom::IntentHelperInstance* intent_helper_instance =
-      GET_INTENT_HELPER_INSTANCE(SendBroadcast);
-  if (intent_helper_instance) {
-    base::DictionaryValue extras;
-    extras.SetBoolean("inTouchMode", IsMouseOrTouchEventFromFlags(event_flags));
-    std::string extras_string;
-    base::JSONWriter::Write(extras, &extras_string);
-    intent_helper_instance->SendBroadcast(
-        kSetInTouchModeIntent,
-        ArcIntentHelperBridge::kArcIntentHelperPackageName,
-        kIntentHelperClassName, extras_string);
-  }
+  if (IsMouseOrTouchEventFromFlags(event_flags))
+    SetTouchMode(IsMouseOrTouchEventFromFlags(event_flags));
 
   // Unthrottle the ARC instance before launching an ARC app. This is done
   // to minimize lag on an app launch.
@@ -235,26 +198,42 @@ int64_t GetValidDisplayId(int64_t display_id) {
   return display::kInvalidDisplayId;
 }
 
+// Converts an app_id and a shortcut_id, eg. manifest_new_note_shortcut, into a
+// full URL for an Arc app shortcut, of the form:
+// appshortcutsearch://[app_id]/[shortcut_id].
+std::string ConstructArcAppShortcutUrl(const std::string& app_id,
+                                       const std::string& shortcut_id) {
+  return "appshortcutsearch://" + app_id + "/" + shortcut_id;
+}
+
 }  // namespace
 
-const char kCameraAppId[] = "goamfaniemdfcajgcmmflhchgkmbngka";
-const char kCameraMigrationAppId[] = "ngmkobaiicipbagcngcmilfkhejlnfci";
-const char kGoogleDuo[] = "djkcbcmkefiiphjkonbeknmcgiheajce";
-const char kInfinitePainter[] = "afihfgfghkmdmggakhkgnfhlikhdpima";
-const char kLightRoom[] = "fpegfnbgomakooccabncdaelhfppceni";
-const char kPlayStoreAppId[] = "cnbgggchhmkkdmeppjobngjoejnihlei";
-const char kPlayBooksAppId[] = "cafegjnmmjpfibnlddppihpnkbkgicbg";
-const char kPlayGamesAppId[] = "nplnnjkbeijcggmpdcecpabgbjgeiedc";
-const char kLegacyCameraAppId[] = "obfofkigjfamlldmipdegnjlcpincibc";
-const char kPlayMoviesAppId[] = "dbbihmicnlldbflflckpafphlekmjfnm";
-const char kPlayMusicAppId[] = "ophbaopahelaolbjliokocojjbgfadfn";
-const char kPlayStorePackage[] = "com.android.vending";
-const char kPlayStoreActivity[] = "com.android.vending.AssetBrowserActivity";
-const char kSettingsAppId[] = "mconboelelhjpkbdhhiijkgcimoangdj";
+// Package names, kept in sorted order.
 const char kInitialStartParam[] = "S.org.chromium.arc.start_type=initialStart";
-constexpr char kSettingsAppPackage[] = "com.android.settings";
+const char kRequestStartTimeParamTemplate[] =
+    "S.org.chromium.arc.request.start=%" PRId64;
+const char kPlayStoreActivity[] = "com.android.vending.AssetBrowserActivity";
+const char kPlayStorePackage[] = "com.android.vending";
 const char kSettingsAppDomainUrlActivity[] =
     "com.android.settings.Settings$ManageDomainUrlsActivity";
+
+constexpr char kSettingsAppPackage[] = "com.android.settings";
+
+// App IDs, kept in sorted order.
+const char kGmailAppId[] = "hhkfkjpmacfncmbapfohfocpjpdnobjg";
+const char kGoogleCalendarAppId[] = "decaoeahkmjpajbmlbpogjjkjbjokeed";
+const char kGoogleDuoAppId[] = "djkcbcmkefiiphjkonbeknmcgiheajce";
+const char kGoogleMapsAppId[] = "gmhipfhgnoelkiiofcnimehjnpaejiel";
+const char kGooglePhotosAppId[] = "fdbkkojdbojonckghlanfaopfakedeca";
+const char kInfinitePainterAppId[] = "afihfgfghkmdmggakhkgnfhlikhdpima";
+const char kLightRoomAppId[] = "fpegfnbgomakooccabncdaelhfppceni";
+const char kPlayBooksAppId[] = "cafegjnmmjpfibnlddppihpnkbkgicbg";
+const char kPlayGamesAppId[] = "nplnnjkbeijcggmpdcecpabgbjgeiedc";
+const char kPlayMoviesAppId[] = "dbbihmicnlldbflflckpafphlekmjfnm";
+const char kPlayMusicAppId[] = "ophbaopahelaolbjliokocojjbgfadfn";
+const char kPlayStoreAppId[] = "cnbgggchhmkkdmeppjobngjoejnihlei";
+const char kSettingsAppId[] = "mconboelelhjpkbdhhiijkgcimoangdj";
+const char kYoutubeAppId[] = "aniolghapcdkoolpkffememnhpphmjkl";
 
 bool ShouldShowInLauncher(const std::string& app_id) {
   for (auto* const id : kAppIdsHiddenInLauncher) {
@@ -322,6 +301,19 @@ bool LaunchAppWithIntent(content::BrowserContext* context,
     return false;
   }
 
+  // Check if ARC apps are not allowed to start because device needs to be
+  // powerwashed. If it is so then show notification instead of starting
+  // the application.
+  policy::PowerwashRequirementsChecker pw_checker(
+      policy::PowerwashRequirementsChecker::Context::kArc, profile);
+  if (pw_checker.GetState() !=
+      policy::PowerwashRequirementsChecker::State::kNotRequired) {
+    VLOG(1) << "Attempt to launch " << app_id
+            << " while ARC++ is blocked due to powerwash request.";
+    pw_checker.ShowNotification();
+    return false;
+  }
+
   // In case supervision transition is in progress ARC++ is not available.
   const ArcSupervisionTransition supervision_transition =
       GetSupervisionTransition(profile);
@@ -335,13 +327,15 @@ bool LaunchAppWithIntent(content::BrowserContext* context,
 
   ArcAppListPrefs* prefs = ArcAppListPrefs::Get(context);
   std::unique_ptr<ArcAppListPrefs::AppInfo> app_info = prefs->GetApp(app_id);
+  base::Optional<std::string> launch_intent_to_send = std::move(launch_intent);
   if (app_info && !app_info->ready) {
     if (!IsArcPlayStoreEnabledForProfile(profile)) {
       if (prefs->IsDefault(app_id)) {
         // The setting can fail if the preference is managed.  However, the
         // caller is responsible to not call this function in such case.  DCHECK
         // is here to prevent possible mistake.
-        SetArcPlayStoreEnabledForProfile(profile, true);
+        if (!SetArcPlayStoreEnabledForProfile(profile, true))
+          return false;
         DCHECK(IsArcPlayStoreEnabledForProfile(profile));
 
         // PlayStore item has special handling for shelf controllers. In order
@@ -379,8 +373,9 @@ bool LaunchAppWithIntent(content::BrowserContext* context,
     // chrome_controller may be null in tests.
     if (chrome_controller) {
       chrome_controller->GetShelfSpinnerController()->AddSpinnerToShelf(
-          app_id, std::make_unique<ArcShelfSpinnerItemController>(
-                      app_id, event_flags, GetValidDisplayId(display_id)));
+          app_id,
+          std::make_unique<ArcShelfSpinnerItemController>(
+              app_id, event_flags, user_action, GetValidDisplayId(display_id)));
 
       // On some boards, ARC is booted with a restricted set of resources by
       // default to avoid slowing down Chrome's user session restoration.
@@ -390,10 +385,18 @@ bool LaunchAppWithIntent(content::BrowserContext* context,
     }
     prefs->SetLastLaunchTime(app_id);
     return true;
+  } else if (app_id == kPlayStoreAppId && !launch_intent_to_send) {
+    // Record launch request time in order to track Play Store default launch
+    // performance.
+    launch_intent_to_send = GetLaunchIntent(
+        kPlayStorePackage, kPlayStoreActivity,
+        {base::StringPrintf(
+            kRequestStartTimeParamTemplate,
+            (base::TimeTicks::Now() - base::TimeTicks()).InMilliseconds())});
   }
 
   arc::ArcBootPhaseMonitorBridge::RecordFirstAppLaunchDelayUMA(context);
-  return Launch(context, app_id, launch_intent, event_flags,
+  return Launch(context, app_id, launch_intent_to_send, event_flags,
                 GetValidDisplayId(display_id));
 }
 
@@ -451,16 +454,21 @@ void CloseTask(int task_id) {
   app_instance->CloseTask(task_id);
 }
 
-void ShowTalkBackSettings() {
+bool SetTouchMode(bool enable) {
   arc::mojom::IntentHelperInstance* intent_helper_instance =
       GET_INTENT_HELPER_INSTANCE(SendBroadcast);
   if (!intent_helper_instance)
-    return;
+    return false;
 
+  base::DictionaryValue extras;
+  extras.SetBoolean("inTouchMode", enable);
+  std::string extras_string;
+  base::JSONWriter::Write(extras, &extras_string);
   intent_helper_instance->SendBroadcast(
-      kShowTalkbackSettingsIntent,
-      ArcIntentHelperBridge::kArcIntentHelperPackageName,
-      kIntentHelperClassName, "{}");
+      kSetInTouchModeIntent, ArcIntentHelperBridge::kArcIntentHelperPackageName,
+      kIntentHelperClassName, extras_string);
+
+  return true;
 }
 
 std::vector<std::string> GetSelectedPackagesFromPrefs(
@@ -712,10 +720,34 @@ bool IsArcAppSticky(const std::string& app_id, Profile* profile) {
 
 void AddAppLaunchObserver(content::BrowserContext* context,
                           AppLaunchObserver* observer) {
+  class ProfileDestroyedObserver : public ProfileObserver {
+   public:
+    ProfileDestroyedObserver() = default;
+    ~ProfileDestroyedObserver() override = default;
+
+    void Observe(Profile* profile) {
+      if (!observed_profiles_.IsObserving(profile))
+        observed_profiles_.Add(profile);
+    }
+
+    void OnProfileWillBeDestroyed(Profile* profile) override {
+      observed_profiles_.Remove(profile);
+      GetAppLaunchObserverMap()->erase(profile);
+    }
+
+   private:
+    ScopedObserver<Profile, ProfileObserver> observed_profiles_{this};
+
+    DISALLOW_COPY_AND_ASSIGN(ProfileDestroyedObserver);
+  };
+  static base::NoDestructor<ProfileDestroyedObserver>
+      profile_destroyed_observer;
+
   AppLaunchObserverMap* const map = GetAppLaunchObserverMap();
   auto result =
       map->emplace(std::piecewise_construct, std::forward_as_tuple(context),
                    std::forward_as_tuple());
+  profile_destroyed_observer->Observe(Profile::FromBrowserContext(context));
   result.first->second.AddObserver(observer);
 }
 
@@ -737,6 +769,58 @@ void Intent::AddExtraParam(const std::string& extra_param) {
 
 bool Intent::HasExtraParam(const std::string& extra_param) const {
   return base::Contains(extra_params_, extra_param);
+}
+
+const std::string GetAppFromAppOrGroupId(content::BrowserContext* context,
+                                         const std::string& app_or_group_id) {
+  const arc::ArcAppShelfId app_shelf_id =
+      arc::ArcAppShelfId::FromString(app_or_group_id);
+  if (!app_shelf_id.has_shelf_group_id())
+    return app_shelf_id.app_id();
+
+  const ArcAppListPrefs* const prefs = ArcAppListPrefs::Get(context);
+  DCHECK(prefs);
+
+  // Try to find a shortcut with requested shelf group id.
+  const std::vector<std::string> app_ids = prefs->GetAppIds();
+  for (const auto& app_id : app_ids) {
+    std::unique_ptr<ArcAppListPrefs::AppInfo> app_info = prefs->GetApp(app_id);
+    DCHECK(app_info);
+    if (!app_info || !app_info->shortcut)
+      continue;
+    const arc::ArcAppShelfId shortcut_shelf_id =
+        arc::ArcAppShelfId::FromIntentAndAppId(app_info->intent_uri, app_id);
+    if (shortcut_shelf_id.has_shelf_group_id() &&
+        shortcut_shelf_id.shelf_group_id() == app_shelf_id.shelf_group_id()) {
+      return app_id;
+    }
+  }
+
+  // Shortcut with requested shelf group id was not found, use app id as
+  // fallback.
+  return app_shelf_id.app_id();
+}
+
+void ExecuteArcShortcutCommand(content::BrowserContext* context,
+                               const std::string& id,
+                               const std::string& shortcut_id,
+                               int64_t display_id) {
+  const arc::ArcAppShelfId arc_shelf_id = arc::ArcAppShelfId::FromString(id);
+  DCHECK(arc_shelf_id.valid());
+  arc::LaunchAppShortcutItem(context, arc_shelf_id.app_id(), shortcut_id,
+                             display_id);
+
+  // Send a training signal to the search controller.
+  AppListClientImpl* app_list_client_impl = AppListClientImpl::GetInstance();
+  if (!app_list_client_impl)
+    return;
+
+  app_list::AppLaunchData app_launch_data;
+  app_launch_data.id =
+      ConstructArcAppShortcutUrl(arc_shelf_id.app_id(), shortcut_id),
+  app_launch_data.ranking_item_type =
+      app_list::RankingItemType::kArcAppShortcut;
+  app_list_client_impl->search_controller()->Train(std::move(app_launch_data));
 }
 
 }  // namespace arc

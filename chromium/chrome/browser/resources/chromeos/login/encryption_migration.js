@@ -24,7 +24,7 @@ var EncryptionMigrationUIState = {
 Polymer({
   is: 'encryption-migration',
 
-  behaviors: [I18nBehavior, OobeDialogHostBehavior],
+  behaviors: [OobeI18nBehavior, OobeDialogHostBehavior],
 
   properties: {
     /**
@@ -85,7 +85,7 @@ Polymer({
    * @param {EncryptionMigrationUIState} state Current UI state
    * @private
    */
-  isInitial_: function(state) {
+  isInitial_(state) {
     return state == EncryptionMigrationUIState.INITIAL;
   },
 
@@ -94,7 +94,7 @@ Polymer({
    * @param {EncryptionMigrationUIState} state Current UI state
    * @private
    */
-  isReady_: function(state) {
+  isReady_(state) {
     return state == EncryptionMigrationUIState.READY;
   },
 
@@ -103,7 +103,7 @@ Polymer({
    * @param {EncryptionMigrationUIState} state Current UI state
    * @private
    */
-  isMigrating_: function(state) {
+  isMigrating_(state) {
     return state == EncryptionMigrationUIState.MIGRATING;
   },
 
@@ -112,7 +112,7 @@ Polymer({
    * @param {EncryptionMigrationUIState} state Current UI state
    * @private
    */
-  isMigrationFailed_: function(state) {
+  isMigrationFailed_(state) {
     return state == EncryptionMigrationUIState.MIGRATION_FAILED;
   },
 
@@ -121,7 +121,7 @@ Polymer({
    * @param {EncryptionMigrationUIState} state Current UI state
    * @private
    */
-  isNotEnoughSpace_: function(state) {
+  isNotEnoughSpace_(state) {
     return state == EncryptionMigrationUIState.NOT_ENOUGH_SPACE;
   },
 
@@ -130,7 +130,7 @@ Polymer({
    * @param {EncryptionMigrationUIState} state Current UI state
    * @private
    */
-  isMigratingMinimal_: function(state) {
+  isMigratingMinimal_(state) {
     return state == EncryptionMigrationUIState.MIGRATING_MINIMAL;
   },
 
@@ -139,7 +139,7 @@ Polymer({
    * @param {number} progress
    * @private
    */
-  isProgressIndeterminate_: function(progress) {
+  isProgressIndeterminate_(progress) {
     return progress < 0;
   },
 
@@ -149,7 +149,7 @@ Polymer({
    * @param {boolean} isSkipped
    * @private
    */
-  isUpdateDisabled_: function(isEnoughBattery, isSkipped) {
+  isUpdateDisabled_(isEnoughBattery, isSkipped) {
     return !isEnoughBattery || isSkipped;
   },
 
@@ -157,7 +157,7 @@ Polymer({
    * Returns true if the 'Skip' button on the initial screen should be hidden.
    * @return {boolean}
    */
-  isSkipHidden_: function() {
+  isSkipHidden_() {
     // TODO(fukino): Instead of checking the board name here to behave
     // differently, it's recommended to add a command-line flag to Chrome and
     // make session_manager pass it based on a feature-based USE flag which is
@@ -168,52 +168,57 @@ Polymer({
 
   /**
    * Computes the label shown under progress bar.
+   * @param {string} locale
    * @param {number} progress
    * @return {string}
    * @private
    */
-  computeProgressLabel_: function(progress) {
+  computeProgressLabel_(locale, progress) {
     return this.i18n('migrationProgressLabel', Math.floor(progress * 100));
   },
 
   /**
    * Computes the warning label when battery level is not enough.
+   * @param {string} locale
    * @param {number} batteryPercent
    * @return {string}
    * @private
    */
-  computeBatteryWarningLabel_: function(batteryPercent) {
+  computeBatteryWarningLabel_(locale, batteryPercent) {
     return this.i18n('migrationBatteryWarningLabel', batteryPercent);
   },
 
   /**
    * Computes the label to show the necessary battery level for migration.
+   * @param {string} locale
    * @param {number} necessaryBatteryPercent
    * @return {string}
    * @private
    */
-  computeNecessaryBatteryLevelLabel_: function(necessaryBatteryPercent) {
+  computeNecessaryBatteryLevelLabel_(locale, necessaryBatteryPercent) {
     return this.i18n(
         'migrationNecessaryBatteryLevelLabel', necessaryBatteryPercent);
   },
 
   /**
    * Computes the label to show the current available space.
+   * @param {string} locale
    * @param {string} availableSpaceInString
    * @return {string}
    * @private
    */
-  computeAvailableSpaceLabel_: function(availableSpaceInString) {
+  computeAvailableSpaceLabel_(locale, availableSpaceInString) {
     return this.i18n('migrationAvailableSpaceLabel', availableSpaceInString);
   },
 
   /**
    * Computes the label to show the necessary space to start migration.
+   * @param {string} locale
    * @param {string} necessarySpaceInString
    * @return {string}
    * @private
    */
-  computeNecessarySpaceLabel_: function(necessarySpaceInString) {
+  computeNecessarySpaceLabel_(locale, necessarySpaceInString) {
     return this.i18n('migrationNecessarySpaceLabel', necessarySpaceInString);
   },
 
@@ -221,7 +226,7 @@ Polymer({
    * Handles tap on UPGRADE button.
    * @private
    */
-  onUpgrade_: function() {
+  onUpgrade_() {
     this.fire('upgrade');
   },
 
@@ -229,7 +234,7 @@ Polymer({
    * Handles tap on SKIP button.
    * @private
    */
-  onSkip_: function() {
+  onSkip_() {
     this.isSkipped = true;
     this.fire('skip');
   },
@@ -238,7 +243,7 @@ Polymer({
    * Handles tap on RESTART button.
    * @private
    */
-  onRestartOnLowStorage_: function() {
+  onRestartOnLowStorage_() {
     this.fire('restart-on-low-storage');
   },
 
@@ -246,7 +251,7 @@ Polymer({
    * Handles tap on RESTART button on the migration failure screen.
    * @private
    */
-  onRestartOnFailure_: function() {
+  onRestartOnFailure_() {
     this.fire('restart-on-failure');
   },
 
@@ -254,7 +259,7 @@ Polymer({
    * Handles tap on REPORT AN ISSUE button.
    * @private
    */
-  onReportAnIssue_: function() {
+  onReportAnIssue_() {
     this.fire('openFeedbackDialog');
   },
 });

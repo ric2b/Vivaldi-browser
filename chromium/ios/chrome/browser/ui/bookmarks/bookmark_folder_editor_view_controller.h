@@ -10,15 +10,12 @@
 
 @class BookmarkFolderEditorViewController;
 @protocol BrowserCommands;
+class ChromeBrowserState;
 
 namespace bookmarks {
 class BookmarkModel;
 class BookmarkNode;
 }  // namespace bookmarks
-
-namespace ios {
-class ChromeBrowserState;
-}  // namespace ios
 
 @protocol BookmarkFolderEditorViewControllerDelegate
 // Called when the controller successfully created or edited |folder|.
@@ -63,12 +60,10 @@ class ChromeBrowserState;
 + (instancetype)
     folderEditorWithBookmarkModel:(bookmarks::BookmarkModel*)bookmarkModel
                            folder:(const bookmarks::BookmarkNode*)folder
-                     browserState:(ios::ChromeBrowserState*)browserState
+                     browserState:(ChromeBrowserState*)browserState
                        dispatcher:(id<BrowserCommands>)dispatcher;
 
-- (instancetype)initWithTableViewStyle:(UITableViewStyle)style
-                           appBarStyle:(ChromeTableViewControllerStyle)style
-    NS_UNAVAILABLE;
+- (instancetype)initWithStyle:(UITableViewStyle)style NS_UNAVAILABLE;
 
 @end
 

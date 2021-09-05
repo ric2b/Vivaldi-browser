@@ -2,12 +2,25 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-cr.define('languages_page_tests', function() {
+// clang-format off
+// #import {CrSettingsPrefs} from 'chrome://settings/settings.js';
+// #import {kMenuCloseDelay, LanguagesBrowserProxyImpl} from 'chrome://settings/lazy_load.js';
+// #import {eventToPromise, fakeDataBind} from 'chrome://test/test_util.m.js';
+// #import {FakeSettingsPrivate} from 'chrome://test/settings/fake_settings_private.m.js';
+// #import {getFakeLanguagePrefs} from 'chrome://test/settings/fake_language_settings_private.m.js';
+// #import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+// #import {isChromeOS, isMac, isWindows} from 'chrome://resources/js/cr.m.js';
+// #import {keyDownOn} from 'chrome://resources/polymer/v3_0/iron-test-helpers/mock-interactions.js';
+// #import {PromiseResolver} from 'chrome://resources/js/promise_resolver.m.js';
+// #import {TestLanguagesBrowserProxy} from 'chrome://test/settings/test_languages_browser_proxy.m.js';
+// clang-format on
+
+  window.languages_page_tests = {};
+
   /** @enum {string} */
-  const TestNames = {
+  window.languages_page_tests.TestNames = {
     AddLanguagesDialog: 'add languages dialog',
     LanguageMenu: 'language menu',
-    InputMethods: 'input methods',
     Spellcheck: 'spellcheck_all',
     SpellcheckOfficialBuild: 'spellcheck_official',
   };
@@ -74,7 +87,7 @@ cr.define('languages_page_tests', function() {
       PolymerTest.clearBody();
     });
 
-    suite(TestNames.AddLanguagesDialog, function() {
+    suite(languages_page_tests.TestNames.AddLanguagesDialog, function() {
       let dialog;
       let dialogItems;
       let cancelButton;
@@ -118,8 +131,10 @@ cr.define('languages_page_tests', function() {
           dialogClosedObserver = new MutationObserver(onMutation);
           dialogClosedObserver.observe(languagesPage.root, {childList: true});
 
-          actionButton = assert(dialog.$$('.action-button'));
-          cancelButton = assert(dialog.$$('.cancel-button'));
+          actionButton = dialog.$$('.action-button');
+          assertTrue(!!actionButton);
+          cancelButton = dialog.$$('.cancel-button');
+          assertTrue(!!cancelButton);
           Polymer.dom.flush();
 
           // The fixed-height dialog's iron-list should stamp far fewer than
@@ -240,18 +255,20 @@ cr.define('languages_page_tests', function() {
       });
     });
 
-    suite(TestNames.LanguageMenu, function() {
+    suite(languages_page_tests.TestNames.LanguageMenu, function() {
       /*
        * Finds, asserts and returns the menu item for the given i18n key.
        * @param {string} i18nKey Name of the i18n string for the item's text.
        * @return {!HTMLElement} Menu item.
        */
       function getMenuItem(i18nKey) {
-        const i18nString = assert(loadTimeData.getString(i18nKey));
+        const i18nString = loadTimeData.getString(i18nKey);
+        assertTrue(!!i18nString);
         const menuItems = actionMenu.querySelectorAll('.dropdown-item');
         const menuItem = Array.from(menuItems).find(
             item => item.textContent.trim() == i18nString);
-        return assert(menuItem, 'Menu item "' + i18nKey + '" not found');
+        assertTrue(!!menuItem, 'Menu item "' + i18nKey + '" not found');
+        return menuItem;
       }
 
       /*
@@ -267,32 +284,6 @@ cr.define('languages_page_tests', function() {
               !buttonVisibility[buttonKey], buttonItem.hidden,
               'Menu item "' + buttonKey + '" hidden');
         }
-      }
-
-      /**
-       * @return {HTMLElement} Traverses the DOM tree to find the lowest level
-       *     active element.
-       */
-      function getActiveElement() {
-        let node = document.activeElement;
-        let lastNode;
-        while (node) {
-          lastNode = node;
-          node = (node.shadowRoot || node).activeElement;
-        }
-        return lastNode;
-      }
-
-      /**
-       * Assert whether the 'restart' button should be active.
-       * @param {boolean} shouldBeActive True to assert that the 'restart'
-       *     button is present and active or false the assert the negation.
-       */
-      function assertRestartButtonActiveState(shouldBeActive) {
-        const activeElement = getActiveElement();
-        isRestartButtonActive =
-            activeElement && (activeElement.id == 'restartButton');
-        assertEquals(isRestartButtonActive, shouldBeActive);
       }
 
       test('structure', function() {
@@ -342,8 +333,9 @@ cr.define('languages_page_tests', function() {
         let translateTargetLabel = null;
         let item = null;
 
-        let listItems = languagesCollapse.querySelectorAll('.list-item');
-        let domRepeat = assert(languagesCollapse.querySelector('dom-repeat'));
+        const listItems = languagesCollapse.querySelectorAll('.list-item');
+        const domRepeat = languagesCollapse.querySelector('dom-repeat');
+        assertTrue(!!domRepeat);
 
         let num_visibles = 0;
         Array.from(listItems).forEach(function(el) {
@@ -362,54 +354,6 @@ cr.define('languages_page_tests', function() {
           assertEquals(
               1, num_visibles,
               'Not exactly one target info label (' + num_visibles + ').');
-        });
-      });
-
-      // TODO(crbug.com/950007): Remove when SplitSettings is the default.
-      test('changing UI language in CrOS', function() {
-        if (!cr.isChromeOS) {
-          return;
-        }
-
-        // Mock changing language.
-        languageHelper.setProspectiveUILanguage = languageCode => {
-          languagesPage.set('languages.prospectiveUILanguage', languageCode);
-        };
-
-        // Restart button is not active.
-        assertRestartButtonActiveState(false);
-
-        const swListItem = languagesCollapse.querySelectorAll('.list-item')[1];
-        // Open options for 'sw'.
-        const languageOptionsDropdownTrigger =
-            swListItem.querySelector('cr-icon-button');
-        assertTrue(!!languageOptionsDropdownTrigger);
-        // No restart button in 'sw' list-item.
-        assertTrue(!swListItem.querySelector('#restartButton'));
-        languageOptionsDropdownTrigger.click();
-        assertTrue(actionMenu.open);
-
-        // OS language is not 'sw'
-        const uiLanguageOption = getMenuItem('displayInThisLanguage');
-        assertFalse(uiLanguageOption.disabled);
-        assertFalse(uiLanguageOption.checked);
-
-        return new Promise(resolve => {
-          actionMenu.addEventListener('close', () => {
-            // Restart button is attached to the first list item and is active.
-            const firstListItem =
-                languagesCollapse.querySelectorAll('.list-item')[0];
-            const domRepeat = languagesCollapse.querySelector('dom-repeat');
-            assertTrue(
-                domRepeat.modelForElement(firstListItem).item.language.code ==
-                'sw');
-            assertTrue(!!firstListItem.querySelector('#restartButton'));
-            assertRestartButtonActiveState(true);
-            resolve();
-          });
-
-          // Change UI language.
-          uiLanguageOption.click();
         });
       });
 
@@ -480,7 +424,8 @@ cr.define('languages_page_tests', function() {
 
         // Find the new language item.
         const items = languagesCollapse.querySelectorAll('.list-item');
-        const domRepeat = assert(languagesCollapse.querySelector('dom-repeat'));
+        const domRepeat = languagesCollapse.querySelector('dom-repeat');
+        assertTrue(!!domRepeat);
         const item = Array.from(items).find(function(el) {
           return domRepeat.itemForElement(el) &&
               domRepeat.itemForElement(el).language.code == 'no';
@@ -507,7 +452,8 @@ cr.define('languages_page_tests', function() {
             ['en-US'], languageHelper.prefs.translate_blocked_languages.value);
 
         const items = languagesCollapse.querySelectorAll('.list-item');
-        const domRepeat = assert(languagesCollapse.querySelector('dom-repeat'));
+        const domRepeat = languagesCollapse.querySelector('dom-repeat');
+        assertTrue(!!domRepeat);
         const item = Array.from(items).find(function(el) {
           return domRepeat.itemForElement(el) &&
               domRepeat.itemForElement(el).language.code == 'en-US';
@@ -522,7 +468,8 @@ cr.define('languages_page_tests', function() {
 
       test('remove language when starting with 2 languages', function() {
         const items = languagesCollapse.querySelectorAll('.list-item');
-        const domRepeat = assert(languagesCollapse.querySelector('dom-repeat'));
+        const domRepeat = languagesCollapse.querySelector('dom-repeat');
+        assertTrue(!!domRepeat);
         const item = Array.from(items).find(function(el) {
           return domRepeat.itemForElement(el) &&
               domRepeat.itemForElement(el).language.code == 'sw';
@@ -590,22 +537,7 @@ cr.define('languages_page_tests', function() {
       });
     });
 
-    // TODO(crbug.com/950007): Remove when SplitSettings is the default.
-    test(TestNames.InputMethods, function() {
-      const inputMethodsCollapse = languagesPage.$.inputMethodsCollapse;
-      const inputMethodSettingsExist = !!inputMethodsCollapse;
-      if (cr.isChromeOS) {
-        assertTrue(inputMethodSettingsExist);
-        const manageInputMethodsButton =
-            inputMethodsCollapse.querySelector('#manageInputMethods');
-        manageInputMethodsButton.click();
-        assertTrue(!!languagesPage.$$('settings-manage-input-methods-page'));
-      } else {
-        assertFalse(inputMethodSettingsExist);
-      }
-    });
-
-    suite(TestNames.Spellcheck, function() {
+    suite(languages_page_tests.TestNames.Spellcheck, function() {
       test('structure', function() {
         const spellCheckCollapse = languagesPage.$.spellCheckCollapse;
         const spellCheckSettingsExist = !!spellCheckCollapse;
@@ -810,7 +742,7 @@ cr.define('languages_page_tests', function() {
       });
     });
 
-    suite(TestNames.SpellcheckOfficialBuild, function() {
+    suite(languages_page_tests.TestNames.SpellcheckOfficialBuild, function() {
       test('enabling and disabling the spelling service', () => {
         const previousValue =
             languagesPage.prefs.spellcheck.use_spelling_service.value;
@@ -831,6 +763,3 @@ cr.define('languages_page_tests', function() {
       });
     });
   });
-
-  return {TestNames: TestNames};
-});

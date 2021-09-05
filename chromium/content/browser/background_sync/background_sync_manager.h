@@ -27,7 +27,7 @@
 #include "content/browser/devtools/devtools_background_services_context_impl.h"
 #include "content/browser/service_worker/service_worker_context_core_observer.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
-#include "content/browser/service_worker/service_worker_storage.h"
+#include "content/browser/service_worker/service_worker_registry.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/background_sync_controller.h"
 #include "content/public/browser/background_sync_parameters.h"
@@ -110,6 +110,10 @@ class CONTENT_EXPORT BackgroundSyncManager
   // success.
   void GetPeriodicSyncRegistrations(int64_t sw_registration_id,
                                     StatusAndRegistrationsCallback callback);
+
+  // Goes through the list of active Periodic Background Sync registrations and
+  // unregisters any origins that no longer have the required permission.
+  void UnregisterPeriodicSyncForOrigin(const url::Origin& origin);
 
   // ServiceWorkerContextCoreObserver overrides.
   void OnRegistrationDeleted(int64_t sw_registration_id,
@@ -200,10 +204,10 @@ class CONTENT_EXPORT BackgroundSyncManager
       const url::Origin& origin,
       const std::string& backend_key,
       const std::string& data,
-      ServiceWorkerStorage::StatusCallback callback);
+      ServiceWorkerRegistry::StatusCallback callback);
   virtual void GetDataFromBackend(
       const std::string& backend_key,
-      ServiceWorkerStorage::GetUserDataForAllRegistrationsCallback callback);
+      ServiceWorkerRegistry::GetUserDataForAllRegistrationsCallback callback);
   virtual void DispatchSyncEvent(
       const std::string& tag,
       scoped_refptr<ServiceWorkerVersion> active_version,
@@ -213,7 +217,7 @@ class CONTENT_EXPORT BackgroundSyncManager
       const std::string& tag,
       scoped_refptr<ServiceWorkerVersion> active_version,
       ServiceWorkerVersion::StatusCallback callback);
-  virtual void HasMainFrameProviderHost(const url::Origin& origin,
+  virtual void HasMainFrameWindowClient(const url::Origin& origin,
                                         BoolCallback callback);
 
  private:
@@ -255,7 +259,7 @@ class CONTENT_EXPORT BackgroundSyncManager
   // Write all registrations for a given |sw_registration_id| to persistent
   // storage.
   void StoreRegistrations(int64_t sw_registration_id,
-                          ServiceWorkerStorage::StatusCallback callback);
+                          ServiceWorkerRegistry::StatusCallback callback);
 
   // Removes the active registration if it is in the map.
   void RemoveActiveRegistration(
@@ -331,12 +335,17 @@ class CONTENT_EXPORT BackgroundSyncManager
 
   // Determines if the browser needs to be able to run in the background (e.g.,
   // to run a pending registration or verify that a firing registration
-  // completed). If background processing is required it calls out to the
-  // BackgroundSyncController to enable it.
+  // completed). If background processing is required it calls out to
+  // BackgroundSyncProxy to enable it.
   // Assumes that all registrations in the pending state are not currently ready
   // to fire. Therefore this should not be called directly and should only be
   // called by FireReadyEvents.
   void ScheduleDelayedProcessingOfRegistrations(
+      blink::mojom::BackgroundSyncType sync_type);
+
+  // Cancels waking up of the browser to process (Periodic) BackgroundSync
+  // registrations.
+  void CancelDelayedProcessingOfRegistrations(
       blink::mojom::BackgroundSyncType sync_type);
 
   // Fires ready events for |sync_type|.
@@ -419,6 +428,14 @@ class CONTENT_EXPORT BackgroundSyncManager
                                   base::OnceClosure done_closure,
                                   blink::ServiceWorkerStatusCode status);
   void DidReceiveDelaysForSuspendedRegistrations(base::OnceClosure callback);
+
+  // Helper methods to unregister Periodic Background Sync registrations
+  // associated with |origin|.
+  void UnregisterForOriginImpl(const url::Origin& origin,
+                               base::OnceClosure callback);
+  void UnregisterForOriginDidStore(base::OnceClosure done_closure,
+                                   blink::ServiceWorkerStatusCode status);
+  void UnregisterForOriginScheduleDelayedProcessing(base::OnceClosure callback);
 
   base::OnceClosure MakeEmptyCompletion(CacheStorageSchedulerId id);
 

@@ -8,7 +8,6 @@
 #include "components/history/core/browser/top_sites_backend.h"
 #include "components/history/core/browser/top_sites_database.h"
 #include "components/history/core/browser/top_sites_impl.h"
-#include "content/public/browser/browser_task_traits.h"
 #include "sql/statement.h"
 
 namespace history {
@@ -38,9 +37,7 @@ bool TopSitesDatabase::ConvertThumbnailData(
       }
       int64_t bookmark_id = 0;
       if (!url.empty() && base::StringToInt64(url, &bookmark_id)) {
-        base::PostTask(
-            FROM_HERE, {content::BrowserThread::UI},
-            base::Bind(callback, path, bookmark_id, std::move(thumbnail)));
+        callback.Run(path, bookmark_id, std::move(thumbnail));
       } else {
         LOG(ERROR) << "Did not find valid thumbnail id in url: "
                          << statement.ColumnString(1);

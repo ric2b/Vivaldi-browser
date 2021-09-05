@@ -9,4 +9,10 @@ namespace web {
 const base::Feature kWebPageTextAccessibility{
     "WebPageTextAccessibility", base::FEATURE_DISABLED_BY_DEFAULT};
 
+const base::Feature kMobileGoogleSRP{"MobileGoogleSRP",
+                                     base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kReloadSadTab{"ReloadSadTab",
+                                  base::FEATURE_DISABLED_BY_DEFAULT};
+
 }  // namespace web

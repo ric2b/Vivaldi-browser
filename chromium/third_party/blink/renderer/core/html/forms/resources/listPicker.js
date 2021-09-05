@@ -21,6 +21,9 @@ function initialize(args) {
   global.params = args;
   var main = $('main');
   main.innerHTML = '';
+  if (global.params.isFormControlsRefreshEnabled) {
+    document.body.classList.add('controls-refresh');
+  }
   global.picker = new ListPicker(main, args);
 }
 
@@ -37,7 +40,6 @@ function handleArgumentsTimeout() {
  */
 function ListPicker(element, config) {
   Picker.call(this, element, config);
-  window.pagePopupController.selectFontsFromOwnerDocument(document);
   this._selectElement = createElement('select');
   this._selectElement.size = 20;
   this._element.appendChild(this._selectElement);

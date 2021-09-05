@@ -144,9 +144,10 @@ class DefaultCaptionButtonModel : public CaptionButtonModel {
       case views::CAPTION_BUTTON_ICON_ZOOM:
         return false;
       case views::CAPTION_BUTTON_ICON_LOCATION:
+        // not used
+        return false;
       case views::CAPTION_BUTTON_ICON_COUNT:
         break;
-        // not used
     }
     NOTREACHED();
     return false;
@@ -415,11 +416,6 @@ void FrameCaptionButtonContainerView::ButtonPressed(views::Button* sender,
     } else {
       frame_->Maximize();
       RecordAction(UserMetricsAction("MaxButton_Clk_Maximize"));
-    }
-
-    if (event.IsGestureEvent()) {
-      UMA_HISTOGRAM_ENUMERATION("Ash.GestureTarget", GESTURE_FRAMEMAXIMIZE_TAP,
-                                GESTURE_ACTION_COUNT);
     }
   } else if (sender == close_button_) {
     frame_->Close();

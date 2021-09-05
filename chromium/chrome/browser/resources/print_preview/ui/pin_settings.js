@@ -2,13 +2,29 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import 'chrome://resources/cr_elements/cr_checkbox/cr_checkbox.m.js';
+import 'chrome://resources/cr_elements/cr_input/cr_input.m.js';
+import 'chrome://resources/polymer/v3_0/iron-collapse/iron-collapse.js';
+import './print_preview_shared_css.js';
+import './settings_section.js';
+
+import {I18nBehavior} from 'chrome://resources/js/i18n_behavior.m.js';
+import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
+import {State} from '../data/state.js';
+
+import {InputBehavior} from './input_behavior.js';
+import {SettingsBehavior} from './settings_behavior.js';
+
 Polymer({
   is: 'print-preview-pin-settings',
 
-  behaviors: [SettingsBehavior, print_preview.InputBehavior],
+  _template: html`{__html_template__}`,
+
+  behaviors: [SettingsBehavior, InputBehavior, I18nBehavior],
 
   properties: {
-    /** @type {!print_preview.State} */
+    /** @type {!State} */
     state: Number,
 
     disabled: Boolean,
@@ -51,20 +67,20 @@ Polymer({
   },
 
   /** @return {!CrInputElement} The cr-input field element for InputBehavior. */
-  getInput: function() {
-    return this.$.pinValue;
+  getInput() {
+    return /** @type {!CrInputElement} */ (this.$.pinValue);
   },
 
   /**
    * @param {!CustomEvent<string>} e Contains the new input value.
    * @private
    */
-  onInputChange_: function(e) {
+  onInputChange_(e) {
     this.inputString_ = e.detail;
   },
 
   /** @private */
-  onCollapseChanged_: function() {
+  onCollapseChanged_() {
     if (this.pinEnabled_) {
       /** @type {!CrInputElement} */ (this.$.pinValue).focusInput();
     }
@@ -77,7 +93,7 @@ Polymer({
    * @return {boolean} Whether pin checkbox should be disabled.
    * @private
    */
-  computeCheckboxDisabled_: function(inputValid, disabled, managed) {
+  computeCheckboxDisabled_(inputValid, disabled, managed) {
     return managed || (inputValid && disabled);
   },
 
@@ -85,7 +101,7 @@ Polymer({
    * @return {boolean} Whether to disable the pin value input.
    * @private
    */
-  inputDisabled_: function() {
+  inputDisabled_() {
     return !this.pinEnabled_ || (this.inputValid_ && this.disabled);
   },
 
@@ -93,7 +109,7 @@ Polymer({
    * Updates the checkbox state when the setting has been initialized.
    * @private
    */
-  onSettingsChanged_: function() {
+  onSettingsChanged_() {
     const pinEnabled = /** @type {boolean} */ (this.getSetting('pin').value);
     this.$.pin.checked = pinEnabled;
     this.pinEnabled_ = pinEnabled;
@@ -103,7 +119,7 @@ Polymer({
   },
 
   /** @private */
-  onPinChange_: function() {
+  onPinChange_() {
     this.setSetting('pin', this.$.pin.checked);
     // We need to set validity of pinValue to true to return to READY state
     // after unchecking the pin and to check the validity again after checking
@@ -118,7 +134,7 @@ Polymer({
   /**
    * @private
    */
-  onInputChanged_: function() {
+  onInputChanged_() {
     this.changePinValueSetting_();
   },
 
@@ -127,7 +143,7 @@ Polymer({
    * input.
    * @private
    */
-  changePinValueSetting_: function() {
+  changePinValueSetting_() {
     if (this.settings === undefined) {
       return;
     }
@@ -136,8 +152,7 @@ Polymer({
     // It's done because we don't permit multiple simultaneous validation errors
     // in Print Preview and we also don't want to set the value when sticky
     // settings may not yet have been set.
-    if (this.state != print_preview.State.READY &&
-        this.settings.pinValue.valid) {
+    if (this.state !== State.READY && this.settings.pinValue.valid) {
       return;
     }
     this.inputValid_ = this.computeValid_();
@@ -145,7 +160,7 @@ Polymer({
 
     // We allow to save the empty string as sticky setting value to give users
     // the opportunity to unset their PIN in sticky settings.
-    if ((this.inputValid_ || this.inputString_ == '') &&
+    if ((this.inputValid_ || this.inputString_ === '') &&
         this.inputString_ !== this.getSettingValue('pinValue')) {
       this.setSetting('pinValue', this.inputString_);
     }
@@ -156,10 +171,18 @@ Polymer({
    *     valid, so that it can be used to update the setting.
    * @private
    */
-  computeValid_: function() {
+  computeValid_() {
     // Make sure value updates first, in case inputString_ was updated by JS.
     this.$.pinValue.value = this.inputString_;
     this.$.pinValue.validate();
     return !this.$.pinValue.invalid;
+  },
+
+  /**
+   * @return {string}
+   * @private
+   */
+  getPinErrorMessage_() {
+    return this.inputValid_ ? '' : this.i18n('pinErrorMessage');
   },
 });

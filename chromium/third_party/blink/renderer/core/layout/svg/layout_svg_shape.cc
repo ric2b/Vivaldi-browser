@@ -79,13 +79,13 @@ void LayoutSVGShape::WillBeDestroyed() {
 void LayoutSVGShape::CreatePath() {
   if (!path_)
     path_ = std::make_unique<Path>();
-  *path_ = ToSVGGeometryElement(GetElement())->AsPath();
+  *path_ = To<SVGGeometryElement>(GetElement())->AsPath();
 }
 
 float LayoutSVGShape::DashScaleFactor() const {
   if (StyleRef().SvgStyle().StrokeDashArray()->data.IsEmpty())
     return 1;
-  return ToSVGGeometryElement(*GetElement()).PathLengthScaleFactor();
+  return To<SVGGeometryElement>(*GetElement()).PathLengthScaleFactor();
 }
 
 void LayoutSVGShape::UpdateShapeFromElement() {
@@ -229,7 +229,6 @@ void LayoutSVGShape::UpdateLayout() {
     FloatRect old_object_bounding_box = ObjectBoundingBox();
     UpdateShapeFromElement();
     if (old_object_bounding_box != ObjectBoundingBox()) {
-      GetElement()->SetNeedsResizeObserverUpdate();
       SetShouldDoFullPaintInvalidation();
       bbox_changed = true;
     }
@@ -391,6 +390,21 @@ FloatRect LayoutSVGShape::CalculateNonScalingStrokeBoundingBox() const {
 float LayoutSVGShape::StrokeWidth() const {
   SVGLengthContext length_context(GetElement());
   return length_context.ValueForLength(StyleRef().SvgStyle().StrokeWidth());
+}
+
+float LayoutSVGShape::StrokeWidthForMarkerUnits() const {
+  float stroke_width = StrokeWidth();
+  if (HasNonScalingStroke()) {
+    const auto& non_scaling_transform = NonScalingStrokeTransform();
+    if (!non_scaling_transform.IsInvertible())
+      return 0;
+    float scale_factor =
+        clampTo<float>(sqrt((non_scaling_transform.XScaleSquared() +
+                             non_scaling_transform.YScaleSquared()) /
+                            2));
+    stroke_width /= scale_factor;
+  }
+  return stroke_width;
 }
 
 LayoutSVGShapeRareData& LayoutSVGShape::EnsureRareData() const {

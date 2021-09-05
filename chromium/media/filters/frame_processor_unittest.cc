@@ -87,13 +87,13 @@ class FrameProcessorTest : public ::testing::TestWithParam<bool> {
         video_id_(2) {
     use_sequence_mode_ = GetParam();
     frame_processor_ = std::make_unique<FrameProcessor>(
-        base::Bind(
+        base::BindRepeating(
             &FrameProcessorTestCallbackHelper::OnPossibleDurationIncrease,
             base::Unretained(&callbacks_)),
         &media_log_);
     frame_processor_->SetParseWarningCallback(
-        base::Bind(&FrameProcessorTestCallbackHelper::OnParseWarning,
-                   base::Unretained(&callbacks_)));
+        base::BindRepeating(&FrameProcessorTestCallbackHelper::OnParseWarning,
+                            base::Unretained(&callbacks_)));
   }
 
   enum StreamFlags {
@@ -222,8 +222,8 @@ class FrameProcessorTest : public ::testing::TestWithParam<bool> {
 
     do {
       read_callback_called_ = false;
-      stream->Read(base::Bind(&FrameProcessorTest::StoreStatusAndBuffer,
-                              base::Unretained(this)));
+      stream->Read(base::BindOnce(&FrameProcessorTest::StoreStatusAndBuffer,
+                                  base::Unretained(this)));
       base::RunLoop().RunUntilIdle();
     } while (++loop_count < 2 && read_callback_called_ &&
              last_read_status_ == DemuxerStream::kAborted);
@@ -248,8 +248,8 @@ class FrameProcessorTest : public ::testing::TestWithParam<bool> {
 
       do {
         read_callback_called_ = false;
-        stream->Read(base::Bind(&FrameProcessorTest::StoreStatusAndBuffer,
-                                base::Unretained(this)));
+        stream->Read(base::BindOnce(&FrameProcessorTest::StoreStatusAndBuffer,
+                                    base::Unretained(this)));
         base::RunLoop().RunUntilIdle();
         EXPECT_TRUE(read_callback_called_);
       } while (++loop_count < 2 &&
@@ -345,9 +345,9 @@ class FrameProcessorTest : public ::testing::TestWithParam<bool> {
         ASSERT_FALSE(audio_);
         audio_.reset(
             new ChunkDemuxerStream(DemuxerStream::AUDIO, MediaTrack::Id("1")));
-        AudioDecoderConfig decoder_config(kCodecVorbis, kSampleFormatPlanarF32,
-                                          CHANNEL_LAYOUT_STEREO, 1000,
-                                          EmptyExtraData(), Unencrypted());
+        AudioDecoderConfig decoder_config(
+            kCodecVorbis, kSampleFormatPlanarF32, CHANNEL_LAYOUT_STEREO, 1000,
+            EmptyExtraData(), EncryptionScheme::kUnencrypted);
         frame_processor_->OnPossibleAudioConfigUpdate(decoder_config);
         ASSERT_TRUE(
             audio_->UpdateAudioConfig(decoder_config, false, &media_log_));

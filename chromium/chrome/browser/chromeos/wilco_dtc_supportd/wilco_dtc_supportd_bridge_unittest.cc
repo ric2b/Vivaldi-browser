@@ -8,22 +8,21 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
-#include "base/memory/scoped_refptr.h"
 #include "base/optional.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/test/task_environment.h"
+#include "chrome/browser/chromeos/wilco_dtc_supportd/fake_wilco_dtc_supportd_client.h"
+#include "chrome/browser/chromeos/wilco_dtc_supportd/testing_wilco_dtc_supportd_network_context.h"
 #include "chrome/browser/chromeos/wilco_dtc_supportd/wilco_dtc_supportd_bridge.h"
+#include "chrome/browser/chromeos/wilco_dtc_supportd/wilco_dtc_supportd_network_context.h"
 #include "chrome/services/wilco_dtc_supportd/public/mojom/wilco_dtc_supportd.mojom.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile_manager.h"
-#include "chromeos/dbus/dbus_thread_manager.h"
-#include "chromeos/dbus/fake_wilco_dtc_supportd_client.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/system/handle.h"
-#include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
-#include "services/network/test/test_url_loader_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -138,13 +137,14 @@ class FakeWilcoDtcSupportdBridgeDelegate final
             mojo_wilco_dtc_supportd_service_factory) {}
 
   void CreateWilcoDtcSupportdServiceFactoryMojoInvitation(
-      wilco_dtc_supportd::mojom::WilcoDtcSupportdServiceFactoryPtr*
-          wilco_dtc_supportd_service_factory_mojo_ptr,
+      mojo::Remote<wilco_dtc_supportd::mojom::WilcoDtcSupportdServiceFactory>*
+          wilco_dtc_supportd_service_factory_mojo_remote,
       base::ScopedFD* remote_endpoint_fd) override {
     // Bind the Mojo pointer passed to the bridge with the
     // FakeMojoWilcoDtcSupportdServiceFactory implementation.
     mojo_wilco_dtc_supportd_service_factory_->Bind(
-        mojo::MakeRequest(wilco_dtc_supportd_service_factory_mojo_ptr));
+        wilco_dtc_supportd_service_factory_mojo_remote
+            ->BindNewPipeAndPassReceiver());
 
     // Return a fake file descriptor - its value is not used in the unit test
     // environment for anything except comparing with zero.
@@ -173,8 +173,7 @@ class MockWilcoDtcSupportdNotificationController
 class WilcoDtcSupportdBridgeTest : public testing::Test {
  protected:
   WilcoDtcSupportdBridgeTest() {
-    DBusThreadManager::Initialize();
-    CHECK(DBusThreadManager::Get()->IsUsingFakes());
+    WilcoDtcSupportdClient::InitializeFake();
 
     auto profile_manager = std::make_unique<TestingProfileManager>(
         TestingBrowserProcess::GetGlobal());
@@ -191,14 +190,13 @@ class WilcoDtcSupportdBridgeTest : public testing::Test {
     wilco_dtc_supportd_bridge_ = std::make_unique<WilcoDtcSupportdBridge>(
         std::make_unique<FakeWilcoDtcSupportdBridgeDelegate>(
             &mojo_wilco_dtc_supportd_service_factory_),
-        base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
-            &test_url_loader_factory_),
+        std::make_unique<TestingWilcoDtcSupportdNetworkContext>(),
         std::move(notification_controller));
   }
 
   ~WilcoDtcSupportdBridgeTest() override {
     wilco_dtc_supportd_bridge_.reset();
-    DBusThreadManager::Shutdown();
+    WilcoDtcSupportdClient::Shutdown();
   }
 
   StrictMock<MockWilcoDtcSupportdNotificationController>*
@@ -210,9 +208,14 @@ class WilcoDtcSupportdBridgeTest : public testing::Test {
     return wilco_dtc_supportd_bridge_.get();
   }
 
+  wilco_dtc_supportd::mojom::WilcoDtcSupportdClient*
+  wilco_dtc_supportd_client() {
+    return wilco_dtc_supportd_bridge_.get();
+  }
+
   FakeWilcoDtcSupportdClient* wilco_dtc_supportd_dbus_client() {
     WilcoDtcSupportdClient* const wilco_dtc_supportd_client =
-        DBusThreadManager::Get()->GetWilcoDtcSupportdClient();
+        WilcoDtcSupportdClient::Get();
     DCHECK(wilco_dtc_supportd_client);
     return static_cast<FakeWilcoDtcSupportdClient*>(wilco_dtc_supportd_client);
   }
@@ -259,7 +262,6 @@ class WilcoDtcSupportdBridgeTest : public testing::Test {
 
   mojo::Remote<wilco_dtc_supportd::mojom::WilcoDtcSupportdClient>
       mojo_wilco_dtc_supportd_client_;
-  network::TestURLLoaderFactory test_url_loader_factory_;
 };
 
 }  // namespace
@@ -460,19 +462,19 @@ TEST_F(WilcoDtcSupportdBridgeTest, RetryCounterReset) {
 // Test that the bridge calls the right method on the notification controller.
 TEST_F(WilcoDtcSupportdBridgeTest, HandleEvent) {
   EXPECT_CALL(*notification_controller(), ShowBatteryAuthNotification());
-  wilco_dtc_supportd_bridge()->HandleEvent(
+  wilco_dtc_supportd_client()->HandleEvent(
       wilco_dtc_supportd::mojom::WilcoDtcSupportdEvent::kBatteryAuth);
 
   EXPECT_CALL(*notification_controller(), ShowIncompatibleDockNotification());
-  wilco_dtc_supportd_bridge()->HandleEvent(
+  wilco_dtc_supportd_client()->HandleEvent(
       wilco_dtc_supportd::mojom::WilcoDtcSupportdEvent::kIncompatibleDock);
 
   EXPECT_CALL(*notification_controller(), ShowNonWilcoChargerNotification());
-  wilco_dtc_supportd_bridge()->HandleEvent(
+  wilco_dtc_supportd_client()->HandleEvent(
       wilco_dtc_supportd::mojom::WilcoDtcSupportdEvent::kNonWilcoCharger);
 
   EXPECT_CALL(*notification_controller(), ShowDockErrorNotification());
-  wilco_dtc_supportd_bridge()->HandleEvent(
+  wilco_dtc_supportd_client()->HandleEvent(
       wilco_dtc_supportd::mojom::WilcoDtcSupportdEvent::kDockError);
 }
 

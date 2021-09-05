@@ -1,11 +1,15 @@
 include_rules = [
+  "+components/version_info",
   "+components/viz/common",
   "+content/public/app",
   "+gpu/command_buffer/service",
+  "+gpu/config/gpu_finch_features.h",
   "+media/base",
   "+mojo/public",
   "+services/service_manager",
   "+third_party/widevine/cdm/widevine_cdm_common.h",
   "+ui/base",
+  "+ui/gfx",
   "+ui/gl/gl_switches.h",
+  "+ui/ozone/public",
 ]

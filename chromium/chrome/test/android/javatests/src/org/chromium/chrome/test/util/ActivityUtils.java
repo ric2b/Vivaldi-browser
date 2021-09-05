@@ -10,19 +10,20 @@ import android.app.Instrumentation.ActivityMonitor;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
-import android.support.v4.app.ActivityOptionsCompat;
-import android.support.v4.app.DialogFragment;
-import android.support.v4.app.Fragment;
-import android.support.v7.app.AppCompatActivity;
+
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityOptionsCompat;
+import androidx.fragment.app.DialogFragment;
+import androidx.fragment.app.Fragment;
 
 import org.junit.Assert;
 
 import org.chromium.base.ApplicationStatus;
+import org.chromium.base.IntentUtils;
 import org.chromium.base.Log;
 import org.chromium.base.test.util.TimeoutTimer;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.preferences.Preferences;
-import org.chromium.chrome.browser.util.IntentUtils;
+import org.chromium.chrome.browser.settings.SettingsActivity;
 import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
@@ -34,7 +35,7 @@ import java.util.concurrent.Callable;
  * Collection of activity utilities.
  */
 public class ActivityUtils {
-    private static final String TAG = "cr_ActivityUtils";
+    private static final String TAG = "ActivityUtils";
 
     private static final long ACTIVITY_START_TIMEOUT_MS = 3000L;
     private static final long CONDITION_POLL_INTERVAL_MS = 100;
@@ -182,13 +183,13 @@ public class ActivityUtils {
      * reference to any fragment that was attached to the activity at any point.
      *
      * @param <T> A subclass of {@link Fragment}.
-     * @param activity An instance or subclass of {@link Preferences}.
+     * @param activity An instance or subclass of {@link SettingsActivity}.
      * @param fragmentClass The class object for {@link T}.
      * @return A reference to the requested fragment or null.
      */
     @SuppressWarnings("unchecked")
     public static <T extends Fragment> T waitForFragmentToAttach(
-            final Preferences activity, final Class<T> fragmentClass) {
+            final SettingsActivity activity, final Class<T> fragmentClass) {
         String failureReason = String.format(
                 "Could not find fragment of type %s", fragmentClass.getCanonicalName());
         CriteriaHelper.pollInstrumentationThread(new Criteria(failureReason) {

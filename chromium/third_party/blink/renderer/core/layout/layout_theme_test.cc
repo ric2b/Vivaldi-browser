@@ -16,33 +16,25 @@
 #include "third_party/blink/renderer/core/page/focus_controller.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
+#include "third_party/blink/renderer/core/testing/color_scheme_helper.h"
 #include "third_party/blink/renderer/core/testing/page_test_base.h"
 #include "third_party/blink/renderer/platform/graphics/color.h"
 #include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
-#include "third_party/blink/renderer/platform/web_test_support.h"
 
 namespace blink {
 
 class LayoutThemeTest : public PageTestBase,
-                        private ScopedCSSColorSchemeForTest {
+                        private ScopedCSSColorSchemeForTest,
+                        private ScopedCSSColorSchemeUARenderingForTest {
  protected:
-  LayoutThemeTest() : ScopedCSSColorSchemeForTest(true) {}
+  LayoutThemeTest()
+      : ScopedCSSColorSchemeForTest(true),
+        ScopedCSSColorSchemeUARenderingForTest(true) {}
   void SetHtmlInnerHTML(const char* html_content);
-
-  void SetUp() override {
-    WebTestSupport::SetMockThemeEnabledForTest(true);
-    PageTestBase::SetUp();
-  }
-
-  void TearDown() override {
-    PageTestBase::TearDown();
-    WebTestSupport::SetMockThemeEnabledForTest(false);
-  }
 };
 
 void LayoutThemeTest::SetHtmlInnerHTML(const char* html_content) {
-  GetDocument().documentElement()->SetInnerHTMLFromString(
-      String::FromUTF8(html_content));
+  GetDocument().documentElement()->setInnerHTML(String::FromUTF8(html_content));
   UpdateAllLifecyclePhasesForTest();
 }
 
@@ -88,56 +80,8 @@ TEST_F(LayoutThemeTest, ChangeFocusRingColor) {
   EXPECT_EQ(custom_color, OutlineColor(span));
 }
 
-TEST_F(LayoutThemeTest, RootElementColor) {
-  EXPECT_EQ(Color::kBlack,
-            LayoutTheme::GetTheme().RootElementColor(WebColorScheme::kLight));
-  EXPECT_EQ(Color::kWhite,
-            LayoutTheme::GetTheme().RootElementColor(WebColorScheme::kDark));
-}
-
-TEST_F(LayoutThemeTest, RootElementColorChange) {
-  SetHtmlInnerHTML(R"HTML(
-    <style>
-      :root { color-scheme: light dark }
-      #initial { color: initial }
-    </style>
-    <div id="initial"></div>
-  )HTML");
-
-  Element* initial = GetDocument().getElementById("initial");
-  ASSERT_TRUE(initial);
-  ASSERT_TRUE(GetDocument().documentElement());
-  const ComputedStyle* document_element_style =
-      GetDocument().documentElement()->GetComputedStyle();
-  ASSERT_TRUE(document_element_style);
-  EXPECT_EQ(Color::kBlack, document_element_style->VisitedDependentColor(
-                               GetCSSPropertyColor()));
-
-  const ComputedStyle* initial_style = initial->GetComputedStyle();
-  ASSERT_TRUE(initial_style);
-  EXPECT_EQ(Color::kBlack,
-            initial_style->VisitedDependentColor(GetCSSPropertyColor()));
-
-  // Change color scheme to dark.
-  GetDocument().GetSettings()->SetPreferredColorScheme(
-      PreferredColorScheme::kDark);
-  UpdateAllLifecyclePhasesForTest();
-
-  document_element_style = GetDocument().documentElement()->GetComputedStyle();
-  ASSERT_TRUE(document_element_style);
-  EXPECT_EQ(Color::kWhite, document_element_style->VisitedDependentColor(
-                               GetCSSPropertyColor()));
-
-  initial_style = initial->GetComputedStyle();
-  ASSERT_TRUE(initial_style);
-  // Theming does not change the initial value for color, only the UA style for
-  // the root element.
-  EXPECT_EQ(Color::kBlack,
-            initial_style->VisitedDependentColor(GetCSSPropertyColor()));
-}
-
-// Mock theming is done on LayoutThemeDefault which is not a base class for
-// LayoutThemeMac.
+// The expectations in the tests below are relying on LayoutThemeDefault.
+// LayoutThemeMac doesn't inherit from that class.
 #if !defined(OS_MACOSX)
 TEST_F(LayoutThemeTest, SystemColorWithColorScheme) {
   SetHtmlInnerHTML(R"HTML(
@@ -155,18 +99,44 @@ TEST_F(LayoutThemeTest, SystemColorWithColorScheme) {
 
   const ComputedStyle* style = dark_element->GetComputedStyle();
   EXPECT_EQ(WebColorScheme::kLight, style->UsedColorScheme());
-  EXPECT_EQ(Color(0xc0, 0xc0, 0xc0),
+  EXPECT_EQ(Color(0xdd, 0xdd, 0xdd),
             style->VisitedDependentColor(GetCSSPropertyColor()));
 
   // Change color scheme to dark.
-  GetDocument().GetSettings()->SetPreferredColorScheme(
-      PreferredColorScheme::kDark);
+  ColorSchemeHelper color_scheme_helper(GetDocument());
+  color_scheme_helper.SetPreferredColorScheme(PreferredColorScheme::kDark);
   UpdateAllLifecyclePhasesForTest();
 
   style = dark_element->GetComputedStyle();
   EXPECT_EQ(WebColorScheme::kDark, style->UsedColorScheme());
-  EXPECT_EQ(Color(0x80, 0x80, 0x80),
+  EXPECT_EQ(Color(0x44, 0x44, 0x44),
             style->VisitedDependentColor(GetCSSPropertyColor()));
+}
+
+TEST_F(LayoutThemeTest, SetSelectionColors) {
+  LayoutTheme::GetTheme().SetSelectionColors(Color::kBlack, Color::kBlack,
+                                             Color::kBlack, Color::kBlack);
+  EXPECT_EQ(Color::kBlack,
+            LayoutTheme::GetTheme().ActiveSelectionForegroundColor(
+                WebColorScheme::kLight));
+  {
+    // Enabling MobileLayoutTheme switches which instance is returned from
+    // LayoutTheme::GetTheme(). Devtools expect SetSelectionColors() to affect
+    // both LayoutTheme instances.
+    ScopedMobileLayoutThemeForTest scope(true);
+    EXPECT_EQ(Color::kBlack,
+              LayoutTheme::GetTheme().ActiveSelectionForegroundColor(
+                  WebColorScheme::kLight));
+
+    LayoutTheme::GetTheme().SetSelectionColors(Color::kWhite, Color::kWhite,
+                                               Color::kWhite, Color::kWhite);
+    EXPECT_EQ(Color::kWhite,
+              LayoutTheme::GetTheme().ActiveSelectionForegroundColor(
+                  WebColorScheme::kLight));
+  }
+  EXPECT_EQ(Color::kWhite,
+            LayoutTheme::GetTheme().ActiveSelectionForegroundColor(
+                WebColorScheme::kLight));
 }
 #endif  // !defined(OS_MACOSX)
 

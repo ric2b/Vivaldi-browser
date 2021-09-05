@@ -180,11 +180,16 @@ void LoginScreenClient::FocusOobeDialog() {
     delegate_->HandleFocusOobeDialog();
 }
 
-void LoginScreenClient::ShowGaiaSignin(bool can_close,
-                                       const AccountId& prefilled_account) {
+void LoginScreenClient::ShowGaiaSignin(const AccountId& prefilled_account) {
   if (chromeos::LoginDisplayHost::default_host()) {
     chromeos::LoginDisplayHost::default_host()->ShowGaiaDialog(
-        can_close, prefilled_account);
+        prefilled_account);
+  }
+}
+
+void LoginScreenClient::HideGaiaSignin() {
+  if (chromeos::LoginDisplayHost::default_host()) {
+    chromeos::LoginDisplayHost::default_host()->HideOobeDialog();
   }
 }
 
@@ -227,15 +232,17 @@ void LoginScreenClient::ShowResetScreen() {
   chromeos::LoginDisplayHost::default_host()->ShowResetScreen();
 }
 
-void LoginScreenClient::ShowAccountAccessHelpApp() {
+void LoginScreenClient::ShowAccountAccessHelpApp(
+    gfx::NativeWindow parent_window) {
   scoped_refptr<chromeos::HelpAppLauncher>(
-      new chromeos::HelpAppLauncher(nullptr))
+      new chromeos::HelpAppLauncher(parent_window))
       ->ShowHelpTopic(chromeos::HelpAppLauncher::HELP_CANT_ACCESS_ACCOUNT);
 }
 
-void LoginScreenClient::ShowParentAccessHelpApp() {
+void LoginScreenClient::ShowParentAccessHelpApp(
+    gfx::NativeWindow parent_window) {
   scoped_refptr<chromeos::HelpAppLauncher>(
-      new chromeos::HelpAppLauncher(nullptr))
+      new chromeos::HelpAppLauncher(parent_window))
       ->ShowHelpTopic(chromeos::HelpAppLauncher::HELP_PARENT_ACCESS_CODE);
 }
 

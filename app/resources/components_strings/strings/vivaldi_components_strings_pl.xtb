@@ -36,6 +36,7 @@
 <translation id="2292556288342944218">Masz zablokowany dostęp do Internetu</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> wymaga nazwy użytkownika i hasła.</translation>
 <translation id="2337852623177822836">Ustawienie kontrolowane przez administratora</translation>
+<translation id="2344028582131185878">Pobieranie automatyczne</translation>
 <translation id="2355395290879513365">Osoby dokonujące ataków mogą widzieć te same obrazy w witrynie co ty i zmodyfikować je by cię oszukać.</translation>
 <translation id="2356070529366658676">Pytaj</translation>
 <translation id="2359808026110333948">Dalej</translation>
@@ -88,7 +89,6 @@
 <translation id="3973234410852337861">Strona <ph name="HOST_NAME" /> jest zablokowana</translation>
 <translation id="3987940399970879459">Mniej niż 1 MB</translation>
 <translation id="4075732493274867456">Klient i serwer nie obsługują wspólnej wersji protokołu SSL lub mechanizmu szyfrowania.</translation>
-<translation id="410351446219883937">Autoodtwarzanie</translation>
 <translation id="4116663294526079822">Zawsze zezwalaj na tej stronie</translation>
 <translation id="4130226655945681476">Sprawdź kable sieciowe, modem i router</translation>
 <translation id="4151403195736952345">Użyj globalnego ustawienia domyślnego (Wykrywaj)</translation>

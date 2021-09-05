@@ -308,7 +308,7 @@ def _ReplaceWindowAndElementIds(payload, id_map):
     id_map: mapping from old to new IDs that should be replaced.
   """
   if isinstance(payload, dict):
-    for key, value in payload.iteritems():
+    for key, value in payload.items():
       if isinstance(value, basestring) and value in id_map:
         payload[key] = id_map[value]
       else:
@@ -831,7 +831,7 @@ class CommandSequence(object):
 
     response = [
         {u"id": key, u"capabilities": val["response"].GetPayloadPrimitive()}
-        for key, val in command_response_pairs.iteritems()
+        for key, val in command_response_pairs.items()
     ]
     self._last_response = _GetSessionsResponseEntry(response)
 
@@ -877,7 +877,8 @@ class Replayer(object):
 def StartChromeDriverServer(chromedriver_binary,
                             output_log_path,
                             devtools_replay_path="",
-                            replayable=False):
+                            replayable=False,
+                            additional_args=None):
   chromedriver = util.GetAbsolutePathOfUserPath(chromedriver_binary)
   if (not os.path.exists(chromedriver) and
       util.GetPlatformName() == "win" and
@@ -889,9 +890,14 @@ def StartChromeDriverServer(chromedriver_binary,
   chromedriver_server = server.Server(chromedriver_binary,
                                       log_path=output_log_path,
                                       devtools_replay_path=devtools_replay_path,
-                                      replayable=replayable)
+                                      replayable=replayable,
+                                      additional_args=additional_args)
 
   return chromedriver_server
+
+
+def _CommandLineError(parser, message):
+  parser.error(message + '\nPlease run "%s --help" for help' % __file__)
 
 
 def _GetCommandLineOptions():
@@ -910,21 +916,26 @@ def _GetCommandLineOptions():
   parser.add_option(
       "", "--devtools-replay", help="Replay DevTools actions in addition\n"
       "to client-side actions")
-  # TODO(crbug.com/chromedriver/2501)
   parser.add_option(
       "", "--replayable", help="Generate logs that do not have truncated\n"
       "strings so that they can be replayed again.")
+  parser.add_option(
+      '', '--additional-args', action='append',
+      help='Additional arguments to add on ChromeDriver command line')
 
   options, args = parser.parse_args()
+  if len(args) < 2:
+    _CommandLineError(parser,
+                      'ChromeDriver binary and/or input log path missing.')
+  if len(args) > 2:
+    _CommandLineError(parser, 'Too many command line arguments.')
   if not os.path.exists(args[0]):
-    parser.error("Path given for chromedriver is invalid.\n"
-                 'Please run "%s --help" for help' % __file__)
+    _CommandLineError(parser, 'Path given for chromedriver is invalid.')
   if options.chrome and not os.path.exists(options.chrome):
-    parser.error("Path given by --chrome is invalid.\n"
-                 'Please run "%s --help" for help' % __file__)
+    _CommandLineError(parser, 'Path given by --chrome is invalid.')
   if options.replayable and not options.output_log_path:
-    parser.error("Replayable log option needs --output-log-path specified. \n"
-                 'Please run "%s --help" for help' % __file__)
+    _CommandLineError(
+        parser, 'Replayable log option needs --output-log-path specified.')
 
   return options, args
 
@@ -933,7 +944,7 @@ def main():
   options, args = _GetCommandLineOptions()
   devtools_replay_path = args[1] if options.devtools_replay else None
   server = StartChromeDriverServer(args[0], options.output_log_path,
-      devtools_replay_path, options.replayable)
+      devtools_replay_path, options.replayable, options.additional_args)
   input_log_path = util.GetAbsolutePathOfUserPath(args[1])
   chrome_binary = (util.GetAbsolutePathOfUserPath(options.chrome)
                    if options.chrome else None)

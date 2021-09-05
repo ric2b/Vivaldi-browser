@@ -45,7 +45,6 @@
 <translation id="3542768452570884558">在新窗口中打开链接</translation>
 <translation id="3588820906588687999">在新标签页中打开图片</translation>
 <translation id="3601066750251199488">怪兽 3</translation>
-<translation id="366643050267431920">加入事件</translation>
 <translation id="3732157130969736834">保存链接为书签</translation>
 <translation id="3732388226447288666">动物 2</translation>
 <translation id="3732439195215136813">动物 5</translation>
@@ -68,7 +67,6 @@
 <translation id="4636708767492582204">使用邮件发送</translation>
 <translation id="4677434526832593569">动物 8</translation>
 <translation id="4881695831933465202">打开</translation>
-<translation id="4973311370126107785">已停用通过AppleScript执行JavaScript。要启用它，请在主菜单里打开“工具”&gt;“允许来自Apple Events的JavaScript”选项。</translation>
 <translation id="5014281392052865061">导入的快速拨号</translation>
 <translation id="5092656712000637858">添加页面到网页面板</translation>
 <translation id="5177818338935286353">怪兽 7</translation>
@@ -89,6 +87,7 @@
 <translation id="6229528619562190452">点击此处更新 Vivaldi。</translation>
 <translation id="6234173136417926046">使用图片作为起始页背景</translation>
 <translation id="630690498669249215">Opera 书签文件</translation>
+<translation id="6339818817272922368">本地账号</translation>
 <translation id="6438786710866753178">风景 4</translation>
 <translation id="6477028720702061455">选择 Opera 配置文件夹以导入</translation>
 <translation id="6510706699590490869">更新 Vivaldi (&amp;U)</translation>
@@ -103,6 +102,7 @@
 <translation id="7496505986576158197">Vivaldi的诞生离不开<ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" />开源项目及其他<ph name="BEGIN_LINK_OSS" />开源软件<ph name="END_LINK_OSS" />。</translation>
 <translation id="7715497554424665066">忽略更新(&amp;I)</translation>
 <translation id="7724603315864178912">剪切</translation>
+<translation id="7793738202466490491">添加到日历事件</translation>
 <translation id="7865983598101744945">确认退出</translation>
 <translation id="7957213167373139414">我的日历</translation>
 <translation id="8027581147000338959">在新窗口中打开</translation>
@@ -112,6 +112,7 @@
 <translation id="8331671104904436324">在后台标签页打开</translation>
 <translation id="8373293945112511707">风景 1</translation>
 <translation id="8427094907586191051">风景 17</translation>
+<translation id="8446668873108041390">以停用通过 AppleScript 运行 JavaScript。启用“设置&gt;隐私&gt;Apple Events”选项以允许从 Apple Events 执行JavaScript。</translation>
 <translation id="8539196077526389150">风景 13</translation>
 <translation id="8624587806981488221">重新加载图片(&amp;R)</translation>
 <translation id="864444594187862076">Opera 15+ （开发版浏览器）</translation>

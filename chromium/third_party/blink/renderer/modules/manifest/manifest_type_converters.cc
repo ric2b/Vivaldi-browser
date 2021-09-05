@@ -40,17 +40,16 @@ TypeConverter<blink::Manifest, blink::mojom::blink::ManifestPtr>::Convert(
   for (auto& icon : input->icons)
     output.icons.push_back(icon.To<blink::Manifest::ImageResource>());
 
+  for (auto& shortcut : input->shortcuts)
+    output.shortcuts.push_back(shortcut.To<blink::Manifest::ShortcutItem>());
+
   if (!input->share_target.is_null()) {
     output.share_target =
         input->share_target.To<blink::Manifest::ShareTarget>();
   }
 
-  if (!input->file_handler.is_null()) {
-    blink::Manifest::FileHandler file_handler;
-    file_handler.action = input->file_handler->action;
-    for (auto& file : input->file_handler->files)
-      file_handler.files.push_back(file.To<blink::Manifest::FileFilter>());
-    output.file_handler = std::move(file_handler);
+  for (auto& entry : input->file_handlers) {
+    output.file_handlers.push_back(entry.To<blink::Manifest::FileHandler>());
   }
 
   for (auto& related_application : input->related_applications) {
@@ -100,6 +99,34 @@ TypeConverter<blink::Manifest::ImageResource,
     }
     output.purpose.push_back(out_purpose);
   }
+
+  return output;
+}
+
+blink::Manifest::ShortcutItem
+TypeConverter<blink::Manifest::ShortcutItem,
+              blink::mojom::blink::ManifestShortcutItemPtr>::
+    Convert(const blink::mojom::blink::ManifestShortcutItemPtr& input) {
+  blink::Manifest::ShortcutItem output;
+  if (input.is_null())
+    return output;
+
+  output.name = blink::WebString(input->name).Utf16();
+
+  if (!input->short_name.IsEmpty()) {
+    output.short_name =
+        base::NullableString16(blink::WebString(input->short_name).Utf16());
+  }
+
+  if (!input->description.IsEmpty()) {
+    output.description =
+        base::NullableString16(blink::WebString(input->description).Utf16());
+  }
+
+  output.url = input->url;
+
+  for (auto& icon : input->icons)
+    output.icons.push_back(icon.To<::blink::Manifest::ImageResource>());
 
   return output;
 }
@@ -175,6 +202,25 @@ TypeConverter<blink::Manifest::FileFilter,
 
   for (auto& accept : input->accept)
     output.accept.push_back(blink::WebString(accept).Utf16());
+
+  return output;
+}
+
+blink::Manifest::FileHandler
+TypeConverter<blink::Manifest::FileHandler,
+              blink::mojom::blink::ManifestFileHandlerPtr>::
+    Convert(const blink::mojom::blink::ManifestFileHandlerPtr& input) {
+  blink::Manifest::FileHandler output;
+  if (input.is_null())
+    return output;
+
+  output.name = blink::WebString(input->name).Utf16();
+  output.action = input->action;
+  for (const auto& it : input->accept) {
+    auto& extensions = output.accept[blink::WebString(it.key).Utf16()];
+    for (const auto& extension : it.value)
+      extensions.push_back(blink::WebString(extension).Utf16());
+  }
 
   return output;
 }

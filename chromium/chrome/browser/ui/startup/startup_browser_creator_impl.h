@@ -87,6 +87,8 @@ class StartupBrowserCreatorImpl {
                            DetermineBrowserOpenBehavior_PostCrash);
   FRIEND_TEST_ALL_PREFIXES(StartupBrowserCreatorImplTest,
                            DetermineBrowserOpenBehavior_NotStartup);
+  FRIEND_TEST_ALL_PREFIXES(StartupBrowserCreatorImplTest,
+                           DetermineStartupTabs_ExtensionCheckupPage);
 
   enum class WelcomeRunType {
     NONE,                // Do not inject the welcome page for this run.
@@ -125,14 +127,12 @@ class StartupBrowserCreatorImpl {
   // In this case |app_url| or |app_id| are populated if they're non-null.
   bool IsAppLaunch(std::string* app_url, std::string* app_id);
 
-  // If IsAppLaunch is true, tries to open an application window.
-  // If the app is specified to start in a tab, or IsAppLaunch is false,
-  // returns false to specify default processing.
-  bool OpenApplicationWindow(Profile* profile);
-
-  // If IsAppLaunch is true and the user set a pref indicating that the app
-  // should open in a tab, do so.
-  bool OpenApplicationTab(Profile* profile);
+  // Opens an application window or tab if the process was launched with the web
+  // application command line switches. Returns true if launch succeeded (or is
+  // proceeding asynchronously); otherwise, returns false to indicate that
+  // normal browser startup should resume. Desktop web applications launch
+  // asynchronously, and fall back to launching a browser window.
+  bool MaybeLaunchApplication(Profile* profile);
 
   // Determines the URLs to be shown at startup by way of various policies
   // (welcome, pinned tabs, etc.), determines whether a session restore
@@ -150,7 +150,8 @@ class StartupBrowserCreatorImpl {
                                    bool is_post_crash_launch,
                                    bool has_incompatible_applications,
                                    bool promotional_tabs_enabled,
-                                   bool welcome_enabled);
+                                   bool welcome_enabled,
+                                   bool serve_extensions_page);
 
   // Begins an asynchronous session restore if current state allows it (e.g.,
   // this is not process startup) and SessionService indicates that one is
@@ -169,14 +170,10 @@ class StartupBrowserCreatorImpl {
     SessionRestore::BehaviorBitmask restore_options, bool process_startup,
     bool is_post_crash_launch);
 
-
   // Adds any startup infobars to the selected tab of the given browser.
   void AddInfoBarsIfNecessary(
       Browser* browser,
       chrome::startup::IsProcessStartup is_process_startup);
-
-  // Records Rappor metrics on startup URLs.
-  void RecordRapporOnStartupURLs(const std::vector<GURL>& urls_to_open);
 
   // Determines how the launch flow should obtain a Browser.
   static BrowserOpenBehavior DetermineBrowserOpenBehavior(

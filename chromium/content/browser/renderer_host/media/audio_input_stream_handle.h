@@ -13,6 +13,7 @@
 #include "media/mojo/mojom/audio_data_pipe.mojom.h"
 #include "media/mojo/mojom/audio_input_stream.mojom.h"
 #include "media/mojo/services/mojo_audio_input_stream.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/system/buffer.h"
@@ -49,8 +50,9 @@ class CONTENT_EXPORT AudioInputStreamHandle {
   const base::UnguessableToken stream_id_;
   DeleterCallback deleter_callback_;
   mojo::Remote<mojom::RendererAudioInputStreamFactoryClient> client_remote_;
-  media::mojom::AudioInputStreamPtr stream_ptr_;
-  media::mojom::AudioInputStreamClientRequest stream_client_request_;
+  mojo::PendingRemote<media::mojom::AudioInputStream> pending_stream_;
+  mojo::PendingReceiver<media::mojom::AudioInputStreamClient>
+      pending_stream_client_;
   media::MojoAudioInputStream stream_;
 
   DISALLOW_COPY_AND_ASSIGN(AudioInputStreamHandle);

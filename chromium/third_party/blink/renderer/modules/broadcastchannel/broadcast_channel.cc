@@ -5,8 +5,8 @@
 #include "third_party/blink/renderer/modules/broadcastchannel/broadcast_channel.h"
 
 #include "mojo/public/cpp/bindings/remote.h"
+#include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
 #include "third_party/blink/public/mojom/web_feature/web_feature.mojom-shared.h"
-#include "third_party/blink/public/platform/interface_provider.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/bindings/core/v8/serialization/serialized_script_value.h"
 #include "third_party/blink/renderer/core/dom/document.h"
@@ -29,7 +29,7 @@ GetThreadSpecificProvider() {
       ThreadSpecific<mojo::Remote<mojom::blink::BroadcastChannelProvider>>,
       provider, ());
   if (!provider.IsSet()) {
-    Platform::Current()->GetInterfaceProvider()->GetInterface(
+    Platform::Current()->GetBrowserInterfaceBroker()->GetInterface(
         provider->BindNewPipeAndPassReceiver());
   }
   return *provider;
@@ -41,14 +41,9 @@ GetThreadSpecificProvider() {
 BroadcastChannel* BroadcastChannel::Create(ExecutionContext* execution_context,
                                            const String& name,
                                            ExceptionState& exception_state) {
-  // Record BroadcastChannel usage in third party context. Don't record if the
-  // frame is same-origin to the top frame, or if we can't tell whether the
-  // frame was ever cross-origin or not.
-  Document* document = DynamicTo<Document>(execution_context);
-  if (document && document->TopFrameOrigin() &&
-      !document->TopFrameOrigin()->CanAccess(document->GetSecurityOrigin())) {
+  Document* document = Document::DynamicFrom(execution_context);
+  if (document && document->IsCrossSiteSubframe())
     UseCounter::Count(document, WebFeature::kThirdPartyBroadcastChannel);
-  }
 
   if (execution_context->GetSecurityOrigin()->IsOpaque()) {
     // TODO(mek): Decide what to do here depending on
@@ -82,6 +77,8 @@ void BroadcastChannel::postMessage(const ScriptValue& message,
 
   BlinkCloneableMessage msg;
   msg.message = std::move(value);
+  msg.sender_origin =
+      GetExecutionContext()->GetSecurityOrigin()->IsolatedCopy();
   remote_client_->OnMessage(std::move(msg));
 }
 
@@ -100,12 +97,12 @@ bool BroadcastChannel::HasPendingActivity() const {
   return receiver_.is_bound() && HasEventListeners(event_type_names::kMessage);
 }
 
-void BroadcastChannel::ContextDestroyed(ExecutionContext*) {
+void BroadcastChannel::ContextDestroyed() {
   close();
 }
 
-void BroadcastChannel::Trace(blink::Visitor* visitor) {
-  ContextLifecycleObserver::Trace(visitor);
+void BroadcastChannel::Trace(Visitor* visitor) {
+  ExecutionContextLifecycleObserver::Trace(visitor);
   EventTargetWithInlineData::Trace(visitor);
 }
 
@@ -139,7 +136,7 @@ void BroadcastChannel::OnError() {
 
 BroadcastChannel::BroadcastChannel(ExecutionContext* execution_context,
                                    const String& name)
-    : ContextLifecycleObserver(execution_context),
+    : ExecutionContextLifecycleObserver(execution_context),
       origin_(execution_context->GetSecurityOrigin()),
       name_(name),
       feature_handle_for_scheduler_(

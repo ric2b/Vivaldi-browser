@@ -15,7 +15,9 @@ js_type_check("closure_compile") {
 js_library("os_powerwash_dialog") {
   deps = [
     ":os_reset_browser_proxy",
+    "..:metrics_recorder",
     "../..:lifetime_browser_proxy",
+    "../localized_link:localized_link",
   ]
 }
 
@@ -28,8 +30,6 @@ js_library("os_reset_page") {
 }
 
 js_library("os_reset_browser_proxy") {
-  deps = [
-    "//ui/webui/resources/js:cr",
-  ]
+  deps = [ "//ui/webui/resources/js:cr" ]
   externs_list = [ "$externs_path/chrome_send.js" ]
 }

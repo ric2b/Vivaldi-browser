@@ -16,10 +16,14 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "ui/aura/window_tracker.h"
+#include "ui/gfx/geometry/point_f.h"
+
+namespace display {
+class Display;
+}  // namespace display
 
 namespace ash {
 class PhantomWindowController;
-class TwoStepEdgeCycler;
 class WindowSize;
 class WindowState;
 
@@ -54,7 +58,7 @@ class ASH_EXPORT WorkspaceWindowResizer : public WindowResizer {
       const std::vector<aura::Window*>& attached_windows);
 
   // WindowResizer:
-  void Drag(const gfx::Point& location_in_parent, int event_flags) override;
+  void Drag(const gfx::PointF& location_in_parent, int event_flags) override;
   void CompleteDrag() override;
   void RevertDrag() override;
   void FlingOrSwipe(ui::GestureEvent* event) override;
@@ -141,7 +145,7 @@ class ASH_EXPORT WorkspaceWindowResizer : public WindowResizer {
   int PrimaryAxisCoordinate(int x, int y) const;
 
   // Updates the bounds of the phantom window for window snapping.
-  void UpdateSnapPhantomWindow(const gfx::Point& location,
+  void UpdateSnapPhantomWindow(const gfx::PointF& location_in_screen,
                                const gfx::Rect& bounds);
 
   // Restacks the windows z-order position so that one of the windows is at the
@@ -151,7 +155,8 @@ class ASH_EXPORT WorkspaceWindowResizer : public WindowResizer {
   // Returns the edge to which the window should be snapped to if the user does
   // no more dragging. SNAP_NONE is returned if the window should not be
   // snapped.
-  SnapType GetSnapType(const gfx::Point& location) const;
+  SnapType GetSnapType(const display::Display& display,
+                       const gfx::PointF& location_in_screen) const;
 
   // Returns true if |bounds_in_parent| are valid bounds for snapped state type
   // |snapped_type|.
@@ -196,10 +201,6 @@ class ASH_EXPORT WorkspaceWindowResizer : public WindowResizer {
   // is a grid and the caption is being dragged.
   std::unique_ptr<PhantomWindowController> snap_phantom_window_controller_;
 
-  // Used to determine whether the window should be snapped when the user drags
-  // a window to the edge of the screen.
-  std::unique_ptr<TwoStepEdgeCycler> edge_cycler_;
-
   // The edge to which the window should be snapped to at the end of the drag.
   SnapType snap_type_;
 
@@ -209,7 +210,7 @@ class ASH_EXPORT WorkspaceWindowResizer : public WindowResizer {
   int num_mouse_moves_since_bounds_change_;
 
   // The mouse location passed to Drag().
-  gfx::Point last_mouse_location_;
+  gfx::PointF last_mouse_location_;
 
   // Window the drag has magnetically attached to.
   aura::Window* magnetism_window_;

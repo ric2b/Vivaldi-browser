@@ -504,12 +504,6 @@ int ResourceLoadingHintsPreviewsInflationBytes() {
       GetResourceLoadingHintsFeature(), kResourceLoadingHintsInflationBytes, 0);
 }
 
-size_t OfflinePreviewsHelperMaxPrefSize() {
-  return GetFieldTrialParamByFeatureAsInt(
-      features::kOfflinePreviewsFalsePositivePrevention, "max_pref_entries",
-      100);
-}
-
 bool ShouldOverrideNavigationCoinFlipToHoldback() {
   return base::GetFieldTrialParamByFeatureAsBool(
       features::kCoinFlipHoldback, "force_coin_flip_always_holdback", false);
@@ -551,6 +545,17 @@ bool DetectDeferRedirectLoopsUsingCache() {
   return GetFieldTrialParamByFeatureAsBool(GetDeferAllScriptPreviewsFeature(),
                                            "detect_redirect_loop_using_cache",
                                            true);
+}
+
+bool OverrideShouldShowPreviewCheck() {
+  return base::GetFieldTrialParamByFeatureAsBool(
+      features::kPreviews, "override_should_show_preview_check", false);
+}
+
+bool ApplyDeferWhenOptimizationGuideDecisionUnknown() {
+  return base::GetFieldTrialParamByFeatureAsBool(
+      features::kPreviews, "apply_deferallscript_when_guide_decision_unknown",
+      false);
 }
 
 }  // namespace params

@@ -4,6 +4,7 @@
 
 #include "chrome/browser/download/download_item_model.h"
 
+#include "base/bind.h"
 #include "base/i18n/number_formatting.h"
 #include "base/i18n/rtl.h"
 #include "base/memory/ptr_util.h"
@@ -15,6 +16,7 @@
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/download/chrome_download_manager_delegate.h"
+#include "chrome/browser/download/download_commands.h"
 #include "chrome/browser/download/download_core_service.h"
 #include "chrome/browser/download/download_core_service_factory.h"
 #include "chrome/browser/download/download_crx_util.h"
@@ -23,15 +25,16 @@
 #include "chrome/browser/download/download_stats.h"
 #include "chrome/browser/download/offline_item_utils.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/safe_browsing/download_protection/deep_scanning_request.h"
 #include "chrome/browser/safe_browsing/download_protection/download_feedback_service.h"
-#include "chrome/common/safe_browsing/download_file_types.pb.h"
-#include "chrome/common/safe_browsing/file_type_policies.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/download/public/common/download_danger_type.h"
 #include "components/download/public/common/download_interrupt_reasons.h"
 #include "components/download/public/common/download_item.h"
 #include "components/safe_browsing/buildflags.h"
+#include "components/safe_browsing/core/file_type_policies.h"
+#include "components/safe_browsing/core/proto/download_file_types.pb.h"
 #include "content/public/browser/download_item_utils.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/time_format.h"
@@ -43,6 +46,7 @@
 
 using base::TimeDelta;
 using download::DownloadItem;
+using MixedContentStatus = download::DownloadItem::MixedContentStatus;
 using safe_browsing::DownloadFileType;
 
 namespace {
@@ -228,10 +232,12 @@ bool DownloadItemModel::MightBeMalicious() const {
     case download::DOWNLOAD_DANGER_TYPE_BLOCKED_PASSWORD_PROTECTED:
     case download::DOWNLOAD_DANGER_TYPE_BLOCKED_TOO_LARGE:
     case download::DOWNLOAD_DANGER_TYPE_DEEP_SCANNED_OPENED_DANGEROUS:
-      return true;
-
     case download::DOWNLOAD_DANGER_TYPE_SENSITIVE_CONTENT_WARNING:
     case download::DOWNLOAD_DANGER_TYPE_SENSITIVE_CONTENT_BLOCK:
+    case download::DOWNLOAD_DANGER_TYPE_PROMPT_FOR_SCANNING:
+    case download::DOWNLOAD_DANGER_TYPE_BLOCKED_UNSUPPORTED_FILETYPE:
+      return true;
+
     case download::DOWNLOAD_DANGER_TYPE_DEEP_SCANNED_SAFE:
     case download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS:
     case download::DOWNLOAD_DANGER_TYPE_MAYBE_DANGEROUS_CONTENT:
@@ -277,10 +283,16 @@ bool DownloadItemModel::IsMalicious() const {
     case download::DOWNLOAD_DANGER_TYPE_SENSITIVE_CONTENT_WARNING:
     case download::DOWNLOAD_DANGER_TYPE_SENSITIVE_CONTENT_BLOCK:
     case download::DOWNLOAD_DANGER_TYPE_DEEP_SCANNED_SAFE:
+    case download::DOWNLOAD_DANGER_TYPE_PROMPT_FOR_SCANNING:
+    case download::DOWNLOAD_DANGER_TYPE_BLOCKED_UNSUPPORTED_FILETYPE:
       return false;
   }
   NOTREACHED();
   return false;
+}
+
+bool DownloadItemModel::IsMixedContent() const {
+  return download_->IsMixedContent();
 }
 
 bool DownloadItemModel::ShouldAllowDownloadFeedback() const {
@@ -397,6 +409,11 @@ void DownloadItemModel::SetDangerLevel(
     DownloadFileType::DangerLevel danger_level) {
   DownloadItemModelData* data = DownloadItemModelData::GetOrCreate(download_);
   data->danger_level_ = danger_level;
+}
+
+download::DownloadItem::MixedContentStatus
+DownloadItemModel::GetMixedContentStatus() const {
+  return download_->GetMixedContentStatus();
 }
 
 bool DownloadItemModel::IsBeingRevived() const {
@@ -561,6 +578,9 @@ bool DownloadItemModel::IsCommandEnabled(
     case DownloadCommands::KEEP:
     case DownloadCommands::LEARN_MORE_SCANNING:
     case DownloadCommands::LEARN_MORE_INTERRUPTED:
+    case DownloadCommands::LEARN_MORE_MIXED_CONTENT:
+    case DownloadCommands::DEEP_SCAN:
+    case DownloadCommands::BYPASS_DEEP_SCANNING:
       return DownloadUIModel::IsCommandEnabled(download_commands, command);
   }
   NOTREACHED();
@@ -592,8 +612,11 @@ bool DownloadItemModel::IsCommandChecked(
     case DownloadCommands::KEEP:
     case DownloadCommands::LEARN_MORE_SCANNING:
     case DownloadCommands::LEARN_MORE_INTERRUPTED:
+    case DownloadCommands::LEARN_MORE_MIXED_CONTENT:
     case DownloadCommands::COPY_TO_CLIPBOARD:
     case DownloadCommands::ANNOTATE:
+    case DownloadCommands::DEEP_SCAN:
+    case DownloadCommands::BYPASS_DEEP_SCANNING:
       return false;
   }
   return false;
@@ -626,7 +649,17 @@ void DownloadItemModel::ExecuteCommand(DownloadCommands* download_commands,
         prefs->EnableAutoOpenBasedOnExtension(path);
       break;
     }
+    case DownloadCommands::BYPASS_DEEP_SCANNING:
+#if BUILDFLAG(FULL_SAFE_BROWSING)
+      CompleteSafeBrowsingScan();
+#endif
+      FALLTHROUGH;
     case DownloadCommands::KEEP:
+      if (IsMixedContent()) {
+        download_->ValidateMixedContentDownload();
+        break;
+      }
+      DCHECK(IsDangerous());
 // Only sends uncommon download accept report if :
 // 1. FULL_SAFE_BROWSING is enabled, and
 // 2. Download verdict is uncommon, and
@@ -682,11 +715,37 @@ void DownloadItemModel::ExecuteCommand(DownloadCommands* download_commands,
     case DownloadCommands::CANCEL:
     case DownloadCommands::DISCARD:
     case DownloadCommands::LEARN_MORE_INTERRUPTED:
+    case DownloadCommands::LEARN_MORE_MIXED_CONTENT:
     case DownloadCommands::PAUSE:
     case DownloadCommands::RESUME:
     case DownloadCommands::COPY_TO_CLIPBOARD:
     case DownloadCommands::ANNOTATE:
       DownloadUIModel::ExecuteCommand(download_commands, command);
+      break;
+    case DownloadCommands::DEEP_SCAN:
+      safe_browsing::SafeBrowsingService* sb_service =
+          g_browser_process->safe_browsing_service();
+      if (!sb_service)
+        break;
+      safe_browsing::DownloadProtectionService* protection_service =
+          sb_service->download_protection_service();
+      if (!protection_service)
+        break;
+      DownloadCoreService* download_core_service =
+          DownloadCoreServiceFactory::GetForBrowserContext(
+              content::DownloadItemUtils::GetBrowserContext(download_));
+      DCHECK(download_core_service);
+      ChromeDownloadManagerDelegate* delegate =
+          download_core_service->GetDownloadManagerDelegate();
+      DCHECK(delegate);
+      protection_service->UploadForDeepScanning(
+          download_,
+          base::BindRepeating(
+              &ChromeDownloadManagerDelegate::CheckClientDownloadDone,
+              delegate->GetWeakPtr(), download_->GetId()),
+          safe_browsing::DeepScanningRequest::DeepScanTrigger::
+              TRIGGER_APP_PROMPT,
+          {safe_browsing::DeepScanningRequest::DeepScanType::SCAN_MALWARE});
       break;
   }
 }

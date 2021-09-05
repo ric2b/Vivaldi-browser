@@ -28,12 +28,12 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
-#include "mojo/public/cpp/bindings/strong_binding_set.h"
 #include "mojo/public/cpp/bindings/unique_receiver_set.h"
 #include "net/cert/cert_verifier.h"
 #include "net/cert/cert_verify_result.h"
 #include "net/dns/dns_config_overrides.h"
 #include "net/dns/host_resolver.h"
+#include "net/http/http_auth_preferences.h"
 #include "services/network/cors/preflight_controller.h"
 #include "services/network/http_cache_data_counter.h"
 #include "services/network/http_cache_data_remover.h"
@@ -64,10 +64,11 @@ class UnguessableToken;
 
 namespace net {
 class CertNetFetcher;
-class CertNetFetcherImpl;
+class CertNetFetcherURLRequest;
 class CertVerifier;
 class CertVerifyProc;
 class HostPortPair;
+class NetworkIsolationKey;
 class ReportSender;
 class StaticHttpUserAgentSettings;
 class URLRequestContext;
@@ -93,8 +94,11 @@ class MdnsResponderManager;
 class NSSTempCertsCacheChromeOS;
 class P2PSocketManager;
 class ProxyLookupRequest;
+class QuicTransport;
 class ResourceScheduler;
 class ResourceSchedulerClient;
+class SQLiteTrustTokenPersister;
+class PendingTrustTokenStore;
 class WebSocketFactory;
 
 namespace cors {
@@ -169,6 +173,10 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
       mojom::URLLoaderFactoryParamsPtr params,
       scoped_refptr<ResourceSchedulerClient> resource_scheduler_client);
 
+  // Enables DoH probes to be sent using this context whenever the DNS
+  // configuration contains DoH servers.
+  void ActivateDohProbes();
+
   // mojom::NetworkContext implementation:
   void SetClient(
       mojo::PendingRemote<mojom::NetworkContextClient> client) override;
@@ -182,7 +190,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
       mojo::PendingReceiver<mojom::RestrictedCookieManager> receiver,
       mojom::RestrictedCookieManagerRole role,
       const url::Origin& origin,
-      const GURL& site_for_cookies,
+      const net::SiteForCookies& site_for_cookies,
       const url::Origin& top_frame_origin,
       bool is_service_worker,
       int32_t process_id,
@@ -267,8 +275,10 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
       mojo::PendingReceiver<mojom::TCPBoundSocket> receiver,
       CreateTCPBoundSocketCallback callback) override;
   void CreateProxyResolvingSocketFactory(
-      mojom::ProxyResolvingSocketFactoryRequest request) override;
+      mojo::PendingReceiver<mojom::ProxyResolvingSocketFactory> receiver)
+      override;
   void LookUpProxyForURL(const GURL& url,
+                         const net::NetworkIsolationKey& network_isolation_key,
                          mojo::PendingRemote<mojom::ProxyLookupClient>
                              proxy_lookup_client) override;
   void ForceReloadProxyConfig(ForceReloadProxyConfigCallback callback) override;
@@ -276,7 +286,8 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
   void CreateWebSocket(
       const GURL& url,
       const std::vector<std::string>& requested_protocols,
-      const GURL& site_for_cookies,
+      const net::SiteForCookies& site_for_cookies,
+      const net::NetworkIsolationKey& network_isolation_key,
       std::vector<mojom::HttpHeaderPtr> additional_headers,
       int32_t process_id,
       int32_t render_frame_id,
@@ -285,10 +296,17 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
       mojo::PendingRemote<mojom::WebSocketHandshakeClient> handshake_client,
       mojo::PendingRemote<mojom::AuthenticationHandler> auth_handler,
       mojo::PendingRemote<mojom::TrustedHeaderClient> header_client) override;
+  void CreateQuicTransport(
+      const GURL& url,
+      const url::Origin& origin,
+      const net::NetworkIsolationKey& network_isolation_key,
+      mojo::PendingRemote<mojom::QuicTransportHandshakeClient> handshake_client)
+      override;
   void CreateNetLogExporter(
       mojo::PendingReceiver<mojom::NetLogExporter> receiver) override;
   void ResolveHost(
       const net::HostPortPair& host,
+      const net::NetworkIsolationKey& network_isolation_key,
       mojom::ResolveHostParametersPtr optional_parameters,
       mojo::PendingRemote<mojom::ResolveHostClient> response_client) override;
   void CreateHostResolver(
@@ -300,6 +318,10 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
       const std::string& ocsp_result,
       const std::string& sct_list,
       VerifyCertForSignedExchangeCallback callback) override;
+  void ParseContentSecurityPolicy(
+      const GURL& base_url,
+      const scoped_refptr<net::HttpResponseHeaders>& headers,
+      ParseContentSecurityPolicyCallback callback) override;
   void AddHSTS(const std::string& host,
                base::Time expiry,
                bool include_subdomains,
@@ -336,9 +358,11 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
       bool allow_credentials,
       const net::NetworkIsolationKey& network_isolation_key) override;
   void CreateP2PSocketManager(
-      mojom::P2PTrustedSocketManagerClientPtr client,
-      mojom::P2PTrustedSocketManagerRequest trusted_socket_manager,
-      mojom::P2PSocketManagerRequest socket_manager_request) override;
+      mojo::PendingRemote<mojom::P2PTrustedSocketManagerClient> client,
+      mojo::PendingReceiver<mojom::P2PTrustedSocketManager>
+          trusted_socket_manager,
+      mojo::PendingReceiver<mojom::P2PSocketManager> socket_manager_receiver)
+      override;
   void CreateMdnsResponder(
       mojo::PendingReceiver<mojom::MdnsResponder> responder_receiver) override;
   void QueueReport(const std::string& type,
@@ -348,23 +372,29 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
                    base::Value body) override;
   void QueueSignedExchangeReport(
       mojom::SignedExchangeReportPtr report) override;
-
   void AddDomainReliabilityContextForTesting(
       const GURL& origin,
       const GURL& upload_url,
       AddDomainReliabilityContextForTestingCallback callback) override;
   void ForceDomainReliabilityUploadsForTesting(
       ForceDomainReliabilityUploadsForTestingCallback callback) override;
-  void SaveHttpAuthCache(SaveHttpAuthCacheCallback callback) override;
-  void LoadHttpAuthCache(const base::UnguessableToken& cache_key,
-                         LoadHttpAuthCacheCallback callback) override;
+  void SetSplitAuthCacheByNetworkIsolationKey(
+      bool split_auth_cache_by_network_isolation_key) override;
+  void SaveHttpAuthCacheProxyEntries(
+      SaveHttpAuthCacheProxyEntriesCallback callback) override;
+  void LoadHttpAuthCacheProxyEntries(
+      const base::UnguessableToken& cache_key,
+      LoadHttpAuthCacheProxyEntriesCallback callback) override;
   void AddAuthCacheEntry(const net::AuthChallengeInfo& challenge,
+                         const net::NetworkIsolationKey& network_isolation_key,
                          const net::AuthCredentials& credentials,
                          AddAuthCacheEntryCallback callback) override;
-  void LookupBasicAuthCredentials(
+  // TODO(mmenke): Rename this method and update Mojo docs to make it clear this
+  // doesn't give proxy auth credentials.
+  void LookupServerBasicAuthCredentials(
       const GURL& url,
-      LookupBasicAuthCredentialsCallback callback) override;
-
+      const net::NetworkIsolationKey& network_isolation_key,
+      LookupServerBasicAuthCredentialsCallback callback) override;
   void GetOriginPolicyManager(
       mojo::PendingReceiver<mojom::OriginPolicyManager> receiver) override;
 
@@ -377,6 +407,9 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
   // Destroys the specified factory. Called by the factory itself when it has
   // no open pipes.
   void DestroyURLLoaderFactory(cors::CorsURLLoaderFactory* url_loader_factory);
+
+  // Removes |transport| and destroys it.
+  void Remove(QuicTransport* transport);
 
   // The following methods are used to track the number of requests per process
   // and ensure it doesn't go over a reasonable limit.
@@ -415,8 +448,9 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
 
   // Creates a new url loader factory bound to this network context. For use
   // inside the network service.
-  mojo::PendingRemote<mojom::URLLoaderFactory>
-  CreateUrlLoaderFactoryForNetworkService();
+  void CreateUrlLoaderFactoryForNetworkService(
+      mojo::PendingReceiver<mojom::URLLoaderFactory>
+          url_loader_factory_pending_receiver);
 
   mojom::OriginPolicyManager* origin_policy_manager() const {
     return origin_policy_manager_.get();
@@ -427,6 +461,30 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
   }
 
   bool IsCorsEnabled() const { return cors_enabled_; }
+
+  // The http_auth_dynamic_params_ would be used to populate
+  // the |http_auth_merged_preferences| of the given NetworkContext.
+  void OnHttpAuthDynamicParamsChanged(
+      const mojom::HttpAuthDynamicParams*
+          http_auth_dynamic_network_service_params);
+
+  const net::HttpAuthPreferences* GetHttpAuthPreferences() const;
+
+  size_t NumOpenQuicTransports() const;
+
+  size_t num_url_loader_factories_for_testing() const {
+    return url_loader_factories_.size();
+  }
+
+  // Maintains Trust Tokens protocol state
+  // (https://github.com/WICG/trust-token-api). Used by URLLoader to check
+  // preconditions before annotating requests with protocol-related headers
+  // and to store information conveyed in the corresponding responses.
+  //
+  // May return null if Trust Tokens support is disabled.
+  PendingTrustTokenStore* trust_token_store() {
+    return trust_token_store_.get();
+  }
 
  private:
   URLRequestContextOwner MakeURLRequestContext();
@@ -477,6 +535,13 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
 
   void InitializeCorsParams();
 
+  // If |trust_token_store_| is backed by an asynchronously-constructed (e.g.,
+  // SQL-based) persistence layer, |FinishConstructingTrustTokenStore|
+  // constructs and populates |trust_token_store_| once the persister's
+  // asynchronous initialization has finished.
+  void FinishConstructingTrustTokenStore(
+      std::unique_ptr<SQLiteTrustTokenPersister> persister);
+
   NetworkService* const network_service_;
 
   mojo::Remote<mojom::NetworkContextClient> client_;
@@ -509,8 +574,11 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
 
   std::unique_ptr<SocketFactory> socket_factory_;
 
-  mojo::StrongBindingSet<mojom::ProxyResolvingSocketFactory>
+  mojo::UniqueReceiverSet<mojom::ProxyResolvingSocketFactory>
       proxy_resolving_socket_factories_;
+
+  // See the comment for |trust_token_store()|.
+  std::unique_ptr<PendingTrustTokenStore> trust_token_store_;
 
 #if !defined(OS_IOS)
   std::unique_ptr<WebSocketFactory> websocket_factory_;
@@ -529,6 +597,9 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
            base::UniquePtrComparator>
       url_loader_factories_;
 
+  std::set<std::unique_ptr<QuicTransport>, base::UniquePtrComparator>
+      quic_transports_;
+
   // A count of outstanding requests per initiating process.
   std::map<uint32_t, uint32_t> loader_count_per_process_;
 
@@ -546,8 +617,8 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
 
   // Ordering: this must be after |cookie_manager_| since it points to its
   // CookieSettings object.
-  mojo::StrongBindingSet<mojom::RestrictedCookieManager>
-      restricted_cookie_manager_bindings_;
+  mojo::UniqueReceiverSet<mojom::RestrictedCookieManager>
+      restricted_cookie_manager_receivers_;
 
   int current_resource_scheduler_client_id_ = 0;
 
@@ -577,7 +648,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
 
   // CertNetFetcher used by the context's CertVerifier. May be nullptr if
   // CertNetFetcher is not used by the current platform.
-  scoped_refptr<net::CertNetFetcherImpl> cert_net_fetcher_;
+  scoped_refptr<net::CertNetFetcherURLRequest> cert_net_fetcher_;
 
   // Created on-demand. Null if unused.
   std::unique_ptr<HostResolver> internal_host_resolver_;
@@ -587,6 +658,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
            std::unique_ptr<net::HostResolver>,
            base::UniquePtrComparator>
       host_resolvers_;
+  std::unique_ptr<net::HostResolver::ProbeRequest> doh_probes_request_;
 
   NetworkServiceProxyDelegate* proxy_delegate_ = nullptr;
 
@@ -627,6 +699,15 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
       domain_reliability_monitor_;
 
   std::unique_ptr<OriginPolicyManager> origin_policy_manager_;
+
+  // Each network context holds its own HttpAuthPreferences.
+  // The dynamic preferences of |NetworkService| and the static
+  // preferences from |NetworkContext| would be merged to
+  // `http_auth_merged_preferences_` which would then be used to create
+  // HttpAuthHandle via |NetworkContext::CreateHttpAuthHandlerFactory|.
+  net::HttpAuthPreferences http_auth_merged_preferences_;
+
+  base::WeakPtrFactory<NetworkContext> weak_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(NetworkContext);
 };

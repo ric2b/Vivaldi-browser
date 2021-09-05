@@ -8,13 +8,15 @@
 #include "base/macros.h"
 #include "content/browser/service_worker/service_worker_cache_writer.h"
 #include "content/common/content_export.h"
-#include "content/public/common/resource_type.h"
-#include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/receiver.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "services/network/public/cpp/net_adapters.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/mojom/url_loader.mojom.h"
+#include "third_party/blink/public/mojom/loader/resource_load_info.mojom-shared.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -42,15 +44,8 @@ struct HttpResponseInfoIOBuffer;
 // A set of |network_loader_state_|, |header_writer_state_|, and
 // |body_writer_state_| is the state of this loader. Each of them is changed
 // independently, while some state changes have dependency to other state
-// changes.  See the comment for each field below to see exactly when their
-// state changes happen. For resume loaders, these states are set to be
-// values extracted from ServiceWorkerSingleScriptUpdateChecker::PausedState
-// to make the loader seamlessly resume the download.
-//
-// In case there is already an installed service worker for this registration,
-// this class also performs the "byte-for-byte" comparison for updating the
-// worker. If the script is identical, the load succeeds but no script is
-// written, and ServiceWorkerVersion is told to terminate startup.
+// changes. See the comment for each field below to see exactly when their state
+// changes happen.
 //
 // NOTE: To perform the network request, this class uses |loader_factory_| which
 // may internally use a non-NetworkService factory if URL has a non-http(s)
@@ -77,10 +72,11 @@ class CONTENT_EXPORT ServiceWorkerNewScriptLoader final
       int32_t request_id,
       uint32_t options,
       const network::ResourceRequest& original_request,
-      network::mojom::URLLoaderClientPtr client,
+      mojo::PendingRemote<network::mojom::URLLoaderClient> client,
       scoped_refptr<ServiceWorkerVersion> version,
       scoped_refptr<network::SharedURLLoaderFactory> loader_factory,
-      const net::MutableNetworkTrafficAnnotationTag& traffic_annotation);
+      const net::MutableNetworkTrafficAnnotationTag& traffic_annotation,
+      int64_t cache_resource_id);
 
   ~ServiceWorkerNewScriptLoader() override;
 
@@ -119,10 +115,11 @@ class CONTENT_EXPORT ServiceWorkerNewScriptLoader final
       int32_t request_id,
       uint32_t options,
       const network::ResourceRequest& original_request,
-      network::mojom::URLLoaderClientPtr client,
+      mojo::PendingRemote<network::mojom::URLLoaderClient> client,
       scoped_refptr<ServiceWorkerVersion> version,
       scoped_refptr<network::SharedURLLoaderFactory> loader_factory,
-      const net::MutableNetworkTrafficAnnotationTag& traffic_annotation);
+      const net::MutableNetworkTrafficAnnotationTag& traffic_annotation,
+      int64_t cache_resource_id);
 
   // Writes the given headers into the service worker script storage.
   void WriteHeaders(scoped_refptr<HttpResponseInfoIOBuffer> info_buffer);
@@ -166,9 +163,9 @@ class CONTENT_EXPORT ServiceWorkerNewScriptLoader final
 
   const GURL request_url_;
 
-  // This is ResourceType::kServiceWorker for the main script or
-  // ResourceType::kScript for an imported script.
-  const ResourceType resource_type_;
+  // This is blink::mojom::ResourceType::kServiceWorker for the main script or
+  // blink::mojom::ResourceType::kScript for an imported script.
+  const blink::mojom::ResourceType resource_type_;
 
   // Load options originally passed to this loader. The options passed to the
   // network loader might be different from this.
@@ -180,15 +177,16 @@ class CONTENT_EXPORT ServiceWorkerNewScriptLoader final
 
   // Used for fetching the script from network (or other loaders like extensions
   // sometimes).
-  network::mojom::URLLoaderPtr network_loader_;
+  mojo::Remote<network::mojom::URLLoader> network_loader_;
 
-  mojo::Binding<network::mojom::URLLoaderClient> network_client_binding_;
+  mojo::Receiver<network::mojom::URLLoaderClient> network_client_receiver_{
+      this};
   mojo::ScopedDataPipeConsumerHandle network_consumer_;
   mojo::SimpleWatcher network_watcher_;
   scoped_refptr<network::SharedURLLoaderFactory> loader_factory_;
 
   // Used for responding with the fetched script to this loader's client.
-  network::mojom::URLLoaderClientPtr client_;
+  mojo::Remote<network::mojom::URLLoaderClient> client_;
   mojo::ScopedDataPipeProducerHandle client_producer_;
 
   // Represents the state of |network_loader_|.

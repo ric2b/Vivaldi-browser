@@ -1,0 +1,225 @@
+<style include="cr-shared-style">
+  :host {
+    --ntp-theme-shortcut-background-color: rgb(229, 231, 232);
+    --ntp-theme-text-color: var(--google-grey-800);
+    --ntp-theme-text-shadow: none;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :host {
+      --ntp-theme-shortcut-background-color: var(--google-grey-refresh-100);
+      --ntp-theme-text-color: white;
+    }
+  }
+
+  :host([show-background-image_]) {
+    --ntp-theme-text-shadow: 0 0 16px rgba(0, 0, 0, .3);
+  }
+
+  #background {
+    height: 100%;
+    position: relative;
+    width: 100%;
+  }
+
+  #background > * {
+    height: 100%;
+    position: absolute;
+    top: 0;
+    width: 100%;
+  }
+
+  #backgroundImage {
+    border: none;
+  }
+
+  #backgroundGradient {
+    background: linear-gradient(rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.3));
+  }
+
+  #content {
+    align-items: center;
+    display: flex;
+    flex-direction: column;
+  }
+
+  #oneGoogleBar {
+    pointer-events: none;
+  }
+
+  #oneGoogleBarSpacer {
+    height: 56px;
+    width: 100%;
+  }
+
+  #logo {
+    margin-bottom: 38px;
+  }
+
+  ntp-fakebox {
+    margin-bottom: 32px;
+  }
+
+  ntp-most-visited[dark] {
+    --icon-button-color-active: var(--google-grey-refresh-300);
+    --icon-button-color: white;
+    --tile-hover-color: rgba(255, 255, 255, .1);
+  }
+
+  #promo {
+    bottom: 16px;
+    height: 35px;
+    left: 0;
+    position: fixed;
+    right: 0;
+    width: 100%;
+  }
+
+  #customizeButtonContainer {
+    background-color: var(--ntp-background-override-color);
+    border-radius: calc(0.5 * var(--cr-button-height));
+    bottom: 16px;
+    position: absolute;
+  }
+
+  :host-context([dir='ltr']) #customizeButtonContainer {
+    right: 16px;
+  }
+
+  :host-context([dir='rtl']) #customizeButtonContainer {
+    left: 16px;
+  }
+
+  #customizeButton {
+    border: none;
+    border-radius: calc(0.5 * var(--cr-button-height));
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.16), 0 1px 2px rgba(0, 0, 0, 0.23);
+    font-weight: 400;
+  }
+
+  #customizeIcon {
+    -webkit-mask-image: url(icons/icon_pencil.svg);
+    -webkit-mask-repeat: no-repeat;
+    -webkit-mask-size: 100%;
+    background-color: var(--text-color);
+    height: 16px;
+    margin-inline-end: 8px;
+    width: 16px;
+  }
+
+  #backgroundImageAttribution {
+    border-radius: 8px;
+    bottom: 16px;
+    color: var(--ntp-theme-text-color);
+    line-height: 20px;
+    max-width: 50vw;
+    padding: 8px;
+    position: absolute;
+    text-shadow: var(--ntp-theme-text-shadow);
+  }
+
+  :host-context([dir='ltr']) #backgroundImageAttribution {
+    left: 16px;
+  }
+
+  :host-context([dir='rtl']) #backgroundImageAttribution {
+    right: 16px;
+  }
+
+  #backgroundImageAttribution:hover {
+    background: rgba(var(--google-grey-900-rgb), .1);
+  }
+
+  #backgroundImageAttribution1Container {
+    align-items: center;
+    display: flex;
+    flex-direction: row;
+  }
+
+  #linkIcon {
+    -webkit-mask-image: url(icons/link.svg);
+    -webkit-mask-repeat: no-repeat;
+    -webkit-mask-size: 100%;
+    background-color: var(--ntp-theme-text-color);
+    height: 16px;
+    margin-inline-end: 8px;
+    width: 16px;
+  }
+
+  #backgroundImageAttribution1,
+  #backgroundImageAttribution2 {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  #backgroundImageAttribution1 {
+    font-size: 0.875rem;
+  }
+
+  #backgroundImageAttribution2 {
+    font-size: 0.75rem;
+  }
+</style>
+<div id="background"
+    style="background-color: [[rgbOrInherit_(theme_.backgroundColor)]];
+        --ntp-theme-text-color: [[rgbOrInherit_(theme_.shortcutTextColor)]];
+        --ntp-theme-shortcut-background-color:
+              [[rgbOrInherit_(theme_.shortcutBackgroundColor)]];
+        --ntp-logo-color: [[rgbOrInherit_(theme_.logoColor)]];">
+  <ntp-untrusted-iframe id="backgroundImage" path="[[backgroundImagePath_]]"
+      hidden="[[!showBackgroundImage_]]">
+  </ntp-untrusted-iframe>
+  <div id="backgroundGradient" hidden="[[!showBackgroundImage_]]"></div>
+  <div id="content">
+    <div id="oneGoogleBarSpacer"></div>
+    <ntp-logo id="logo" doodle-allowed$="[[doodleAllowed_]]"
+        single-colored$="[[singleColoredLogo_]]">
+    </ntp-logo>
+    <ntp-fakebox id="fakebox" on-open-voice-search="onVoiceSearchClick_">
+    </ntp-fakebox>
+    <ntp-most-visited id="mostVisited" dark$="[[theme_.isDark]]">
+    </ntp-most-visited>
+    <dom-if if="[[showCustomizeDialog_]]" restamp>
+      <template>
+        <ntp-customize-dialog on-close="onCustomizeDialogClose_"
+            theme="[[theme_]]">
+        </ntp-customize-dialog>
+      </template>
+    </dom-if>
+    <dom-if if="[[showVoiceSearchOverlay_]]" restamp>
+      <template>
+        <ntp-voice-search-overlay on-close="onVoiceSearchOverlayClose_">
+        </ntp-voice-search-overlay>
+      </template>
+    </dom-if>
+    <ntp-untrusted-iframe id="promo" path="promo" hidden$="[[!promoLoaded_]]">
+    </ntp-untrusted-iframe>
+    <!-- cr-button is transparent on hover. This leads to incorrect results when
+         a custom background is set. Therefore, wrap customize button in
+         container to enfore solid background color. -->
+    <div id="customizeButtonContainer">
+      <cr-button id="customizeButton" on-click="onCustomizeClick_">
+        <div id="customizeIcon"></div>
+        $i18n{customizeButton}
+      </cr-button>
+    </div>
+    <a id="backgroundImageAttribution"
+        href="[[theme_.backgroundImageAttributionUrl.url]]"
+        hidden="[[!theme_.backgroundImageAttribution1]]">
+      <div id="backgroundImageAttribution1Container">
+        <div id="linkIcon"></div>
+        <div id="backgroundImageAttribution1">
+          [[theme_.backgroundImageAttribution1]]
+        </div>
+      </div>
+      <div id="backgroundImageAttribution2"
+          hidden="[[!theme_.backgroundImageAttribution2]]">
+        [[theme_.backgroundImageAttribution2]]
+      </div>
+    </a>
+  </div>
+  <ntp-untrusted-iframe id="oneGoogleBar" path="one-google-bar"
+      hidden$="[[!oneGoogleBarLoaded_]]">
+  </ntp-untrusted-iframe>
+</div>

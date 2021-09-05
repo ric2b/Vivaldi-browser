@@ -38,6 +38,7 @@
 #include "chrome/browser/chromeos/policy/device_policy_builder.h"
 #include "chrome/browser/chromeos/policy/device_policy_cros_browser_test.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/chromeos/scoped_test_system_nss_key_slot_mixin.h"
 #include "chrome/browser/chromeos/settings/scoped_testing_cros_settings.h"
 #include "chrome/browser/chromeos/settings/stub_cros_settings_provider.h"
 #include "chrome/browser/ui/login/login_handler.h"
@@ -69,7 +70,6 @@
 #include "crypto/nss_util.h"
 #include "crypto/nss_util_internal.h"
 #include "crypto/scoped_test_nss_db.h"
-#include "crypto/scoped_test_system_nss_key_slot.h"
 #include "media/base/media_switches.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/cookies/canonical_cookie.h"
@@ -188,7 +188,6 @@ class WebviewLoginTest : public OobeBaseTest {
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     command_line->AppendSwitch(switches::kOobeSkipPostLogin);
-    command_line->AppendSwitch(::switches::kUseFakeDeviceForMediaStream);
     OobeBaseTest::SetUpCommandLine(command_line);
   }
 
@@ -284,13 +283,7 @@ IN_PROC_BROWSER_TEST_F(WebviewLoginTest, Basic) {
   histogram_tester.ExpectUniqueSample("ChromeOS.SAML.APILogin", 0, 1);
 }
 
-// TODO(crbug.com/998330): The test is flaky (timeout) on Chromium OS MSAN.
-#if defined(MEMORY_SANITIZER) && defined(OS_CHROMEOS)
-#define MAYBE_BackButton DISABLED_BackButton
-#else
-#define MAYBE_BackButton BackButton
-#endif
-IN_PROC_BROWSER_TEST_F(WebviewLoginTest, MAYBE_BackButton) {
+IN_PROC_BROWSER_TEST_F(WebviewLoginTest, BackButton) {
   WaitForGaiaPageLoadAndPropertyUpdate();
 
   // Start with identifer page.
@@ -541,12 +534,6 @@ class WebviewClientCertsLoginTestBase : public WebviewLoginTest {
   }
 
  protected:
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    command_line->AppendSwitch(
-        switches::kDisableSigninFrameClientCertUserSelection);
-    WebviewLoginTest::SetUpCommandLine(command_line);
-  }
-
   void SetUpInProcessBrowserTestFixture() override {
     // Override FakeSessionManagerClient. This will be shut down by the browser.
     chromeos::SessionManagerClient::InitializeFakeInMemory();
@@ -603,49 +590,13 @@ class WebviewClientCertsLoginTest : public WebviewClientCertsLoginTestBase {
  public:
   WebviewClientCertsLoginTest() = default;
 
-  // Installs a testing system slot and imports a client certificate into it.
-  void SetUpClientCertInSystemSlot() {
-    bool system_slot_constructed_successfully = false;
-    base::RunLoop loop;
-    base::PostTaskAndReply(
-        FROM_HERE, {content::BrowserThread::IO},
-        base::BindOnce(&WebviewClientCertsLoginTest::SetUpTestSystemSlotOnIO,
-                       base::Unretained(this),
-                       &system_slot_constructed_successfully),
-        loop.QuitClosure());
-    loop.Run();
-    ASSERT_TRUE(system_slot_constructed_successfully);
-
-    ASSERT_TRUE(ImportSystemSlotClientCert(test_system_slot_->slot()));
-  }
-
- protected:
-  void TearDownOnMainThread() override {
-    TearDownTestSystemSlot();
-    WebviewClientCertsLoginTestBase::TearDownOnMainThread();
+  // Imports a client certificate into the system slot.
+  bool SetUpClientCertInSystemSlot() {
+    return ImportSystemSlotClientCert(system_nss_key_slot_mixin_.slot());
   }
 
  private:
-  void SetUpTestSystemSlotOnIO(bool* out_system_slot_constructed_successfully) {
-    DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
-    test_system_slot_ = std::make_unique<crypto::ScopedTestSystemNSSKeySlot>();
-    *out_system_slot_constructed_successfully =
-        test_system_slot_->ConstructedSuccessfully();
-  }
-
-  void TearDownTestSystemSlot() {
-    base::RunLoop loop;
-    base::PostTaskAndReply(
-        FROM_HERE, {content::BrowserThread::IO},
-        base::BindOnce(&WebviewClientCertsLoginTest::TearDownTestSystemSlotOnIO,
-                       base::Unretained(this)),
-        loop.QuitClosure());
-    loop.Run();
-  }
-
-  void TearDownTestSystemSlotOnIO() { test_system_slot_.reset(); }
-
-  std::unique_ptr<crypto::ScopedTestSystemNSSKeySlot> test_system_slot_;
+  ScopedTestSystemNSSKeySlotMixin system_nss_key_slot_mixin_{&mixin_host_};
 
   DISALLOW_COPY_AND_ASSIGN(WebviewClientCertsLoginTest);
 };
@@ -654,14 +605,11 @@ class WebviewClientCertsLoginTest : public WebviewClientCertsLoginTestBase {
 // system slot is enabled in the sign-in frame. The server does not request
 // certificates signed by a specific authority.
 // TODO(crbug.com/949511) The test is flaky (timeout) on MSAN.
-#if defined(MEMORY_SANITIZER)
-#define MAYBE_SigninFrameNoAuthorityGiven DISABLED_SigninFrameNoAuthorityGiven
-#else
-#define MAYBE_SigninFrameNoAuthorityGiven SigninFrameNoAuthorityGiven
-#endif
+// Flaky (timeout), especially (but not only) in debug builds or under
+// ASAN/LSAN. crbug.com/1022034
 IN_PROC_BROWSER_TEST_F(WebviewClientCertsLoginTest,
-                       MAYBE_SigninFrameNoAuthorityGiven) {
-  ASSERT_NO_FATAL_FAILURE(SetUpClientCertInSystemSlot());
+                       DISABLED_SigninFrameNoAuthorityGiven) {
+  ASSERT_TRUE(SetUpClientCertInSystemSlot());
   net::SpawnedTestServer::SSLOptions ssl_options;
   ssl_options.request_client_certificate = true;
   ASSERT_NO_FATAL_FAILURE(StartHttpsServer(ssl_options));
@@ -683,16 +631,11 @@ IN_PROC_BROWSER_TEST_F(WebviewClientCertsLoginTest,
 // Test that client certificate autoselect selects the right certificate even
 // with multiple filters for the same pattern.
 // TODO(crbug.com/949511) The test is flaky (timeout) on MSAN.
-#if defined(MEMORY_SANITIZER)
-#define MAYBE_SigninFrameCertMultipleFiltersAutoSelected \
-  DISABLED_SigninFrameCertMultipleFiltersAutoSelected
-#else
-#define MAYBE_SigninFrameCertMultipleFiltersAutoSelected \
-  SigninFrameCertMultipleFiltersAutoSelected
-#endif
+// Flaky (timeout), especially (but not only) in debug builds or under
+// ASAN/LSAN. crbug.com/1022034
 IN_PROC_BROWSER_TEST_F(WebviewClientCertsLoginTest,
-                       MAYBE_SigninFrameCertMultipleFiltersAutoSelected) {
-  ASSERT_NO_FATAL_FAILURE(SetUpClientCertInSystemSlot());
+                       DISABLED_SigninFrameCertMultipleFiltersAutoSelected) {
+  ASSERT_TRUE(SetUpClientCertInSystemSlot());
   net::SpawnedTestServer::SSLOptions ssl_options;
   ssl_options.request_client_certificate = true;
   ASSERT_NO_FATAL_FAILURE(StartHttpsServer(ssl_options));
@@ -715,15 +658,11 @@ IN_PROC_BROWSER_TEST_F(WebviewClientCertsLoginTest,
 // Test that if no client certificate is auto-selected using policy on the
 // sign-in frame, the client does not send up any client certificate.
 // TODO(crbug.com/949511) The test is flaky (timeout) on MSAN.
-#if defined(MEMORY_SANITIZER)
-#define MAYBE_SigninFrameCertNotAutoSelected \
-  DISABLED_SigninFrameCertNotAutoSelected
-#else
-#define MAYBE_SigninFrameCertNotAutoSelected SigninFrameCertNotAutoSelected
-#endif
+// Flaky (timeout), especially (but not only) in debug builds or under
+// ASAN/LSAN. crbug.com/1022034
 IN_PROC_BROWSER_TEST_F(WebviewClientCertsLoginTest,
-                       MAYBE_SigninFrameCertNotAutoSelected) {
-  ASSERT_NO_FATAL_FAILURE(SetUpClientCertInSystemSlot());
+                       DISABLED_SigninFrameCertNotAutoSelected) {
+  ASSERT_TRUE(SetUpClientCertInSystemSlot());
   net::SpawnedTestServer::SSLOptions ssl_options;
   ssl_options.request_client_certificate = true;
   ASSERT_NO_FATAL_FAILURE(StartHttpsServer(ssl_options));
@@ -740,14 +679,11 @@ IN_PROC_BROWSER_TEST_F(WebviewClientCertsLoginTest,
 // system slot is enabled in the sign-in frame. The server requests
 // a certificate signed by a specific authority.
 // TODO(crbug.com/949511) The test is flaky (timeout) on MSAN.
-#if defined(MEMORY_SANITIZER)
-#define MAYBE_SigninFrameAuthorityGiven DISABLED_SigninFrameAuthorityGiven
-#else
-#define MAYBE_SigninFrameAuthorityGiven SigninFrameAuthorityGiven
-#endif
+// Flaky (timeout), especially (but not only) in debug builds or under
+// ASAN/LSAN. crbug.com/1022034
 IN_PROC_BROWSER_TEST_F(WebviewClientCertsLoginTest,
-                       MAYBE_SigninFrameAuthorityGiven) {
-  ASSERT_NO_FATAL_FAILURE(SetUpClientCertInSystemSlot());
+                       DISABLED_SigninFrameAuthorityGiven) {
+  ASSERT_TRUE(SetUpClientCertInSystemSlot());
   net::SpawnedTestServer::SSLOptions ssl_options;
   ssl_options.request_client_certificate = true;
   base::FilePath ca_path =
@@ -774,16 +710,11 @@ IN_PROC_BROWSER_TEST_F(WebviewClientCertsLoginTest,
 // a certificate signed by a specific authority. The client doesn't have a
 // matching certificate.
 // TODO(crbug.com/949511) The test is flaky (timeout) on MSAN.
-#if defined(MEMORY_SANITIZER)
-#define MAYBE_SigninFrameAuthorityGivenNoMatchingCert \
-  DISABLED_SigninFrameAuthorityGivenNoMatchingCert
-#else
-#define MAYBE_SigninFrameAuthorityGivenNoMatchingCert \
-  SigninFrameAuthorityGivenNoMatchingCert
-#endif
+// Flaky (timeout), especially (but not only) in debug builds or under
+// ASAN/LSAN. crbug.com/1022034
 IN_PROC_BROWSER_TEST_F(WebviewClientCertsLoginTest,
-                       MAYBE_SigninFrameAuthorityGivenNoMatchingCert) {
-  ASSERT_NO_FATAL_FAILURE(SetUpClientCertInSystemSlot());
+                       DISABLED_SigninFrameAuthorityGivenNoMatchingCert) {
+  ASSERT_TRUE(SetUpClientCertInSystemSlot());
   net::SpawnedTestServer::SSLOptions ssl_options;
   ssl_options.request_client_certificate = true;
   base::FilePath ca_path =
@@ -808,16 +739,9 @@ IN_PROC_BROWSER_TEST_F(WebviewClientCertsLoginTest,
 // known on the device (it has not been made available through device ONC
 // policy).
 // TODO(crbug.com/949511) The test is flaky (timeout) on MSAN.
-#if defined(MEMORY_SANITIZER)
-#define MAYBE_SigninFrameIntermediateAuthorityUnknown \
-  DISABLED_SigninFrameIntermediateAuthorityUnknown
-#else
-#define MAYBE_SigninFrameIntermediateAuthorityUnknown \
-  SigninFrameIntermediateAuthorityUnknown
-#endif
 IN_PROC_BROWSER_TEST_F(WebviewClientCertsLoginTest,
-                       MAYBE_SigninFrameIntermediateAuthorityUnknown) {
-  ASSERT_NO_FATAL_FAILURE(SetUpClientCertInSystemSlot());
+                       DISABLED_SigninFrameIntermediateAuthorityUnknown) {
+  ASSERT_TRUE(SetUpClientCertInSystemSlot());
   net::SpawnedTestServer::SSLOptions ssl_options;
   ssl_options.request_client_certificate = true;
   base::FilePath ca_path = net::GetTestCertsDirectory().Append(
@@ -841,16 +765,11 @@ IN_PROC_BROWSER_TEST_F(WebviewClientCertsLoginTest,
 // issued by an intermediate authority, and the intermediate authority is
 // known on the device (it has been made available through device ONC policy).
 // TODO(crbug.com/949511) The test is flaky (timeout) on MSAN.
-#if defined(MEMORY_SANITIZER)
-#define MAYBE_SigninFrameIntermediateAuthorityKnown \
-  DISABLED_SigninFrameIntermediateAuthorityKnown
-#else
-#define MAYBE_SigninFrameIntermediateAuthorityKnown \
-  SigninFrameIntermediateAuthorityKnown
-#endif
+// Flaky (timeout), especially (but not only) in debug builds or under
+// ASAN/LSAN. crbug.com/1022034
 IN_PROC_BROWSER_TEST_F(WebviewClientCertsLoginTest,
-                       MAYBE_SigninFrameIntermediateAuthorityKnown) {
-  ASSERT_NO_FATAL_FAILURE(SetUpClientCertInSystemSlot());
+                       DISABLED_SigninFrameIntermediateAuthorityKnown) {
+  ASSERT_TRUE(SetUpClientCertInSystemSlot());
   net::SpawnedTestServer::SSLOptions ssl_options;
   ssl_options.request_client_certificate = true;
   base::FilePath ca_path = net::GetTestCertsDirectory().Append(
@@ -884,7 +803,7 @@ IN_PROC_BROWSER_TEST_F(WebviewClientCertsLoginTest,
 // deprecated and removed. https://crbug.com/849710.
 IN_PROC_BROWSER_TEST_F(WebviewClientCertsLoginTest,
                        DISABLED_ClientCertRequestedInOtherWebView) {
-  ASSERT_NO_FATAL_FAILURE(SetUpClientCertInSystemSlot());
+  ASSERT_TRUE(SetUpClientCertInSystemSlot());
   net::SpawnedTestServer::SSLOptions ssl_options;
   ssl_options.request_client_certificate = true;
   ASSERT_NO_FATAL_FAILURE(StartHttpsServer(ssl_options));
@@ -1004,8 +923,14 @@ bool IsTpmTokenReady() {
 // Test that the system slot becomes initialized and the client certificate
 // authentication works in the sign-in frame after the TPM gets reported as
 // ready.
+// Flaky (timeout), in ASAN/LSAN. crbug.com/1022034
+#if defined(ADDRESS_SANITIZER)
+#define MAYBE_SystemSlotInitialization DISABLED_SystemSlotInitialization
+#else
+#define MAYBE_SystemSlotInitialization SystemSlotInitialization
+#endif
 IN_PROC_BROWSER_TEST_F(WebviewClientCertsTokenLoadingLoginTest,
-                       SystemSlotInitialization) {
+                       MAYBE_SystemSlotInitialization) {
   ASSERT_NO_FATAL_FAILURE(PrepareSystemSlot());
   net::SpawnedTestServer::SSLOptions ssl_options;
   ssl_options.request_client_certificate = true;

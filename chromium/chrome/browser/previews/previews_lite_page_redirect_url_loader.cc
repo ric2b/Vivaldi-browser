@@ -35,7 +35,6 @@ PreviewsLitePageRedirectURLLoader::PreviewsLitePageRedirectURLLoader(
     HandleRequest callback)
     : modified_resource_request_(tentative_resource_request),
       callback_(std::move(callback)),
-      binding_(this),
       origin_probe_finished_successfully_(false),
       litepage_request_finished_successfully_(false) {
   pref_service_ = browser_context
@@ -211,12 +210,19 @@ void PreviewsLitePageRedirectURLLoader::CreateRedirectInformation(
   modified_resource_request_.referrer = GURL(redirect_info_.new_referrer);
   modified_resource_request_.referrer_policy =
       redirect_info_.new_referrer_policy;
+
+  if (modified_resource_request_.trusted_params.has_value()) {
+    auto params = modified_resource_request_.trusted_params.value();
+    params.network_isolation_key = net::NetworkIsolationKey(
+        url::Origin::Create(redirect_url), url::Origin::Create(redirect_url));
+    modified_resource_request_.trusted_params = params;
+  }
 }
 
 void PreviewsLitePageRedirectURLLoader::OnResultDetermined(
     ServingLoaderResult result,
     base::Optional<net::RedirectInfo> redirect_info,
-    scoped_refptr<network::ResourceResponse> response) {
+    network::mojom::URLResponseHeadPtr response) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!redirect_info || result == ServingLoaderResult::kRedirect);
   DCHECK(!response || result == ServingLoaderResult::kRedirect);
@@ -230,7 +236,7 @@ void PreviewsLitePageRedirectURLLoader::OnResultDetermined(
       OnLitePageFallback();
       return;
     case ServingLoaderResult::kRedirect:
-      OnLitePageRedirect(redirect_info.value(), response->head);
+      OnLitePageRedirect(redirect_info.value(), std::move(response));
       return;
   }
   NOTREACHED();
@@ -263,11 +269,11 @@ void PreviewsLitePageRedirectURLLoader::OnLitePageSuccess() {
 
 void PreviewsLitePageRedirectURLLoader::OnLitePageRedirect(
     const net::RedirectInfo& redirect_info,
-    const network::ResourceResponseHead& response_head) {
+    network::mojom::URLResponseHeadPtr response_head) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   redirect_info_ = redirect_info;
 
-  response_head_ = response_head;
+  response_head_ = std::move(response_head);
 
   std::move(callback_).Run(
       nullptr,
@@ -283,11 +289,11 @@ void PreviewsLitePageRedirectURLLoader::OnLitePageFallback() {
 
 void PreviewsLitePageRedirectURLLoader::StartHandlingRedirectToModifiedRequest(
     const network::ResourceRequest& resource_request,
-    network::mojom::URLLoaderRequest request,
-    network::mojom::URLLoaderClientPtr client) {
+    mojo::PendingReceiver<network::mojom::URLLoader> receiver,
+    mojo::PendingRemote<network::mojom::URLLoaderClient> client) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  response_head_.request_start = base::TimeTicks::Now();
-  response_head_.response_start = response_head_.request_start;
+  response_head_->request_start = base::TimeTicks::Now();
+  response_head_->response_start = response_head_->request_start;
 
   std::string header_string = base::StringPrintf(
       "HTTP/1.1 %i Temporary Redirect\n"
@@ -295,25 +301,25 @@ void PreviewsLitePageRedirectURLLoader::StartHandlingRedirectToModifiedRequest(
       net::HTTP_TEMPORARY_REDIRECT,
       modified_resource_request_.url.spec().c_str());
 
-  response_head_.headers = base::MakeRefCounted<net::HttpResponseHeaders>(
+  response_head_->headers = base::MakeRefCounted<net::HttpResponseHeaders>(
       net::HttpUtil::AssembleRawHeaders(header_string));
-  response_head_.encoded_data_length = 0;
+  response_head_->encoded_data_length = 0;
 
-  StartHandlingRedirect(resource_request, std::move(request),
+  StartHandlingRedirect(resource_request, std::move(receiver),
                         std::move(client));
 }
 
 void PreviewsLitePageRedirectURLLoader::StartHandlingRedirect(
     const network::ResourceRequest& /* resource_request */,
-    network::mojom::URLLoaderRequest request,
-    network::mojom::URLLoaderClientPtr client) {
+    mojo::PendingReceiver<network::mojom::URLLoader> receiver,
+    mojo::PendingRemote<network::mojom::URLLoaderClient> client) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(!binding_.is_bound());
-  binding_.Bind(std::move(request));
-  binding_.set_connection_error_handler(
+  DCHECK(!receiver_.is_bound());
+  receiver_.Bind(std::move(receiver));
+  receiver_.set_disconnect_handler(
       base::BindOnce(&PreviewsLitePageRedirectURLLoader::OnConnectionClosed,
                      weak_ptr_factory_.GetWeakPtr()));
-  client_ = std::move(client);
+  client_.Bind(std::move(client));
 
   mojo::DataPipe pipe(kRedirectDefaultAllocationSize);
   if (!pipe.consumer_handle.is_valid()) {
@@ -321,7 +327,7 @@ void PreviewsLitePageRedirectURLLoader::StartHandlingRedirect(
     return;
   }
 
-  client_->OnReceiveRedirect(redirect_info_, response_head_);
+  client_->OnReceiveRedirect(redirect_info_, response_head_->Clone());
 }
 
 void PreviewsLitePageRedirectURLLoader::FollowRedirect(
@@ -354,9 +360,9 @@ void PreviewsLitePageRedirectURLLoader::ResumeReadingBodyFromNet() {
 }
 
 void PreviewsLitePageRedirectURLLoader::OnConnectionClosed() {
-  // This happens when content cancels the navigation. Close the network request
+  // This happens when content cancels the navigation. Reset the network request
   // and client handle and destroy |this|.
-  binding_.Close();
+  receiver_.reset();
   client_.reset();
   delete this;
 }

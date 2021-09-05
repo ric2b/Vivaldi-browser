@@ -39,6 +39,7 @@ class ToolkitDelegateViews : public RenderViewContextMenuBase::ToolkitDelegate {
   void RunMenuAt(views::Widget* parent,
                  const gfx::Point& point,
                  ui::MenuSourceType type);
+  views::MenuItemView* menu_view() { return menu_view_; }
 
   views::MenuItemView* VivaldiInit(ui::SimpleMenuModel* menu_model,
       vivaldi::ContextMenuPostitionDelegate* delegate);

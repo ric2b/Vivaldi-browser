@@ -44,6 +44,7 @@ web::WebUIIOSDataSource* CreateFlagsUIHTMLSource() {
   source->UseStringsJs();
   FlagsUI::AddFlagsIOSStrings(source);
   source->AddResourcePath(flags_ui::kFlagsJS, IDR_FLAGS_UI_FLAGS_JS);
+  source->AddResourcePath(flags_ui::kFlagsCSS, IDR_FLAGS_UI_FLAGS_CSS);
   source->SetDefaultResource(IDR_FLAGS_UI_FLAGS_HTML);
   source->UseStringsJs();
   return source;
@@ -200,7 +201,7 @@ FlagsUI::FlagsUI(web::WebUIIOS* web_ui)
                 flag_access);
 
   // Set up the about:flags source.
-  web::WebUIIOSDataSource::Add(ios::ChromeBrowserState::FromWebUIIOS(web_ui),
+  web::WebUIIOSDataSource::Add(ChromeBrowserState::FromWebUIIOS(web_ui),
                                CreateFlagsUIHTMLSource());
 }
 

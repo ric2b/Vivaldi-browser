@@ -11,7 +11,7 @@
 #include "base/values.h"
 #include "components/grit/components_resources.h"
 #include "components/prefs/pref_service.h"
-#include "components/safe_browsing/common/safe_browsing_prefs.h"
+#include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "components/security_interstitials/content/security_interstitial_controller_client.h"
 #include "components/security_interstitials/core/common_string_util.h"
 #include "content/public/browser/interstitial_page.h"
@@ -76,7 +76,7 @@ std::string SecurityInterstitialPage::GetHTMLContents() {
   webui::SetLoadTimeDataDefaults(controller()->GetApplicationLocale(),
                                  &load_time_data);
   std::string html =
-      ui::ResourceBundle::GetSharedInstance().DecompressDataResource(
+      ui::ResourceBundle::GetSharedInstance().LoadDataResourceString(
           GetHTMLTemplateId());
 
   webui::AppendWebUiCssTextDefaults(&html);

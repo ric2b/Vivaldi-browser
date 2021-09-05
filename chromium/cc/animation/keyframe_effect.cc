@@ -11,6 +11,7 @@
 #include "cc/animation/animation.h"
 #include "cc/animation/animation_curve.h"
 #include "cc/animation/animation_host.h"
+#include "cc/animation/animation_timeline.h"
 #include "cc/animation/keyframe_model.h"
 #include "cc/animation/scroll_offset_animation_curve.h"
 #include "cc/animation/transform_operations.h"
@@ -45,9 +46,8 @@ std::vector<size_t> FindAnimationsWithSameGroupId(
 
 }  // namespace
 
-KeyframeEffect::KeyframeEffect(KeyframeEffectId id)
-    : animation_(),
-      id_(id),
+KeyframeEffect::KeyframeEffect(Animation* animation)
+    : animation_(animation),
       element_animations_(),
       needs_to_start_keyframe_models_(false),
       scroll_offset_animation_was_interrupted_(false),
@@ -56,14 +56,6 @@ KeyframeEffect::KeyframeEffect(KeyframeEffectId id)
 
 KeyframeEffect::~KeyframeEffect() {
   DCHECK(!has_bound_element_animations());
-}
-
-std::unique_ptr<KeyframeEffect> KeyframeEffect::Create(KeyframeEffectId id) {
-  return std::make_unique<KeyframeEffect>(id);
-}
-
-std::unique_ptr<KeyframeEffect> KeyframeEffect::CreateImplInstance() const {
-  return KeyframeEffect::Create(id());
 }
 
 void KeyframeEffect::SetNeedsPushProperties() {
@@ -272,12 +264,10 @@ void KeyframeEffect::AddKeyframeModel(
 }
 
 void KeyframeEffect::PauseKeyframeModel(int keyframe_model_id,
-                                        double time_offset) {
-  const base::TimeDelta pause_offset =
-      base::TimeDelta::FromSecondsD(time_offset);
+                                        base::TimeDelta time_offset) {
   for (auto& keyframe_model : keyframe_models_) {
     if (keyframe_model->id() == keyframe_model_id) {
-      keyframe_model->Pause(pause_offset);
+      keyframe_model->Pause(time_offset);
     }
   }
 
@@ -365,7 +355,7 @@ void KeyframeEffect::AbortKeyframeModelsWithProperty(
   }
 }
 
-void KeyframeEffect::ActivateKeyframeEffects() {
+void KeyframeEffect::ActivateKeyframeModels() {
   DCHECK(has_bound_element_animations());
 
   bool keyframe_model_activated = false;
@@ -394,62 +384,65 @@ void KeyframeEffect::KeyframeModelAdded() {
   element_animations_->UpdateClientAnimationState();
 }
 
-bool KeyframeEffect::NotifyKeyframeModelStarted(const AnimationEvent& event) {
+bool KeyframeEffect::DispatchAnimationEventToKeyframeModel(
+    const AnimationEvent& event) {
   DCHECK(!event.is_impl_only);
-  for (auto& keyframe_model : keyframe_models_) {
-    if (keyframe_model->group() == event.group_id &&
-        keyframe_model->target_property_id() == event.target_property &&
-        keyframe_model->needs_synchronized_start_time()) {
-      keyframe_model->set_needs_synchronized_start_time(false);
-      if (!keyframe_model->has_set_start_time())
-        keyframe_model->set_start_time(event.monotonic_time);
-      animation_->NotifyKeyframeModelStarted(event);
-      return true;
-    }
+  KeyframeModel* keyframe_model = GetKeyframeModelById(event.uid.model_id);
+  bool dispatched = false;
+  switch (event.type) {
+    case AnimationEvent::STARTED:
+      if (keyframe_model && keyframe_model->needs_synchronized_start_time()) {
+        keyframe_model->set_needs_synchronized_start_time(false);
+        if (!keyframe_model->has_set_start_time())
+          keyframe_model->set_start_time(event.monotonic_time);
+        dispatched = true;
+      }
+      break;
+
+    case AnimationEvent::FINISHED:
+      if (keyframe_model) {
+        keyframe_model->set_received_finished_event(true);
+        dispatched = true;
+      } else {
+        // This is for the case when a keyframe_model is already removed on main
+        // thread, but the impl version of it sent a finished event and is now
+        // waiting for deletion. We would need to delete that keyframe_model
+        // during push properties.
+        SetNeedsPushProperties();
+      }
+      break;
+
+    case AnimationEvent::ABORTED:
+      if (keyframe_model) {
+        keyframe_model->SetRunState(KeyframeModel::ABORTED,
+                                    event.monotonic_time);
+        keyframe_model->set_received_finished_event(true);
+        dispatched = true;
+
+        ElementAnimations* element_animations =
+            animation_->animation_host()
+                ->GetElementAnimationsForElementId(element_id())
+                .get();
+        if (element_animations)
+          element_animations->UpdateClientAnimationState();
+      }
+      break;
+
+    case AnimationEvent::TAKEOVER:
+      // TODO(crbug.com/1018213): Routing TAKEOVER events is broken.
+      // We need to purge KeyframeModels marked for deletion on CT.
+      SetNeedsPushProperties();
+      dispatched = true;
+      break;
+
+    case AnimationEvent::TIME_UPDATED:
+      // TIME_UPDATED events are used to synchronize effect time between cc and
+      // main thread worklet animations. Keyframe models are not involved in
+      // this process.
+      NOTREACHED();
+      break;
   }
-  return false;
-}
-
-bool KeyframeEffect::NotifyKeyframeModelFinished(const AnimationEvent& event) {
-  DCHECK(!event.is_impl_only);
-  for (auto& keyframe_model : keyframe_models_) {
-    if (keyframe_model->group() == event.group_id &&
-        keyframe_model->target_property_id() == event.target_property) {
-      keyframe_model->set_received_finished_event(true);
-      animation_->NotifyKeyframeModelFinished(event);
-      return true;
-    }
-  }
-
-  // This is for the case when a keyframe_model is already removed on main
-  // thread, but the impl version of it sent a finished event and is now waiting
-  // for deletion. We would need to delete that keyframe_model during push
-  // properties.
-  SetNeedsPushProperties();
-  return false;
-}
-
-void KeyframeEffect::NotifyKeyframeModelTakeover(const AnimationEvent& event) {
-  DCHECK(!event.is_impl_only);
-
-  // We need to purge KeyframeModels marked for deletion on CT.
-  SetNeedsPushProperties();
-
-  animation_->NotifyKeyframeModelTakeover(event);
-}
-
-bool KeyframeEffect::NotifyKeyframeModelAborted(const AnimationEvent& event) {
-  DCHECK(!event.is_impl_only);
-  for (auto& keyframe_model : keyframe_models_) {
-    if (keyframe_model->group() == event.group_id &&
-        keyframe_model->target_property_id() == event.target_property) {
-      keyframe_model->SetRunState(KeyframeModel::ABORTED, event.monotonic_time);
-      keyframe_model->set_received_finished_event(true);
-      animation_->NotifyKeyframeModelAborted(event);
-      return true;
-    }
-  }
-  return false;
+  return dispatched;
 }
 
 bool KeyframeEffect::HasTickingKeyframeModel() const {
@@ -768,15 +761,15 @@ void KeyframeEffect::PushPropertiesTo(KeyframeEffect* keyframe_effect_impl) {
   if (element_id_ != keyframe_effect_impl->element_id_) {
     // We have to detach/attach via the Animation as it may need to inform
     // the host as well.
-    if (keyframe_effect_impl->has_attached_element()) {
-      keyframe_effect_impl->animation_->DetachElementForKeyframeEffect(
-          keyframe_effect_impl->element_id_, keyframe_effect_impl->id_);
-    }
-    if (element_id_) {
-      keyframe_effect_impl->animation_->AttachElementForKeyframeEffect(
-          element_id_, id_);
-    }
+    if (keyframe_effect_impl->has_attached_element())
+      keyframe_effect_impl->animation_->DetachElement();
+    if (element_id_)
+      keyframe_effect_impl->animation_->AttachElement(element_id_);
   }
+
+  keyframe_effect_impl->scroll_offset_animation_was_interrupted_ =
+      scroll_offset_animation_was_interrupted_;
+  scroll_offset_animation_was_interrupted_ = false;
 
   // If neither main nor impl have any KeyframeModels, there is nothing further
   // to synchronize.
@@ -799,15 +792,8 @@ void KeyframeEffect::PushPropertiesTo(KeyframeEffect* keyframe_effect_impl) {
     if (current_impl)
       keyframe_model->PushPropertiesTo(current_impl);
   }
-  keyframe_effect_impl->scroll_offset_animation_was_interrupted_ =
-      scroll_offset_animation_was_interrupted_;
-  scroll_offset_animation_was_interrupted_ = false;
 
   keyframe_effect_impl->UpdateTickingState();
-}
-
-void KeyframeEffect::SetAnimation(Animation* animation) {
-  animation_ = animation;
 }
 
 std::string KeyframeEffect::KeyframeModelsToString() const {
@@ -1082,7 +1068,10 @@ void KeyframeEffect::GenerateEvent(AnimationEvents* events,
   if (!events)
     return;
 
-  AnimationEvent event(type, element_id_, keyframe_model.group(),
+  AnimationEvent event(type,
+                       {animation_->animation_timeline()->id(),
+                        animation_->id(), keyframe_model.id()},
+                       keyframe_model.group(),
                        keyframe_model.target_property_id(), monotonic_time);
   event.is_impl_only = keyframe_model.is_impl_only();
   if (!event.is_impl_only) {
@@ -1090,22 +1079,7 @@ void KeyframeEffect::GenerateEvent(AnimationEvents* events,
     return;
   }
   // For impl only animations notify delegate directly, do not record the event.
-  switch (type) {
-    case AnimationEvent::FINISHED:
-      animation_->NotifyKeyframeModelFinished(event);
-      break;
-    case AnimationEvent::STARTED:
-      animation_->NotifyKeyframeModelStarted(event);
-      break;
-    case AnimationEvent::ABORTED:
-      animation_->NotifyKeyframeModelAborted(event);
-      break;
-    case AnimationEvent::TAKEOVER:
-      // We never expect to receive a TAKEOVER notification on impl only
-      // animations.
-      NOTREACHED();
-      break;
-  }
+  animation_->DispatchAndDelegateAnimationEvent(event);
 }
 
 void KeyframeEffect::GenerateTakeoverEventForScrollAnimation(
@@ -1116,17 +1090,28 @@ void KeyframeEffect::GenerateTakeoverEventForScrollAnimation(
   if (!events)
     return;
 
-  AnimationEvent takeover_event(
-      AnimationEvent::TAKEOVER, element_id_, keyframe_model.group(),
-      keyframe_model.target_property_id(), monotonic_time);
+  AnimationEvent takeover_event(AnimationEvent::TAKEOVER,
+                                {animation_->animation_timeline()->id(),
+                                 animation_->id(), keyframe_model.id()},
+                                keyframe_model.group(),
+                                keyframe_model.target_property_id(),
+                                monotonic_time);
   takeover_event.animation_start_time = keyframe_model.start_time();
   const ScrollOffsetAnimationCurve* scroll_offset_animation_curve =
       keyframe_model.curve()->ToScrollOffsetAnimationCurve();
   takeover_event.curve = scroll_offset_animation_curve->Clone();
-  // Notify the compositor that the animation is finished.
-  animation_->NotifyKeyframeModelFinished(takeover_event);
   // Notify main thread.
   events->events_.push_back(takeover_event);
+
+  AnimationEvent finished_event(AnimationEvent::FINISHED,
+                                {animation_->animation_timeline()->id(),
+                                 animation_->id(), keyframe_model.id()},
+                                keyframe_model.group(),
+                                keyframe_model.target_property_id(),
+                                monotonic_time);
+  // Notify the compositor that the animation is finished.
+  finished_event.is_impl_only = true;
+  animation_->DispatchAndDelegateAnimationEvent(finished_event);
 }
 
 }  // namespace cc

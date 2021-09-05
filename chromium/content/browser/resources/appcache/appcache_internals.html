@@ -34,6 +34,16 @@
                 <a class="appcache-info-url" jscontent="manifestURL"
                                              jsvalues="href:manifestURL;"
                                              target="_blank"></a>
+                <ul>
+                  <li>
+                    <span> Manifest Parser Version: </span>
+                    <span jscontent="manifestParserVersion"></span>
+                  </li>
+                  <li>
+                    <span> Manifest Scope: </span>
+                    <span jscontent="manifestScope"></span>
+                  </li>
+                </ul>
               </div>
               <div class="appcache-size">
                 <span> Size: </span>
@@ -56,6 +66,12 @@
                   <li>
                     <span> Last Update Time: </span>
                     <span jscontent="new Date(lastUpdateTime)"></span>
+                  </li>
+                  <li>
+                    <span> Token Expires: </span>
+                    <span jscontent=
+                      "tokenExpires ? new Date(tokenExpires) : '(unset)'">
+                    </span>
                   </li>
                 </ul>
               </div>
@@ -81,13 +97,14 @@
       </div>
 
       <table id="appcache-info-template">
-        <thead>
+        <thead class="appcache-details-header">
           <tr>
             <th>File URL</th>
             <th>Total Size</th>
             <th>Response</th>
             <th>Padding</th>
             <th>Properties</th>
+            <th>Token Expires</th>
           </tr>
         </thead>
         <tbody class="appcache-details"
@@ -102,6 +119,9 @@
             <td jscontent="responseSize"></td>
             <td jscontent="paddingSize"></td>
             <td jscontent="properties"></td>
+            <td class="token-expires" jscontent=
+              "tokenExpires ? new Date(tokenExpires) : '(unset)'">
+            </td>
           </tr>
         </tbody>
       </table>

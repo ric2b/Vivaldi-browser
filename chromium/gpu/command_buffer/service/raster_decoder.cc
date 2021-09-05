@@ -216,7 +216,8 @@ class RasterDecoderImpl final : public RasterDecoder,
                     const GpuPreferences& gpu_preferences,
                     MemoryTracker* memory_tracker,
                     SharedImageManager* shared_image_manager,
-                    scoped_refptr<SharedContextState> shared_context_state);
+                    scoped_refptr<SharedContextState> shared_context_state,
+                    bool is_privileged);
   ~RasterDecoderImpl() override;
 
   gles2::GLES2Util* GetGLES2Util() override { return &util_; }
@@ -321,6 +322,13 @@ class RasterDecoderImpl final : public RasterDecoder,
                                    unsigned format,
                                    int width,
                                    int height) override;
+  bool ClearCompressedTextureLevel3D(gles2::Texture* texture,
+                                     unsigned target,
+                                     int level,
+                                     unsigned format,
+                                     int width,
+                                     int height,
+                                     int depth) override;
   bool ClearLevel3D(gles2::Texture* texture,
                     unsigned target,
                     int level,
@@ -429,6 +437,8 @@ class RasterDecoderImpl final : public RasterDecoder,
                                 GLint y,
                                 GLsizei width,
                                 GLsizei height,
+                                GLboolean unpack_flip_y,
+                                GLboolean unpack_premultiply_alpha,
                                 const volatile GLbyte* mailboxes);
   void DoCopySubTextureINTERNALGLPassthrough(GLint xoffset,
                                              GLint yoffset,
@@ -436,6 +446,8 @@ class RasterDecoderImpl final : public RasterDecoder,
                                              GLint y,
                                              GLsizei width,
                                              GLsizei height,
+                                             GLboolean unpack_flip_y,
+                                             GLboolean unpack_premultiply_alpha,
                                              const Mailbox& source_mailbox,
                                              const Mailbox& dest_mailbox);
   void DoCopySubTextureINTERNALGL(GLint xoffset,
@@ -444,6 +456,8 @@ class RasterDecoderImpl final : public RasterDecoder,
                                   GLint y,
                                   GLsizei width,
                                   GLsizei height,
+                                  GLboolean unpack_flip_y,
+                                  GLboolean unpack_premultiply_alpha,
                                   const Mailbox& source_mailbox,
                                   const Mailbox& dest_mailbox);
   void DoCopySubTextureINTERNALSkia(GLint xoffset,
@@ -452,6 +466,8 @@ class RasterDecoderImpl final : public RasterDecoder,
                                     GLint y,
                                     GLsizei width,
                                     GLsizei height,
+                                    GLboolean unpack_flip_y,
+                                    GLboolean unpack_premultiply_alpha,
                                     const Mailbox& source_mailbox,
                                     const Mailbox& dest_mailbox);
   void DoLoseContextCHROMIUM(GLenum current, GLenum other) { NOTIMPLEMENTED(); }
@@ -552,8 +568,6 @@ class RasterDecoderImpl final : public RasterDecoder,
   // only if not returning an error.
   error::Error current_decoder_error_ = error::kNoError;
 
-  scoped_refptr<gl::GLContext> context_;
-
   GpuPreferences gpu_preferences_;
 
   gles2::DebugMarkerManager debug_marker_manager_;
@@ -585,7 +599,7 @@ class RasterDecoderImpl final : public RasterDecoder,
   // Raster helpers.
   scoped_refptr<ServiceFontManager> font_manager_;
   std::unique_ptr<SharedImageRepresentationSkia> shared_image_;
-  base::Optional<SharedImageRepresentationSkia::ScopedWriteAccess>
+  std::unique_ptr<SharedImageRepresentationSkia::ScopedWriteAccess>
       scoped_shared_image_write_;
   SkSurface* sk_surface_ = nullptr;
   sk_sp<SkSurface> sk_surface_for_testing_;
@@ -604,6 +618,8 @@ class RasterDecoderImpl final : public RasterDecoder,
 
   bool in_copy_sub_texture_ = false;
   bool reset_texture_state_ = false;
+
+  bool is_privileged_ = false;
 
   gl::GLApi* api_ = nullptr;
 
@@ -633,11 +649,12 @@ RasterDecoder* RasterDecoder::Create(
     const GpuPreferences& gpu_preferences,
     MemoryTracker* memory_tracker,
     SharedImageManager* shared_image_manager,
-    scoped_refptr<SharedContextState> shared_context_state) {
+    scoped_refptr<SharedContextState> shared_context_state,
+    bool is_privileged) {
   return new RasterDecoderImpl(client, command_buffer_service, outputter,
                                gpu_feature_info, gpu_preferences,
                                memory_tracker, shared_image_manager,
-                               std::move(shared_context_state));
+                               std::move(shared_context_state), is_privileged);
 }
 
 RasterDecoder::RasterDecoder(DecoderClient* client,
@@ -689,7 +706,8 @@ RasterDecoderImpl::RasterDecoderImpl(
     const GpuPreferences& gpu_preferences,
     MemoryTracker* memory_tracker,
     SharedImageManager* shared_image_manager,
-    scoped_refptr<SharedContextState> shared_context_state)
+    scoped_refptr<SharedContextState> shared_context_state,
+    bool is_privileged)
     : RasterDecoder(client, command_buffer_service, outputter),
       raster_decoder_id_(g_raster_decoder_id.GetNext() + 1),
       supports_gpu_raster_(
@@ -710,7 +728,8 @@ RasterDecoderImpl::RasterDecoderImpl(
                                            memory_tracker),
       gpu_decoder_category_(TRACE_EVENT_API_GET_CATEGORY_GROUP_ENABLED(
           TRACE_DISABLED_BY_DEFAULT("gpu.decoder"))),
-      font_manager_(base::MakeRefCounted<ServiceFontManager>(this)) {
+      font_manager_(base::MakeRefCounted<ServiceFontManager>(this)),
+      is_privileged_(is_privileged) {
   DCHECK(shared_context_state_);
 }
 
@@ -727,8 +746,7 @@ ContextResult RasterDecoderImpl::Initialize(
     const gles2::DisallowedFeatures& disallowed_features,
     const ContextCreationAttribs& attrib_helper) {
   TRACE_EVENT0("gpu", "RasterDecoderImpl::Initialize");
-  DCHECK(shared_context_state_->IsCurrent(surface.get()));
-  DCHECK(!context_.get());
+  DCHECK(shared_context_state_->IsCurrent(nullptr));
 
   api_ = gl::g_current_gl_context;
 
@@ -746,10 +764,10 @@ ContextResult RasterDecoderImpl::Initialize(
 
   DCHECK_EQ(surface.get(), shared_context_state_->surface());
   DCHECK_EQ(context.get(), shared_context_state_->context());
-  context_ = context;
 
   // Create GPU Tracer for timing values.
-  gpu_tracer_.reset(new gles2::GPUTracer(this));
+  gpu_tracer_.reset(
+      new gles2::GPUTracer(this, shared_context_state_->GrContextIsGL()));
 
   // Save the loseContextWhenOutOfMemory context creation attribute.
   lose_context_when_out_of_memory_ =
@@ -831,13 +849,6 @@ void RasterDecoderImpl::Destroy(bool have_context) {
     query_manager_.reset();
   }
 
-  // Destroy the surface before the context, some surface destructors make GL
-  // calls.
-  if (context_.get()) {
-    context_->ReleaseCurrent(nullptr);
-    context_ = nullptr;
-  }
-
   font_manager_->Destroy();
   font_manager_.reset();
 }
@@ -846,9 +857,6 @@ void RasterDecoderImpl::Destroy(bool have_context) {
 bool RasterDecoderImpl::MakeCurrent() {
   if (!shared_context_state_->GrContextIsGL())
     return true;
-
-  if (!context_.get())
-    return false;
 
   if (context_lost_) {
     LOG(ERROR) << "  RasterDecoderImpl: Trying to make lost context current.";
@@ -877,11 +885,15 @@ bool RasterDecoderImpl::MakeCurrent() {
 }
 
 gl::GLContext* RasterDecoderImpl::GetGLContext() {
-  return context_.get();
+  return shared_context_state_->GrContextIsGL()
+             ? shared_context_state_->context()
+             : nullptr;
 }
 
 gl::GLSurface* RasterDecoderImpl::GetGLSurface() {
-  return shared_context_state_->surface();
+  return shared_context_state_->GrContextIsGL()
+             ? shared_context_state_->surface()
+             : nullptr;
 }
 
 Capabilities RasterDecoderImpl::GetCapabilities() {
@@ -937,8 +949,6 @@ Capabilities RasterDecoderImpl::GetCapabilities() {
   if (gr_context()) {
     caps.context_supports_distance_field_text =
         gr_context()->supportsDistanceFieldText();
-    caps.glyph_cache_max_texture_bytes =
-        shared_context_state_->glyph_cache_max_texture_bytes();
   }
   return caps;
 }
@@ -1235,7 +1245,8 @@ error::Error RasterDecoderImpl::DoCommandsImpl(unsigned int num_commands,
         if (DebugImpl && doing_gpu_trace)
           gpu_tracer_->End(gles2::kTraceDecoder);
 
-        if (DebugImpl && debug() && !WasContextLost()) {
+        if (DebugImpl && shared_context_state_->GrContextIsGL() && debug() &&
+            !WasContextLost()) {
           GLenum error;
           while ((error = api()->glGetErrorFn()) != GL_NO_ERROR) {
             LOG(ERROR) << "[" << logger_.GetLogPrefix() << "] "
@@ -1415,6 +1426,17 @@ bool RasterDecoderImpl::ClearCompressedTextureLevel(gles2::Texture* texture,
                                                     unsigned format,
                                                     int width,
                                                     int height) {
+  NOTREACHED();
+  return false;
+}
+
+bool RasterDecoderImpl::ClearCompressedTextureLevel3D(gles2::Texture* texture,
+                                                      unsigned target,
+                                                      int level,
+                                                      unsigned format,
+                                                      int width,
+                                                      int height,
+                                                      int depth) {
   NOTREACHED();
   return false;
 }
@@ -1739,6 +1761,8 @@ void RasterDecoderImpl::DoCopySubTextureINTERNAL(
     GLint y,
     GLsizei width,
     GLsizei height,
+    GLboolean unpack_flip_y,
+    GLboolean unpack_premultiply_alpha,
     const volatile GLbyte* mailboxes) {
   Mailbox source_mailbox = Mailbox::FromVolatile(
       reinterpret_cast<const volatile Mailbox*>(mailboxes)[0]);
@@ -1758,12 +1782,15 @@ void RasterDecoderImpl::DoCopySubTextureINTERNAL(
   if (!shared_context_state_->GrContextIsGL()) {
     // Use Skia to copy texture if raster's gr_context() is not using GL.
     DoCopySubTextureINTERNALSkia(xoffset, yoffset, x, y, width, height,
+                                 unpack_flip_y, unpack_premultiply_alpha,
                                  source_mailbox, dest_mailbox);
   } else if (use_passthrough_) {
-    DoCopySubTextureINTERNALGLPassthrough(xoffset, yoffset, x, y, width, height,
-                                          source_mailbox, dest_mailbox);
+    DoCopySubTextureINTERNALGLPassthrough(
+        xoffset, yoffset, x, y, width, height, unpack_flip_y,
+        unpack_premultiply_alpha, source_mailbox, dest_mailbox);
   } else {
     DoCopySubTextureINTERNALGL(xoffset, yoffset, x, y, width, height,
+                               unpack_flip_y, unpack_premultiply_alpha,
                                source_mailbox, dest_mailbox);
   }
 }
@@ -1775,6 +1802,8 @@ void RasterDecoderImpl::DoCopySubTextureINTERNALGLPassthrough(
     GLint y,
     GLsizei width,
     GLsizei height,
+    GLboolean unpack_flip_y,
+    GLboolean unpack_premultiply_alpha,
     const Mailbox& source_mailbox,
     const Mailbox& dest_mailbox) {
   DCHECK(source_mailbox != dest_mailbox);
@@ -1793,19 +1822,39 @@ void RasterDecoderImpl::DoCopySubTextureINTERNALGLPassthrough(
     return;
   }
 
-  SharedImageRepresentationGLTexturePassthrough::ScopedAccess source_access(
-      source_shared_image.get(), GL_SHARED_IMAGE_ACCESS_MODE_READ_CHROMIUM);
-  if (!source_access.success()) {
+  std::unique_ptr<SharedImageRepresentationGLTexturePassthrough::ScopedAccess>
+      source_access = source_shared_image->BeginScopedAccess(
+          GL_SHARED_IMAGE_ACCESS_MODE_READ_CHROMIUM,
+          SharedImageRepresentation::AllowUnclearedAccess::kNo);
+  if (!source_access) {
     LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCopySubTexture",
                        "unable to access source for read");
     return;
   }
 
-  SharedImageRepresentationGLTexturePassthrough::ScopedAccess dest_access(
-      dest_shared_image.get(), GL_SHARED_IMAGE_ACCESS_MODE_READWRITE_CHROMIUM);
-  if (!dest_access.success()) {
+  // Allow uncleared access, as we manually handle clear tracking.
+  std::unique_ptr<SharedImageRepresentationGLTexturePassthrough::ScopedAccess>
+      dest_access = dest_shared_image->BeginScopedAccess(
+          GL_SHARED_IMAGE_ACCESS_MODE_READWRITE_CHROMIUM,
+          SharedImageRepresentation::AllowUnclearedAccess::kYes);
+  if (!dest_access) {
     LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCopySubTexture",
                        "unable to access destination for write");
+    return;
+  }
+
+  gfx::Rect new_cleared_rect;
+  gfx::Rect old_cleared_rect = dest_shared_image->ClearedRect();
+  gfx::Rect dest_rect(xoffset, yoffset, width, height);
+  if (gles2::TextureManager::CombineAdjacentRects(old_cleared_rect, dest_rect,
+                                                  &new_cleared_rect)) {
+    DCHECK(old_cleared_rect.IsEmpty() ||
+           new_cleared_rect.Contains(old_cleared_rect));
+  } else {
+    // No users of RasterDecoder leverage this functionality. Clearing uncleared
+    // regions could be added here if needed.
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCopySubTexture",
+                       "Cannot clear non-combineable rects.");
     return;
   }
 
@@ -1819,10 +1868,14 @@ void RasterDecoderImpl::DoCopySubTextureINTERNALGLPassthrough(
   api()->glCopySubTextureCHROMIUMFn(
       source_texture->service_id(), /*source_level=*/0, dest_texture->target(),
       dest_texture->service_id(),
-      /*dest_level=*/0, xoffset, yoffset, x, y, width, height,
-      /*unpack_flip_y=*/false, /*unpack_premultiply_alpha=*/false,
+      /*dest_level=*/0, xoffset, yoffset, x, y, width, height, unpack_flip_y,
+      unpack_premultiply_alpha,
       /*unpack_unmultiply_alpha=*/false);
   LOCAL_COPY_REAL_GL_ERRORS_TO_WRAPPER("glCopySubTexture");
+
+  if (!dest_shared_image->IsCleared()) {
+    dest_shared_image->SetClearedRect(new_cleared_rect);
+  }
 }
 
 void RasterDecoderImpl::DoCopySubTextureINTERNALGL(
@@ -1832,6 +1885,8 @@ void RasterDecoderImpl::DoCopySubTextureINTERNALGL(
     GLint y,
     GLsizei width,
     GLsizei height,
+    GLboolean unpack_flip_y,
+    GLboolean unpack_premultiply_alpha,
     const Mailbox& source_mailbox,
     const Mailbox& dest_mailbox) {
   DCHECK(source_mailbox != dest_mailbox);
@@ -1846,9 +1901,11 @@ void RasterDecoderImpl::DoCopySubTextureINTERNALGL(
     return;
   }
 
-  SharedImageRepresentationGLTexture::ScopedAccess source_access(
-      source_shared_image.get(), GL_SHARED_IMAGE_ACCESS_MODE_READ_CHROMIUM);
-  if (!source_access.success()) {
+  std::unique_ptr<SharedImageRepresentationGLTexture::ScopedAccess>
+      source_access = source_shared_image->BeginScopedAccess(
+          GL_SHARED_IMAGE_ACCESS_MODE_READ_CHROMIUM,
+          SharedImageRepresentation::AllowUnclearedAccess::kNo);
+  if (!source_access) {
     LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCopySubTexture",
                        "unable to access source for read");
     return;
@@ -1866,9 +1923,12 @@ void RasterDecoderImpl::DoCopySubTextureINTERNALGL(
     return;
   }
 
-  SharedImageRepresentationGLTexture::ScopedAccess dest_access(
-      dest_shared_image.get(), GL_SHARED_IMAGE_ACCESS_MODE_READWRITE_CHROMIUM);
-  if (!dest_access.success()) {
+  // Allow uncleared access, as we manually handle clear tracking.
+  std::unique_ptr<SharedImageRepresentationGLTexture::ScopedAccess>
+      dest_access = dest_shared_image->BeginScopedAccess(
+          GL_SHARED_IMAGE_ACCESS_MODE_READWRITE_CHROMIUM,
+          SharedImageRepresentation::AllowUnclearedAccess::kYes);
+  if (!dest_access) {
     LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCopySubTexture",
                        "unable to access destination for write");
     return;
@@ -1927,14 +1987,11 @@ void RasterDecoderImpl::DoCopySubTextureINTERNALGL(
     DCHECK(old_cleared_rect.IsEmpty() ||
            new_cleared_rect.Contains(old_cleared_rect));
   } else {
-    // Otherwise clear part of texture level that is not already cleared.
-    if (!gles2::TextureManager::ClearTextureLevel(this, dest_texture,
-                                                  dest_target, dest_level)) {
-      LOCAL_SET_GL_ERROR(GL_OUT_OF_MEMORY, "glCopySubTexture",
-                         "destination texture dimensions too big");
-      return;
-    }
-    new_cleared_rect = gfx::Rect(dest_size);
+    // No users of RasterDecoder leverage this functionality. Clearing uncleared
+    // regions could be added here if needed.
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCopySubTexture",
+                       "Cannot clear non-combineable rects.");
+    return;
   }
 
   ScopedTextureBinder binder(state(), dest_target, dest_texture->service_id(),
@@ -1997,8 +2054,7 @@ void RasterDecoderImpl::DoCopySubTextureINTERNALGL(
           source_internal_format, dest_target, dest_texture->service_id(),
           dest_level, dest_internal_format, xoffset, yoffset, x, y, width,
           height, dest_size.width(), dest_size.height(), source_size.width(),
-          source_size.height(), false /* unpack_flip_y */,
-          false /* unpack_premultiply_alpha */,
+          source_size.height(), unpack_flip_y, unpack_premultiply_alpha,
           false /* unpack_unmultiply_alpha */, false /* dither */,
           transform_matrix, copy_tex_image_blit_.get());
       dest_texture->SetLevelClearedRect(dest_target, dest_level,
@@ -2009,9 +2065,9 @@ void RasterDecoderImpl::DoCopySubTextureINTERNALGL(
 
   gles2::CopyTextureMethod method = GetCopyTextureCHROMIUMMethod(
       GetFeatureInfo(), source_target, source_level, source_internal_format,
-      source_type, dest_target, dest_level, dest_internal_format,
-      false /* unpack_flip_y */, false /* unpack_premultiply_alpha */,
-      false /* unpack_unmultiply_alpha */, false /* dither */);
+      source_type, dest_target, dest_level, dest_internal_format, unpack_flip_y,
+      unpack_premultiply_alpha, false /* unpack_unmultiply_alpha */,
+      false /* dither */);
 #if defined(OS_CHROMEOS) && defined(ARCH_CPU_X86_FAMILY)
   // glDrawArrays is faster than glCopyTexSubImage2D on IA Mesa driver,
   // although opposite in Android.
@@ -2031,9 +2087,9 @@ void RasterDecoderImpl::DoCopySubTextureINTERNALGL(
       source_internal_format, dest_target, dest_texture->service_id(),
       dest_level, dest_internal_format, xoffset, yoffset, x, y, width, height,
       dest_size.width(), dest_size.height(), source_size.width(),
-      source_size.height(), false /* unpack_flip_y */,
-      false /* unpack_premultiply_alpha */, false /* unpack_unmultiply_alpha */,
-      false /* dither */, method, copy_tex_image_blit_.get());
+      source_size.height(), unpack_flip_y, unpack_premultiply_alpha,
+      false /* unpack_unmultiply_alpha */, false /* dither */, method,
+      copy_tex_image_blit_.get());
   dest_texture->SetLevelClearedRect(dest_target, dest_level, new_cleared_rect);
   in_copy_sub_texture_ = false;
   if (reset_texture_state_) {
@@ -2059,6 +2115,8 @@ void RasterDecoderImpl::DoCopySubTextureINTERNALSkia(
     GLint y,
     GLsizei width,
     GLsizei height,
+    GLboolean unpack_flip_y,
+    GLboolean unpack_premultiply_alpha,
     const Mailbox& source_mailbox,
     const Mailbox& dest_mailbox) {
   DCHECK(source_mailbox != dest_mailbox);
@@ -2092,11 +2150,28 @@ void RasterDecoderImpl::DoCopySubTextureINTERNALSkia(
   std::vector<GrBackendSemaphore> begin_semaphores;
   std::vector<GrBackendSemaphore> end_semaphores;
 
-  SharedImageRepresentationSkia::ScopedWriteAccess dest_scoped_access(
-      dest_shared_image.get(), &begin_semaphores, &end_semaphores);
-  if (!dest_scoped_access.success()) {
+  // Allow uncleared access, as we manually handle clear tracking.
+  std::unique_ptr<SharedImageRepresentationSkia::ScopedWriteAccess>
+      dest_scoped_access = dest_shared_image->BeginScopedWriteAccess(
+          &begin_semaphores, &end_semaphores,
+          SharedImageRepresentation::AllowUnclearedAccess::kYes);
+  if (!dest_scoped_access) {
     LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCopySubTexture",
                        "Dest shared image is not writable");
+    return;
+  }
+
+  gfx::Rect new_cleared_rect;
+  gfx::Rect old_cleared_rect = dest_shared_image->ClearedRect();
+  if (gles2::TextureManager::CombineAdjacentRects(old_cleared_rect, dest_rect,
+                                                  &new_cleared_rect)) {
+    DCHECK(old_cleared_rect.IsEmpty() ||
+           new_cleared_rect.Contains(old_cleared_rect));
+  } else {
+    // No users of RasterDecoder leverage this functionality. Clearing uncleared
+    // regions could be added here if needed.
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCopySubTexture",
+                       "Cannot clear non-combineable rects.");
     return;
   }
 
@@ -2106,29 +2181,40 @@ void RasterDecoderImpl::DoCopySubTextureINTERNALSkia(
   // |dest_shared_image|. We can save one copy by drawing the SHM GMB to the
   // target |dest_shared_image| directly.
   // TODO(penghuang): get rid of the one extra copy. https://crbug.com/984045
-  SharedImageRepresentationSkia::ScopedReadAccess source_scoped_access(
-      source_shared_image.get(), &begin_semaphores, &end_semaphores);
+  std::unique_ptr<SharedImageRepresentationSkia::ScopedReadAccess>
+      source_scoped_access = source_shared_image->BeginScopedReadAccess(
+          &begin_semaphores, &end_semaphores);
 
   if (!begin_semaphores.empty()) {
-    bool result = dest_scoped_access.surface()->wait(begin_semaphores.size(),
-                                                     begin_semaphores.data());
+    bool result = dest_scoped_access->surface()->wait(begin_semaphores.size(),
+                                                      begin_semaphores.data());
     DCHECK(result);
   }
 
-  if (!source_scoped_access.success()) {
+  if (!source_scoped_access) {
     LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCopySubTexture",
                        "Source shared image is not accessable");
   } else {
     auto color_type = viz::ResourceFormatToClosestSkColorType(
         true /* gpu_compositing */, source_shared_image->format());
+
+    // TODO(http://crbug.com/1034086): We should initialize alpha_type and
+    // origin using metadata stored with the shared image.
+    SkAlphaType alpha_type = kPremul_SkAlphaType;
+    if (unpack_premultiply_alpha)
+      alpha_type = kUnpremul_SkAlphaType;
     auto source_image = SkImage::MakeFromTexture(
         shared_context_state_->gr_context(),
-        source_scoped_access.promise_image_texture()->backendTexture(),
-        kTopLeft_GrSurfaceOrigin, color_type, kUnpremul_SkAlphaType,
+        source_scoped_access->promise_image_texture()->backendTexture(),
+        kTopLeft_GrSurfaceOrigin, color_type, alpha_type,
         nullptr /* colorSpace */);
 
-    auto* canvas = dest_scoped_access.surface()->getCanvas();
+    auto* canvas = dest_scoped_access->surface()->getCanvas();
     SkPaint paint;
+    if (unpack_flip_y) {
+      canvas->scale(1, -1);
+      canvas->translate(0, -height);
+    }
     paint.setBlendMode(SkBlendMode::kSrc);
     canvas->drawImageRect(source_image, gfx::RectToSkRect(source_rect),
                           gfx::RectToSkRect(dest_rect), &paint);
@@ -2144,8 +2230,12 @@ void RasterDecoderImpl::DoCopySubTextureINTERNALSkia(
   };
   gpu::AddVulkanCleanupTaskForSkiaFlush(
       shared_context_state_->vk_context_provider(), &flush_info);
-  dest_scoped_access.surface()->flush(
+  dest_scoped_access->surface()->flush(
       SkSurface::BackendSurfaceAccess::kNoAccess, flush_info);
+
+  if (!dest_shared_image->IsCleared()) {
+    dest_shared_image->SetClearedRect(new_cleared_rect);
+  }
 }
 
 namespace {
@@ -2282,23 +2372,24 @@ void RasterDecoderImpl::DoBeginRasterCHROMIUM(
   std::vector<GrBackendSemaphore> begin_semaphores;
   DCHECK(end_semaphores_.empty());
   DCHECK(!scoped_shared_image_write_);
-  scoped_shared_image_write_.emplace(shared_image_.get(), final_msaa_count,
-                                     surface_props, &begin_semaphores,
-                                     &end_semaphores_);
+  // Allow uncleared access, as raster specifically handles uncleared images by
+  // clearing them before writing.
+  scoped_shared_image_write_ = shared_image_->BeginScopedWriteAccess(
+      final_msaa_count, surface_props, &begin_semaphores, &end_semaphores_,
+      SharedImageRepresentation::AllowUnclearedAccess::kYes);
+  if (!scoped_shared_image_write_) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION, "glBeginRasterCHROMIUM",
+                       "failed to create surface");
+    shared_image_.reset();
+    return;
+  }
+
   sk_surface_ = scoped_shared_image_write_->surface();
 
   if (!begin_semaphores.empty()) {
     bool result =
         sk_surface_->wait(begin_semaphores.size(), begin_semaphores.data());
     DCHECK(result);
-  }
-
-  if (!sk_surface_) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION, "glBeginRasterCHROMIUM",
-                       "failed to create surface");
-    scoped_shared_image_write_.reset();
-    shared_image_.reset();
-    return;
   }
 
   if (use_ddl_) {
@@ -2386,7 +2477,7 @@ void RasterDecoderImpl::DoRasterCHROMIUM(GLuint raster_shm_id,
   TransferCacheDeserializeHelperImpl impl(raster_decoder_id_, transfer_cache());
   cc::PaintOp::DeserializeOptions options(
       &impl, paint_cache_.get(), font_manager_->strike_client(),
-      shared_context_state_->scratch_deserialization_buffer());
+      shared_context_state_->scratch_deserialization_buffer(), is_privileged_);
   options.crash_dump_on_failure = true;
 
   size_t paint_buffer_size = raster_shm_size;
@@ -2423,10 +2514,13 @@ void RasterDecoderImpl::DoEndRasterCHROMIUM() {
 
   raster_canvas_ = nullptr;
 
+  // The DDL pins memory for the recorded ops so it must be kept alive until its
+  // flushed.
+  std::unique_ptr<SkDeferredDisplayList> ddl;
   if (use_ddl_) {
     TRACE_EVENT0("gpu",
                  "RasterDecoderImpl::DoEndRasterCHROMIUM::DetachAndDrawDDL");
-    auto ddl = recorder_->detach();
+    ddl = recorder_->detach();
     recorder_ = nullptr;
     sk_surface_->draw(ddl.get());
   }
@@ -2449,8 +2543,10 @@ void RasterDecoderImpl::DoEndRasterCHROMIUM() {
                                      flush_info);
     DCHECK(result == GrSemaphoresSubmitted::kYes || end_semaphores_.empty());
     end_semaphores_.clear();
+    ddl.reset();
   }
 
+  shared_context_state_->UpdateSkiaOwnedMemorySize();
   sk_surface_ = nullptr;
   if (!shared_image_) {
     // Test only path for  SetUpForRasterCHROMIUMForTest.
@@ -2501,6 +2597,12 @@ void RasterDecoderImpl::DoCreateTransferCacheEntryINTERNAL(
     LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCreateTransferCacheEntryINTERNAL",
                        "Attempt to use OOP transfer cache with an invalid "
                        "cache entry type.");
+    return;
+  }
+
+  if (entry_type == cc::TransferCacheEntryType::kSkottie && !is_privileged_) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCreateTransferCacheEntryINTERNAL",
+                       "Attempt to use skottie on a non privileged channel");
     return;
   }
 

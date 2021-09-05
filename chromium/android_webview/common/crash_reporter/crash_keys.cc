@@ -15,12 +15,15 @@ const char kAppPackageVersionCode[] = "app-package-version-code";
 
 const char kAndroidSdkInt[] = "android-sdk-int";
 
+const char kSupportLibraryWebkitVersion[] = "androidx-webkit-version";
+
 // clang-format off
 const char* const kWebViewCrashKeyWhiteList[] = {
     "AW_WHITELISTED_DEBUG_KEY",
     kAppPackageName,
     kAppPackageVersionCode,
     kAndroidSdkInt,
+    kSupportLibraryWebkitVersion,
 
     // process type
     "ptype",
@@ -42,11 +45,14 @@ const char* const kWebViewCrashKeyWhiteList[] = {
     "bad_message_reason",
     "discardable-memory-allocated",
     "discardable-memory-free",
+    "mojo-message-error",
     "mojo-message-error__1",
     "mojo-message-error__2",
     "mojo-message-error__3",
     "mojo-message-error__4",
     "total-discardable-memory-allocated",
+    // TODO(https://crbug.com/1006814): Remove this.
+    "IsRenderFrameLive",
 
     // GWP-ASan
     gwp_asan::kMallocCrashKey,

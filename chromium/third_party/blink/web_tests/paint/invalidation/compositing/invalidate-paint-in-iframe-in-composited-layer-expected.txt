@@ -9,14 +9,16 @@
     {
       "name": "LayoutNGBlockFlow DIV",
       "bounds": [304, 200],
-      "paintInvalidations": [
-        {
-          "object": "LayoutNGBlockFlow DIV",
-          "rect": [10, 10, 50, 50],
-          "reason": "background"
-        }
+      "invalidations": [
+        [10, 10, 50, 50]
       ],
       "transform": 1
+    },
+    {
+      "name": "ContentsLayer for Vertical Scrollbar Layer",
+      "position": [785, 0],
+      "bounds": [15, 600],
+      "contentsOpaque": true
     }
   ],
   "transforms": [

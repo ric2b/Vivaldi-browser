@@ -75,7 +75,6 @@ void OverlayPanelLayer::SetProperties(
     float bar_text_opacity,
     bool bar_border_visible,
     float bar_border_height,
-    bool bar_shadow_visible,
     int icon_tint,
     int drag_handlebar_tint,
     float icon_opacity,
@@ -361,7 +360,6 @@ void OverlayPanelLayer::SetProperties(
   // ---------------------------------------------------------------------------
   // Bar Shadow
   // ---------------------------------------------------------------------------
-  if (bar_shadow_visible) {
     ui::Resource* bar_shadow_resource = resource_manager_->GetResource(
         ui::ANDROID_RESOURCE_TYPE_STATIC, bar_shadow_resource_id_);
 
@@ -377,10 +375,6 @@ void OverlayPanelLayer::SetProperties(
       bar_shadow_->SetPosition(gfx::PointF(0.f, bar_bottom));
       bar_shadow_->SetOpacity(1.0f);
     }
-  } else {
-    if (bar_shadow_.get() && bar_shadow_->parent())
-      bar_shadow_->RemoveFromParent();
-  }
 
   // ---------------------------------------------------------------------------
   // Panel
@@ -411,7 +405,7 @@ void OverlayPanelLayer::SetProgressBar(int progress_bar_background_resource_id,
                                        float progress_bar_position_y,
                                        float progress_bar_height,
                                        float progress_bar_opacity,
-                                       int progress_bar_completion,
+                                       float progress_bar_completion,
                                        float panel_width) {
   bool should_render_progress_bar =
       progress_bar_visible && progress_bar_opacity > 0.f;
@@ -449,8 +443,7 @@ void OverlayPanelLayer::SetProgressBar(int progress_bar_background_resource_id,
     if (progress_bar_->parent() != layer_)
       layer_->AddChild(progress_bar_);
 
-    float progress_bar_width =
-        floor(panel_width * progress_bar_completion / 100.f);
+    float progress_bar_width = floor(panel_width * progress_bar_completion);
     gfx::Size progress_bar_size(progress_bar_width, progress_bar_height);
     progress_bar_->SetUIResourceId(progress_bar_resource->ui_resource()->id());
     progress_bar_->SetBorder(progress_bar_resource->Border(progress_bar_size));

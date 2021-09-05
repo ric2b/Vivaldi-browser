@@ -32,6 +32,7 @@ class AnimationHost;
 class LayerTreeFrameSink;
 class LayerTreeHost;
 class LayerTreeSettings;
+class RenderFrameMetadataObserver;
 class TaskGraphRunner;
 class UkmRecorderFactory;
 }  // namespace cc
@@ -89,7 +90,7 @@ class CONTENT_EXPORT LayerTreeView : public cc::LayerTreeHostClient,
   void DidInitializeLayerTreeFrameSink() override;
   void DidFailToInitializeLayerTreeFrameSink() override;
   void WillCommit() override;
-  void DidCommit() override;
+  void DidCommit(base::TimeTicks commit_start_time) override;
   void DidCommitAndDrawFrame() override;
   void DidReceiveCompositorFrameAck() override {}
   void DidCompletePageScaleAnimation() override;
@@ -97,7 +98,9 @@ class CONTENT_EXPORT LayerTreeView : public cc::LayerTreeHostClient,
       uint32_t frame_token,
       const gfx::PresentationFeedback& feedback) override;
   void RecordStartOfFrameMetrics() override;
-  void RecordEndOfFrameMetrics(base::TimeTicks frame_begin_time) override;
+  void RecordEndOfFrameMetrics(
+      base::TimeTicks frame_begin_time,
+      cc::ActiveFrameSequenceTrackers trackers) override;
   std::unique_ptr<cc::BeginMainFrameMetrics> GetBeginMainFrameMetrics()
       override;
 
@@ -123,7 +126,9 @@ class CONTENT_EXPORT LayerTreeView : public cc::LayerTreeHostClient,
 
  private:
   void SetLayerTreeFrameSink(
-      std::unique_ptr<cc::LayerTreeFrameSink> layer_tree_frame_sink);
+      std::unique_ptr<cc::LayerTreeFrameSink> layer_tree_frame_sink,
+      std::unique_ptr<cc::RenderFrameMetadataObserver>
+          render_frame_metadata_observer);
 
   const scoped_refptr<base::SingleThreadTaskRunner> main_thread_;
   const scoped_refptr<base::SingleThreadTaskRunner> compositor_thread_;

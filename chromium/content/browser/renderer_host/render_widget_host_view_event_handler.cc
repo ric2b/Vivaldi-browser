@@ -35,7 +35,6 @@
 
 #if defined(OS_WIN)
 #include "content/browser/frame_host/render_frame_host_impl.h"
-#include "content/public/common/context_menu_params.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/display/screen.h"
 #endif  // defined(OS_WIN)
@@ -106,10 +105,7 @@ bool NeedsInputGrab(content::RenderWidgetHostViewBase* view) {
 
 namespace content {
 
-RenderWidgetHostViewEventHandler::Delegate::Delegate()
-    : selection_controller_client_(nullptr),
-      selection_controller_(nullptr),
-      overscroll_controller_(nullptr) {}
+RenderWidgetHostViewEventHandler::Delegate::Delegate() = default;
 
 RenderWidgetHostViewEventHandler::Delegate::~Delegate() {}
 
@@ -117,18 +113,12 @@ RenderWidgetHostViewEventHandler::RenderWidgetHostViewEventHandler(
     RenderWidgetHostImpl* host,
     RenderWidgetHostViewBase* host_view,
     Delegate* delegate)
-    : accept_return_character_(false),
-      mouse_locked_(false),
-      pinch_zoom_enabled_(content::IsPinchToZoomEnabled()),
-      set_focus_on_mouse_down_or_key_event_(false),
+    : pinch_zoom_enabled_(content::IsPinchToZoomEnabled()),
       enable_consolidated_movement_(
           base::FeatureList::IsEnabled(features::kConsolidatedMovementXY)),
       host_(host),
       host_view_(host_view),
-      popup_child_host_view_(nullptr),
-      popup_child_event_handler_(nullptr),
       delegate_(delegate),
-      window_(nullptr),
       mouse_wheel_phase_handler_(host_view),
       debug_observer_(features::IsVizHitTestingDebugEnabled()
                           ? std::make_unique<HitTestDebugKeyEventObserver>(host)
@@ -164,22 +154,21 @@ void RenderWidgetHostViewEventHandler::UpdateMouseLockRegion() {
 }
 #endif
 
-bool RenderWidgetHostViewEventHandler::LockMouse(
+blink::mojom::PointerLockResult RenderWidgetHostViewEventHandler::LockMouse(
     bool request_unadjusted_movement) {
   aura::Window* root_window = window_->GetRootWindow();
   if (!root_window)
-    return false;
+    return blink::mojom::PointerLockResult::kWrongDocument;
 
   if (mouse_locked_)
-    return true;
+    return blink::mojom::PointerLockResult::kSuccess;
 
   if (request_unadjusted_movement && window_->GetHost()) {
     mouse_locked_unadjusted_movement_ =
         window_->GetHost()->RequestUnadjustedMovement();
     if (!mouse_locked_unadjusted_movement_)
-      return false;
+      return blink::mojom::PointerLockResult::kUnsupportedOptions;
   }
-
   mouse_locked_ = true;
 
 #if !defined(OS_WIN)
@@ -198,7 +187,39 @@ bool RenderWidgetHostViewEventHandler::LockMouse(
     MoveCursorToCenter(nullptr);
 
   delegate_->SetTooltipsEnabled(false);
-  return true;
+  return blink::mojom::PointerLockResult::kSuccess;
+}
+
+blink::mojom::PointerLockResult
+RenderWidgetHostViewEventHandler::ChangeMouseLock(
+    bool request_unadjusted_movement) {
+  aura::Window* root_window = window_->GetRootWindow();
+  if (!root_window || !window_->GetHost())
+    return blink::mojom::PointerLockResult::kWrongDocument;
+
+  // If lock was lost before completing this change request
+  // it was because the user hit escape or navigated away
+  // from the page.
+  if (!mouse_locked_)
+    return blink::mojom::PointerLockResult::kUserRejected;
+
+  if (!request_unadjusted_movement) {
+    mouse_locked_unadjusted_movement_.reset();
+    return blink::mojom::PointerLockResult::kSuccess;
+  }
+
+  if (mouse_locked_unadjusted_movement_) {
+    // Desired state already acquired.
+    return blink::mojom::PointerLockResult::kSuccess;
+  }
+
+  mouse_locked_unadjusted_movement_ =
+      window_->GetHost()->RequestUnadjustedMovement();
+
+  if (!mouse_locked_unadjusted_movement_)
+    return blink::mojom::PointerLockResult::kUnsupportedOptions;
+
+  return blink::mojom::PointerLockResult::kSuccess;
 }
 
 void RenderWidgetHostViewEventHandler::UnlockMouse() {
@@ -670,7 +691,8 @@ void RenderWidgetHostViewEventHandler::FinishImeCompositionSession() {
   // call to finish composition text should be made through the RWHVA itself
   // otherwise the following call to cancel composition will lead to an extra
   // IPC for finishing the ongoing composition (see https://crbug.com/723024).
-  host_view_->GetTextInputClient()->ConfirmCompositionText();
+  host_view_->GetTextInputClient()->ConfirmCompositionText(
+      /* keep_selection */ false);
   host_view_->ImeCancelComposition();
 }
 
@@ -799,8 +821,7 @@ void RenderWidgetHostViewEventHandler::ModifyEventMovementAndCoords(
     // reset any global_mouse_position set previously.
     if (ui_mouse_event.type() == ui::ET_MOUSE_ENTERED ||
         ui_mouse_event.type() == ui::ET_MOUSE_EXITED) {
-      global_mouse_position_.SetPoint(event->PositionInScreen().x,
-                                      event->PositionInScreen().y);
+      global_mouse_position_ = event->PositionInScreen();
     }
 
     // Movement is computed by taking the difference of the new cursor position
@@ -814,14 +835,13 @@ void RenderWidgetHostViewEventHandler::ModifyEventMovementAndCoords(
     // to keep the movement calculation as "floor(cur_pos) - floor(last_pos)".
     // Remove the floor here when movement_x/y is changed to double.
     if (!(ui_mouse_event.flags() & ui::EF_UNADJUSTED_MOUSE)) {
-      event->movement_x = gfx::ToFlooredInt(event->PositionInScreen().x) -
+      event->movement_x = gfx::ToFlooredInt(event->PositionInScreen().x()) -
                           gfx::ToFlooredInt(global_mouse_position_.x());
-      event->movement_y = gfx::ToFlooredInt(event->PositionInScreen().y) -
+      event->movement_y = gfx::ToFlooredInt(event->PositionInScreen().y()) -
                           gfx::ToFlooredInt(global_mouse_position_.y());
     }
 
-    global_mouse_position_.SetPoint(event->PositionInScreen().x,
-                                    event->PositionInScreen().y);
+    global_mouse_position_ = event->PositionInScreen();
   }
 
   // This logic is similar to |is_move_to_center_event| check when
@@ -846,10 +866,8 @@ void RenderWidgetHostViewEventHandler::ModifyEventMovementAndCoords(
                                  unlocked_global_mouse_position_.y());
     }
   } else {
-    unlocked_mouse_position_.SetPoint(event->PositionInWidget().x,
-                                      event->PositionInWidget().y);
-    unlocked_global_mouse_position_.SetPoint(event->PositionInScreen().x,
-                                             event->PositionInScreen().y);
+    unlocked_mouse_position_ = event->PositionInWidget();
+    unlocked_global_mouse_position_ = event->PositionInScreen();
   }
 }
 
@@ -894,9 +912,9 @@ bool RenderWidgetHostViewEventHandler::MatchesSynthesizedMovePosition(
       // correctly. Workaround is to treat a mouse move or drag event off by
       // atmost 2 px from the center as a move to center event.
       // TODO(crbug.com/991236): figure out a way to avoid the conversion error.
-      return ((std::abs(event.PositionInScreen().x -
+      return ((std::abs(event.PositionInScreen().x() -
                         synthetic_move_position_->x()) <= 2) &&
-              (std::abs(event.PositionInScreen().y -
+              (std::abs(event.PositionInScreen().y() -
                         synthetic_move_position_->y()) <= 2));
     } else {
       return synthetic_move_position_.value() ==

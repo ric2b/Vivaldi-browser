@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/test/task_environment.h"
 #include "services/resource_coordinator/public/cpp/memory_instrumentation/client_process_impl.h"
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/memory/ref_counted_memory.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/test/test_io_thread.h"
@@ -16,7 +16,7 @@
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/memory_dump_manager_test_utils.h"
 #include "base/trace_event/memory_dump_scheduler.h"
-#include "base/trace_event/memory_infra_background_whitelist.h"
+#include "base/trace_event/memory_infra_background_allowlist.h"
 #include "base/trace_event/trace_buffer.h"
 #include "base/trace_event/trace_config.h"
 #include "base/trace_event/trace_config_memory_test_util.h"
@@ -138,7 +138,8 @@ class MockCoordinator : public mojom::Coordinator {
 class MemoryTracingIntegrationTest : public testing::Test {
  public:
   void SetUp() override {
-    message_loop_ = std::make_unique<base::MessageLoop>();
+    task_environment_ =
+        std::make_unique<base::test::SingleThreadTaskEnvironment>();
     coordinator_ = std::make_unique<MockCoordinator>(this);
   }
 
@@ -161,7 +162,7 @@ class MemoryTracingIntegrationTest : public testing::Test {
     mdm_.reset();
     client_process_.reset();
     coordinator_.reset();
-    message_loop_.reset();
+    task_environment_.reset();
     TraceLog::ResetForTesting();
   }
 
@@ -247,7 +248,7 @@ class MemoryTracingIntegrationTest : public testing::Test {
   std::unique_ptr<MemoryDumpManager> mdm_;
 
  private:
-  std::unique_ptr<base::MessageLoop> message_loop_;
+  std::unique_ptr<base::test::SingleThreadTaskEnvironment> task_environment_;
   std::unique_ptr<MockCoordinator> coordinator_;
   std::unique_ptr<ClientProcessImpl> client_process_;
   uint64_t guid_counter_ = 0;
@@ -297,7 +298,7 @@ TEST_F(MemoryTracingIntegrationTest, InitializedAfterStartOfTracing) {
 // DETAILED, even if requested explicitly.
 TEST_F(MemoryTracingIntegrationTest, TestBackgroundTracingSetup) {
   InitializeClientProcess(mojom::ProcessType::BROWSER);
-  base::trace_event::SetDumpProviderWhitelistForTesting(kTestMDPWhitelist);
+  base::trace_event::SetDumpProviderAllowlistForTesting(kTestMDPWhitelist);
   auto mdp = std::make_unique<MockMemoryDumpProvider>();
   RegisterDumpProvider(&*mdp, nullptr, MemoryDumpProvider::Options(),
                        kWhitelistedMDPName);
@@ -443,7 +444,7 @@ TEST_F(MemoryTracingIntegrationTest, PeriodicDumpingWithMultipleModes) {
 
 TEST_F(MemoryTracingIntegrationTest, TestWhitelistingMDP) {
   InitializeClientProcess(mojom::ProcessType::RENDERER);
-  base::trace_event::SetDumpProviderWhitelistForTesting(kTestMDPWhitelist);
+  base::trace_event::SetDumpProviderAllowlistForTesting(kTestMDPWhitelist);
   std::unique_ptr<MockMemoryDumpProvider> mdp1(new MockMemoryDumpProvider);
   RegisterDumpProvider(mdp1.get(), nullptr);
   std::unique_ptr<MockMemoryDumpProvider> mdp2(new MockMemoryDumpProvider);

@@ -33,24 +33,27 @@ class GpuVideoAcceleratorFactories;
 // from the data source.
 class IPCMediaPipelineHost {
  public:
-  using Creator = base::Callback<std::unique_ptr<IPCMediaPipelineHost>(
-      const scoped_refptr<base::SequencedTaskRunner>& task_runner,
-      DataSource* data_source)>;
+  using Creator =
+      base::RepeatingCallback<std::unique_ptr<IPCMediaPipelineHost>()>;
 
-  using InitializeCB =
-      base::Callback<void(bool success,
-                          int bitrate,
-                          const PlatformMediaTimeInfo& time_info,
-                          const PlatformAudioConfig& audio_config,
-                          const PlatformVideoConfig& video_config)>;
-  using DecodeVideoCB =
-      base::Callback<void(DemuxerStream::Status,
-                          const scoped_refptr<VideoFrame>&)>;
+  using InitializeCB = base::OnceCallback<void(bool success)>;
 
   virtual ~IPCMediaPipelineHost() {}
 
+  void init_data_source(DataSource* data_source) {
+    DCHECK(data_source);
+    DCHECK(!data_source_);
+    data_source_ = data_source;
+  }
+
+  DataSource* data_source() const { return data_source_; }
+  int bitrate() const { return bitrate_; }
+  PlatformMediaTimeInfo time_info() const { return time_info_; }
+  const PlatformAudioConfig& audio_config() const { return audio_config_; }
+  const PlatformVideoConfig& video_config() const { return video_config_; }
+
   virtual void Initialize(const std::string& mimetype,
-                          const InitializeCB& callback) = 0;
+                          InitializeCB callback) = 0;
 
   // Used to inform the platform side of the pipeline that a seek request is
   // about to arrive.  This lets the platform drop everything it was doing and
@@ -59,24 +62,18 @@ class IPCMediaPipelineHost {
 
   // Performs the seek over the IPC.
   virtual void Seek(base::TimeDelta time,
-                    const PipelineStatusCB& status_cb) = 0;
-
-  // Stops the demuxer.
-  virtual void Stop() = 0;
+                    PipelineStatusCallback status_cb) = 0;
 
   // Starts an asynchronous read of decoded media data over the IPC.
   virtual void ReadDecodedData(PlatformMediaDataType type,
-                               const DemuxerStream::ReadCB& read_cb) = 0;
+                               DemuxerStream::ReadCB read_cb) = 0;
 
-  virtual void AppendBuffer(const scoped_refptr<DecoderBuffer>& buffer,
-                            const VideoDecoder::DecodeCB& decode_cb) = 0;
-  virtual bool DecodeVideo(const VideoDecoderConfig& config,
-                           const DecodeVideoCB& read_cb) = 0;
-  virtual bool HasEnoughData() = 0;
-  virtual int GetMaxDecodeBuffers() = 0;
-
-  virtual PlatformAudioConfig audio_config() const = 0;
-  virtual PlatformVideoConfig video_config() const = 0;
+ protected:
+  DataSource* data_source_ = nullptr;
+  int bitrate_ = -1;
+  PlatformMediaTimeInfo time_info_;
+  PlatformAudioConfig audio_config_;
+  PlatformVideoConfig video_config_;
 };
 
 }  // namespace media

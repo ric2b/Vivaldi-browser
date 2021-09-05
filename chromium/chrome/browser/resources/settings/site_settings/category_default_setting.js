@@ -6,46 +6,100 @@
  * @fileoverview
  * 'category-default-setting' is the polymer element for showing a certain
  * category under Site Settings.
+ *
+ * |optionLabel_| toggle is enabled:
+ * +-------------------------------------------------+
+ * | Category                                        |<-- Not defined here
+ * |                                                 |
+ * |  optionLabel_                     ( O)          |
+ * |  optionDescription_                             |
+ * |                                                 |    SubOptionMode.PREF or
+ * |  subOptionLabel                   ( O)          |<-- COOKIES_SESSION_ONLY
+ * |  subOptionDescription                           |    (optional)
+ * |                                                 |
+ * +-------------------------------------------------+
+ *
+ * |optionLabel_| toggle is disabled:
+ * +-------------------------------------------------+
+ * | Category                                        |<-- Not defined here
+ * |                                                 |
+ * |  optionLabel_                     (O )          |
+ * |  optionDescription_                             |
+ * |                                                 |
+ * |  subOptionLabel                   (O )          |<-- Toggle is off and
+ * |  subOptionDescription                           |    disabled; or hidden
+ * |                                                 |
+ * +-------------------------------------------------+
+ *
  */
+
+/**
+ * The setting to display as a sub-option, if any.
+ * @enum {string}
+ */
+const SubOptionMode = {
+  COOKIES_SESSION_ONLY: 'cookies-session-only',
+  PREF: 'pref',
+  NONE: 'none',
+};
+
 Polymer({
   is: 'category-default-setting',
 
   behaviors: [SiteSettingsBehavior, WebUIListenerBehavior],
 
   properties: {
-    /* The second line, shown under the |optionLabel_| line. (optional) */
-    optionDescription: String,
-
-    /* The second line, shown under the |subOptionLabel| line. (optional) */
-    subOptionDescription: String,
-
-    /* The sub-option is a separate toggle. Setting this label will show the
-     * additional toggle. Shown above |subOptionDescription|. (optional) */
-    subOptionLabel: String,
 
     /* The on/off text for |optionLabel_| below. */
     toggleOffLabel: String,
     toggleOnLabel: String,
 
+    /* The on/off text for |optionDescription_| below. */
+    toggleOffDescription: String,
+    toggleOnDescription: String,
+
+    /* The sub-option is a separate toggle. Setting this label will show the
+     * additional sub option. Shown above |subOptionDescription|. (optional)
+     */
+    subOptionLabel: String,
+
+    /* The second line, shown under the |subOptionLabel| line. (optional) */
+    subOptionDescription: String,
+
+    /* The valid sub-option modes. */
+    subOptionMode: String,
+
+    /* The pref that the sub-option state is bound to, when |subOptionMode| is
+     * set to SubOptionMode.PREF. */
+    subOptionPref: Boolean,
+
+    /* Pref based
     /** @private {chrome.settingsPrivate.PrefObject} */
     controlParams_: {
       type: Object,
-      value: function() {
+      value() {
         return /** @type {chrome.settingsPrivate.PrefObject} */ ({});
       },
     },
 
     /**
-     * The label to be shown next to the toggle (above |optionDescription|).
-     * This will be either toggleOffLabel or toggleOnLabel.
+     * The label to be shown next to the toggle (above
+     * |optionDescription_|). This will be either toggleOffLabel or
+     * toggleOnLabel.
      * @private
      */
     optionLabel_: String,
 
+    /* The second line, shown under the |optionLabel_| line. This will be
+     * either toggleOffDescription or toggleOnDescription. (optional)
+     * @private
+     */
+    optionDescription_: String,
+
     /** @private {!DefaultContentSetting} */
     priorDefaultContentSetting_: {
       type: Object,
-      value: function() {
+      value() {
         return /** @type {DefaultContentSetting} */ ({});
       },
     },
@@ -57,7 +111,7 @@ Polymer({
      */
     subControlParams_: {
       type: Object,
-      value: function() {
+      value() {
         return /** @type {chrome.settingsPrivate.PrefObject} */ ({});
       },
     },
@@ -70,7 +124,7 @@ Polymer({
   ],
 
   /** @override */
-  ready: function() {
+  ready() {
     this.addWebUIListener(
         'contentSettingCategoryChanged', this.onCategoryChanged_.bind(this));
   },
@@ -85,7 +139,7 @@ Polymer({
    * This is also called during page setup after we get the default state.
    * @private
    */
-  onChangePermissionControl_: function() {
+  onChangePermissionControl_() {
     if (this.category === undefined ||
         this.controlParams_.value === undefined ||
         this.subControlParams_.value === undefined) {
@@ -126,8 +180,12 @@ Polymer({
       case settings.ContentSettingsTypes.MIDI_DEVICES:
       case settings.ContentSettingsTypes.USB_DEVICES:
       case settings.ContentSettingsTypes.SERIAL_PORTS:
+      case settings.ContentSettingsTypes.BLUETOOTH_DEVICES:
       case settings.ContentSettingsTypes.BLUETOOTH_SCANNING:
       case settings.ContentSettingsTypes.NATIVE_FILE_SYSTEM_WRITE:
+      case settings.ContentSettingsTypes.HID_DEVICES:
+      case settings.ContentSettingsTypes.VR:
+      case settings.ContentSettingsTypes.AR:
         // "Ask" vs "Blocked".
         this.browserProxy.setDefaultValueForContentType(
             this.category,
@@ -162,7 +220,7 @@ Polymer({
    * @param {!DefaultContentSetting} update
    * @private
    */
-  updateControlParams_: function(update) {
+  updateControlParams_(update) {
     // Early out if there is no actual change.
     if (this.priorDefaultContentSetting_.setting == update.setting &&
         this.priorDefaultContentSetting_.source == update.source) {
@@ -201,20 +259,28 @@ Polymer({
     this.controlParams_ = /** @type {chrome.settingsPrivate.PrefObject} */ (
         Object.assign({'value': prefValue}, basePref));
 
-    const subPrefValue =
-        this.category == settings.ContentSettingsTypes.COOKIES &&
-        update.setting == settings.ContentSetting.SESSION_ONLY;
-    // The subControlParams_ must be replaced (rather than just value changes)
-    // so that observers will be notified of the change.
-    this.subControlParams_ = /** @type {chrome.settingsPrivate.PrefObject} */ (
-        Object.assign({'value': subPrefValue}, basePref));
+    if (!!settings.routes.COOKIES &&
+        !loadTimeData.getBoolean('privacySettingsRedesignEnabled')) {
+      assertNotReached(
+          'Cookie specific category logic should be removed when M82 settings' +
+          'redesign solidifies.');
+    } else {
+      const subPrefValue =
+          this.category == settings.ContentSettingsTypes.COOKIES &&
+          update.setting == settings.ContentSetting.SESSION_ONLY;
+      // The subControlParams_ must be replaced (rather than just value changes)
+      // so that observers will be notified of the change.
+      this.subControlParams_ =
+          /** @type {chrome.settingsPrivate.PrefObject} */ (
+              Object.assign({'value': subPrefValue}, basePref));
+    }
   },
 
   /**
    * Handles changes to the category pref and the |category| member variable.
    * @private
    */
-  onCategoryChanged_: function() {
+  onCategoryChanged_() {
     this.browserProxy.getDefaultValueForContentType(this.category)
         .then(defaultValue => {
           this.updateControlParams_(defaultValue);
@@ -223,6 +289,8 @@ Polymer({
               this.computeIsSettingEnabled(defaultValue.setting);
           this.optionLabel_ =
               categoryEnabled ? this.toggleOnLabel : this.toggleOffLabel;
+          this.optionDescription_ = categoryEnabled ? this.toggleOnDescription :
+                                                      this.toggleOffDescription;
         });
   },
 
@@ -230,8 +298,24 @@ Polymer({
    * @return {boolean}
    * @private
    */
-  isToggleDisabled_: function() {
+  isToggleDisabled_() {
     return this.category == settings.ContentSettingsTypes.POPUPS &&
         loadTimeData.getBoolean('isGuest');
+  },
+
+  /**
+   * @return {boolean}
+   * @private
+   */
+  showCookiesSubOption_(subOptionMode) {
+    return (subOptionMode == SubOptionMode.COOKIES_SESSION_ONLY);
+  },
+
+  /**
+   * @return {boolean}
+   * @private
+   */
+  showPrefSubOption_(subOptionMode) {
+    return (subOptionMode == SubOptionMode.PREF);
   },
 });

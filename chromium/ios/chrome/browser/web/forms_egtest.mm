@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#import <EarlGrey/EarlGrey.h>
 #import <XCTest/XCTest.h>
 
 #include <memory>
@@ -11,23 +10,20 @@
 #include "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
 #include "components/strings/grit/components_strings.h"
+#include "components/url_formatter/url_formatter.h"
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_constants.h"
-#import "ios/chrome/test/app/chrome_test_util.h"
-#import "ios/chrome/test/app/tab_test_util.h"
+#import "ios/chrome/test/earl_grey/chrome_actions.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
 #import "ios/chrome/test/scoped_eg_synchronization_disabler.h"
+#import "ios/testing/earl_grey/earl_grey_test.h"
 #import "ios/testing/earl_grey/matchers.h"
-#import "ios/web/public/test/earl_grey/web_view_actions.h"
-#import "ios/web/public/test/earl_grey/web_view_matchers.h"
 #include "ios/web/public/test/element_selector.h"
 #include "ios/web/public/test/http_server/data_response_provider.h"
 #import "ios/web/public/test/http_server/http_server.h"
 #include "ios/web/public/test/http_server/http_server_util.h"
-#include "ios/web/public/test/url_test_util.h"
-#import "ios/web/public/web_client.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -35,6 +31,7 @@
 
 using chrome_test_util::ButtonWithAccessibilityLabelId;
 using chrome_test_util::OmniboxText;
+using chrome_test_util::TapWebElement;
 using chrome_test_util::WebViewMatcher;
 
 using testing::ElementToDismissAlert;
@@ -217,33 +214,23 @@ id<GREYMatcher> ResendPostButtonMatcher() {
   [[EarlGrey selectElementWithMatcher:OmniboxText(destinationURL.GetContent())]
       assertWithMatcher:grey_notNil()];
 
-  // WKBasedNavigationManager presents repost confirmation dialog before loading
-  // stops.
-  if ([ChromeEarlGrey isSlimNavigationManagerEnabled]) {
-    [chrome_test_util::BrowserCommandDispatcherForMainBVC() reload];
-  } else {
-    // Legacy navigation manager presents repost confirmation dialog after
-    // loading stops.
-    [ChromeEarlGrey reload];
-  }
+  // Repost confirmation dialog is presented before loading stops so do not wait
+  // for load to complete because it never will.
+  [ChromeEarlGrey reloadAndWaitForCompletion:NO];
 
   {
-    // When slim navigation manager is enabled, synchronization must be disabled
-    // until after the repost confirmation is dismissed because it is presented
-    // during the load. It is always disabled, but immediately re-enabled if
-    // slim navigation manger is not enabled. This is necessary in order to keep
-    // the correct scope of ScopedSynchronizationDisabler which ensures
-    // synchronization is not left disabled if the test fails.
+    // Synchronization must be disabled until after the repost confirmation is
+    // dismissed because it is presented during the load. It is always disabled,
+    // but immediately re-enabled if slim navigation manger is not enabled. This
+    // is necessary in order to keep the correct scope of
+    // ScopedSynchronizationDisabler which ensures synchronization is not left
+    // disabled if the test fails.
     std::unique_ptr<ScopedSynchronizationDisabler> disabler =
         std::make_unique<ScopedSynchronizationDisabler>();
-    if (![ChromeEarlGrey isSlimNavigationManagerEnabled]) {
-      disabler.reset();
-    } else {
-      // TODO(crbug.com/989615): Investigate why this is necessary even with a
-      // visible check below.
-      base::test::ios::SpinRunLoopWithMinDelay(
-          base::TimeDelta::FromSecondsD(0.5));
-    }
+    // TODO(crbug.com/989615): Investigate why this is necessary even with a
+    // visible check below.
+    base::test::ios::SpinRunLoopWithMinDelay(
+        base::TimeDelta::FromSecondsD(0.5));
 
     [ChromeEarlGrey
         waitForSufficientlyVisibleElementWithMatcher:ResendPostButtonMatcher()];
@@ -271,31 +258,24 @@ id<GREYMatcher> ResendPostButtonMatcher() {
   [ChromeEarlGrey loadURL:GetGenericUrl()];
   [ChromeEarlGrey goBack];
 
-  // WKBasedNavigationManager doesn't triggere repost on |goForward| due to
-  // WKWebView's back-forward cache. Force reload to trigger repost. Not using
-  // [ChromeEarlGrey reload] because WKBasedNavigationManager presents repost
-  // confirmation dialog before loading stops.
-  if ([ChromeEarlGrey isSlimNavigationManagerEnabled]) {
-    [chrome_test_util::BrowserCommandDispatcherForMainBVC() reload];
-  }
+  // NavigationManager doesn't trigger repost on |goForward| due to WKWebView's
+  // back-forward cache. Force reload to trigger repost. Not waiting because
+  // NavigationManager presents repost confirmation dialog before loading stops.
+  [ChromeEarlGrey reloadAndWaitForCompletion:NO];
 
   {
-    // When slim navigation manager is enabled, synchronization must be disabled
-    // until after the repost confirmation is dismissed because it is presented
-    // during the load. It is always disabled, but immediately re-enabled if
-    // slim navigation manger is not enabled. This is necessary in order to keep
-    // the correct scope of ScopedSynchronizationDisabler which ensures
-    // synchronization is not left disabled if the test fails.
+    // Synchronization must be disabled until after the repost confirmation is
+    // dismissed because it is presented during the load. It is always disabled,
+    // but immediately re-enabled if slim navigation manger is not enabled. This
+    // is necessary in order to keep the correct scope of
+    // ScopedSynchronizationDisabler which ensures synchronization is not left
+    // disabled if the test fails.
     std::unique_ptr<ScopedSynchronizationDisabler> disabler =
         std::make_unique<ScopedSynchronizationDisabler>();
-    if (![ChromeEarlGrey isSlimNavigationManagerEnabled]) {
-      disabler.reset();
-    } else {
       // TODO(crbug.com/989615): Investigate why this is necessary even with a
       // visible check below.
       base::test::ios::SpinRunLoopWithMinDelay(
           base::TimeDelta::FromSecondsD(0.5));
-    }
 
     [ChromeEarlGrey
         waitForSufficientlyVisibleElementWithMatcher:ResendPostButtonMatcher()];
@@ -322,31 +302,24 @@ id<GREYMatcher> ResendPostButtonMatcher() {
   [ChromeEarlGrey goBack];
   [ChromeEarlGrey goForward];
 
-  // WKBasedNavigationManager doesn't triggere repost on |goForward| due to
-  // WKWebView's back-forward cache. Force reload to trigger repost. Not using
-  // [ChromeEarlGrey reload] because WKBasedNavigationManager presents repost
-  // confirmation dialog before loading stops.
-  if ([ChromeEarlGrey isSlimNavigationManagerEnabled]) {
-    [chrome_test_util::BrowserCommandDispatcherForMainBVC() reload];
-  }
+  // NavigationManager doesn't trigger repost on |goForward| due to WKWebView's
+  // back-forward cache. Force reload to trigger repost. Not waiting because
+  // NavigationManager presents repost confirmation dialog before loading stops.
+  [ChromeEarlGrey reloadAndWaitForCompletion:NO];
 
   {
-    // When slim navigation manager is enabled, synchronization must be disabled
-    // until after the repost confirmation is dismissed because it is presented
-    // during the load. It is always disabled, but immediately re-enabled if
-    // slim navigation manger is not enabled. This is necessary in order to keep
-    // the correct scope of ScopedSynchronizationDisabler which ensures
-    // synchronization is not left disabled if the test fails.
+    // Synchronization must be disabled until after the repost confirmation is
+    // dismissed because it is presented during the load. It is always disabled,
+    // but immediately re-enabled if slim navigation manger is not enabled. This
+    // is necessary in order to keep the correct scope of
+    // ScopedSynchronizationDisabler which ensures synchronization is not left
+    // disabled if the test fails.
     std::unique_ptr<ScopedSynchronizationDisabler> disabler =
         std::make_unique<ScopedSynchronizationDisabler>();
-    if (![ChromeEarlGrey isSlimNavigationManagerEnabled]) {
-      disabler.reset();
-    } else {
       // TODO(crbug.com/989615): Investigate why this is necessary even with a
       // visible check below.
       base::test::ios::SpinRunLoopWithMinDelay(
           base::TimeDelta::FromSecondsD(0.5));
-    }
 
     [ChromeEarlGrey
         waitForSufficientlyVisibleElementWithMatcher:ResendPostButtonMatcher()];
@@ -374,19 +347,16 @@ id<GREYMatcher> ResendPostButtonMatcher() {
   [ChromeEarlGrey loadURL:GetGenericUrl()];
   [self openBackHistory];
   [self waitForTabHistoryView];
-  id<GREYMatcher> historyItem = grey_text(
-      base::SysUTF16ToNSString(web::GetDisplayTitleForUrl(destinationURL)));
+
+  // Mimic |web::GetDisplayTitleForUrl| behavior which uses FormatUrl
+  // internally. It can't be called directly from the EarlGrey 2 test process.
+  base::string16 title = url_formatter::FormatUrl(destinationURL);
+  id<GREYMatcher> historyItem = grey_text(base::SysUTF16ToNSString(title));
   [[EarlGrey selectElementWithMatcher:historyItem] performAction:grey_tap()];
   [ChromeEarlGrey waitForPageToFinishLoading];
 
-  // Back-forward navigation with WKBasedNavigationManager is served from
-  // WKWebView's app-cache, so it won't trigger repost warning.
-  if (![ChromeEarlGrey isSlimNavigationManagerEnabled]) {
-    [ChromeEarlGrey
-        waitForSufficientlyVisibleElementWithMatcher:ResendPostButtonMatcher()];
-    [self confirmResendWarning];
-  }
-
+  // Back-forward navigation is served from WKWebView's app-cache, so it won't
+  // trigger repost warning.
   [ChromeEarlGrey waitForWebStateContainingText:kDestinationText];
   [[EarlGrey selectElementWithMatcher:OmniboxText(destinationURL.GetContent())]
       assertWithMatcher:grey_notNil()];
@@ -406,26 +376,20 @@ id<GREYMatcher> ResendPostButtonMatcher() {
   [ChromeEarlGrey goBack];
   [ChromeEarlGrey goForward];
 
-  // WKBasedNavigationManager doesn't triggere repost on |goForward| due to
-  // WKWebView's back-forward cache. Force reload to trigger repost. Not using
-  // [ChromeEarlGrey reload] because WKBasedNavigationManager presents repost
-  // confirmation dialog before loading stops.
-  if ([ChromeEarlGrey isSlimNavigationManagerEnabled]) {
-    [chrome_test_util::BrowserCommandDispatcherForMainBVC() reload];
-  }
+  // NavigationManager doesn't trigger repost on |goForward| due to WKWebView's
+  // back-forward cache. Force reload to trigger repost. Not waiting because
+  // NavigationManager presents repost confirmation dialog before loading stops.
+  [ChromeEarlGrey reloadAndWaitForCompletion:NO];
 
   {
-    // When slim navigation manager is enabled, synchronization must be disabled
-    // until after the repost confirmation is dismissed because it is presented
-    // during the load. It is always disabled, but immediately re-enabled if
-    // slim navigation manger is not enabled. This is necessary in order to keep
-    // the correct scope of ScopedSynchronizationDisabler which ensures
-    // synchronization is not left disabled if the test fails.
+    // Synchronization must be disabled until after the repost confirmation is
+    // dismissed because it is presented during the load. It is always disabled,
+    // but immediately re-enabled if slim navigation manger is not enabled. This
+    // is necessary in order to keep the correct scope of
+    // ScopedSynchronizationDisabler which ensures synchronization is not left
+    // disabled if the test fails.
     std::unique_ptr<ScopedSynchronizationDisabler> disabler =
         std::make_unique<ScopedSynchronizationDisabler>();
-    if (![ChromeEarlGrey isSlimNavigationManagerEnabled]) {
-      disabler.reset();
-    }
 
     [ChromeEarlGrey
         waitForSufficientlyVisibleElementWithMatcher:ResendPostButtonMatcher()];
@@ -435,18 +399,6 @@ id<GREYMatcher> ResendPostButtonMatcher() {
 
   [ChromeEarlGrey waitForPageToFinishLoading];
 
-  // Expected behavior is different between the two navigation manager
-  // implementations.
-  if (![ChromeEarlGrey isSlimNavigationManagerEnabled]) {
-    // LegacyNavigationManager displays repost on |goBack|. So after cancelling,
-    // web view should show form URL.
-    [ChromeEarlGrey waitForWebStateContainingText:(base::SysNSStringToUTF8(
-                                                      kSubmitButtonLabel))];
-    [[EarlGrey selectElementWithMatcher:OmniboxText(GetFormUrl().GetContent())]
-        assertWithMatcher:grey_notNil()];
-    [[EarlGrey selectElementWithMatcher:chrome_test_util::ForwardButton()]
-        assertWithMatcher:grey_interactable()];
-  } else {
     // WKBasedNavigationManager displays repost on |reload|. So after
     // cancelling, web view should show |destinationURL|.
     [ChromeEarlGrey waitForWebStateContainingText:kDestinationText];
@@ -455,7 +407,6 @@ id<GREYMatcher> ResendPostButtonMatcher() {
         assertWithMatcher:grey_notNil()];
     [[EarlGrey selectElementWithMatcher:chrome_test_util::BackButton()]
         assertWithMatcher:grey_interactable()];
-  }
 }
 
 // A new navigation dismisses the repost dialog.
@@ -469,28 +420,19 @@ id<GREYMatcher> ResendPostButtonMatcher() {
   [[EarlGrey selectElementWithMatcher:OmniboxText(destinationURL.GetContent())]
       assertWithMatcher:grey_notNil()];
 
-  // WKBasedNavigationManager presents repost confirmation dialog before loading
-  // stops.
-  if ([ChromeEarlGrey isSlimNavigationManagerEnabled]) {
-    [chrome_test_util::BrowserCommandDispatcherForMainBVC() reload];
-  } else {
-    // Legacy navigation manager presents repost confirmation dialog after
-    // loading stops.
-    [ChromeEarlGrey reload];
-  }
+  // Repost confirmation dialog is presented before loading stops so do not wait
+  // for load to complete because it never will.
+  [ChromeEarlGrey reloadAndWaitForCompletion:NO];
 
   {
-    // When slim navigation manager is enabled, synchronization must be disabled
-    // until after the repost confirmation is dismissed because it is presented
-    // during the load. It is always disabled, but immediately re-enabled if
-    // slim navigation manger is not enabled. This is necessary in order to keep
-    // the correct scope of ScopedSynchronizationDisabler which ensures
-    // synchronization is not left disabled if the test fails.
+    // Synchronization must be disabled until after the repost confirmation is
+    // dismissed because it is presented during the load. It is always disabled,
+    // but immediately re-enabled if slim navigation manger is not enabled. This
+    // is necessary in order to keep the correct scope of
+    // ScopedSynchronizationDisabler which ensures synchronization is not left
+    // disabled if the test fails.
     std::unique_ptr<ScopedSynchronizationDisabler> disabler =
         std::make_unique<ScopedSynchronizationDisabler>();
-    if (![ChromeEarlGrey isSlimNavigationManagerEnabled]) {
-      disabler.reset();
-    }
 
     // Repost confirmation box should be visible.
     [ChromeEarlGrey
@@ -622,9 +564,7 @@ id<GREYMatcher> ResendPostButtonMatcher() {
         conditionWithName:@"Wait for web view to be interactable."
                     block:^BOOL {
                       NSError* error = nil;
-                      id<GREYMatcher> webViewMatcher = WebViewInWebState(
-                          chrome_test_util::GetCurrentWebState());
-                      [[EarlGrey selectElementWithMatcher:webViewMatcher]
+                      [[EarlGrey selectElementWithMatcher:WebViewMatcher()]
                           assertWithMatcher:grey_interactable()
                                       error:&error];
                       return !error;
@@ -633,10 +573,8 @@ id<GREYMatcher> ResendPostButtonMatcher() {
                    waitWithTimeout:base::test::ios::kWaitForUIElementTimeout],
                @"Web view did not become interactable.");
 
-    web::WebState* currentWebState = chrome_test_util::GetCurrentWebState();
     [[EarlGrey selectElementWithMatcher:WebViewMatcher()]
-        performAction:web::WebViewTapElement(
-                          currentWebState,
+        performAction:TapWebElement(
                           [ElementSelector selectorWithElementID:ID])];
 
     // Wait until the keyboard shows up before tapping.

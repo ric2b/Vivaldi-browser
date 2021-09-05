@@ -26,11 +26,14 @@ namespace {
 
 using performance_manager::NodeBase;
 
+const std::string kHtmlMimeType = "text/html";
+
 class TestChangeStream : public discards::mojom::GraphChangeStream {
  public:
   using FrameMap = std::map<int64_t, discards::mojom::FrameInfoPtr>;
   using PageMap = std::map<int64_t, discards::mojom::PageInfoPtr>;
   using ProcessMap = std::map<int64_t, discards::mojom::ProcessInfoPtr>;
+  using WorkerMap = std::map<int64_t, discards::mojom::WorkerInfoPtr>;
   using IdSet = std::set<int64_t>;
 
   TestChangeStream() {}
@@ -67,6 +70,12 @@ class TestChangeStream : public discards::mojom::GraphChangeStream {
     process_map_.insert(std::make_pair(process->id, std::move(process)));
   }
 
+  void WorkerCreated(discards::mojom::WorkerInfoPtr worker) override {
+    EXPECT_FALSE(HasId(worker->id));
+    id_set_.insert(worker->id);
+    worker_map_.insert(std::make_pair(worker->id, std::move(worker)));
+  }
+
   void FrameChanged(discards::mojom::FrameInfoPtr frame) override {
     EXPECT_TRUE(HasId(frame->id));
     frame_map_[frame->id] = std::move(frame);
@@ -85,6 +94,12 @@ class TestChangeStream : public discards::mojom::GraphChangeStream {
     ++num_changes_;
   }
 
+  void WorkerChanged(discards::mojom::WorkerInfoPtr worker) override {
+    EXPECT_TRUE(HasId(worker->id));
+    worker_map_[worker->id] = std::move(worker);
+    ++num_changes_;
+  }
+
   void FavIconDataAvailable(discards::mojom::FavIconInfoPtr favicon) override {}
 
   void NodeDeleted(int64_t node_id) override {
@@ -98,6 +113,7 @@ class TestChangeStream : public discards::mojom::GraphChangeStream {
   const FrameMap& frame_map() const { return frame_map_; }
   const PageMap& page_map() const { return page_map_; }
   const ProcessMap& process_map() const { return process_map_; }
+  const WorkerMap& worker_map() const { return worker_map_; }
   const IdSet& id_set() const { return id_set_; }
   size_t num_changes() const { return num_changes_; }
 
@@ -108,6 +124,7 @@ class TestChangeStream : public discards::mojom::GraphChangeStream {
   FrameMap frame_map_;
   PageMap page_map_;
   ProcessMap process_map_;
+  WorkerMap worker_map_;
   IdSet id_set_;
   size_t num_changes_ = 0;
 
@@ -125,19 +142,27 @@ class DiscardsGraphDumpImplTest : public testing::Test {
 }  // namespace
 
 TEST_F(DiscardsGraphDumpImplTest, ChangeStream) {
+  using performance_manager::TestNodeWrapper;
+  using performance_manager::WorkerNodeImpl;
   content::BrowserTaskEnvironment task_environment;
 
   performance_manager::MockMultiplePagesWithMultipleProcessesGraph mock_graph(
       &graph_);
+  TestNodeWrapper<WorkerNodeImpl> worker(
+      TestNodeWrapper<WorkerNodeImpl>::Create(
+          &graph_, performance_manager::WorkerNode::WorkerType::kDedicated,
+          mock_graph.process.get()));
+
+  worker->AddClientFrame(mock_graph.frame.get());
 
   base::TimeTicks now = base::TimeTicks::Now();
 
   const GURL kExampleUrl("http://www.example.org");
   int64_t next_navigation_id = 1;
   mock_graph.page->OnMainFrameNavigationCommitted(
-      false, now, next_navigation_id++, kExampleUrl);
+      false, now, next_navigation_id++, kExampleUrl, kHtmlMimeType);
   mock_graph.other_page->OnMainFrameNavigationCommitted(
-      false, now, next_navigation_id++, kExampleUrl);
+      false, now, next_navigation_id++, kExampleUrl, kHtmlMimeType);
 
   auto* main_frame = mock_graph.page->GetMainFrameNodeImpl();
   main_frame->OnNavigationCommitted(kExampleUrl, /* same_document */ false);
@@ -157,7 +182,7 @@ TEST_F(DiscardsGraphDumpImplTest, ChangeStream) {
 
   // Validate that the initial graph state dump is complete.
   EXPECT_EQ(0u, change_stream.num_changes());
-  EXPECT_EQ(7u, change_stream.id_set().size());
+  EXPECT_EQ(8u, change_stream.id_set().size());
 
   EXPECT_EQ(2u, change_stream.process_map().size());
   for (const auto& kv : change_stream.process_map()) {
@@ -165,6 +190,7 @@ TEST_F(DiscardsGraphDumpImplTest, ChangeStream) {
   }
 
   EXPECT_EQ(3u, change_stream.frame_map().size());
+  EXPECT_EQ(1u, change_stream.worker_map().size());
 
   // Count the top-level frames as we go.
   size_t top_level_frames = 0;
@@ -197,7 +223,7 @@ TEST_F(DiscardsGraphDumpImplTest, ChangeStream) {
   // Test change notifications.
   const GURL kAnotherURL("http://www.google.com/");
   mock_graph.page->OnMainFrameNavigationCommitted(
-      false, now, next_navigation_id++, kAnotherURL);
+      false, now, next_navigation_id++, kAnotherURL, kHtmlMimeType);
 
   size_t child_frame_id =
       NodeBase::GetSerializationId(mock_graph.child_frame.get());
@@ -221,4 +247,6 @@ TEST_F(DiscardsGraphDumpImplTest, ChangeStream) {
   task_environment.RunUntilIdle();
 
   EXPECT_EQ(nullptr, graph_.TakeFromGraph(impl_raw));
+
+  worker->RemoveClientFrame(mock_graph.frame.get());
 }

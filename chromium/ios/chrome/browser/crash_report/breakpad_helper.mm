@@ -19,8 +19,8 @@
 #include "base/path_service.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "ios/chrome/browser/chrome_paths.h"
-#include "ios/chrome/browser/crash_report/crash_report_flags.h"
 #import "ios/chrome/browser/crash_report/crash_report_user_application_state.h"
 #import "ios/chrome/browser/crash_report/main_thread_freeze_detector.h"
 
@@ -34,6 +34,8 @@
 #endif
 
 namespace breakpad_helper {
+
+NSString* const kBreadcrumbs = @"breadcrumbs%lu";
 
 namespace {
 
@@ -181,11 +183,8 @@ void SetUserEnabledUploading(bool uploading_enabled) {
 }
 
 void SetUploadingEnabled(bool enabled) {
-  if (enabled &&
-      [UIApplication sharedApplication].applicationState ==
-          UIApplicationStateInactive &&
-      !base::FeatureList::IsEnabled(
-          crash_report::kBreakpadNoDelayInitialUpload)) {
+  if (enabled && [UIApplication sharedApplication].applicationState ==
+                     UIApplicationStateInactive) {
     return;
   }
   if ([MainThreadFreezeDetector sharedInstance].canUploadBreakpadCrashReports) {
@@ -206,9 +205,8 @@ bool UserEnabledUploading() {
 void CleanupCrashReports() {
   base::FilePath crash_directory;
   base::PathService::Get(ios::DIR_CRASH_DUMPS, &crash_directory);
-  base::PostTask(
-      FROM_HERE,
-      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::BEST_EFFORT},
+  base::ThreadPool::PostTask(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::BindOnce(&DeleteAllReportsInDirectory, crash_directory));
 }
 
@@ -281,7 +279,7 @@ void SetMemoryWarningInProgress(bool value) {
 
 void SetHangReport(bool value) {
   if (value)
-    AddReportParameter(kHangReport, @"yes", true);
+    AddReportParameter(kHangReport, @"yes", false);
   else
     RemoveReportParameter(kHangReport);
 }
@@ -370,6 +368,15 @@ void SetGridToVisibleTabAnimation(NSString* to_view_controller,
 
 void RemoveGridToVisibleTabAnimation() {
   RemoveReportParameter(kGridToVisibleTabAnimation);
+}
+
+void SetBreadcrumbEvents(NSArray* breadcrumbs) {
+  DCHECK_GT(breadcrumbs.count, 0U);
+  DCHECK_LE(breadcrumbs.count, 6U);
+  for (NSUInteger i = 0; i < breadcrumbs.count; i++) {
+    NSString* key = [NSString stringWithFormat:kBreadcrumbs, i];
+    AddReportParameter(key, breadcrumbs[i], /*async=*/true);
+  }
 }
 
 void MediaStreamPlaybackDidStart() {

@@ -1,0 +1,67 @@
+<?xml version="1.0" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="mk">
+<translation id="1124772482545689468">Корисник</translation>
+<translation id="1181037720776840403">Отстрани</translation>
+<translation id="1201402288615127009">Следно</translation>
+<translation id="1383876407941801731">Барај</translation>
+<translation id="2079545284768500474">Врати</translation>
+<translation id="2148716181193084225">Денес</translation>
+<translation id="2359808026110333948">Продолжи</translation>
+<translation id="2501278716633472235">Врати се</translation>
+<translation id="2569468611847789653">{COOKIE_COUNT,plural, =1{1 колаче е блокирано}one{# колаче е блокирано}other{# колачиња се блокирани}}</translation>
+<translation id="257931822824936280">Проширено - кликни да се сокрие.</translation>
+<translation id="2653659639078652383">Поднеси</translation>
+<translation id="2704606927547763573">Копирано</translation>
+<translation id="2968755619301702150">Прикажувач на сертификат</translation>
+<translation id="3115898365077584848">Прикажи ги информациите</translation>
+<translation id="3295602654194328831">Сокриј ги информациите</translation>
+<translation id="3479552764303398839">Не сега</translation>
+<translation id="385051799172605136">Назад</translation>
+<translation id="3987993985790029246">Копирај линк</translation>
+<translation id="4002066346123236978">Наслов</translation>
+<translation id="4570913071927164677">Детали</translation>
+<translation id="4645575059429386691">Управувано од вашиот родител</translation>
+<translation id="4883854917563148705">Управуваните поставки не може да се ресетираат</translation>
+<translation id="497421865427891073">Оди напред</translation>
+<translation id="5100237604440890931">Проширено - кликни да се прошири.</translation>
+<translation id="5300589172476337783">Прикажи</translation>
+<translation id="5301954838959518834">Добро, сфатив</translation>
+<translation id="5317780077021120954">Зачувај</translation>
+<translation id="5391532827096253100">Врската со сајтов не е безбедна. Информации за сајтот</translation>
+<translation id="5556459405103347317">Повторно вчитај</translation>
+<translation id="5596627076506792578">Повеќе опции</translation>
+<translation id="5860033963881614850">Исклучено</translation>
+<translation id="5916664084637901428">Вклучено</translation>
+<translation id="5939518447894949180">Ресетирај</translation>
+<translation id="6040143037577758943">Затвори</translation>
+<translation id="6042308850641462728">Повеќе</translation>
+<translation id="6165508094623778733">Дознајте повеќе</translation>
+<translation id="6206551242102657620">Врската е безбедна. Информации за сајтот</translation>
+<translation id="6216432067784365534">Опции за <ph name="NAME_OF_LIST_ITEM" /></translation>
+<translation id="6527303717912515753">Сподели</translation>
+<translation id="6746124502594467657">Премести долу</translation>
+<translation id="6818926723028410516">Изберете ставки</translation>
+<translation id="6910211073230771657">Избришано</translation>
+<translation id="6945221475159498467">Избери</translation>
+<translation id="6963642900430330478">Страницава е опасна. Информации за сајтот</translation>
+<translation id="6965382102122355670">Во ред</translation>
+<translation id="7066151586745993502">{NUM_SELECTED,plural, =1{Избрана е 1}one{Избрана е #}other{Избрани се #}}</translation>
+<translation id="7087918508125750058">Избрани ставки: <ph name="ITEM_COUNT" />. Достапни се опции во горниот дел од екранот</translation>
+<translation id="7250468141469952378">Избрани ставки: <ph name="ITEM_COUNT" /></translation>
+<translation id="7649070708921625228">Помош</translation>
+<translation id="7658239707568436148">Откажи</translation>
+<translation id="7781829728241885113">Вчера</translation>
+<translation id="7791543448312431591">Додај</translation>
+<translation id="780301667611848630">Не, фала</translation>
+<translation id="7846076177841592234">Откажи избор</translation>
+<translation id="8131740175452115882">Потврди</translation>
+<translation id="8206354486702514201">Поставката ја наметнува администраторот.</translation>
+<translation id="8249310407154411074">Премести најгоре</translation>
+<translation id="8261506727792406068">Избриши</translation>
+<translation id="8609465669617005112">Премести нагоре</translation>
+<translation id="8676374126336081632">Јасно внесување</translation>
+<translation id="8725066075913043281">Обидете се повторно</translation>
+<translation id="8730621377337864115">Готово</translation>
+<translation id="9019902583201351841">Управувано од вашите родители</translation>
+</translationbundle>

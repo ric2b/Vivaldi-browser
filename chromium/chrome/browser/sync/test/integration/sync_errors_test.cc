@@ -3,13 +3,12 @@
 // found in the LICENSE file.
 
 #include "base/macros.h"
-#include "base/run_loop.h"
 #include "base/test/bind_test_util.h"
 #include "build/build_config.h"
 #include "chrome/browser/sync/test/integration/bookmarks_helper.h"
 #include "chrome/browser/sync/test/integration/passwords_helper.h"
 #include "chrome/browser/sync/test/integration/profile_sync_service_harness.h"
-#include "chrome/browser/sync/test/integration/single_client_status_change_checker.h"
+#include "chrome/browser/sync/test/integration/sync_disabled_checker.h"
 #include "chrome/browser/sync/test/integration/sync_test.h"
 #include "chrome/browser/sync/test/integration/updated_progress_marker_checker.h"
 #include "chrome/common/pref_names.h"
@@ -27,42 +26,16 @@ using syncer::ProfileSyncService;
 
 namespace {
 
-class SyncDisabledChecker : public SingleClientStatusChangeChecker {
- public:
-  explicit SyncDisabledChecker(ProfileSyncService* service)
-      : SingleClientStatusChangeChecker(service) {}
-
-  SyncDisabledChecker(ProfileSyncService* service,
-                      base::OnceClosure condition_satisfied_callback)
-      : SingleClientStatusChangeChecker(service),
-        condition_satisfied_callback_(std::move(condition_satisfied_callback)) {
-  }
-
-  bool IsExitConditionSatisfied() override {
-    bool satisfied = !service()->IsSetupInProgress() &&
-                     !service()->GetUserSettings()->IsFirstSetupComplete();
-    if (satisfied && condition_satisfied_callback_) {
-      std::move(condition_satisfied_callback_).Run();
-    }
-    return satisfied;
-  }
-
-  std::string GetDebugMessage() const override { return "Sync Disabled"; }
-
- private:
-  base::OnceClosure condition_satisfied_callback_;
-};
-
 class SyncEngineStoppedChecker : public SingleClientStatusChangeChecker {
  public:
   explicit SyncEngineStoppedChecker(ProfileSyncService* service)
       : SingleClientStatusChangeChecker(service) {}
 
   // StatusChangeChecker implementation.
-  bool IsExitConditionSatisfied() override {
+  bool IsExitConditionSatisfied(std::ostream* os) override {
+    *os << "Waiting for sync to stop";
     return !service()->IsEngineInitialized();
   }
-  std::string GetDebugMessage() const override { return "Sync stopped"; }
 };
 
 class TypeDisabledChecker : public SingleClientStatusChangeChecker {
@@ -72,10 +45,11 @@ class TypeDisabledChecker : public SingleClientStatusChangeChecker {
       : SingleClientStatusChangeChecker(service), type_(type) {}
 
   // StatusChangeChecker implementation.
-  bool IsExitConditionSatisfied() override {
+  bool IsExitConditionSatisfied(std::ostream* os) override {
+    *os << "Waiting for type " << syncer::ModelTypeToString(type_)
+        << " to become disabled";
     return !service()->GetActiveDataTypes().Has(type_);
   }
-  std::string GetDebugMessage() const override { return "Type disabled"; }
 
  private:
   syncer::ModelType type_;
@@ -100,15 +74,12 @@ class ActionableErrorChecker : public SingleClientStatusChangeChecker {
 
   // Checks if an actionable error has been hit. Called repeatedly each time PSS
   // notifies observers of a state change.
-  bool IsExitConditionSatisfied() override {
+  bool IsExitConditionSatisfied(std::ostream* os) override {
+    *os << "Waiting until sync hits an actionable error";
     syncer::SyncStatus status;
     service()->QueryDetailedSyncStatusForDebugging(&status);
     return (status.sync_protocol_error.action != syncer::UNKNOWN_ACTION &&
             service()->HasUnrecoverableError());
-  }
-
-  std::string GetDebugMessage() const override {
-    return "ActionableErrorChecker";
   }
 
  private:
@@ -193,7 +164,16 @@ IN_PROC_BROWSER_TEST_F(SyncErrorTest, MAYBE_ErrorWhileSettingUp) {
 #endif
 }
 
-IN_PROC_BROWSER_TEST_F(SyncErrorTest, BirthdayErrorUsingActionableErrorTest) {
+#if defined(OS_WIN)
+// TODO(crbug.com/1045619) Flaky test on Windows.
+#define MAYBE_BirthdayErrorUsingActionableErrorTest \
+  DISABLED_BirthdayErrorUsingActionableErrorTest
+#else
+#define MAYBE_BirthdayErrorUsingActionableErrorTest \
+  BirthdayErrorUsingActionableErrorTest
+#endif
+IN_PROC_BROWSER_TEST_F(SyncErrorTest,
+                       MAYBE_BirthdayErrorUsingActionableErrorTest) {
   ASSERT_TRUE(SetupSync()) << "SetupSync() failed.";
 
   const BookmarkNode* node1 = AddFolder(0, 0, "title1");
@@ -210,20 +190,16 @@ IN_PROC_BROWSER_TEST_F(SyncErrorTest, BirthdayErrorUsingActionableErrorTest) {
   // Now make one more change so we will do another sync.
   const BookmarkNode* node2 = AddFolder(0, 0, "title2");
   SetTitle(0, node2, "new_title2");
+  EXPECT_TRUE(SyncDisabledChecker(GetSyncService(0)).Wait());
+  syncer::SyncStatus status;
+  GetSyncService(0)->QueryDetailedSyncStatusForDebugging(&status);
 
-  auto condition = base::BindLambdaForTesting([&]() {
-    syncer::SyncStatus status;
-    GetSyncService(0)->QueryDetailedSyncStatusForDebugging(&status);
-
-    // Note: If SyncStandaloneTransport is enabled, then on receiving the error,
-    // the SyncService will immediately start up again in transport mode, which
-    // resets the status. So query the status that the checker recorded at the
-    // time Sync was off.
-    EXPECT_EQ(status.sync_protocol_error.error_type, syncer::NOT_MY_BIRTHDAY);
-    EXPECT_EQ(status.sync_protocol_error.action,
-              syncer::DISABLE_SYNC_ON_CLIENT);
-  });
-  EXPECT_TRUE(SyncDisabledChecker(GetSyncService(0), condition).Wait());
+  // Note: If SyncStandaloneTransport is enabled, then on receiving the error,
+  // the SyncService will immediately start up again in transport mode, which
+  // resets the status. So query the status that the checker recorded at the
+  // time Sync was off.
+  EXPECT_EQ(status.sync_protocol_error.error_type, syncer::NOT_MY_BIRTHDAY);
+  EXPECT_EQ(status.sync_protocol_error.action, syncer::DISABLE_SYNC_ON_CLIENT);
 }
 
 // Tests that on receiving CLIENT_DATA_OBSOLETE sync engine gets restarted and

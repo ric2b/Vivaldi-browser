@@ -25,6 +25,7 @@ _READY_TO_RUN_FILTER = [
     'BasicMouseInterfaceTest.testMoveMouseByOffsetOverAndOutOfAnElement',
     'BasicMouseInterfaceTest.testMovingMouseToRelativeElementOffset',
     'BasicMouseInterfaceTest.testMovingMouseToRelativeZeroElementOffset',
+    'ChromeOptionsFunctionalTest.canAddExtensionFromFile',
     'CombinedInputActionsTest.testClickAfterMoveToAnElementWithAnOffsetShouldUseLastMousePosition',
     'ContentEditableTest.appendsTextToEndOfContentEditableWithMultipleTextNodes',
     'ContentEditableTest.testShouldAppendToTinyMCE',
@@ -35,7 +36,10 @@ _READY_TO_RUN_FILTER = [
     'PageLoadingTest.testEagerStrategyShouldNotWaitForResources',
     'PageLoadingTest.testEagerStrategyShouldNotWaitForResourcesOnRefresh',
     'PageLoadingTest.testEagerStrategyShouldWaitForDocumentToBeLoaded',
+    'TextHandlingTest.canHandleTextTransformProperty',
     'WindowSwitchingTest.canOpenANewWindow',
+    'LocationContextTest.testShouldSetAndGetLatitude',
+    'LocationContextTest.testShouldSetAndGetLongitude',
 ]
 
 _OS_NEGATIVE_FILTER = {}

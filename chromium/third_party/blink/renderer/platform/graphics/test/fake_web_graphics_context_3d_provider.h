@@ -9,6 +9,7 @@
 #include "cc/tiles/image_decode_cache.h"
 #include "components/viz/test/test_context_provider.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
+#include "gpu/command_buffer/client/raster_implementation_gles.h"
 #include "gpu/command_buffer/common/capabilities.h"
 #include "gpu/config/gpu_feature_info.h"
 #include "third_party/blink/public/platform/web_graphics_context_3d_provider.h"
@@ -31,6 +32,12 @@ class FakeWebGraphicsContext3DProvider : public WebGraphicsContext3DProvider {
       GrMockOptions mockOptions;
       gr_context_ = GrContext::MakeMock(&mockOptions);
     }
+
+    // TODO(nazabris, crbug.com/1017508) Use RasterImplementation after
+    // all references to GLES2Interface have been removed.
+    raster_interface_ =
+        std::make_unique<gpu::raster::RasterImplementationGLES>(gl_, nullptr);
+
     // enable all gpu features.
     for (unsigned feature = 0; feature < gpu::NUMBER_OF_GPU_FEATURE_TYPES;
          ++feature) {
@@ -54,13 +61,21 @@ class FakeWebGraphicsContext3DProvider : public WebGraphicsContext3DProvider {
     return webgl_preferences_;
   }
 
-  viz::GLHelper* GetGLHelper() override { return nullptr; }
+  gpu::GLHelper* GetGLHelper() override { return nullptr; }
 
+  gpu::InterfaceBase* InterfaceBase() override { return gl_; }
   gpu::gles2::GLES2Interface* ContextGL() override { return gl_; }
+  gpu::raster::RasterInterface* RasterInterface() override {
+    if (!raster_interface_)
+      return nullptr;
+
+    return raster_interface_.get();
+  }
+
   gpu::webgpu::WebGPUInterface* WebGPUInterface() override { return nullptr; }
 
   bool BindToCurrentThread() override { return false; }
-  void SetLostContextCallback(base::Closure) override {}
+  void SetLostContextCallback(base::RepeatingClosure) override {}
   void SetErrorMessageCallback(
       base::RepeatingCallback<void(const char*, int32_t id)>) override {}
   cc::ImageDecodeCache* ImageDecodeCache(SkColorType color_type) override {
@@ -77,6 +92,7 @@ class FakeWebGraphicsContext3DProvider : public WebGraphicsContext3DProvider {
   cc::StubDecodeCache stub_image_decode_cache_;
   viz::TestSharedImageInterface test_shared_image_interface_;
   gpu::gles2::GLES2Interface* gl_;
+  std::unique_ptr<gpu::raster::RasterInterface> raster_interface_;
   sk_sp<GrContext> gr_context_;
   gpu::Capabilities capabilities_;
   gpu::GpuFeatureInfo gpu_feature_info_;

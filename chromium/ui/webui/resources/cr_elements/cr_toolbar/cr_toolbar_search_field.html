@@ -25,21 +25,25 @@
       }
 
       cr-icon-button {
+        --cr-icon-button-fill-color-focus: var(
+            --cr-toolbar-search-field-input-bg-color,
+            var(--cr-toolbar-background-color));
         --cr-icon-button-size: 32px;
         margin: 6px;
       }
 
       @media (prefers-color-scheme: light) {
         cr-icon-button {
-          --cr-icon-button-color: currentColor;
-          --iron-icon-fill-color:
-              var(--cr-toolbar-search-field-input-color, white);
+          --cr-icon-button-fill-color: var(
+              --cr-toolbar-search-field-input-color,
+              white);
         }
       }
 
       @media (prefers-color-scheme: dark) {
         cr-icon-button {
-          --iron-icon-fill-color: var(--cr-toolbar-search-field-input-color,
+          --cr-icon-button-fill-color: var(
+              --cr-toolbar-search-field-input-color,
               var(--google-grey-refresh-500));
         }
       }
@@ -60,13 +64,14 @@
       }
 
       paper-spinner-lite {
-        @apply --cr-icon-height-width;
         --paper-spinner-color:
             var(--cr-toolbar-search-field-input-color, white);
+        height: var(--cr-icon-size);
         margin: 0 6px;
         opacity: 0;
         padding: 6px;
         position: absolute;
+        width: var(--cr-icon-size);
       }
 
       paper-spinner-lite[active] {
@@ -161,7 +166,7 @@
       <paper-spinner-lite active="[[isSpinnerShown_]]">
       </paper-spinner-lite>
     </template>
-    <cr-icon-button id="icon" iron-icon="cr:search" title="[[label]]"
+    <cr-icon-button id="icon" iron-icon="cr:search" title="[[label]]" dir="ltr"
         tabindex$="[[computeIconTabIndex_(narrow, hasSearchText)]]"
         aria-hidden$="[[computeIconAriaHidden_(narrow, hasSearchText)]]">
     </cr-icon-button>

@@ -24,7 +24,8 @@
 #include "content/public/browser/site_instance.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/web_contents_tester.h"
-#include "mojo/public/cpp/bindings/associated_binding.h"
+#include "mojo/public/cpp/bindings/associated_receiver.h"
+#include "mojo/public/cpp/bindings/pending_associated_receiver.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/manifest/manifest.h"
@@ -33,10 +34,19 @@ namespace web_app {
 
 namespace {
 
-const GURL kFooUrl("https://foo.example");
-const GURL kFooUrl2("https://foo.example/bar");
 const char kFooTitle[] = "Foo Title";
-const GURL kBarUrl("https://bar.example");
+
+// TODO(https://crbug.com/1042727): Fix test GURL scoping and remove this getter
+// function.
+GURL FooUrl() {
+  return GURL("https://foo.example");
+}
+GURL FooUrl2() {
+  return GURL("https://foo.example/bar");
+}
+GURL BarUrl() {
+  return GURL("https://bar.example");
+}
 
 }  // namespace
 
@@ -52,8 +62,8 @@ class FakeChromeRenderFrame
   }
 
   void Bind(mojo::ScopedInterfaceEndpointHandle handle) {
-    binding_.Bind(
-        mojo::AssociatedInterfaceRequest<ChromeRenderFrame>(std::move(handle)));
+    receiver_.Bind(
+        mojo::PendingAssociatedReceiver<ChromeRenderFrame>(std::move(handle)));
   }
 
   // Set |web_app_info| to respond on |GetWebApplicationInfo|.
@@ -68,7 +78,7 @@ class FakeChromeRenderFrame
  private:
   WebApplicationInfo web_app_info_;
 
-  mojo::AssociatedBinding<chrome::mojom::ChromeRenderFrame> binding_{this};
+  mojo::AssociatedReceiver<chrome::mojom::ChromeRenderFrame> receiver_{this};
 };
 
 class WebAppDataRetrieverTest : public ChromeRenderViewHostTestHarness {
@@ -161,7 +171,7 @@ TEST_F(WebAppDataRetrieverTest, GetWebApplicationInfo_NoEntry) {
 TEST_F(WebAppDataRetrieverTest, GetWebApplicationInfo_AppUrlAbsent) {
   SetFakeChromeRenderFrame();
 
-  web_contents_tester()->NavigateAndCommit(kFooUrl);
+  web_contents_tester()->NavigateAndCommit(FooUrl());
 
   WebApplicationInfo original_web_app_info;
   original_web_app_info.app_url = GURL();
@@ -178,16 +188,16 @@ TEST_F(WebAppDataRetrieverTest, GetWebApplicationInfo_AppUrlAbsent) {
 
   // If the WebApplicationInfo has no URL, we fallback to the last committed
   // URL.
-  EXPECT_EQ(kFooUrl, web_app_info()->app_url);
+  EXPECT_EQ(FooUrl(), web_app_info()->app_url);
 }
 
 TEST_F(WebAppDataRetrieverTest, GetWebApplicationInfo_AppUrlPresent) {
   SetFakeChromeRenderFrame();
 
-  web_contents_tester()->NavigateAndCommit(kFooUrl);
+  web_contents_tester()->NavigateAndCommit(FooUrl());
 
   WebApplicationInfo original_web_app_info;
-  original_web_app_info.app_url = kBarUrl;
+  original_web_app_info.app_url = BarUrl();
 
   SetRendererWebApplicationInfo(original_web_app_info);
 
@@ -205,7 +215,7 @@ TEST_F(WebAppDataRetrieverTest, GetWebApplicationInfo_AppUrlPresent) {
 TEST_F(WebAppDataRetrieverTest, GetWebApplicationInfo_TitleAbsentFromRenderer) {
   SetFakeChromeRenderFrame();
 
-  web_contents_tester()->NavigateAndCommit(kFooUrl);
+  web_contents_tester()->NavigateAndCommit(FooUrl());
 
   const auto web_contents_title = base::UTF8ToUTF16(kFooTitle);
   web_contents_tester()->SetTitle(web_contents_title);
@@ -232,7 +242,7 @@ TEST_F(WebAppDataRetrieverTest,
        GetWebApplicationInfo_TitleAbsentFromWebContents) {
   SetFakeChromeRenderFrame();
 
-  web_contents_tester()->NavigateAndCommit(kFooUrl);
+  web_contents_tester()->NavigateAndCommit(FooUrl());
 
   web_contents_tester()->SetTitle(base::UTF8ToUTF16(""));
 
@@ -258,7 +268,7 @@ TEST_F(WebAppDataRetrieverTest,
 TEST_F(WebAppDataRetrieverTest, GetWebApplicationInfo_ConnectionError) {
   // Do not set fake ChromeRenderFrame to simulate connection error.
 
-  web_contents_tester()->NavigateAndCommit(kFooUrl);
+  web_contents_tester()->NavigateAndCommit(FooUrl());
 
   base::RunLoop run_loop;
   WebAppDataRetriever retriever;
@@ -274,7 +284,7 @@ TEST_F(WebAppDataRetrieverTest, GetWebApplicationInfo_ConnectionError) {
 TEST_F(WebAppDataRetrieverTest, GetWebApplicationInfo_WebContentsDestroyed) {
   SetFakeChromeRenderFrame();
 
-  web_contents_tester()->NavigateAndCommit(kFooUrl);
+  web_contents_tester()->NavigateAndCommit(FooUrl());
 
   base::RunLoop run_loop;
   WebAppDataRetriever retriever;
@@ -292,7 +302,7 @@ TEST_F(WebAppDataRetrieverTest,
        CheckInstallabilityAndRetrieveManifest_WebContentsDestroyed) {
   SetFakeChromeRenderFrame();
 
-  web_contents_tester()->NavigateAndCommit(kFooUrl);
+  web_contents_tester()->NavigateAndCommit(FooUrl());
 
   {
     auto manifest = std::make_unique<blink::Manifest>();
@@ -304,10 +314,10 @@ TEST_F(WebAppDataRetrieverTest,
   WebAppDataRetriever retriever;
   retriever.CheckInstallabilityAndRetrieveManifest(
       web_contents(), /*bypass_service_worker_check=*/false,
-      base::BindLambdaForTesting([&](const blink::Manifest& manifet,
+      base::BindLambdaForTesting([&](base::Optional<blink::Manifest> manifest,
                                      bool valid_manifest_for_web_app,
                                      bool is_installable) {
-        EXPECT_TRUE(manifet.IsEmpty());
+        EXPECT_FALSE(manifest);
         EXPECT_FALSE(valid_manifest_for_web_app);
         EXPECT_FALSE(is_installable);
         run_loop.Quit();
@@ -319,7 +329,7 @@ TEST_F(WebAppDataRetrieverTest,
 TEST_F(WebAppDataRetrieverTest, GetIcons_WebContentsDestroyed) {
   SetFakeChromeRenderFrame();
 
-  web_contents_tester()->NavigateAndCommit(kFooUrl);
+  web_contents_tester()->NavigateAndCommit(FooUrl());
 
   const std::vector<GURL> icon_urls;
   bool skip_page_favicons = true;
@@ -339,7 +349,7 @@ TEST_F(WebAppDataRetrieverTest, GetIcons_WebContentsDestroyed) {
 TEST_F(WebAppDataRetrieverTest, GetWebApplicationInfo_FrameNavigated) {
   SetFakeChromeRenderFrame();
 
-  web_contents_tester()->NavigateAndCommit(kFooUrl);
+  web_contents_tester()->NavigateAndCommit(FooUrl());
 
   base::RunLoop run_loop;
   WebAppDataRetriever retriever;
@@ -347,7 +357,7 @@ TEST_F(WebAppDataRetrieverTest, GetWebApplicationInfo_FrameNavigated) {
       web_contents(),
       base::BindOnce(&WebAppDataRetrieverTest::GetWebApplicationInfoCallback,
                      base::Unretained(this), run_loop.QuitClosure()));
-  web_contents_tester()->NavigateAndCommit(kFooUrl2);
+  web_contents_tester()->NavigateAndCommit(FooUrl2());
   run_loop.Run();
 
   EXPECT_EQ(nullptr, web_app_info());
@@ -382,21 +392,21 @@ TEST_F(WebAppDataRetrieverTest, CheckInstallabilityAndRetrieveManifest) {
 
   retriever.CheckInstallabilityAndRetrieveManifest(
       web_contents(), /*bypass_service_worker_check=*/false,
-      base::BindLambdaForTesting(
-          [&](const blink::Manifest& result, bool valid_manifest_for_web_app,
-              bool is_installable) {
-            EXPECT_TRUE(is_installable);
+      base::BindLambdaForTesting([&](base::Optional<blink::Manifest> result,
+                                     bool valid_manifest_for_web_app,
+                                     bool is_installable) {
+        EXPECT_TRUE(is_installable);
 
-            EXPECT_EQ(base::UTF8ToUTF16(manifest_short_name),
-                      result.short_name.string());
-            EXPECT_EQ(base::UTF8ToUTF16(manifest_name), result.name.string());
-            EXPECT_EQ(manifest_start_url, result.start_url);
-            EXPECT_EQ(manifest_scope, result.scope);
-            EXPECT_EQ(manifest_theme_color, result.theme_color);
+        EXPECT_EQ(base::UTF8ToUTF16(manifest_short_name),
+                  result->short_name.string());
+        EXPECT_EQ(base::UTF8ToUTF16(manifest_name), result->name.string());
+        EXPECT_EQ(manifest_start_url, result->start_url);
+        EXPECT_EQ(manifest_scope, result->scope);
+        EXPECT_EQ(manifest_theme_color, result->theme_color);
 
-            callback_called = true;
-            run_loop.Quit();
-          }));
+        callback_called = true;
+        run_loop.Quit();
+      }));
   run_loop.Run();
 
   EXPECT_TRUE(callback_called);
@@ -418,10 +428,11 @@ TEST_F(WebAppDataRetrieverTest, CheckInstallabilityFails) {
 
   retriever.CheckInstallabilityAndRetrieveManifest(
       web_contents(), /*bypass_service_worker_check=*/false,
-      base::BindLambdaForTesting([&](const blink::Manifest& result,
+      base::BindLambdaForTesting([&](base::Optional<blink::Manifest> result,
                                      bool valid_manifest_for_web_app,
                                      bool is_installable) {
         EXPECT_FALSE(is_installable);
+        EXPECT_FALSE(valid_manifest_for_web_app);
         callback_called = true;
         run_loop.Quit();
       }));

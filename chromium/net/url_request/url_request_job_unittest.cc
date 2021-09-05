@@ -575,7 +575,6 @@ TEST_F(URLRequestJobTest, InvalidContentGZipTransaction) {
   // so should be false.
   EXPECT_FALSE(d.request_failed());
   EXPECT_EQ(200, req->GetResponseCode());
-  EXPECT_FALSE(req->status().is_success());
   EXPECT_EQ(ERR_CONTENT_DECODING_FAILED, d.request_status());
   EXPECT_TRUE(d.data_received().empty());
   EXPECT_FALSE(network_layer.done_reading_called());
@@ -633,6 +632,30 @@ TEST_F(URLRequestJobTest, SlowBrotliRead) {
   EXPECT_EQ(-1, req->GetExpectedContentSize());
 
   RemoveMockTransaction(&kBrotliSlowTransaction);
+}
+
+TEST(URLRequestJobComputeReferrer, SetsSameOriginForMetricsOnSameOrigin) {
+  bool same_origin = false;
+  URLRequestJob::ComputeReferrerForPolicy(
+      URLRequest::ReferrerPolicy(),
+      /*original_referrer=*/GURL("http://google.com"),
+      /*destination=*/GURL("http://google.com"), &same_origin);
+  EXPECT_TRUE(same_origin);
+}
+
+TEST(URLRequestJobComputeReferrer, SetsSameOriginForMetricsOnCrossOrigin) {
+  bool same_origin = true;
+  URLRequestJob::ComputeReferrerForPolicy(
+      URLRequest::ReferrerPolicy(),
+      /*original_referrer=*/GURL("http://google.com"),
+      /*destination=*/GURL("http://boggle.com"), &same_origin);
+  EXPECT_FALSE(same_origin);
+}
+
+TEST(URLRequestJobComputeReferrer, AcceptsNullptrInput) {
+  // Shouldn't segfault.
+  URLRequestJob::ComputeReferrerForPolicy(URLRequest::ReferrerPolicy(), GURL(),
+                                          GURL(), nullptr);
 }
 
 }  // namespace net

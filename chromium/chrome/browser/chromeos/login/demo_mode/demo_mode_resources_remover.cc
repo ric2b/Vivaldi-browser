@@ -15,6 +15,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/time/default_tick_clock.h"
 #include "base/time/tick_clock.h"
 #include "base/time/time.h"
@@ -63,7 +64,7 @@ DemoModeResourcesRemover::RemovalResult RemoveDirectory(
   if (!base::DirectoryExists(path) || base::IsDirectoryEmpty(path))
     return DemoModeResourcesRemover::RemovalResult::kNotFound;
 
-  if (!base::DeleteFile(path, true /*recursive*/))
+  if (!base::DeleteFileRecursively(path))
     return DemoModeResourcesRemover::RemovalResult::kFailed;
 
   return DemoModeResourcesRemover::RemovalResult::kSuccess;
@@ -227,10 +228,9 @@ void DemoModeResourcesRemover::AttemptRemoval(RemovalReason reason,
     return;
   removal_in_progress_ = true;
 
-  base::PostTaskAndReplyWithResult(
+  base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE,
-      {base::ThreadPool(), base::MayBlock(),
-       base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
+      {base::MayBlock(), base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
       base::BindOnce(&RemoveDirectory, DemoResources::GetPreInstalledPath()),
       base::BindOnce(&DemoModeResourcesRemover::OnRemovalDone,
                      weak_ptr_factory_.GetWeakPtr(), reason));

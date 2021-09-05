@@ -63,7 +63,7 @@ class PLATFORM_EXPORT RawResource final : public Resource {
                                     RawResourceClient*);
 
   // Exposed for testing
-  static RawResource* CreateForTest(ResourceRequest request,
+  static RawResource* CreateForTest(const ResourceRequest& request,
                                     ResourceType type) {
     ResourceLoaderOptions options;
     return MakeGarbageCollected<RawResource>(request, type, options);
@@ -128,7 +128,6 @@ class PLATFORM_EXPORT RawResource final : public Resource {
                    uint64_t total_bytes_to_be_sent) override;
   void DidDownloadData(uint64_t) override;
   void DidDownloadToBlob(scoped_refptr<BlobDataHandle>) override;
-  void ReportResourceTimingToClients(const ResourceTimingInfo&) override;
   bool MatchPreload(const FetchParameters&,
                     base::SingleThreadTaskRunner*) override;
 
@@ -194,7 +193,6 @@ class PLATFORM_EXPORT RawResourceClient : public ResourceClient {
   }
   virtual void RedirectBlocked() {}
   virtual void DataDownloaded(Resource*, uint64_t) {}
-  virtual void DidReceiveResourceTiming(Resource*, const ResourceTimingInfo&) {}
   // Called for requests that had DownloadToBlob set to true. Can be called with
   // null if creating the blob failed for some reason (but the download itself
   // otherwise succeeded). Could also not be called at all if the downloaded
@@ -209,7 +207,6 @@ class PLATFORM_EXPORT RawResourceClientStateChecker final {
 
  public:
   RawResourceClientStateChecker();
-  ~RawResourceClientStateChecker();
 
   // Call before addClient()/removeClient() is called.
   void WillAddClient();

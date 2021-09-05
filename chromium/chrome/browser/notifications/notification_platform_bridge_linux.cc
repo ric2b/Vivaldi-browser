@@ -19,6 +19,7 @@
 #include "base/files/file_path_watcher.h"
 #include "base/files/file_util.h"
 #include "base/i18n/number_formatting.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/ranges.h"
 #include "base/strings/nullable_string16.h"
@@ -63,6 +64,7 @@ const char kFreedesktopNotificationsPath[] = "/org/freedesktop/Notifications";
 // DBus methods.
 const char kMethodCloseNotification[] = "CloseNotification";
 const char kMethodGetCapabilities[] = "GetCapabilities";
+const char kMethodListActivatableNames[] = "ListActivatableNames";
 const char kMethodNameHasOwner[] = "NameHasOwner";
 const char kMethodNotify[] = "Notify";
 
@@ -81,6 +83,7 @@ const char kCapabilityIconMulti[] = "icon-multi";
 const char kCapabilityIconStatic[] = "icon-static";
 const char kCapabilityPersistence[] = "persistence";
 const char kCapabilitySound[] = "sound";
+const char kCapabilityXKdeOriginName[] = "x-kde-origin-name";
 
 // Button IDs.
 const char kCloseButtonId[] = "close";
@@ -209,9 +212,9 @@ void ForwardNotificationOperationOnUiThread(
 
   g_browser_process->profile_manager()->LoadProfile(
       profile_id, is_incognito,
-      base::Bind(&NotificationDisplayServiceImpl::ProfileLoadedCallback,
-                 operation, notification_type, origin, notification_id,
-                 action_index, base::nullopt /* reply */, by_user));
+      base::BindOnce(&NotificationDisplayServiceImpl::ProfileLoadedCallback,
+                     operation, notification_type, origin, notification_id,
+                     action_index, base::nullopt /* reply */, by_user));
 }
 
 class ResourceFile {
@@ -250,7 +253,7 @@ std::unique_ptr<ResourceFile> WriteDataToTmpFile(
   return resource_file;
 }
 
-bool CheckNotificationsNameHasOwner(dbus::Bus* bus) {
+bool CheckNotificationsNameHasOwnerOrIsActivatable(dbus::Bus* bus) {
   dbus::ObjectProxy* dbus_proxy =
       bus->GetObjectProxy(DBUS_SERVICE_DBUS, dbus::ObjectPath(DBUS_PATH_DBUS));
   dbus::MethodCall name_has_owner_call(DBUS_INTERFACE_DBUS,
@@ -262,7 +265,22 @@ bool CheckNotificationsNameHasOwner(dbus::Bus* bus) {
                                      dbus::ObjectProxy::TIMEOUT_USE_DEFAULT);
   dbus::MessageReader reader(name_has_owner_response.get());
   bool owned = false;
-  return name_has_owner_response && reader.PopBool(&owned) && owned;
+  if (name_has_owner_response && reader.PopBool(&owned) && owned)
+    return true;
+
+  // If the service currently isn't running, maybe it is activatable.
+  dbus::MethodCall list_activatable_names_call(DBUS_INTERFACE_DBUS,
+                                               kMethodListActivatableNames);
+  std::unique_ptr<dbus::Response> list_activatable_names_response =
+      dbus_proxy->CallMethodAndBlock(&list_activatable_names_call,
+                                     dbus::ObjectProxy::TIMEOUT_USE_DEFAULT);
+  if (list_activatable_names_response) {
+    dbus::MessageReader reader(list_activatable_names_response.get());
+    std::vector<std::string> activatable_names;
+    reader.PopArrayOfStrings(&activatable_names);
+    return base::Contains(activatable_names, kFreedesktopNotificationsName);
+  }
+  return false;
 }
 
 }  // namespace
@@ -301,7 +319,7 @@ class NotificationPlatformBridgeLinuxImpl
   void Init() {
     product_logo_png_bytes_ =
         gfx::Image(*ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
-                       IDR_PRODUCT_LOGO_256))
+                       IDR_PRODUCT_LOGO_64))
             .As1xPNGBytes();
     task_runner_->PostTask(
         FROM_HERE,
@@ -440,7 +458,7 @@ class NotificationPlatformBridgeLinuxImpl
       bus_ = base::MakeRefCounted<dbus::Bus>(bus_options);
     }
 
-    if (!CheckNotificationsNameHasOwner(bus_.get())) {
+    if (!CheckNotificationsNameHasOwnerOrIsActivatable(bus_.get())) {
       OnConnectionInitializationFinishedOnTaskRunner(
           ConnectionInitializationStatusCode::
               NATIVE_NOTIFICATIONS_NOT_SUPPORTED);
@@ -493,20 +511,20 @@ class NotificationPlatformBridgeLinuxImpl
     DCHECK(!connect_signals_in_progress_);
     connect_signals_in_progress_ = true;
     connected_signals_barrier_ = base::BarrierClosure(
-        2, base::Bind(&NotificationPlatformBridgeLinuxImpl::
-                          OnConnectionInitializationFinishedOnTaskRunner,
-                      this, ConnectionInitializationStatusCode::SUCCESS));
+        2, base::BindOnce(&NotificationPlatformBridgeLinuxImpl::
+                              OnConnectionInitializationFinishedOnTaskRunner,
+                          this, ConnectionInitializationStatusCode::SUCCESS));
     notification_proxy_->ConnectToSignal(
         kFreedesktopNotificationsName, kSignalActionInvoked,
         base::Bind(&NotificationPlatformBridgeLinuxImpl::OnActionInvoked, this),
-        base::Bind(&NotificationPlatformBridgeLinuxImpl::OnSignalConnected,
-                   this));
+        base::BindOnce(&NotificationPlatformBridgeLinuxImpl::OnSignalConnected,
+                       this));
     notification_proxy_->ConnectToSignal(
         kFreedesktopNotificationsName, kSignalNotificationClosed,
         base::Bind(&NotificationPlatformBridgeLinuxImpl::OnNotificationClosed,
                    this),
-        base::Bind(&NotificationPlatformBridgeLinuxImpl::OnSignalConnected,
-                   this));
+        base::BindOnce(&NotificationPlatformBridgeLinuxImpl::OnSignalConnected,
+                       this));
   }
 
   void CleanUpOnTaskRunner() {
@@ -568,41 +586,52 @@ class NotificationPlatformBridgeLinuxImpl
     writer.AppendString(
         base::UTF16ToUTF8(CreateNotificationTitle(*notification)));
 
+    std::string context_display_text;
+    bool linkify_context_if_possible = false;
+    if (notification->UseOriginAsContextMessage()) {
+      context_display_text =
+          base::UTF16ToUTF8(url_formatter::FormatUrlForSecurityDisplay(
+              notification->origin_url(),
+              url_formatter::SchemeDisplay::OMIT_HTTP_AND_HTTPS));
+      if (context_display_text.size() > kMaxAllowedOriginLength) {
+        std::string domain_and_registry =
+            net::registry_controlled_domains::GetDomainAndRegistry(
+                notification->origin_url(),
+                net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
+        // localhost, raw IPs etc. are not handled by GetDomainAndRegistry.
+        if (!domain_and_registry.empty()) {
+          context_display_text = domain_and_registry;
+        }
+      }
+      linkify_context_if_possible = true;
+    } else {
+      context_display_text = base::UTF16ToUTF8(notification->context_message());
+    }
+
+    const bool has_support_for_kde_origin_name =
+        base::Contains(capabilities_, kCapabilityXKdeOriginName);
+
     std::ostringstream body;
     if (base::Contains(capabilities_, kCapabilityBody)) {
       const bool body_markup =
           base::Contains(capabilities_, kCapabilityBodyMarkup);
 
-      if (notification->UseOriginAsContextMessage()) {
-        std::string url_display_text =
-            base::UTF16ToUTF8(url_formatter::FormatUrlForSecurityDisplay(
-                notification->origin_url(),
-                url_formatter::SchemeDisplay::OMIT_HTTP_AND_HTTPS));
-        if (url_display_text.size() > kMaxAllowedOriginLength) {
-          std::string domain_and_registry =
-              net::registry_controlled_domains::GetDomainAndRegistry(
-                  notification->origin_url(),
-                  net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
-          // localhost, raw IPs etc. are not handled by GetDomainAndRegistry.
-          if (!domain_and_registry.empty()) {
-            url_display_text = domain_and_registry;
+      if (!has_support_for_kde_origin_name) {
+        if (body_markup) {
+          EscapeUnsafeCharacters(&context_display_text);
+        }
+
+        if (linkify_context_if_possible) {
+          if (base::Contains(capabilities_, kCapabilityBodyHyperlinks)) {
+            body << "<a href=\""
+                 << net::EscapeForHTML(notification->origin_url().spec())
+                 << "\">" << context_display_text << "</a>\n\n";
+          } else {
+            body << context_display_text << "\n\n";
           }
+        } else if (!context_display_text.empty()) {
+          body << context_display_text << "\n\n";
         }
-        EscapeUnsafeCharacters(&url_display_text);
-        if (body_markup &&
-            base::Contains(capabilities_, kCapabilityBodyHyperlinks)) {
-          body << "<a href=\""
-               << net::EscapeForHTML(notification->origin_url().spec()) << "\">"
-               << url_display_text << "</a>\n\n";
-        } else {
-          body << url_display_text << "\n\n";
-        }
-      } else if (!notification->context_message().empty()) {
-        std::string context =
-            base::UTF16ToUTF8(notification->context_message());
-        if (body_markup)
-          EscapeUnsafeCharacters(&context);
-        body << context << "\n\n";
       }
 
       std::string message = base::UTF16ToUTF8(notification->message());
@@ -714,6 +743,14 @@ class NotificationPlatformBridgeLinuxImpl
         hints_writer.CloseContainer(&image_path_writer);
       }
       data->resource_files.push_back(std::move(icon_file));
+    }
+
+    if (has_support_for_kde_origin_name && !context_display_text.empty()) {
+      dbus::MessageWriter kde_origin_name_writer(nullptr);
+      hints_writer.OpenDictEntry(&kde_origin_name_writer);
+      kde_origin_name_writer.AppendString(kCapabilityXKdeOriginName);
+      kde_origin_name_writer.AppendVariantOfString(context_display_text);
+      hints_writer.CloseContainer(&kde_origin_name_writer);
     }
 
     writer.CloseContainer(&hints_writer);

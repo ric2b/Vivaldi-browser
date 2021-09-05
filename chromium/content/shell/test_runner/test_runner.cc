@@ -21,13 +21,13 @@
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "cc/paint/paint_canvas.h"
-#include "content/shell/common/web_test/web_test_switches.h"
+#include "content/shell/common/web_test/web_test_constants.h"
+#include "content/shell/common/web_test/web_test_string_util.h"
 #include "content/shell/test_runner/layout_dump.h"
 #include "content/shell/test_runner/mock_content_settings_client.h"
 #include "content/shell/test_runner/mock_web_document_subresource_filter.h"
 #include "content/shell/test_runner/pixel_dump.h"
 #include "content/shell/test_runner/spell_check_client.h"
-#include "content/shell/test_runner/test_common.h"
 #include "content/shell/test_runner/test_interfaces.h"
 #include "content/shell/test_runner/test_preferences.h"
 #include "content/shell/test_runner/test_runner_for_specific_view.h"
@@ -40,7 +40,6 @@
 #include "gin/wrappable.h"
 #include "services/network/public/mojom/cors.mojom.h"
 #include "third_party/blink/public/platform/web_data.h"
-#include "third_party/blink/public/platform/web_point.h"
 #include "third_party/blink/public/platform/web_url_response.h"
 #include "third_party/blink/public/web/blink.h"
 #include "third_party/blink/public/web/web_array_buffer.h"
@@ -50,7 +49,6 @@
 #include "third_party/blink/public/web/web_frame.h"
 #include "third_party/blink/public/web/web_input_element.h"
 #include "third_party/blink/public/web/web_local_frame.h"
-#include "third_party/blink/public/web/web_page_importance_signals.h"
 #include "third_party/blink/public/web/web_script_source.h"
 #include "third_party/blink/public/web/web_security_policy.h"
 #include "third_party/blink/public/web/web_serialized_script_value.h"
@@ -117,7 +115,8 @@ void ConvertAndSet(gin::Arguments* args, blink::WebString* set_param) {
     return;
   }
 
-  *set_param = V8StringToWebString(args->isolate(), result.ToLocalChecked());
+  *set_param = web_test_string_util::V8StringToWebString(
+      args->isolate(), result.ToLocalChecked());
 }
 
 }  // namespace
@@ -183,11 +182,13 @@ class TestRunnerBindings : public gin::Wrappable<TestRunnerBindings> {
   void EnableUseZoomForDSF(v8::Local<v8::Function> callback);
   void EvaluateScriptInIsolatedWorld(int world_id, const std::string& script);
   void ExecCommand(gin::Arguments* args);
+  void TriggerTestInspectorIssue(gin::Arguments* args);
   void ForceNextDrawingBufferCreationToFail();
   void ForceNextWebGLContextCreationToFail();
   void ForceRedSelectionColors();
   void GetBluetoothManualChooserEvents(v8::Local<v8::Function> callback);
   void GetManifestThen(v8::Local<v8::Function> callback);
+  base::FilePath::StringType GetWritableDirectory();
   void InsertStyleSheet(const std::string& source_code);
   void UpdateAllLifecyclePhasesAndComposite();
   void UpdateAllLifecyclePhasesAndCompositeThen(
@@ -213,7 +214,6 @@ class TestRunnerBindings : public gin::Wrappable<TestRunnerBindings> {
   void SetAcceptLanguages(const std::string& accept_languages);
   void SetAllowFileAccessFromFileURLs(bool allow);
   void SetAllowRunningOfInsecureContent(bool allowed);
-  void SetAutoplayAllowed(bool allowed);
   void SetBlockThirdPartyCookies(bool block);
   void SetAudioData(const gin::ArrayBufferView& view);
   void SetBackingScaleFactor(double value, v8::Local<v8::Function> callback);
@@ -235,6 +235,7 @@ class TestRunnerBindings : public gin::Wrappable<TestRunnerBindings> {
   void SetDumpConsoleMessages(bool value);
   void SetDumpJavaScriptDialogs(bool value);
   void SetEffectiveConnectionType(const std::string& connection_type);
+  void SetFilePathForMockFileDialog(const base::FilePath::StringType& path);
   void SetMockSpellCheckerEnabled(bool enabled);
   void SetImagesAllowed(bool allowed);
   void SetIsolatedWorldInfo(int world_id,
@@ -265,6 +266,7 @@ class TestRunnerBindings : public gin::Wrappable<TestRunnerBindings> {
   void SetTextSubpixelPositioning(bool value);
   void SetViewSourceForFrame(const std::string& name, bool enabled);
   void SetWillSendRequestClearHeader(const std::string& header);
+  void SetWillSendRequestClearReferrer();
   void SetWindowIsKey(bool value);
   void NavigateSecondaryWindow(const std::string& url);
   void InspectSecondaryWindow();
@@ -285,7 +287,6 @@ class TestRunnerBindings : public gin::Wrappable<TestRunnerBindings> {
       const std::string& script);
   bool FindString(const std::string& search_text,
                   const std::vector<std::string>& options_array);
-  bool HasCustomPageSizeStyle(int page_index);
   bool IsChooserShown();
 
   bool IsCommandEnabled(const std::string& command);
@@ -451,6 +452,8 @@ gin::ObjectTemplateBuilder TestRunnerBindings::GetObjectTemplateBuilder(
           "evaluateScriptInIsolatedWorldAndReturnValue",
           &TestRunnerBindings::EvaluateScriptInIsolatedWorldAndReturnValue)
       .SetMethod("execCommand", &TestRunnerBindings::ExecCommand)
+      .SetMethod("triggerTestInspectorIssue",
+                 &TestRunnerBindings::TriggerTestInspectorIssue)
       .SetMethod("findString", &TestRunnerBindings::FindString)
       .SetMethod("forceNextDrawingBufferCreationToFail",
                  &TestRunnerBindings::ForceNextDrawingBufferCreationToFail)
@@ -464,8 +467,8 @@ gin::ObjectTemplateBuilder TestRunnerBindings::GetObjectTemplateBuilder(
       .SetMethod("getBluetoothManualChooserEvents",
                  &TestRunnerBindings::GetBluetoothManualChooserEvents)
       .SetMethod("getManifestThen", &TestRunnerBindings::GetManifestThen)
-      .SetMethod("hasCustomPageSizeStyle",
-                 &TestRunnerBindings::HasCustomPageSizeStyle)
+      .SetMethod("getWritableDirectory",
+                 &TestRunnerBindings::GetWritableDirectory)
       .SetMethod("insertStyleSheet", &TestRunnerBindings::InsertStyleSheet)
       .SetMethod("isChooserShown", &TestRunnerBindings::IsChooserShown)
       .SetMethod("isCommandEnabled", &TestRunnerBindings::IsCommandEnabled)
@@ -511,7 +514,6 @@ gin::ObjectTemplateBuilder TestRunnerBindings::GetObjectTemplateBuilder(
                  &TestRunnerBindings::SetAllowFileAccessFromFileURLs)
       .SetMethod("setAllowRunningOfInsecureContent",
                  &TestRunnerBindings::SetAllowRunningOfInsecureContent)
-      .SetMethod("setAutoplayAllowed", &TestRunnerBindings::SetAutoplayAllowed)
       .SetMethod("setBlockThirdPartyCookies",
                  &TestRunnerBindings::SetBlockThirdPartyCookies)
       .SetMethod("setAudioData", &TestRunnerBindings::SetAudioData)
@@ -541,6 +543,8 @@ gin::ObjectTemplateBuilder TestRunnerBindings::GetObjectTemplateBuilder(
                  &TestRunnerBindings::SetDumpJavaScriptDialogs)
       .SetMethod("setEffectiveConnectionType",
                  &TestRunnerBindings::SetEffectiveConnectionType)
+      .SetMethod("setFilePathForMockFileDialog",
+                 &TestRunnerBindings::SetFilePathForMockFileDialog)
       .SetMethod("setHighlightAds", &TestRunnerBindings::SetHighlightAds)
       .SetMethod("setMockSpellCheckerEnabled",
                  &TestRunnerBindings::SetMockSpellCheckerEnabled)
@@ -589,6 +593,8 @@ gin::ObjectTemplateBuilder TestRunnerBindings::GetObjectTemplateBuilder(
                  &TestRunnerBindings::SetViewSourceForFrame)
       .SetMethod("setWillSendRequestClearHeader",
                  &TestRunnerBindings::SetWillSendRequestClearHeader)
+      .SetMethod("setWillSendRequestClearReferrer",
+                 &TestRunnerBindings::SetWillSendRequestClearReferrer)
       .SetMethod("setWindowIsKey", &TestRunnerBindings::SetWindowIsKey)
       .SetMethod("navigateSecondaryWindow",
                  &TestRunnerBindings::NavigateSecondaryWindow)
@@ -710,6 +716,11 @@ void TestRunnerBindings::ExecCommand(gin::Arguments* args) {
     view_runner_->ExecCommand(args);
 }
 
+void TestRunnerBindings::TriggerTestInspectorIssue(gin::Arguments* args) {
+  if (view_runner_)
+    view_runner_->TriggerTestInspectorIssue();
+}
+
 bool TestRunnerBindings::IsCommandEnabled(const std::string& command) {
   if (view_runner_)
     return view_runner_->IsCommandEnabled(command);
@@ -754,6 +765,18 @@ void TestRunnerBindings::SetEffectiveConnectionType(
 
   if (runner_)
     runner_->SetEffectiveConnectionType(web_type);
+}
+
+base::FilePath::StringType TestRunnerBindings::GetWritableDirectory() {
+  if (!runner_)
+    return {};
+  return runner_->GetWritableDirectory().value();
+}
+
+void TestRunnerBindings::SetFilePathForMockFileDialog(
+    const base::FilePath::StringType& path) {
+  if (runner_)
+    runner_->SetFilePathForMockFileDialog(base::FilePath(path));
 }
 
 void TestRunnerBindings::SetMockSpellCheckerEnabled(bool enabled) {
@@ -816,12 +839,6 @@ void TestRunnerBindings::AddOriginAccessAllowListEntry(
                                            destination_host,
                                            allow_destination_subdomains);
   }
-}
-
-bool TestRunnerBindings::HasCustomPageSizeStyle(int page_index) {
-  if (view_runner_)
-    return view_runner_->HasCustomPageSizeStyle(page_index);
-  return false;
 }
 
 void TestRunnerBindings::ForceRedSelectionColors() {
@@ -1059,11 +1076,6 @@ void TestRunnerBindings::SetAllowRunningOfInsecureContent(bool allowed) {
     runner_->SetAllowRunningOfInsecureContent(allowed);
 }
 
-void TestRunnerBindings::SetAutoplayAllowed(bool allowed) {
-  if (runner_)
-    runner_->SetAutoplayAllowed(allowed);
-}
-
 void TestRunnerBindings::DumpPermissionClientCallbacks() {
   if (runner_)
     runner_->DumpPermissionClientCallbacks();
@@ -1114,6 +1126,11 @@ void TestRunnerBindings::SetWillSendRequestClearHeader(
     const std::string& header) {
   if (runner_)
     runner_->SetWillSendRequestClearHeader(header);
+}
+
+void TestRunnerBindings::SetWillSendRequestClearReferrer() {
+  if (runner_)
+    runner_->SetWillSendRequestClearReferrer();
 }
 
 void TestRunnerBindings::WaitUntilExternalURLLoad() {
@@ -1178,10 +1195,11 @@ void TestRunnerBindings::SetBackingScaleFactor(
     v8::Local<v8::Function> callback) {
   // Limit backing scale factor to something low - 15x. Without
   // this limit, arbitrarily large values can be used, which can lead to
-  // crashes and other problems. Examples of problems: gfx::Size::GetCheckedArea
-  // crashes with a size which overflows int; GLES2DecoderImpl::TexStorageImpl
-  // fails with "dimensions out of range"; GL ERROR :GL_OUT_OF_MEMORY.
-  // See https://crbug.com/899482 or https://crbug.com/900271
+  // crashes and other problems. Examples of problems:
+  // gfx::Size::GetCheckedArea crashes with a size which overflows int;
+  // GLES2DecoderImpl::TexStorageImpl fails with "dimensions out of range"; GL
+  // ERROR :GL_OUT_OF_MEMORY. See https://crbug.com/899482 or
+  // https://crbug.com/900271
   double limited_value = fmin(15, value);
   if (view_runner_)
     view_runner_->SetBackingScaleFactor(limited_value, callback);
@@ -1459,10 +1477,10 @@ void TestRunner::WorkQueue::ProcessWork() {
       // Quit doing work once a load is in progress.
       //
       // TODO(danakj): We could avoid the post-task of ProcessWork() by not
-      // early-outting here if |finished_loading_|. Since load finished we could
-      // keep running work. And in RemoveLoadingFrame() instead of calling
-      // ProcessWorkSoon() unconditionally, only call it if we're not already
-      // inside ProcessWork().
+      // early-outting here if |finished_loading_|. Since load finished we
+      // could keep running work. And in RemoveLoadingFrame() instead of
+      // calling ProcessWorkSoon() unconditionally, only call it if we're not
+      // already inside ProcessWork().
       return;
     }
   }
@@ -1520,7 +1538,7 @@ void TestRunner::Reset() {
 
   if (delegate_) {
     // Reset the default quota for each origin.
-    delegate_->SetDatabaseQuota(kDefaultDatabaseQuota);
+    delegate_->SetDatabaseQuota(content::kDefaultDatabaseQuota);
     delegate_->SetDeviceColorSpace("reset");
     delegate_->SetDeviceScaleFactor(GetDefaultDeviceScaleFactor());
     delegate_->SetBlockThirdPartyCookies(false);
@@ -1543,6 +1561,7 @@ void TestRunner::Reset() {
   did_notify_done_ = false;
 
   http_headers_to_clear_.clear();
+  clear_referrer_ = false;
 
   platform_name_ = "chromium";
   tooltip_text_ = std::string();
@@ -1679,7 +1698,7 @@ void TestRunner::ReplicateWebTestRuntimeFlagsChanges(
 
     bool allowed = web_test_runtime_flags_.plugins_allowed();
     for (WebViewTestProxy* window : test_interfaces_->GetWindowList())
-      window->webview()->GetSettings()->SetPluginsEnabled(allowed);
+      window->GetWebView()->GetSettings()->SetPluginsEnabled(allowed);
   }
 }
 
@@ -1765,6 +1784,10 @@ const std::set<std::string>* TestRunner::HttpHeadersToClear() const {
   return &http_headers_to_clear_;
 }
 
+bool TestRunner::ClearReferrer() const {
+  return clear_referrer_;
+}
+
 bool TestRunner::IsFramePartOfMainTestWindow(blink::WebFrame* frame) const {
   return test_is_running_ && frame->Top()->View() == main_view_;
 }
@@ -1786,9 +1809,10 @@ void TestRunner::AddLoadingFrame(blink::WebFrame* frame) {
 }
 
 void TestRunner::RemoveLoadingFrame(blink::WebFrame* frame) {
-  if (!IsFramePartOfMainTestWindow(frame))
-    return;
-
+  // Note that unlike AddLoadingFrame, we don't check if |frame| is part of the
+  // current main test window or not, because in some cases we might have
+  // marked the new page as the current main test window before we removed all
+  // the loading frames of the old main test window from |loading_frames_|.
   if (!base::Contains(loading_frames_, frame))
     return;
 
@@ -1806,8 +1830,8 @@ void TestRunner::RemoveLoadingFrame(blink::WebFrame* frame) {
 
   // No more new work after the first complete load.
   work_queue_.set_frozen(true);
-  // Inform the work queue that any load it started is done, in case it is still
-  // inside ProcessWork().
+  // Inform the work queue that any load it started is done, in case it is
+  // still inside ProcessWork().
   work_queue_.set_finished_loading();
 
   // The test chooses between running queued tasks or waiting for NotifyDone()
@@ -1841,9 +1865,9 @@ void TestRunner::FinishTestIfReady() {
   // for NotifyDone(), then we normally conclude the test. However if this
   // TestRunner is attached to a swapped out frame tree - that is the main
   // frame is in another frame tree - then finishing here would be premature
-  // for the main frame where the test is running. If |did_notify_done_| is true
-  // then we *were* waiting for NotifyDone() and it has already happened, so we
-  // want to proceed as if the NotifyDone() is happening now.
+  // for the main frame where the test is running. If |did_notify_done_| is
+  // true then we *were* waiting for NotifyDone() and it has already happened,
+  // so we want to proceed as if the NotifyDone() is happening now.
   //
   // Ideally, the main frame would wait for loading frames in its frame tree
   // as well as any secondary renderers, but it does not know about secondary
@@ -1853,8 +1877,8 @@ void TestRunner::FinishTestIfReady() {
   if (!main_view_->MainFrame()->IsWebLocalFrame() && !did_notify_done_)
     return;
 
-  // No tasks left to run, all frames are done loading from previous tasks, and
-  // we're not waiting for NotifyDone(), so the test is done.
+  // No tasks left to run, all frames are done loading from previous tasks,
+  // and we're not waiting for NotifyDone(), so the test is done.
   delegate_->TestFinished();
 }
 
@@ -2020,10 +2044,10 @@ void TestRunner::QueueLoad(const std::string& url, const std::string& target) {
   if (!main_view_)
     return;
 
-  // TODO(lukasza): testRunner.queueLoad(...) should work even if the main frame
-  // is remote (ideally testRunner.queueLoad would bind to and execute in the
-  // context of a specific local frame - resolving relative urls should be done
-  // on relative to the calling frame's url).
+  // TODO(lukasza): testRunner.queueLoad(...) should work even if the main
+  // frame is remote (ideally testRunner.queueLoad would bind to and execute
+  // in the context of a specific local frame - resolving relative urls should
+  // be done on relative to the calling frame's url).
   CHECK(main_view_->MainFrame()->IsWebLocalFrame())
       << "This function cannot be called if the main frame is not "
          "a local frame.";
@@ -2136,11 +2160,14 @@ void TestRunner::SetMockScreenOrientation(const std::string& orientation_str) {
   }
 
   for (WebViewTestProxy* window : test_interfaces_->GetWindowList()) {
-    blink::WebFrame* main_frame = window->webview()->MainFrame();
+    blink::WebFrame* main_frame = window->GetWebView()->MainFrame();
     // TODO(lukasza): Need to make this work for remote frames.
     if (main_frame->IsWebLocalFrame()) {
-      mock_screen_orientation_client_.UpdateDeviceOrientation(
-          main_frame->ToWebLocalFrame(), orientation);
+      bool screen_orientation_changed =
+          mock_screen_orientation_client_.UpdateDeviceOrientation(
+              main_frame->ToWebLocalFrame(), orientation);
+      if (screen_orientation_changed)
+        delegate_->SetScreenOrientationChanged();
     }
   }
 }
@@ -2230,7 +2257,7 @@ void TestRunner::SetAcceptLanguages(const std::string& accept_languages) {
   OnWebTestRuntimeFlagsChanged();
 
   for (WebViewTestProxy* window : test_interfaces_->GetWindowList())
-    window->webview()->AcceptLanguagesChanged();
+    window->GetWebView()->AcceptLanguagesChanged();
 }
 
 void TestRunner::SetPluginsEnabled(bool enabled) {
@@ -2339,18 +2366,13 @@ void TestRunner::SetPluginsAllowed(bool allowed) {
   web_test_runtime_flags_.set_plugins_allowed(allowed);
 
   for (WebViewTestProxy* window : test_interfaces_->GetWindowList())
-    window->webview()->GetSettings()->SetPluginsEnabled(allowed);
+    window->GetWebView()->GetSettings()->SetPluginsEnabled(allowed);
 
   OnWebTestRuntimeFlagsChanged();
 }
 
 void TestRunner::SetAllowRunningOfInsecureContent(bool allowed) {
   web_test_runtime_flags_.set_running_insecure_content_allowed(allowed);
-  OnWebTestRuntimeFlagsChanged();
-}
-
-void TestRunner::SetAutoplayAllowed(bool allowed) {
-  web_test_runtime_flags_.set_autoplay_allowed(allowed);
   OnWebTestRuntimeFlagsChanged();
 }
 
@@ -2409,6 +2431,10 @@ void TestRunner::SetShouldStayOnPageAfterHandlingBeforeUnload(bool value) {
 void TestRunner::SetWillSendRequestClearHeader(const std::string& header) {
   if (!header.empty())
     http_headers_to_clear_.insert(header);
+}
+
+void TestRunner::SetWillSendRequestClearReferrer() {
+  clear_referrer_ = true;
 }
 
 void TestRunner::WaitUntilExternalURLLoad() {
@@ -2520,6 +2546,14 @@ void TestRunner::SimulateWebNotificationClose(const std::string& title,
 
 void TestRunner::SimulateWebContentIndexDelete(const std::string& id) {
   delegate_->SimulateWebContentIndexDelete(id);
+}
+
+base::FilePath TestRunner::GetWritableDirectory() {
+  return delegate_->GetWritableDirectory();
+}
+
+void TestRunner::SetFilePathForMockFileDialog(const base::FilePath& path) {
+  delegate_->SetFilePathForMockFileDialog(path);
 }
 
 void TestRunner::SetAnimationRequiresRaster(bool do_raster) {

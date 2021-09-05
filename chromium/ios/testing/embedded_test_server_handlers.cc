@@ -4,6 +4,8 @@
 
 #include "ios/testing/embedded_test_server_handlers.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
@@ -37,31 +39,35 @@ class DownloadResponse : public net::test_server::BasicHttpResponse {
  public:
   DownloadResponse(int length) : length_(length) {}
 
-  void SendResponse(
-      const net::test_server::SendBytesCallback& send,
-      const net::test_server::SendCompleteCallback& done) override {
+  void SendResponse(const net::test_server::SendBytesCallback& send,
+                    net::test_server::SendCompleteCallback done) override {
     send.Run(base::StringPrintf("HTTP/1.1 200 OK\r\n"
                                 "Content-Type:%s\r\n\r\n"
                                 "Content-Length:%d\r\n\r\n",
                                 kTestDownloadMimeType, length_),
-             base::BindRepeating(&DownloadResponse::Send, send, done, length_));
+             base::BindOnce(&DownloadResponse::Send, send, std::move(done),
+                            length_));
   }
 
  private:
-  // Sends "0" |count| times.
+  // Sends "0" |count| times using 1KB blocks. Using blocks with smaller size is
+  // performance inefficient and can cause unnecessary delays especially when
+  // multiple tests run in parallel on a single machine.
   static void Send(const net::test_server::SendBytesCallback& send,
-                   const net::test_server::SendCompleteCallback& done,
+                   net::test_server::SendCompleteCallback done,
                    int count) {
     if (!count) {
-      done.Run();
+      std::move(done).Run();
       return;
     }
 
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    const int block_size = std::min(count, 1000);
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE,
-        base::BindRepeating(send, "0",
-                            base::BindRepeating(&DownloadResponse::Send, send,
-                                                done, count - 1)));
+        base::BindOnce(send, std::string(block_size, 0),
+                       base::BindOnce(&DownloadResponse::Send, send,
+                                      std::move(done), count - block_size)),
+        base::TimeDelta::FromMilliseconds(100));
   }
 
   int length_ = 0;

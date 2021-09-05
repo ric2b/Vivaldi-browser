@@ -107,8 +107,21 @@ class BrowserSwitcherServiceTest : public InProcessBrowserTest {
     BrowserSwitcherService::SetRefreshDelayForTesting(action_timeout() * 3 / 2);
 #if defined(OS_WIN)
     ASSERT_TRUE(fake_appdata_dir_.CreateUniqueTempDir());
-    base::PathService::Override(base::DIR_LOCAL_APP_DATA,
-                                fake_appdata_dir_.GetPath());
+#endif
+  }
+
+  void SetUpOnMainThread() override {
+#if defined(OS_WIN)
+    BrowserSwitcherServiceFactory::GetInstance()->SetTestingFactory(
+        browser()->profile(),
+        base::BindRepeating(
+            [](base::FilePath cache_dir, content::BrowserContext* context) {
+              auto* instance = new BrowserSwitcherServiceWin(
+                  Profile::FromBrowserContext(context), cache_dir);
+              instance->Init();
+              return std::unique_ptr<KeyedService>(instance);
+            },
+            cache_dir()));
 #endif
   }
 
@@ -163,8 +176,6 @@ class BrowserSwitcherServiceTest : public InProcessBrowserTest {
 #if defined(OS_WIN)
   base::ScopedTempDir fake_appdata_dir_;
 #endif
-
-  DISALLOW_COPY_AND_ASSIGN(BrowserSwitcherServiceTest);
 };
 
 IN_PROC_BROWSER_TEST_F(BrowserSwitcherServiceTest, ExternalSitelistInvalidUrl) {
@@ -554,7 +565,9 @@ IN_PROC_BROWSER_TEST_F(BrowserSwitcherServiceTest,
   run_loop.Run();
 }
 
-IN_PROC_BROWSER_TEST_F(BrowserSwitcherServiceTest, IeemIgnoresFailedDownload) {
+// Disabled test due to flaky failures on Win 7: crbug.com/1044619
+IN_PROC_BROWSER_TEST_F(BrowserSwitcherServiceTest,
+                       DISABLED_IeemIgnoresFailedDownload) {
   SetUseIeSitelist(true);
   BrowserSwitcherServiceWin::SetIeemSitelistUrlForTesting(kAValidUrl);
 
@@ -768,22 +781,29 @@ IN_PROC_BROWSER_TEST_F(BrowserSwitcherServiceTest, WritesSitelistsToCacheFile) {
                             base::File::FLAG_OPEN | base::File::FLAG_READ);
             ASSERT_TRUE(file.IsValid());
 
-            const char expected_output[] =
+            base::FilePath expected_chrome_path;
+            base::FilePath::CharType chrome_path[MAX_PATH];
+#if defined(OS_WIN)
+            ::GetModuleFileName(NULL, chrome_path, ARRAYSIZE(chrome_path));
+            expected_chrome_path = base::FilePath(chrome_path);
+#endif
+            std::string expected_output = base::StringPrintf(
                 "1\n"
                 "\n"
                 "\n"
-                "\n"
+                "%s\n"
                 "\n"
                 "2\n"
                 "docs.google.com\n"
                 "yahoo.com\n"
                 "1\n"
-                "greylist.invalid.com\n";
+                "greylist.invalid.com\n",
+                expected_chrome_path.MaybeAsASCII().c_str());
 
             std::unique_ptr<char[]> buffer(new char[file.GetLength() + 1]);
             buffer.get()[file.GetLength()] = '\0';
             file.Read(0, buffer.get(), file.GetLength());
-            EXPECT_EQ(std::string(expected_output), std::string(buffer.get()));
+            EXPECT_EQ(expected_output, std::string(buffer.get()));
 
             // Check that sitelistcache.dat doesn't exist.
             EXPECT_FALSE(base::PathExists(sitelist_cache_file_path));
@@ -843,21 +863,27 @@ IN_PROC_BROWSER_TEST_F(BrowserSwitcherServiceTest, CacheFileCorrectOnStartup) {
             base::File file(cache_file_path,
                             base::File::FLAG_OPEN | base::File::FLAG_READ);
             ASSERT_TRUE(file.IsValid());
-
-            const char expected_output[] =
+            base::FilePath expected_chrome_path;
+            base::FilePath::CharType chrome_path[MAX_PATH];
+#if defined(OS_WIN)
+            ::GetModuleFileName(NULL, chrome_path, ARRAYSIZE(chrome_path));
+            expected_chrome_path = base::FilePath(chrome_path);
+#endif
+            std::string expected_output = base::StringPrintf(
                 "1\n"
                 "\n"
                 "\n"
-                "\n"
+                "%s\n"
                 "\n"
                 "1\n"
                 "docs.google.com\n"
-                "0\n";
+                "0\n",
+                expected_chrome_path.MaybeAsASCII().c_str());
 
             std::unique_ptr<char[]> buffer(new char[file.GetLength() + 1]);
             buffer.get()[file.GetLength()] = '\0';
             file.Read(0, buffer.get(), file.GetLength());
-            EXPECT_EQ(std::string(expected_output), std::string(buffer.get()));
+            EXPECT_EQ(expected_output, std::string(buffer.get()));
 
             std::move(quit).Run();
           },

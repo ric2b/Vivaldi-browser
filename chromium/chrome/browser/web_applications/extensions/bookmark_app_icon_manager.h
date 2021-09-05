@@ -20,12 +20,23 @@ class BookmarkAppIconManager : public web_app::AppIconManager {
   ~BookmarkAppIconManager() override;
 
   // AppIconManager:
-  bool ReadIcon(const web_app::AppId& app_id,
-                int icon_size_in_px,
-                ReadIconCallback callback) override;
-  bool ReadSmallestIcon(const web_app::AppId& app_id,
-                        int icon_size_in_px,
-                        ReadIconCallback callback) override;
+  bool HasIcons(
+      const web_app::AppId& app_id,
+      const std::vector<SquareSizePx>& icon_sizes_in_px) const override;
+  bool HasSmallestIcon(const web_app::AppId& app_id,
+                       SquareSizePx icon_size_in_px) const override;
+  void ReadIcons(const web_app::AppId& app_id,
+                 const std::vector<SquareSizePx>& icon_sizes_in_px,
+                 ReadIconsCallback callback) const override;
+  void ReadAllIcons(const web_app::AppId& app_id,
+                    ReadIconsCallback callback) const override;
+  void ReadSmallestIcon(const web_app::AppId& app_id,
+                        SquareSizePx icon_size_in_px,
+                        ReadIconCallback callback) const override;
+  void ReadSmallestCompressedIcon(
+      const web_app::AppId& app_id,
+      SquareSizePx icon_size_in_px,
+      ReadCompressedIconCallback callback) const override;
 
  private:
   Profile* const profile_;

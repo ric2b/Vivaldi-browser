@@ -26,7 +26,6 @@ TestOmniboxClient::TestOmniboxClient()
       autocomplete_classifier_(
           std::make_unique<AutocompleteController>(
               CreateAutocompleteProviderClient(),
-              nullptr,
               AutocompleteClassifier::DefaultOmniboxProviders()),
           std::make_unique<TestSchemeClassifier>()) {}
 
@@ -45,9 +44,11 @@ TestOmniboxClient::CreateAutocompleteProviderClient() {
 
   std::unique_ptr<TemplateURLService> template_url_service(
       new TemplateURLService(
-          nullptr, std::unique_ptr<SearchTermsData>(new SearchTermsData),
-          nullptr, std::unique_ptr<TemplateURLServiceClient>(), nullptr,
-          base::Closure()));
+          nullptr /* PrefService */,
+          std::unique_ptr<SearchTermsData>(new SearchTermsData),
+          nullptr /* KeywordWebDataService */,
+          std::unique_ptr<TemplateURLServiceClient>(),
+          base::RepeatingClosure()));
 
   // Save a reference to the created TemplateURLService for test use.
   template_url_service_ = template_url_service.get();

@@ -15,7 +15,7 @@
 #include "extensions/browser/extension_function_dispatcher.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 
-#include "content/browser/web_contents/web_contents_impl.h"
+#include "content/browser/web_contents/web_contents_impl.h" // nogncheck
 
 namespace extensions {
 

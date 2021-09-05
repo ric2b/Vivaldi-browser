@@ -12,9 +12,9 @@
 #include "base/lazy_instance.h"
 #include "base/power_monitor/power_observer.h"
 #include "chrome/browser/external_protocol/external_protocol_handler.h"
-#include "chrome/browser/password_manager/reauth_purpose.h"
 #include "chrome/browser/shell_integration.h"
-#include "chrome/browser/ui/passwords/settings/password_access_authenticator.h"
+#include "components/password_manager/core/browser/password_access_authenticator.h"
+#include "components/password_manager/core/browser/reauth_purpose.h"
 #include "content/public/browser/download_manager.h"
 #include "extensions/browser/api/file_system/file_system_api.h"
 #include "extensions/browser/app_window/app_window.h"
@@ -71,7 +71,7 @@ class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
                         const gfx::Rect& rect,
                         const std::string& flow_direction);
 
-  // Sets anchor rect for the named dialog
+  // Gets anchor rect for the named dialog
   gfx::Rect GetDialogPosition(int window_id,
                               const std::string& dialog,
                               std::string* flow_direction);
@@ -142,7 +142,7 @@ class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
   // Persistent class used for re-authentication of the user when viewing
   // saved passwords. It cannot be instanciated per call as it keeps state
   // of previous authentiations.
-  PasswordAccessAuthenticator password_access_authenticator_;
+  password_manager::PasswordAccessAuthenticator password_access_authenticator_;
 
   // Used to anchor the auth dialog.
   gfx::NativeWindow native_window_ = nullptr;
@@ -300,6 +300,21 @@ class UtilitiesGetFFMPEGStateFunction : public ExtensionFunction {
 
  private:
   DISALLOW_COPY_AND_ASSIGN(UtilitiesGetFFMPEGStateFunction);
+};
+
+class UtilitiesGetMediaAvailableStateFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.getMediaAvailableState",
+                             UTILITIES_GET_MEDIA_AVAILABLE_STATE)
+  UtilitiesGetMediaAvailableStateFunction() = default;
+
+ protected:
+  ~UtilitiesGetMediaAvailableStateFunction() override = default;
+
+  ResponseAction Run() override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesGetMediaAvailableStateFunction);
 };
 
 class UtilitiesSetSharedDataFunction : public ExtensionFunction {
@@ -710,6 +725,19 @@ class UtilitiesFocusDialogFunction : public ExtensionFunction {
   ResponseAction Run() override;
 
   DISALLOW_COPY_AND_ASSIGN(UtilitiesFocusDialogFunction);
+};
+
+class UtilitiesStartChromecastFunction : public ExtensionFunction {
+public:
+ DECLARE_EXTENSION_FUNCTION("utilities.startChromecast",
+                            UTILITIES_START_CHROMECAST)
+ UtilitiesStartChromecastFunction() = default;
+
+private:
+  ~UtilitiesStartChromecastFunction() override = default;
+  ResponseAction Run() override;
+
+  DISALLOW_COPY_AND_ASSIGN(UtilitiesStartChromecastFunction);
 };
 
 }  // namespace extensions

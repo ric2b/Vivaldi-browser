@@ -11,6 +11,7 @@
 #include "base/time/time.h"
 #include "google_apis/gcm/base/gcm_export.h"
 #include "google_apis/gcm/engine/connection_handler.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "services/network/public/mojom/proxy_resolving_socket.mojom.h"
 
 class GURL;
@@ -26,15 +27,15 @@ class LoginRequest;
 namespace gcm {
 
 using GetProxyResolvingFactoryCallback = base::RepeatingCallback<void(
-    network::mojom::ProxyResolvingSocketFactoryRequest)>;
+    mojo::PendingReceiver<network::mojom::ProxyResolvingSocketFactory>)>;
 
 // Factory for creating a ConnectionHandler and maintaining its connection.
 // The factory retains ownership of the ConnectionHandler and will enforce
 // backoff policies when attempting connections.
 class GCM_EXPORT ConnectionFactory {
  public:
-  typedef base::Callback<void(mcs_proto::LoginRequest* login_request)>
-      BuildLoginRequestCallback;
+  using BuildLoginRequestCallback =
+      base::RepeatingCallback<void(mcs_proto::LoginRequest* login_request)>;
 
   // Reasons for triggering a connection reset. Note that these enums are
   // consumed by a histogram, so ordering should not be modified.

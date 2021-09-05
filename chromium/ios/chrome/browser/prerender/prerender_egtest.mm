@@ -2,20 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#import <EarlGrey/EarlGrey.h>
 #import <XCTest/XCTest.h>
+#import "ios/testing/earl_grey/earl_grey_test.h"
 
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
-#import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
-#import "ios/chrome/browser/ui/omnibox/omnibox_text_field_ios.h"
-#import "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_truncating_label.h"
-#include "ios/chrome/browser/ui/util/ui_util.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
 
@@ -88,7 +85,7 @@ std::unique_ptr<net::test_server::HttpResponse> StandardResponse(
   [[EarlGrey selectElementWithMatcher:chrome_test_util::Omnibox()]
       performAction:grey_typeText([pageString stringByAppendingString:@"\n"])];
   [ChromeEarlGrey waitForPageToFinishLoading];
-  GREYAssertEqual(2, visitCounter, @"The page should have been loaded twice");
+  static int visitCountBeforePrerender = visitCounter;
   [[self class] closeAllTabs];
   [ChromeEarlGrey openNewTab];
 
@@ -103,15 +100,15 @@ std::unique_ptr<net::test_server::HttpResponse> StandardResponse(
 
   // Wait until prerender request reaches the server.
   bool prerendered = WaitUntilConditionOrTimeout(kWaitForPageLoadTimeout, ^{
-    return visitCounter == 3;
+    return visitCounter == visitCountBeforePrerender + 1;
   });
   GREYAssertTrue(prerendered, @"Prerender did not happen");
 
   // Make sure the omnibox is autocompleted.
   [[EarlGrey
       selectElementWithMatcher:grey_allOf(grey_accessibilityLabel(pageString),
-                                          grey_ancestor(grey_kindOfClass(
-                                              [OmniboxTextFieldIOS class])),
+                                          grey_ancestor(grey_kindOfClassName(
+                                              @"OmniboxTextFieldIOS")),
                                           nil)]
       assertWithMatcher:grey_sufficientlyVisible()];
 
@@ -120,15 +117,15 @@ std::unique_ptr<net::test_server::HttpResponse> StandardResponse(
   [[EarlGrey
       selectElementWithMatcher:grey_allOf(
                                    grey_accessibilityLabel(pageString),
-                                   grey_kindOfClass(
-                                       [OmniboxPopupTruncatingLabel class]),
+                                   grey_kindOfClassName(@"FadeTruncatingLabel"),
                                    grey_ancestor(grey_accessibilityID(
                                        @"omnibox suggestion 0")),
                                    grey_sufficientlyVisible(), nil)]
       performAction:grey_tap()];
 
   [ChromeEarlGrey waitForWebStateContainingText:kPageLoadedString];
-  GREYAssertEqual(3, visitCounter, @"Prerender should have been the last load");
+  GREYAssertEqual(visitCountBeforePrerender + 1, visitCounter,
+                  @"Prerender should have been the last load");
 }
 
 @end

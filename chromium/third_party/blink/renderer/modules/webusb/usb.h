@@ -12,39 +12,38 @@
 #include "third_party/blink/public/mojom/usb/web_usb_service.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
-#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+#include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
 #include "third_party/blink/renderer/core/execution_context/security_context.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 
 namespace blink {
 
+class ExceptionState;
 class ScriptPromiseResolver;
 class ScriptState;
 class USBDevice;
 class USBDeviceRequestOptions;
 
 class USB final : public EventTargetWithInlineData,
-                  public ContextLifecycleObserver,
+                  public ExecutionContextLifecycleObserver,
                   public device::mojom::blink::UsbDeviceManagerClient {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(USB);
   USING_PRE_FINALIZER(USB, Dispose);
 
  public:
-  static USB* Create(ExecutionContext& context) {
-    return MakeGarbageCollected<USB>(context);
-  }
-
   explicit USB(ExecutionContext&);
   ~USB() override;
 
   void Dispose();
 
   // USB.idl
-  ScriptPromise getDevices(ScriptState*);
-  ScriptPromise requestDevice(ScriptState*, const USBDeviceRequestOptions*);
+  ScriptPromise getDevices(ScriptState*, ExceptionState&);
+  ScriptPromise requestDevice(ScriptState*,
+                              const USBDeviceRequestOptions*,
+                              ExceptionState&);
   DEFINE_ATTRIBUTE_EVENT_LISTENER(connect, kConnect)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(disconnect, kDisconnect)
 
@@ -52,8 +51,8 @@ class USB final : public EventTargetWithInlineData,
   ExecutionContext* GetExecutionContext() const override;
   const AtomicString& InterfaceName() const override;
 
-  // ContextLifecycleObserver overrides.
-  void ContextDestroyed(ExecutionContext*) override;
+  // ExecutionContextLifecycleObserver overrides.
+  void ContextDestroyed() override;
 
   USBDevice* GetOrCreateDevice(device::mojom::blink::UsbDeviceInfoPtr);
 
@@ -72,7 +71,7 @@ class USB final : public EventTargetWithInlineData,
 
   void OnServiceConnectionError();
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  protected:
   // EventTarget protected overrides.
@@ -83,7 +82,7 @@ class USB final : public EventTargetWithInlineData,
   void EnsureServiceConnection();
 
   bool IsContextSupported() const;
-  FeatureEnabledState GetFeatureEnabledState() const;
+  bool IsFeatureEnabled(ReportOptions) const;
 
   mojo::Remote<mojom::blink::WebUsbService> service_;
   HeapHashSet<Member<ScriptPromiseResolver>> get_devices_requests_;

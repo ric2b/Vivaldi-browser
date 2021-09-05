@@ -33,60 +33,35 @@
 
 namespace media {
 
-class WMFByteStream;
-
 class WMFMediaPipeline : public PlatformMediaPipeline {
  public:
-  WMFMediaPipeline(
-      DataSource* data_source,
-      const AudioConfigChangedCB& audio_config_changed_cb,
-      const VideoConfigChangedCB& video_config_changed_cb);
+  WMFMediaPipeline();
   ~WMFMediaPipeline() override;
 
-  void Initialize(const std::string& mime_type,
-                  const InitializeCB& initialize_cb) override;
-  void ReadAudioData(const ReadDataCB& read_audio_data_cb) override;
-  void ReadVideoData(const ReadDataCB& read_video_data_cb) override;
+  void Initialize(ipc_data_source::Reader source_reader,
+                  ipc_data_source::Info source_info,
+                  InitializeCB initialize_cb) override;
+  void ReadMediaData(IPCDecodingBuffer buffer) override;
   void WillSeek() override {}
-  void Seek(base::TimeDelta time, const SeekCB& seek_cb) override;
+  void Seek(base::TimeDelta time, SeekCB seek_cb) override;
 
  private:
   class AudioTimestampCalculator;
 
-  void InitializeDone(bool success,
-                      int bitrate,
-                      PlatformMediaTimeInfo time_info,
-                      PlatformAudioConfig audio_config,
-                      PlatformVideoConfig video_config);
-  void ReadDataDone(PlatformMediaDataType type,
-                    scoped_refptr<DataBuffer> decoded_data);
-  void SeekDone(bool success);
-
-  void AudioConfigChanged(PlatformAudioConfig audio_config);
-  void VideoConfigChanged(PlatformVideoConfig video_config);
-
-  AudioConfigChangedCB audio_config_changed_cb_;
-  VideoConfigChangedCB video_config_changed_cb_;
-  InitializeCB initialize_cb_;
-  ReadDataCB read_audio_data_cb_;
-  ReadDataCB read_video_data_cb_;
-  SeekCB seek_cb_;
-
-  Microsoft::WRL::ComPtr<WMFByteStream> byte_stream_;
-
   class ThreadedImpl {
    public:
-    explicit ThreadedImpl(DataSource* data_source);
+    ThreadedImpl();
     ~ThreadedImpl();
 
-    void Initialize(base::WeakPtr<WMFMediaPipeline> wmf_media_pipeline,
-                    scoped_refptr<WMFByteStream> byte_stream,
-                    const std::string& mime_type);
-    void ReadData(PlatformMediaDataType type);
-    void Seek(base::TimeDelta time);
+    void Initialize(ipc_data_source::Reader ipc_source_reader,
+                    ipc_data_source::Info ipc_source_info,
+                    InitializeCB initialize_cb);
+    void ReadData(IPCDecodingBuffer buffer);
+    void Seek(base::TimeDelta time, SeekCB seek_cb);
 
    private:
     bool CreateSourceReaderCallbackAndAttributes(
+        const std::string& mime_type,
         Microsoft::WRL::ComPtr<IMFAttributes>* attributes);
 
     bool RetrieveStreamIndices();
@@ -102,24 +77,21 @@ class WMFMediaPipeline : public PlatformMediaPipeline {
     void OnReadSample(MediaDataStatus status,
                       DWORD stream_index,
                       const Microsoft::WRL::ComPtr<IMFSample>& sample);
-    scoped_refptr<DataBuffer> CreateDataBuffer(
-        IMFSample* sample,
-        PlatformMediaDataType media_type);
-    scoped_refptr<DataBuffer> CreateDataBufferFromMemory(IMFSample* sample);
+    bool CreateDataBuffer(IMFSample* sample,
+                          IPCDecodingBuffer* decoding_buffer);
+    bool CreateDataBufferFromMemory(IMFSample* sample,
+                                    IPCDecodingBuffer* decoding_buffer);
 
-    base::WeakPtr<WMFMediaPipeline> wmf_media_pipeline_;
     scoped_refptr<base::SingleThreadTaskRunner> main_task_runner_;
-    DataSource* data_source_;
+    bool is_streaming_ = false;
     Microsoft::WRL::ComPtr<IMFSourceReaderCallback> source_reader_callback_;
     platform_media::SourceReaderWorker source_reader_worker_;
 
-    DWORD
-    stream_indices_[PlatformMediaDataType::PLATFORM_MEDIA_DATA_TYPE_COUNT];
+    DWORD stream_indices_[kPlatformMediaDataTypeCount];
 
     std::unique_ptr<AudioTimestampCalculator> audio_timestamp_calculator_;
 
-    scoped_refptr<DataBuffer> pending_decoded_data_
-        [PlatformMediaDataType::PLATFORM_MEDIA_DATA_TYPE_COUNT];
+    IPCDecodingBuffer ipc_decoding_buffers_[kPlatformMediaDataTypeCount];
 
     // See |WMFDecoderImpl::get_stride_function_|.
     decltype(MFGetStrideForBitmapInfoHeader)* get_stride_function_;
@@ -130,11 +102,9 @@ class WMFMediaPipeline : public PlatformMediaPipeline {
   friend class ThreadedImpl;
   std::unique_ptr<ThreadedImpl> threaded_impl_;
 
-  base::Thread media_pipeline_thread_;
-  scoped_refptr<base::SingleThreadTaskRunner> media_pipeline_task_runner_;
+  scoped_refptr<base::SequencedTaskRunner> media_pipeline_task_runner_;
 
   SEQUENCE_CHECKER(sequence_checker_);
-  base::WeakPtrFactory<WMFMediaPipeline> weak_ptr_factory_;
 };
 
 }  // namespace media

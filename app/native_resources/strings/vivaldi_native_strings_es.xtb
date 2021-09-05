@@ -12,7 +12,7 @@
 <translation id="1657174850639146440">Monstruo 9</translation>
 <translation id="1676595396635191120">Nueva ventana privada</translation>
 <translation id="1728549374069268714">Pegar e ir</translation>
-<translation id="1756026472674246267">Abrir enlace en una pestaña nueva</translation>
+<translation id="1756026472674246267">Abrir el enlace en una pestaña nueva</translation>
 <translation id="1759842336958782510">Chrome</translation>
 <translation id="1769904678986817931">Propiedades de la imagen...</translation>
 <translation id="1920297417712412573">Copiar como Nota</translation>
@@ -27,7 +27,7 @@
 <translation id="2873951654529031587">Papelera</translation>
 <translation id="292258461174562431">Monstruo 4</translation>
 <translation id="2923448633003185837">Pegar e ir</translation>
-<translation id="2977472760057091832">Abrir enlace en una ventana privada</translation>
+<translation id="2977472760057091832">Abrir el enlace en una ventana privada</translation>
 <translation id="2989805286512600854">Abrir en una nueva pestaña</translation>
 <translation id="3027988479108856431">Desgraciadamente, sus preferencias de Yandex no están disponibles mientras está en funcionamiento. Para poder importarlas a Vivaldi, guarde su trabajo, cierre todas las ventanas de Yandex y luego pulse en Continuar.</translation>
 <translation id="3084011186245865060">Paisaje 6</translation>
@@ -42,10 +42,9 @@
 <translation id="3516213908976398531">Paisaje 11</translation>
 <translation id="3521635864657970829">Por favor, confirme el cierre de esta ventana</translation>
 <translation id="3540597690227428180">Animal 9</translation>
-<translation id="3542768452570884558">Abrir enlace en una ventana nueva</translation>
+<translation id="3542768452570884558">Abrir el enlace en una ventana nueva</translation>
 <translation id="3588820906588687999">Abrir imagen en una pestaña nueva</translation>
 <translation id="3601066750251199488">Monstruo 3</translation>
-<translation id="366643050267431920">Añadir como evento</translation>
 <translation id="3732157130969736834">Guardar enlace</translation>
 <translation id="3732388226447288666">Animal 2</translation>
 <translation id="3732439195215136813">Animal 5</translation>
@@ -61,10 +60,10 @@
 <translation id="4420816922321010053">¿Confirma cerrar Vivaldi?</translation>
 <translation id="443008484043213881">Herramientas</translation>
 <translation id="4456211719108566931">Monstruo 6</translation>
-<translation id="4512900838580567989">Abrir enlace en una pestaña nueva en segundo plano</translation>
+<translation id="4512900838580567989">Abrir el enlace en una pestaña nueva en segundo plano</translation>
 <translation id="4515472507709384008">Opera version 15+</translation>
 <translation id="4548358047305717967">Abrir imagen en una pestaña nueva en segundo plano</translation>
-<translation id="4582480609585453144">Abrir enlace en una pestaña en segundo plano</translation>
+<translation id="4582480609585453144">Abrir el enlace en una pestaña en segundo plano</translation>
 <translation id="4636708767492582204">Enviar por correo</translation>
 <translation id="4677434526832593569">Animal 8</translation>
 <translation id="4881695831933465202">Abrir</translation>
@@ -99,6 +98,7 @@
 <translation id="7086554968911045110">Paisaje 7</translation>
 <translation id="7111492742514999492">Paisaje 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
+<translation id="7496505986576158197">Vivaldi se ha hecho posible gracias al proyecto de código abierto <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> y otro <ph name="BEGIN_LINK_OSS" />software de código abierto<ph name="END_LINK_OSS" />.</translation>
 <translation id="7715497554424665066">&amp;Ignorar actualización</translation>
 <translation id="7724603315864178912">Cortar</translation>
 <translation id="7865983598101744945">Confirmar salida</translation>

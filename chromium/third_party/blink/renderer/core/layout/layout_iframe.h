@@ -32,7 +32,7 @@ namespace blink {
 
 class LayoutIFrame final : public LayoutEmbeddedContent {
  public:
-  explicit LayoutIFrame(Element*);
+  explicit LayoutIFrame(HTMLFrameOwnerElement*);
 
   const char* GetName() const override { return "LayoutIFrame"; }
 
@@ -49,8 +49,6 @@ class LayoutIFrame final : public LayoutEmbeddedContent {
 
   PaintLayerType LayerTypeRequired() const override;
 };
-
-DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutIFrame, IsLayoutIFrame());
 
 }  // namespace blink
 

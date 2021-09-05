@@ -208,15 +208,10 @@ IN_PROC_BROWSER_TEST_F(EventsApiTest,
   }
 }
 
-// Disabled on non-Mac due to flaky timeouts. https://crbug.com/833854
-#if !defined(OS_MACOSX)
-#define MAYBE_NewlyIntroducedListener DISABLED_NewlyIntroducedListener
-#else
-#define MAYBE_NewlyIntroducedListener NewlyIntroducedListener
-#endif
+// Disabled due to flaky timeouts. https://crbug.com/833854
 // Tests that if an extension's updated version has a new lazy listener, it
 // fires properly after the update.
-IN_PROC_BROWSER_TEST_F(EventsApiTest, MAYBE_NewlyIntroducedListener) {
+IN_PROC_BROWSER_TEST_F(EventsApiTest, DISABLED_NewlyIntroducedListener) {
   std::vector<ExtensionCRXData> data;
   data.emplace_back("v1");
   data.emplace_back("v2");
@@ -244,7 +239,7 @@ IN_PROC_BROWSER_TEST_F(EventsApiTest, MAYBE_NewlyIntroducedListener) {
     ui_test_utils::NavigateToURLWithDisposition(
         browser(), GURL(url::kAboutBlankURL),
         WindowOpenDisposition::NEW_BACKGROUND_TAB,
-        ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+        ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
     // Expect tabs.onCreated to fire.
     EXPECT_TRUE(catcher.GetNextResult());
   }

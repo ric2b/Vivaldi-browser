@@ -3,437 +3,555 @@
 // found in the LICENSE file.
 
 /**
- * @typedef {{
- *   enabled: boolean,
- *   pref: !chrome.settingsPrivate.PrefObject
- * }}
- */
-let BlockAutoplayStatus;
-
-/**
  * @fileoverview
  * 'settings-privacy-page' is the settings page containing privacy and
  * security settings.
  */
-(function() {
+cr.define('settings', function() {
+  /**
+   * @typedef {{
+   *   enabled: boolean,
+   *   pref: !chrome.settingsPrivate.PrefObject
+   * }}
+   */
+  let BlockAutoplayStatus;
 
-/**
- * Must be kept in sync with the C++ enum of the same name.
- * @enum {number}
- */
-const NetworkPredictionOptions = {
-  ALWAYS: 0,
-  WIFI_ONLY: 1,
-  NEVER: 2,
-  DEFAULT: 1,
-};
+  /**
+   * Must be kept in sync with the C++ enum of the same name.
+   * @enum {number}
+   */
+  const NetworkPredictionOptions = {
+    ALWAYS: 0,
+    WIFI_ONLY: 1,
+    NEVER: 2,
+    DEFAULT: 1,
+  };
 
-Polymer({
-  is: 'settings-privacy-page',
+  Polymer({
+    is: 'settings-privacy-page',
 
-  behaviors: [
-    settings.RouteObserverBehavior,
-    I18nBehavior,
-    WebUIListenerBehavior,
-  ],
+    behaviors: [
+      PrefsBehavior,
+      settings.RouteObserverBehavior,
+      I18nBehavior,
+      WebUIListenerBehavior,
+    ],
 
-  properties: {
-    /**
-     * Preferences state.
-     */
-    prefs: {
-      type: Object,
-      notify: true,
+    properties: {
+      /**
+       * Preferences state.
+       */
+      prefs: {
+        type: Object,
+        notify: true,
+      },
+
+      /**
+       * The current sync status, supplied by SyncBrowserProxy.
+       * @type {?settings.SyncStatus}
+       */
+      syncStatus: Object,
+
+      /**
+       * Dictionary defining page visibility.
+       * @type {!PrivacyPageVisibility}
+       */
+      pageVisibility: Object,
+
+      /** @private {chrome.settingsPrivate.PrefObject} */
+      safeBrowsingReportingPref_: {
+        type: Object,
+        value() {
+          return /** @type {chrome.settingsPrivate.PrefObject} */ ({
+            key: '',
+            type: chrome.settingsPrivate.PrefType.BOOLEAN,
+            value: false,
+          });
+        },
+      },
+
+      /** @private */
+      isGuest_: {
+        type: Boolean,
+        value() {
+          return loadTimeData.getBoolean('isGuest');
+        }
+      },
+
+      /** @private */
+      showClearBrowsingDataDialog_: Boolean,
+
+      /**
+       * Used for HTML bindings. This is defined as a property rather than
+       * within the ready callback, because the value needs to be available
+       * before local DOM initialization - otherwise, the toggle has unexpected
+       * behavior.
+       * @private
+       */
+      networkPredictionUncheckedValue_: {
+        type: Number,
+        value: NetworkPredictionOptions.NEVER,
+      },
+
+      /** @private */
+      enableSafeBrowsingSubresourceFilter_: {
+        type: Boolean,
+        value() {
+          return loadTimeData.getBoolean('enableSafeBrowsingSubresourceFilter');
+        }
+      },
+
+      /** @private */
+      privacySettingsRedesignEnabled_: {
+        type: Boolean,
+        value() {
+          return loadTimeData.getBoolean('privacySettingsRedesignEnabled');
+        },
+      },
+
+      /**
+       * Whether the secure DNS setting should be displayed.
+       * @private
+       */
+      showSecureDnsSetting_: {
+        type: Boolean,
+        readOnly: true,
+        value: function() {
+          return loadTimeData.getBoolean('showSecureDnsSetting');
+        },
+      },
+
+      /**
+       * Whether the more settings list is opened.
+       * @private
+       */
+      moreOpened_: {
+        type: Boolean,
+        value: false,
+      },
+
+      /** @private */
+      cookieSettingDescription_: String,
+
+      /** @private */
+      enableBlockAutoplayContentSetting_: {
+        type: Boolean,
+        value() {
+          return loadTimeData.getBoolean('enableBlockAutoplayContentSetting');
+        }
+      },
+
+      /** @private {settings.BlockAutoplayStatus} */
+      blockAutoplayStatus_: {
+        type: Object,
+        value() {
+          return /** @type {settings.BlockAutoplayStatus} */ ({});
+        }
+      },
+
+      /** @private */
+      enablePaymentHandlerContentSetting_: {
+        type: Boolean,
+        value() {
+          return loadTimeData.getBoolean('enablePaymentHandlerContentSetting');
+        }
+      },
+
+      /** @private */
+      enableExperimentalWebPlatformFeatures_: {
+        type: Boolean,
+        value() {
+          return loadTimeData.getBoolean(
+              'enableExperimentalWebPlatformFeatures');
+        },
+      },
+
+      /** @private */
+      enableSecurityKeysSubpage_: {
+        type: Boolean,
+        readOnly: true,
+        value() {
+          return loadTimeData.getBoolean('enableSecurityKeysSubpage');
+        }
+      },
+
+      /** @private */
+      enableInsecureContentContentSetting_: {
+        type: Boolean,
+        value() {
+          return loadTimeData.getBoolean('enableInsecureContentContentSetting');
+        }
+      },
+
+      /** @private */
+      enableNativeFileSystemWriteContentSetting_: {
+        type: Boolean,
+        value() {
+          return loadTimeData.getBoolean(
+              'enableNativeFileSystemWriteContentSetting');
+        }
+      },
+
+      /** @private */
+      enableQuietNotificationPromptsSetting_: {
+        type: Boolean,
+        value: () =>
+            loadTimeData.getBoolean('enableQuietNotificationPromptsSetting'),
+      },
+
+      /** @private */
+      enableWebBluetoothNewPermissionsBackend_: {
+        type: Boolean,
+        value: () =>
+            loadTimeData.getBoolean('enableWebBluetoothNewPermissionsBackend'),
+      },
+
+      /** @private */
+      enableWebXrContentSetting_: {
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('enableWebXrContentSetting'),
+      },
+
+      /** @private {!Map<string, string>} */
+      focusConfig_: {
+        type: Object,
+        value() {
+          const map = new Map();
+
+          if (this.privacySettingsRedesignEnabled_) {
+            if (settings.routes.SECURITY) {
+              map.set(settings.routes.SECURITY.path, '#securityLinkRow');
+            }
+
+            if (settings.routes.COOKIES) {
+              map.set(
+                  `${settings.routes.COOKIES.path}_${
+                      settings.routes.PRIVACY.path}`,
+                  '#cookiesLinkRow');
+              map.set(
+                  `${settings.routes.COOKIES.path}_${
+                      settings.routes.BASIC.path}`,
+                  '#cookiesLinkRow');
+            }
+
+            if (settings.routes.SITE_SETTINGS) {
+              map.set(
+                  settings.routes.SITE_SETTINGS.path, '#permissionsLinkRow');
+            }
+          } else {
+            // <if expr="use_nss_certs">
+            if (settings.routes.CERTIFICATES) {
+              map.set(settings.routes.CERTIFICATES.path, '#manageCertificates');
+            }
+            // </if>
+            if (settings.routes.SITE_SETTINGS) {
+              map.set(
+                  settings.routes.SITE_SETTINGS.path,
+                  '#site-settings-subpage-trigger');
+            }
+
+            if (settings.routes.SITE_SETTINGS_SITE_DATA) {
+              map.set(
+                  settings.routes.SITE_SETTINGS_SITE_DATA.path,
+                  '#site-data-trigger');
+            }
+
+            if (settings.routes.SECURITY_KEYS) {
+              map.set(
+                  settings.routes.SECURITY_KEYS.path,
+                  '#security-keys-subpage-trigger');
+            }
+          }
+
+          return map;
+        },
+      },
+
+      /** @private */
+      searchFilter_: String,
+
+      /** @private */
+      siteDataFilter_: String,
+    },
+
+    observers: [
+      'onSafeBrowsingReportingPrefChange_(prefs.safebrowsing.*)',
+    ],
+
+    /** @private {?settings.PrivacyPageBrowserProxy} */
+    browserProxy_: null,
+
+    /** @override */
+    ready() {
+      this.ContentSettingsTypes = settings.ContentSettingsTypes;
+      this.ChooserType = settings.ChooserType;
+
+      this.browserProxy_ = settings.PrivacyPageBrowserProxyImpl.getInstance();
+      this.metricsBrowserProxy_ =
+          settings.MetricsBrowserProxyImpl.getInstance();
+
+      this.onBlockAutoplayStatusChanged_({
+        pref: /** @type {chrome.settingsPrivate.PrefObject} */ ({value: false}),
+        enabled: false
+      });
+
+      this.addWebUIListener(
+          'onBlockAutoplayStatusChanged',
+          this.onBlockAutoplayStatusChanged_.bind(this));
+
+      settings.SyncBrowserProxyImpl.getInstance().getSyncStatus().then(
+          this.handleSyncStatus_.bind(this));
+      this.addWebUIListener(
+          'sync-status-changed', this.handleSyncStatus_.bind(this));
+
+      settings.SiteSettingsPrefsBrowserProxyImpl.getInstance()
+          .getCookieSettingDescription()
+          .then(description => this.cookieSettingDescription_ = description);
+      this.addWebUIListener(
+          'cookieSettingDescriptionChanged',
+          description => this.cookieSettingDescription_ = description);
     },
 
     /**
-     * The current sync status, supplied by SyncBrowserProxy.
-     * @type {?settings.SyncStatus}
-     */
-    syncStatus: Object,
-
-    /**
-     * Dictionary defining page visibility.
-     * @type {!PrivacyPageVisibility}
-     */
-    pageVisibility: Object,
-
-    /** @private */
-    isGuest_: {
-      type: Boolean,
-      value: function() {
-        return loadTimeData.getBoolean('isGuest');
-      }
-    },
-
-    /** @private */
-    showClearBrowsingDataDialog_: Boolean,
-
-    /** @private */
-    showDoNotTrackDialog_: {
-      type: Boolean,
-      value: false,
-    },
-
-    /**
-     * Used for HTML bindings. This is defined as a property rather than within
-     * the ready callback, because the value needs to be available before
-     * local DOM initialization - otherwise, the toggle has unexpected behavior.
+     * @return {Element}
      * @private
      */
-    networkPredictionUncheckedValue_: {
-      type: Number,
-      value: NetworkPredictionOptions.NEVER,
-    },
-
-    /** @private */
-    enableSafeBrowsingSubresourceFilter_: {
-      type: Boolean,
-      value: function() {
-        return loadTimeData.getBoolean('enableSafeBrowsingSubresourceFilter');
-      }
-    },
-
-    /** @private */
-    enableBlockAutoplayContentSetting_: {
-      type: Boolean,
-      value: function() {
-        return loadTimeData.getBoolean('enableBlockAutoplayContentSetting');
-      }
-    },
-
-    /** @private {BlockAutoplayStatus} */
-    blockAutoplayStatus_: {
-      type: Object,
-      value: function() {
-        return /** @type {BlockAutoplayStatus} */ ({});
-      }
-    },
-
-    /** @private */
-    enablePaymentHandlerContentSetting_: {
-      type: Boolean,
-      value: function() {
-        return loadTimeData.getBoolean('enablePaymentHandlerContentSetting');
-      }
-    },
-
-    /** @private */
-    enableExperimentalWebPlatformFeatures_: {
-      type: Boolean,
-      value: function() {
-        return loadTimeData.getBoolean('enableExperimentalWebPlatformFeatures');
-      },
-    },
-
-    /** @private */
-    enableSecurityKeysSubpage_: {
-      type: Boolean,
-      readOnly: true,
-      value: function() {
-        return loadTimeData.getBoolean('enableSecurityKeysSubpage');
-      }
-    },
-
-    /** @private */
-    enableInsecureContentContentSetting_: {
-      type: Boolean,
-      value: function() {
-        return loadTimeData.getBoolean('enableInsecureContentContentSetting');
-      }
-    },
-
-    /** @private */
-    enableNativeFileSystemWriteContentSetting_: {
-      type: Boolean,
-      value: function() {
-        return loadTimeData.getBoolean(
-            'enableNativeFileSystemWriteContentSetting');
-      }
-    },
-
-    /** @private {!Map<string, string>} */
-    focusConfig_: {
-      type: Object,
-      value: function() {
-        const map = new Map();
-        // <if expr="use_nss_certs">
-        if (settings.routes.CERTIFICATES) {
-          map.set(settings.routes.CERTIFICATES.path, '#manageCertificates');
-        }
-        // </if>
-        if (settings.routes.SITE_SETTINGS) {
-          map.set(
-              settings.routes.SITE_SETTINGS.path,
+    getControlForSiteSettingsSubpage_() {
+      return this.$$(
+          this.privacySettingsRedesignEnabled_ ?
+              '#permissionsLinkRow' :
               '#site-settings-subpage-trigger');
-        }
-
-        if (settings.routes.SITE_SETTINGS_SITE_DATA) {
-          map.set(
-              settings.routes.SITE_SETTINGS_SITE_DATA.path,
-              '#site-data-trigger');
-        }
-
-        if (settings.routes.SECURITY_KEYS) {
-          map.set(
-              settings.routes.SECURITY_KEYS.path,
-              '#security-keys-subpage-trigger');
-        }
-        return map;
-      },
     },
 
     /**
-     * This flag is used to conditionally show a set of sync UIs to the
-     * profiles that have been migrated to have a unified consent flow.
-     * TODO(tangltom): In the future when all profiles are completely migrated,
-     * this should be removed, and UIs hidden behind it should become default.
+     * @return {Element}
      * @private
      */
-    unifiedConsentEnabled_: {
-      type: Boolean,
-      value: function() {
-        return loadTimeData.getBoolean('unifiedConsentEnabled');
-      },
+    getControlForCertificatesSubpage_() {
+      return this.$$(
+          this.privacySettingsRedesignEnabled_ ? '#securityLinkRow' :
+                                                 '#manageCertificates');
     },
 
-    // <if expr="not chromeos">
-    /** @private */
-    showRestart_: Boolean,
-    // </if>
+    /**
+     * @return {Element}
+     * @private
+     */
+    getControlForSecurityKeysSubpage_() {
+      return this.$$(
+          this.privacySettingsRedesignEnabled_ ?
+              '#securityLinkRow' :
+              '#security-keys-subpage-trigger');
+    },
+
+    /**
+     * @return {boolean}
+     * @private
+     */
+    getDisabledExtendedSafeBrowsing_() {
+      return !this.getPref('safebrowsing.enabled').value;
+    },
 
     /** @private */
-    showSignoutDialog_: Boolean,
+    onSafeBrowsingReportingToggleChange_() {
+      this.metricsBrowserProxy_.recordSettingsPageHistogram(
+          settings.PrivacyElementInteractions.IMPROVE_SECURITY);
+      this.setPrefValue(
+          'safebrowsing.scout_reporting_enabled',
+          this.$$('#safeBrowsingReportingToggle').checked);
+    },
 
     /** @private */
-    searchFilter_: String,
-  },
+    onSafeBrowsingReportingPrefChange_() {
+      if (this.prefs == undefined) {
+        return;
+      }
+      const safeBrowsingScoutPref =
+          this.getPref('safebrowsing.scout_reporting_enabled');
+      const prefValue = !!this.getPref('safebrowsing.enabled').value &&
+          !!safeBrowsingScoutPref.value;
+      this.safeBrowsingReportingPref_ = {
+        key: '',
+        type: chrome.settingsPrivate.PrefType.BOOLEAN,
+        value: prefValue,
+        enforcement: safeBrowsingScoutPref.enforcement,
+        controlledBy: safeBrowsingScoutPref.controlledBy,
+      };
+    },
 
-  /** @override */
-  ready: function() {
-    this.ContentSettingsTypes = settings.ContentSettingsTypes;
-    this.ChooserType = settings.ChooserType;
+    /**
+     * Handler for when the sync state is pushed from the browser.
+     * @param {?settings.SyncStatus} syncStatus
+     * @private
+     */
+    handleSyncStatus_(syncStatus) {
+      this.syncStatus = syncStatus;
+    },
 
-    this.browserProxy_ = settings.PrivacyPageBrowserProxyImpl.getInstance();
+    /** @protected */
+    currentRouteChanged() {
+      this.showClearBrowsingDataDialog_ =
+          settings.Router.getInstance().getCurrentRoute() ==
+          settings.routes.CLEAR_BROWSER_DATA;
+    },
 
-    this.onBlockAutoplayStatusChanged_({
-      pref: /** @type {chrome.settingsPrivate.PrefObject} */ ({value: false}),
-      enabled: false
-    });
 
-    this.addWebUIListener(
-        'onBlockAutoplayStatusChanged',
-        this.onBlockAutoplayStatusChanged_.bind(this));
+    /**
+     * Called when the block autoplay status changes.
+     * @param {settings.BlockAutoplayStatus} autoplayStatus
+     * @private
+     */
+    onBlockAutoplayStatusChanged_(autoplayStatus) {
+      this.blockAutoplayStatus_ = autoplayStatus;
+    },
 
-    settings.SyncBrowserProxyImpl.getInstance().getSyncStatus().then(
-        this.handleSyncStatus_.bind(this));
-    this.addWebUIListener(
-        'sync-status-changed', this.handleSyncStatus_.bind(this));
-  },
+    /**
+     * Updates the block autoplay pref when the toggle is changed.
+     * @param {!Event} event
+     * @private
+     */
+    onBlockAutoplayToggleChange_(event) {
+      const target = /** @type {!SettingsToggleButtonElement} */ (event.target);
+      this.browserProxy_.setBlockAutoplayEnabled(target.checked);
+    },
 
-  /**
-   * Handler for when the sync state is pushed from the browser.
-   * @param {?settings.SyncStatus} syncStatus
-   * @private
-   */
-  handleSyncStatus_: function(syncStatus) {
-    this.syncStatus = syncStatus;
-  },
+    /**
+     * Updates both required block third party cookie preferences.
+     * @param {!Event} event
+     * @private
+     */
+    onBlockThirdPartyCookiesToggleChange_(event) {
+      const target = /** @type {!SettingsToggleButtonElement} */ (event.target);
+      this.setPrefValue('profile.block_third_party_cookies', target.checked);
+      this.setPrefValue(
+          'profile.cookie_controls_mode',
+          target.checked ? settings.CookieControlsMode.ENABLED :
+                           settings.CookieControlsMode.DISABLED);
+    },
 
-  /** @protected */
-  currentRouteChanged: function() {
-    this.showClearBrowsingDataDialog_ =
-        settings.getCurrentRoute() == settings.routes.CLEAR_BROWSER_DATA;
-  },
+    /**
+     * Records changes made to the "can a website check if you have saved
+     * payment methods" setting for logging, the logic of actually changing the
+     * setting is taken care of by the webUI pref.
+     * @private
+     */
+    onCanMakePaymentChange_() {
+      this.metricsBrowserProxy_.recordSettingsPageHistogram(
+          settings.PrivacyElementInteractions.PAYMENT_METHOD);
+    },
 
-  /**
-   * @param {!Event} event
-   * @private
-   */
-  onDoNotTrackDomChange_: function(event) {
-    if (this.showDoNotTrackDialog_) {
-      this.maybeShowDoNotTrackDialog_();
-    }
-  },
+    /** @private */
+    onManageCertificatesTap_() {
+      this.metricsBrowserProxy_.recordSettingsPageHistogram(
+          settings.PrivacyElementInteractions.MANAGE_CERTIFICATES);
+      // <if expr="use_nss_certs">
+      settings.Router.getInstance().navigateTo(settings.routes.CERTIFICATES);
+      // </if>
+      // <if expr="is_win or is_macosx">
+      this.browserProxy_.showManageSSLCertificates();
+      // </if>
+    },
 
-  /**
-   * Called when the block autoplay status changes.
-   * @param {BlockAutoplayStatus} autoplayStatus
-   * @private
-   */
-  onBlockAutoplayStatusChanged_: function(autoplayStatus) {
-    this.blockAutoplayStatus_ = autoplayStatus;
-  },
+    /**
+     * Records changes made to the network prediction setting for logging, the
+     * logic of actually changing the setting is taken care of by the webUI
+     * pref.
+     * @private
+     */
+    onNetworkPredictionChange_() {
+      this.metricsBrowserProxy_.recordSettingsPageHistogram(
+          settings.PrivacyElementInteractions.NETWORK_PREDICTION);
+    },
 
-  /**
-   * Updates the block autoplay pref when the toggle is changed.
-   * @param {!Event} event
-   * @private
-   */
-  onBlockAutoplayToggleChange_: function(event) {
-    const target = /** @type {!SettingsToggleButtonElement} */ (event.target);
-    this.browserProxy_.setBlockAutoplayEnabled(target.checked);
-  },
+    /**
+     * This is a workaround to connect the remove all button to the subpage.
+     * @private
+     */
+    onRemoveAllCookiesFromSite_() {
+      const node = /** @type {?SiteDataDetailsSubpageElement} */ (
+          this.$$('site-data-details-subpage'));
+      if (node) {
+        node.removeAll();
+      }
+    },
 
-  /**
-   * Handles the change event for the do-not-track toggle. Shows a
-   * confirmation dialog when enabling the setting.
-   * @param {!Event} event
-   * @private
-   */
-  onDoNotTrackChange_: function(event) {
-    const target = /** @type {!SettingsToggleButtonElement} */ (event.target);
-    if (!target.checked) {
-      // Always allow disabling the pref.
-      target.sendPrefChange();
-      return;
-    }
-    this.showDoNotTrackDialog_ = true;
-    // If the dialog has already been stamped, show it. Otherwise it will be
-    // shown in onDomChange_.
-    this.maybeShowDoNotTrackDialog_();
-  },
+    /** @private */
+    onSiteDataTap_() {
+      settings.Router.getInstance().navigateTo(
+          settings.routes.SITE_SETTINGS_SITE_DATA);
+    },
 
-  /** @private */
-  maybeShowDoNotTrackDialog_: function() {
-    const dialog = this.$$('#confirmDoNotTrackDialog');
-    if (dialog && !dialog.open) {
-      dialog.showModal();
-    }
-  },
+    /** @private */
+    onSiteSettingsTap_() {
+      settings.Router.getInstance().navigateTo(settings.routes.SITE_SETTINGS);
+    },
 
-  /** @private */
-  closeDoNotTrackDialog_: function() {
-    this.$$('#confirmDoNotTrackDialog').close();
-    this.showDoNotTrackDialog_ = false;
-  },
+    /** @private */
+    onSafeBrowsingToggleChange_: function() {
+      this.metricsBrowserProxy_.recordSettingsPageHistogram(
+          settings.PrivacyElementInteractions.SAFE_BROWSING);
+    },
 
-  /** @private */
-  onDoNotTrackDialogClosed_: function() {
-    cr.ui.focusWithoutInk(this.$.doNotTrack);
-  },
+    /** @private */
+    onClearBrowsingDataTap_() {
+      this.tryShowHatsSurvey_();
 
-  /**
-   * Handles the shared proxy confirmation dialog 'Confirm' button.
-   * @private
-   */
-  onDoNotTrackDialogConfirm_: function() {
-    /** @type {!SettingsToggleButtonElement} */ (this.$.doNotTrack)
-        .sendPrefChange();
-    this.closeDoNotTrackDialog_();
-  },
+      settings.Router.getInstance().navigateTo(
+          settings.routes.CLEAR_BROWSER_DATA);
+    },
 
-  /**
-   * Handles the shared proxy confirmation dialog 'Cancel' button or a cancel
-   * event.
-   * @private
-   */
-  onDoNotTrackDialogCancel_: function() {
-    /** @type {!SettingsToggleButtonElement} */ (this.$.doNotTrack)
-        .resetToPrefValue();
-    this.closeDoNotTrackDialog_();
-  },
+    /** @private */
+    onCookiesClick_() {
+      this.tryShowHatsSurvey_();
 
-  /** @private */
-  onManageCertificatesTap_: function() {
-    // <if expr="use_nss_certs">
-    settings.navigateTo(settings.routes.CERTIFICATES);
-    // </if>
-    // <if expr="is_win or is_macosx">
-    this.browserProxy_.showManageSSLCertificates();
-    // </if>
-  },
+      settings.Router.getInstance().navigateTo(settings.routes.COOKIES);
+    },
 
-  /** @private */
-  onSyncAndGoogleServicesClick_: function() {
-    // Navigate to sync page, and remove (privacy related) search text to
-    // avoid the sync page from being hidden.
-    settings.navigateTo(settings.routes.SYNC, null, true);
-  },
+    /** @private */
+    onDialogClosed_() {
+      settings.Router.getInstance().navigateTo(
+          assert(settings.routes.CLEAR_BROWSER_DATA.parent));
+      cr.ui.focusWithoutInk(assert(this.$$('#clearBrowsingData')));
+    },
 
-  /**
-   * This is a workaround to connect the remove all button to the subpage.
-   * @private
-   */
-  onRemoveAllCookiesFromSite_: function() {
-    const node = /** @type {?SiteDataDetailsSubpageElement} */ (
-        this.$$('site-data-details-subpage'));
-    if (node) {
-      node.removeAll();
-    }
-  },
+    /** @private */
+    onPermissionsPageClick_() {
+      this.tryShowHatsSurvey_();
 
-  /** @private */
-  onSiteDataTap_: function() {
-    settings.navigateTo(settings.routes.SITE_SETTINGS_SITE_DATA);
-  },
+      settings.Router.getInstance().navigateTo(settings.routes.SITE_SETTINGS);
+    },
 
-  /** @private */
-  onSiteSettingsTap_: function() {
-    settings.navigateTo(settings.routes.SITE_SETTINGS);
-  },
+    /** @private */
+    onSecurityKeysTap_() {
+      settings.Router.getInstance().navigateTo(settings.routes.SECURITY_KEYS);
+    },
 
-  /** @private */
-  onClearBrowsingDataTap_: function() {
-    settings.navigateTo(settings.routes.CLEAR_BROWSER_DATA);
-  },
+    /** @private */
+    onSecurityPageClick_() {
+      this.tryShowHatsSurvey_();
 
-  /** @private */
-  onDialogClosed_: function() {
-    settings.navigateTo(settings.routes.CLEAR_BROWSER_DATA.parent);
-    cr.ui.focusWithoutInk(assert(this.$.clearBrowsingData));
-  },
+      settings.Router.getInstance().navigateTo(settings.routes.SECURITY);
+    },
 
-  /** @private */
-  onSecurityKeysTap_: function() {
-    settings.navigateTo(settings.routes.SECURITY_KEYS);
-  },
+    /** @private */
+    getProtectedContentLabel_(value) {
+      return value ? this.i18n('siteSettingsProtectedContentEnable') :
+                     this.i18n('siteSettingsBlocked');
+    },
 
-  /** @private */
-  getProtectedContentLabel_: function(value) {
-    return value ? this.i18n('siteSettingsProtectedContentEnable') :
-                   this.i18n('siteSettingsBlocked');
-  },
+    /** @private */
+    getProtectedContentIdentifiersLabel_(value) {
+      return value ?
+          this.i18n('siteSettingsProtectedContentEnableIdentifiers') :
+          this.i18n('siteSettingsBlocked');
+    },
 
-  /** @private */
-  getProtectedContentIdentifiersLabel_: function(value) {
-    return value ? this.i18n('siteSettingsProtectedContentEnableIdentifiers') :
-                   this.i18n('siteSettingsBlocked');
-  },
+    /** @private */
+    tryShowHatsSurvey_() {
+      settings.HatsBrowserProxyImpl.getInstance().tryShowSurvey();
+    },
+  });
 
-  /** @private */
-  onSigninAllowedChange_: function() {
-    if (this.syncStatus.signedIn && !this.$.signinAllowedToggle.checked) {
-      // Switch the toggle back on and show the signout dialog.
-      this.$.signinAllowedToggle.checked = true;
-      this.showSignoutDialog_ = true;
-    } else {
-      /** @type {!SettingsToggleButtonElement} */ (this.$.signinAllowedToggle)
-          .sendPrefChange();
-      this.showRestart_ = true;
-    }
-  },
-
-  /** @private */
-  onSignoutDialogClosed_: function() {
-    if (/** @type {!SettingsSignoutDialogElement} */ (
-            this.$$('settings-signout-dialog'))
-            .wasConfirmed()) {
-      this.$.signinAllowedToggle.checked = false;
-      /** @type {!SettingsToggleButtonElement} */ (this.$.signinAllowedToggle)
-          .sendPrefChange();
-      this.showRestart_ = true;
-    }
-    this.showSignoutDialog_ = false;
-  },
-
-  /**
-   * @param {!Event} e
-   * @private
-   */
-  onRestartTap_: function(e) {
-    e.stopPropagation();
-    settings.LifetimeBrowserProxyImpl.getInstance().restart();
-  },
+  // #cr_define_end
+  return {BlockAutoplayStatus};
 });
-})();

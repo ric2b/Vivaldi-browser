@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="sk">
 <translation id="1017280919048282932">Prid&amp;ať do slovníka</translation>
+<translation id="1029317248976101138">Lupa</translation>
 <translation id="1031362278801463162">Načítava sa ukážka</translation>
 <translation id="1047431265488717055">Kopírovať te&amp;xt odkazu</translation>
 <translation id="1049795001945932310">&amp;Nastavenia jazyka</translation>
@@ -66,7 +67,6 @@
 <translation id="2150139952286079145">Hľadať ciele</translation>
 <translation id="215753907730220065">Ukončiť zobrazenie na celú obrazovku</translation>
 <translation id="2177950615300672361">Súkromný list: <ph name="TAB_NAME" /></translation>
-<translation id="218070003709087997">Zadanie počtu kópií, ktoré chcete vytlačiť, treba zadať číslovkou (1 až 999).</translation>
 <translation id="219008588003277019">Modul miestneho klienta: <ph name="NEXE_NAME" /></translation>
 <translation id="220138918934036434">Skryť tlačidlo</translation>
 <translation id="2218515861914035131">Prilepiť ako obyčajný text</translation>
@@ -78,11 +78,9 @@
 <translation id="2282146716419988068">Úloha GPU</translation>
 <translation id="2301382460326681002">Koreňový adresár rozšírenia je neplatný.</translation>
 <translation id="2318143611928805047">Veľkosť papiera</translation>
-<translation id="2318923050469484167">Aktuálna súkromná relácia (<ph name="EMBEDDING" />)</translation>
 <translation id="2322193970951063277">Hlavičky a päty</translation>
 <translation id="2326931316514688470">&amp;Znova načítať aplikáciu</translation>
 <translation id="2327492829706409234">Povoliť aplikáciu</translation>
-<translation id="2344028582131185878">Automatické stiahnutia</translation>
 <translation id="2348176352564285430">Aplikácia: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">Vybrať adresár rozšírenia.</translation>
 <translation id="2379281330731083556">Tlačiť prostredníctvom dialógového okna systému… <ph name="SHORTCUT_KEY" /></translation>
@@ -95,12 +93,12 @@
 <translation id="2470702053775288986">Nepodporovaný typ rozšírenia bol zakázaný</translation>
 <translation id="2476578072172137802">Nastavenia stránky</translation>
 <translation id="2482878487686419369">Oznámenia</translation>
+<translation id="2498539833203011245">Minimalizovať</translation>
 <translation id="2509495747794740764">Hodnota mierky musí byť v rozsahu od 10 do 200.</translation>
 <translation id="253557089021624350">Počet akcií zabraňujúcich ukončeniu</translation>
 <translation id="2546283357679194313">Súbory cookie a údaje stránok</translation>
 <translation id="2550212893339833758">Swapovaná pamäť</translation>
 <translation id="2553440850688409052">Skryť tento doplnok</translation>
-<translation id="2580924999637585241">Celkom: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="26224892172169984">Nepovoliť žiadnym stránkam obsluhovať protokoly</translation>
 <translation id="2662876636500006917">Internetový obchod Chrome</translation>
 <translation id="2678063897982469759">Znova povoliť</translation>
@@ -120,7 +118,6 @@
 <translation id="2932883381142163287">Nahlásiť zneužitie</translation>
 <translation id="2941112035454246133">Nízka</translation>
 <translation id="2972581237482394796">&amp;Znova</translation>
-<translation id="299483336428448530">Nainštalované vaším rodičom.</translation>
 <translation id="3003623123441819449">Vyrovnávacia pamäť CSS</translation>
 <translation id="3008272652534848354">Obnoviť povolenia</translation>
 <translation id="3012631534724231212">(iframe)</translation>
@@ -274,7 +271,6 @@
 <translation id="5425042808445046667">Pokračovať v sťahovaní</translation>
 <translation id="5427459444770871191">Otočiť &amp;v smere hodinových ručičiek</translation>
 <translation id="5431318178759467895">Farebne</translation>
-<translation id="5472133193607270166">Keď je táto možnosť zapnutá, stránky nemôžu prispôsobovať reklamy na základe vašej aktivity prehliadania na rôznych stránkach. Niektoré stránky nemusia fungovať správne.</translation>
 <translation id="5483785310822538350">Odvolať prístup k súborom a zariadeniam</translation>
 <translation id="5485102783864353244">Pridať aplikáciu</translation>
 <translation id="5486561344817861625">Simulovať reštartovanie prehliadača</translation>
@@ -302,7 +298,6 @@
 <translation id="5804241973901381774">Povolenia</translation>
 <translation id="5828633471261496623">Prebieha tlač...</translation>
 <translation id="583281660410589416">Neznáma</translation>
-<translation id="5838456317242088717">Aktuálna súkromná relácia</translation>
 <translation id="5860491529813859533">Zapnúť</translation>
 <translation id="5867841422488265304">Zadajte dopyt alebo webovú adresu</translation>
 <translation id="5908769186679515905">Blokovať na stránkach spúšťanie obsahu vo formáte Flash</translation>
@@ -322,7 +317,6 @@
 <translation id="6147020289383635445">Ukážka pred tlačou zlyhala</translation>
 <translation id="6156863943908443225">Vyrovnávacia pamäť skriptov</translation>
 <translation id="6169666352732958425">Plochu sa nepodarilo prenášať.</translation>
-<translation id="6196640612572343990">Blokovať súbory cookie tretích strán</translation>
 <translation id="6196854373336333322">Toto rozšírenie „<ph name="EXTENSION_NAME" />“ prevzalo kontrolu nad vašimi nastaveniami servera proxy, čo znamená, že môže zmeniť, prerušiť alebo zachytiť všetku vašu činnosť online. Ak neviete, prečo k tomu došlo, pravdepodobne si to neželáte.</translation>
 <translation id="6206311232642889873">&amp;Kopírovať obrázok</translation>
 <translation id="6239558157302047471">Znova načítať &amp;rámcový prvok</translation>
@@ -335,6 +329,7 @@
 <translation id="6295158916970320988">Všetky stránky</translation>
 <translation id="6295855836753816081">Ukladá sa...</translation>
 <translation id="6308937455967653460">Uložiť &amp;odkaz ako...</translation>
+<translation id="6315493146179903667">Zobraziť všetko navrchu</translation>
 <translation id="6326855256003666642">Počet akcií zabraňujúcich ukončeniu</translation>
 <translation id="6374469231428023295">Skúsiť znova</translation>
 <translation id="6385543213911723544">Stránky môžu ukladať a čítať údaje súborov cookie</translation>
@@ -425,7 +420,7 @@
 <translation id="7982789257301363584">Sieť</translation>
 <translation id="7997826902155442747">Priorita procesov</translation>
 <translation id="7999229196265990314">Boli vytvorené nasledujúce súbory:
-        
+
 Rozšírenie: <ph name="EXTENSION_FILE" />
 Súbor kľúča: <ph name="KEY_FILE" />
 
@@ -437,7 +432,7 @@ Súbor kľúča uložte na bezpečné miesto. Budete ho potrebovať na vytvoreni
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> kB</translation>
 <translation id="8137559199583651773">Spravovať rozšírenia</translation>
 <translation id="8180239481735238521">strana</translation>
-<translation id="8212008074015601248">{NUM_DOWNLOAD,plural, =1{Sťahuje sa}few{Sťahujú sa}many{Sťahujú sa}other{Sťahujú sa}}</translation>
+<translation id="8212008074015601248">{NUM_DOWNLOAD,plural, =1{Prebieha sťahovanie}few{Prebiehajú sťahovania}many{Prebiehajúcich sťahovaní}other{Prebiehajúcich sťahovaní}}</translation>
 <translation id="8230134520748321204">Uložiť heslo pre adresu <ph name="ORIGIN" />?</translation>
 <translation id="8261378640211443080">Toto rozšírenie nie je uvedené na webe <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> a mohlo byť pridané bez vášho vedomia.</translation>
 <translation id="8270242299912238708">Dokumenty PDF</translation>
@@ -487,7 +482,7 @@ Súbor kľúča uložte na bezpečné miesto. Budete ho potrebovať na vytvoreni
 <translation id="9137916601698928395">Otvoriť odkaz ako <ph name="USER" /></translation>
 <translation id="916607977885256133">Obraz v obraze</translation>
 <translation id="9170848237812810038">&amp;Naspäť</translation>
-<translation id="9215293857209265904">Položka „<ph name="EXTENSION_NAME" />“ bola pridaná</translation>
+<translation id="9215293857209265904">Rozšírenie „<ph name="EXTENSION_NAME" />“ bolo pridané</translation>
 <translation id="9218430445555521422">Nastaviť ako predvolený</translation>
 <translation id="9219103736887031265">Obrázky</translation>
 <translation id="93766956588638423">Opraviť rozšírenie</translation>

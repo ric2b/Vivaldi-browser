@@ -11,7 +11,6 @@ UserModel::UserModel()
     : pending_input_event_count_(0),
       is_gesture_active_(false),
       is_gesture_expected_(false) {}
-UserModel::~UserModel() = default;
 
 void UserModel::DidStartProcessingInputEvent(blink::WebInputEvent::Type type,
                                              const base::TimeTicks now) {
@@ -99,8 +98,7 @@ bool UserModel::IsGestureExpectedSoonImpl(
         base::TimeDelta::FromMilliseconds(kExpectSubsequentGestureMillis);
     return true;
   } else {
-    // If we've have a finished a gesture then a subsequent gesture is deemed
-    // likely.
+    // If we have finished a gesture then a subsequent gesture is deemed likely.
     base::TimeDelta expect_subsequent_gesture_for =
         base::TimeDelta::FromMilliseconds(kExpectSubsequentGestureMillis);
     if (last_continuous_gesture_time_.is_null() ||

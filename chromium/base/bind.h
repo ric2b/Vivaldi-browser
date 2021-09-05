@@ -12,6 +12,7 @@
 
 #include "base/bind_internal.h"
 #include "base/compiler_specific.h"
+#include "base/template_util.h"
 #include "build/build_config.h"
 
 #if defined(OS_MACOSX) && !HAS_FEATURE(objc_arc)
@@ -187,18 +188,15 @@ using MakeUnwrappedTypeList =
 // well-formed. Using `Invoker::Run` with a OnceCallback triggers a
 // static_assert, which is why the ternary expression does not compile.
 // TODO(crbug.com/752720): Remove this indirection once we have `if constexpr`.
-template <bool is_once, typename Invoker>
-struct InvokeFuncImpl;
+template <typename Invoker>
+constexpr auto GetInvokeFunc(std::true_type) {
+  return Invoker::RunOnce;
+}
 
 template <typename Invoker>
-struct InvokeFuncImpl<true, Invoker> {
-  static constexpr auto Value = &Invoker::RunOnce;
-};
-
-template <typename Invoker>
-struct InvokeFuncImpl<false, Invoker> {
-  static constexpr auto Value = &Invoker::Run;
-};
+constexpr auto GetInvokeFunc(std::false_type) {
+  return Invoker::Run;
+}
 
 template <template <typename> class CallbackT,
           typename Functor,
@@ -229,7 +227,8 @@ decltype(auto) BindImpl(Functor&& functor, Args&&... args) {
   // InvokeFuncStorage, so that we can ensure its type matches to
   // PolymorphicInvoke, to which CallbackType will cast back.
   using PolymorphicInvoke = typename CallbackType::PolymorphicInvoke;
-  PolymorphicInvoke invoke_func = InvokeFuncImpl<kIsOnce, Invoker>::Value;
+  PolymorphicInvoke invoke_func =
+      GetInvokeFunc<Invoker>(bool_constant<kIsOnce>());
 
   using InvokeFuncStorage = internal::BindStateBase::InvokeFuncStorage;
   return CallbackType(BindState::Create(
@@ -278,19 +277,24 @@ Bind(Functor&& functor, Args&&... args) {
 
 // Special cases for binding to a base::Callback without extra bound arguments.
 template <typename Signature>
-OnceCallback<Signature> BindOnce(OnceCallback<Signature> closure) {
-  return closure;
+OnceCallback<Signature> BindOnce(OnceCallback<Signature> callback) {
+  return callback;
+}
+
+template <typename Signature>
+OnceCallback<Signature> BindOnce(RepeatingCallback<Signature> callback) {
+  return callback;
 }
 
 template <typename Signature>
 RepeatingCallback<Signature> BindRepeating(
-    RepeatingCallback<Signature> closure) {
-  return closure;
+    RepeatingCallback<Signature> callback) {
+  return callback;
 }
 
 template <typename Signature>
-Callback<Signature> Bind(Callback<Signature> closure) {
-  return closure;
+Callback<Signature> Bind(Callback<Signature> callback) {
+  return callback;
 }
 
 // Unretained() allows binding a non-refcounted class, and to disable
@@ -365,9 +369,10 @@ static inline internal::OwnedWrapper<T> Owned(T* o) {
   return internal::OwnedWrapper<T>(o);
 }
 
-template <typename T>
-static inline internal::OwnedWrapper<T> Owned(std::unique_ptr<T>&& ptr) {
-  return internal::OwnedWrapper<T>(std::move(ptr));
+template <typename T, typename Deleter>
+static inline internal::OwnedWrapper<T, Deleter> Owned(
+    std::unique_ptr<T, Deleter>&& ptr) {
+  return internal::OwnedWrapper<T, Deleter>(std::move(ptr));
 }
 
 // Passed() is for transferring movable-but-not-copyable types (eg. unique_ptr)

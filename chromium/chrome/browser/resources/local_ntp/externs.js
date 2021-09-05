@@ -31,6 +31,7 @@ let MostVisitedData;
  *            isAccessibleBrowser: boolean,
  *            isGooglePage: boolean,
  *            realboxEnabled: boolean,
+ *            realboxMatchOmniboxTheme: boolean,
  *            richerPicker: boolean,
  *            suggestionTransparencyEnabled: boolean,
  *            translatedStrings: Object<string>}}
@@ -110,7 +111,8 @@ let og;
  *     ConvertPromoDataToDict()
  * @typedef {{promoHtml: (string|undefined),
  *            promoLogUrl: (string|undefined),
- *            promoId: (string|undefined)}}
+ *            promoId: (string|undefined),
+ *            canOpenExtensionsPage: boolean}}
  */
 let promo;
 
@@ -317,6 +319,7 @@ window.chrome.embeddedSearch.newTabPage.setBackgroundInfo;
  *   colorLight: (!Array<number>|undefined),
  *   colorPicked: (!Array<number>|undefined),
  *   customBackgroundConfigured: boolean,
+ *   customBackgroundDisabledByPolicy: boolean,
  *   iconBackgroundColor: !Array<number>,
  *   imageHorizontalAlignment: (string|undefined),
  *   imageTiling: (string|undefined),
@@ -324,6 +327,22 @@ window.chrome.embeddedSearch.newTabPage.setBackgroundInfo;
  *   imageVerticalAlignment: (string|undefined),
  *   isNtpBackgroundDark: boolean,
  *   logoColor: (!Array<number>|undefined),
+ *   searchBox: (!{
+ *     bg: !Array<number>,
+ *     icon: !Array<number>,
+ *     iconSelected: !Array<number>,
+ *     placeholder: !Array<number>,
+ *     resultsBg: !Array<number>,
+ *     resultsBgHovered: !Array<number>,
+ *     resultsBgSelected: !Array<number>,
+ *     resultsDim: !Array<number>,
+ *     resultsDimSelected: !Array<number>,
+ *     resultsText: !Array<number>,
+ *     resultsTextSelected: !Array<number>,
+ *     resultsUrl: !Array<number>,
+ *     resultsUrlSelected: !Array<number>,
+ *     text: !Array<number>,
+ *   }|undefined),
  *   textColorLightRgba: !Array<number>,
  *   textColorRgba: !Array<number>,
  *   themeId: (string|undefined),
@@ -333,10 +352,10 @@ window.chrome.embeddedSearch.newTabPage.setBackgroundInfo;
  *   usingDefaultTheme: boolean,
  * }}
  */
-let ThemeBackgroundInfo;
+let NtpTheme;
 
-/** @type {?ThemeBackgroundInfo} */
-window.chrome.embeddedSearch.newTabPage.themeBackgroundInfo;
+/** @type {?NtpTheme} */
+window.chrome.embeddedSearch.newTabPage.ntpTheme;
 
 /**
  * No params.
@@ -378,6 +397,15 @@ window.chrome.embeddedSearch.newTabPage.updateCustomLink;
 window.chrome.embeddedSearch.newTabPage.blocklistPromo;
 
 /**
+ * @param {number} button
+ * @param {boolean} altKey
+ * @param {boolean} ctrlKey
+ * @param {boolean} metaKey
+ * @param {boolean} shiftKey
+ */
+window.chrome.embeddedSearch.newTabPage.openExtensionsPage;
+
+/**
  * Embedded Search API methods defined in
  * chrome/renderer/searchbox/searchbox_extension.cc:
  *  SearchBoxBindings::GetObjectTemplateBuilder()
@@ -386,11 +414,16 @@ window.chrome.embeddedSearch.searchBox;
 /** @param {number} line */
 window.chrome.embeddedSearch.searchBox.deleteAutocompleteMatch;
 window.chrome.embeddedSearch.searchBox.isKeyCaptureEnabled;
+/** @param {number} latencyMs */
+window.chrome.embeddedSearch.searchBox.logCharTypedToRepaintLatency;
 window.chrome.embeddedSearch.searchBox.paste;
 window.chrome.embeddedSearch.searchBox.rtl;
 window.chrome.embeddedSearch.searchBox.startCapturingKeyStrokes;
 window.chrome.embeddedSearch.searchBox.stopCapturingKeyStrokes;
-/** @param {string} input */
+/**
+ * @param {string} input
+ * @param {boolean} preventInlineAutocomplete
+ */
 window.chrome.embeddedSearch.searchBox.queryAutocomplete;
 /** @param {boolean} clearResult */
 window.chrome.embeddedSearch.searchBox.stopAutocomplete;
@@ -406,9 +439,12 @@ let ACMatchClassification;
  *   description: string,
  *   descriptionClass: !Array<!ACMatchClassification>,
  *   destinationUrl: string,
+ *   fillIntoEdit: string,
+ *   iconUrl: string,
+ *   imageDominantColor: string,
+ *   imageUrl: string,
  *   inlineAutocompletion: string,
  *   isSearchType: boolean,
- *   fillIntoEdit: string,
  *   supportsDeletion: boolean,
  *   swapContentsAndDescription: boolean,
  *   type: string,
@@ -416,31 +452,32 @@ let ACMatchClassification;
  */
 let AutocompleteMatch;
 
-/** @enum {number} */
-const AutocompleteResultStatus = {};
-
 /**
  * @typedef {{
  *   input: string,
  *   matches: !Array<!AutocompleteMatch>,
- *   status: !AutocompleteResultStatus,
  * }}
  */
 let AutocompleteResult;
 
 /** @type {function(!AutocompleteResult):void} */
-window.chrome.embeddedSearch.searchBox.onqueryautocompletedone;
+window.chrome.embeddedSearch.searchBox.autocompleteresultchanged;
+
+/** @type {function(number, string, string):void} */
+window.chrome.embeddedSearch.searchBox.autocompletematchimageavailable;
 
 /**
- * @typedef {{
- *   success: boolean,
- *   matches: !Array<!AutocompleteMatch>,
- * }}
+ * @param {number} line
+ * @param {string} url
+ * @param {boolean} areMatchesShowing
+ * @param {number} timeElapsedSinceLastFocus
+ * @param {number} button
+ * @param {boolean} altKey
+ * @param {boolean} ctrlKey
+ * @param {boolean} metaKey
+ * @param {boolean} shiftKey
  */
-let DeleteAutocompleteMatchResult;
-
-/** @type {function(!DeleteAutocompleteMatchResult):void} */
-window.chrome.embeddedSearch.searchBox.ondeleteautocompletematch;
+window.chrome.embeddedSearch.searchBox.openAutocompleteMatch;
 
 /**************************** Translated Strings *****************************/
 
@@ -512,4 +549,5 @@ configData.translatedStrings.undoThumbnailRemove;
 configData.translatedStrings.uploadImage;
 configData.translatedStrings.urlField;
 configData.translatedStrings.voiceCloseTooltip;
+configData.translatedStrings.voiceSearchClosed;
 configData.translatedStrings.waiting;

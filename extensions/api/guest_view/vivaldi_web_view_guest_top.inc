@@ -1,16 +1,17 @@
 
 // included by "extensions/browser/guest_view/web_view/web_view_guest.h"
 
+#include "content/public/browser/keyboard_event_processing_result.h"
 #include "content/public/browser/notification_source.h"
 #include "extensions/browser/app_window/native_app_window.h"
 #include "extensions/browser/extension_host.h"
 #include "extensions/browser/notification_types.h"
 
-#include "third_party/blink/public/platform/web_input_event.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
 
 #include "chrome/browser/ui/tabs/tab_utils.h"
 
-#include "content/browser/browser_plugin/browser_plugin_guest.h"
+#include "content/browser/browser_plugin/browser_plugin_guest.h" // nogncheck
 
 #include "content/public/browser/render_widget_host.h"
 

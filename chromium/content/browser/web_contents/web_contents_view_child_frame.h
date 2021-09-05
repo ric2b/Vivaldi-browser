@@ -38,12 +38,10 @@ class WebContentsViewChildFrame : public WebContentsView,
   gfx::Rect GetViewBounds() const override;
   void CreateView(gfx::NativeView context) override;
   RenderWidgetHostViewBase* CreateViewForWidget(
-      RenderWidgetHost* render_widget_host,
-      bool is_guest_view_hack) override;
+      RenderWidgetHost* render_widget_host) override;
   RenderWidgetHostViewBase* CreateViewForChildWidget(
       RenderWidgetHost* render_widget_host) override;
   void SetPageTitle(const base::string16& title) override;
-  void RenderViewCreated(RenderViewHost* host) override;
   void RenderViewReady() override;
   void RenderViewHostChanged(RenderViewHost* old_host,
                              RenderViewHost* new_host) override;

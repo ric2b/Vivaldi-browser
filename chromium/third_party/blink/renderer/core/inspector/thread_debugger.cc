@@ -15,12 +15,12 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_event.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_event_listener.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_event_listener_info.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_event_target.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_html_all_collection.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_html_collection.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_node.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_node_list.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_script_runner.h"
-#include "third_party/blink/renderer/core/dom/user_gesture_indicator.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/inspector/inspector_dom_debugger_agent.h"
@@ -152,16 +152,14 @@ void ThreadDebugger::PromiseRejectionRevoked(v8::Local<v8::Context> context,
                                      ToV8InspectorStringView(message));
 }
 
+// TODO(mustaq): Fix the caller in v8/src.
 void ThreadDebugger::beginUserGesture() {
-  ExecutionContext* ec = CurrentExecutionContext(isolate_);
-  Document* document = DynamicTo<Document>(ec);
-  user_gesture_indicator_ = LocalFrame::NotifyUserActivation(
-      document ? document->GetFrame() : nullptr);
+  auto* window = CurrentDOMWindow(isolate_);
+  LocalFrame::NotifyUserActivation(window ? window->GetFrame() : nullptr);
 }
 
-void ThreadDebugger::endUserGesture() {
-  user_gesture_indicator_.reset();
-}
+// TODO(mustaq): Fix the caller in v8/src.
+void ThreadDebugger::endUserGesture() {}
 
 std::unique_ptr<v8_inspector::StringBuffer> ThreadDebugger::valueSubtype(
     v8::Local<v8::Value> value) {

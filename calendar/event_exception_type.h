@@ -9,7 +9,9 @@
 #ifndef CALENDAR_EVENT_EXCEPTION_TYPE_H_
 #define CALENDAR_EVENT_EXCEPTION_TYPE_H_
 
-//#include "calendar/calendar_typedefs.h"
+#include "base/macros.h"
+#include "base/strings/string16.h"
+#include "base/time/time.h"
 
 namespace calendar {
 
@@ -18,14 +20,16 @@ namespace calendar {
 // Used during event creation
 class EventExceptionType {
  public:
-  EventExceptionType() = default;
+  EventExceptionType();  // = default;
   ~EventExceptionType() = default;
+  EventExceptionType(const EventExceptionType& other);  // = default;
 
   base::string16 title;
   base::string16 description;
   base::Time exception_date;
   base::Time start;
   base::Time end;
+  bool cancelled;
 };
 
 typedef std::vector<EventExceptionType> EventExceptions;

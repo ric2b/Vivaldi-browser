@@ -42,6 +42,7 @@ class SendTabToSelfBubbleView;
 
 // An implementation of BrowserWindow used for testing. TestBrowserWindow only
 // contains a valid LocationBar, all other getters return NULL.
+// However, some of them can be preset to a specific value.
 // See BrowserWithTestWindowTest for an example of using this class.
 class TestBrowserWindow : public BrowserWindow {
  public:
@@ -54,7 +55,7 @@ class TestBrowserWindow : public BrowserWindow {
   void Hide() override {}
   bool IsVisible() const override;
   void SetBounds(const gfx::Rect& bounds) override {}
-  void Close() override {}
+  void Close() override;
   void Activate() override {}
   void Deactivate() override {}
   bool IsActive() const override;
@@ -100,7 +101,7 @@ class TestBrowserWindow : public BrowserWindow {
   bool IsFullscreen() const override;
   bool IsFullscreenBubbleVisible() const override;
   LocationBar* GetLocationBar() const override;
-  bool UpdatePageActionIcon(PageActionIconType type) override;
+  void UpdatePageActionIcon(PageActionIconType type) override {}
   autofill::AutofillBubbleHandler* GetAutofillBubbleHandler() override;
   void ExecutePageActionIconForTesting(PageActionIconType type) override {}
   void SetFocusToLocationBar(bool is_user_initiated) override {}
@@ -109,7 +110,6 @@ class TestBrowserWindow : public BrowserWindow {
   void UpdateCustomTabBarVisibility(bool visible, bool animate) override {}
   void ResetToolbarTabState(content::WebContents* contents) override {}
   void FocusToolbar() override {}
-  ToolbarActionsBar* GetToolbarActionsBar() override;
   ExtensionsContainer* GetExtensionsContainer() override;
   void ToolbarSizeChanged(bool is_animating) override {}
   void TabDraggingStatusChanged(bool is_dragging) override {}
@@ -195,6 +195,10 @@ class TestBrowserWindow : public BrowserWindow {
 
   void ShowInProductHelpPromo(InProductHelpFeature iph_feature) override {}
 
+  void SetNativeWindow(gfx::NativeWindow window);
+
+  void SetCloseCallback(base::OnceClosure close_callback);
+
  protected:
   void DestroyBrowser() override {}
 
@@ -227,6 +231,9 @@ class TestBrowserWindow : public BrowserWindow {
   autofill::TestAutofillBubbleHandler autofill_bubble_handler_;
   TestDownloadShelf download_shelf_;
   TestLocationBar location_bar_;
+  gfx::NativeWindow native_window_ = nullptr;
+
+  base::OnceClosure close_callback_;
 
   DISALLOW_COPY_AND_ASSIGN(TestBrowserWindow);
 };

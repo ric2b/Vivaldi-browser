@@ -20,7 +20,6 @@
 #include "base/containers/queue.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
-#include "base/memory/aligned_memory.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/unsafe_shared_memory_region.h"
 #include "base/memory/weak_ptr.h"
@@ -67,8 +66,9 @@
 #include "media/gpu/h264_decoder.h"
 #include "media/gpu/h264_dpb.h"
 #include "media/gpu/macros.h"
-#include "media/gpu/test/video_accelerator_unittest_helpers.h"
 #include "media/gpu/test/video_frame_helpers.h"
+#include "media/gpu/test/video_test_helpers.h"
+#include "media/mojo/common/mojo_shared_buffer_video_frame.h"
 #include "media/parsers/vp8_parser.h"
 #include "media/video/fake_video_encode_accelerator.h"
 #include "media/video/h264_level_limits.h"
@@ -126,10 +126,10 @@ const unsigned int kMinFramesForBitrateTests = 300;
 const unsigned int kLoggedLatencyPercentiles[] = {50, 75, 95};
 // Timeout between each BitstreamBufferReady() call and flush callback.
 // In the multiple encoder test case, the FPS might be lower than expected.
-// Currently the largest resolution we run at lab is 4K. The FPS of the slowest
-// device in MultipleEncoders test case is 3. Here we set the timeout 10x of the
-// expected period for margin.
-const unsigned int kBitstreamBufferReadyTimeoutMs = 3000;
+// To rule out a flakiness on low-end devices, the timeout is set to 10 sec,
+// https://crbug.com/1019307.
+const unsigned int kBitstreamBufferReadyTimeoutMs =
+    10 * base::Time::kMillisecondsPerSecond;
 
 // The syntax of multiple test streams is:
 //  test-stream1;test-stream2;test-stream3
@@ -220,53 +220,6 @@ VideoEncodeAcceleratorTestEnvironment* g_env;
 // "--num_frames_to_encode". Ignored if 0.
 int g_num_frames_to_encode = 0;
 
-#ifdef ARCH_CPU_ARMEL
-// ARM performs CPU cache management with CPU cache line granularity. We thus
-// need to ensure our buffers are CPU cache line-aligned (64 byte-aligned).
-// Otherwise newer kernels will refuse to accept them, and on older kernels
-// we'll be treating ourselves to random corruption.
-// Moreover, some hardware codecs require 128-byte alignment for physical
-// buffers.
-const size_t kPlatformBufferAlignment = 128;
-#else
-const size_t kPlatformBufferAlignment = 8;
-#endif
-
-inline static size_t AlignToPlatformRequirements(size_t value) {
-  return base::bits::Align(value, kPlatformBufferAlignment);
-}
-
-// An aligned STL allocator.
-template <typename T, size_t ByteAlignment>
-class AlignedAllocator : public std::allocator<T> {
- public:
-  typedef size_t size_type;
-  typedef T* pointer;
-
-  template <class T1>
-  struct rebind {
-    typedef AlignedAllocator<T1, ByteAlignment> other;
-  };
-
-  AlignedAllocator() {}
-  explicit AlignedAllocator(const AlignedAllocator&) {}
-  template <class T1>
-  explicit AlignedAllocator(const AlignedAllocator<T1, ByteAlignment>&) {}
-  ~AlignedAllocator() {}
-
-  pointer allocate(size_type n, const void* = 0) {
-    return static_cast<pointer>(base::AlignedAlloc(n, ByteAlignment));
-  }
-
-  void deallocate(pointer p, size_type n) {
-    base::AlignedFree(static_cast<void*>(p));
-  }
-
-  size_type max_size() const {
-    return std::numeric_limits<size_t>::max() / sizeof(T);
-  }
-};
-
 struct TestStream {
   TestStream()
       : num_frames(0),
@@ -288,7 +241,8 @@ struct TestStream {
   // A vector used to prepare aligned input buffers of |in_filename|. This
   // makes sure starting addresses of YUV planes are aligned to
   // kPlatformBufferAlignment bytes.
-  std::vector<char, AlignedAllocator<char, kPlatformBufferAlignment>>
+  std::vector<char,
+              test::AlignedAllocator<char, test::kPlatformBufferAlignment>>
       aligned_in_file_data;
 
   // Byte size of a frame of |aligned_in_file_data|.
@@ -516,7 +470,6 @@ static void CreateAlignedInputStreamFile(const gfx::Size& coded_size,
   ASSERT_NE(test_stream->pixel_format, PIXEL_FORMAT_UNKNOWN);
   const VideoPixelFormat pixel_format = test_stream->pixel_format;
   size_t num_planes = VideoFrame::NumPlanes(pixel_format);
-  std::vector<size_t> padding_sizes(num_planes);
   std::vector<size_t> coded_bpl(num_planes);
   std::vector<size_t> visible_bpl(num_planes);
   std::vector<size_t> visible_plane_rows(num_planes);
@@ -529,22 +482,17 @@ static void CreateAlignedInputStreamFile(const gfx::Size& coded_size,
   // the VEA; each row of visible_bpl bytes in the original file needs to be
   // copied into a row of coded_bpl bytes in the aligned file.
   for (size_t i = 0; i < num_planes; i++) {
-    const size_t size =
-        VideoFrame::PlaneSize(pixel_format, i, coded_size).GetArea();
-    test_stream->aligned_plane_size.push_back(
-        AlignToPlatformRequirements(size));
-    test_stream->aligned_buffer_size += test_stream->aligned_plane_size.back();
-
     coded_bpl[i] = VideoFrame::RowBytes(i, pixel_format, coded_size.width());
     visible_bpl[i] = VideoFrame::RowBytes(i, pixel_format,
                                           test_stream->visible_size.width());
     visible_plane_rows[i] =
         VideoFrame::Rows(i, pixel_format, test_stream->visible_size.height());
-    const size_t padding_rows =
-        VideoFrame::Rows(i, pixel_format, coded_size.height()) -
-        visible_plane_rows[i];
-    padding_sizes[i] =
-        padding_rows * coded_bpl[i] + AlignToPlatformRequirements(size) - size;
+    size_t coded_area_size =
+        coded_bpl[i] * VideoFrame::Rows(i, pixel_format, coded_size.height());
+    const size_t aligned_size =
+        test::AlignToPlatformRequirements(coded_area_size);
+    test_stream->aligned_plane_size.push_back(aligned_size);
+    test_stream->aligned_buffer_size += aligned_size;
   }
 
   base::FilePath src_file(StringToFilePathStringType(test_stream->in_filename));
@@ -589,15 +537,15 @@ static void CreateAlignedInputStreamFile(const gfx::Size& coded_size,
     const char* src_ptr = &src_data[0];
     for (size_t i = 0; i < num_planes; i++) {
       // Assert that each plane of frame starts at required byte boundary.
-      ASSERT_EQ(0u, dest_offset & (kPlatformBufferAlignment - 1))
+      ASSERT_EQ(0u, dest_offset & (test::kPlatformBufferAlignment - 1))
           << "Planes of frame should be mapped per platform requirements";
+      char* dst_ptr = &test_stream->aligned_in_file_data[dest_offset];
       for (size_t j = 0; j < visible_plane_rows[i]; j++) {
-        memcpy(&test_stream->aligned_in_file_data[dest_offset], src_ptr,
-               visible_bpl[i]);
+        memcpy(dst_ptr, src_ptr, visible_bpl[i]);
         src_ptr += visible_bpl[i];
-        dest_offset += static_cast<off_t>(coded_bpl[i]);
+        dst_ptr += static_cast<off_t>(coded_bpl[i]);
       }
-      dest_offset += static_cast<off_t>(padding_sizes[i]);
+      dest_offset += test_stream->aligned_plane_size[i];
     }
     src_offset += static_cast<off_t>(frame_buffer_size);
   }
@@ -853,23 +801,23 @@ class StreamValidator {
   // buffer, passing true if the frame is a keyframe and the visible size.
   // Returns false if we are not interested in more frames and further
   // processing should be aborted.
-  typedef base::Callback<bool(bool, const gfx::Size&)> FrameFoundCallback;
+  typedef base::RepeatingCallback<bool(bool, const gfx::Size&)>
+      FrameFoundCallback;
 
   virtual ~StreamValidator() {}
 
   // Provide a StreamValidator instance for the given |profile| and |level|.
   // |level| is optional and should specified only if codec is h264.
-  static std::unique_ptr<StreamValidator> Create(
-      VideoCodecProfile profile,
-      base::Optional<uint8_t> level,
-      const FrameFoundCallback& frame_cb);
+  static std::unique_ptr<StreamValidator> Create(VideoCodecProfile profile,
+                                                 base::Optional<uint8_t> level,
+                                                 FrameFoundCallback frame_cb);
 
   // Process and verify contents of a bitstream buffer.
   virtual void ProcessStreamBuffer(const uint8_t* stream, size_t size) = 0;
 
  protected:
-  explicit StreamValidator(const FrameFoundCallback& frame_cb)
-      : frame_cb_(frame_cb) {}
+  explicit StreamValidator(FrameFoundCallback frame_cb)
+      : frame_cb_(std::move(frame_cb)) {}
 
   FrameFoundCallback frame_cb_;
   gfx::Size visible_size_;
@@ -877,9 +825,8 @@ class StreamValidator {
 
 class H264Validator : public StreamValidator {
  public:
-  H264Validator(base::Optional<uint8_t> level,
-                const FrameFoundCallback& frame_cb)
-      : StreamValidator(frame_cb),
+  H264Validator(base::Optional<uint8_t> level, FrameFoundCallback frame_cb)
+      : StreamValidator(std::move(frame_cb)),
         target_level_(level),
         seen_sps_(false),
         seen_pps_(false),
@@ -1012,8 +959,8 @@ bool H264Validator::UpdateCurrentPicture(const H264SliceHeader& slice_hdr) {
 
 class VP8Validator : public StreamValidator {
  public:
-  explicit VP8Validator(const FrameFoundCallback& frame_cb)
-      : StreamValidator(frame_cb), seen_keyframe_(false) {}
+  explicit VP8Validator(FrameFoundCallback frame_cb)
+      : StreamValidator(std::move(frame_cb)), seen_keyframe_(false) {}
 
   void ProcessStreamBuffer(const uint8_t* stream, size_t size) override;
 
@@ -1041,8 +988,10 @@ void VP8Validator::ProcessStreamBuffer(const uint8_t* stream, size_t size) {
 
 class VP9Validator : public StreamValidator {
  public:
-  explicit VP9Validator(const FrameFoundCallback& frame_cb)
-      : StreamValidator(frame_cb), parser_(false), seen_keyframe_(false) {}
+  explicit VP9Validator(FrameFoundCallback frame_cb)
+      : StreamValidator(std::move(frame_cb)),
+        parser_(false),
+        seen_keyframe_(false) {}
 
   void ProcessStreamBuffer(const uint8_t* stream, size_t size) override;
 
@@ -1074,15 +1023,15 @@ void VP9Validator::ProcessStreamBuffer(const uint8_t* stream, size_t size) {
 std::unique_ptr<StreamValidator> StreamValidator::Create(
     VideoCodecProfile profile,
     base::Optional<uint8_t> level,
-    const FrameFoundCallback& frame_cb) {
+    FrameFoundCallback frame_cb) {
   std::unique_ptr<StreamValidator> validator;
 
   if (IsH264(profile)) {
-    validator.reset(new H264Validator(level, frame_cb));
+    validator.reset(new H264Validator(level, std::move(frame_cb)));
   } else if (IsVP8(profile)) {
-    validator.reset(new VP8Validator(frame_cb));
+    validator.reset(new VP8Validator(std::move(frame_cb)));
   } else if (IsVP9(profile)) {
-    validator.reset(new VP9Validator(frame_cb));
+    validator.reset(new VP9Validator(std::move(frame_cb)));
   } else {
     LOG(FATAL) << "Unsupported profile: " << GetProfileName(profile);
   }
@@ -1106,7 +1055,7 @@ class VideoFrameQualityValidator
   void Flush();
 
  private:
-  void InitializeCB(bool success);
+  void InitializeCB(Status status);
   void DecodeDone(DecodeStatus status);
   void FlushDone(DecodeStatus status);
   void VerifyOutputFrame(scoped_refptr<VideoFrame> output_frame);
@@ -1170,17 +1119,17 @@ void VideoFrameQualityValidator::Initialize(const gfx::Size& coded_size,
   if (IsVP8(profile_)) {
     config.Initialize(kCodecVP8, VP8PROFILE_ANY, alpha_mode, VideoColorSpace(),
                       kNoTransformation, coded_size, visible_size, natural_size,
-                      EmptyExtraData(), Unencrypted());
+                      EmptyExtraData(), EncryptionScheme::kUnencrypted);
   } else if (IsVP9(profile_)) {
     config.Initialize(kCodecVP9, VP9PROFILE_PROFILE0, alpha_mode,
                       VideoColorSpace(), kNoTransformation, coded_size,
                       visible_size, natural_size, EmptyExtraData(),
-                      Unencrypted());
+                      EncryptionScheme::kUnencrypted);
   } else if (IsH264(profile_)) {
     config.Initialize(kCodecH264, H264PROFILE_MAIN, alpha_mode,
                       VideoColorSpace(), kNoTransformation, coded_size,
                       visible_size, natural_size, EmptyExtraData(),
-                      Unencrypted());
+                      EncryptionScheme::kUnencrypted);
   } else {
     LOG_ASSERT(0) << "Invalid profile " << GetProfileName(profile_);
   }
@@ -1194,10 +1143,10 @@ void VideoFrameQualityValidator::Initialize(const gfx::Size& coded_size,
       base::NullCallback());
 }
 
-void VideoFrameQualityValidator::InitializeCB(bool success) {
+void VideoFrameQualityValidator::InitializeCB(Status status) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  if (success) {
+  if (status.is_ok()) {
     decoder_state_ = INITIALIZED;
     Decode();
   } else {
@@ -2151,16 +2100,24 @@ scoped_refptr<VideoFrame> VEAClient::CreateFrame(off_t position) {
           base::TimeDelta().FromMilliseconds(
               (next_input_id_ + 1) * base::Time::kMillisecondsPerSecond /
               current_framerate_));
-  if (video_frame && g_native_input) {
 #if defined(OS_LINUX)
-    video_frame = test::CloneVideoFrame(
-        gpu_memory_buffer_factory_.get(), video_frame.get(),
-        video_frame->layout(), VideoFrame::STORAGE_GPU_MEMORY_BUFFER,
-        gfx::BufferUsage::SCANOUT_VEA_READ_CAMERA_AND_CPU_READ_WRITE);
+  if (video_frame) {
+    if (g_native_input) {
+      video_frame = test::CloneVideoFrame(
+          gpu_memory_buffer_factory_.get(), video_frame.get(),
+          video_frame->layout(), VideoFrame::STORAGE_GPU_MEMORY_BUFFER,
+          gfx::BufferUsage::SCANOUT_VEA_READ_CAMERA_AND_CPU_READ_WRITE);
+    } else {
+      // We want MOJO_SHARED_BUFFER memory for the Chrome OS VEA if it needs to
+      // use the image processor.
+      video_frame =
+          MojoSharedBufferVideoFrame::CreateFromYUVFrame(*video_frame);
+    }
+  }
 #else
+  if (g_native_input)
     video_frame = nullptr;
 #endif
-  }
 
   EXPECT_NE(nullptr, video_frame.get());
   return video_frame;
@@ -2677,34 +2634,31 @@ void VEACacheLineUnalignedInputClient::FeedEncoderWithOneInput(
   const VideoPixelFormat pixel_format = g_env->test_streams_[0]->pixel_format;
   size_t num_planes = VideoFrame::NumPlanes(pixel_format);
   CHECK_LE(num_planes, 3u);
-  std::vector<char, AlignedAllocator<char, kPlatformBufferAlignment>>
-      aligned_data[3];
   std::vector<ColorPlaneLayout> planes(num_planes);
-  std::vector<size_t> buffer_sizes(num_planes);
-  uint8_t* frame_data[3] = {};
-  // This VideoFrame is dummy. Each plane is stored in a separate buffer and
-  // each buffer size is the same as the plane size.
+  size_t offset = 0;
   for (size_t i = 0; i < num_planes; i++) {
-    size_t plane_size =
-        VideoFrame::PlaneSize(pixel_format, i, input_coded_size).GetArea();
-    aligned_data[i].resize(plane_size);
-    frame_data[i] = reinterpret_cast<uint8_t*>(aligned_data[i].data());
+    size_t plane_size = base::bits::Align(
+        VideoFrame::PlaneSize(pixel_format, i, input_coded_size).GetArea(),
+        test::kPlatformBufferAlignment);
+
     planes[i].stride =
         VideoFrame::RowBytes(i, pixel_format, input_coded_size.width());
-    planes[i].offset = 0;
+    planes[i].offset = offset;
     planes[i].size = plane_size;
+    offset += plane_size;
   }
-
   auto layout = VideoFrameLayout::CreateWithPlanes(
-      pixel_format, input_coded_size, std::move(planes));
+      pixel_format, input_coded_size, std::move(planes),
+      test::kPlatformBufferAlignment);
   ASSERT_TRUE(layout);
-
-  scoped_refptr<VideoFrame> video_frame =
-      VideoFrame::WrapExternalYuvDataWithLayout(
-          *layout, gfx::Rect(input_coded_size), input_coded_size, frame_data[0],
-          frame_data[1], frame_data[2],
-          base::TimeDelta().FromMilliseconds(
-              base::Time::kMillisecondsPerSecond / fps_));
+  scoped_refptr<VideoFrame> video_frame = VideoFrame::CreateFrameWithLayout(
+      *layout, gfx::Rect(input_coded_size), input_coded_size,
+      base::TimeDelta().FromMilliseconds(base::Time::kMillisecondsPerSecond /
+                                         fps_),
+      true);
+  // We want MOJO_SHARED_BUFFER memory for the Chrome OS VEA if it needs to
+  // use the image processor.
+  video_frame = MojoSharedBufferVideoFrame::CreateFromYUVFrame(*video_frame);
 
   encoder_->Encode(video_frame, false);
 }

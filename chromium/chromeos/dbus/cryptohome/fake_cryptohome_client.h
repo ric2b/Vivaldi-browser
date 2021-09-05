@@ -244,6 +244,8 @@ class COMPONENT_EXPORT(CRYPTOHOME_CLIENT) FakeCryptohomeClient
                              DBusMethodCallback<int64_t> callback) override;
   void GetCurrentSpaceForGid(gid_t android_gid,
                              DBusMethodCallback<int64_t> callback) override;
+  void CheckHealth(const cryptohome::CheckHealthRequest& request,
+                   DBusMethodCallback<cryptohome::BaseReply> callback) override;
 
   /////////// Test helpers ////////////
 
@@ -321,6 +323,11 @@ class COMPONENT_EXPORT(CRYPTOHOME_CLIENT) FakeCryptohomeClient
     tpm_attestation_does_key_exist_should_succeed_ = should_succeed;
   }
 
+  void set_tpm_attestation_public_key(
+      base::Optional<TpmAttestationDataResult> value) {
+    tpm_attestation_public_key_ = value;
+  }
+
   void set_supports_low_entropy_credentials(bool supports) {
     supports_low_entropy_credentials_ = supports;
   }
@@ -393,6 +400,10 @@ class COMPONENT_EXPORT(CRYPTOHOME_CLIENT) FakeCryptohomeClient
 
   bool is_device_locked_to_single_user() const {
     return is_device_locked_to_single_user_;
+  }
+
+  void set_requires_powerwash(bool requires_powerwash) {
+    requires_powerwash_ = requires_powerwash;
   }
 
  private:
@@ -486,6 +497,7 @@ class COMPONENT_EXPORT(CRYPTOHOME_CLIENT) FakeCryptohomeClient
   bool enable_auth_check_ = false;
   bool tpm_is_ready_ = true;
   bool tpm_is_enabled_ = true;
+  base::Optional<TpmAttestationDataResult> tpm_attestation_public_key_;
 
   // Reply to GetRsuDeviceId().
   std::string rsu_device_id_;
@@ -502,6 +514,9 @@ class COMPONENT_EXPORT(CRYPTOHOME_CLIENT) FakeCryptohomeClient
 
   // Used by LockToSingleUserMountUntilReboot.
   bool is_device_locked_to_single_user_ = false;
+
+  // Used by GetStateRequiresPowerwash
+  bool requires_powerwash_ = false;
 
   base::WeakPtrFactory<FakeCryptohomeClient> weak_ptr_factory_{this};
 

@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "base/callback_forward.h"
+#include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/threading/thread_checker.h"
@@ -212,6 +213,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterWinrt : public BluetoothAdapter {
   void RemoveAdvertisementReceivedHandler();
 
   bool is_initialized_ = false;
+  bool radio_access_allowed_ = false;
   std::string address_;
   std::string name_;
   std::unique_ptr<base::ScopedClosureRunner> on_init_;
@@ -228,6 +230,8 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterWinrt : public BluetoothAdapter {
   base::Optional<EventRegistrationToken> powered_radio_removed_token_;
   base::Optional<EventRegistrationToken> powered_radios_enumerated_token_;
   size_t num_powered_radios_ = 0;
+
+  bool radio_was_powered_ = false;
 
   std::vector<scoped_refptr<BluetoothAdvertisement>> pending_advertisements_;
 

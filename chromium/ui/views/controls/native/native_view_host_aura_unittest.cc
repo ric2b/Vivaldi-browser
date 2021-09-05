@@ -5,6 +5,8 @@
 #include "ui/views/controls/native/native_view_host_aura.h"
 
 #include <memory>
+#include <utility>
+#include <vector>
 
 #include "base/macros.h"
 #include "ui/aura/client/aura_constants.h"
@@ -13,6 +15,7 @@
 #include "ui/aura/window_targeter.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/cursor/cursor.h"
+#include "ui/base/mojom/cursor_type.mojom-shared.h"
 #include "ui/events/event_utils.h"
 #include "ui/views/controls/native/native_view_host.h"
 #include "ui/views/controls/native/native_view_host_test_base.h"
@@ -76,7 +79,7 @@ class NativeViewHostWindowObserver : public aura::WindowObserver {
   }
 
   void OnWindowDestroyed(aura::Window* window) override {
-    EventDetails event = { EVENT_DESTROYED, window, gfx::Rect() };
+    EventDetails event = {EVENT_DESTROYED, window, gfx::Rect()};
     events_.push_back(event);
   }
 
@@ -95,9 +98,7 @@ class NativeViewHostAuraTest : public test::NativeViewHostTestBase {
     return static_cast<NativeViewHostAura*>(GetNativeWrapper());
   }
 
-  Widget* child() {
-    return child_.get();
-  }
+  Widget* child() { return child_.get(); }
 
   aura::Window* clipping_window() {
     return native_host()->clipping_window_.get();
@@ -107,8 +108,7 @@ class NativeViewHostAuraTest : public test::NativeViewHostTestBase {
     CreateTopLevel();
     CreateTestingHost();
     child_.reset(CreateChildForHost(toplevel()->GetNativeView(),
-                                    toplevel()->GetRootView(),
-                                    new View,
+                                    toplevel()->GetRootView(), new View,
                                     host()));
   }
 
@@ -165,12 +165,12 @@ TEST_F(NativeViewHostAuraTest, HostViewPropertyKey) {
 TEST_F(NativeViewHostAuraTest, CursorForNativeView) {
   CreateHost();
 
-  toplevel()->SetCursor(ui::CursorType::kHand);
-  child()->SetCursor(ui::CursorType::kWait);
+  toplevel()->SetCursor(ui::mojom::CursorType::kHand);
+  child()->SetCursor(ui::mojom::CursorType::kWait);
   ui::MouseEvent move_event(ui::ET_MOUSE_MOVED, gfx::Point(0, 0),
                             gfx::Point(0, 0), ui::EventTimeForNow(), 0, 0);
 
-  EXPECT_EQ(ui::CursorType::kWait, host()->GetCursor(move_event).native_type());
+  EXPECT_EQ(ui::mojom::CursorType::kWait, host()->GetCursor(move_event).type());
 
   DestroyHost();
 }
@@ -353,7 +353,7 @@ TEST_F(NativeViewHostAuraTest, ParentAfterDetach) {
             test_observer.events().back().type);
 }
 
-// Ensure the clipping window is hidden before setting the native view's bounds.
+// Ensure the clipping window is hidden before any other operations.
 // This is a regression test for http://crbug.com/388699.
 TEST_F(NativeViewHostAuraTest, RemoveClippingWindowOrder) {
   CreateHost();
@@ -368,16 +368,10 @@ TEST_F(NativeViewHostAuraTest, RemoveClippingWindowOrder) {
 
   host()->Detach();
 
-  ASSERT_EQ(3u, test_observer.events().size());
+  ASSERT_GE(test_observer.events().size(), 1u);
   EXPECT_EQ(NativeViewHostWindowObserver::EVENT_HIDDEN,
             test_observer.events()[0].type);
   EXPECT_EQ(clipping_window(), test_observer.events()[0].window);
-  EXPECT_EQ(NativeViewHostWindowObserver::EVENT_BOUNDS_CHANGED,
-            test_observer.events()[1].type);
-  EXPECT_EQ(child()->GetNativeView(), test_observer.events()[1].window);
-  EXPECT_EQ(NativeViewHostWindowObserver::EVENT_HIDDEN,
-            test_observer.events()[2].type);
-  EXPECT_EQ(child()->GetNativeView(), test_observer.events()[2].window);
 
   clipping_window()->RemoveObserver(&test_observer);
   child()->GetNativeView()->RemoveObserver(&test_observer);
@@ -572,6 +566,28 @@ TEST_F(NativeViewHostAuraTest, WindowHiddenWhenAttached) {
   host->Attach(window.get());
   // Is |host| is not visible, |window| should immediately be hidden.
   EXPECT_FALSE(window->TargetVisibility());
+}
+
+TEST_F(NativeViewHostAuraTest, ClippedWindowNotResizedOnDetach) {
+  CreateTopLevel();
+  toplevel()->SetSize(gfx::Size(100, 100));
+  toplevel()->Show();
+
+  std::unique_ptr<aura::Window> window =
+      std::make_unique<aura::Window>(nullptr);
+  window->Init(ui::LAYER_NOT_DRAWN);
+  window->set_owned_by_parent(false);
+  window->SetBounds(gfx::Rect(0, 0, 200, 200));
+  window->Show();
+
+  NativeViewHost* host = toplevel()->GetRootView()->AddChildView(
+      std::make_unique<NativeViewHost>());
+  host->SetVisible(true);
+  host->SetBoundsRect(gfx::Rect(0, 0, 100, 100));
+  host->Attach(window.get());
+  EXPECT_EQ(gfx::Size(200, 200), window->bounds().size());
+  host->Detach();
+  EXPECT_EQ(gfx::Size(200, 200), window->bounds().size());
 }
 
 }  // namespace views

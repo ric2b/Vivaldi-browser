@@ -17,7 +17,10 @@ config("zlib_internal_config") {
 }
 
 use_arm_neon_optimizations = false
-if (current_cpu == "arm" || current_cpu == "arm64") {
+if ((current_cpu == "arm" || current_cpu == "arm64") &&
+    !(is_win && !is_clang)) {
+  # TODO(richard.townsend@arm.com): Optimizations temporarily disabled for
+  # Windows on Arm MSVC builds, see http://crbug.com/v8/10012.
   if (arm_use_neon) {
     use_arm_neon_optimizations = true
   }
@@ -29,9 +32,12 @@ use_x86_x64_optimizations =
 config("zlib_adler32_simd_config") {
   if (use_x86_x64_optimizations) {
     defines = [ "ADLER32_SIMD_SSSE3" ]
-  }
-
-  if (use_arm_neon_optimizations) {
+    if (is_win) {
+      defines += [ "X86_WINDOWS" ]
+    } else {
+      defines += [ "X86_NOT_WINDOWS" ]
+    }
+  } else if (use_arm_neon_optimizations) {
     defines = [ "ADLER32_SIMD_NEON" ]
   }
 }
@@ -94,24 +100,13 @@ if (use_arm_neon_optimizations) {
     if (!is_ios) {
       include_dirs = [ "." ]
 
-      if (is_android) {
-        import("//build/config/android/config.gni")
-        if (defined(android_ndk_root) && android_ndk_root != "") {
-          deps = [
-            "//third_party/android_ndk:cpu_features",
-          ]
-        } else {
-          assert(false, "CPU detection requires the Android NDK")
-        }
-      } else if (!is_win && !is_clang) {
+      if (!is_win && !is_clang) {
         assert(!use_thin_lto,
                "ThinLTO fails mixing different module-level targets")
         cflags_c = [ "-march=armv8-a+crc" ]
       }
 
       sources = [
-        "arm_features.c",
-        "arm_features.h",
         "crc32_simd.c",
         "crc32_simd.h",
       ]
@@ -218,10 +213,6 @@ source_set("zlib_x86_simd") {
         "-mpclmul",
       ]
     }
-  } else {
-    sources = [
-      "simd_stub.c",
-    ]
   }
 
   configs -= [ "//build/config/compiler:chromium_code" ]
@@ -247,6 +238,9 @@ component("zlib") {
     "adler32.c",
     "chromeconf.h",
     "compress.c",
+    "contrib/optimizations/insert_string.h",
+    "cpu_features.c",
+    "cpu_features.h",
     "crc32.c",
     "crc32.h",
     "deflate.c",
@@ -266,7 +260,6 @@ component("zlib") {
     "trees.c",
     "trees.h",
     "uncompr.c",
-    "x86.h",
     "zconf.h",
     "zlib.h",
     "zutil.c",
@@ -275,6 +268,19 @@ component("zlib") {
 
   defines = []
   deps = []
+  if (!use_x86_x64_optimizations && !use_arm_neon_optimizations) {
+    # Apparently android_cronet bot builds with NEON disabled and
+    # we also should disable optimizations for iOS@x86 (a.k.a. simulator).
+    defines += [ "CPU_NO_SIMD" ]
+  }
+
+  if (is_ios) {
+    # iOS@ARM is a special case where we always have NEON but don't check
+    # for crypto extensions.
+    # TODO(cavalcantii): verify what is the current state of CPU features shipped
+    # on latest iOS devices.
+    defines += [ "ARM_OS_IOS" ]
+  }
 
   if (use_x86_x64_optimizations || use_arm_neon_optimizations) {
     deps += [
@@ -283,7 +289,6 @@ component("zlib") {
     ]
 
     if (use_x86_x64_optimizations) {
-      sources += [ "x86.c" ]
       deps += [ ":zlib_crc32_simd" ]
     } else if (use_arm_neon_optimizations) {
       sources += [ "contrib/optimizations/slide_hash_neon.h" ]
@@ -291,6 +296,15 @@ component("zlib") {
     }
   } else {
     sources += [ "inflate.c" ]
+  }
+
+  if (is_android) {
+    import("//build/config/android/config.gni")
+    if (defined(android_ndk_root) && android_ndk_root != "") {
+      deps += [ "//third_party/android_ndk:cpu_features" ]
+    } else {
+      assert(false, "CPU detection requires the Android NDK")
+    }
   }
 
   configs -= [ "//build/config/compiler:chromium_code" ]
@@ -342,9 +356,7 @@ static_library("minizip") {
     defines = [ "USE_FILE32API" ]
   }
 
-  deps = [
-    ":zlib",
-  ]
+  deps = [ ":zlib" ]
 
   configs -= [ "//build/config/compiler:chromium_code" ]
   configs += [
@@ -360,9 +372,7 @@ static_library("minizip") {
 executable("zlib_bench") {
   include_dirs = [ "." ]
 
-  sources = [
-    "contrib/bench/zlib_bench.cc",
-  ]
+  sources = [ "contrib/bench/zlib_bench.cc" ]
 
   if (!is_debug) {
     configs -= [ "//build/config/compiler:default_optimization" ]
@@ -372,7 +382,5 @@ executable("zlib_bench") {
   configs -= [ "//build/config/compiler:chromium_code" ]
   configs += [ "//build/config/compiler:no_chromium_code" ]
 
-  deps = [
-    ":zlib",
-  ]
+  deps = [ ":zlib" ]
 }

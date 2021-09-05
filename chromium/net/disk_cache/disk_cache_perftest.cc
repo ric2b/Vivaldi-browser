@@ -437,7 +437,10 @@ TEST_F(DiskCachePerfTest, BlockfileHashes) {
   base::ElapsedTimer timer;
   for (int i = 0; i < 300000; i++) {
     std::string key = GenerateKey(true);
-    base::Hash(key);
+    // TODO(dcheng): It's unclear if this is sufficient to keep a sufficiently
+    // smart optimizer from simply discarding the function call if it realizes
+    // there are no side effects.
+    base::PersistentHash(key);
   }
   reporter.AddResult(kMetricCacheKeysHashTimeMs,
                      timer.Elapsed().InMillisecondsF());
@@ -548,7 +551,7 @@ TEST_F(DiskCachePerfTest, BlockFilesPerformance) {
   base::RunLoop().RunUntilIdle();
 }
 
-void VerifyRvAndCallClosure(base::Closure* c, int expect_rv, int rv) {
+void VerifyRvAndCallClosure(base::RepeatingClosure* c, int expect_rv, int rv) {
   EXPECT_EQ(expect_rv, rv);
   c->Run();
 }
@@ -600,7 +603,7 @@ TEST_F(DiskCachePerfTest, SimpleCacheInitialReadPortion) {
 
   for (int i = 0; i < kIterations; ++i) {
     base::RunLoop event_loop;
-    base::Closure barrier =
+    base::RepeatingClosure barrier =
         base::BarrierClosure(kBatchSize, event_loop.QuitWhenIdleClosure());
     net::CompletionRepeatingCallback cb_batch(base::BindRepeating(
         VerifyRvAndCallClosure, base::Unretained(&barrier), kHeadersSize));

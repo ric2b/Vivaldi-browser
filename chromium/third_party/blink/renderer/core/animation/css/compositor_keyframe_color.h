@@ -17,10 +17,6 @@ class CORE_EXPORT CompositorKeyframeColor final
   CompositorKeyframeColor(SkColor color) : color_(color) {}
   ~CompositorKeyframeColor() override = default;
 
-  static CompositorKeyframeColor* Create(SkColor color) {
-    return MakeGarbageCollected<CompositorKeyframeColor>(color);
-  }
-
   SkColor ToColor() const { return color_; }
 
  private:
@@ -29,7 +25,12 @@ class CORE_EXPORT CompositorKeyframeColor final
   SkColor color_;
 };
 
-DEFINE_COMPOSITOR_KEYFRAME_VALUE_TYPE_CASTS(CompositorKeyframeColor, IsColor());
+template <>
+struct DowncastTraits<CompositorKeyframeColor> {
+  static bool AllowFrom(const CompositorKeyframeValue& value) {
+    return value.IsColor();
+  }
+};
 
 }  // namespace blink
 

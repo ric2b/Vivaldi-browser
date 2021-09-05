@@ -1,57 +1,32 @@
-// Copyright (c) 2017 Vivaldi Technologies AS. All rights reserved.
+// Copyright (c) 2017-2020 Vivaldi Technologies AS. All rights reserved.
 //
 // Custom bindings for the vivaldi.windowPrivate API.
 
-var binding = require('binding').Binding.create('windowPrivate');
+var appWindowNatives = requireNative('app_window_natives');
 
-function VivaldiWindow(w) {
-  this.id_ = w.id;
-  this.state = w.state;
-};
-
-VivaldiWindow.prototype.isMinimized = function () {
-  return Boolean(this.state === "minimized");
-};
-
-VivaldiWindow.prototype.isMaximized = function () {
-  return Boolean(this.state === "maximized");
-};
-
-VivaldiWindow.prototype.isFullscreen = function () {
-  return Boolean(this.state === "fullscreen");
-};
-
-Object.defineProperty(VivaldiWindow.prototype, 'id', {
-  get: function () {
-    return this.id_;
-  }
-});
-
-binding.registerCustomHook(function(bindingsAPI) {
+apiBridge.registerCustomHook(function(bindingsAPI) {
   var apiFunctions = bindingsAPI.apiFunctions;
 
-  apiFunctions.setHandleRequest('current', function () {
-    var win;
-    var promise = new Promise(resolve => {
-      chrome.windows.getCurrent(w => {
-        resolve(w);
-      });
-    }).then(w => {
-      win = new VivaldiWindow(w);
-    });
-    return win;
+  apiFunctions.setCustomCallback('create',
+      function(name, request, callback, windowParams) {
+
+    // |callback| is optional.
+    let maybeCallback = callback || function() {};
+
+    // When window creation fails, windowParams is undefined. Return undefined
+    // to the caller.
+    if (!windowParams || !windowParams.frameId) {
+      maybeCallback(undefined);
+      return;
+    }
+
+    // We could make our own based on this, but let's use it since it exists.
+    let view = appWindowNatives.GetFrame(windowParams.frameId,
+                                         true /* notifyBrowser */);
+
+    let windowResult = view ? view : undefined;
+    maybeCallback(windowParams.windowId, windowResult);
+
   });
 
-  apiFunctions.setHandleRequest('get', (id) => {
-    return new Promise(resolve => {
-      chrome.windows.get(id, (w) => {
-        resolve(w);
-      });
-    }).then(w => {
-      return new VivaldiWindow(w);
-    });
-  });
 });
-
-exports.$set('binding', binding.generate());
-exports.$set('VivaldiWindow', VivaldiWindow);

@@ -11,7 +11,6 @@
 #include "chrome/grit/generated_resources.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/views/controls/button/label_button.h"
-#include "ui/views/window/dialog_client_view.h"
 
 class NativeFileSystemDirectoryAccessConfirmationViewTest
     : public DialogBrowserTest {
@@ -20,11 +19,12 @@ class NativeFileSystemDirectoryAccessConfirmationViewTest
   void ShowUi(const std::string& name) override {
     widget_ = NativeFileSystemDirectoryAccessConfirmationView::ShowDialog(
         kTestOrigin, base::FilePath(FILE_PATH_LITERAL("/foo/bar/MyProject")),
-        base::BindLambdaForTesting([&](PermissionAction result) {
+        base::BindLambdaForTesting([&](permissions::PermissionAction result) {
           callback_called_ = true;
           callback_result_ = result;
         }),
-        browser()->tab_strip_model()->GetActiveWebContents());
+        browser()->tab_strip_model()->GetActiveWebContents(),
+        base::ScopedClosureRunner());
   }
 
  protected:
@@ -34,13 +34,14 @@ class NativeFileSystemDirectoryAccessConfirmationViewTest
   views::Widget* widget_ = nullptr;
 
   bool callback_called_ = false;
-  PermissionAction callback_result_ = PermissionAction::IGNORED;
+  permissions::PermissionAction callback_result_ =
+      permissions::PermissionAction::IGNORED;
 };
 
 IN_PROC_BROWSER_TEST_F(NativeFileSystemDirectoryAccessConfirmationViewTest,
                        AcceptIsntDefaultFocused) {
   ShowUi(std::string());
-  EXPECT_NE(widget_->client_view()->AsDialogClientView()->ok_button(),
+  EXPECT_NE(widget_->widget_delegate()->AsDialogDelegate()->GetOkButton(),
             widget_->GetFocusManager()->GetFocusedView());
   widget_->Close();
   base::RunLoop().RunUntilIdle();
@@ -49,18 +50,18 @@ IN_PROC_BROWSER_TEST_F(NativeFileSystemDirectoryAccessConfirmationViewTest,
 IN_PROC_BROWSER_TEST_F(NativeFileSystemDirectoryAccessConfirmationViewTest,
                        AcceptRunsCallback) {
   ShowUi(std::string());
-  widget_->client_view()->AsDialogClientView()->AcceptWindow();
+  widget_->widget_delegate()->AsDialogDelegate()->AcceptDialog();
   EXPECT_TRUE(callback_called_);
-  EXPECT_EQ(PermissionAction::GRANTED, callback_result_);
+  EXPECT_EQ(permissions::PermissionAction::GRANTED, callback_result_);
   base::RunLoop().RunUntilIdle();
 }
 
 IN_PROC_BROWSER_TEST_F(NativeFileSystemDirectoryAccessConfirmationViewTest,
                        CancelRunsCallback) {
   ShowUi(std::string());
-  widget_->client_view()->AsDialogClientView()->CancelWindow();
+  widget_->widget_delegate()->AsDialogDelegate()->CancelDialog();
   EXPECT_TRUE(callback_called_);
-  EXPECT_EQ(PermissionAction::DISMISSED, callback_result_);
+  EXPECT_EQ(permissions::PermissionAction::DISMISSED, callback_result_);
   base::RunLoop().RunUntilIdle();
 }
 
@@ -69,7 +70,7 @@ IN_PROC_BROWSER_TEST_F(NativeFileSystemDirectoryAccessConfirmationViewTest,
   ShowUi(std::string());
   widget_->Close();
   EXPECT_TRUE(callback_called_);
-  EXPECT_EQ(PermissionAction::DISMISSED, callback_result_);
+  EXPECT_EQ(permissions::PermissionAction::DISMISSED, callback_result_);
   base::RunLoop().RunUntilIdle();
 }
 

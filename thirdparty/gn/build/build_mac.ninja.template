@@ -1,17 +1,11 @@
-rule cc
-  command = $cc -MMD -MF $out.d $defines $includes $cflags $cflags_c -c $in -o $out
-  description = CC $out
-  depfile = $out.d
-  deps = gcc
-
 rule cxx
-  command = $cxx -MMD -MF $out.d $defines $includes $cflags $cflags_cc -c $in -o $out
+  command = $cxx -MMD -MF $out.d $includes $cflags -c $in -o $out
   description = CXX $out
   depfile = $out.d
   deps = gcc
 
 rule alink_thin
-  command = rm -f $out && libtool -static -o $out $in
+  command = rm -f $out && $ar rcs $out $in
   description = AR $out
 
 rule link

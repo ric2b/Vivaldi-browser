@@ -12,16 +12,16 @@
 #include "base/metrics/field_trial.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/time/default_clock.h"
 #include "base/time/time.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_config.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_config_service_client_test_utils.h"
-#include "components/data_reduction_proxy/core/browser/data_reduction_proxy_configurator.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_mutable_config_values.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_prefs.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_request_options.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_test_utils.h"
-#include "components/data_reduction_proxy/core/browser/network_properties_manager.h"
+#include "components/data_reduction_proxy/core/common/data_reduction_proxy_features.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_headers.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params_test_utils.h"
@@ -62,8 +62,6 @@ std::string CreateEncodedConfig(
 class DataReductionProxyServiceTest : public testing::Test {
  public:
   void SetUp() override {
-    base::CommandLine::ForCurrentProcess()->AppendSwitch(
-        switches::kDisableDataReductionProxyWarmupURLFetch);
     RegisterSimpleProfilePrefs(prefs_.registry());
   }
 
@@ -130,9 +128,10 @@ TEST_F(DataReductionProxyServiceTest, TestResetBadProxyListOnDisableDataSaver) {
 }
 
 TEST_F(DataReductionProxyServiceTest, HoldbackConfiguresProxies) {
-  base::FieldTrialList field_trial_list(nullptr);
-  ASSERT_TRUE(base::FieldTrialList::CreateFieldTrial(
-      "DataCompressionProxyHoldback", "Enabled"));
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      features::kDataReductionProxyHoldback);
+
   std::unique_ptr<DataReductionProxyTestContext> drp_test_context =
       DataReductionProxyTestContext::Builder()
           .SkipSettingsInitialization()
@@ -165,12 +164,7 @@ TEST_F(DataReductionProxyServiceTest, TestCustomProxyConfigClient) {
       client_remote.BindNewPipeAndPassReceiver());
   service->AddCustomProxyConfigClient(std::move(client_remote));
   base::RunLoop().RunUntilIdle();
-
-  EXPECT_EQ(client.config->rules.proxies_for_http.Get(), proxy_server);
-  EXPECT_TRUE(
-      client.config->post_cache_headers.HasHeader(chrome_proxy_header()));
-  EXPECT_TRUE(
-      client.config->pre_cache_headers.HasHeader(chrome_proxy_ect_header()));
+  ASSERT_FALSE(client.config);
 }
 
 TEST_F(DataReductionProxyServiceTest, TestCustomProxyConfigUpdatedOnECTChange) {
@@ -188,18 +182,7 @@ TEST_F(DataReductionProxyServiceTest, TestCustomProxyConfigUpdatedOnECTChange) {
       std::move(client_remote));
   base::RunLoop().RunUntilIdle();
 
-  std::string value;
-  EXPECT_TRUE(client.config->pre_cache_headers.GetHeader(
-      chrome_proxy_ect_header(), &value));
-  EXPECT_EQ(value, "4G");
-
-  drp_test_context->test_network_quality_tracker()
-      ->ReportEffectiveConnectionTypeForTesting(
-          net::EFFECTIVE_CONNECTION_TYPE_2G);
-  base::RunLoop().RunUntilIdle();
-  EXPECT_TRUE(client.config->pre_cache_headers.GetHeader(
-      chrome_proxy_ect_header(), &value));
-  EXPECT_EQ(value, "2G");
+  ASSERT_FALSE(client.config);
 }
 
 TEST_F(DataReductionProxyServiceTest,
@@ -217,15 +200,7 @@ TEST_F(DataReductionProxyServiceTest,
   base::RunLoop().RunUntilIdle();
 
   std::string value;
-  EXPECT_TRUE(client.config->post_cache_headers.GetHeader(chrome_proxy_header(),
-                                                          &value));
-
-  service->request_options()->SetSecureSession("session_value");
-  base::RunLoop().RunUntilIdle();
-  std::string changed_value;
-  EXPECT_TRUE(client.config->post_cache_headers.GetHeader(chrome_proxy_header(),
-                                                          &changed_value));
-  EXPECT_NE(value, changed_value);
+  ASSERT_FALSE(client.config);
 }
 
 TEST_F(DataReductionProxyServiceTest,
@@ -236,10 +211,6 @@ TEST_F(DataReductionProxyServiceTest,
   DataReductionProxyService* service =
       drp_test_context->data_reduction_proxy_service();
 
-  NetworkPropertiesManager network_properties_manager(
-      base::DefaultClock::GetInstance(), prefs());
-  service->config()->SetNetworkPropertiesManagerForTesting(
-      &network_properties_manager);
   service->config()->UpdateConfigForTesting(true, true, true);
 
   auto proxy_server1 = net::ProxyServer::FromPacString("PROXY foo");
@@ -252,15 +223,7 @@ TEST_F(DataReductionProxyServiceTest,
   service->AddCustomProxyConfigClient(std::move(client_remote));
   base::RunLoop().RunUntilIdle();
 
-  EXPECT_EQ(client.config->rules.proxies_for_http.Get(), proxy_server1);
-
-  auto proxy_server2 = net::ProxyServer::FromPacString("PROXY bar");
-  service->config_client()->SetRemoteConfigAppliedForTesting(false);
-  service->config_client()->ApplySerializedConfig(
-      CreateEncodedConfig({DataReductionProxyServer(proxy_server2)}));
-  base::RunLoop().RunUntilIdle();
-
-  EXPECT_EQ(client.config->rules.proxies_for_http.Get(), proxy_server2);
+  ASSERT_FALSE(client.config);
 }
 
 TEST_F(DataReductionProxyServiceTest,
@@ -270,10 +233,6 @@ TEST_F(DataReductionProxyServiceTest,
   drp_test_context->SetDataReductionProxyEnabled(true);
   DataReductionProxyService* service =
       drp_test_context->data_reduction_proxy_service();
-  NetworkPropertiesManager network_properties_manager(
-      base::DefaultClock::GetInstance(), prefs());
-  service->config()->SetNetworkPropertiesManagerForTesting(
-      &network_properties_manager);
   service->config()->UpdateConfigForTesting(true, true, true);
 
   auto core_proxy_server = net::ProxyServer::FromPacString("PROXY foo");
@@ -288,13 +247,7 @@ TEST_F(DataReductionProxyServiceTest,
   service->AddCustomProxyConfigClient(std::move(client_remote));
   base::RunLoop().RunUntilIdle();
 
-  net::ProxyConfig::ProxyRules expected_rules;
-  expected_rules.type =
-      net::ProxyConfig::ProxyRules::Type::PROXY_LIST_PER_SCHEME;
-  expected_rules.proxies_for_http.AddProxyServer(core_proxy_server);
-  expected_rules.proxies_for_http.AddProxyServer(second_proxy_server);
-  expected_rules.proxies_for_http.AddProxyServer(net::ProxyServer::Direct());
-  EXPECT_TRUE(client.config->rules.Equals(expected_rules));
+  ASSERT_FALSE(client.config);
 }
 
 TEST_F(DataReductionProxyServiceTest, TestCustomProxyConfigProperties) {
@@ -303,10 +256,6 @@ TEST_F(DataReductionProxyServiceTest, TestCustomProxyConfigProperties) {
   drp_test_context->SetDataReductionProxyEnabled(true);
   DataReductionProxyService* service =
       drp_test_context->data_reduction_proxy_service();
-  NetworkPropertiesManager network_properties_manager(
-      base::DefaultClock::GetInstance(), prefs());
-  service->config()->SetNetworkPropertiesManagerForTesting(
-      &network_properties_manager);
   service->config()->UpdateConfigForTesting(true, true, true);
 
   mojo::Remote<network::mojom::CustomProxyConfigClient> client_remote;
@@ -314,9 +263,7 @@ TEST_F(DataReductionProxyServiceTest, TestCustomProxyConfigProperties) {
       client_remote.BindNewPipeAndPassReceiver());
   service->AddCustomProxyConfigClient(std::move(client_remote));
   base::RunLoop().RunUntilIdle();
-
-  EXPECT_TRUE(client.config->assume_https_proxies_support_quic);
-  EXPECT_FALSE(client.config->can_use_proxy_on_http_url_redirect_cycles);
+  ASSERT_FALSE(client.config);
 }
 
 }  // namespace data_reduction_proxy

@@ -15,8 +15,8 @@
 #include "ash/shell.h"
 #include "ash/wm/desks/desks_controller.h"
 #include "ash/wm/mru_window_tracker.h"
+#include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/screen_pinning_controller.h"
-#include "ash/wm/splitview/split_view_controller.h"
 #include "ash/wm/splitview/split_view_utils.h"
 #include "ash/wm/tablet_mode/tablet_mode_window_manager.h"
 #include "ash/wm/window_properties.h"
@@ -79,19 +79,19 @@ gfx::Rect GetCenteredBounds(const gfx::Rect& bounds_in_parent,
 
 // Returns the maximized/full screen and/or centered bounds of a window.
 gfx::Rect GetBoundsInTabletMode(WindowState* state_object) {
-  if (state_object->IsFullscreen() || state_object->IsPinned()) {
-    return screen_util::GetFullscreenWindowBoundsInParent(
-        state_object->window());
-  }
+  aura::Window* window = state_object->window();
+
+  if (state_object->IsFullscreen() || state_object->IsPinned())
+    return screen_util::GetFullscreenWindowBoundsInParent(window);
 
   if (state_object->GetStateType() == WindowStateType::kLeftSnapped) {
     return SplitViewController::Get(Shell::GetPrimaryRootWindow())
-        ->GetSnappedWindowBoundsInParent(SplitViewController::LEFT);
+        ->GetSnappedWindowBoundsInParent(SplitViewController::LEFT, window);
   }
 
   if (state_object->GetStateType() == WindowStateType::kRightSnapped) {
     return SplitViewController::Get(Shell::GetPrimaryRootWindow())
-        ->GetSnappedWindowBoundsInParent(SplitViewController::RIGHT);
+        ->GetSnappedWindowBoundsInParent(SplitViewController::RIGHT, window);
   }
 
   gfx::Rect bounds_in_parent;
@@ -154,7 +154,7 @@ bool IsTabDraggingSourceWindow(aura::Window* window) {
 // True if |window| is the top window in BuildWindowForCycleList.
 bool IsTopWindow(aura::Window* window) {
   DCHECK(window);
-  return window == TabletModeWindowManager::GetTopWindow();
+  return window == window_util::GetTopWindow();
 }
 
 bool IsSnapped(WindowStateType state) {
@@ -187,7 +187,8 @@ TabletModeWindowState::TabletModeWindowState(aura::Window* window,
       animate_bounds_on_attach_(animate_bounds_on_attach) {
   WindowState* state = WindowState::Get(window);
   current_state_type_ = state->GetStateType();
-  DCHECK(!snap || CanSnapInSplitview(window));
+  DCHECK(!snap || SplitViewController::Get(Shell::GetPrimaryRootWindow())
+                      ->CanSnapWindow(window));
   state_type_on_attach_ =
       snap ? current_state_type_ : GetMaximizedOrCenteredWindowType(state);
   // TODO(oshima|sammiequon): consider SplitView scenario.
@@ -195,6 +196,7 @@ TabletModeWindowState::TabletModeWindowState(aura::Window* window,
       window, entering_tablet_mode && !IsTopWindow(window)
                   ? WindowState::BoundsChangeAnimationType::STEP_END
                   : WindowState::BoundsChangeAnimationType::DEFAULT);
+  old_window_bounds_in_screen_ = window->GetBoundsInScreen();
   old_state_.reset(
       state->SetStateObject(std::unique_ptr<State>(this)).release());
 }
@@ -224,6 +226,27 @@ void TabletModeWindowState::LeaveTabletMode(WindowState* window_state,
       window_state->window(), animation_type);
   std::unique_ptr<WindowState::State> our_reference =
       window_state->SetStateObject(std::move(old_state_));
+}
+
+void TabletModeWindowState::CycleTabletSnap(
+    WindowState* window_state,
+    SplitViewController::SnapPosition snap_position) {
+  aura::Window* window = window_state->window();
+  SplitViewController* split_view_controller = SplitViewController::Get(window);
+  // If |window| is already snapped in |snap_position|, then unsnap |window|.
+  if (window == split_view_controller->GetSnappedWindow(snap_position)) {
+    UpdateWindow(window_state, GetMaximizedOrCenteredWindowType(window_state),
+                 /*animated=*/true);
+    return;
+  }
+  // If |window| can snap in split view, then snap |window| in |snap_position|.
+  if (split_view_controller->CanSnapWindow(window)) {
+    split_view_controller->SnapWindow(window, snap_position);
+    Shell::Get()->overview_controller()->StartOverview();
+    return;
+  }
+  // Otherwise, show the cannot snap toast.
+  ShowAppCannotSnapToast();
 }
 
 void TabletModeWindowState::OnWMEvent(WindowState* window_state,
@@ -260,8 +283,6 @@ void TabletModeWindowState::OnWMEvent(WindowState* window_state,
     case WM_EVENT_TOGGLE_VERTICAL_MAXIMIZE:
     case WM_EVENT_TOGGLE_HORIZONTAL_MAXIMIZE:
     case WM_EVENT_TOGGLE_MAXIMIZE:
-    case WM_EVENT_CYCLE_SNAP_LEFT:
-    case WM_EVENT_CYCLE_SNAP_RIGHT:
     case WM_EVENT_CENTER:
     case WM_EVENT_NORMAL:
     case WM_EVENT_MAXIMIZE:
@@ -285,6 +306,12 @@ void TabletModeWindowState::OnWMEvent(WindowState* window_state,
                    GetSnappedWindowStateType(window_state,
                                              WindowStateType::kRightSnapped),
                    false /* animated */);
+      return;
+    case WM_EVENT_CYCLE_SNAP_LEFT:
+      CycleTabletSnap(window_state, SplitViewController::LEFT);
+      return;
+    case WM_EVENT_CYCLE_SNAP_RIGHT:
+      CycleTabletSnap(window_state, SplitViewController::RIGHT);
       return;
     case WM_EVENT_MINIMIZE:
       UpdateWindow(window_state, WindowStateType::kMinimized,
@@ -456,7 +483,8 @@ WindowStateType TabletModeWindowState::GetSnappedWindowStateType(
     WindowStateType target_state) {
   DCHECK(target_state == WindowStateType::kLeftSnapped ||
          target_state == WindowStateType::kRightSnapped);
-  return CanSnapInSplitview(window_state->window())
+  return SplitViewController::Get(Shell::GetPrimaryRootWindow())
+                 ->CanSnapWindow(window_state->window())
              ? target_state
              : GetMaximizedOrCenteredWindowType(window_state);
 }

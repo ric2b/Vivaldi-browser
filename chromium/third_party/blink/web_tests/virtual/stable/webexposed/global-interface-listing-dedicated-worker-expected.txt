@@ -42,6 +42,11 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method match
 [Worker]     method matchAll
 [Worker]     setter onprogress
+[Worker] interface BarcodeDetector
+[Worker]     static method getSupportedFormats
+[Worker]     attribute @@toStringTag
+[Worker]     method constructor
+[Worker]     method detect
 [Worker] interface Blob
 [Worker]     attribute @@toStringTag
 [Worker]     getter size
@@ -107,6 +112,11 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     getter code
 [Worker]     getter reason
 [Worker]     getter wasClean
+[Worker]     method constructor
+[Worker] interface CompressionStream
+[Worker]     attribute @@toStringTag
+[Worker]     getter readable
+[Worker]     getter writable
 [Worker]     method constructor
 [Worker] interface CountQueuingStrategy
 [Worker]     attribute @@toStringTag
@@ -329,6 +339,11 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method constructor
 [Worker]     method contains
 [Worker]     method item
+[Worker] interface DecompressionStream
+[Worker]     attribute @@toStringTag
+[Worker]     getter readable
+[Worker]     getter writable
+[Worker]     method constructor
 [Worker] interface DedicatedWorkerGlobalScope : WorkerGlobalScope
 [Worker]     attribute @@toStringTag
 [Worker]     attribute PERSISTENT
@@ -601,6 +616,7 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker] interface IDBTransaction : EventTarget
 [Worker]     attribute @@toStringTag
 [Worker]     getter db
+[Worker]     getter durability
 [Worker]     getter error
 [Worker]     getter mode
 [Worker]     getter objectStoreNames
@@ -773,6 +789,7 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method fillText
 [Worker]     method getImageData
 [Worker]     method getLineDash
+[Worker]     method getTransform
 [Worker]     method isPointInPath
 [Worker]     method isPointInStroke
 [Worker]     method lineTo
@@ -910,6 +927,12 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     getter name
 [Worker]     method constructor
 [Worker]     method toJSON
+[Worker] interface PeriodicSyncManager
+[Worker]     attribute @@toStringTag
+[Worker]     method constructor
+[Worker]     method getTags
+[Worker]     method register
+[Worker]     method unregister
 [Worker] interface PermissionStatus : EventTarget
 [Worker]     attribute @@toStringTag
 [Worker]     getter onchange
@@ -1035,6 +1058,7 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     getter navigationPreload
 [Worker]     getter onupdatefound
 [Worker]     getter paymentManager
+[Worker]     getter periodicSync
 [Worker]     getter pushManager
 [Worker]     getter scope
 [Worker]     getter sync
@@ -1111,6 +1135,19 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     getter readable
 [Worker]     getter writable
 [Worker]     method constructor
+[Worker] interface TrustedTypePolicyFactory
+[Worker]     attribute @@toStringTag
+[Worker]     getter defaultPolicy
+[Worker]     getter emptyHTML
+[Worker]     getter emptyScript
+[Worker]     method constructor
+[Worker]     method createPolicy
+[Worker]     method getAttributeType
+[Worker]     method getPropertyType
+[Worker]     method getTypeMapping
+[Worker]     method isHTML
+[Worker]     method isScript
+[Worker]     method isScriptURL
 [Worker] interface URL
 [Worker]     static method createObjectURL
 [Worker]     static method revokeObjectURL
@@ -2591,6 +2628,7 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     getter origin
 [Worker]     getter performance
 [Worker]     getter self
+[Worker]     getter trustedTypes
 [Worker]     method atob
 [Worker]     method btoa
 [Worker]     method clearInterval
@@ -2645,6 +2683,7 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     attribute @@toStringTag
 [Worker]     getter locked
 [Worker]     method abort
+[Worker]     method close
 [Worker]     method constructor
 [Worker]     method getWriter
 [Worker] interface WritableStreamDefaultWriter

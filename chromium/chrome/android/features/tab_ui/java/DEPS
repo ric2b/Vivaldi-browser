@@ -1,8 +1,13 @@
 include_rules = [
- "+chrome/lib/lifecycle/public/android/java/src/org/chromium/chrome/browser/lifecycle",
- "+chrome/browser/ui/android/widget",
-
+ "+chrome/browser/android/lifecycle",
+ "+chrome/browser/profiles/android/java",
+ "+chrome/browser/ui/android/favicon/java",
+ "+chrome/browser/ui/messages/android/java",
+ "+chrome/browser/util",
+ "+components/browser_ui/styles/android",
+ "+components/browser_ui/widget/android",
  "+components/feature_engagement/public/android/java/src/org/chromium/components/feature_engagement",
+ "+components/search_engines/android/java/src/org/chromium/components/search_engines",
  "+components/module_installer",
 
  "+content/public/android/java/src/org/chromium/content_public/browser",

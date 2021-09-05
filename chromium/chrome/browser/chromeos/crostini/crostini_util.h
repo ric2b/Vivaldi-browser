@@ -12,7 +12,9 @@
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/optional.h"
-#include "storage/browser/fileapi/file_system_url.h"
+#include "base/values.h"
+#include "chrome/browser/chromeos/crostini/crostini_simple_types.h"
+#include "storage/browser/file_system/file_system_url.h"
 #include "ui/base/resource/scale_factor.h"
 
 namespace base {
@@ -45,6 +47,11 @@ struct ContainerId {
 };
 
 bool operator<(const ContainerId& lhs, const ContainerId& rhs) noexcept;
+bool operator==(const ContainerId& lhs, const ContainerId& rhs) noexcept;
+inline bool operator!=(const ContainerId& lhs,
+                       const ContainerId& rhs) noexcept {
+  return !(lhs == rhs);
+}
 
 std::ostream& operator<<(std::ostream& ostream,
                          const ContainerId& container_id);
@@ -55,24 +62,19 @@ using LaunchCrostiniAppCallback =
 // Checks if user profile is able to a crostini app with a given app_id.
 bool IsUninstallable(Profile* profile, const std::string& app_id);
 
-// Returns true if crostini is allowed to run for |profile|.
-// Otherwise, returns false, e.g. if crostini is not available on the device,
-// or it is in the flow to set up managed account creation.
-bool IsCrostiniAllowedForProfile(Profile* profile);
-
-// When |check_policy| is true, returns true if fully interactive crostini UI
-// may be shown. Implies crostini is allowed to run.
-// When check_policy is false, returns true if crostini UI is not forbidden by
-// hardware, flags, etc, even if it is forbidden by the enterprise policy. The
-// UI uses this to indicate that crostini is available but disabled by policy.
-bool IsCrostiniUIAllowedForProfile(Profile* profile, bool check_policy = true);
-
 // Returns whether the default Crostini VM is running for the user.
 bool IsCrostiniRunning(Profile* profile);
 
-// Returns whether infrastructure for applying Ansible playbook to default
-// Crostini container is enabled.
-bool IsCrostiniAnsibleInfrastructureEnabled();
+// Whether the user is able to perform a container upgrade.
+bool ShouldAllowContainerUpgrade(Profile* profile);
+
+// Returns whether default Crostini container should be configured according to
+// the configuration specified by CrostiniAnsiblePlaybook user policy.
+bool ShouldConfigureDefaultContainer(Profile* profile);
+
+// Returns whether a dialog from Crostini is blocking the immediate launch.
+bool MaybeShowCrostiniDialogBeforeLaunch(Profile* profile,
+                                         CrostiniResult result);
 
 // Launches the Crostini app with ID of |app_id| on the display with ID of
 // |display_id|. |app_id| should be a valid Crostini app list id.
@@ -126,17 +128,14 @@ enum class CrostiniUISurface { kSettings = 0, kAppList = 1, kCount };
 // See chrome/browser/ui/views/crostini for implementation of the ShowXXX
 // functions below.
 
-// Shows the Crostini Installer dialog.
-void ShowCrostiniInstallerView(Profile* profile, CrostiniUISurface ui_surface);
 // Shows the Crostini Uninstaller dialog.
 void ShowCrostiniUninstallerView(Profile* profile,
                                  CrostiniUISurface ui_surface);
+bool IsCrostiniRecoveryViewShowing();
+
 // Shows the Crostini App installer dialog.
 void ShowCrostiniAppInstallerView(Profile* profile,
                                   const LinuxPackageInfo& package_info);
-// Shows the Crostini App Uninstaller dialog.
-void ShowCrostiniAppUninstallerView(Profile* profile,
-                                    const std::string& app_id);
 // Shows the Crostini force-close dialog. If |app_name| is nonempty, the dialog
 // will include the window's name as text. Returns a handle to that dialog, so
 // that we can add observers to the dialog itself.
@@ -146,45 +145,65 @@ views::Widget* ShowCrostiniForceCloseDialog(
     base::OnceClosure force_close_callback);
 // Shows the Crostini Termina Upgrade dialog (for blocking crostini start until
 // Termina version matches).
-void ShowCrostiniUpgradeView(Profile* profile, CrostiniUISurface ui_surface);
+void ShowCrostiniUpdateComponentView(Profile* profile,
+                                     CrostiniUISurface ui_surface);
+// Shows the ui with the error message when installing a package fails.
+void ShowCrostiniPackageInstallFailureView(const std::string& error_message);
 
 // Shows the Crostini Container Upgrade dialog (for running upgrades in the
 // container).
-void ShowCrostiniUpgradeContainerView(Profile* profile,
+void ShowCrostiniUpdateFilesystemView(Profile* profile,
                                       CrostiniUISurface ui_surface);
 // Show the Crostini Container Upgrade dialog after a delay
-// (CloseCrostiniUpgradeContainerView will cancel the next dialog show).
-void PrepareShowCrostiniUpgradeContainerView(Profile* profile,
+// (CloseCrostiniUpdateFilesystemView will cancel the next dialog show).
+void PrepareShowCrostiniUpdateFilesystemView(Profile* profile,
                                              CrostiniUISurface ui_surface);
-// Closes the current CrostiniUpgradeContainerView or ensures that the view will
-// not open until PrepareShowCrostiniUpgradeContainerView is called again.
-void CloseCrostiniUpgradeContainerView();
+// Closes the current CrostiniUpdateFilesystemView or ensures that the view will
+// not open until PrepareShowCrostiniUpdateFilesystemView is called again.
+void CloseCrostiniUpdateFilesystemView();
 
-// Show the Crostini Software Config Upgrade dialog (for installing Ansible and
+// Show the Crostini Software Config dialog (for installing Ansible and
 // applying an Ansible playbook in the container).
 void ShowCrostiniAnsibleSoftwareConfigView(Profile* profile);
+
+// Show the Crostini Recovery dialog when Crostini is still running after a
+// Chrome crash. Returns false if recovery terminal can be launched.
+bool ShowCrostiniRecoveryView(Profile* profile,
+                              CrostiniUISurface ui_surface,
+                              const std::string& app_id,
+                              int64_t display_id,
+                              LaunchCrostiniAppCallback callback);
+
+// Returns App ID of the terminal app which is either the older crosh-based
+// terminal, or the new Terminal System App if the TerminalSystemApp feature
+// is enabled.
+const std::string& GetTerminalId();
+
+// Returns the alternative terminal ID to |GetTerminalId|.  This is used when
+// migrating terminals when TerminalSystemApp feature changes.
+const std::string& GetDeletedTerminalId();
 
 // We use an arbitrary well-formed extension id for the Terminal app, this
 // is equal to GenerateId("Terminal").
 constexpr char kCrostiniTerminalId[] = "oajcgpnkmhaalajejhlfpacbiokdnnfe";
+// web_app::GenerateAppIdFromURL(
+//     GURL("chrome-untrusted://terminal/html/terminal.html"))
+constexpr char kCrostiniTerminalSystemAppId[] =
+    "fhicihalidkgcimdmhpohldehjmcabcf";
 
 constexpr char kCrostiniDefaultVmName[] = "termina";
 constexpr char kCrostiniDefaultContainerName[] = "penguin";
 constexpr char kCrostiniDefaultUsername[] = "emperor";
-constexpr char kCrostiniCroshBuiltinAppId[] =
-    "nkoccljplnhpfnfiajclkommnmllphnl";
 // In order to be compatible with sync folder id must match standard.
 // Generated using crx_file::id_util::GenerateId("LinuxAppsFolder")
 constexpr char kCrostiniFolderId[] = "ddolnhmblagmcagkedkbfejapapdimlk";
 constexpr char kCrostiniDefaultImageServerUrl[] =
     "https://storage.googleapis.com/cros-containers/%d";
-constexpr char kCrostiniDefaultImageAlias[] = "debian/stretch";
+constexpr char kCrostiniStretchImageAlias[] = "debian/stretch";
+constexpr char kCrostiniBusterImageAlias[] = "debian/buster";
+
 constexpr base::FilePath::CharType kHomeDirectory[] =
     FILE_PATH_LITERAL("/home");
-
-// Whether running Crostini is allowed for unaffiliated users per enterprise
-// policy.
-bool IsUnaffiliatedCrostiniAllowedByPolicy();
 
 // Add a newly created LXD container to the kCrostiniContainers pref
 void AddNewLxdContainerToPrefs(Profile* profile,
@@ -201,6 +220,26 @@ void RemoveLxdContainerFromPrefs(Profile* profile,
 // left for an operation to run which started and time |start| and is current
 // at |percent| way through.
 base::string16 GetTimeRemainingMessage(base::TimeTicks start, int percent);
+
+// Splits the range between |min_size| and |available_space| into enough
+// evenly-spaced intervals you can use them as ticks on a slider. Will return an
+// empty set if the range is invalid (e.g. any numbers are negative).
+// The number of ticks will fit in a signed integer.
+std::vector<int64_t> GetTicksForDiskSize(int64_t min_size,
+                                         int64_t available_space);
+
+// Returns a pref value stored for a specific container.
+const base::Value* GetContainerPrefValue(Profile* profile,
+                                         const ContainerId& container_id,
+                                         const std::string& key);
+
+// Sets a pref value for a specific container.
+void UpdateContainerPref(Profile* profile,
+                         const ContainerId& container_id,
+                         const std::string& key,
+                         base::Value value);
+
+const ContainerId& DefaultContainerId();
 
 }  // namespace crostini
 

@@ -6,7 +6,6 @@
 
 #include <fcntl.h>
 #include <sys/mman.h>
-#include <sys/stat.h>
 
 #include "base/files/file.h"
 #include "base/files/file_util.h"
@@ -18,12 +17,6 @@ namespace base {
 namespace subtle {
 
 namespace {
-
-#if !defined(OS_NACL)
-void LogCreateError(PlatformSharedMemoryRegion::CreateError error) {
-  UMA_HISTOGRAM_ENUMERATION("SharedMemory.CreateError", error);
-}
-#endif
 
 struct ScopedPathUnlinkerTraits {
   static const FilePath* InvalidValue() { return nullptr; }
@@ -139,20 +132,6 @@ PlatformSharedMemoryRegion PlatformSharedMemoryRegion::Take(
   return Take(ScopedFDPair(std::move(handle), ScopedFD()), mode, size, guid);
 }
 
-// static
-PlatformSharedMemoryRegion
-PlatformSharedMemoryRegion::TakeFromSharedMemoryHandle(
-    const SharedMemoryHandle& handle,
-    Mode mode) {
-  CHECK(mode == Mode::kReadOnly || mode == Mode::kUnsafe);
-  if (!handle.IsValid())
-    return {};
-
-  return Take(
-      base::subtle::ScopedFDPair(ScopedFD(handle.GetHandle()), ScopedFD()),
-      mode, handle.GetSize(), handle.GetGUID());
-}
-
 FDPair PlatformSharedMemoryRegion::GetPlatformHandle() const {
   return handle_.get();
 }
@@ -234,12 +213,10 @@ PlatformSharedMemoryRegion PlatformSharedMemoryRegion::Create(Mode mode,
   return {};
 #else
   if (size == 0) {
-    LogCreateError(PlatformSharedMemoryRegion::CreateError::SIZE_ZERO);
     return {};
   }
 
   if (size > static_cast<size_t>(std::numeric_limits<int>::max())) {
-    LogCreateError(PlatformSharedMemoryRegion::CreateError::SIZE_TOO_LARGE);
     return {};
   }
 
@@ -261,8 +238,6 @@ PlatformSharedMemoryRegion PlatformSharedMemoryRegion::Create(Mode mode,
           false /* executable */,
 #endif
           &directory)) {
-    LogCreateError(
-        PlatformSharedMemoryRegion::CreateError::GET_SHMEM_TEMP_DIR_FAILURE);
     return {};
   }
 
@@ -271,8 +246,6 @@ PlatformSharedMemoryRegion PlatformSharedMemoryRegion::Create(Mode mode,
   File shm_file(fd.release());
 
   if (!shm_file.IsValid()) {
-    LogCreateError(
-        PlatformSharedMemoryRegion::CreateError::CREATE_FILE_MAPPING_FAILURE);
     PLOG(ERROR) << "Creating shared memory in " << path.value() << " failed";
     FilePath dir = path.DirName();
     if (access(dir.value().c_str(), W_OK | X_OK) < 0) {
@@ -295,43 +268,35 @@ PlatformSharedMemoryRegion PlatformSharedMemoryRegion::Create(Mode mode,
     // Also open as readonly so that we can ConvertToReadOnly().
     readonly_fd.reset(HANDLE_EINTR(open(path.value().c_str(), O_RDONLY)));
     if (!readonly_fd.is_valid()) {
-      LogCreateError(
-          PlatformSharedMemoryRegion::CreateError::REDUCE_PERMISSIONS_FAILURE);
       DPLOG(ERROR) << "open(\"" << path.value() << "\", O_RDONLY) failed";
       return {};
     }
   }
 
   if (!AllocateFileRegion(&shm_file, 0, size)) {
-    LogCreateError(
-        PlatformSharedMemoryRegion::CreateError::ALLOCATE_FILE_REGION_FAILURE);
     return {};
   }
 
   if (readonly_fd.is_valid()) {
-    struct stat stat = {};
-    if (fstat(shm_file.GetPlatformFile(), &stat) != 0) {
-      LogCreateError(PlatformSharedMemoryRegion::CreateError::FSTAT_FAILURE);
+    stat_wrapper_t shm_stat;
+    if (File::Fstat(shm_file.GetPlatformFile(), &shm_stat) != 0) {
       DPLOG(ERROR) << "fstat(fd) failed";
       return {};
     }
 
-    struct stat readonly_stat = {};
-    if (fstat(readonly_fd.get(), &readonly_stat) != 0) {
-      LogCreateError(PlatformSharedMemoryRegion::CreateError::FSTAT_FAILURE);
+    stat_wrapper_t readonly_stat;
+    if (File::Fstat(readonly_fd.get(), &readonly_stat) != 0) {
       DPLOG(ERROR) << "fstat(readonly_fd) failed";
       return {};
     }
 
-    if (stat.st_dev != readonly_stat.st_dev ||
-        stat.st_ino != readonly_stat.st_ino) {
-      LogCreateError(PlatformSharedMemoryRegion::CreateError::INODES_MISMATCH);
+    if (shm_stat.st_dev != readonly_stat.st_dev ||
+        shm_stat.st_ino != readonly_stat.st_ino) {
       LOG(ERROR) << "Writable and read-only inodes don't match; bailing";
       return {};
     }
   }
 
-  LogCreateError(PlatformSharedMemoryRegion::CreateError::SUCCESS);
   return PlatformSharedMemoryRegion(
       {ScopedFD(shm_file.TakePlatformFile()), std::move(readonly_fd)}, mode,
       size, UnguessableToken::Create());

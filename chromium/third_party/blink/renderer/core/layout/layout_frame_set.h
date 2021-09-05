@@ -132,9 +132,15 @@ class LayoutFrameSet final : public LayoutBox {
 
   void UpdateLayout() override;
   void Paint(const PaintInfo&) const override;
-  void ComputePreferredLogicalWidths() override;
+
+  MinMaxSizes PreferredLogicalWidths() const override { return MinMaxSizes(); }
+  MinMaxSizes ComputeIntrinsicLogicalWidths() const final {
+    NOTREACHED();
+    return MinMaxSizes();
+  }
+
   bool IsChildAllowed(LayoutObject*, const ComputedStyle&) const override;
-  CursorDirective GetCursor(const PhysicalOffset&, Cursor&) const override;
+  CursorDirective GetCursor(const PhysicalOffset&, ui::Cursor&) const override;
 
   void SetIsResizing(bool);
 
@@ -149,17 +155,12 @@ class LayoutFrameSet final : public LayoutBox {
   void StartResizing(GridAxis&, int position);
   void ContinueResizing(GridAxis&, int position);
 
-  bool PaintedOutputOfObjectHasNoEffectRegardlessOfSize() const override {
-    return false;
-  }
-
   LayoutObjectChildList children_;
 
   GridAxis rows_;
   GridAxis cols_;
 
   bool is_resizing_;
-  bool is_child_resizing_;
 };
 
 DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutFrameSet, IsFrameSet());

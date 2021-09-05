@@ -13,6 +13,7 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
@@ -20,18 +21,21 @@
 #include "base/numerics/safe_conversions.h"
 #include "base/numerics/safe_math.h"
 #include "base/strings/stringprintf.h"
+#include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/trace_event.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
-#include "mojo/public/cpp/bindings/remote.h"
 #include "storage/browser/blob/blob_data_builder.h"
 #include "storage/browser/blob/blob_data_item.h"
 #include "storage/browser/blob/blob_data_snapshot.h"
 #include "storage/browser/blob/blob_impl.h"
 #include "storage/browser/blob/shareable_blob_data_item.h"
+#include "storage/browser/blob/write_blob_to_file.h"
 #include "third_party/blink/public/common/blob/blob_utils.h"
+#include "third_party/blink/public/mojom/blob/data_element.mojom.h"
 #include "url/gurl.h"
 
 namespace storage {
@@ -41,15 +45,18 @@ using QuotaAllocationTask = BlobMemoryController::QuotaAllocationTask;
 }  // namespace
 
 BlobStorageContext::BlobStorageContext()
-    : memory_controller_(base::FilePath(), scoped_refptr<base::TaskRunner>()) {
+    : profile_directory_(base::FilePath()),
+      memory_controller_(base::FilePath(), scoped_refptr<base::TaskRunner>()) {
   base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
       this, "BlobStorageContext", base::ThreadTaskRunnerHandle::Get());
 }
 
 BlobStorageContext::BlobStorageContext(
-    base::FilePath storage_directory,
+    const base::FilePath& profile_directory,
+    const base::FilePath& storage_directory,
     scoped_refptr<base::TaskRunner> file_runner)
-    : memory_controller_(std::move(storage_directory), std::move(file_runner)) {
+    : profile_directory_(profile_directory),
+      memory_controller_(storage_directory, std::move(file_runner)) {
   base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
       this, "BlobStorageContext", base::ThreadTaskRunnerHandle::Get());
 }
@@ -239,6 +246,42 @@ std::unique_ptr<BlobDataHandle> BlobStorageContext::BuildBlobInternal(
   UMA_HISTOGRAM_COUNTS_1M("Storage.Blob.TotalUnsharedSize",
                           total_memory_needed / 1024);
 
+  std::vector<scoped_refptr<BlobDataItem>> items_needing_timestamp;
+  std::vector<base::FilePath> file_paths_needing_timestamp;
+  for (auto& item : entry->items_) {
+    if (item->item()->type() == BlobDataItem::Type::kFile &&
+        !item->item()->IsFutureFileItem() &&
+        item->item()->expected_modification_time().is_null()) {
+      items_needing_timestamp.push_back(item->item());
+      file_paths_needing_timestamp.push_back(item->item()->path());
+    }
+  }
+  if (!items_needing_timestamp.empty()) {
+    // Blob construction isn't blocked on getting these timestamps. The created
+    // blob will be fully functional whether or not timestamps are set. When
+    // the timestamp isn't set the blob just won't be able to detect the file
+    // on disk changing after the blob is created.
+    base::ThreadPool::PostTaskAndReplyWithResult(
+        FROM_HERE, {base::MayBlock()},
+        base::BindOnce(
+            [](std::vector<base::FilePath> paths) {
+              std::vector<base::Time> result;
+              result.reserve(paths.size());
+              for (const auto& path : paths) {
+                base::File::Info info;
+                if (!base::GetFileInfo(path, &info)) {
+                  result.emplace_back();
+                  continue;
+                }
+                result.push_back(info.last_modified);
+              }
+              return result;
+            },
+            std::move(file_paths_needing_timestamp)),
+        base::BindOnce(&BlobDataItem::SetFileModificationTimes,
+                       std::move(items_needing_timestamp)));
+  }
+
   size_t num_building_dependent_blobs = 0;
   std::vector<std::unique_ptr<BlobDataHandle>> dependent_blobs;
   // We hold a handle to all blobs we're using. This is important, as our memory
@@ -368,6 +411,11 @@ void BlobStorageContext::NotifyTransportComplete(const std::string& uuid) {
   CHECK(entry) << "There is no blob entry with uuid " << uuid;
   DCHECK(BlobStatusIsPending(entry->status()));
   NotifyTransportCompleteInternal(entry);
+}
+
+void BlobStorageContext::Bind(
+    mojo::PendingReceiver<mojom::BlobStorageContext> receiver) {
+  receivers_.Add(this, std::move(receiver));
 }
 
 void BlobStorageContext::IncrementBlobRefCount(const std::string& uuid) {
@@ -503,7 +551,7 @@ void BlobStorageContext::FinishBuilding(BlobEntry* entry) {
       switch (copy.source_item->item()->type()) {
         case BlobDataItem::Type::kBytes: {
           DCHECK_EQ(dest_type, BlobDataItem::Type::kBytesDescription);
-          base::span<const char> src_data =
+          base::span<const uint8_t> src_data =
               copy.source_item->item()->bytes().subspan(copy.source_item_offset,
                                                         dest_size);
           copy.dest_item->item()->PopulateBytes(src_data);
@@ -656,6 +704,80 @@ bool BlobStorageContext::OnMemoryDump(
   if (system_allocator_name)
     pmd->AddSuballocation(mad->guid(), system_allocator_name);
   return true;
+}
+
+void BlobStorageContext::RegisterFromDataItem(
+    mojo::PendingReceiver<::blink::mojom::Blob> blob,
+    const std::string& uuid,
+    mojom::BlobDataItemPtr item) {
+  if (registry_.HasEntry(uuid)) {
+    receivers_.ReportBadMessage("duplicate uuid");
+    return;
+  }
+  std::unique_ptr<BlobDataBuilder> builder =
+      std::make_unique<BlobDataBuilder>(uuid);
+  if (!item->content_type.empty())
+    builder->set_content_type(item->content_type);
+  builder->AppendMojoDataItem(std::move(item));
+  std::unique_ptr<BlobDataHandle> handle = AddFinishedBlob(std::move(builder));
+  BlobImpl::Create(std::move(handle), std::move(blob));
+}
+
+void BlobStorageContext::RegisterFromMemory(
+    mojo::PendingReceiver<::blink::mojom::Blob> blob,
+    const std::string& uuid,
+    mojo_base::BigBuffer data) {
+  if (registry_.HasEntry(uuid)) {
+    receivers_.ReportBadMessage("duplicate uuid");
+    return;
+  }
+
+  std::unique_ptr<BlobDataBuilder> builder =
+      std::make_unique<BlobDataBuilder>(uuid);
+  builder->AppendData(data.byte_span());
+  std::unique_ptr<BlobDataHandle> handle = AddFinishedBlob(std::move(builder));
+  BlobImpl::Create(std::move(handle), std::move(blob));
+}
+
+void BlobStorageContext::WriteBlobToFile(
+    mojo::PendingRemote<::blink::mojom::Blob> pending_blob,
+    const base::FilePath& file_path,
+    bool flush_on_write,
+    base::Optional<base::Time> last_modified,
+    BlobStorageContext::WriteBlobToFileCallback callback) {
+  DCHECK(!last_modified || !last_modified.value().is_null());
+  if (profile_directory_.empty()) {
+    std::move(callback).Run(mojom::WriteBlobToFileResult::kBadPath);
+    return;
+  }
+  if (file_path.ReferencesParent()) {
+    std::move(callback).Run(mojom::WriteBlobToFileResult::kBadPath);
+    return;
+  }
+  if (!profile_directory_.IsParent(file_path)) {
+    std::move(callback).Run(mojom::WriteBlobToFileResult::kBadPath);
+    return;
+  }
+
+  GetBlobDataFromBlobRemote(
+      std::move(pending_blob),
+      base::BindOnce(
+          [](base::WeakPtr<BlobStorageContext> blob_context,
+             const base::FilePath& file_path, bool flush_on_write,
+             base::Optional<base::Time> last_modified,
+             BlobStorageContext::WriteBlobToFileCallback callback,
+             std::unique_ptr<BlobDataHandle> handle) {
+            if (!handle || !blob_context) {
+              std::move(callback).Run(
+                  mojom::WriteBlobToFileResult::kInvalidBlob);
+              return;
+            }
+            storage::WriteBlobToFile(std::move(handle), file_path,
+                                     flush_on_write, last_modified,
+                                     std::move(callback));
+          },
+          AsWeakPtr(), file_path, flush_on_write, last_modified,
+          std::move(callback)));
 }
 
 }  // namespace storage

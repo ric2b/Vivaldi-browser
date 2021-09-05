@@ -41,7 +41,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/resource_coordinator/tab_lifecycle_unit_external.h"
 #include "chrome/browser/resource_coordinator/tab_manager.h"
-#include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
 #include "chrome/browser/ui/apps/chrome_app_delegate.h"
 #include "chrome/browser/ui/browser.h"
@@ -63,6 +62,7 @@
 #include "chrome/common/url_constants.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
+#include "components/sessions/content/session_tab_helper.h"
 #include "components/translate/core/browser/language_state.h"
 #include "components/translate/core/common/language_detection_details.h"
 #include "components/zoom/zoom_controller.h"
@@ -522,6 +522,9 @@ ExtensionFunction::ResponseAction WindowsCreateFunction::Run() {
       if (ExtensionTabUtil::IsKillURL(url))
         return RespondNow(Error(tabs_constants::kNoCrashBrowserError));
       urls.push_back(url);
+
+      // Log if this navigation looks like it is to a devtools URL.
+      ExtensionTabUtil::LogPossibleDevtoolsSchemeNavigation(url);
     }
   }
 
@@ -595,9 +598,8 @@ ExtensionFunction::ResponseAction WindowsCreateFunction::Run() {
 
     // Initialize default window bounds according to window type.
     ui::WindowShowState ignored_show_state = ui::SHOW_STATE_DEFAULT;
-    WindowSizer::GetBrowserWindowBoundsAndShowState(std::string(), gfx::Rect(),
-                                                    nullptr, &window_bounds,
-                                                    &ignored_show_state);
+    WindowSizer::GetBrowserWindowBoundsAndShowState(
+        gfx::Rect(), nullptr, &window_bounds, &ignored_show_state);
 
     // Any part of the bounds can optionally be set by the caller.
     if (create_data->left)
@@ -702,9 +704,8 @@ ExtensionFunction::ResponseAction WindowsCreateFunction::Run() {
     }
   }
   // Create a new tab if the created window is still empty. Don't create a new
-  // tab when it is intended to create an empty popup, or vivaldi view.
-  if (!contents && urls.empty() && window_type == Browser::TYPE_NORMAL &&
-      !is_vivaldi) {
+  // tab when it is intended to create an empty popup.
+  if (!contents && urls.empty() && window_type == Browser::TYPE_NORMAL) {
     chrome::NewTab(new_window);
   }
   chrome::SelectNumberedTab(new_window, 0, {TabStripModel::GestureType::kNone});
@@ -950,7 +951,6 @@ ExtensionFunction::ResponseAction TabsQueryFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   bool loading_status_set = params->query_info.status != tabs::TAB_STATUS_NONE;
-  bool loading = params->query_info.status == tabs::TAB_STATUS_LOADING;
 
   URLPatternSet url_patterns;
   if (params->query_info.url.get()) {
@@ -1107,8 +1107,11 @@ ExtensionFunction::ResponseAction TabsQueryFunction::Run() {
         }
       }
 
-      if (loading_status_set && loading != web_contents->IsLoading())
+      if (loading_status_set &&
+          params->query_info.status !=
+              ExtensionTabUtil::GetLoadingStatus(web_contents)) {
         continue;
+      }
 
       result->Append(CreateTabObjectHelper(web_contents, extension(),
                                            source_context_type(), tab_strip, i)
@@ -1306,7 +1309,7 @@ ExtensionFunction::ResponseAction TabsUpdateFunction::Run() {
     contents = browser->tab_strip_model()->GetActiveWebContents();
     if (!contents)
       return RespondNow(Error(tabs_constants::kNoSelectedTabError));
-    tab_id = SessionTabHelper::IdForTab(contents).id();
+    tab_id = sessions::SessionTabHelper::IdForTab(contents).id();
   } else {
     tab_id = *params->tab_id;
   }
@@ -1431,6 +1434,9 @@ bool TabsUpdateFunction::UpdateURL(const std::string& url_string,
     return false;
   }
 
+  // Log if this navigation looks like it is to a devtools URL.
+  ExtensionTabUtil::LogPossibleDevtoolsSchemeNavigation(url);
+
   const bool is_javascript_scheme = url.SchemeIs(url::kJavaScriptScheme);
   UMA_HISTOGRAM_BOOLEAN("Extensions.ApiTabUpdateJavascript",
                         is_javascript_scheme);
@@ -1446,8 +1452,14 @@ bool TabsUpdateFunction::UpdateURL(const std::string& url_string,
   // does not show in the omnibox until it commits.  This avoids URL spoofs
   // since URLs can be opened on behalf of untrusted content.
   load_params.is_renderer_initiated = true;
+  // All renderer-initiated navigations need to have an initiator origin.
   load_params.initiator_origin = url::Origin::Create(
       Extension::GetBaseURLFromExtensionId(extension()->id()));
+  // |source_site_instance| needs to be set so that a renderer process
+  // compatible with |initiator_origin| is picked by Site Isolation.
+  load_params.source_site_instance = content::SiteInstance::CreateForURL(
+      web_contents_->GetBrowserContext(),
+      load_params.initiator_origin->GetURL());
 
   web_contents_->GetController().LoadURLWithParams(load_params);
 
@@ -1779,7 +1791,7 @@ WebContents* TabsCaptureVisibleTabFunction::GetWebContentsForID(
 
   if (!extension()->permissions_data()->CanCaptureVisiblePage(
           contents->GetLastCommittedURL(),
-          SessionTabHelper::IdForTab(contents).id(), error,
+          sessions::SessionTabHelper::IdForTab(contents).id(), error,
           extensions::CaptureRequirement::kActiveTabOrAllUrls)) {
     return nullptr;
   }

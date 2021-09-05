@@ -35,7 +35,7 @@ VideoDecoderConfig CreateFakeVideoConfig() {
   return VideoDecoderConfig(
       kCodecH264, H264PROFILE_MAIN, VideoDecoderConfig::AlphaMode::kIsOpaque,
       VideoColorSpace(), kNoTransformation, coded_size, visible_rect,
-      natural_size, EmptyExtraData(), Unencrypted());
+      natural_size, EmptyExtraData(), EncryptionScheme::kUnencrypted);
 }
 
 BufferQueue GenerateFakeBuffers(const int* frame_pts_ms,
@@ -82,11 +82,10 @@ class EsAdapterVideoTest : public testing::Test {
 };
 
 EsAdapterVideoTest::EsAdapterVideoTest()
-    : es_adapter_(base::Bind(&EsAdapterVideoTest::OnNewConfig,
-                             base::Unretained(this)),
-                  base::Bind(&EsAdapterVideoTest::OnNewBuffer,
-                             base::Unretained(this))) {
-}
+    : es_adapter_(base::BindRepeating(&EsAdapterVideoTest::OnNewConfig,
+                                      base::Unretained(this)),
+                  base::BindRepeating(&EsAdapterVideoTest::OnNewBuffer,
+                                      base::Unretained(this))) {}
 
 void EsAdapterVideoTest::OnNewConfig(const VideoDecoderConfig& video_config) {
 }

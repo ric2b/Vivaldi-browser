@@ -4,8 +4,8 @@
 
 import logging
 import re
+import sys
 
-from telemetry.core import android_platform
 from telemetry.testing import serially_executed_browser_test_case
 from telemetry.util import screenshot
 from typ import json_results
@@ -164,7 +164,7 @@ class GpuIntegrationTest(
 
   def _RunGpuTest(self, url, test_name, *args):
     expected_results, should_retry_on_failure = (
-        self.GetExpectationsForTest())
+        self.GetExpectationsForTest()[:2])
     try:
       # TODO(nednguyen): For some reason the arguments are getting wrapped
       # in another tuple sometimes (like in the WebGL extension tests).
@@ -172,9 +172,13 @@ class GpuIntegrationTest(
       # generator?
       if len(args) == 1 and isinstance(args[0], tuple):
         args = args[0]
+      expected_crashes = self.GetExpectedCrashes(args)
       self.RunActualGpuTest(url, *args)
     except Exception:
       if ResultType.Failure in expected_results or should_retry_on_failure:
+        # We don't check the return value here since we'll be raising the
+        # caught exception already.
+        self._ClearExpectedCrashes(expected_crashes)
         if should_retry_on_failure:
           logging.exception('Exception while running flaky test %s', test_name)
           # For robustness, shut down the browser and restart it
@@ -199,23 +203,104 @@ class GpuIntegrationTest(
         # stacks could slow down the tests' running time unacceptably.
         # We also don't do this if the browser failed to startup.
         if self.browser is not None:
-          # TODO(https://crbug.com/1008075): Remove this split once stack
-          # symbolization is standardized across all platforms.
-          if isinstance(self.browser.platform,
-              android_platform.AndroidPlatform):
-            _, output = self.browser.GetStackTrace()
-            logging.error(output)
-          else:
-            self.browser.LogSymbolizedUnsymbolizedMinidumps(logging.ERROR)
+          self.browser.CollectDebugData(logging.ERROR)
         # This failure might have been caused by a browser or renderer
         # crash, so restart the browser to make sure any state doesn't
         # propagate to the next test iteration.
         self._RestartBrowser('unexpected test failure')
-      self.fail()
+      raise
     else:
+      # We always want to clear any expected crashes, but we don't bother
+      # failing the test if it's expected to fail.
+      actual_and_expected_crashes_match = self._ClearExpectedCrashes(
+          expected_crashes)
       if ResultType.Failure in expected_results:
         logging.warning(
           '%s was expected to fail, but passed.\n', test_name)
+      else:
+        if not actual_and_expected_crashes_match:
+          raise RuntimeError('Actual and expected crashes did not match')
+
+  def _IsIntel(self, vendor_id):
+    return vendor_id == 0x8086
+
+  def _IsIntelGPUActive(self):
+    gpu = self.browser.GetSystemInfo().gpu
+    # The implementation of GetSystemInfo guarantees that the first entry in the
+    # GPU devices list is the active GPU.
+    return self._IsIntel(gpu.devices[0].vendor_id)
+
+  def _IsDualGPUMacLaptop(self):
+    if sys.platform != 'darwin':
+      return False
+    system_info = self.browser.GetSystemInfo()
+    if not system_info:
+      self.fail("Browser doesn't support GetSystemInfo")
+    gpu = system_info.gpu
+    if not gpu:
+      self.fail('Target machine must have a GPU')
+    if len(gpu.devices) != 2:
+      return False
+    if (self._IsIntel(gpu.devices[0].vendor_id) and not
+        self._IsIntel(gpu.devices[1].vendor_id)):
+      return True
+    if (not self._IsIntel(gpu.devices[0].vendor_id) and
+        self._IsIntel(gpu.devices[1].vendor_id)):
+      return True
+    return False
+
+  def _ClearExpectedCrashes(self, expected_crashes):
+    """Clears any expected crash minidumps so they're not caught later.
+
+    Args:
+      expected_crashes: A dictionary mapping crash types as strings to the
+          number of expected crashes of that type.
+
+    Returns:
+      True if the actual number of crashes matched the expected number,
+      otherwise False.
+    """
+    # We can't get crashes if we don't have a browser.
+    if self.browser is None:
+      return True
+    # TODO(crbug.com/1006331): Properly match type once we have a way of
+    # checking the crashed process type without symbolizing the minidump.
+    total_expected_crashes = sum(expected_crashes.values())
+    # The Telemetry-wide cleanup will handle any remaining minidumps, so early
+    # return here since we don't expect any, which saves us a bit of work.
+    if total_expected_crashes == 0:
+      return True
+    unsymbolized_minidumps = self.browser.GetAllUnsymbolizedMinidumpPaths()
+    total_unsymbolized_minidumps = len(unsymbolized_minidumps)
+
+    if total_expected_crashes == total_unsymbolized_minidumps:
+      for path in unsymbolized_minidumps:
+        self.browser.IgnoreMinidump(path)
+      return True
+
+    logging.error(
+        'Found %d unsymbolized minidumps when we expected %d. Expected '
+        'crash breakdown: %s', total_unsymbolized_minidumps,
+        total_expected_crashes, expected_crashes)
+    return False
+
+  def GetExpectedCrashes(self, args):
+    """Returns which crashes, per process type, to expect for the current test.
+
+    Should be overridden by child classes to actually return valid data if
+    available.
+
+    Args:
+      args: The list passed to _RunGpuTest()
+
+    Returns:
+      A dictionary mapping crash types as strings to the number of expected
+      crashes of that type. Examples include 'gpu' for the GPU process,
+      'renderer' for the renderer process, and 'browser' for the browser
+      process.
+    """
+    del args
+    return {}
 
   @classmethod
   def GenerateGpuTests(cls, options):
@@ -280,7 +365,7 @@ class GpuIntegrationTest(
     This configuration is collected on Windows platform only.
     The rules to determine bot config are:
       1) DX12: Win7 doesn't support DX12. Only Win10 supports DX12
-      2) Vulkan: All bots support Vulkan except for Win FYI AMD bots
+      2) Vulkan: All bots support Vulkan.
     """
     if self.browser is None:
       raise Exception("Browser doesn't exist")
@@ -291,7 +376,6 @@ class GpuIntegrationTest(
     if gpu is None:
       raise Exception("System Info doesn't have a gpu")
     gpu_vendor_id = gpu.vendor_id
-    gpu_device_id = gpu.device_id
     assert gpu_vendor_id in _SUPPORTED_WIN_GPU_VENDORS
 
     os_version = self.browser.platform.GetOSVersionName()
@@ -307,11 +391,6 @@ class GpuIntegrationTest(
 
     if os_version == 'win7':
       config['supports_dx12'] = False
-
-    # "Win7 FYI Release (AMD)" and "Win7 FYI Debug (AMD)" bots
-    if (os_version == 'win7' and gpu_vendor_id == 0x1002
-        and gpu_device_id == 0x6613):
-      config['supports_vulkan'] = False
 
     return config
 
@@ -338,24 +417,31 @@ class GpuIntegrationTest(
     tags = super(GpuIntegrationTest, cls).GetPlatformTags(browser)
     system_info = browser.GetSystemInfo()
     if system_info:
+      gpu_tags = []
       gpu_info = system_info.gpu
-      gpu_vendor = gpu_helper.GetGpuVendorString(gpu_info)
-      gpu_device_id = gpu_helper.GetGpuDeviceId(gpu_info)
-      # The gpu device id tag will contain both the vendor and device id
-      # separated by a '-'.
-      try:
-        # If the device id is an integer then it will be added as
-        # a hexadecimal to the tag
-        gpu_device_tag = '%s-0x%x' % (gpu_vendor, gpu_device_id)
-      except TypeError:
-        # if the device id is not an integer it will be added as
-        # a string to the tag.
-        gpu_device_tag = '%s-%s' % (gpu_vendor, gpu_device_id)
-      angle_renderer = gpu_helper.GetANGLERenderer(gpu_info)
-      cmd_decoder = gpu_helper.GetCommandDecoder(gpu_info)
+      # On the dual-GPU MacBook Pros, surface the tags of the secondary GPU if
+      # it's the discrete GPU, so that test expectations can be written that
+      # target the discrete GPU.
+      gpu_tags.append(gpu_helper.GetANGLERenderer(gpu_info))
+      gpu_tags.append(gpu_helper.GetCommandDecoder(gpu_info))
+      if gpu_info and gpu_info.devices:
+        for ii in xrange(0, len(gpu_info.devices)):
+          gpu_vendor = gpu_helper.GetGpuVendorString(gpu_info, ii)
+          gpu_device_id = gpu_helper.GetGpuDeviceId(gpu_info, ii)
+          # The gpu device id tag will contain both the vendor and device id
+          # separated by a '-'.
+          try:
+            # If the device id is an integer then it will be added as
+            # a hexadecimal to the tag
+            gpu_device_tag = '%s-0x%x' % (gpu_vendor, gpu_device_id)
+          except TypeError:
+            # if the device id is not an integer it will be added as
+            # a string to the tag.
+            gpu_device_tag = '%s-%s' % (gpu_vendor, gpu_device_id)
+          if ii == 0 or gpu_vendor != 'intel':
+            gpu_tags.extend([gpu_vendor, gpu_device_tag])
       # all spaces and underscores in the tag will be replaced by dashes
-      tags.extend([re.sub('[ _]', '-', tag) for tag in [
-          gpu_vendor, gpu_device_tag, angle_renderer, cmd_decoder]])
+      tags.extend([re.sub('[ _]', '-', tag) for tag in gpu_tags])
     # If additional options have been set via '--extra-browser-args' check for
     # those which map to expectation tags. The '_browser_backend' attribute may
     # not exist in unit tests.

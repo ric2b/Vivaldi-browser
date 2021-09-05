@@ -8,6 +8,7 @@
 
 #include "base/feature_list.h"
 #include "base/i18n/icu_util.h"
+#include "base/location.h"
 #include "base/test/test_timeouts.h"
 #include "gin/v8_initializer.h"
 #include "third_party/blink/public/platform/web_runtime_features.h"
@@ -26,6 +27,11 @@ constexpr gin::V8Initializer::V8SnapshotFileType kSnapshotType =
 #endif
 }
 
+RenderViewTestAdapter::RenderViewTestAdapter()
+    // Allow fuzzing test a longer Run() timeout than normal (see
+    // htps://crbug.com/1053401).
+    : increased_timeout_(FROM_HERE, TestTimeouts::action_max_timeout()) {}
+
 void RenderViewTestAdapter::SetUp() {
   RenderViewTest::SetUp();
   CreateFakeWebURLLoaderFactory();
@@ -42,7 +48,6 @@ Env::Env() {
 
 #ifdef V8_USE_EXTERNAL_STARTUP_DATA
   gin::V8Initializer::LoadV8Snapshot(kSnapshotType);
-  gin::V8Initializer::LoadV8Natives();
 #endif
   gin::IsolateHolder::Initialize(gin::IsolateHolder::kStrictMode,
                                  gin::ArrayBufferAllocator::SharedInstance());

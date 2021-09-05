@@ -11,7 +11,13 @@ import androidx.annotation.ColorInt;
 import androidx.annotation.Nullable;
 
 import org.chromium.base.ObserverList;
-import org.chromium.chrome.browser.util.ColorUtils;
+import org.chromium.chrome.browser.toolbar.ToolbarColors;
+import org.chromium.ui.util.ColorUtils;
+
+import android.app.Activity;
+import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+import org.vivaldi.browser.preferences.VivaldiPreferences;
+import org.chromium.components.browser_ui.styles.ChromeColors;
 
 /**
  * An abstract class that provides the current theme color.
@@ -60,14 +66,19 @@ public abstract class ThemeColorProvider {
     /** List of {@link TintObserver}s. These are used to broadcast events to listeners. */
     private final ObserverList<TintObserver> mTintObservers;
 
+    // Vivaldi
+    private final Context mContext;
     /**
      * @param context The {@link Context} that is used to retrieve color related resources.
      */
     public ThemeColorProvider(Context context) {
         mThemeColorObservers = new ObserverList<ThemeColorObserver>();
         mTintObservers = new ObserverList<TintObserver>();
-        mLightModeTint = ColorUtils.getThemedToolbarIconTint(context, true);
-        mDarkModeTint = ColorUtils.getThemedToolbarIconTint(context, false);
+        mLightModeTint = ToolbarColors.getThemedToolbarIconTint(context, true);
+        mDarkModeTint = ToolbarColors.getThemedToolbarIconTint(context, false);
+
+        // Vivaldi
+        mContext = context;
     }
 
     /**
@@ -131,7 +142,23 @@ public abstract class ThemeColorProvider {
     }
 
     protected void updatePrimaryColor(int color, boolean shouldAnimate) {
+        // Note(david@vivaldi.com): This is for resetting the color when toggling the tab strip
+        // setting.
+        if(!ChromeApplication.isVivaldi()) {
         if (mPrimaryColor == color) return;
+        } else {
+            Activity activity = (Activity) mContext;
+            if (activity instanceof ChromeTabbedActivity) {
+                ChromeTabbedActivity chromeActivity = (ChromeTabbedActivity) activity;
+                if (SharedPreferencesManager.getInstance().readBoolean(
+                            VivaldiPreferences.SHOW_TAB_STRIP, true)
+                        || chromeActivity.isTablet()) {
+                    color = ChromeColors.getDefaultThemeColor(chromeActivity.getResources(),
+                            chromeActivity.getTabModelSelector().isIncognitoSelected());
+                }
+            }
+        }
+
         mPrimaryColor = color;
         for (ThemeColorObserver observer : mThemeColorObservers) {
             observer.onThemeColorChanged(color, shouldAnimate);

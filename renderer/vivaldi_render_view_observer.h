@@ -6,6 +6,8 @@
 #include "content/public/renderer/render_view_observer.h"
 #include "renderer/vivaldi_render_messages.h"
 
+#define INSIDE_BLINK 1
+
 namespace vivaldi {
 
 // This class holds the Vivaldi specific parts of RenderView, and has the same
@@ -23,9 +25,12 @@ class VivaldiRenderViewObserver : public content::RenderViewObserver {
   void OnPinchZoom(float scale, int x, int y);
   void OnRequestThumbnailForFrame(
       VivaldiViewMsg_RequestThumbnailForFrame_Params params);
+  void OnGetSpatialNavigationRects();
+  void OnGetScrollPosition();
   void OnGetAccessKeysForPage();
   void OnAccessKeyAction(std::string access_key);
-  void OnScrollPage(std::string scroll_type);
+  void OnScrollPage(std::string scroll_type, int scroll_amount);
+  void OnActivateElementFromPoint(int x, int y);
 
   DISALLOW_COPY_AND_ASSIGN(VivaldiRenderViewObserver);
 };

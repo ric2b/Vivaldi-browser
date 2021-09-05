@@ -96,6 +96,14 @@ int CompareLexicalNumberStrings(
   return 0;
 }
 
+bool isOldIntelDriver(const std::vector<std::string>& version) {
+  DCHECK_EQ(4u, version.size());
+  unsigned value = 0;
+  bool valid = base::StringToUint(version[2], &value);
+  DCHECK(valid);
+  return value < 100;
+}
+
 // A mismatch is identified only if both |input| and |pattern| are not empty.
 bool StringMismatch(const std::string& input, const std::string& pattern) {
   if (input.empty() || pattern.empty())
@@ -234,14 +242,59 @@ void GpuControlList::Entry::LogControlListMatch(
                                 control_list_logging_name.c_str());
 }
 
-bool GpuControlList::DriverInfo::Contains(const GPUInfo& gpu_info) const {
+bool GpuControlList::DriverInfo::Contains(const GPUInfo& gpu_info,
+                                          VersionSchema version_schema) const {
   const GPUInfo::GPUDevice& active_gpu = gpu_info.active_gpu();
   if (StringMismatch(active_gpu.driver_vendor, driver_vendor)) {
     return false;
   }
-  if (driver_version.IsSpecified() && !active_gpu.driver_version.empty() &&
-      !driver_version.Contains(active_gpu.driver_version)) {
-    return false;
+  if (driver_version.IsSpecified() && !active_gpu.driver_version.empty()) {
+    if (version_schema == kCommon) {
+      if (!driver_version.Contains(active_gpu.driver_version))
+        return false;
+    } else if (version_schema == kIntelDriver) {
+      std::vector<std::string> version;
+      if (!ProcessVersionString(active_gpu.driver_version, '.', &version))
+        return false;
+      std::vector<std::string> ref_version, ref_version2;
+      bool valid = ProcessVersionString(driver_version.value1, '.',
+                                        &ref_version);
+      DCHECK(valid);
+      if (driver_version.value2) {
+        valid = ProcessVersionString(driver_version.value2, '.', &ref_version2);
+        DCHECK(valid);
+      }
+      // If either of the two versions doesn't match the Intel driver version                                                                                                                                     +      // schema, or they belong to different generation of version schema, they
+      // should not be compared.
+      if (version.size() != 4 || ref_version.size() != 4)
+        return false;
+      if (isOldIntelDriver(version) != isOldIntelDriver(ref_version))
+        return false;
+      if (!ref_version2.empty()) {
+        if (ref_version2.size() != 4
+            || isOldIntelDriver(ref_version) != isOldIntelDriver(ref_version2))
+          return false;
+      }
+
+      std::string build_num, ref_build_num, ref_build_num2;
+      if (isOldIntelDriver(version)) {
+        build_num = version[3];
+        ref_build_num = ref_version[3];
+        if (!ref_version2.empty())
+          ref_build_num2 = ref_version2[3];
+      } else {
+        build_num = version[2] + "." + version[3];
+        ref_build_num = ref_version[2] + "." + ref_version[3];
+        if (!ref_version2.empty())
+          ref_build_num2 = ref_version2[2] + "." + ref_version2[3];
+      }
+      Version ref_driver_version(driver_version);
+      ref_driver_version.value1 = ref_build_num.c_str();
+      if (!ref_build_num2.empty())
+        ref_driver_version.value2 = ref_build_num2.c_str();
+      if (!ref_driver_version.Contains(build_num))
+        return false;
+    }
   }
   return true;
 }
@@ -312,16 +365,22 @@ bool GpuControlList::More::Contains(const GPUInfo& gpu_info) const {
       break;
     case kSupported:
 #if defined(OS_WIN)
-      if (!gpu_info.supports_overlays)
+      if (!gpu_info.overlay_info.supports_overlays)
         return false;
 #endif  // OS_WIN
       break;
     case kUnsupported:
 #if defined(OS_WIN)
-      if (gpu_info.supports_overlays)
+      if (gpu_info.overlay_info.supports_overlays)
         return false;
 #endif  // OS_WIN
       break;
+  }
+  if ((subpixel_font_rendering == kUnsupported &&
+       gpu_info.subpixel_font_rendering) ||
+      (subpixel_font_rendering == kSupported &&
+       !gpu_info.subpixel_font_rendering)) {
+    return false;
   }
   return true;
 }
@@ -336,7 +395,8 @@ bool GpuControlList::Conditions::Contains(OsType target_os_type,
     if (os_version.IsSpecified() && !os_version.Contains(target_os_version))
       return false;
   }
-  if (vendor_id != 0 || gpu_series_list_size > 0 || intel_gpu_generation.IsSpecified()) {
+  if (vendor_id != 0 || intel_gpu_series_list_size > 0 ||
+      intel_gpu_generation.IsSpecified()) {
     std::vector<GPUInfo::GPUDevice> candidates;
     switch (multi_gpu_category) {
       case kMultiGpuCategoryPrimary:
@@ -363,14 +423,14 @@ bool GpuControlList::Conditions::Contains(OsType target_os_type,
     }
 
     bool found = false;
-    if (gpu_series_list_size > 0) {
+    if (intel_gpu_series_list_size > 0) {
       for (size_t ii = 0; !found && ii < candidates.size(); ++ii) {
-        GpuSeriesType candidate_series = GetGpuSeriesType(
+        IntelGpuSeriesType candidate_series = GetIntelGpuSeriesType(
             candidates[ii].vendor_id, candidates[ii].device_id);
-        if (candidate_series == GpuSeriesType::kUnknown)
+        if (candidate_series == IntelGpuSeriesType::kUnknown)
           continue;
-        for (size_t jj = 0; jj < gpu_series_list_size; ++jj) {
-          if (candidate_series == gpu_series_list[jj]) {
+        for (size_t jj = 0; jj < intel_gpu_series_list_size; ++jj) {
+          if (candidate_series == intel_gpu_series_list[jj]) {
             found = true;
             break;
           }
@@ -441,8 +501,30 @@ bool GpuControlList::Conditions::Contains(OsType target_os_type,
     case kMultiGpuStyleNone:
       break;
   }
-  if (driver_info && !driver_info->Contains(gpu_info)) {
-    return false;
+
+  if (driver_info) {
+    // On Windows, if either current gpu or the gpu condition is from Intel,
+    // the driver version should be compared based on the Intel graphics driver
+    // version schema.
+    // https://www.intel.com/content/www/us/en/support/articles/000005654/graphics-drivers.html
+    VersionSchema version_schema = kCommon;
+    if (target_os_type == kOsWin) {
+      if (vendor_id == 0x8086
+          || intel_gpu_series_list_size > 0
+          || intel_gpu_generation.IsSpecified()
+          || (driver_info->driver_vendor
+              && std::string(driver_info->driver_vendor).find("Intel")
+                 != std::string::npos)) {
+        version_schema = kIntelDriver;
+      } else {
+        const GPUInfo::GPUDevice& active_gpu = gpu_info.active_gpu();
+        if (active_gpu.vendor_id == 0x8086
+            || active_gpu.driver_vendor.find("Intel") != std::string::npos)
+          version_schema = kIntelDriver;
+      }
+    }
+    if (!driver_info->Contains(gpu_info, version_schema))
+      return false;
   }
   if (gl_strings && !gl_strings->Contains(gpu_info)) {
     return false;

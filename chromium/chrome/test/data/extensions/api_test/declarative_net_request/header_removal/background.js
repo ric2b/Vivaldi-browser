@@ -230,7 +230,7 @@ function checkAddWebRequestSetCookie(expectRemoved) {
 // Clears the current state by removing rules specified in |ruleIds| and
 // clearing all cookies.
 function clearState(ruleIds, callback) {
-  chrome.declarativeNetRequest.removeDynamicRules(ruleIds, function() {
+  chrome.declarativeNetRequest.updateDynamicRules(ruleIds, [], function() {
     chrome.test.assertNoLastError();
     checkAndResetCookies().then(callback);
   });
@@ -248,6 +248,7 @@ var removeSetCookieRule = {
 };
 var allowRule = {
   id: 3,
+  priority: 1,
   condition: {urlFilter: host, resourceTypes: ['main_frame']},
   action: {type: 'allow'}
 };
@@ -261,7 +262,7 @@ var tests = [
 
   function addRulesAndTestCookieRemoval() {
     var rules = [removeCookieRule];
-    chrome.declarativeNetRequest.addDynamicRules(rules, function() {
+    chrome.declarativeNetRequest.updateDynamicRules([], rules, function() {
       chrome.test.assertNoLastError();
       checkCookieHeaderRemoved(true);
     });
@@ -273,7 +274,7 @@ var tests = [
 
   function addRulesAndTestSetCookieRemoval() {
     var rules = [removeSetCookieRule];
-    chrome.declarativeNetRequest.addDynamicRules(rules, function() {
+    chrome.declarativeNetRequest.updateDynamicRules([], rules, function() {
       chrome.test.assertNoLastError();
       checkSetCookieHeaderRemoved(true);
     });
@@ -288,7 +289,7 @@ var tests = [
 
   function testAddWebRequestCookieWithRules() {
     var rules = [removeCookieRule];
-    chrome.declarativeNetRequest.addDynamicRules(rules, function() {
+    chrome.declarativeNetRequest.updateDynamicRules([], rules, function() {
       checkAddWebRequestCookie(true);
     });
   },
@@ -299,13 +300,13 @@ var tests = [
 
   function testAddWebRequestSetCookieWithRules() {
     var rules = [removeSetCookieRule];
-    chrome.declarativeNetRequest.addDynamicRules(rules, function() {
+    chrome.declarativeNetRequest.updateDynamicRules([], rules, function() {
       checkAddWebRequestSetCookie(true);
     });
   },
 
   function testAddWebRequestCookieWithAllowRule() {
-    chrome.declarativeNetRequest.addDynamicRules([allowRule], () => {
+    chrome.declarativeNetRequest.updateDynamicRules([], [allowRule], () => {
        checkAddWebRequestSetCookie(false);
     });
   },

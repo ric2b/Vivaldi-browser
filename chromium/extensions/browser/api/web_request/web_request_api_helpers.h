@@ -29,7 +29,7 @@
 namespace base {
 class ListValue;
 class DictionaryValue;
-}
+}  // namespace base
 
 namespace content {
 class BrowserContext;
@@ -38,7 +38,7 @@ class BrowserContext;
 namespace extensions {
 class Extension;
 struct WebRequestInfo;
-}
+}  // namespace extensions
 
 namespace extension_web_request_api_helpers {
 
@@ -84,7 +84,7 @@ enum class RequestHeaderType {
   kProxyConnection = 33,
   kRange = 34,
   kReferer = 35,
-  kSecOriginPolicy = 36,
+  //  kSecOriginPolicy = 36, // no longer shipping
   kTe = 37,
   kTransferEncoding = 38,
   kUpgrade = 39,
@@ -456,16 +456,16 @@ void MergeCookiesInOnHeadersReceivedResponses(
 // that is modified according to |deltas|. If |deltas| does not instruct to
 // modify the response headers, |override_response_headers| remains empty.
 // Extension-initiated redirects are written to |override_response_headers|
-// (to request redirection) and |*allowed_unsafe_redirect_url| (to make sure
-// that the request is not cancelled with net::ERR_UNSAFE_REDIRECT).
-// Stores in |response_headers_modified| whether the response headers were
-// modified.
+// (to request redirection) and |*preserve_fragment_on_redirect_url| (to make
+// sure that the URL provided by the extension isn't modified by having its
+// fragment overwritten by that of the original URL). Stores in
+// |response_headers_modified| whether the response headers were modified.
 void MergeOnHeadersReceivedResponses(
     const extensions::WebRequestInfo& request,
     const EventResponseDeltas& deltas,
     const net::HttpResponseHeaders* original_response_headers,
     scoped_refptr<net::HttpResponseHeaders>* override_response_headers,
-    GURL* allowed_unsafe_redirect_url,
+    GURL* preserve_fragment_on_redirect_url,
     IgnoredActions* ignored_actions,
     bool* response_headers_modified);
 // Merge the responses of blocked onAuthRequired handlers. The first

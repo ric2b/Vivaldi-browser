@@ -8,12 +8,12 @@
 #include <memory>
 #include <vector>
 
-#include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
-#include "services/network/public/mojom/host_resolver.mojom.h"
+#include "net/dns/public/resolve_error_info.h"
+#include "services/network/public/mojom/host_resolver.mojom-forward.h"
 #include "services/network/test/test_network_context.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -28,9 +28,12 @@ class FakeHostResolver : public network::mojom::HostResolver {
   };
 
   struct SingleResult {
-    SingleResult(int32_t result, Response response)
-        : result(result), response(response) {}
+    SingleResult(int32_t result,
+                 net::ResolveErrorInfo resolve_error_info,
+                 Response response);
+
     int32_t result;
+    net::ResolveErrorInfo resolve_error_info;
     Response response;
   };
 
@@ -41,11 +44,13 @@ class FakeHostResolver : public network::mojom::HostResolver {
   FakeHostResolver(
       mojo::PendingReceiver<network::mojom::HostResolver> resolver_receiver,
       int32_t result,
+      net::ResolveErrorInfo resolve_error_info,
       Response response);
 
   ~FakeHostResolver() override;
 
   void ResolveHost(const net::HostPortPair& host,
+                   const net::NetworkIsolationKey& network_isolation_key,
                    network::mojom::ResolveHostParametersPtr optional_parameters,
                    mojo::PendingRemote<network::mojom::ResolveHostClient>
                        pending_response_client) override;
@@ -69,6 +74,7 @@ class HangingHostResolver : public network::mojom::HostResolver {
   ~HangingHostResolver() override;
 
   void ResolveHost(const net::HostPortPair& host,
+                   const net::NetworkIsolationKey& network_isolation_key,
                    network::mojom::ResolveHostParametersPtr optional_parameters,
                    mojo::PendingRemote<network::mojom::ResolveHostClient>
                        response_client) override;
@@ -87,8 +93,8 @@ class HangingHostResolver : public network::mojom::HostResolver {
 class FakeHostResolverNetworkContext : public network::TestNetworkContext {
  public:
   FakeHostResolverNetworkContext(
-      std::vector<FakeHostResolver::SingleResult> system_result_list,
-      std::vector<FakeHostResolver::SingleResult> public_result_list);
+      std::vector<FakeHostResolver::SingleResult> current_config_result_list,
+      std::vector<FakeHostResolver::SingleResult> google_config_result_list);
   ~FakeHostResolverNetworkContext() override;
 
   void CreateHostResolver(
@@ -96,17 +102,17 @@ class FakeHostResolverNetworkContext : public network::TestNetworkContext {
       mojo::PendingReceiver<network::mojom::HostResolver> receiver) override;
 
  private:
-  std::vector<FakeHostResolver::SingleResult> system_result_list_;
-  std::vector<FakeHostResolver::SingleResult> public_result_list_;
-  std::unique_ptr<FakeHostResolver> system_resolver_;
-  std::unique_ptr<FakeHostResolver> public_resolver_;
+  std::vector<FakeHostResolver::SingleResult> current_config_result_list_;
+  std::vector<FakeHostResolver::SingleResult> google_config_result_list_;
+  std::unique_ptr<FakeHostResolver> current_config_resolver_;
+  std::unique_ptr<FakeHostResolver> google_config_resolver_;
 };
 
 class FakeDnsConfigChangeManager
     : public network::mojom::DnsConfigChangeManager {
  public:
   explicit FakeDnsConfigChangeManager(
-      network::mojom::DnsConfigChangeManagerRequest request);
+      mojo::PendingReceiver<network::mojom::DnsConfigChangeManager> receiver);
   ~FakeDnsConfigChangeManager() override;
 
   // mojom::DnsConfigChangeManager implementation:
@@ -117,7 +123,7 @@ class FakeDnsConfigChangeManager
   void SimulateDnsConfigChange();
 
  private:
-  mojo::Binding<network::mojom::DnsConfigChangeManager> binding_;
+  mojo::Receiver<network::mojom::DnsConfigChangeManager> receiver_;
   mojo::Remote<network::mojom::DnsConfigChangeManagerClient> client_;
 };
 

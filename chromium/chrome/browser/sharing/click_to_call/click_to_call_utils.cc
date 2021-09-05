@@ -4,15 +4,19 @@
 
 #include "chrome/browser/sharing/click_to_call/click_to_call_utils.h"
 
+#include <algorithm>
+#include <cctype>
+
 #include "base/metrics/histogram_functions.h"
-#include "base/no_destructor.h"
 #include "base/optional.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/timer/elapsed_timer.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/sharing/click_to_call/click_to_call_metrics.h"
 #include "chrome/browser/sharing/click_to_call/feature.h"
+#include "chrome/browser/sharing/click_to_call/phone_number_regex.h"
 #include "chrome/browser/sharing/sharing_service.h"
 #include "chrome/browser/sharing/sharing_service_factory.h"
 #include "chrome/common/pref_names.h"
@@ -29,15 +33,10 @@ namespace {
 // reducing the max length.
 constexpr int kSelectionTextMaxLength = 30;
 
-// Heuristical regex to search for phone number.
-// (^|\\s) makes sure the pattern begins with a new word.
-// (\\(?\\+[0-9]+\\)?)? checks for optional international code in number.
-// ([.\\s\\-\\(]?[0-9][\\s\\-\\)]?){8,} checks for at least eight occurrences of
-// pattern denoted to reduce false positives.
-// The first pattern matched is (^|\\s) and the second pattern matched is the
-// phone number we are looking for.
-const char kPhoneNumberRegexPattern[] =
-    "(?:^|\\s)((\\(?\\+[0-9]+\\)?)?([.\\s\\-\\(]?[0-9][\\s\\-\\)]?){8,})";
+// Upper bound on digits in selected text to reduce false positives. This
+// matches the maximum number of digits in phone numbers according to E.164 and
+// showed a good tradeoff between false negatives vs. false positives.
+constexpr int kSelectionTextMaxDigits = 15;
 
 bool IsClickToCallEnabled(content::BrowserContext* browser_context) {
   // Check Chrome enterprise policy for Click to Call.
@@ -49,21 +48,6 @@ bool IsClickToCallEnabled(content::BrowserContext* browser_context) {
       SharingServiceFactory::GetForBrowserContext(browser_context);
   return sharing_service && base::FeatureList::IsEnabled(kClickToCallUI);
 }
-
-// Todo(himanshujaju): Make it generic and move to base/metrics/histogram_base.h
-// Used to Log delay in parsing phone number in highlighted text to UMA.
-struct ScopedUmaHistogramMicrosecondsTimer {
-  ScopedUmaHistogramMicrosecondsTimer() : timer() {}
-
-  ~ScopedUmaHistogramMicrosecondsTimer() {
-    base::UmaHistogramCustomMicrosecondsTimes(
-        "Sharing.ClickToCallContextMenuPhoneNumberParsingDelay",
-        timer.Elapsed(), base::TimeDelta::FromMicroseconds(1),
-        base::TimeDelta::FromSeconds(1), 50);
-  }
-
-  const base::ElapsedTimer timer;
-};
 
 }  // namespace
 
@@ -81,24 +65,28 @@ base::Optional<std::string> ExtractPhoneNumberForClickToCall(
   if (selection_text.size() > kSelectionTextMaxLength)
     return base::nullopt;
 
-  if (!base::FeatureList::IsEnabled(kClickToCallContextMenuForSelectedText) ||
-      !IsClickToCallEnabled(browser_context)) {
+  int digits = std::count_if(selection_text.begin(), selection_text.end(),
+                             [](char c) { return std::isdigit(c); });
+  if (digits > kSelectionTextMaxDigits)
     return base::nullopt;
-  }
 
+  if (!IsClickToCallEnabled(browser_context))
+    return base::nullopt;
+
+  return ExtractPhoneNumber(selection_text);
+}
+
+base::Optional<std::string> ExtractPhoneNumber(
+    const std::string& selection_text) {
   ScopedUmaHistogramMicrosecondsTimer scoped_uma_timer;
+  std::string parsed_number;
 
-  // TODO(crbug.com/992906): Find a better way to parse phone numbers.
-  static const base::NoDestructor<re2::RE2> kPhoneNumberRegex(
-      kPhoneNumberRegexPattern);
-  std::string parsed_phone_number;
-  if (!re2::RE2::PartialMatch(selection_text, *kPhoneNumberRegex,
-                              &parsed_phone_number)) {
+  const re2::RE2& regex = GetPhoneNumberRegex();
+  if (!re2::RE2::PartialMatch(selection_text, regex, &parsed_number))
     return base::nullopt;
-  }
 
-  return base::TrimWhitespaceASCII(parsed_phone_number, base::TRIM_ALL)
-      .as_string();
+  return base::UTF16ToUTF8(
+      base::TrimWhitespace(base::UTF8ToUTF16(parsed_number), base::TRIM_ALL));
 }
 
 std::string GetUnescapedURLContent(const GURL& url) {

@@ -9,6 +9,7 @@
 
 #include "components/omnibox/browser/autocomplete_match_type.h"
 #include "components/security_state/core/security_state.h"
+#import "ios/chrome/browser/ui/omnibox/omnibox_icon_type.h"
 #include "ios/chrome/browser/ui/omnibox/omnibox_suggestion_icon_util.h"
 
 #pragma mark - Suggestion icons.
@@ -27,18 +28,6 @@ UIImage* GetOmniboxSuggestionIconForAutocompleteMatchType(
 
 #pragma mark - Security icons.
 
-// All available icons for security states.
-enum LocationBarSecurityIconType {
-  INSECURE = 0,
-  SECURE,
-  DANGEROUS,
-  LOCATION_BAR_SECURITY_ICON_TYPE_COUNT,
-};
-
-// Returns the asset name (to be used in -[UIImage imageNamed:]).
-NSString* GetLocationBarSecurityIconTypeAssetName(
-    LocationBarSecurityIconType icon);
-
 // Returns the asset with "always template" rendering mode.
 UIImage* GetLocationBarSecurityIcon(LocationBarSecurityIconType icon);
 
@@ -50,18 +39,5 @@ LocationBarSecurityIconType GetLocationBarSecurityIconTypeForSecurityState(
 // rendering mode.
 UIImage* GetLocationBarSecurityIconForSecurityState(
     security_state::SecurityLevel security_level);
-
-#pragma mark - Legacy utils.
-
-// Converts |type| to a resource identifier for the appropriate icon for this
-// type to show in the omnibox.
-int GetIconForAutocompleteMatchType(AutocompleteMatchType::Type type,
-                                    bool is_starred,
-                                    bool is_incognito);
-
-
-// Converts |security_level| to a resource identifier for the appropriate icon
-// for this security level in the omnibox.
-int GetIconForSecurityState(security_state::SecurityLevel security_level);
 
 #endif  // IOS_CHROME_BROWSER_UI_OMNIBOX_OMNIBOX_UTIL_H_

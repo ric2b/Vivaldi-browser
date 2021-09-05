@@ -9,20 +9,21 @@
 #include <utility>
 
 #include "third_party/blink/renderer/bindings/core/v8/source_location.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_object_builder.h"
 #include "third_party/blink/renderer/core/frame/report_body.h"
 
 namespace blink {
 
-class LocationReportBody : public ReportBody {
+class CORE_EXPORT LocationReportBody : public ReportBody {
  public:
   explicit LocationReportBody(std::unique_ptr<SourceLocation> location)
       : source_file_(location->Url()),
         line_number_(location->IsUnknown()
                          ? base::nullopt
-                         : base::Optional<uint32_t>{location->LineNumber()}),
-        column_number_(location->IsUnknown() ? base::nullopt
-                                             : base::Optional<uint32_t>{
-                                                   location->ColumnNumber()}) {}
+                         : base::make_optional(location->LineNumber())),
+        column_number_(location->IsUnknown()
+                           ? base::nullopt
+                           : base::make_optional(location->ColumnNumber())) {}
 
   LocationReportBody() : LocationReportBody(SourceLocation::Capture()) {}
 
@@ -35,22 +36,27 @@ class LocationReportBody : public ReportBody {
 
   ~LocationReportBody() override = default;
 
-  String sourceFile() const { return source_file_; }
+  const String& sourceFile() const { return source_file_; }
 
-  uint32_t lineNumber(bool& is_null) const {
+  base::Optional<uint32_t> lineNumber() const { return line_number_; }
+  base::Optional<uint32_t> columnNumber() const { return column_number_; }
+
+  // TODO(crbug.com/1060971): Remove |is_null| version.
+  uint32_t lineNumber(bool& is_null) const {  // DEPRECATED
     is_null = !line_number_.has_value();
     return line_number_.value_or(0);
   }
-
-  uint32_t columnNumber(bool& is_null) const {
+  uint32_t columnNumber(bool& is_null) const {  // DEPRECATED
     is_null = !column_number_.has_value();
     return column_number_.value_or(0);
   }
 
+  void BuildJSONValue(V8ObjectBuilder& builder) const override;
+
  protected:
   const String source_file_;
-  base::Optional<uint32_t> line_number_;
-  base::Optional<uint32_t> column_number_;
+  const base::Optional<uint32_t> line_number_;
+  const base::Optional<uint32_t> column_number_;
 };
 
 }  // namespace blink

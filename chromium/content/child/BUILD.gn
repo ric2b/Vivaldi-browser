@@ -38,6 +38,8 @@ target(link_target_type, "child") {
     "assert_matching_enums.cc",
     "blink_platform_impl.cc",
     "blink_platform_impl.h",
+    "browser_exposed_child_interfaces.cc",
+    "browser_exposed_child_interfaces.h",
     "browser_font_resource_trusted.cc",
     "browser_font_resource_trusted.h",
     "child_histogram_fetcher_impl.cc",
@@ -62,8 +64,7 @@ target(link_target_type, "child") {
     "field_trial.h",
     "font_warmup_win.cc",
     "font_warmup_win.h",
-    "image_decoder.cc",
-    "image_decoder.h",
+    "image_decoder_utils.cc",
     "runtime_features.cc",
     "runtime_features.h",
     "scoped_child_process_reference.cc",
@@ -93,9 +94,7 @@ target(link_target_type, "child") {
     "//cc/paint",
     "//components/discardable_memory/client",
     "//components/discardable_memory/public/mojom",
-    "//components/tracing",
     "//components/tracing:startup_tracing",
-    "//components/tracing/common:interfaces",
     "//components/variations",
     "//components/webcrypto",
     "//content/app/resources",
@@ -109,11 +108,12 @@ target(link_target_type, "child") {
     "//net",
     "//services/device/public/cpp:device_features",
     "//services/device/public/cpp/power_monitor",
-    "//services/device/public/mojom:constants",
     "//services/resource_coordinator/public/cpp/memory_instrumentation",
     "//services/service_manager/public/cpp",
     "//services/service_manager/public/mojom",
     "//services/tracing/public/cpp",
+    "//services/tracing/public/cpp:traced_process",
+    "//services/tracing/public/cpp/background_tracing:background_tracing",
     "//skia",
     "//storage/common",
     "//third_party/blink/public:blink_headers",
@@ -177,8 +177,6 @@ target(link_target_type, "child") {
 group("for_content_tests") {
   visibility = [ "//content/test/*" ]
   if (!is_component_build) {
-    public_deps = [
-      ":child",
-    ]
+    public_deps = [ ":child" ]
   }
 }

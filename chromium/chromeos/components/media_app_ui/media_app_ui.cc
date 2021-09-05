@@ -4,12 +4,17 @@
 
 #include "chromeos/components/media_app_ui/media_app_ui.h"
 
+#include <utility>
+
 #include "chromeos/components/media_app_ui/media_app_guest_ui.h"
+#include "chromeos/components/media_app_ui/media_app_page_handler.h"
 #include "chromeos/components/media_app_ui/url_constants.h"
-#include "chromeos/grit/chromeos_resources.h"
+#include "chromeos/grit/chromeos_media_app_bundle_resources.h"
+#include "chromeos/grit/chromeos_media_app_resources.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
+#include "content/public/common/url_constants.h"
 
 namespace chromeos {
 namespace {
@@ -17,40 +22,62 @@ namespace {
 content::WebUIDataSource* CreateHostDataSource() {
   content::WebUIDataSource* source =
       content::WebUIDataSource::Create(kChromeUIMediaAppHost);
+
+  // Add resources from chromeos_media_app_resources.pak.
   source->SetDefaultResource(IDR_MEDIA_APP_INDEX_HTML);
   source->AddResourcePath("pwa.html", IDR_MEDIA_APP_PWA_HTML);
   source->AddResourcePath("manifest.json", IDR_MEDIA_APP_MANIFEST);
-  source->AddResourcePath("assets/app_icon_256.png", IDR_MEDIA_APP_ICON_256);
+  source->AddResourcePath("mojo_api_bootstrap.js",
+                          IDR_MEDIA_APP_MOJO_API_BOOTSTRAP_JS);
+  source->AddResourcePath("media_app.mojom-lite.js",
+                          IDR_MEDIA_APP_MEDIA_APP_MOJOM_JS);
+  source->AddResourcePath("media_app_index_scripts.js",
+                          IDR_MEDIA_APP_INDEX_SCRIPTS_JS);
+
+  // TODO(b/141588875): Switch this back to IDR_MEDIA_APP_APP_ICON_256_PNG (and
+  // add more icon resolutions) when the final icon is ready.
+  source->AddResourcePath("system_assets/app_icon_256.png",
+                          IDR_MEDIA_APP_GALLERY_ICON_256_PNG);
+
   return source;
 }
 
 }  // namespace
 
-MediaAppUI::MediaAppUI(content::WebUI* web_ui) : MojoWebUIController(web_ui) {
+MediaAppUI::MediaAppUI(content::WebUI* web_ui,
+                       std::unique_ptr<MediaAppUIDelegate> delegate)
+    : MojoWebUIController(web_ui), delegate_(std::move(delegate)) {
   content::BrowserContext* browser_context =
       web_ui->GetWebContents()->GetBrowserContext();
   content::WebUIDataSource* host_source = CreateHostDataSource();
   content::WebUIDataSource::Add(browser_context, host_source);
 
-  // Whilst the guest is in an <iframe> rather than a <webview>, we need a CSP
-  // override to use the guest origin in the host.
-  // TODO(crbug/996088): Remove these overrides when there's a new sandboxing
-  // option for the guest.
+  // The guest is in an <iframe>. Add it to CSP.
   std::string csp = std::string("frame-src ") + kChromeUIMediaAppGuestURL + ";";
   host_source->OverrideContentSecurityPolicyChildSrc(csp);
 
-  // We also add the guest data source here (and allow it to be iframed). If
-  // it's only added in the MediaAppGuestUI constructor, then a user navigation
-  // to chrome://media-app-guest is required before the <iframe> can see it.
-  // This is due to logic in RenderFrameHostManager::GetFrameHostForNavigation()
-  // that currently skips creating webui objects when !IsMainFrame() (which is
-  // temporary according to https://crbug.com/713313 but, long-term, the guest
-  // shouldn't need the webui objects in any case - just the data source).
-  content::WebUIDataSource* guest_source = MediaAppGuestUI::CreateDataSource();
-  guest_source->DisableDenyXFrameOptions();
-  content::WebUIDataSource::Add(browser_context, guest_source);
+  content::WebUIDataSource* untrusted_source =
+      CreateMediaAppUntrustedDataSource();
+  content::WebUIDataSource::Add(browser_context, untrusted_source);
+
+  // Add ability to request chrome-untrusted: URLs.
+  web_ui->AddRequestableScheme(content::kChromeUIUntrustedScheme);
 }
 
 MediaAppUI::~MediaAppUI() = default;
+
+void MediaAppUI::BindInterface(
+    mojo::PendingReceiver<media_app_ui::mojom::PageHandlerFactory> receiver) {
+  page_factory_receiver_.reset();
+  page_factory_receiver_.Bind(std::move(receiver));
+}
+
+void MediaAppUI::CreatePageHandler(
+    mojo::PendingReceiver<media_app_ui::mojom::PageHandler> receiver) {
+  page_handler_ =
+      std::make_unique<MediaAppPageHandler>(this, std::move(receiver));
+}
+
+WEB_UI_CONTROLLER_TYPE_IMPL(MediaAppUI)
 
 }  // namespace chromeos

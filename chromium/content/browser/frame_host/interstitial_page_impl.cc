@@ -57,12 +57,19 @@
 #include "net/url_request/url_request_context_getter.h"
 #include "ui/base/page_transition_types.h"
 
-#include "content/browser/browser_plugin/browser_plugin_guest.h"
-
 using blink::WebDragOperation;
 using blink::WebDragOperationsMask;
 
 namespace content {
+
+namespace {
+
+const blink::UserAgentOverride& NoUAOverride() {
+  static const base::NoDestructor<blink::UserAgentOverride> no_ua_override;
+  return *no_ua_override;
+}
+
+}  // namespace
 
 class InterstitialPageImpl::InterstitialPageRVHDelegateView
     : public RenderViewHostDelegateView {
@@ -275,9 +282,6 @@ void InterstitialPageImpl::Hide() {
     return;
 
   Disable();
-  // Need to call DidChangeVisibleSecurityState here since we navigate away from
-  // the interstatial page, and the ssl state might change.
-  static_cast<WebContentsImpl*>(web_contents_)->DidChangeVisibleSecurityState();
 
   RenderWidgetHostView* old_view =
       controller_->delegate()->GetRenderViewHost()->GetWidget()->GetView();
@@ -370,14 +374,6 @@ bool InterstitialPageImpl::OnMessageReceived(
                         OnDomOperationResponse)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
-
-  if (handled) {
-    return handled;
-  }
-  WebContentsImpl* web_contents = static_cast<WebContentsImpl*>(web_contents_);
-  if (web_contents && web_contents->GetBrowserPluginGuest()) {
-    return web_contents->GetBrowserPluginGuest()->OnMessageReceived(message);
-  }
 
   return handled;
 }
@@ -479,34 +475,6 @@ void InterstitialPageImpl::SelectAll() {
   RecordAction(base::UserMetricsAction("SelectAll"));
 }
 
-// Undo/Redo/Delete addeded by Vivaldi
-void InterstitialPageImpl::Undo() {
-  FrameTreeNode* focused_node = frame_tree_->GetFocusedFrame();
-  if (!focused_node)
-    return;
-
-  focused_node->current_frame_host()->GetFrameInputHandler()->Undo();
-  RecordAction(base::UserMetricsAction("Undo"));
-}
-
-void InterstitialPageImpl::Redo() {
-  FrameTreeNode* focused_node = frame_tree_->GetFocusedFrame();
-  if (!focused_node)
-    return;
-
-  focused_node->current_frame_host()->GetFrameInputHandler()->Redo();
-  RecordAction(base::UserMetricsAction("Redo"));
-}
-
-void InterstitialPageImpl::Delete() {
-  FrameTreeNode* focused_node = frame_tree_->GetFocusedFrame();
-  if (!focused_node)
-    return;
-
-  focused_node->current_frame_host()->GetFrameInputHandler()->Delete();
-  RecordAction(base::UserMetricsAction("DeleteSelection"));
-}
-
 RenderViewHostDelegateView* InterstitialPageImpl::GetDelegateView() {
   return rvh_delegate_view_.get();
 }
@@ -575,16 +543,11 @@ WebContents* InterstitialPageImpl::OpenURL(const OpenURLParams& params) {
   return nullptr;
 }
 
-const std::string& InterstitialPageImpl::GetUserAgentOverride() {
-  return base::EmptyString();
+const blink::UserAgentOverride& InterstitialPageImpl::GetUserAgentOverride() {
+  return NoUAOverride();
 }
 
 bool InterstitialPageImpl::ShouldOverrideUserAgentInNewTabs() {
-  return false;
-}
-
-bool InterstitialPageImpl::ShowingInterstitialPage() {
-  // An interstitial page never shows a second interstitial.
   return false;
 }
 
@@ -648,9 +611,9 @@ RenderViewHostImpl* InterstitialPageImpl::CreateRenderViewHost() {
       SessionStorageNamespaceImpl::Create(dom_storage_context);
 
   // Use the RenderViewHost from our FrameTree.
-  frame_tree_->root()->render_manager()->Init(
-      site_instance.get(), MSG_ROUTING_NONE, MSG_ROUTING_NONE, MSG_ROUTING_NONE,
-      false);
+  frame_tree_->root()->render_manager()->InitRoot(
+      site_instance.get(),
+      /*renderer_initiated_creation=*/false);
   return frame_tree_->root()->current_frame_host()->render_view_host();
 }
 
@@ -660,7 +623,7 @@ WebContentsView* InterstitialPageImpl::CreateWebContentsView() {
   WebContentsView* wcv =
       static_cast<WebContentsImpl*>(web_contents())->GetView();
   RenderWidgetHostViewBase* view =
-      wcv->CreateViewForWidget(render_view_host_->GetWidget(), false);
+      wcv->CreateViewForWidget(render_view_host_->GetWidget());
   render_view_host_->GetWidget()->SetView(view);
   render_view_host_->GetMainFrame()->AllowBindings(
       BINDINGS_POLICY_DOM_AUTOMATION);
@@ -833,7 +796,8 @@ void InterstitialPageImpl::CreateNewWidget(
     int32_t render_process_id,
     int32_t route_id,
     mojo::PendingRemote<mojom::Widget> widget,
-    RenderViewHostImpl* render_view_host) {
+    mojo::PendingAssociatedReceiver<blink::mojom::WidgetHost> blink_widget_host,
+    mojo::PendingAssociatedRemote<blink::mojom::Widget> blink_widget) {
   NOTREACHED() << "InterstitialPage does not support showing drop-downs.";
 }
 
@@ -841,7 +805,8 @@ void InterstitialPageImpl::CreateNewFullscreenWidget(
     int32_t render_process_id,
     int32_t route_id,
     mojo::PendingRemote<mojom::Widget> widget,
-    RenderViewHostImpl* render_view_host) {
+    mojo::PendingAssociatedReceiver<blink::mojom::WidgetHost> blink_widget_host,
+    mojo::PendingAssociatedRemote<blink::mojom::Widget> blink_widget) {
   NOTREACHED()
       << "InterstitialPage does not support showing full screen popups.";
 }

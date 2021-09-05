@@ -16,13 +16,11 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/scoped_observer.h"
-#include "chrome/browser/profiles/profile_observer.h"
 #include "chromeos/components/drivefs/drivefs_host.h"
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "components/drive/drive_notification_observer.h"
 #include "components/drive/file_errors.h"
 #include "components/drive/file_system_core_util.h"
-#include "components/drive/job_scheduler.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 #include "components/keyed_service/core/keyed_service.h"
 
@@ -43,16 +41,9 @@ class DriveFs;
 
 namespace drive {
 
-class DebugInfoCollector;
-class DownloadHandler;
-class DriveServiceInterface;
 class EventLogger;
-class FileSystemInterface;
-class JobListInterface;
 
 namespace internal {
-class FileCache;
-class ResourceMetadata;
 class ResourceMetadataStorage;
 }  // namespace internal
 
@@ -102,8 +93,6 @@ class DriveIntegrationServiceObserver {
 // that are used to integrate Drive to Chrome. The object of this class is
 // created per-profile.
 class DriveIntegrationService : public KeyedService,
-                                public DriveNotificationObserver,
-                                public ProfileObserver,
                                 public drivefs::DriveFsHost::MountObserver,
                                 public chromeos::PowerManagerClient::Observer {
  public:
@@ -122,10 +111,8 @@ class DriveIntegrationService : public KeyedService,
   DriveIntegrationService(
       Profile* profile,
       PreferenceWatcher* preference_watcher,
-      DriveServiceInterface* test_drive_service,
       const std::string& test_mount_point_name,
       const base::FilePath& test_cache_root,
-      FileSystemInterface* test_file_system,
       DriveFsMojoListenerFactory test_drivefs_mojo_listener_factory = {});
   ~DriveIntegrationService() override;
 
@@ -157,12 +144,6 @@ class DriveIntegrationService : public KeyedService,
   void AddObserver(DriveIntegrationServiceObserver* observer);
   void RemoveObserver(DriveIntegrationServiceObserver* observer);
 
-  // DriveNotificationObserver implementation.
-  void OnNotificationReceived(
-      const std::map<std::string, int64_t>& invalidations) override;
-  void OnNotificationTimerFired() override;
-  void OnPushNotificationEnabled(bool enabled) override;
-
   // MountObserver implementation.
   void OnMounted(const base::FilePath& mount_path) override;
   void OnUnmounted(base::Optional<base::TimeDelta> remount_delay) override;
@@ -170,13 +151,6 @@ class DriveIntegrationService : public KeyedService,
                      base::Optional<base::TimeDelta> remount_delay) override;
 
   EventLogger* event_logger() { return logger_.get(); }
-  DriveServiceInterface* drive_service() { return drive_service_.get(); }
-  DebugInfoCollector* debug_info_collector() {
-    return debug_info_collector_.get();
-  }
-  FileSystemInterface* file_system() { return file_system_.get(); }
-  DownloadHandler* download_handler() { return download_handler_.get(); }
-  JobListInterface* job_list() { return scheduler_.get(); }
 
   // Clears all the local cache file, the local resource metadata, and
   // in-memory Drive app registry, and remounts the file system. |callback|
@@ -248,9 +222,6 @@ class DriveIntegrationService : public KeyedService,
 
   bool DownloadDirectoryPreferenceIsInDrive();
 
-  // ProfileObserver:
-  void OnOffTheRecordProfileCreated(Profile* off_the_record) override;
-
   // Migrate pinned files from the old Drive integration to DriveFS.
   void MigratePinnedFiles();
 
@@ -280,20 +251,11 @@ class DriveIntegrationService : public KeyedService,
   scoped_refptr<base::SequencedTaskRunner> blocking_task_runner_;
   std::unique_ptr<internal::ResourceMetadataStorage, util::DestroyHelper>
       metadata_storage_;
-  std::unique_ptr<internal::FileCache, util::DestroyHelper> cache_;
-  std::unique_ptr<DriveServiceInterface> drive_service_;
-  std::unique_ptr<JobScheduler> scheduler_;
-  std::unique_ptr<internal::ResourceMetadata, util::DestroyHelper>
-      resource_metadata_;
-  std::unique_ptr<FileSystemInterface> file_system_;
-  std::unique_ptr<DownloadHandler> download_handler_;
-  std::unique_ptr<DebugInfoCollector> debug_info_collector_;
 
   base::ObserverList<DriveIntegrationServiceObserver>::Unchecked observers_;
 
   std::unique_ptr<DriveFsHolder> drivefs_holder_;
   std::unique_ptr<PreferenceWatcher> preference_watcher_;
-  std::unique_ptr<NotificationManager> notification_manager_;
   int drivefs_total_failures_count_ = 0;
   int drivefs_consecutive_failures_count_ = 0;
   bool remount_when_online_ = false;
@@ -303,7 +265,6 @@ class DriveIntegrationService : public KeyedService,
   ScopedObserver<chromeos::PowerManagerClient,
                  chromeos::PowerManagerClient::Observer>
       power_manager_observer_{this};
-  ScopedObserver<Profile, ProfileObserver> observed_profiles_{this};
 
   // Note: This should remain the last member so it'll be destroyed and
   // invalidate its weak pointers before any other members are destroyed.

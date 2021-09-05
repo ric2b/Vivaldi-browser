@@ -38,14 +38,6 @@ int DebugColors::ContentLayerBorderWidth(float device_scale_factor) {
   return Scale(2, device_scale_factor);
 }
 
-// Masking layers are pale blue and wide.
-SkColor DebugColors::MaskingLayerBorderColor() {
-  return SkColorSetARGB(48, 128, 255, 255);
-}
-int DebugColors::MaskingLayerBorderWidth(float device_scale_factor) {
-  return Scale(20, device_scale_factor);
-}
-
 // Other container layers are yellow.
 SkColor DebugColors::ContainerLayerBorderColor() {
   return SkColorSetARGB(192, 255, 255, 0);
@@ -274,6 +266,17 @@ SkColor DebugColors::NonFastScrollableRectBorderColor() {
 int DebugColors::NonFastScrollableRectBorderWidth() { return 2; }
 SkColor DebugColors::NonFastScrollableRectFillColor() {
   return SkColorSetARGB(30, 238, 163, 59);
+}
+
+// Main-thread scrolling reason rects in yellow-orange.
+SkColor DebugColors::MainThreadScrollingReasonRectBorderColor() {
+  return SkColorSetARGB(255, 200, 100, 0);
+}
+int DebugColors::MainThreadScrollingReasonRectBorderWidth() {
+  return 2;
+}
+SkColor DebugColors::MainThreadScrollingReasonRectFillColor() {
+  return SkColorSetARGB(30, 200, 100, 0);
 }
 
 // Animation bounds are lime-green.

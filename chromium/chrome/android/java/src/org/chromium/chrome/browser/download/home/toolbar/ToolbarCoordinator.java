@@ -13,17 +13,16 @@ import android.view.ViewGroup;
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.browser.download.home.list.ListItem;
 import org.chromium.chrome.browser.download.home.metrics.UmaUtils;
-import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.ui.widget.FadingShadow;
-import org.chromium.chrome.browser.ui.widget.FadingShadowView;
-import org.chromium.chrome.browser.widget.selection.SelectableListToolbar;
-import org.chromium.chrome.browser.widget.selection.SelectionDelegate;
-import org.chromium.chrome.browser.widget.selection.SelectionDelegate.SelectionObserver;
+import org.chromium.chrome.browser.vr.VrModeProviderImpl;
 import org.chromium.chrome.download.R;
+import org.chromium.components.browser_ui.widget.FadingShadow;
+import org.chromium.components.browser_ui.widget.FadingShadowView;
+import org.chromium.components.browser_ui.widget.selectable_list.SelectableListToolbar;
+import org.chromium.components.browser_ui.widget.selectable_list.SelectionDelegate;
+import org.chromium.components.browser_ui.widget.selectable_list.SelectionDelegate.SelectionObserver;
+import org.chromium.components.feature_engagement.Tracker;
 
 import java.util.List;
-
-import org.chromium.chrome.browser.ChromeApplication;
 
 /**
  * A top level class to handle various toolbar related functionalities in download home.
@@ -93,8 +92,8 @@ public class ToolbarCoordinator implements SelectionObserver<ListItem> {
 
     public ToolbarCoordinator(Context context, ToolbarActionDelegate delegate,
             ToolbarListActionDelegate listActionDelegate,
-            SelectionDelegate<ListItem> selectionDelegate, boolean showOfflineHome,
-            boolean hasCloseButton, Profile profile) {
+            SelectionDelegate<ListItem> selectionDelegate, boolean hasCloseButton,
+            Tracker tracker) {
         mDelegate = delegate;
         mListActionDelegate = listActionDelegate;
 
@@ -102,24 +101,15 @@ public class ToolbarCoordinator implements SelectionObserver<ListItem> {
                 R.layout.download_home_toolbar, null);
         mToolbar = mView.findViewById(R.id.download_toolbar);
         mShadow = mView.findViewById(R.id.shadow);
-
-        if (ChromeApplication.isVivaldi()) {
-            View bg = mView.findViewById(R.id.action_bar_bg);
-            bg.setBackgroundColor(ApiCompatibilityUtils.getColor(
-                    context.getResources(), android.R.color.transparent));
-        }
-
-        int titleResId =
-                showOfflineHome ? R.string.download_manager_offline_home : R.string.menu_downloads;
-        mToolbar.initialize(selectionDelegate, titleResId, R.id.normal_menu_group,
-                R.id.selection_mode_menu_group, hasCloseButton);
+        mToolbar.initialize(selectionDelegate, R.string.menu_downloads, R.id.normal_menu_group,
+                R.id.selection_mode_menu_group, hasCloseButton, new VrModeProviderImpl());
         mToolbar.setOnMenuItemClickListener(this ::onMenuItemClick);
 
         // TODO(crbug.com/881037): Pass the visible group to the toolbar during initialization.
         mToolbar.initializeSearchView(
                 mSearchDelegate, R.string.download_manager_search, R.id.search_menu_id);
 
-        ToolbarUtils.setupTrackerForDownloadSettingsIPH(mToolbar, profile);
+        ToolbarUtils.setupTrackerForDownloadSettingsIPH(tracker, mToolbar);
 
         mShadow.init(ApiCompatibilityUtils.getColor(
                              context.getResources(), R.color.toolbar_shadow_color),

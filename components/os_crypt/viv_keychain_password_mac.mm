@@ -8,7 +8,6 @@
 #include "base/mac/scoped_cftyperef.h"
 #include "base/rand_util.h"
 #include "build/branding_buildflags.h"
-#include "components/os_crypt/encryption_key_creation_util.h"
 #include "crypto/apple_keychain.h"
 
 std::string KeychainPassword::GetPassword(

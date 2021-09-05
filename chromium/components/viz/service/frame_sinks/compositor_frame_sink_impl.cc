@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
+#include "ui/gfx/overlay_transform.h"
 
 namespace viz {
 
@@ -23,8 +24,7 @@ CompositorFrameSinkImpl::CompositorFrameSinkImpl(
           compositor_frame_sink_client_.get(),
           frame_sink_manager,
           frame_sink_id,
-          false /* is_root */,
-          true /* needs_sync_points */)) {
+          false /* is_root */)) {
   compositor_frame_sink_receiver_.set_disconnect_handler(
       base::BindOnce(&CompositorFrameSinkImpl::OnClientConnectionLost,
                      base::Unretained(this)));
@@ -45,6 +45,8 @@ void CompositorFrameSinkImpl::SubmitCompositorFrame(
     CompositorFrame frame,
     base::Optional<HitTestRegionList> hit_test_region_list,
     uint64_t submit_time) {
+  // Non-root surface frames should not have display transform hint.
+  DCHECK_EQ(gfx::OVERLAY_TRANSFORM_NONE, frame.metadata.display_transform_hint);
   SubmitCompositorFrameInternal(local_surface_id, std::move(frame),
                                 std::move(hit_test_region_list), submit_time,
                                 SubmitCompositorFrameSyncCallback());

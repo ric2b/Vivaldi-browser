@@ -5,6 +5,7 @@
 #include "ui/views/controls/textfield/textfield_model.h"
 
 #include <algorithm>
+#include <utility>
 
 #include "base/logging.h"
 #include "base/macros.h"
@@ -306,7 +307,7 @@ TextfieldModel::Delegate::~Delegate() = default;
 
 TextfieldModel::TextfieldModel(Delegate* delegate)
     : delegate_(delegate),
-      render_text_(gfx::RenderText::CreateHarfBuzzInstance()),
+      render_text_(gfx::RenderText::CreateRenderText()),
       current_edit_(edit_history_.end()) {}
 
 TextfieldModel::~TextfieldModel() {
@@ -364,8 +365,8 @@ bool TextfieldModel::Delete(bool add_to_kill_buffer) {
     DeleteSelection();
     return true;
   }
-  if (text().length() > GetCursorPosition()) {
-    size_t cursor_position = GetCursorPosition();
+  const size_t cursor_position = GetCursorPosition();
+  if (cursor_position < text().length()) {
     size_t next_grapheme_index = render_text_->IndexOfAdjacentGrapheme(
         cursor_position, gfx::CURSOR_FORWARD);
     gfx::Range range_to_delete(cursor_position, next_grapheme_index);
@@ -393,7 +394,7 @@ bool TextfieldModel::Backspace(bool add_to_kill_buffer) {
     DeleteSelection();
     return true;
   }
-  size_t cursor_position = GetCursorPosition();
+  const size_t cursor_position = GetCursorPosition();
   if (cursor_position > 0) {
     gfx::Range range_to_delete(
         PlatformStyle::RangeToDeleteBackwards(text(), cursor_position));
@@ -429,6 +430,10 @@ bool TextfieldModel::MoveCursorTo(const gfx::SelectionModel& cursor) {
         gfx::SelectionModel(cursor.caret_pos(), cursor.caret_affinity()));
   }
   return render_text_->SetSelection(cursor);
+}
+
+bool TextfieldModel::MoveCursorTo(size_t pos) {
+  return MoveCursorTo(gfx::SelectionModel(pos, gfx::CURSOR_FORWARD));
 }
 
 bool TextfieldModel::MoveCursorTo(const gfx::Point& point, bool select) {
@@ -480,8 +485,8 @@ bool TextfieldModel::CanRedo() {
     return false;
   // There is no redo iff the current edit is the last element in the history.
   auto iter = current_edit_;
-  return iter == edit_history_.end() || // at the top.
-      ++iter != edit_history_.end();
+  return iter == edit_history_.end() ||  // at the top.
+         ++iter != edit_history_.end();
 }
 
 bool TextfieldModel::Undo() {
@@ -524,13 +529,6 @@ bool TextfieldModel::Cut() {
   if (!HasCompositionText() && HasSelection() && !render_text_->obscured()) {
     ui::ScopedClipboardWriter(ui::ClipboardBuffer::kCopyPaste)
         .WriteText(GetSelectedText());
-    // A trick to let undo/redo handle cursor correctly.
-    // Undoing CUT moves the cursor to the end of the change rather
-    // than beginning, unlike Delete/Backspace.
-    // TODO(oshima): Change Delete/Backspace to use DeleteSelection,
-    // update DeleteEdit and remove this trick.
-    const gfx::Range& selection = render_text_->selection();
-    render_text_->SelectRange(gfx::Range(selection.end(), selection.start()));
     DeleteSelection();
     return true;
   }
@@ -686,8 +684,8 @@ void TextfieldModel::SetCompositionFromExistingText(const gfx::Range& range) {
 
 void TextfieldModel::ConfirmCompositionText() {
   DCHECK(HasCompositionText());
-  base::string16 composition = text().substr(
-      composition_range_.start(), composition_range_.length());
+  base::string16 composition =
+      text().substr(composition_range_.start(), composition_range_.length());
   // TODO(oshima): current behavior on ChromeOS is a bit weird and not
   // sure exactly how this should work. Find out and fix if necessary.
   AddOrMergeEditHistory(std::make_unique<internal::InsertEdit>(

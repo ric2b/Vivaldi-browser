@@ -1,0 +1,10 @@
+// Copyright (c) 2020 Vivaldi Technologies AS. All rights reserved
+
+module adblock_filter.mojom;
+
+import "url/mojom/url.mojom";
+
+interface CosmeticFilter {
+  GetStyleSheet(url.mojom.Url url) => (string stylesheet);
+  ShouldAllowWebRTC(url.mojom.Url document_url, array<url.mojom.Url> ice_servers) => (bool allowed);
+};

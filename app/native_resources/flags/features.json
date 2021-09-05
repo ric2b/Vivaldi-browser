@@ -1,17 +1,5 @@
 {
   "flags": {
-    "profile_management": {
-      "friendly_name": "User profile management",
-      "description": "Enables a menu entry to do user profile management and open guest windows",
-      "value": "true",
-      "internal_value": "true"
-    },
-    "razer_chroma_support": {
-      "friendly_name": "Razer Chroma support",
-      "description": "Enables Razer Chroma color device integration (on Windows). Requires a restart of Vivaldi to be active.",
-      "value": "true",
-      "internal_value": "true"
-    },
     "double_click_menu": {
       "friendly_name": "Show context menu on a double click",
       "description": "Use a double click anywhere in the page to show its context menu. Requires a restart of Vivaldi to be active.",
@@ -34,6 +22,12 @@
       "friendly_name": "Menu entries for installing Progressive Web Apps.",
       "description": "Enables menu entries to do installation of Progressive Web Apps.",
       "value": "false",
+      "internal_value": "true"
+    },
+    "notes_manager": {
+      "friendly_name": "Experimental Notes editor.",
+      "description": "Edit and view notes in a tab.",
+      "value": "true",
       "internal_value": "true"
     }
   }

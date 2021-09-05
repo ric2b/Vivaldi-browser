@@ -12,11 +12,13 @@ import android.content.pm.ResolveInfo;
 import android.content.res.Resources;
 import android.graphics.drawable.Drawable;
 import android.provider.Browser;
-import android.support.v4.graphics.drawable.DrawableCompat;
 import android.text.TextUtils;
 import android.widget.ImageView;
 
+import androidx.core.graphics.drawable.DrawableCompat;
+
 import org.chromium.base.ApiCompatibilityUtils;
+import org.chromium.base.IntentUtils;
 import org.chromium.base.PackageManagerUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
@@ -25,11 +27,11 @@ import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchUma;
 import org.chromium.chrome.browser.contextualsearch.QuickActionCategory;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.util.ColorUtils;
-import org.chromium.chrome.browser.util.IntentUtils;
+import org.chromium.chrome.browser.toolbar.ToolbarColors;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
 import org.chromium.ui.resources.dynamics.ViewResourceInflater;
+import org.chromium.ui.util.ColorUtils;
 
 import java.net.URISyntaxException;
 import java.util.List;
@@ -300,7 +302,7 @@ public class ContextualSearchQuickActionControl extends ViewResourceInflater {
 
                 Resources res = mContext.getResources();
                 if (mToolbarBackgroundColor != 0
-                        && !ColorUtils.isUsingDefaultToolbarColor(
+                        && !ToolbarColors.isUsingDefaultToolbarColor(
                                 res, false, mToolbarBackgroundColor)
                         && ColorUtils.shouldUseLightForegroundOnBackground(
                                 mToolbarBackgroundColor)) {

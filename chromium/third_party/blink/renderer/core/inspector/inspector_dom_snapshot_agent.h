@@ -26,16 +26,9 @@ class PaintLayer;
 class CORE_EXPORT InspectorDOMSnapshotAgent final
     : public InspectorBaseAgent<protocol::DOMSnapshot::Metainfo> {
  public:
-  static InspectorDOMSnapshotAgent* Create(
-      InspectedFrames* inspected_frames,
-      InspectorDOMDebuggerAgent* dom_debugger_agent) {
-    return MakeGarbageCollected<InspectorDOMSnapshotAgent>(inspected_frames,
-                                                           dom_debugger_agent);
-  }
-
   InspectorDOMSnapshotAgent(InspectedFrames*, InspectorDOMDebuggerAgent*);
   ~InspectorDOMSnapshotAgent() override;
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
   void Restore() override;
 
@@ -101,8 +94,6 @@ class CORE_EXPORT InspectorDOMSnapshotAgent final
   std::unique_ptr<protocol::Array<int>> BuildArrayForElementAttributes(Node*);
   int BuildLayoutTreeNode(LayoutObject*, Node*, int node_index);
   std::unique_ptr<protocol::Array<int>> BuildStylesForNode(Node*);
-
-  void GetOriginUrl(String*, const Node*);
 
   static void TraversePaintLayerTree(Document*, PaintOrderMap* paint_order_map);
   static void VisitPaintLayer(PaintLayer*, PaintOrderMap* paint_order_map);

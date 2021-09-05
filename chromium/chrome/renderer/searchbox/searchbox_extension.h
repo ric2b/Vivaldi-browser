@@ -37,12 +37,14 @@ class SearchBoxExtension {
                                              bool success);
   static void DispatchDeleteCustomLinkResult(blink::WebLocalFrame* frame,
                                              bool success);
-  static void DispatchQueryAutocompleteResult(
+  static void DispatchAutocompleteResultChanged(
       blink::WebLocalFrame* frame,
       chrome::mojom::AutocompleteResultPtr result);
-  static void DispatchDeleteAutocompleteMatchResult(
+  static void DispatchAutocompleteMatchImageAvailable(
       blink::WebLocalFrame* frame,
-      chrome::mojom::DeleteAutocompleteMatchResultPtr result);
+      uint32_t match_index,
+      const std::string& image_url,
+      const std::string& data_url);
   static void DispatchInputCancel(blink::WebLocalFrame* frame);
   static void DispatchInputStart(blink::WebLocalFrame* frame);
   static void DispatchKeyCaptureChange(blink::WebLocalFrame* frame);

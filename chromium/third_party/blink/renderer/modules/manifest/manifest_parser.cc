@@ -81,9 +81,7 @@ void ManifestParser::Parse() {
   if (share_target.has_value())
     manifest_->share_target = std::move(*share_target);
 
-  auto file_handler = ParseFileHandler(root_object.get());
-  if (file_handler.has_value())
-    manifest_->file_handler = std::move(*file_handler);
+  manifest_->file_handlers = ParseFileHandlers(root_object.get());
 
   manifest_->related_applications = ParseRelatedApplications(root_object.get());
   manifest_->prefer_related_applications =
@@ -101,6 +99,7 @@ void ManifestParser::Parse() {
     manifest_->background_color = *background_color;
 
   manifest_->gcm_sender_id = ParseGCMSenderID(root_object.get());
+  manifest_->shortcuts = ParseShortcuts(root_object.get());
 
   ManifestUmaUtil::ParseSucceeded(manifest_);
 }
@@ -153,6 +152,41 @@ base::Optional<String> ManifestParser::ParseString(const JSONObject* object,
   return value;
 }
 
+base::Optional<String> ManifestParser::ParseStringForMember(
+    const JSONObject* object,
+    const String& member_name,
+    const String& key,
+    bool required,
+    TrimType trim) {
+  JSONValue* json_value = object->Get(key);
+  if (!json_value) {
+    if (required) {
+      AddErrorInfo("property '" + key + "' of '" + member_name +
+                   "' not present.");
+    }
+
+    return base::nullopt;
+  }
+
+  String value;
+  if (!json_value->AsString(&value)) {
+    AddErrorInfo("property '" + key + "' of '" + member_name +
+                 "' ignored, type string expected.");
+    return base::nullopt;
+  }
+  if (trim == TrimType::Trim)
+    value = value.StripWhiteSpace();
+
+  if (value == "") {
+    AddErrorInfo("property '" + key + "' of '" + member_name +
+                 "' is an empty string.");
+    if (required)
+      return base::nullopt;
+  }
+
+  return value;
+}
+
 base::Optional<RGBA32> ManifestParser::ParseColor(const JSONObject* object,
                                                   const String& key) {
   base::Optional<String> parsed_color = ParseString(object, key, Trim);
@@ -185,7 +219,7 @@ KURL ManifestParser::ParseURL(const JSONObject* object,
 
   switch (origin_restriction) {
     case ParseURLOriginRestrictions::kSameOriginOnly:
-      if (!SecurityOrigin::AreSameSchemeHostPort(resolved, document_url_)) {
+      if (!SecurityOrigin::AreSameOrigin(resolved, document_url_)) {
         AddErrorInfo("property '" + key +
                      "' ignored, should be same origin as document.");
         return KURL();
@@ -227,7 +261,7 @@ KURL ManifestParser::ParseScope(const JSONObject* object,
   if (scope.IsEmpty())
     return KURL(default_value.BaseAsString());
 
-  if (!SecurityOrigin::AreSameSchemeHostPort(default_value, scope) ||
+  if (!SecurityOrigin::AreSameOrigin(default_value, scope) ||
       !default_value.GetPath().StartsWith(scope.GetPath())) {
     AddErrorInfo(
         "property 'scope' ignored. Start url should be within scope "
@@ -276,14 +310,14 @@ String ManifestParser::ParseIconType(const JSONObject* icon) {
   return type.has_value() ? *type : String("");
 }
 
-Vector<WebSize> ManifestParser::ParseIconSizes(const JSONObject* icon) {
+Vector<gfx::Size> ManifestParser::ParseIconSizes(const JSONObject* icon) {
   base::Optional<String> sizes_str = ParseString(icon, "sizes", NoTrim);
   if (!sizes_str.has_value())
-    return Vector<WebSize>();
+    return Vector<gfx::Size>();
 
-  WebVector<WebSize> web_sizes =
+  WebVector<gfx::Size> web_sizes =
       WebIconSizesParser::ParseIconSizes(WebString(*sizes_str));
-  Vector<WebSize> sizes;
+  Vector<gfx::Size> sizes;
   for (auto& size : web_sizes)
     sizes.push_back(size);
 
@@ -383,6 +417,81 @@ Vector<mojom::blink::ManifestImageResourcePtr> ManifestParser::ParseIcons(
   }
 
   return icons;
+}
+
+String ManifestParser::ParseShortcutName(const JSONObject* shortcut) {
+  base::Optional<String> name =
+      ParseStringForMember(shortcut, "shortcut", "name", true, Trim);
+  return name.has_value() ? *name : String();
+}
+
+String ManifestParser::ParseShortcutShortName(const JSONObject* shortcut) {
+  base::Optional<String> short_name =
+      ParseStringForMember(shortcut, "shortcut", "short_name", false, Trim);
+  return short_name.has_value() ? *short_name : String();
+}
+
+String ManifestParser::ParseShortcutDescription(const JSONObject* shortcut) {
+  base::Optional<String> description =
+      ParseStringForMember(shortcut, "shortcut", "description", false, Trim);
+  return description.has_value() ? *description : String();
+}
+
+KURL ManifestParser::ParseShortcutUrl(const JSONObject* shortcut) {
+  KURL shortcut_url = ParseURL(shortcut, "url", manifest_url_,
+                               ParseURLOriginRestrictions::kSameOriginOnly);
+  if (shortcut_url.IsNull()) {
+    AddErrorInfo("property 'url' of 'shortcut' not present.");
+  } else if (!shortcut_url.GetString().StartsWith(
+                 manifest_->scope.GetString())) {
+    AddErrorInfo(
+        "property 'url' of 'shortcut' ignored. url should be within scope of "
+        "the manifest.");
+    return KURL();
+  }
+
+  return shortcut_url;
+}
+
+Vector<mojom::blink::ManifestShortcutItemPtr> ManifestParser::ParseShortcuts(
+    const JSONObject* object) {
+  Vector<mojom::blink::ManifestShortcutItemPtr> shortcuts;
+  JSONValue* json_value = object->Get("shortcuts");
+  if (!json_value)
+    return shortcuts;
+
+  JSONArray* shortcuts_list = object->GetArray("shortcuts");
+  if (!shortcuts_list) {
+    AddErrorInfo("property 'shortcuts' ignored, type array expected.");
+    return shortcuts;
+  }
+
+  for (wtf_size_t i = 0; i < shortcuts_list->size(); ++i) {
+    JSONObject* shortcut_object = JSONObject::Cast(shortcuts_list->at(i));
+    if (!shortcut_object)
+      continue;
+
+    auto shortcut = mojom::blink::ManifestShortcutItem::New();
+    shortcut->url = ParseShortcutUrl(shortcut_object);
+    // A shortcut MUST have a valid url. If it does not, it MUST be ignored.
+    if (!shortcut->url.IsValid())
+      continue;
+
+    // A shortcut MUST have a valid name. If it does not, it MUST be ignored.
+    shortcut->name = ParseShortcutName(shortcut_object);
+    if (shortcut->name == String())
+      continue;
+
+    shortcut->short_name = ParseShortcutShortName(shortcut_object);
+    shortcut->description = ParseShortcutDescription(shortcut_object);
+    auto icons = ParseIcons(shortcut_object);
+    if (!icons.IsEmpty())
+      shortcut->icons = std::move(icons);
+
+    shortcuts.push_back(std::move(shortcut));
+  }
+
+  return shortcuts;
 }
 
 String ManifestParser::ParseFileFilterName(const JSONObject* file) {
@@ -627,30 +736,118 @@ ManifestParser::ParseShareTarget(const JSONObject* object) {
   return share_target;
 }
 
+Vector<mojom::blink::ManifestFileHandlerPtr> ManifestParser::ParseFileHandlers(
+    const JSONObject* object) {
+  Vector<mojom::blink::ManifestFileHandlerPtr> result;
+
+  if (!object->Get("file_handlers"))
+    return result;
+
+  JSONArray* entry_array = object->GetArray("file_handlers");
+  if (!entry_array) {
+    AddErrorInfo("property 'file_handlers' ignored, type array expected.");
+    return result;
+  }
+
+  for (wtf_size_t i = 0; i < entry_array->size(); ++i) {
+    JSONObject* json_entry = JSONObject::Cast(entry_array->at(i));
+    if (!json_entry) {
+      AddErrorInfo("FileHandler ignored, type object expected.");
+      continue;
+    }
+
+    base::Optional<mojom::blink::ManifestFileHandlerPtr> entry =
+        ParseFileHandler(json_entry);
+    if (!entry)
+      continue;
+
+    result.push_back(std::move(entry.value()));
+  }
+
+  return result;
+}
+
 base::Optional<mojom::blink::ManifestFileHandlerPtr>
-ManifestParser::ParseFileHandler(const JSONObject* object) {
-  const JSONObject* file_handler_object = object->GetJSONObject("file_handler");
-  if (!file_handler_object)
+ManifestParser::ParseFileHandler(const JSONObject* file_handler) {
+  mojom::blink::ManifestFileHandlerPtr entry =
+      mojom::blink::ManifestFileHandler::New();
+  entry->action = ParseURL(file_handler, "action", manifest_url_,
+                           ParseURLOriginRestrictions::kSameOriginOnly);
+  if (!entry->action.IsValid()) {
+    AddErrorInfo("FileHandler ignored. Property 'action' is invalid.");
     return base::nullopt;
+  }
 
-  auto file_handler = mojom::blink::ManifestFileHandler::New();
-  file_handler->action = ParseURL(file_handler_object, "action", manifest_url_,
-                                  ParseURLOriginRestrictions::kSameOriginOnly);
-  if (!file_handler->action.IsValid()) {
+  entry->name = ParseString(file_handler, "name", Trim).value_or("");
+
+  entry->accept = ParseFileHandlerAccept(file_handler->GetJSONObject("accept"));
+  if (entry->accept.IsEmpty()) {
+    AddErrorInfo("FileHandler ignored. Property 'accept' is invalid.");
+    return base::nullopt;
+  }
+
+  return entry;
+}
+
+HashMap<String, Vector<String>> ManifestParser::ParseFileHandlerAccept(
+    const JSONObject* accept) {
+  HashMap<String, Vector<String>> result;
+  if (!accept)
+    return result;
+
+  for (wtf_size_t i = 0; i < accept->size(); ++i) {
+    JSONObject::Entry entry = accept->at(i);
+    String& mimetype = entry.first;
+
+    Vector<String> extensions;
+    String extension;
+    JSONArray* extensions_array = JSONArray::Cast(entry.second);
+    if (extensions_array) {
+      for (wtf_size_t j = 0; j < extensions_array->size(); ++j) {
+        JSONValue* value = extensions_array->at(j);
+        if (!value->AsString(&extension)) {
+          AddErrorInfo(
+              "property 'accept' file extension ignored, type string "
+              "expected.");
+          continue;
+        }
+
+        if (!ParseFileHandlerAcceptExtension(value, &extension)) {
+          // Errors are added by ParseFileHandlerAcceptExtension.
+          continue;
+        }
+
+        extensions.push_back(extension);
+      }
+    } else if (ParseFileHandlerAcceptExtension(entry.second, &extension)) {
+      extensions.push_back(extension);
+    } else {
+      // Parsing errors will already have been added.
+      continue;
+    }
+
+    result.Set(mimetype, std::move(extensions));
+  }
+
+  return result;
+}
+
+bool ManifestParser::ParseFileHandlerAcceptExtension(const JSONValue* extension,
+                                                     String* output) {
+  if (!extension->AsString(output)) {
     AddErrorInfo(
-        "property 'file_handler' ignored. Property 'action' is "
-        "invalid.");
-    return base::nullopt;
+        "property 'accept' type ignored. File extensions must be type array or "
+        "type string.");
+    return false;
   }
 
-  file_handler->files = ParseTargetFiles("files", file_handler_object);
-
-  if (file_handler->files.size() == 0) {
-    AddErrorInfo("no file handlers were specified.");
-    return base::nullopt;
+  if (!output->StartsWith(".")) {
+    AddErrorInfo(
+        "property 'accept' file extension ignored, must start with a '.'.");
+    return false;
   }
 
-  return file_handler;
+  return true;
 }
 
 String ManifestParser::ParseRelatedApplicationPlatform(

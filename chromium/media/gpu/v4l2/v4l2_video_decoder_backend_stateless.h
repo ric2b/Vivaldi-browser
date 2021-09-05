@@ -12,7 +12,7 @@
 #include "base/sequenced_task_runner.h"
 #include "media/base/decode_status.h"
 #include "media/base/video_decoder.h"
-#include "media/gpu/linux/dmabuf_video_frame_pool.h"
+#include "media/gpu/chromeos/dmabuf_video_frame_pool.h"
 #include "media/gpu/v4l2/v4l2_decode_surface_handler.h"
 #include "media/gpu/v4l2/v4l2_video_decoder_backend.h"
 
@@ -32,7 +32,6 @@ class V4L2StatelessVideoDecoderBackend : public V4L2VideoDecoderBackend,
   V4L2StatelessVideoDecoderBackend(
       Client* const client,
       scoped_refptr<V4L2Device> device,
-      DmabufVideoFramePool* const frame_pool,
       VideoCodecProfile profile,
       scoped_refptr<base::SequencedTaskRunner> task_runner);
 
@@ -45,16 +44,19 @@ class V4L2StatelessVideoDecoderBackend : public V4L2VideoDecoderBackend,
                          int32_t bitstream_id) override;
   void OnOutputBufferDequeued(V4L2ReadableBufferRef buffer) override;
   void OnStreamStopped() override;
+  bool ApplyResolution(const gfx::Size& pic_size,
+                       const gfx::Rect& visible_rect,
+                       const size_t num_output_frames) override;
+  void OnChangeResolutionDone(bool success) override;
   void ClearPendingRequests(DecodeStatus status) override;
 
   // V4L2DecodeSurfaceHandler implementation.
   scoped_refptr<V4L2DecodeSurface> CreateSurface() override;
-  bool SubmitSlice(const scoped_refptr<V4L2DecodeSurface>& dec_surface,
+  bool SubmitSlice(V4L2DecodeSurface* dec_surface,
                    const uint8_t* data,
                    size_t size) override;
-  void DecodeSurface(
-      const scoped_refptr<V4L2DecodeSurface>& dec_surface) override;
-  void SurfaceReady(const scoped_refptr<V4L2DecodeSurface>& dec_surface,
+  void DecodeSurface(scoped_refptr<V4L2DecodeSurface> dec_surface) override;
+  void SurfaceReady(scoped_refptr<V4L2DecodeSurface> dec_surface,
                     int32_t bitstream_id,
                     const gfx::Rect& visible_rect,
                     const VideoColorSpace& color_space) override;
@@ -98,7 +100,11 @@ class V4L2StatelessVideoDecoderBackend : public V4L2VideoDecoderBackend,
     kWaitSubFrameDecoded,
   };
 
-  // Callback which is called when V4L2 surface is destroyed.
+  // Callback which is called when the output buffer is not used anymore.
+  static void ReuseOutputBufferThunk(
+      scoped_refptr<base::SequencedTaskRunner> task_runner,
+      base::Optional<base::WeakPtr<V4L2StatelessVideoDecoderBackend>> weak_this,
+      V4L2ReadableBufferRef buffer);
   void ReuseOutputBuffer(V4L2ReadableBufferRef buffer);
 
   // Try to advance the decoding work.
@@ -115,18 +121,19 @@ class V4L2StatelessVideoDecoderBackend : public V4L2VideoDecoderBackend,
   // dequeued from the V4L2 device.
   void PumpOutputSurfaces();
   // Setup the format of V4L2 output buffer, and allocate new buffer set.
-  bool ChangeResolution();
+  void ChangeResolution();
 
-  // Check whether request api is supported or not.
-  bool CheckRequestAPISupport();
-  // Allocate necessary request buffers is request api is supported.
-  bool AllocateRequests();
+  // Returns whether |profile| is supported by a v4l2 stateless decoder driver.
+  bool IsSupportedProfile(VideoCodecProfile profile);
 
-  // Video frame pool provided by the decoder.
-  DmabufVideoFramePool* const frame_pool_;
+  // Create codec-specific AcceleratedVideoDecoder and reset related variables.
+  bool CreateAvd();
 
-  // Video profile we will be decoding.
-  const VideoCodecProfile profile_;
+  // Video profile we are decoding.
+  VideoCodecProfile profile_;
+
+  // Video coded size we are decoding.
+  gfx::Size pic_size_;
 
   // Video decoder used to parse stream headers by software.
   std::unique_ptr<AcceleratedVideoDecoder> avd_;
@@ -158,12 +165,11 @@ class V4L2StatelessVideoDecoderBackend : public V4L2VideoDecoderBackend,
   // Callbacks of EOS buffer passed from Decode().
   VideoDecoder::DecodeCB flush_cb_;
 
-  // Set to true during Initialize() if the codec driver supports request API.
-  bool supports_requests_ = false;
-  // FIFO queue of requests, only used if supports_requests_ is true.
-  base::queue<base::ScopedFD> requests_;
-  // Stores the media file descriptor, only used if supports_requests_ is true.
-  base::ScopedFD media_fd_;
+  // VideoCodecProfiles supported by a v4l2 stateless decoder driver.
+  std::vector<VideoCodecProfile> supported_profiles_;
+
+  // Reference to request queue to get free requests.
+  V4L2RequestsQueue* requests_queue_;
 
   base::WeakPtr<V4L2StatelessVideoDecoderBackend> weak_this_;
   base::WeakPtrFactory<V4L2StatelessVideoDecoderBackend> weak_this_factory_{

@@ -1,17 +1,23 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="cs">
+<translation id="1195447618553298278">Neznámá chyba.</translation>
+<translation id="1468664791493211953">Nabídky</translation>
 <translation id="1482734542997480527">Toto zařízení je spravováno doménou <ph name="ENROLLMENT_DOMAIN" />, která také může sledovat vaši aktivitu.</translation>
+<translation id="150962533380566081">Neplatný kód PUK.</translation>
 <translation id="1510238584712386396">Spouštěč</translation>
+<translation id="159973520823200404">Objevit</translation>
 <translation id="1734367976349034509">Toto zařízení je spravováno organizací</translation>
+<translation id="1905710495812624430">Byl překročen maximální povolený počet pokusů.</translation>
 <translation id="1930797645656624981">Služba metod zadávání systému Chrome OS</translation>
 <translation id="1979103255016296513">Uběhl termín pro změnu hesla</translation>
 <translation id="2049639323467105390">Zařízení je spravováno doménou <ph name="DOMAIN" />.</translation>
-<translation id="2083960536266308407">Na obrazovce nebylo nic nalezeno</translation>
 <translation id="2338501278241028356">Chcete-li objevit okolní zařízení, zapněte Bluetooth</translation>
+<translation id="2375079107209812402">Zbývající pokusy: <ph name="ATTEMPTS_LEFT" /></translation>
 <translation id="2805756323405976993">Aplikace</translation>
 <translation id="2872961005593481000">Vypnout</translation>
 <translation id="3008341117444806826">OBNOVIT</translation>
+<translation id="3820172043799983114">Neplatný kód PIN.</translation>
 <translation id="3838338534323494292">Nové heslo</translation>
 <translation id="4003259559679196451">Toto zařízení je spravováno doménou <ph name="ENROLLMENT_DOMAIN" />, která má přístup k veškeré uživatelské aktivitě, včetně navštívených webových stránek, hesel a e‑mailu.</translation>
 <translation id="4227825898293920515">Platnost hesla vyprší za <ph name="TIME" /></translation>
@@ -35,7 +41,9 @@ Zkuste klepnout na mikrofon a zeptat se.</translation>
 <translation id="7658239707568436148">Zrušit</translation>
 <translation id="7690294790491645610">Potvrďte nové heslo</translation>
 <translation id="808894953321890993">Změnit heslo</translation>
+<translation id="8208861521865154048">Výhody</translation>
 <translation id="8747900814994928677">Potvrdit změnu</translation>
+<translation id="89415009803968170"><ph name="ERROR_MESSAGE" /> Zbývající pokusy: <ph name="ATTEMPTS_LEFT" /></translation>
 <translation id="910415269708673980">Obnovte lístek pro <ph name="PRINCIPAL_NAME" /></translation>
 <translation id="9111102763498581341">Odemknout</translation>
 </translationbundle>

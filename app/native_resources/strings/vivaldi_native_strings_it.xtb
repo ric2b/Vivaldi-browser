@@ -6,7 +6,7 @@
 <translation id="1158503667684816647">Non mostrare nuovamente la conferma</translation>
 <translation id="1276145862619442150">Selezione Rapida</translation>
 <translation id="1281950884873973195">Animale 6</translation>
-<translation id="1411638389238344450">Invia Link via posta</translation>
+<translation id="1411638389238344450">Invia Link tramite mail</translation>
 <translation id="1454726940098520109">Non Chiedere Conferma Di Nuovo</translation>
 <translation id="1462666970065907900">Vuoi davvero chiudere questa finestra?</translation>
 <translation id="1657174850639146440">Mostro 9</translation>
@@ -45,7 +45,6 @@
 <translation id="3542768452570884558">Apri link in nuova finestra</translation>
 <translation id="3588820906588687999">Apri immagine in nuova scheda</translation>
 <translation id="3601066750251199488">Mostro 3</translation>
-<translation id="366643050267431920">Aggiungi come evento</translation>
 <translation id="3732157130969736834">Aggiungi link nei segnalibri</translation>
 <translation id="3732388226447288666">Animale 2</translation>
 <translation id="3732439195215136813">Animale 5</translation>
@@ -68,7 +67,6 @@
 <translation id="4636708767492582204">Invia per posta</translation>
 <translation id="4677434526832593569">Animale 8</translation>
 <translation id="4881695831933465202">Apri</translation>
-<translation id="4973311370126107785">L'esecuzione di JavaScript attraverso AppleScript è disabilitata. Per abilitarla, dalla barra del menù, vai su Strumenti &gt; Consenti JavaScript da Eventi Apple.</translation>
 <translation id="5014281392052865061">Selezione rapida importata</translation>
 <translation id="5092656712000637858">Aggiungi pagina al pannello web</translation>
 <translation id="5177818338935286353">Mostro 7</translation>
@@ -89,6 +87,7 @@
 <translation id="6229528619562190452">Clicca qui per aggiornare Vivaldi.</translation>
 <translation id="6234173136417926046">Usa immagine come sfondo per la pagina iniziale</translation>
 <translation id="630690498669249215">File Segnalibri Opera</translation>
+<translation id="6339818817272922368">Account locale</translation>
 <translation id="6438786710866753178">Paesaggio 4</translation>
 <translation id="6477028720702061455">Seleziona cartella profilo Opera per l'importazione</translation>
 <translation id="6510706699590490869">&amp;Aggiornamento Vivaldi</translation>
@@ -103,6 +102,7 @@
 <translation id="7496505986576158197">Vivaldi è reso possibile dal progetto open source <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> e da altri <ph name="BEGIN_LINK_OSS" />software open source<ph name="END_LINK_OSS" />.</translation>
 <translation id="7715497554424665066">&amp;Ignora aggiornamento</translation>
 <translation id="7724603315864178912">Taglia</translation>
+<translation id="7793738202466490491">Aggiungi come evento del calendario</translation>
 <translation id="7865983598101744945">Conferma l'uscita</translation>
 <translation id="7957213167373139414">Il mio Calendario</translation>
 <translation id="8027581147000338959">Apri un una nuova finestra</translation>
@@ -112,6 +112,7 @@
 <translation id="8331671104904436324">Apri un una scheda in secondo piano</translation>
 <translation id="8373293945112511707">Paesaggio 1</translation>
 <translation id="8427094907586191051">Paesaggio 17</translation>
+<translation id="8446668873108041390">L'esecuzione di JavaScript attraverso AppleScript è disattivata. In Impostazioni &gt; Privacy &gt; Apple Events, c'è un'impostazione per consentire JavaScript da Apple Events.</translation>
 <translation id="8539196077526389150">Paesaggio 13</translation>
 <translation id="8624587806981488221">&amp;Ricarica immagine</translation>
 <translation id="864444594187862076">Opera versione 15+ (Developer)</translation>

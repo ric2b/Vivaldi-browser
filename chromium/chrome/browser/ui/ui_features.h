@@ -17,25 +17,23 @@ namespace features {
 // All features in alphabetical order. The features should be documented
 // alongside the definition of their values in the .cc file.
 
-extern const base::Feature kAnimatedAvatarButton;
-extern const base::Feature kAnimatedAvatarButtonOnSignIn;
-extern const base::Feature kAnimatedAvatarButtonOnOpeningWindow;
-
 extern const base::Feature kEvDetailsInPageInfo;
 
 extern const base::Feature kExtensionsToolbarMenu;
 
-extern const base::Feature kUseTextForUpdateButton;
+extern const base::Feature kMixBrowserTypeTabs;
 
 extern const base::Feature kNewTabstripAnimation;
 
-extern const base::Feature kProfileMenuRevamp;
+extern const base::Feature kProminentDarkModeActiveTabTitle;
 
 extern const base::Feature kScrollableTabStrip;
 
-extern const base::Feature kShowSyncPausedReasonCookiesClearedOnExit;
-
 extern const base::Feature kTabGroups;
+
+extern const base::Feature kTabGroupsCollapse;
+
+extern const base::Feature kTabGroupsFeedback;
 
 extern const base::Feature kTabHoverCards;
 extern const char kTabHoverCardsFeatureParameterName[];
@@ -44,11 +42,15 @@ extern const base::Feature kTabHoverCardImages;
 
 extern const base::Feature kTabOutlinesInLowContrastThemes;
 
-extern const base::Feature kProminentDarkModeActiveTabTitle;
+extern const base::Feature kUseTextForUpdateButton;
 
 extern const base::Feature kWebFooterExperiment;
 
 extern const base::Feature kWebUITabStrip;
+
+extern const base::Feature kWebUITabStripDemoOptions;
+
+extern const base::Feature kSyncSetupFriendlySettings;
 
 #if defined(OS_CHROMEOS)
 extern const base::Feature kHiddenNetworkWarning;

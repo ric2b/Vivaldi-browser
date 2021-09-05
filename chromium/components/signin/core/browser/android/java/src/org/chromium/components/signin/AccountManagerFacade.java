@@ -21,6 +21,7 @@ import android.os.UserManager;
 import androidx.annotation.AnyThread;
 import androidx.annotation.MainThread;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 import androidx.annotation.WorkerThread;
 
 import org.chromium.base.Callback;
@@ -28,9 +29,7 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.ObserverList;
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.VisibleForTesting;
-import org.chromium.base.annotations.CalledByNative;
-import org.chromium.base.metrics.CachedMetrics;
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.task.AsyncTask;
 import org.chromium.components.signin.util.PatternMatcher;
 
@@ -38,23 +37,15 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.Locale;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.regex.Pattern;
 
 /**
  * AccountManagerFacade wraps our access of AccountManager in Android.
  *
- * Use the {@link #initializeAccountManagerFacade} to instantiate it.
- * After initialization, instance get be acquired by calling {@link #get}.
  */
 public class AccountManagerFacade {
     private static final String TAG = "Sync_Signin";
-    private static final Pattern AT_SYMBOL = Pattern.compile("@");
-    private static final String GMAIL_COM = "gmail.com";
-    private static final String GOOGLEMAIL_COM = "googlemail.com";
-    public static final String GOOGLE_ACCOUNT_TYPE = "com.google";
 
     /**
      * An account feature (corresponding to a Gaia service flag) that specifies whether the account
@@ -73,12 +64,6 @@ public class AccountManagerFacade {
     @VisibleForTesting
     public static final String ACCOUNT_RESTRICTION_PATTERNS_KEY = "RestrictAccountsToPatterns";
 
-    private static AccountManagerFacade sInstance;
-    private static AccountManagerFacade sTestingInstance;
-
-    private static final AtomicReference<AccountManagerFacade> sAtomicInstance =
-            new AtomicReference<>();
-
     private final AccountManagerDelegate mDelegate;
     private final ObserverList<AccountsChangeObserver> mObservers = new ObserverList<>();
 
@@ -89,8 +74,6 @@ public class AccountManagerFacade {
     private final AtomicReference<AccountManagerResult<List<Account>>> mFilteredAccounts =
             new AtomicReference<>();
     private final CountDownLatch mPopulateAccountCacheLatch = new CountDownLatch(1);
-    private final CachedMetrics.TimesHistogramSample mPopulateAccountCacheWaitingTimeHistogram =
-            new CachedMetrics.TimesHistogramSample("Signin.AndroidPopulateAccountCacheWaitingTime");
 
     private final ArrayList<Runnable> mCallbacksWaitingForCachePopulation = new ArrayList<>();
 
@@ -101,7 +84,7 @@ public class AccountManagerFacade {
     /**
      * @param delegate the AccountManagerDelegate to use as a backend
      */
-    private AccountManagerFacade(AccountManagerDelegate delegate) {
+    AccountManagerFacade(AccountManagerDelegate delegate) {
         ThreadUtils.assertOnUiThread();
         mDelegate = delegate;
         mDelegate.registerObservers();
@@ -112,65 +95,6 @@ public class AccountManagerFacade {
         }
 
         new InitializeTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR);
-    }
-
-    /**
-     * Initializes AccountManagerFacade singleton instance. Can only be called once.
-     * Tests can override the instance with {@link #overrideAccountManagerFacadeForTests}.
-     *
-     * @param delegate the AccountManagerDelegate to use
-     */
-    @MainThread
-    public static void initializeAccountManagerFacade(AccountManagerDelegate delegate) {
-        ThreadUtils.assertOnUiThread();
-        if (sInstance != null) {
-            throw new IllegalStateException("AccountManagerFacade is already initialized!");
-        }
-        sInstance = new AccountManagerFacade(delegate);
-        if (sTestingInstance != null) return;
-        sAtomicInstance.set(sInstance);
-    }
-
-    /**
-     * Overrides AccountManagerFacade singleton instance for tests. Only for use in Tests.
-     * Overrides any previous or future calls to {@link #initializeAccountManagerFacade}.
-     *
-     * @param delegate the AccountManagerDelegate to use
-     */
-    @VisibleForTesting
-    @AnyThread
-    public static void overrideAccountManagerFacadeForTests(AccountManagerDelegate delegate) {
-        ThreadUtils.runOnUiThreadBlocking(() -> {
-            sTestingInstance = new AccountManagerFacade(delegate);
-            sAtomicInstance.set(sTestingInstance);
-        });
-    }
-
-    /**
-     * Resets custom AccountManagerFacade set with {@link #overrideAccountManagerFacadeForTests}.
-     * Only for use in Tests.
-     */
-    @VisibleForTesting
-    @AnyThread
-    public static void resetAccountManagerFacadeForTests() {
-        ThreadUtils.runOnUiThreadBlocking(() -> {
-            sTestingInstance = null;
-            sAtomicInstance.set(sInstance);
-        });
-    }
-
-    /**
-     * Singleton instance getter. Singleton must be initialized before calling this by
-     * {@link #initializeAccountManagerFacade} or {@link #overrideAccountManagerFacadeForTests}.
-     *
-     * @return a singleton instance
-     */
-    @AnyThread
-    @CalledByNative
-    public static AccountManagerFacade get() {
-        AccountManagerFacade instance = sAtomicInstance.get();
-        assert instance != null : "AccountManagerFacade is not initialized!";
-        return instance;
     }
 
     /**
@@ -193,14 +117,6 @@ public class AccountManagerFacade {
         ThreadUtils.assertOnUiThread();
         boolean success = mObservers.removeObserver(observer);
         assert success : "Can't find observer";
-    }
-
-    /**
-     * Creates an Account object for the given name.
-     */
-    @AnyThread
-    public static Account createAccountFromName(String name) {
-        return new Account(name, GOOGLE_ACCOUNT_TYPE);
     }
 
     /**
@@ -264,14 +180,6 @@ public class AccountManagerFacade {
      * Asynchronous version of {@link #tryGetGoogleAccountNames()}.
      */
     @MainThread
-    public void tryGetGoogleAccountNames(final Callback<List<String>> callback) {
-        runAfterCacheIsPopulated(() -> callback.onResult(tryGetGoogleAccountNames()));
-    }
-
-    /**
-     * Asynchronous version of {@link #tryGetGoogleAccountNames()}.
-     */
-    @MainThread
     public void getGoogleAccountNames(
             final Callback<AccountManagerResult<List<String>>> callback) {
         runAfterCacheIsPopulated(() -> {
@@ -306,7 +214,8 @@ public class AccountManagerFacade {
                 mPopulateAccountCacheLatch.await();
                 maybeAccounts = mFilteredAccounts.get();
                 if (ThreadUtils.runningOnUiThread()) {
-                    mPopulateAccountCacheWaitingTimeHistogram.record(
+                    RecordHistogram.recordTimesHistogram(
+                            "Signin.AndroidPopulateAccountCacheWaitingTime",
                             SystemClock.elapsedRealtime() - now);
                 }
             } catch (InterruptedException e) {
@@ -314,14 +223,6 @@ public class AccountManagerFacade {
             }
         }
         return maybeAccounts.get();
-    }
-
-    /**
-     * Asynchronous version of {@link #getGoogleAccounts()}.
-     */
-    @MainThread
-    public void getGoogleAccounts(Callback<AccountManagerResult<List<Account>>> callback) {
-        runAfterCacheIsPopulated(() -> callback.onResult(mFilteredAccounts.get()));
     }
 
     /**
@@ -346,57 +247,19 @@ public class AccountManagerFacade {
     }
 
     /**
-     * Determine whether there are any Google accounts on the device.
-     * Returns false if an error occurs while getting account list.
-     */
-    @AnyThread
-    public boolean hasGoogleAccounts() {
-        return !tryGetGoogleAccounts().isEmpty();
-    }
-
-    /**
-     * Asynchronous version of {@link #hasGoogleAccounts()}.
-     */
-    @MainThread
-    public void hasGoogleAccounts(final Callback<Boolean> callback) {
-        runAfterCacheIsPopulated(() -> callback.onResult(hasGoogleAccounts()));
-    }
-
-    private String canonicalizeName(String name) {
-        String[] parts = AT_SYMBOL.split(name);
-        if (parts.length != 2) return name;
-
-        if (GOOGLEMAIL_COM.equalsIgnoreCase(parts[1])) {
-            parts[1] = GMAIL_COM;
-        }
-        if (GMAIL_COM.equalsIgnoreCase(parts[1])) {
-            parts[0] = parts[0].replace(".", "");
-        }
-        return (parts[0] + "@" + parts[1]).toLowerCase(Locale.US);
-    }
-
-    /**
      * Returns the account if it exists; null if account doesn't exists or an error occurs
      * while getting account list.
      */
     @AnyThread
     public Account getAccountFromName(String accountName) {
-        String canonicalName = canonicalizeName(accountName);
+        String canonicalName = AccountUtils.canonicalizeName(accountName);
         List<Account> accounts = tryGetGoogleAccounts();
         for (Account account : accounts) {
-            if (canonicalizeName(account.name).equals(canonicalName)) {
+            if (AccountUtils.canonicalizeName(account.name).equals(canonicalName)) {
                 return account;
             }
         }
         return null;
-    }
-
-    /**
-     * Asynchronous version of {@link #getAccountFromName(String)}.
-     */
-    @MainThread
-    public void getAccountFromName(String accountName, final Callback<Account> callback) {
-        runAfterCacheIsPopulated(() -> callback.onResult(getAccountFromName(accountName)));
     }
 
     /**
@@ -409,23 +272,13 @@ public class AccountManagerFacade {
     }
 
     /**
-     * Asynchronous version of {@link #hasAccountForName(String)}.
-     */
-    // TODO(maxbogue): Remove once this function is used outside of tests.
-    @VisibleForTesting
-    @MainThread
-    public void hasAccountForName(String accountName, final Callback<Boolean> callback) {
-        runAfterCacheIsPopulated(() -> callback.onResult(hasAccountForName(accountName)));
-    }
-
-    /**
      * @return Whether or not there is an account authenticator for Google accounts.
      */
     @AnyThread
     public boolean hasGoogleAccountAuthenticator() {
         AuthenticatorDescription[] descs = mDelegate.getAuthenticatorTypes();
         for (AuthenticatorDescription desc : descs) {
-            if (GOOGLE_ACCOUNT_TYPE.equals(desc.type)) return true;
+            if (AccountUtils.GOOGLE_ACCOUNT_TYPE.equals(desc.type)) return true;
         }
         return false;
     }
@@ -438,7 +291,7 @@ public class AccountManagerFacade {
      * @return The OAuth2 access token as a string.
      */
     @WorkerThread
-    String getAccessToken(Account account, String scope) throws AuthException {
+    public String getAccessToken(Account account, String scope) throws AuthException {
         assert account != null;
         assert scope != null;
         // TODO(bsazonov): Rename delegate's getAuthToken to getAccessToken.
@@ -451,7 +304,7 @@ public class AccountManagerFacade {
      * @param accessToken The access token to invalidate.
      */
     @WorkerThread
-    void invalidateAccessToken(String accessToken) throws AuthException {
+    public void invalidateAccessToken(String accessToken) throws AuthException {
         assert accessToken != null;
         // TODO(bsazonov): Rename delegate's invalidateAuthToken to invalidateAccessToken.
         mDelegate.invalidateAuthToken(accessToken);
@@ -537,6 +390,28 @@ public class AccountManagerFacade {
     public ObservableValue<Boolean> isUpdatePending() {
         ThreadUtils.assertOnUiThread();
         return mUpdatePendingState;
+    }
+
+    /**
+     * Returns the Gaia id for the account associated with the given email address.
+     * If an account with the given email address is not installed on the device
+     * then null is returned.
+     *
+     * This method will throw IllegalStateException if called on the main thread.
+     *
+     * @param accountEmail The email address of a Google account.
+     */
+    @WorkerThread
+    @Nullable
+    public String getAccountGaiaId(String accountEmail) {
+        return mDelegate.getAccountGaiaId(accountEmail);
+    }
+
+    /**
+     * Checks whether Google Play services is available.
+     */
+    boolean isGooglePlayServicesAvailable() {
+        return mDelegate.isGooglePlayServicesAvailable();
     }
 
     private boolean hasFeature(Account account, String feature) {

@@ -22,13 +22,13 @@ LocalImageDataClassHandler::~LocalImageDataClassHandler() {
 
 bool LocalImageDataClassHandler::GetData(
     const std::string& data_id,
-    const content::URLDataSource::GotDataCallback& callback) {
+    content::URLDataSource::GotDataCallback callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
 
   if (!data_sources_api_)
     return false;
 
-  data_sources_api_->GetDataForId(url_kind_, data_id, callback);
+  data_sources_api_->GetDataForId(url_kind_, data_id, std::move(callback));
 
   return true;
 }

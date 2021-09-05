@@ -16,9 +16,10 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Parcel;
 import android.os.RemoteException;
-import android.support.v4.app.NotificationManagerCompat;
 import android.text.TextUtils;
 import android.util.Log;
+
+import androidx.core.app.NotificationManagerCompat;
 
 /**
  * Implements services offered by the WebAPK to Chrome.
@@ -28,7 +29,7 @@ public class WebApkServiceImpl extends IWebApkApi.Stub {
     public static final String KEY_SMALL_ICON_ID = "small_icon_id";
     public static final String KEY_HOST_BROWSER_UID = "host_browser_uid";
 
-    private static final String TAG = "cr_WebApkServiceImpl";
+    private static final String TAG = "WebApkServiceImpl";
 
     private final Context mContext;
 

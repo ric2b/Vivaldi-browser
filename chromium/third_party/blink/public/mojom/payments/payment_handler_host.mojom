@@ -30,7 +30,7 @@ struct PaymentHandlerModifier {
 
 // Constructed by the browser based on PaymentDetails from the Merchant
 // renderer. The browser sends this to the Payment Handler renderer.
-struct PaymentMethodChangeResponse {
+struct PaymentRequestDetailsUpdate {
   PaymentCurrencyAmount? total;
   array<PaymentShippingOption>? shipping_options;
   array<PaymentHandlerModifier>? modifiers;
@@ -61,7 +61,7 @@ interface PaymentHandlerHost {
   // The Merchant renderer then responds to the browser via
   // PaymentRequest.UpdateWith(details) to update the total or other details of
   // the payment request based on the selected instrument/shipping address/
-  // shipping option or PaymentRequest.NoUpdatedPaymentDetails() if the
+  // shipping option or PaymentRequest.OnPaymentDetailsNotUpdated() if the
   // total and other details are unchanged. The total can change, for example,
   // based on the billing address of the selected instrument or the selected
   // shipping address/option. The list of available shipping options can change
@@ -69,13 +69,11 @@ interface PaymentHandlerHost {
   //
   // The browser validates the |details| from the Merchant renderer and sends
   // their subset to the Payment Handler renderer as
-  // |PaymentMethodChangeResponse|, so it can show the updated details.
-  // Todo(sahel): Rename PaymentMethodChangeResponse to
-  // PaymentRequestDetailsUpdate which is a more generic name. crbug.com/984694
+  // |PaymentRequestDetailsUpdate|, so it can show the updated details.
   ChangePaymentMethod(PaymentHandlerMethodData method_data) =>
-      (PaymentMethodChangeResponse response_data);
+      (PaymentRequestDetailsUpdate response_data);
   ChangeShippingOption(string shipping_option_id) =>
-      (PaymentMethodChangeResponse response_data);
+      (PaymentRequestDetailsUpdate response_data);
   ChangeShippingAddress(PaymentAddress shipping_address) =>
-      (PaymentMethodChangeResponse response_data);
+      (PaymentRequestDetailsUpdate response_data);
 };

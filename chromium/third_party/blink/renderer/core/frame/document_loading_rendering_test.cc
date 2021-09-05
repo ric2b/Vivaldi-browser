@@ -14,6 +14,7 @@
 #include "third_party/blink/renderer/core/testing/sim/sim_compositor.h"
 #include "third_party/blink/renderer/core/testing/sim/sim_request.h"
 #include "third_party/blink/renderer/core/testing/sim/sim_test.h"
+#include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
 
 namespace blink {
 
@@ -60,10 +61,12 @@ TEST_F(DocumentLoadingRenderingTest,
 
   // Sheet finished, but no body yet, so don't resume.
   css_resource.Finish();
+  test::RunPendingTasks();
   EXPECT_TRUE(Compositor().DeferMainFrameUpdate());
 
   // Body inserted and sheet is loaded so resume commits.
   main_resource.Write("<body>");
+  test::RunPendingTasks();
   EXPECT_FALSE(Compositor().DeferMainFrameUpdate());
 
   // Finish the load, should stay resumed.
@@ -93,6 +96,7 @@ TEST_F(DocumentLoadingRenderingTest, ShouldResumeCommitsAfterSheetsLoaded) {
 
   // Sheet finished and there's a body so resume.
   css_resource.Finish();
+  test::RunPendingTasks();
   EXPECT_FALSE(Compositor().DeferMainFrameUpdate());
 
   // Finish the load, should stay resumed.
@@ -114,6 +118,7 @@ TEST_F(DocumentLoadingRenderingTest,
 
   // Sheet finishes loading, but no documentElement yet so don't resume.
   css_resource.Complete("a { color: red; }");
+  test::RunPendingTasks();
   EXPECT_TRUE(Compositor().DeferMainFrameUpdate());
 
   // Root inserted so resume.
@@ -151,6 +156,7 @@ TEST_F(DocumentLoadingRenderingTest, ShouldResumeCommitsAfterSheetsLoadForXml) {
 
   // Sheet finished, so resume commits.
   css_resource.Finish();
+  test::RunPendingTasks();
   EXPECT_FALSE(Compositor().DeferMainFrameUpdate());
 }
 
@@ -198,6 +204,7 @@ TEST_F(DocumentLoadingRenderingTest, ShouldScheduleFrameAfterSheetsLoaded) {
   first_css_resource.Write("body { color: red; }");
   main_resource.Write("<body>");
   first_css_resource.Finish();
+  test::RunPendingTasks();
 
   // Sheet finished and there's a body so resume.
   EXPECT_FALSE(Compositor().DeferMainFrameUpdate());
@@ -251,24 +258,25 @@ TEST_F(DocumentLoadingRenderingTest,
     </div>
   )HTML");
 
-  // Trigger a layout with pending sheets. For example a page could trigger
-  // this by doing offsetTop in a setTimeout, or by a parent frame executing
-  // script that touched offsetTop in the child frame.
+  // Trigger a layout with a blocking sheet. For example, a parent frame
+  // executing a script that reads offsetTop in the child frame could do this.
   auto* child_frame =
       To<HTMLIFrameElement>(GetDocument().getElementById("frame"));
-  child_frame->contentDocument()->UpdateStyleAndLayout();
+  child_frame->contentDocument()->UpdateStyleAndLayout(
+      DocumentUpdateReason::kTest);
 
   auto frame2 = Compositor().BeginFrame();
 
-  // The child frame still has pending sheets, so we should not paint it.
+  // The child frame still has a sheet blocking in head, so nothing is painted.
   // Still only paint the main frame.
   EXPECT_EQ(2u, frame2.DrawCount());
   EXPECT_TRUE(frame2.Contains(SimCanvas::kText, "black"));
   EXPECT_TRUE(frame2.Contains(SimCanvas::kRect, "white"));
 
-  // Finish loading the sheets in the child frame. After it should issue a
-  // paint invalidation for every layer when the frame becomes unthrottled.
+  // Finish loading the sheets in the child frame. After it we should continue
+  // parsing and paint the frame contents.
   css_resource.Complete();
+  test::RunPendingTasks();
 
   // First frame where all frames are loaded, should paint the text in the
   // child frame.
@@ -337,6 +345,7 @@ TEST_F(DocumentLoadingRenderingTest,
   // Finish loading the sheets in the child frame. Should enable lifecycle
   // updates and raf callbacks.
   css_resource.Complete();
+  test::RunPendingTasks();
 
   // Frame with all lifecycle updates enabled.
   auto* frame2_callback = MakeGarbageCollected<CheckRafCallback>();
@@ -350,6 +359,11 @@ TEST_F(DocumentLoadingRenderingTest,
 
 TEST_F(DocumentLoadingRenderingTest,
        ShouldContinuePaintingWhenSheetsStartedAfterBody) {
+  // HaveRenderBlockingResourcesLoaded being tested here is always true with
+  // ScopedBlockHTMLParserOnStyleSheets enabled. Remove this test when the flag
+  // is removed.
+  ScopedBlockHTMLParserOnStyleSheetsForTest scoped_feature(false);
+
   SimRequest main_resource("https://example.com/test.html", "text/html");
   SimSubresourceRequest css_head_resource("https://example.com/testHead.css",
                                           "text/css");
@@ -446,7 +460,7 @@ TEST_F(DocumentLoadingRenderingTest, StableSVGStopStylingWhileLoadingImport) {
   const auto recalc_and_check = [this]() {
     GetDocument().GetStyleEngine().MarkAllElementsForStyleRecalc(
         StyleChangeReasonForTracing::Create("test reason"));
-    GetDocument().UpdateStyleAndLayout();
+    GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kTest);
 
     Element* element = GetDocument().getElementById("test");
     ASSERT_NE(nullptr, element);

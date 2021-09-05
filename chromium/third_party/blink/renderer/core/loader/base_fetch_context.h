@@ -6,6 +6,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LOADER_BASE_FETCH_CONTEXT_H_
 
 #include "base/optional.h"
+#include "net/cookies/site_for_cookies.h"
 #include "services/network/public/mojom/referrer_policy.mojom-blink-forward.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/renderer/core/core_export.h"
@@ -35,16 +36,16 @@ class CORE_EXPORT BaseFetchContext : public FetchContext {
       const ResourceRequest&,
       const KURL&,
       const ResourceLoaderOptions&,
-      SecurityViolationReportingPolicy,
+      ReportingDisposition,
       ResourceRequest::RedirectStatus) const override;
   base::Optional<ResourceRequestBlockedReason> CheckCSPForRequest(
       mojom::RequestContextType,
       const KURL&,
       const ResourceLoaderOptions&,
-      SecurityViolationReportingPolicy,
+      ReportingDisposition,
       ResourceRequest::RedirectStatus) const override;
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
   const DetachableResourceFetcherProperties& GetResourceFetcherProperties()
       const {
@@ -53,7 +54,7 @@ class CORE_EXPORT BaseFetchContext : public FetchContext {
 
   virtual void CountUsage(mojom::WebFeature) const = 0;
   virtual void CountDeprecation(mojom::WebFeature) const = 0;
-  virtual KURL GetSiteForCookies() const = 0;
+  virtual net::SiteForCookies GetSiteForCookies() const = 0;
 
   // Returns the origin of the top frame in the document.
   virtual scoped_refptr<const SecurityOrigin> GetTopFrameOrigin() const = 0;
@@ -67,6 +68,14 @@ class CORE_EXPORT BaseFetchContext : public FetchContext {
 
   bool CalculateIfAdSubresource(const ResourceRequest& resource_request,
                                 ResourceType type) override;
+
+  // Returns whether a request to |url| is a conversion registration request.
+  // Conversion registration requests are redirects to a well-known conversion
+  // registration endpoint.
+  virtual bool SendConversionRequestInsteadOfRedirecting(
+      const KURL& url,
+      ResourceRequest::RedirectStatus redirect_status,
+      ReportingDisposition reporting_disposition) const;
 
   virtual const ContentSecurityPolicy* GetContentSecurityPolicy() const = 0;
 
@@ -92,7 +101,7 @@ class CORE_EXPORT BaseFetchContext : public FetchContext {
       mojom::RequestContextType,
       ResourceRequest::RedirectStatus,
       const KURL&,
-      SecurityViolationReportingPolicy) const = 0;
+      ReportingDisposition) const = 0;
   virtual bool ShouldBlockFetchAsCredentialedSubresource(const ResourceRequest&,
                                                          const KURL&) const = 0;
   virtual const KURL& Url() const = 0;
@@ -113,14 +122,14 @@ class CORE_EXPORT BaseFetchContext : public FetchContext {
       const ResourceRequest&,
       const KURL&,
       const ResourceLoaderOptions&,
-      SecurityViolationReportingPolicy,
+      ReportingDisposition,
       ResourceRequest::RedirectStatus) const;
 
   base::Optional<ResourceRequestBlockedReason> CheckCSPForRequestInternal(
       mojom::RequestContextType,
       const KURL&,
       const ResourceLoaderOptions&,
-      SecurityViolationReportingPolicy,
+      ReportingDisposition,
       ResourceRequest::RedirectStatus,
       ContentSecurityPolicy::CheckHeaderType) const;
 };

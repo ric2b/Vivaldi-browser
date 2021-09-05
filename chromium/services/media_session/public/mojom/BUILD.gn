@@ -5,11 +5,13 @@
 import("//mojo/public/tools/bindings/mojom.gni")
 
 mojom("mojom") {
+  generate_java = true
   sources = [
     "audio_focus.mojom",
     "constants.mojom",
     "media_controller.mojom",
     "media_session.mojom",
+    "media_session_service.mojom",
   ]
 
   public_deps = [

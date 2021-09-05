@@ -14,6 +14,7 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/browser/web_ui.h"
 #include "ui/aura/window.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_widget_types.h"
@@ -60,6 +61,8 @@ LoginWebDialog::LoginWebDialog(content::BrowserContext* browser_context,
     parent_window_ =
         chromeos::LoginDisplayHost::default_host()->GetNativeWindow();
   }
+  LOG_IF(WARNING, !parent_window)
+      << "No parent window. Dialog sizes could be wrong";
 }
 
 LoginWebDialog::~LoginWebDialog() {}
@@ -118,8 +121,7 @@ WebContents* LoginWebDialog::GetCurrentWebContents() {
   return stack.empty() ? nullptr : stack.front();
 }
 
-void LoginWebDialog::OnDialogShown(content::WebUI* webui,
-                                   content::RenderViewHost* render_view_host) {
+void LoginWebDialog::OnDialogShown(content::WebUI* webui) {
   g_web_contents_stack.Pointer()->push_front(webui->GetWebContents());
 }
 

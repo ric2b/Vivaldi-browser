@@ -110,6 +110,9 @@ if (is_chromeos) {
     "wallpaper.json",
     "wallpaper_private.json",
   ]
+  if (use_cups) {
+    schema_sources_ += [ "printing.idl" ]
+  }
 } else if (is_linux || is_win) {
   schema_sources_ += [ "input_ime.json" ]
 }
@@ -124,6 +127,10 @@ if (enable_print_preview && !is_chromeos) {
 
 if (enable_service_discovery) {
   schema_sources_ += [ "mdns.idl" ]
+}
+
+if (enable_autofill_assistant_api) {
+  schema_sources_ += [ "autofill_assistant_private.idl" ]
 }
 
 uncompiled_sources_ = [

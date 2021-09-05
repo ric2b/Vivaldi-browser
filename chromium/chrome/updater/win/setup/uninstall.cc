@@ -4,6 +4,7 @@
 
 #include "chrome/updater/win/setup/uninstall.h"
 
+#include <shlobj.h>
 #include <windows.h>
 #include <memory>
 
@@ -16,34 +17,78 @@
 #include "base/stl_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/stringprintf.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/win/scoped_com_initializer.h"
-#include "chrome/updater/updater_constants.h"
+#include "chrome/installer/util/install_service_work_item.h"
+#include "chrome/installer/util/install_util.h"
+#include "chrome/installer/util/work_item_list.h"
+#include "chrome/updater/constants.h"
+#include "chrome/updater/server/win/updater_idl.h"
 #include "chrome/updater/util.h"
+#include "chrome/updater/win/constants.h"
 #include "chrome/updater/win/setup/setup_util.h"
 #include "chrome/updater/win/task_scheduler.h"
 
 namespace updater {
 
+void DeleteComServer(HKEY root) {
+  InstallUtil::DeleteRegistryKey(root, GetComServerClsidRegistryPath(),
+                                 WorkItem::kWow64Default);
+}
+
+void DeleteComService() {
+  DCHECK(::IsUserAnAdmin());
+
+  InstallUtil::DeleteRegistryKey(HKEY_LOCAL_MACHINE,
+                                 GetComServiceClsidRegistryPath(),
+                                 WorkItem::kWow64Default);
+  InstallUtil::DeleteRegistryKey(HKEY_LOCAL_MACHINE,
+                                 GetComServiceAppidRegistryPath(),
+                                 WorkItem::kWow64Default);
+  if (!installer::InstallServiceWorkItem::DeleteService(kWindowsServiceName))
+    LOG(WARNING) << "DeleteService failed.";
+}
+
+void DeleteComInterfaces(HKEY root) {
+  for (const auto iid : {__uuidof(IUpdater), __uuidof(IUpdaterObserver),
+                         __uuidof(ICompleteStatus)}) {
+    for (const auto& reg_path :
+         {GetComIidRegistryPath(iid), GetComTypeLibRegistryPath(iid)}) {
+      InstallUtil::DeleteRegistryKey(root, reg_path, WorkItem::kWow64Default);
+    }
+  }
+}
+
 // Reverses the changes made by setup. This is a best effort uninstall:
-// 1. deletes the scheduled task.
-// 2. runs the uninstall script in the install directory of the updater.
+// 1. Deletes the scheduled task.
+// 2. Deletes the Clients and ClientState keys.
+// 3. Runs the uninstall script in the install directory of the updater.
 // The execution of this function and the script race each other but the script
 // loops and waits in between iterations trying to delete the install directory.
-int Uninstall() {
-  VLOG(1) << __func__;
+int Uninstall(bool is_machine) {
+  VLOG(1) << __func__ << ", is_machine: " << is_machine;
+  DCHECK(!is_machine || ::IsUserAnAdmin());
+  HKEY key = is_machine ? HKEY_LOCAL_MACHINE : HKEY_CURRENT_USER;
 
   auto scoped_com_initializer =
       std::make_unique<base::win::ScopedCOMInitializer>(
           base::win::ScopedCOMInitializer::kMTA);
 
-  if (!TaskScheduler::Initialize()) {
-    LOG(ERROR) << "Failed to initialize the scheduler.";
+  updater::UnregisterUpdateAppsTask();
+
+  std::unique_ptr<WorkItemList> uninstall_list(WorkItem::CreateWorkItemList());
+  uninstall_list->AddDeleteRegKeyWorkItem(key, base::ASCIIToUTF16(UPDATER_KEY),
+                                          WorkItem::kWow64Default);
+  if (!uninstall_list->Do()) {
+    LOG(ERROR) << "Failed to delete the registry keys.";
+    uninstall_list->Rollback();
     return -1;
   }
-  base::ScopedClosureRunner task_scheduler_terminate_caller(
-      base::BindOnce([]() { TaskScheduler::Terminate(); }));
 
-  updater::UnregisterUpdateAppsTask();
+  DeleteComInterfaces(key);
+  if (is_machine)
+    DeleteComService();
+  DeleteComServer(key);
 
   base::FilePath product_dir;
   if (!GetProductDirectory(&product_dir)) {
@@ -60,8 +105,7 @@ int Uninstall() {
   base::FilePath script_path = product_dir.AppendASCII(kUninstallScript);
 
   base::string16 cmdline = cmd_path;
-  base::StringAppendF(&cmdline, L" /Q /C \"%ls\"",
-                      script_path.AsUTF16Unsafe().c_str());
+  base::StringAppendF(&cmdline, L" /Q /C \"%ls\"", script_path.value().c_str());
   base::LaunchOptions options;
   options.start_hidden = true;
 

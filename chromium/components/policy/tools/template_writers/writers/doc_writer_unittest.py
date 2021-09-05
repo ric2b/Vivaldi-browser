@@ -1396,7 +1396,8 @@ See <a href="http://policy-explanation.example.com">http://policy-explanation.ex
             123
     }
     self.writer._AddPolicySection(self.doc_root, policy)
-    self.assertTrue(self.writer.IsPolicySupportedOnPlatform(policy, 'android'))
+    self.assertTrue(
+        self.writer.IsPolicyOrItemSupportedOnPlatform(policy, 'android'))
     self.assertEquals(
         self.doc_root.toxml(), '<root>'
         '<div style="margin-left: 0px">'
@@ -1612,7 +1613,7 @@ See <a href="http://policy-explanation.example.com">http://policy-explanation.ex
   def testGoogleCloudChromeOsPolicies(self):
     # Tests whether Chrome OS policies with management type 'google_cloud'
     # don't print example values etc. since they are managed through Google's
-    # CPanel/DPanel, not Active Directory GPO.
+    # Admin console, not Active Directory GPO.
     policy = {
         'name':
             'PolicyName',

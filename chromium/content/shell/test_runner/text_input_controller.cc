@@ -11,9 +11,9 @@
 #include "gin/handle.h"
 #include "gin/object_template_builder.h"
 #include "gin/wrappable.h"
+#include "third_party/blink/public/common/input/web_keyboard_event.h"
 #include "third_party/blink/public/platform/web_coalesced_input_event.h"
 #include "third_party/blink/public/platform/web_input_event_result.h"
-#include "third_party/blink/public/platform/web_keyboard_event.h"
 #include "third_party/blink/public/web/blink.h"
 #include "third_party/blink/public/web/web_frame_widget.h"
 #include "third_party/blink/public/web/web_ime_text_span.h"
@@ -274,11 +274,14 @@ void TextInputController::SetMarkedText(const std::string& text,
     ime_text_span.end_offset = start + length;
   }
   ime_text_span.thickness = ui::mojom::ImeTextSpanThickness::kThick;
+  ime_text_span.underline_style = ui::mojom::ImeTextSpanUnderlineStyle::kSolid;
   ime_text_spans.push_back(ime_text_span);
   if (start + length < static_cast<int>(web_text.length())) {
     ime_text_span.start_offset = ime_text_span.end_offset;
     ime_text_span.end_offset = web_text.length();
     ime_text_span.thickness = ui::mojom::ImeTextSpanThickness::kThin;
+    ime_text_span.underline_style =
+        ui::mojom::ImeTextSpanUnderlineStyle::kSolid;
     ime_text_spans.push_back(ime_text_span);
   }
 
@@ -385,7 +388,8 @@ void TextInputController::SetComposition(const std::string& text) {
   std::vector<blink::WebImeTextSpan> ime_text_spans;
   ime_text_spans.push_back(blink::WebImeTextSpan(
       blink::WebImeTextSpan::Type::kComposition, 0, textLength,
-      ui::mojom::ImeTextSpanThickness::kThin, SK_ColorTRANSPARENT));
+      ui::mojom::ImeTextSpanThickness::kThin,
+      ui::mojom::ImeTextSpanUnderlineStyle::kSolid, SK_ColorTRANSPARENT));
   if (auto* controller = GetInputMethodController()) {
     controller->SetComposition(
         newText, blink::WebVector<blink::WebImeTextSpan>(ime_text_spans),
@@ -403,7 +407,7 @@ void TextInputController::ForceTextInputStateUpdate() {
 }
 
 blink::WebView* TextInputController::view() {
-  return web_view_test_proxy_->webview();
+  return web_view_test_proxy_->GetWebView();
 }
 
 blink::WebInputMethodController*

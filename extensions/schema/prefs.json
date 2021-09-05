@@ -85,17 +85,6 @@
             "name": "path",
             "type": "string",
             "description": "The preference path"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "description": "Returns the value of the preference after it's been reset.",
-            "parameters": [
-              {
-                "name": "value",
-                "type": "any"
-              }
-            ]
           }
         ]
       },

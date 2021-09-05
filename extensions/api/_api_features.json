@@ -46,6 +46,11 @@
     "dependencies": [ "permission:contextMenu" ],
     "contexts": [ "blessed_extension" ]
   },
+  "contentBlocking": {
+    "vivaldi": true,
+    "dependencies": [ "permission:contentBlocking" ],
+    "contexts": [ "blessed_extension" ]
+  },
   "contacts": {
     "vivaldi": true,
     "dependencies": [ "permission:contacts" ],
@@ -85,6 +90,11 @@
     "dependencies": [ "permission:mailPrivate" ],
     "contexts": [ "blessed_extension" ]
   },
+   "menuContent": {
+    "vivaldi": true,
+    "dependencies": [ "permission:menuContent" ],
+    "contexts": [ "blessed_extension" ]
+  },
   "menubar": {
     "vivaldi": true,
     "dependencies": [ "permission:menubar" ],
@@ -99,6 +109,12 @@
     "vivaldi": true,
     "dependencies": [ "permission:notes" ],
     "contexts": [ "blessed_extension" ]
+  },
+  "pipPrivate": {
+    "vivaldi": true,
+    "dependencies": [ "permission:pipPrivate" ],
+    "extension_types": ["hosted_app", "extension", "legacy_packaged_app"],
+    "contexts": [ "blessed_extension", "content_script", "unblessed_extension" ]
   },
   "prefs": {
     "vivaldi": true,

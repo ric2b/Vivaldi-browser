@@ -2,7 +2,7 @@
 
 import("//build/config/jumbo.gni")
 
-jumbo_source_set("contact") {
+source_set("contact") {
   sources = [
     "email_table.cc",
     "email_table.h",
@@ -41,11 +41,16 @@ jumbo_source_set("contact") {
   deps = [
     "//base:base",
     "//chrome:strings",
+    "//chrome/common",
     "//components/keyed_service/core:core",
     "//components/keyed_service/content:content",
+    "//components/prefs",
+    "//components/variations",
     "//content/public/browser",
+    "//sql:sql",
     "//vivaldi/app:vivaldi_native_resources",
     "//vivaldi/app:vivaldi_unscaled_native_resources",
+    "//vivaldi/prefs:prefs_strings",
   ]
   public_deps = [
     #"//components/sync/protocol",

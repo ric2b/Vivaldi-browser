@@ -14,7 +14,9 @@
 namespace cc {
 
 // For composited overlay scrollbars with nine-patch thumb. For overlay
-// scrollbars whose thumb is not nine-patch, use PaintedScrollbarLayer.
+// scrollbars whose thumb is not nine-patch, use PaintedScrollbarLayer or
+// SolidColorScrollbarLayer. In practice, this is used for non-custom
+// overlay scrollbars on Win/Linux.
 class CC_EXPORT PaintedOverlayScrollbarLayer : public ScrollbarLayerBase {
  public:
   std::unique_ptr<LayerImpl> CreateLayerImpl(LayerTreeImpl* tree_impl) override;
@@ -23,20 +25,20 @@ class CC_EXPORT PaintedOverlayScrollbarLayer : public ScrollbarLayerBase {
   PaintedOverlayScrollbarLayer& operator=(const PaintedOverlayScrollbarLayer&) =
       delete;
   static scoped_refptr<PaintedOverlayScrollbarLayer> Create(
-      std::unique_ptr<Scrollbar> scrollbar);
+      scoped_refptr<Scrollbar> scrollbar);
 
   bool OpacityCanAnimateOnImplThread() const override;
   bool Update() override;
   void SetLayerTreeHost(LayerTreeHost* host) override;
   void PushPropertiesTo(LayerImpl* layer) override;
 
+  ScrollbarLayerType ScrollbarLayerTypeForTesting() const override;
+
  protected:
-  explicit PaintedOverlayScrollbarLayer(std::unique_ptr<Scrollbar> scrollbar);
+  explicit PaintedOverlayScrollbarLayer(scoped_refptr<Scrollbar> scrollbar);
   ~PaintedOverlayScrollbarLayer() override;
 
  private:
-  gfx::Rect OriginThumbRectForPainting() const;
-
   template <typename T>
   bool UpdateProperty(T value, T* prop) {
     if (*prop == value)
@@ -49,13 +51,10 @@ class CC_EXPORT PaintedOverlayScrollbarLayer : public ScrollbarLayerBase {
   bool PaintThumbIfNeeded();
   bool PaintTickmarks();
 
-  std::unique_ptr<Scrollbar> scrollbar_;
+  scoped_refptr<Scrollbar> scrollbar_;
 
-  int thumb_thickness_;
-  int thumb_length_;
-  gfx::Point location_;
+  gfx::Size thumb_size_;
   gfx::Rect track_rect_;
-
   gfx::Rect aperture_;
 
   std::unique_ptr<ScopedUIResource> thumb_resource_;

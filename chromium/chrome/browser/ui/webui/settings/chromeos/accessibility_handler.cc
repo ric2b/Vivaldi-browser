@@ -4,8 +4,10 @@
 
 #include "chrome/browser/ui/webui/settings/chromeos/accessibility_handler.h"
 
+#include "ash/public/cpp/tablet_mode.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/metrics/histogram_functions.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/profiles/profile.h"
@@ -18,11 +20,24 @@
 namespace chromeos {
 namespace settings {
 
-AccessibilityHandler::AccessibilityHandler(content::WebUI* webui)
-    : profile_(Profile::FromWebUI(webui)) {
+namespace {
+
+void RecordShowShelfNavigationButtonsValueChange(bool enabled) {
+  base::UmaHistogramBoolean(
+      "Accessibility.CrosShelfNavigationButtonsInTabletModeChanged."
+      "OsSettings",
+      enabled);
 }
 
-AccessibilityHandler::~AccessibilityHandler() {}
+}  // namespace
+
+AccessibilityHandler::AccessibilityHandler(Profile* profile)
+    : profile_(profile) {}
+
+AccessibilityHandler::~AccessibilityHandler() {
+  if (a11y_nav_buttons_toggle_metrics_reporter_timer_.IsRunning())
+    a11y_nav_buttons_toggle_metrics_reporter_timer_.FireNow();
+}
 
 void AccessibilityHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback(
@@ -35,12 +50,20 @@ void AccessibilityHandler::RegisterMessages() {
           &AccessibilityHandler::HandleShowSelectToSpeakSettings,
           base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
-      "getStartupSoundEnabled",
-      base::BindRepeating(&AccessibilityHandler::HandleGetStartupSoundEnabled,
-                          base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
       "setStartupSoundEnabled",
       base::BindRepeating(&AccessibilityHandler::HandleSetStartupSoundEnabled,
+                          base::Unretained(this)));
+
+  web_ui()->RegisterMessageCallback(
+      "recordSelectedShowShelfNavigationButtonValue",
+      base::BindRepeating(
+          &AccessibilityHandler::
+              HandleRecordSelectedShowShelfNavigationButtonsValue,
+          base::Unretained(this)));
+
+  web_ui()->RegisterMessageCallback(
+      "manageA11yPageReady",
+      base::BindRepeating(&AccessibilityHandler::HandleManageA11yPageReady,
                           base::Unretained(this)));
 }
 
@@ -54,20 +77,54 @@ void AccessibilityHandler::HandleShowSelectToSpeakSettings(
   OpenExtensionOptionsPage(extension_misc::kSelectToSpeakExtensionId);
 }
 
-void AccessibilityHandler::HandleGetStartupSoundEnabled(
-    const base::ListValue* args) {
-  AllowJavascript();
-  FireWebUIListener(
-      "startup-sound-enabled-updated",
-      base::Value(AccessibilityManager::Get()->GetStartupSoundEnabled()));
-}
-
 void AccessibilityHandler::HandleSetStartupSoundEnabled(
     const base::ListValue* args) {
   DCHECK_EQ(1U, args->GetSize());
   bool enabled;
   args->GetBoolean(0, &enabled);
   AccessibilityManager::Get()->SetStartupSoundEnabled(enabled);
+}
+
+void AccessibilityHandler::HandleRecordSelectedShowShelfNavigationButtonsValue(
+    const base::ListValue* args) {
+  DCHECK_EQ(1U, args->GetSize());
+  bool enabled;
+  args->GetBoolean(0, &enabled);
+
+  a11y_nav_buttons_toggle_metrics_reporter_timer_.Start(
+      FROM_HERE, base::TimeDelta::FromSeconds(10),
+      base::BindOnce(&RecordShowShelfNavigationButtonsValueChange, enabled));
+}
+
+void AccessibilityHandler::HandleManageA11yPageReady(
+    const base::ListValue* args) {
+  AllowJavascript();
+
+  // When tablet mode is active we can return early since tablet mode
+  // is supported.
+  if (ash::TabletMode::Get()->InTabletMode()) {
+    FireWebUIListener(
+        "initial-data-ready",
+        base::Value(AccessibilityManager::Get()->GetStartupSoundEnabled()),
+        base::Value(true /* tablet_mode_supported */));
+    return;
+  }
+
+  PowerManagerClient::Get()->GetSwitchStates(
+      base::BindOnce(&AccessibilityHandler::OnReceivedSwitchStates,
+                     weak_ptr_factory_.GetWeakPtr()));
+}
+
+void AccessibilityHandler::OnReceivedSwitchStates(
+    base::Optional<PowerManagerClient::SwitchStates> switch_states) {
+  bool tablet_mode_supported =
+      switch_states.has_value() &&
+      switch_states->tablet_mode != PowerManagerClient::TabletMode::UNSUPPORTED;
+
+  FireWebUIListener(
+      "initial-data-ready",
+      base::Value(AccessibilityManager::Get()->GetStartupSoundEnabled()),
+      base::Value(tablet_mode_supported));
 }
 
 void AccessibilityHandler::OpenExtensionOptionsPage(const char extension_id[]) {

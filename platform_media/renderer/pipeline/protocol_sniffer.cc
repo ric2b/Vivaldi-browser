@@ -10,6 +10,7 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "media/base/container_names.h"
 #include "media/base/data_source.h"
 
@@ -127,14 +128,21 @@ std::string DetermineContainer(const uint8_t* data, size_t data_size) {
   return std::string();
 }
 
+void SniffReadDone(std::unique_ptr<uint8_t[]> data,
+                   ProtocolSniffer::Callback callback,
+                   int size_read) {
+  std::string mime_type;
+  if (size_read > 0) {
+    mime_type = DetermineContainer(data.get(), size_read);
+  }
+
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+          << " sniffed MimeType : '" << mime_type << "'";
+
+  std::move(callback).Run(std::move(mime_type));
+}
+
 }  // namespace
-
-ProtocolSniffer::ProtocolSniffer() : weak_ptr_factory_(this) {
-}
-
-ProtocolSniffer::~ProtocolSniffer() {
-  DCHECK(thread_checker_.CalledOnValidThread());
-}
 
 // static
 bool ProtocolSniffer::ShouldSniffProtocol(const std::string& content_type) {
@@ -156,36 +164,26 @@ bool ProtocolSniffer::ShouldSniffProtocol(const std::string& content_type) {
   return should_sniff;
 }
 
+// static
 void ProtocolSniffer::SniffProtocol(DataSource* data_source,
-                                    const Callback& callback) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+                                    Callback callback) {
   DCHECK(data_source);
 
   // We read the first 8192 bytes, same as FFmpeg.
   static const size_t kDataSize = 8192;
   std::unique_ptr<uint8_t[]> data_holder(new uint8_t[kDataSize]);
+
+  // C++ does not define the order of argument evaluation, so get the pointer
+  // before base::BindOnce() can be evaluated and call the move constructor for
+  // data_holder.
   uint8_t* data = data_holder.get();
 
+  // As we embedd move-only instances into the callback, we need to use
+  // AdaptCallbackForRepeating/BindOnce, not just Bind.
   data_source->Read(
       0, kDataSize, data,
-      base::Bind(&ProtocolSniffer::ReadDone, weak_ptr_factory_.GetWeakPtr(),
-                 base::Passed(&data_holder), callback));
-}
-
-void ProtocolSniffer::ReadDone(std::unique_ptr<uint8_t[]> data,
-                               const Callback& callback,
-                               int size_read) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-
-  std::string mime_type;
-
-  if (size_read != DataSource::kReadError)
-    mime_type = DetermineContainer(data.get(), size_read);
-
-  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-          << " sniffed MimeType : '" << mime_type << "'";
-
-  callback.Run(mime_type);
+      base::AdaptCallbackForRepeating(base::BindOnce(
+          &SniffReadDone, std::move(data_holder), std::move(callback))));
 }
 
 }  // namespace media

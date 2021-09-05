@@ -26,12 +26,15 @@ class NativeFileSystemFileHandle final : public NativeFileSystemHandle {
 
   ScriptPromise createWriter(ScriptState*,
                              const FileSystemCreateWriterOptions* options);
-  ScriptPromise getFile(ScriptState*);
+  ScriptPromise createWritable(ScriptState*,
+                               const FileSystemCreateWriterOptions* options,
+                               ExceptionState&);
+  ScriptPromise getFile(ScriptState*, ExceptionState&);
 
   mojo::PendingRemote<mojom::blink::NativeFileSystemTransferToken> Transfer()
       override;
 
-  void ContextDestroyed(ExecutionContext*) override;
+  void ContextDestroyed() override;
 
   mojom::blink::NativeFileSystemFileHandle* MojoHandle() {
     return mojo_ptr_.get();
@@ -45,6 +48,10 @@ class NativeFileSystemFileHandle final : public NativeFileSystemHandle {
       bool writable,
       base::OnceCallback<void(mojom::blink::NativeFileSystemErrorPtr,
                               mojom::blink::PermissionStatus)>) override;
+  void IsSameEntryImpl(
+      mojo::PendingRemote<mojom::blink::NativeFileSystemTransferToken> other,
+      base::OnceCallback<void(mojom::blink::NativeFileSystemErrorPtr, bool)>)
+      override;
 
   mojo::Remote<mojom::blink::NativeFileSystemFileHandle> mojo_ptr_;
 };

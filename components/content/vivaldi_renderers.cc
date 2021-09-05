@@ -7,11 +7,6 @@
 
 namespace content {
 
-void RenderWidgetHostViewChildFrame::PassSurfaceCopyRequest(
-    std::unique_ptr<viz::CopyOutputRequest> request) {
-  support_->RequestCopyOfOutput(viz::LocalSurfaceId(), std::move(request));
-}
-
 bool RenderWidgetHostViewBase::IsAura() const {
   return false;
 }

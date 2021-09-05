@@ -15,7 +15,6 @@
 #include "base/android/jni_string.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
-#include "base/command_line.h"
 #include "base/json/json_writer.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
@@ -41,7 +40,6 @@
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
-#include "net/android/network_library.h"
 #include "ui/accessibility/ax_assistant_structure.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/accessibility/mojom/ax_assistant_structure.mojom.h"
@@ -50,6 +48,8 @@
 #include "ui/gfx/android/java_bitmap.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
+#include "url/android/gurl_android.h"
+#include "url/gurl.h"
 
 using base::android::AttachCurrentThread;
 using base::android::ConvertJavaStringToUTF8;
@@ -202,13 +202,6 @@ WebContentsAndroid::WebContentsAndroid(WebContentsImpl* web_contents)
              Java_WebContentsImpl_create(env, reinterpret_cast<intptr_t>(this),
                                          navigation_controller_.GetJavaObject())
                  .obj());
-  blink::mojom::RendererPreferences* prefs =
-      web_contents_->GetMutableRendererPrefs();
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  prefs->network_contry_iso =
-      command_line->HasSwitch(switches::kNetworkCountryIso) ?
-          command_line->GetSwitchValueASCII(switches::kNetworkCountryIso)
-          : net::android::GetTelephonyNetworkCountryIso();
 }
 
 WebContentsAndroid::~WebContentsAndroid() {
@@ -296,11 +289,10 @@ ScopedJavaLocalRef<jstring> WebContentsAndroid::GetTitle(
                                                  web_contents_->GetTitle());
 }
 
-ScopedJavaLocalRef<jstring> WebContentsAndroid::GetVisibleURL(
+ScopedJavaLocalRef<jobject> WebContentsAndroid::GetVisibleURL(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) const {
-  return base::android::ConvertUTF8ToJavaString(
-      env, web_contents_->GetVisibleURL().spec());
+  return url::GURLAndroid::FromNativeGURL(env, web_contents_->GetVisibleURL());
 }
 
 bool WebContentsAndroid::IsLoading(JNIEnv* env,
@@ -312,6 +304,12 @@ bool WebContentsAndroid::IsLoadingToDifferentDocument(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) const {
   return web_contents_->IsLoadingToDifferentDocument();
+}
+
+void WebContentsAndroid::DispatchBeforeUnload(JNIEnv* env,
+                                              const JavaParamRef<jobject>& obj,
+                                              bool auto_cancel) {
+  web_contents_->DispatchBeforeUnload(auto_cancel);
 }
 
 void WebContentsAndroid::Stop(JNIEnv* env, const JavaParamRef<jobject>& obj) {
@@ -360,6 +358,27 @@ ScopedJavaLocalRef<jobject> WebContentsAndroid::GetRenderWidgetHostView(
   if (!rwhva)
     return nullptr;
   return rwhva->GetJavaObject();
+}
+
+ScopedJavaLocalRef<jobjectArray> WebContentsAndroid::GetInnerWebContents(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
+  std::vector<WebContents*> inner_web_contents =
+      web_contents_->GetInnerWebContents();
+  jclass clazz =
+      org_chromium_content_browser_webcontents_WebContentsImpl_clazz(env);
+  jobjectArray array =
+      env->NewObjectArray(inner_web_contents.size(), clazz, nullptr);
+  for (size_t i = 0; i < inner_web_contents.size(); i++) {
+    ScopedJavaLocalRef<jobject> contents_java =
+        inner_web_contents[i]->GetJavaWebContents();
+    env->SetObjectArrayElement(array, i, contents_java.obj());
+  }
+  return ScopedJavaLocalRef<jobjectArray>(env, array);
+}
+
+jint WebContentsAndroid::GetVisibility(JNIEnv* env) {
+  return static_cast<jint>(web_contents_->GetVisibility());
 }
 
 RenderWidgetHostViewAndroid*
@@ -444,6 +463,12 @@ jboolean WebContentsAndroid::FocusLocationBarByDefault(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) {
   return web_contents_->FocusLocationBarByDefault();
+}
+
+bool WebContentsAndroid::IsFullscreenForCurrentTab(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
+  return web_contents_->IsFullscreenForCurrentTab();
 }
 
 void WebContentsAndroid::ExitFullscreen(JNIEnv* env,
@@ -591,9 +616,9 @@ jint WebContentsAndroid::GetThemeColor(JNIEnv* env,
   return web_contents_->GetThemeColor().value_or(SK_ColorTRANSPARENT);
 }
 
-jint WebContentsAndroid::GetLoadProgress(JNIEnv* env,
-                                         const JavaParamRef<jobject>& obj) {
-  return web_contents_->GetLoadProgress() * 100;
+jfloat WebContentsAndroid::GetLoadProgress(JNIEnv* env,
+                                           const JavaParamRef<jobject>& obj) {
+  return web_contents_->GetLoadProgress();
 }
 
 void WebContentsAndroid::RequestSmartClipExtract(
@@ -663,12 +688,13 @@ int WebContentsAndroid::DownloadImage(
     jboolean bypass_cache,
     const base::android::JavaParamRef<jobject>& jcallback) {
   GURL url(base::android::ConvertJavaStringToUTF8(env, jurl));
+  const uint32_t preferred_size = 0;
   return web_contents_->DownloadImage(
-      url, is_fav_icon, max_bitmap_size, bypass_cache,
-      base::Bind(&WebContentsAndroid::OnFinishDownloadImage,
-                 weak_factory_.GetWeakPtr(),
-                 ScopedJavaGlobalRef<jobject>(env, obj),
-                 ScopedJavaGlobalRef<jobject>(env, jcallback)));
+      url, is_fav_icon, preferred_size, max_bitmap_size, bypass_cache,
+      base::BindOnce(&WebContentsAndroid::OnFinishDownloadImage,
+                     weak_factory_.GetWeakPtr(),
+                     ScopedJavaGlobalRef<jobject>(env, obj),
+                     ScopedJavaGlobalRef<jobject>(env, jcallback)));
 }
 
 void WebContentsAndroid::SetHasPersistentVideo(
@@ -822,6 +848,12 @@ void WebContentsAndroid::NotifyRendererPreferenceUpdate(
   RenderViewHost* rvh = web_contents_->GetRenderViewHost();
   DCHECK(rvh);
   rvh->OnWebkitPreferencesChanged();
+}
+
+void WebContentsAndroid::NotifyBrowserControlsHeightChanged(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& obj) {
+  web_contents_->GetNativeView()->OnBrowserControlsHeightChanged();
 }
 
 }  // namespace content

@@ -4,11 +4,24 @@
 
 import("//tools/polymer/polymer.gni")
 
+group("closure_compile") {
+  deps = [ "sync_confirmation:closure_compile" ]
+  if (!is_chromeos) {
+    deps += [
+      "signin_email_confirmation:closure_compile",
+      "signin_error:closure_compile",
+    ]
+  }
+}
+
 group("polymer3_elements") {
-  deps = [
+  public_deps = [
     ":signin_shared_css_module",
     "sync_confirmation:polymer3_elements",
   ]
+  if (!is_chromeos) {
+    public_deps += [ "signin_email_confirmation:polymer3_elements" ]
+  }
 }
 
 polymer_modulizer("signin_shared_css") {

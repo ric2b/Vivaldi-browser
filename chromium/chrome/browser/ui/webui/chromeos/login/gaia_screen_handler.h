@@ -17,15 +17,19 @@
 #include "chrome/browser/ui/webui/chromeos/login/base_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/core_oobe_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/network_state_informer.h"
+#include "chrome/browser/ui/webui/chromeos/login/saml_challenge_key_handler.h"
+#include "chromeos/components/security_token_pin/constants.h"
 #include "chromeos/network/portal_detector/network_portal_detector.h"
 #include "components/user_manager/user_type.h"
 #include "net/base/net_errors.h"
 #include "net/cookies/canonical_cookie.h"
+#include "services/network/public/mojom/cookie_manager.mojom.h"
 
 class AccountId;
 
 namespace base {
 class DictionaryValue;
+class OneShotTimer;
 }  // namespace base
 
 namespace network {
@@ -75,6 +79,7 @@ class GaiaView {
 class GaiaScreenHandler : public BaseScreenHandler,
                           public GaiaView,
                           public NetworkPortalDetector::Observer,
+                          public network::mojom::CookieChangeListener,
                           public SecurityTokenPinDialogHost {
  public:
   using TView = GaiaView;
@@ -120,9 +125,9 @@ class GaiaScreenHandler : public BaseScreenHandler,
   // SecurityTokenPinDialogHost:
   void ShowSecurityTokenPinDialog(
       const std::string& caller_extension_name,
-      SecurityTokenPinCodeType code_type,
+      security_token_pin::CodeType code_type,
       bool enable_user_input,
-      SecurityTokenPinErrorLabel error_label,
+      security_token_pin::ErrorLabel error_label,
       int attempts_left,
       const base::Optional<AccountId>& authenticating_user_account_id,
       SecurityTokenPinEnteredCallback pin_entered_callback,
@@ -132,6 +137,9 @@ class GaiaScreenHandler : public BaseScreenHandler,
   // Returns true if offline login mode was either required, or reported by the
   // WebUI (i.e. WebUI mignt not have completed transition to the new mode).
   bool IsOfflineLoginActive() const;
+
+  void SetNextSamlChallengeKeyHandlerForTesting(
+      std::unique_ptr<SamlChallengeKeyHandler> handler_for_test);
 
  private:
   // TODO (xiaoyinh): remove this dependency.
@@ -185,6 +193,9 @@ class GaiaScreenHandler : public BaseScreenHandler,
       const NetworkState* network,
       const NetworkPortalDetector::CaptivePortalState& state) override;
 
+  // network::mojom::CookieChangeListener:
+  void OnCookieChange(const net::CookieChangeInfo& change) override;
+
   // WebUI message handlers.
   void HandleWebviewLoadAborted(int error_code);
   void HandleCompleteAuthentication(
@@ -194,15 +205,6 @@ class GaiaScreenHandler : public BaseScreenHandler,
       bool using_saml,
       const ::login::StringList& services,
       const base::DictionaryValue* password_attributes);
-  void OnGetCookiesForCompleteAuthentication(
-      const std::string& gaia_id,
-      const std::string& email,
-      const std::string& password,
-      bool using_saml,
-      const ::login::StringList& services,
-      const SamlPasswordAttributes& password_attributes,
-      const net::CookieStatusList& cookies,
-      const net::CookieStatusList& excluded_cookies);
   void HandleCompleteLogin(const std::string& gaia_id,
                            const std::string& typed_email,
                            const std::string& password,
@@ -218,18 +220,19 @@ class GaiaScreenHandler : public BaseScreenHandler,
   void HandleUsingSAMLAPI(bool is_third_party_idp);
   void HandleScrapedPasswordCount(int password_count);
   void HandleScrapedPasswordVerificationFailed();
+  void HandleSamlChallengeMachineKey(const std::string& callback_id,
+                                     const std::string& url,
+                                     const std::string& challenge);
 
   void HandleGaiaUIReady();
 
   void HandleIdentifierEntered(const std::string& account_identifier);
 
   void HandleAuthExtensionLoaded();
-  void HandleHideOobeDialog();
   void HandleShowAddUser(const base::ListValue* args);
   void HandleGetIsSamlUserPasswordless(const std::string& callback_id,
                                        const std::string& typed_email,
                                        const std::string& gaia_id);
-  void HandleUpdateSigninUIState(int state);
 
   // Allows WebUI to control the login shelf's guest button visibility during
   // OOBE.
@@ -322,15 +325,24 @@ class GaiaScreenHandler : public BaseScreenHandler,
       const AccountId& account_id,
       bool using_saml,
       const std::string& password,
-      const std::string& auth_code,
-      const std::string& gaps_cookie,
       const SamlPasswordAttributes& password_attributes,
       UserContext* user_context,
       std::string* error_message);
 
+  void ContinueAuthenticationWhenCookiesAvailable();
+  void OnGetCookiesForCompleteAuthentication(
+      const net::CookieStatusList& cookies,
+      const net::CookieStatusList& excluded_cookies);
+
+  void OnCookieWaitTimeout();
+
   bool is_security_token_pin_dialog_running() const {
     return !security_token_pin_dialog_closed_callback_.is_null();
   }
+
+  // Assigns new SamlChallengeKeyHandler object or an object for testing to
+  // |saml_challenge_key_handler_|.
+  void CreateSamlChallengeKeyHandler();
 
   // Current state of Gaia frame.
   FrameState frame_state_ = FRAME_STATE_UNKNOWN;
@@ -434,6 +446,19 @@ class GaiaScreenHandler : public BaseScreenHandler,
   // Is non-empty iff the dialog is active.
   SecurityTokenPinDialogClosedCallback
       security_token_pin_dialog_closed_callback_;
+  // Whether the PIN dialog shown during the current authentication attempt was
+  // canceled by the user.
+  bool was_security_token_pin_canceled_ = false;
+
+  // Handler for |samlChallengeMachineKey| request.
+  std::unique_ptr<SamlChallengeKeyHandler> saml_challenge_key_handler_;
+  std::unique_ptr<SamlChallengeKeyHandler> saml_challenge_key_handler_for_test_;
+
+  // Connection to the CookieManager that signals when the GAIA cookies change.
+  mojo::Receiver<network::mojom::CookieChangeListener> oauth_code_listener_{
+      this};
+  std::unique_ptr<UserContext> pending_user_context_;
+  std::unique_ptr<base::OneShotTimer> cookie_waiting_timer_;
 
   base::WeakPtrFactory<GaiaScreenHandler> weak_factory_{this};
 

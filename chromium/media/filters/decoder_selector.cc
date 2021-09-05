@@ -153,18 +153,18 @@ void DecoderSelector<StreamType>::InitializeDecoder() {
   const bool is_live = stream_->liveness() == DemuxerStream::LIVENESS_LIVE;
   traits_->InitializeDecoder(
       decoder_.get(), config_, is_live, cdm_context_,
-      base::BindRepeating(&DecoderSelector<StreamType>::OnDecoderInitializeDone,
-                          weak_this_factory_.GetWeakPtr()),
+      base::BindOnce(&DecoderSelector<StreamType>::OnDecoderInitializeDone,
+                     weak_this_factory_.GetWeakPtr()),
       output_cb_, waiting_cb_);
 }
 
 template <DemuxerStream::Type StreamType>
-void DecoderSelector<StreamType>::OnDecoderInitializeDone(bool success) {
+void DecoderSelector<StreamType>::OnDecoderInitializeDone(Status status) {
   DVLOG(2) << __func__ << ": " << decoder_->GetDisplayName()
-           << " success=" << success;
+           << " success=" << std::hex << status.code();
   DCHECK(task_runner_->BelongsToCurrentThread());
 
-  if (!success) {
+  if (!status.is_ok()) {
     // Try the next decoder on the list.
     decoder_.reset();
     InitializeDecoder();
@@ -198,7 +198,7 @@ void DecoderSelector<StreamType>::InitializeDecryptingDemuxerStream() {
 
   decrypting_demuxer_stream_->Initialize(
       stream_, cdm_context_,
-      base::BindRepeating(
+      base::BindOnce(
           &DecoderSelector<StreamType>::OnDecryptingDemuxerStreamInitializeDone,
           weak_this_factory_.GetWeakPtr()));
 }
@@ -206,8 +206,7 @@ void DecoderSelector<StreamType>::InitializeDecryptingDemuxerStream() {
 template <DemuxerStream::Type StreamType>
 void DecoderSelector<StreamType>::OnDecryptingDemuxerStreamInitializeDone(
     PipelineStatus status) {
-  DVLOG(2) << __func__
-           << ": status=" << MediaLog::PipelineStatusToString(status);
+  DVLOG(2) << __func__ << ": status=" << status;
   DCHECK(task_runner_->BelongsToCurrentThread());
 
   if (status != PIPELINE_OK) {

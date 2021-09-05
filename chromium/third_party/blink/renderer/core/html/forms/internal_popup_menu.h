@@ -12,6 +12,7 @@
 namespace blink {
 
 class ChromeClient;
+class CSSFontSelector;
 class PagePopup;
 class HTMLElement;
 class HTMLHRElement;
@@ -49,11 +50,12 @@ class CORE_EXPORT InternalPopupMenu final : public PopupMenu,
 
   // PagePopupClient functions:
   void WriteDocument(SharedBuffer*) override;
-  void SelectFontsFromOwnerDocument(Document&) override;
+  CSSFontSelector* CreateCSSFontSelector(Document& popup_document) override;
   void SetValueAndClosePopup(int, const String&) override;
   void SetValue(const String&) override;
   void CancelPopup() override;
   Element& OwnerElement() override;
+  ChromeClient& GetChromeClient() override;
   float ZoomFactor() override { return 1.0; }
   Locale& GetLocale() override;
   void DidClosePopup() override;

@@ -15,12 +15,12 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/referrer.h"
-#include "content/public/common/resource_type.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_request_job.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
+#include "third_party/blink/public/mojom/loader/resource_load_info.mojom-shared.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -82,10 +82,22 @@ DetachedResourceRequest::DetachedResourceRequest(
   resource_request->referrer = net::URLRequestJob::ComputeReferrerForPolicy(
       referrer_policy, site_for_cookies_, url_);
   resource_request->referrer_policy = referrer_policy;
-  resource_request->site_for_cookies = site_for_cookies_;
-  resource_request->request_initiator = url::Origin::Create(site_for_cookies_);
+  resource_request->site_for_cookies =
+      net::SiteForCookies::FromUrl(site_for_cookies_);
+
+  url::Origin site_for_cookies_origin = url::Origin::Create(site_for_cookies_);
+  resource_request->request_initiator = site_for_cookies_origin;
+
+  // Since |site_for_cookies_| has gone through digital asset links
+  // verification, it should be ok to use it to compute the network isolation
+  // key.
+  resource_request->trusted_params = network::ResourceRequest::TrustedParams();
+  resource_request->trusted_params->network_isolation_key =
+      net::NetworkIsolationKey(site_for_cookies_origin,
+                               site_for_cookies_origin);
+
   resource_request->resource_type =
-      static_cast<int>(content::ResourceType::kSubResource);
+      static_cast<int>(blink::mojom::ResourceType::kSubResource);
   resource_request->do_not_prompt_for_login = true;
   resource_request->render_frame_id = -1;
   resource_request->enable_load_timing = false;
@@ -106,10 +118,28 @@ void DetachedResourceRequest::Start(
   request->url_loader_->SetOnRedirectCallback(
       base::BindRepeating(&DetachedResourceRequest::OnRedirectCallback,
                           base::Unretained(request.get())));
-  // Only retry on network changes, not HTTP 5xx codes. This is a client-side
-  // failure, and main requests are retried in this case.
-  request->url_loader_->SetRetryOptions(
-      1 /* max_retries */, network::SimpleURLLoader::RETRY_ON_NETWORK_CHANGE);
+
+  // Retry for client-side transient failures: DNS resolution errors and network
+  // configuration changes. Server HTTP 5xx errors are not retried.
+  //
+  // This is due to seeing that network changes happen quite a bit in
+  // practice. This may be due to these requests happening early in Chrome's
+  // lifecycle, so perhaps when the network was otherwise idle before,
+  // potentially triggering a network change as a consequence. This is only an
+  // hypothesis, but happens in practice, and retrying does help lowering the
+  // failure rate.
+  //
+  // DNS errors are both independent and linked to this. They can happen for a
+  // number of reasons, including a network change. Starting with Chrome 81
+  // however, a network change happening during DNS resolution is reported as a
+  // DNS error, not a network configuration change. This is visible in
+  // metrics. As a consequence, retry the request on DNS errors as well. Note
+  // that this is harmless, since the request cannot have server-side
+  // side-effects if the DNS resolution failed. See crbug.com/1078350 for
+  // details.
+  int retry_mode = network::SimpleURLLoader::RETRY_ON_NETWORK_CHANGE |
+                   network::SimpleURLLoader::RETRY_ON_NAME_NOT_RESOLVED;
+  request->url_loader_->SetRetryOptions(1 /* max_retries */, retry_mode);
 
   // |url_loader_| is owned by the request, and must be kept alive to not cancel
   // the request. Pass the ownership of the request to the response callback,

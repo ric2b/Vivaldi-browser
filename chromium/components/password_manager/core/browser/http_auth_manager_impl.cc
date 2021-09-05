@@ -8,11 +8,11 @@
 
 #include "components/autofill/core/common/password_form.h"
 #include "components/autofill/core/common/save_password_progress_logger.h"
-#include "components/password_manager/core/browser/form_saver_impl.h"
 #include "components/password_manager/core/browser/password_form_manager.h"
 #include "components/password_manager/core/browser/password_form_manager_for_ui.h"
 #include "components/password_manager/core/browser/password_manager_client.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
+#include "components/password_manager/core/browser/password_save_manager_impl.h"
 
 using autofill::PasswordForm;
 
@@ -61,8 +61,8 @@ void HttpAuthManagerImpl::SetObserverAndDeliverCredentials(
   // Initialize the form manager.
   form_manager_ = std::make_unique<PasswordFormManager>(
       client_, PasswordStore::FormDigest(observed_form),
-      nullptr, /* form_fetcher */
-      std::make_unique<FormSaverImpl>(client_->GetProfilePasswordStore()));
+      nullptr /* form_fetcher */,
+      PasswordSaveManagerImpl::CreatePasswordSaveManagerImpl(client_));
 }
 
 void HttpAuthManagerImpl::ProvisionallySaveForm(

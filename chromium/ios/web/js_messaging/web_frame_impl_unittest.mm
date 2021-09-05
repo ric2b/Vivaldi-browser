@@ -7,7 +7,6 @@
 #import "base/base64.h"
 #include "base/bind.h"
 #include "base/json/json_reader.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #import "base/strings/sys_string_conversions.h"
@@ -293,7 +292,7 @@ TEST_F(WebFrameImplTest, CallJavaScriptFunctionMessageProperlyEncoded) {
                         &function_plaintext));
   std::string message_plaintext;
   EXPECT_TRUE(aead.Open(decoded_message_ciphertext, decoded_message_iv,
-                        /*additional_data=*/nullptr, &message_plaintext));
+                        /*additional_data=*/"", &message_plaintext));
 
   base::Optional<base::Value> parsed_function_result =
       base::JSONReader::Read(function_plaintext, false);
@@ -371,7 +370,7 @@ TEST_F(WebFrameImplTest, CallJavaScriptFunctionRespondWithResult) {
   aead.Init(&key_string);
   std::string message_plaintext;
   EXPECT_TRUE(aead.Open(decoded_message_ciphertext, decoded_message_iv,
-                        /*additional_data=*/nullptr, &message_plaintext));
+                        /*additional_data=*/"", &message_plaintext));
 
   base::Optional<base::Value> parsed_result =
       base::JSONReader::Read(message_plaintext, false);

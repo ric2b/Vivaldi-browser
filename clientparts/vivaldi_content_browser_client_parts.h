@@ -15,7 +15,7 @@ class RenderProcessHost;
 class RenderViewHost;
 class SiteInstance;
 struct WebPreferences;
-}
+}  // namespace content
 
 namespace storage {
 class FileSystemBackend;

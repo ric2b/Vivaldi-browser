@@ -11,16 +11,17 @@ import android.os.Build;
 import android.text.format.DateUtils;
 import android.util.Xml;
 
+import androidx.annotation.VisibleForTesting;
+
 import org.xmlpull.v1.XmlSerializer;
 
 import org.chromium.base.BuildInfo;
 import org.chromium.base.Log;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.base.task.PostTask;
 import org.chromium.chrome.browser.identity.SettingsSecureBasedIdentificationGenerator;
 import org.chromium.chrome.browser.identity.UniqueIdentificationGeneratorFactory;
 import org.chromium.chrome.browser.init.ProcessInitializationHandler;
-import org.chromium.components.signin.AccountManagerFacade;
+import org.chromium.components.signin.AccountManagerFacadeProvider;
 import org.chromium.components.signin.ChromeSigninController;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.ui.base.DeviceFormFactor;
@@ -70,7 +71,7 @@ public abstract class RequestGenerator {
      * with some additional dummy values supplied.
      */
     public String generateXML(String sessionID, String versionName, long installAge,
-            RequestData data) throws RequestFailureException {
+            int lastCheckDate, RequestData data) throws RequestFailureException {
         XmlSerializer serializer = Xml.newSerializer();
         StringWriter writer = new StringWriter();
         try {
@@ -86,6 +87,7 @@ public abstract class RequestGenerator {
             serializer.attribute(null, "sessionid", "{" + sessionID + "}");
             serializer.attribute(null, "installsource", data.getInstallSource());
             serializer.attribute(null, "userid", "{" + getDeviceID() + "}");
+            serializer.attribute(null, "dedup", "uid");
 
             // Set up <os platform="android"... />
             serializer.startTag(null, "os");
@@ -124,9 +126,11 @@ public abstract class RequestGenerator {
                 serializer.startTag(null, "updatecheck");
                 serializer.endTag(null, "updatecheck");
 
-                // Set up <ping active="1" />
+                // Set up <ping active="1" rd="..." ad="..." />
                 serializer.startTag(null, "ping");
                 serializer.attribute(null, "active", "1");
+                serializer.attribute(null, "ad", String.valueOf(lastCheckDate));
+                serializer.attribute(null, "rd", String.valueOf(lastCheckDate));
                 serializer.endTag(null, "ping");
             }
 
@@ -198,23 +202,16 @@ public abstract class RequestGenerator {
     public int getNumGoogleAccountsOnDevice() {
         // RequestGenerator may be invoked from JobService or AlarmManager (through OmahaService),
         // so have to make sure AccountManagerFacade instance is initialized.
+        // TODO(waffles@chromium.org): Ideally, this should be asynchronous.
         int numAccounts = 0;
         try {
-            // TODO(waffles@chromium.org): Ideally, this should be asynchronous.
             PostTask.runSynchronously(UiThreadTaskTraits.DEFAULT,
                     () -> ProcessInitializationHandler.getInstance().initializePreNative());
-            numAccounts = AccountManagerFacade.get().getGoogleAccounts().size();
+            numAccounts = AccountManagerFacadeProvider.getInstance().tryGetGoogleAccounts().size();
         } catch (Exception e) {
-            Log.e(TAG, "Can't get number of accounts.", e);
+            Log.e(TAG, "Cannot get number of accounts.", e);
         }
-        switch (numAccounts) {
-            case 0:
-                return 0;
-            case 1:
-                return 1;
-            default:
-                return 2;
-        }
+        return numAccounts < 2 ? numAccounts : 2;
     }
 
     /**

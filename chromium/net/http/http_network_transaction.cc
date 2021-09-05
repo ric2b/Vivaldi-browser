@@ -518,11 +518,6 @@ void HttpNetworkTransaction::SetBeforeNetworkStartCallback(
   before_network_start_callback_ = callback;
 }
 
-void HttpNetworkTransaction::SetBeforeHeadersSentCallback(
-    const BeforeHeadersSentCallback& callback) {
-  before_headers_sent_callback_ = callback;
-}
-
 void HttpNetworkTransaction::SetRequestHeadersCallback(
     RequestHeadersCallback callback) {
   DCHECK(!stream_);
@@ -580,7 +575,8 @@ void HttpNetworkTransaction::OnStreamFailed(
     int result,
     const NetErrorDetails& net_error_details,
     const SSLConfig& used_ssl_config,
-    const ProxyInfo& used_proxy_info) {
+    const ProxyInfo& used_proxy_info,
+    ResolveErrorInfo resolve_error_info) {
   DCHECK_EQ(STATE_CREATE_STREAM_COMPLETE, next_state_);
   DCHECK_NE(OK, result);
   DCHECK(stream_request_.get());
@@ -589,6 +585,7 @@ void HttpNetworkTransaction::OnStreamFailed(
   net_error_details_ = net_error_details;
   proxy_info_ = used_proxy_info;
   SetProxyInfoInReponse(used_proxy_info, &response_);
+  response_.resolve_error_info = resolve_error_info;
 
   OnIOComplete(result);
 }
@@ -883,10 +880,10 @@ int HttpNetworkTransaction::DoGenerateProxyAuthToken() {
     return OK;
   HttpAuth::Target target = HttpAuth::AUTH_PROXY;
   if (!auth_controllers_[target].get())
-    auth_controllers_[target] = new HttpAuthController(
-        target, AuthURL(target), session_->http_auth_cache(),
-        session_->http_auth_handler_factory(), session_->host_resolver(),
-        session_->params().allow_default_credentials);
+    auth_controllers_[target] = base::MakeRefCounted<HttpAuthController>(
+        target, AuthURL(target), request_->network_isolation_key,
+        session_->http_auth_cache(), session_->http_auth_handler_factory(),
+        session_->host_resolver());
   return auth_controllers_[target]->MaybeGenerateAuthToken(request_,
                                                            io_callback_,
                                                            net_log_);
@@ -903,10 +900,10 @@ int HttpNetworkTransaction::DoGenerateServerAuthToken() {
   next_state_ = STATE_GENERATE_SERVER_AUTH_TOKEN_COMPLETE;
   HttpAuth::Target target = HttpAuth::AUTH_SERVER;
   if (!auth_controllers_[target].get()) {
-    auth_controllers_[target] = new HttpAuthController(
-        target, AuthURL(target), session_->http_auth_cache(),
-        session_->http_auth_handler_factory(), session_->host_resolver(),
-        session_->params().allow_default_credentials);
+    auth_controllers_[target] = base::MakeRefCounted<HttpAuthController>(
+        target, AuthURL(target), request_->network_isolation_key,
+        session_->http_auth_cache(), session_->http_auth_handler_factory(),
+        session_->host_resolver());
     if (request_->load_flags & LOAD_DO_NOT_USE_EMBEDDED_IDENTITY)
       auth_controllers_[target]->DisableEmbeddedIdentity();
   }
@@ -973,9 +970,6 @@ int HttpNetworkTransaction::BuildRequestHeaders(
         &request_headers_);
 
   request_headers_.MergeFrom(request_->extra_headers);
-
-  if (!before_headers_sent_callback_.is_null())
-    before_headers_sent_callback_.Run(proxy_info_, &request_headers_);
 
   response_.did_use_http_auth =
       request_headers_.HasHeader(HttpRequestHeaders::kAuthorization) ||
@@ -1094,10 +1088,13 @@ int HttpNetworkTransaction::DoReadHeadersComplete(int result) {
     return ERR_CONTENT_DECODING_FAILED;
 
   // On a 408 response from the server ("Request Timeout") on a stale socket,
-  // retry the request.
+  // retry the request for HTTP/1.1 but not HTTP/2 or QUIC because those
+  // multiplex requests and have no need for 408.
   // Headers can be NULL because of http://crbug.com/384554.
   if (response_.headers.get() &&
       response_.headers->response_code() == HTTP_REQUEST_TIMEOUT &&
+      HttpResponseInfo::ConnectionInfoToCoarse(response_.connection_info) ==
+          HttpResponseInfo::CONNECTION_INFO_COARSE_HTTP1 &&
       stream_->IsConnectionReused()) {
 #if BUILDFLAG(ENABLE_REPORTING)
     GenerateNetworkErrorLoggingReport(OK);
@@ -1390,11 +1387,8 @@ void HttpNetworkTransaction::GenerateNetworkErrorLoggingReport(int rv) {
 
   NetworkErrorLoggingService* service =
       session_->network_error_logging_service();
-  if (!service) {
-    NetworkErrorLoggingService::
-        RecordRequestDiscardedForNoNetworkErrorLoggingService();
+  if (!service)
     return;
-  }
 
   // Don't report on proxy auth challenges.
   if (response_.headers && response_.headers->response_code() ==
@@ -1408,10 +1402,8 @@ void HttpNetworkTransaction::GenerateNetworkErrorLoggingReport(int rv) {
     return;
 
   // Ignore errors from non-HTTPS origins.
-  if (!url_.SchemeIsCryptographic()) {
-    NetworkErrorLoggingService::RecordRequestDiscardedForInsecureOrigin();
+  if (!url_.SchemeIsCryptographic())
     return;
-  }
 
   NetworkErrorLoggingService::RequestDetails details;
 
@@ -1586,8 +1578,9 @@ int HttpNetworkTransaction::HandleIOError(int error) {
         retry_attempts_++;
         ResetConnectionAndRequestForResend();
         error = OK;
-      } else if (session_->params()
-                     .quic_params.retry_without_alt_svc_on_quic_errors) {
+      } else if (session_->context()
+                     .quic_context->params()
+                     ->retry_without_alt_svc_on_quic_errors) {
         // Disable alternative services for this request and retry it. If the
         // retry succeeds, then the alternative service will be marked as
         // broken then.

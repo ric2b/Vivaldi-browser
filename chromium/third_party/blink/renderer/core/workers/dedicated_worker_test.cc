@@ -35,7 +35,7 @@ class DedicatedWorkerThreadForTest final : public DedicatedWorkerThread {
                                DedicatedWorkerObjectProxy& worker_object_proxy)
       : DedicatedWorkerThread(parent_execution_context, worker_object_proxy) {
     worker_backing_thread_ = std::make_unique<WorkerBackingThread>(
-        ThreadCreationParams(WebThreadType::kTestThread));
+        ThreadCreationParams(ThreadType::kTestThread));
   }
 
   WorkerOrWorkletGlobalScope* CreateWorkerGlobalScope(
@@ -125,14 +125,14 @@ class DedicatedWorkerMessagingProxyForTest
     KURL script_url("http://fake.url/");
     security_origin_ = SecurityOrigin::Create(script_url);
     Vector<CSPHeaderAndType> headers{
-        {"contentSecurityPolicy", kContentSecurityPolicyHeaderTypeReport}};
+        {"contentSecurityPolicy",
+         network::mojom::ContentSecurityPolicyType::kReport}};
     auto worker_settings = std::make_unique<WorkerSettings>(
-        To<Document>(GetExecutionContext())->GetSettings());
+        Document::From(GetExecutionContext())->GetSettings());
     InitializeWorkerThread(
         std::make_unique<GlobalScopeCreationParams>(
-            script_url, mojom::ScriptType::kClassic,
-            OffMainThreadWorkerScriptFetchOption::kDisabled,
-            "fake global scope name", "fake user agent",
+            script_url, mojom::ScriptType::kClassic, "fake global scope name",
+            "fake user agent", UserAgentMetadata(),
             nullptr /* web_worker_fetch_context */, headers,
             network::mojom::ReferrerPolicy::kDefault, security_origin_.get(),
             false /* starter_secure_context */,
@@ -154,7 +154,7 @@ class DedicatedWorkerMessagingProxyForTest
     return static_cast<DedicatedWorkerThreadForTest*>(GetWorkerThread());
   }
 
-  void Trace(blink::Visitor* visitor) override {
+  void Trace(Visitor* visitor) override {
     DedicatedWorkerMessagingProxy::Trace(visitor);
   }
 
@@ -175,7 +175,7 @@ class DedicatedWorkerTest : public PageTestBase {
     PageTestBase::SetUp(IntSize());
     worker_messaging_proxy_ =
         MakeGarbageCollected<DedicatedWorkerMessagingProxyForTest>(
-            &GetDocument());
+            GetDocument().ToExecutionContext());
   }
 
   void TearDown() override {

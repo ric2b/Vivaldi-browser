@@ -5,6 +5,7 @@
 #include <memory>
 
 #include "base/bind.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/json/json_writer.h"
 #include "base/message_loop/message_loop_current.h"
@@ -24,6 +25,7 @@
 #include "chrome/browser/chromeos/login/test/session_manager_state_waiter.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
+#include "chrome/browser/chromeos/policy/device_local_account.h"
 #include "chrome/browser/chromeos/policy/device_policy_cros_browser_test.h"
 #include "chrome/browser/chromeos/policy/login_policy_test_base.h"
 #include "chrome/browser/chromeos/policy/signin_profile_extensions_policy_test_base.h"
@@ -578,7 +580,7 @@ class PolicyProvidedCertsPublicSessionTest
     chromeos::WizardController* const wizard_controller =
         chromeos::WizardController::default_controller();
     ASSERT_TRUE(wizard_controller);
-    wizard_controller->SkipToLoginForTesting(chromeos::LoginScreenContext());
+    wizard_controller->SkipToLoginForTesting();
 
     content::WindowedNotificationObserver(
         chrome::NOTIFICATION_LOGIN_OR_LOCK_WEBUI_VISIBLE,
@@ -782,10 +784,8 @@ class PolicyProvidedCertsForSigninExtensionTest
 
   content::StoragePartition* GetStoragePartitionForSigninExtension(
       const std::string& extension_id) {
-    const GURL site =
-        extensions::util::GetSiteForExtensionId(extension_id, signin_profile_);
-    return content::BrowserContext::GetStoragePartitionForSite(
-        signin_profile_, site, /*can_create=*/false);
+    return extensions::util::GetStoragePartitionForExtensionId(
+        extension_id, signin_profile_, /*can_create=*/false);
   }
 
   Profile* signin_profile_ = nullptr;

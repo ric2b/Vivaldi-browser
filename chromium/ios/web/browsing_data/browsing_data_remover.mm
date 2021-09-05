@@ -7,6 +7,7 @@
 #import <WebKit/WebKit.h>
 
 #import "base/ios/block_types.h"
+#include "base/memory/ptr_util.h"
 #include "base/task/post_task.h"
 #import "ios/web/browsing_data/browsing_data_remover_observer.h"
 #import "ios/web/public/browser_state.h"
@@ -79,7 +80,7 @@ void BrowsingDataRemover::ClearBrowsingData(ClearBrowsingDataMask types,
   }
 
   if (![data_types_to_remove count]) {
-    base::PostTask(FROM_HERE, base::BindOnce(std::move(block_closure)));
+    std::move(block_closure).Run();
     return;
   }
 

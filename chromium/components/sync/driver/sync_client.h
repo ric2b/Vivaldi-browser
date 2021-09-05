@@ -21,9 +21,9 @@ namespace invalidation {
 class InvalidationService;
 }  // namespace invalidation
 
-namespace vivaldi {
-class Notes_Model;
-} // namespace vivaldi
+namespace signin {
+class IdentityManager;
+}
 
 namespace syncer {
 
@@ -46,6 +46,8 @@ class SyncClient {
 
   // Returns the current profile's preference service.
   virtual PrefService* GetPrefService() = 0;
+
+  virtual signin::IdentityManager* GetIdentityManager() = 0;
 
   virtual base::FilePath GetSyncDataPath() = 0;
 
@@ -78,8 +80,6 @@ class SyncClient {
 
   // Returns the preference provider, or null if none exists.
   virtual SyncTypePreferenceProvider* GetPreferenceProvider() = 0;
-
-  virtual vivaldi::Notes_Model* GetNotesModel();
 
  private:
   DISALLOW_COPY_AND_ASSIGN(SyncClient);

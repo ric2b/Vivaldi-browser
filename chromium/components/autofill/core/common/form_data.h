@@ -29,10 +29,13 @@ using ButtonTitleList = std::vector<ButtonTitleInfo>;
 
 // Holds information about a form to be filled and/or submitted.
 struct FormData {
-  // TODO(https://crbug.com/875768): Rename this const to kNotSetRendererId, and
-  // use it also for not set renderer ids in FormFieldData.
-  static constexpr uint32_t kNotSetFormRendererId =
-      std::numeric_limits<uint32_t>::max();
+  // Less-than relation for STL containers. Compares only members needed to
+  // uniquely identify a form.
+  struct IdentityComparator {
+    bool operator()(const FormData& a, const FormData& b) const;
+  };
+
+  static constexpr uint32_t kNotSetRendererId = std::numeric_limits<uint32_t>::max();
 
   FormData();
   FormData(const FormData&);
@@ -52,11 +55,6 @@ struct FormData {
   // If |form| is the same as this from the POV of dynamic refills.
   bool DynamicallySameFormAs(const FormData& form) const;
 
-  // Note: operator==() performs a full-field-comparison(byte by byte), this is
-  // different from SameFormAs(), which ignores comparison for those "values" of
-  // all form fields, just like what FormFieldData::SameFieldAs() ignores.
-  bool operator==(const FormData& form) const;
-  bool operator!=(const FormData& form) const;
   // Allow FormData to be a key in STL containers.
   bool operator<(const FormData& form) const;
 
@@ -65,6 +63,11 @@ struct FormData {
 
   // The name attribute of the form.
   base::string16 name_attribute;
+
+  // NOTE: update IdentityComparator                when adding new a member.
+  // NOTE: update SameFormAs()            if needed when adding new a member.
+  // NOTE: update SimilarFormAs()         if needed when adding new a member.
+  // NOTE: update DynamicallySameFormAs() if needed when adding new a member.
 
   // The name by which autofill knows this form. This is generally either the
   // name attribute or the id_attribute value, which-ever is non-empty with
@@ -91,10 +94,10 @@ struct FormData {
   // and used if features::kAutofillRestrictUnownedFieldsToFormlessCheckout is
   // enabled, to prevent heuristics from running on formless non-checkout.
   bool is_formless_checkout = false;
-  //  Unique renderer id which is returned by function
-  //  WebFormElement::UniqueRendererFormId(). It is not persistant between page
-  //  loads, so it is not saved and not used in comparison in SameFormAs().
-  uint32_t unique_renderer_id = kNotSetFormRendererId;
+  // Unique renderer id returned by WebFormElement::UniqueRendererFormId(). It
+  // is not persistent between page loads, so it is not saved and not used in
+  // comparison in SameFormAs().
+  uint32_t unique_renderer_id = kNotSetRendererId;
   // The type of the event that was taken as an indication that this form is
   // being or has already been submitted. This field is filled only in Password
   // Manager for submitted password forms.
@@ -123,6 +126,8 @@ void SerializeFormData(const FormData& form_data, base::Pickle* pickle);
 bool DeserializeFormData(base::PickleIterator* iter, FormData* form_data);
 
 LogBuffer& operator<<(LogBuffer& buffer, const FormData& form);
+
+bool FormDataEqualForTesting(const FormData& lhs, const FormData& rhs);
 
 }  // namespace autofill
 

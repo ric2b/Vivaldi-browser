@@ -8,7 +8,6 @@ import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.Rect;
 import android.view.View;
-import android.view.ViewGroup.LayoutParams;
 import android.view.ViewParent;
 import android.widget.FrameLayout;
 
@@ -266,6 +265,7 @@ class TopControlsContainerView extends FrameLayout {
         mLastHeight = getHeight();
         TopControlsContainerViewJni.get().setTopControlsSize(mNativeTopControlsContainerView,
                 TopControlsContainerView.this, mLastWidth, mLastHeight);
+        setTopControlsOffset(0, mLastHeight);
     }
 
     private void finishTopControlsScroll(int topContentOffsetY) {

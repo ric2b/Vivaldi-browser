@@ -7,9 +7,11 @@ package org.chromium.chrome.browser.media.router.caf;
 import static org.chromium.chrome.browser.media.router.caf.CastUtils.isSameOrigin;
 
 import android.os.Handler;
-import android.support.v4.util.ArrayMap;
 import android.text.TextUtils;
 import android.util.SparseArray;
+
+import androidx.annotation.VisibleForTesting;
+import androidx.collection.ArrayMap;
 
 import com.google.android.gms.cast.ApplicationMetadata;
 import com.google.android.gms.common.api.PendingResult;
@@ -20,7 +22,6 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import org.chromium.base.Log;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.browser.media.router.CastRequestIdGenerator;
 import org.chromium.chrome.browser.media.router.CastSessionUtil;
 import org.chromium.chrome.browser.media.router.ClientRecord;

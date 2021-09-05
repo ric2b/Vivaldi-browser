@@ -11,6 +11,8 @@
 #include "base/callback_forward.h"
 #include "base/process/process.h"
 #include "content/common/content_export.h"
+#include "gpu/config/gpu_feature_info.h"
+#include "gpu/config/gpu_feature_type.h"
 
 namespace base {
 class CommandLine;
@@ -23,7 +25,7 @@ struct VideoMemoryUsageStats;
 
 namespace content {
 enum GpuProcessKind {
-  GPU_PROCESS_KIND_UNSANDBOXED_NO_GL,  // Unsandboxed, no init GL bindings.
+  GPU_PROCESS_KIND_INFO_COLLECTION,  // Unsandboxed, no init GL bindings.
   GPU_PROCESS_KIND_SANDBOXED,
   GPU_PROCESS_KIND_COUNT
 };
@@ -45,10 +47,15 @@ class GpuDataManager {
   // Getter for the singleton.
   CONTENT_EXPORT static GpuDataManager* GetInstance();
 
+  CONTENT_EXPORT static bool Initialized();
+
   // This is only called by extensions testing.
   virtual void BlacklistWebGLForTesting() = 0;
 
   virtual gpu::GPUInfo GetGPUInfo() = 0;
+
+  virtual gpu::GpuFeatureStatus GetFeatureStatus(
+      gpu::GpuFeatureType feature) = 0;
 
   // This indicator might change because we could collect more GPU info or
   // because the GPU blacklist could be updated.

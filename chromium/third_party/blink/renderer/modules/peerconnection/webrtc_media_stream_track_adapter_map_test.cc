@@ -2,24 +2,25 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "third_party/blink/public/web/modules/peerconnection/webrtc_media_stream_track_adapter_map.h"
+#include "third_party/blink/renderer/modules/peerconnection/webrtc_media_stream_track_adapter_map.h"
 
 #include <memory>
 
 #include "base/bind.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/scoped_run_loop_timeout.h"
 #include "base/test/test_timeouts.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/public/platform/modules/mediastream/media_stream_audio_source.h"
 #include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
 #include "third_party/blink/public/platform/web_media_stream_source.h"
 #include "third_party/blink/public/platform/web_media_stream_track.h"
 #include "third_party/blink/public/platform/web_string.h"
-#include "third_party/blink/public/web/modules/peerconnection/mock_peer_connection_dependency_factory.h"
 #include "third_party/blink/public/web/web_heap.h"
+#include "third_party/blink/renderer/modules/peerconnection/mock_peer_connection_dependency_factory.h"
+#include "third_party/blink/renderer/platform/mediastream/media_stream_audio_source.h"
 #include "third_party/blink/renderer/platform/testing/io_task_runner_testing_platform_support.h"
 
 namespace blink {
@@ -29,7 +30,7 @@ class WebRtcMediaStreamTrackAdapterMapTest : public ::testing::Test {
   void SetUp() override {
     dependency_factory_.reset(new blink::MockPeerConnectionDependencyFactory());
     main_thread_ = blink::scheduler::GetSingleThreadTaskRunnerForTesting();
-    map_ = new blink::WebRtcMediaStreamTrackAdapterMap(
+    map_ = base::MakeRefCounted<blink::WebRtcMediaStreamTrackAdapterMap>(
         dependency_factory_.get(), main_thread_);
   }
 
@@ -261,11 +262,7 @@ class WebRtcMediaStreamTrackAdapterMapStressTest
     : public WebRtcMediaStreamTrackAdapterMapTest {
  public:
   WebRtcMediaStreamTrackAdapterMapStressTest()
-      : WebRtcMediaStreamTrackAdapterMapTest(),
-        increased_run_timeout_(
-            TestTimeouts::action_max_timeout(),
-            base::MakeExpectedNotRunClosure(FROM_HERE,
-                                            "RunLoop::Run() timed out.")) {}
+      : increased_run_timeout_(FROM_HERE, TestTimeouts::action_max_timeout()) {}
 
   void RunStressTest(size_t iterations) {
     base::RunLoop run_loop;
@@ -344,7 +341,7 @@ class WebRtcMediaStreamTrackAdapterMapStressTest
  private:
   // TODO(https://crbug.com/1002761): Fix this test to run in < action_timeout()
   // on slower bots (e.g. Debug, ASAN, etc).
-  const base::RunLoop::ScopedRunTimeoutForTest increased_run_timeout_;
+  const base::test::ScopedRunLoopTimeout increased_run_timeout_;
 
   size_t remaining_iterations_;
 };

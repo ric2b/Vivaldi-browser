@@ -4,7 +4,10 @@
 
 #include "android_webview/browser/network_service/aw_proxying_url_loader_factory.h"
 
+#include <memory>
+#include <string>
 #include <utility>
+#include <vector>
 
 #include "android_webview/browser/android_protocol_handler.h"
 #include "android_webview/browser/aw_contents_client_bridge.h"
@@ -23,18 +26,18 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/post_task.h"
-#include "components/safe_browsing/common/safebrowsing_constants.h"
+#include "components/safe_browsing/core/common/safebrowsing_constants.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/global_request_id.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_constants.h"
-#include "content/public/common/resource_type.h"
 #include "content/public/common/url_utils.h"
-#include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/receiver.h"
 #include "net/base/load_flags.h"
 #include "net/http/http_util.h"
 #include "services/network/public/cpp/resource_request.h"
+#include "third_party/blink/public/mojom/loader/resource_load_info.mojom-shared.h"
 #include "url/gurl.h"
 
 namespace android_webview {
@@ -55,9 +58,9 @@ class InterceptedRequest : public network::mojom::URLLoader,
       uint32_t options,
       const network::ResourceRequest& request,
       const net::MutableNetworkTrafficAnnotationTag& traffic_annotation,
-      network::mojom::URLLoaderRequest loader_request,
-      network::mojom::URLLoaderClientPtr client,
-      network::mojom::URLLoaderFactoryPtr target_factory,
+      mojo::PendingReceiver<network::mojom::URLLoader> loader_receiver,
+      mojo::PendingRemote<network::mojom::URLLoaderClient> client,
+      mojo::PendingRemote<network::mojom::URLLoaderFactory> target_factory,
       bool intercept_only);
   ~InterceptedRequest() override;
 
@@ -105,7 +108,7 @@ class InterceptedRequest : public network::mojom::URLLoader,
   void OnURLLoaderError(uint32_t custom_reason, const std::string& description);
 
   // Call OnComplete on |target_client_|. If |wait_for_loader_error| is true
-  // then this object will wait for |proxied_loader_binding_| to have a
+  // then this object will wait for |proxied_loader_receiver_| to have a
   // connection error before destructing.
   void CallOnComplete(const network::URLLoaderCompletionStatus& status,
                       bool wait_for_loader_error);
@@ -142,12 +145,13 @@ class InterceptedRequest : public network::mojom::URLLoader,
 
   const net::MutableNetworkTrafficAnnotationTag traffic_annotation_;
 
-  mojo::Binding<network::mojom::URLLoader> proxied_loader_binding_;
-  network::mojom::URLLoaderClientPtr target_client_;
+  mojo::Receiver<network::mojom::URLLoader> proxied_loader_receiver_;
+  mojo::Remote<network::mojom::URLLoaderClient> target_client_;
 
-  mojo::Binding<network::mojom::URLLoaderClient> proxied_client_binding_;
-  network::mojom::URLLoaderPtr target_loader_;
-  network::mojom::URLLoaderFactoryPtr target_factory_;
+  mojo::Receiver<network::mojom::URLLoaderClient> proxied_client_receiver_{
+      this};
+  mojo::Remote<network::mojom::URLLoader> target_loader_;
+  mojo::Remote<network::mojom::URLLoaderFactory> target_factory_;
 
   base::WeakPtrFactory<InterceptedRequest> weak_factory_{this};
 
@@ -262,9 +266,9 @@ InterceptedRequest::InterceptedRequest(
     uint32_t options,
     const network::ResourceRequest& request,
     const net::MutableNetworkTrafficAnnotationTag& traffic_annotation,
-    network::mojom::URLLoaderRequest loader_request,
-    network::mojom::URLLoaderClientPtr client,
-    network::mojom::URLLoaderFactoryPtr target_factory,
+    mojo::PendingReceiver<network::mojom::URLLoader> loader_receiver,
+    mojo::PendingRemote<network::mojom::URLLoaderClient> client,
+    mojo::PendingRemote<network::mojom::URLLoaderFactory> target_factory,
     bool intercept_only)
     : process_id_(process_id),
       request_id_(request_id),
@@ -273,16 +277,14 @@ InterceptedRequest::InterceptedRequest(
       intercept_only_(intercept_only),
       request_(request),
       traffic_annotation_(traffic_annotation),
-      proxied_loader_binding_(this, std::move(loader_request)),
+      proxied_loader_receiver_(this, std::move(loader_receiver)),
       target_client_(std::move(client)),
-      proxied_client_binding_(this),
       target_factory_(std::move(target_factory)) {
   // If there is a client error, clean up the request.
-  target_client_.set_connection_error_handler(base::BindOnce(
+  target_client_.set_disconnect_handler(base::BindOnce(
       &InterceptedRequest::OnURLLoaderClientError, base::Unretained(this)));
-  proxied_loader_binding_.set_connection_error_with_reason_handler(
-      base::BindOnce(&InterceptedRequest::OnURLLoaderError,
-                     base::Unretained(this)));
+  proxied_loader_receiver_.set_disconnect_with_reason_handler(base::BindOnce(
+      &InterceptedRequest::OnURLLoaderError, base::Unretained(this)));
 }
 
 InterceptedRequest::~InterceptedRequest() {
@@ -394,7 +396,7 @@ bool InterceptedRequest::InputStreamFailed(bool restart_needed) {
   }
 
   input_stream_previously_failed_ = true;
-  proxied_client_binding_.Unbind();
+  proxied_client_receiver_.reset();
   Restart();
   return true;  // request restarted
 }
@@ -413,10 +415,9 @@ void InterceptedRequest::ContinueAfterIntercept() {
   if (!input_stream_previously_failed_ &&
       (request_.url.SchemeIs(url::kContentScheme) ||
        android_webview::IsAndroidSpecialFileUrl(request_.url))) {
-    network::mojom::URLLoaderClientPtr proxied_client;
-    proxied_client_binding_.Bind(mojo::MakeRequest(&proxied_client));
     AndroidStreamReaderURLLoader* loader = new AndroidStreamReaderURLLoader(
-        request_, std::move(proxied_client), traffic_annotation_,
+        request_, proxied_client_receiver_.BindNewPipeAndPassRemote(),
+        traffic_annotation_,
         std::make_unique<ProtocolResponseDelegate>(request_.url,
                                                    weak_factory_.GetWeakPtr()));
     loader->Start();
@@ -424,20 +425,18 @@ void InterceptedRequest::ContinueAfterIntercept() {
   }
 
   if (!target_loader_ && target_factory_) {
-    network::mojom::URLLoaderClientPtr proxied_client;
-    proxied_client_binding_.Bind(mojo::MakeRequest(&proxied_client));
     target_factory_->CreateLoaderAndStart(
-        mojo::MakeRequest(&target_loader_), routing_id_, request_id_, options_,
-        request_, std::move(proxied_client), traffic_annotation_);
+        target_loader_.BindNewPipeAndPassReceiver(), routing_id_, request_id_,
+        options_, request_, proxied_client_receiver_.BindNewPipeAndPassRemote(),
+        traffic_annotation_);
   }
 }
 
 void InterceptedRequest::ContinueAfterInterceptWithOverride(
     std::unique_ptr<AwWebResourceResponse> response) {
-  network::mojom::URLLoaderClientPtr proxied_client;
-  proxied_client_binding_.Bind(mojo::MakeRequest(&proxied_client));
   AndroidStreamReaderURLLoader* loader = new AndroidStreamReaderURLLoader(
-      request_, std::move(proxied_client), traffic_annotation_,
+      request_, proxied_client_receiver_.BindNewPipeAndPassRemote(),
+      traffic_annotation_,
       std::make_unique<InterceptResponseDelegate>(std::move(response),
                                                   weak_factory_.GetWeakPtr()));
   loader->Start();
@@ -481,7 +480,7 @@ void OnReceivedErrorOnUiThread(int process_id,
                   << request.url;
     return;
   }
-  client->OnReceivedError(request, error_code, safebrowsing_hit);
+  client->OnReceivedError(request, error_code, safebrowsing_hit, true);
 }
 
 void OnNewLoginRequestOnUiThread(int process_id,
@@ -503,7 +502,7 @@ void OnNewLoginRequestOnUiThread(int process_id,
 void InterceptedRequest::OnReceiveResponse(
     network::mojom::URLResponseHeadPtr head) {
   // intercept response headers here
-  // pause/resume proxied_client_binding_ if necessary
+  // pause/resume |proxied_client_receiver_| if necessary
 
   if (head->headers && head->headers->response_code() >= 400) {
     // In Android WebView the WebViewClient.onReceivedHttpError callback
@@ -520,7 +519,7 @@ void InterceptedRequest::OnReceiveResponse(
   }
 
   if (request_.resource_type ==
-      static_cast<int>(content::ResourceType::kMainFrame)) {
+      static_cast<int>(blink::mojom::ResourceType::kMainFrame)) {
     // Check for x-auto-login-header
     HeaderData header_data;
     std::string header_string;
@@ -592,7 +591,7 @@ void InterceptedRequest::FollowRedirect(
     target_loader_->FollowRedirect(removed_headers, modified_headers, new_url);
 
   // If |OnURLLoaderClientError| was called then we're just waiting for the
-  // connection error handler of |proxied_loader_binding_|. Don't restart the
+  // connection error handler of |proxied_loader_receiver_|. Don't restart the
   // job since that'll create another URLLoader
   if (!target_client_)
     return;
@@ -669,13 +668,13 @@ void InterceptedRequest::CallOnComplete(
   if (target_client_)
     target_client_->OnComplete(status);
 
-  if (proxied_loader_binding_ && wait_for_loader_error) {
+  if (proxied_loader_receiver_.is_bound() && wait_for_loader_error) {
     // Since the original client is gone no need to continue loading the
     // request.
-    proxied_client_binding_.Close();
+    proxied_client_receiver_.reset();
     target_loader_.reset();
 
-    // Don't delete |this| yet, in case the |proxied_loader_binding_|'s
+    // Don't delete |this| yet, in case the |proxied_loader_receiver_|'s
     // error_handler is called with a reason to indicate an error which we want
     // to send to the client bridge. Also reset |target_client_| so we don't
     // get its error_handler called and then delete |this|.
@@ -721,14 +720,14 @@ void InterceptedRequest::SendErrorCallback(int error_code,
 AwProxyingURLLoaderFactory::AwProxyingURLLoaderFactory(
     int process_id,
     mojo::PendingReceiver<network::mojom::URLLoaderFactory> loader_receiver,
-    network::mojom::URLLoaderFactoryPtrInfo target_factory_info,
+    mojo::PendingRemote<network::mojom::URLLoaderFactory> target_factory_remote,
     bool intercept_only)
     : process_id_(process_id), intercept_only_(intercept_only) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
-  DCHECK(!(intercept_only_ && target_factory_info));
-  if (target_factory_info) {
-    target_factory_.Bind(std::move(target_factory_info));
-    target_factory_.set_connection_error_handler(
+  DCHECK(!(intercept_only_ && target_factory_remote));
+  if (target_factory_remote) {
+    target_factory_.Bind(std::move(target_factory_remote));
+    target_factory_.set_disconnect_handler(
         base::BindOnce(&AwProxyingURLLoaderFactory::OnTargetFactoryError,
                        base::Unretained(this)));
   }
@@ -744,28 +743,30 @@ AwProxyingURLLoaderFactory::~AwProxyingURLLoaderFactory() {}
 void AwProxyingURLLoaderFactory::CreateProxy(
     int process_id,
     mojo::PendingReceiver<network::mojom::URLLoaderFactory> loader_receiver,
-    network::mojom::URLLoaderFactoryPtrInfo target_factory_info) {
+    mojo::PendingRemote<network::mojom::URLLoaderFactory>
+        target_factory_remote) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
 
   // will manage its own lifetime
   new AwProxyingURLLoaderFactory(process_id, std::move(loader_receiver),
-                                 std::move(target_factory_info), false);
+                                 std::move(target_factory_remote), false);
 }
 
 void AwProxyingURLLoaderFactory::CreateLoaderAndStart(
-    network::mojom::URLLoaderRequest loader,
+    mojo::PendingReceiver<network::mojom::URLLoader> loader,
     int32_t routing_id,
     int32_t request_id,
     uint32_t options,
     const network::ResourceRequest& request,
-    network::mojom::URLLoaderClientPtr client,
+    mojo::PendingRemote<network::mojom::URLLoaderClient> client,
     const net::MutableNetworkTrafficAnnotationTag& traffic_annotation) {
   // TODO(timvolodine): handle interception, modification (headers for
   // webview), blocking, callbacks etc..
 
-  network::mojom::URLLoaderFactoryPtr target_factory_clone;
+  mojo::PendingRemote<network::mojom::URLLoaderFactory> target_factory_clone;
   if (target_factory_)
-    target_factory_->Clone(MakeRequest(&target_factory_clone));
+    target_factory_->Clone(
+        target_factory_clone.InitWithNewPipeAndPassReceiver());
 
   bool global_cookie_policy =
       AwCookieAccessPolicy::GetInstance()->GetShouldAcceptCookies();

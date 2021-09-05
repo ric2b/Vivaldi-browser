@@ -30,7 +30,7 @@
 
 #include "third_party/blink/renderer/core/svg/svg_number.h"
 
-#include "third_party/blink/renderer/core/svg/svg_animation_element.h"
+#include "third_party/blink/renderer/core/svg/svg_animate_element.h"
 #include "third_party/blink/renderer/core/svg/svg_parser_utilities.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 
@@ -75,29 +75,28 @@ SVGParsingError SVGNumber::SetValueAsString(const String& string) {
 }
 
 void SVGNumber::Add(SVGPropertyBase* other, SVGElement*) {
-  SetValue(value_ + ToSVGNumber(other)->Value());
+  SetValue(value_ + To<SVGNumber>(other)->Value());
 }
 
-void SVGNumber::CalculateAnimatedValue(SVGAnimationElement* animation_element,
-                                       float percentage,
-                                       unsigned repeat_count,
-                                       SVGPropertyBase* from,
-                                       SVGPropertyBase* to,
-                                       SVGPropertyBase* to_at_end_of_duration,
-                                       SVGElement*) {
-  DCHECK(animation_element);
+void SVGNumber::CalculateAnimatedValue(
+    const SVGAnimateElement& animation_element,
+    float percentage,
+    unsigned repeat_count,
+    SVGPropertyBase* from,
+    SVGPropertyBase* to,
+    SVGPropertyBase* to_at_end_of_duration,
+    SVGElement*) {
+  auto* from_number = To<SVGNumber>(from);
+  auto* to_number = To<SVGNumber>(to);
+  auto* to_at_end_of_duration_number = To<SVGNumber>(to_at_end_of_duration);
 
-  SVGNumber* from_number = ToSVGNumber(from);
-  SVGNumber* to_number = ToSVGNumber(to);
-  SVGNumber* to_at_end_of_duration_number = ToSVGNumber(to_at_end_of_duration);
-
-  animation_element->AnimateAdditiveNumber(
+  animation_element.AnimateAdditiveNumber(
       percentage, repeat_count, from_number->Value(), to_number->Value(),
       to_at_end_of_duration_number->Value(), value_);
 }
 
 float SVGNumber::CalculateDistance(SVGPropertyBase* other, SVGElement*) {
-  return fabsf(value_ - ToSVGNumber(other)->Value());
+  return fabsf(value_ - To<SVGNumber>(other)->Value());
 }
 
 SVGNumber* SVGNumberAcceptPercentage::Clone() const {

@@ -9,6 +9,7 @@
 #include <memory>
 
 #include "base/android/scoped_hardware_buffer_fence_sync.h"
+#include "base/bind_helpers.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder.h"
 #include "gpu/command_buffer/service/texture_manager.h"
 #include "ui/gl/gl_context.h"
@@ -68,7 +69,7 @@ void CodecImage::NotifyUnused() {
   // that we did in Initialize.
   ReleaseCodecBuffer();
   codec_buffer_wait_coordinator_.reset();
-  promotion_hint_cb_ = PromotionHintAggregator::NotifyPromotionHintCB();
+  promotion_hint_cb_ = base::NullCallback();
 
   for (auto& cb : unused_cbs_)
     std::move(cb).Run(this);
@@ -233,9 +234,8 @@ bool CodecImage::HasTextureOwner() const {
   return !!texture_owner();
 }
 
-gpu::gles2::Texture* CodecImage::GetTexture() const {
-  DCHECK(texture_owner());
-  return gpu::gles2::Texture::CheckedCast(texture_owner()->GetTextureBase());
+gpu::TextureBase* CodecImage::GetTextureBase() const {
+  return texture_owner()->GetTextureBase();
 }
 
 bool CodecImage::RenderToFrontBuffer() {
@@ -247,11 +247,18 @@ bool CodecImage::RenderToFrontBuffer() {
 }
 
 bool CodecImage::RenderToTextureOwnerBackBuffer(BlockingMode blocking_mode) {
-  DCHECK(codec_buffer_wait_coordinator_);
   DCHECK_NE(phase_, Phase::kInFrontBuffer);
   if (phase_ == Phase::kInBackBuffer)
     return true;
   if (phase_ == Phase::kInvalidated)
+    return false;
+
+  // Normally, we should have a wait coordinator if we're called.  However, if
+  // the renderer is torn down (either VideoFrameSubmitter or the whole process)
+  // before we get returns back from viz, then we can be notified that we're
+  // no longer in use (erroneously) when the VideoFrame is destroyed.  So, if
+  // we don't have a wait coordinator, then just fail.
+  if (!codec_buffer_wait_coordinator_)
     return false;
 
   // Wait for a previous frame available so we don't confuse it with the one
@@ -271,7 +278,13 @@ bool CodecImage::RenderToTextureOwnerBackBuffer(BlockingMode blocking_mode) {
 }
 
 bool CodecImage::RenderToTextureOwnerFrontBuffer(BindingsMode bindings_mode) {
-  DCHECK(codec_buffer_wait_coordinator_);
+  // Normally, we should have a wait coordinator if we're called.  However, if
+  // the renderer is torn down (either VideoFrameSubmitter or the whole process)
+  // before we get returns back from viz, then we can be notified that we're
+  // no longer in use (erroneously) when the VideoFrame is destroyed.  So, if
+  // we don't have a wait coordinator, then just fail.
+  if (!codec_buffer_wait_coordinator_)
+    return false;
 
   if (phase_ == Phase::kInFrontBuffer) {
     EnsureBoundIfNeeded(bindings_mode);
@@ -353,6 +366,12 @@ CodecImage::GetAHardwareBuffer() {
 
   RenderToTextureOwnerFrontBuffer(BindingsMode::kDontRestoreIfBound);
   return codec_buffer_wait_coordinator_->texture_owner()->GetAHardwareBuffer();
+}
+
+gfx::Rect CodecImage::GetCropRect() {
+  if (!codec_buffer_wait_coordinator_)
+    return gfx::Rect();
+  return codec_buffer_wait_coordinator_->texture_owner()->GetCropRect();
 }
 
 bool CodecImage::HasMutableState() const {

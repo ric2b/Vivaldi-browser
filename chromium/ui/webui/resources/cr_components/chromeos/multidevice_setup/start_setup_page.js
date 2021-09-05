@@ -21,7 +21,7 @@ Polymer({
     /**
      * Array of objects representing all potential MultiDevice hosts.
      *
-     * @type {!Array<!chromeos.multidevice.mojom.RemoteDevice>}
+     * @type {!Array<!chromeos.multideviceSetup.mojom.HostDevice>}
      */
     devices: {
       type: Array,
@@ -30,14 +30,18 @@ Polymer({
     },
 
     /**
-     * Unique identifier for the currently selected host device.
+     * Unique identifier for the currently selected host device. This uses the
+     * device's Instance ID if it is available; otherwise, the device's legacy
+     * device ID is used.
+     * TODO(https://crbug.com/1019206): When v1 DeviceSync is turned off, only
+     * use Instance ID since all devices are guaranteed to have one.
      *
      * Undefined if the no list of potential hosts has been received from mojo
      * service.
      *
      * @type {string|undefined}
      */
-    selectedDeviceId: {
+    selectedInstanceIdOrLegacyDeviceId: {
       type: String,
       notify: true,
     },
@@ -55,14 +59,14 @@ Polymer({
   ],
 
   /** @override */
-  attached: function() {
+  attached() {
     this.addWebUIListener(
         'multidevice_setup.initializeSetupFlow',
         this.initializeSetupFlow_.bind(this));
   },
 
   /** @private */
-  initializeSetupFlow_: function() {
+  initializeSetupFlow_() {
     // The "Learn More" links are inside a grdp string, so we cannot actually
     // add an onclick handler directly to the html. Instead, grab the two and
     // manaully add onclick handlers.
@@ -81,12 +85,12 @@ Polymer({
    * @return {string} The cancel button text ID, dependent on OOBE vs. non-OOBE.
    * @private
    */
-  getCancelButtonTextId_: function(delegate) {
+  getCancelButtonTextId_(delegate) {
     return this.delegate.getStartSetupCancelButtonTextId();
   },
 
   /**
-   * @param {!Array<!chromeos.multidevice.mojom.RemoteDevice>} devices
+   * @param {!Array<!chromeos.multideviceSetup.mojom.HostDevice>} devices
    * @return {string} Label for devices selection content.
    * @private
    */
@@ -102,43 +106,87 @@ Polymer({
   },
 
   /**
-   * @param {!Array<!chromeos.multidevice.mojom.RemoteDevice>} devices
+   * @param {!Array<!chromeos.multideviceSetup.mojom.HostDevice>} devices
    * @return {boolean} True if there are more than one potential host devices.
    * @private
    */
-  doesDeviceListHaveMultipleElements_: function(devices) {
+  doesDeviceListHaveMultipleElements_(devices) {
     return devices.length > 1;
   },
 
   /**
-   * @param {!Array<!chromeos.multidevice.mojom.RemoteDevice>} devices
+   * @param {!Array<!chromeos.multideviceSetup.mojom.HostDevice>} devices
    * @return {boolean} True if there is exactly one potential host device.
    * @private
    */
-  doesDeviceListHaveOneElement_: function(devices) {
-    return devices.length == 1;
+  doesDeviceListHaveOneElement_(devices) {
+    return devices.length === 1;
   },
 
   /**
-   * @param {!Array<!chromeos.multidevice.mojom.RemoteDevice>} devices
+   * @param {!Array<!chromeos.multideviceSetup.mojom.HostDevice>} devices
    * @return {string} Name of the first device in device list if there are any.
    *     Returns an empty string otherwise.
    * @private
    */
-  getFirstDeviceNameInList_: function(devices) {
-    return devices[0] ? this.devices[0].deviceName : '';
+  getFirstDeviceNameInList_(devices) {
+    return devices[0] ? this.devices[0].remoteDevice.deviceName : '';
+  },
+
+  /**
+   * @param {!chromeos.deviceSync.mojom.ConnectivityStatus} connectivityStatus
+   * @return {string} The classes to bind to the device name option.
+   * @private
+   */
+  getDeviceOptionClass_(connectivityStatus) {
+    return connectivityStatus ===
+            chromeos.deviceSync.mojom.ConnectivityStatus.kOffline ?
+        'offline-device-name' :
+        '';
+  },
+
+  /**
+   * @param {!chromeos.multideviceSetup.mojom.HostDevice} device
+   * @return {string} Name of the device, with connectivity status information.
+   * @private
+   */
+  getDeviceNameWithConnectivityStatus_(device) {
+    return device.connectivityStatus ===
+            chromeos.deviceSync.mojom.ConnectivityStatus.kOffline ?
+        this.i18n(
+            'startSetupPageOfflineDeviceOption',
+            device.remoteDevice.deviceName) :
+        device.remoteDevice.deviceName;
+  },
+
+  /**
+   * @param {!chromeos.multideviceSetup.mojom.HostDevice} device
+   * @return {string} Returns a unique identifier for the input device, using
+   *     the device's Instance ID if it is available; otherwise, the device's
+   *     legacy device ID is used.
+   *     TODO(https://crbug.com/1019206): When v1 DeviceSync is turned off, only
+   *     use Instance ID since all devices are guaranteed to have one.
+   * @private
+   */
+  getInstanceIdOrLegacyDeviceId_(device) {
+    if (device.remoteDevice.instanceId) {
+      return device.remoteDevice.instanceId;
+    }
+
+    return device.remoteDevice.deviceId;
   },
 
   /** @private */
-  devicesChanged_: function() {
+  devicesChanged_() {
     if (this.devices.length > 0) {
-      this.selectedDeviceId = this.devices[0].deviceId;
+      this.selectedInstanceIdOrLegacyDeviceId =
+          this.getInstanceIdOrLegacyDeviceId_(this.devices[0]);
     }
   },
 
   /** @private */
-  onDeviceDropdownSelectionChanged_: function() {
-    this.selectedDeviceId = this.$.deviceDropdown.value;
+  onDeviceDropdownSelectionChanged_() {
+    this.selectedInstanceIdOrLegacyDeviceId = this.$.deviceDropdown.value;
   },
 
   /**
@@ -150,7 +198,7 @@ Polymer({
    * @param {string} textId The loadTimeData ID of the string to be translated.
    * @private
    */
-  i18nAdvancedDynamic_: function(locale, textId) {
+  i18nAdvancedDynamic_(locale, textId) {
     return this.i18nAdvanced(textId);
   },
 });

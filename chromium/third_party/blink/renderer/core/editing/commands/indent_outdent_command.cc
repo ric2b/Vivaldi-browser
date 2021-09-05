@@ -42,8 +42,6 @@
 
 namespace blink {
 
-using namespace html_names;
-
 // Returns true if |node| is UL, OL, or BLOCKQUOTE with "display:block".
 // "Outdent" command considers <BLOCKQUOTE style="display:inline"> makes
 // indentation.
@@ -55,15 +53,15 @@ static bool IsHTMLListOrBlockquoteElement(const Node* node) {
     return false;
   // TODO(yosin): We should check OL/UL element has "list-style-type" CSS
   // property to make sure they layout contents as list.
-  return IsHTMLUListElement(*element) || IsA<HTMLOListElement>(*element) ||
-         element->HasTagName(kBlockquoteTag);
+  return IsA<HTMLUListElement>(*element) || IsA<HTMLOListElement>(*element) ||
+         element->HasTagName(html_names::kBlockquoteTag);
 }
 
 IndentOutdentCommand::IndentOutdentCommand(Document& document,
                                            IndentType type_of_action)
     : ApplyBlockElementCommand(
           document,
-          kBlockquoteTag,
+          html_names::kBlockquoteTag,
           "margin: 0 0 0 40px; border: none; padding: 0px;"),
       type_of_action_(type_of_action) {}
 
@@ -100,7 +98,7 @@ bool IndentOutdentCommand::TryIndentingAsListItem(const Position& start,
   if (editing_state->IsAborted())
     return false;
 
-  GetDocument().UpdateStyleAndLayout();
+  GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
 
   // We should clone all the children of the list item for indenting purposes.
   // However, in case the current selection does not encompass all its children,
@@ -136,7 +134,7 @@ bool IndentOutdentCommand::TryIndentingAsListItem(const Position& start,
       return false;
   }
 
-  GetDocument().UpdateStyleAndLayout();
+  GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
   DCHECK(new_list);
   if (previous_list && CanMergeLists(*previous_list, *new_list)) {
     MergeIdenticalElements(previous_list, new_list, editing_state);
@@ -144,7 +142,7 @@ bool IndentOutdentCommand::TryIndentingAsListItem(const Position& start,
       return false;
   }
 
-  GetDocument().UpdateStyleAndLayout();
+  GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
   if (next_list && CanMergeLists(*new_list, *next_list)) {
     MergeIdenticalElements(new_list, next_list, editing_state);
     if (editing_state->IsAborted())
@@ -175,7 +173,7 @@ void IndentOutdentCommand::IndentIntoBlockquote(const Position& start,
           ? start.ComputeContainerNode()
           : SplitTreeToNode(start.ComputeContainerNode(), element_to_split_to);
 
-  GetDocument().UpdateStyleAndLayout();
+  GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
   VisiblePosition start_of_contents = CreateVisiblePosition(start);
   if (!target_blockquote) {
     // Create a new blockquote and insert it as a child of the root editable
@@ -185,7 +183,7 @@ void IndentOutdentCommand::IndentIntoBlockquote(const Position& start,
     if (outer_block == start.ComputeContainerNode()) {
       // When we apply indent to an empty <blockquote>, we should call
       // insertNodeAfter(). See http://crbug.com/625802 for more details.
-      if (outer_block->HasTagName(kBlockquoteTag))
+      if (outer_block->HasTagName(html_names::kBlockquoteTag))
         InsertNodeAfter(target_blockquote, outer_block, editing_state);
       else
         InsertNodeAt(target_blockquote, start, editing_state);
@@ -193,7 +191,7 @@ void IndentOutdentCommand::IndentIntoBlockquote(const Position& start,
       InsertNodeBefore(target_blockquote, outer_block, editing_state);
     if (editing_state->IsAborted())
       return;
-    GetDocument().UpdateStyleAndLayout();
+    GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
     start_of_contents = VisiblePosition::InParentAfterNode(*target_blockquote);
   }
 
@@ -224,7 +222,7 @@ void IndentOutdentCommand::OutdentParagraph(EditingState* editing_state) {
                             editing_state);
     return;
   }
-  if (IsHTMLUListElement(*enclosing_element)) {
+  if (IsA<HTMLUListElement>(*enclosing_element)) {
     ApplyCommandToComposite(
         MakeGarbageCollected<InsertListCommand>(
             GetDocument(), InsertListCommand::kUnorderedList),
@@ -263,14 +261,14 @@ void IndentOutdentCommand::OutdentParagraph(EditingState* editing_state) {
     if (split_point) {
       if (Element* split_point_parent = split_point->parentElement()) {
         // We can't outdent if there is no place to go!
-        if (split_point_parent->HasTagName(kBlockquoteTag) &&
-            !split_point->HasTagName(kBlockquoteTag) &&
+        if (split_point_parent->HasTagName(html_names::kBlockquoteTag) &&
+            !split_point->HasTagName(html_names::kBlockquoteTag) &&
             HasEditableStyle(*split_point_parent->parentNode()))
           SplitElement(split_point_parent, split_point);
       }
     }
 
-    GetDocument().UpdateStyleAndLayout();
+    GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
     visible_start_of_paragraph =
         CreateVisiblePosition(visible_start_of_paragraph.DeepEquivalent());
     if (visible_start_of_paragraph.IsNotNull() &&
@@ -281,7 +279,7 @@ void IndentOutdentCommand::OutdentParagraph(EditingState* editing_state) {
         return;
     }
 
-    GetDocument().UpdateStyleAndLayout();
+    GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
     visible_end_of_paragraph =
         CreateVisiblePosition(visible_end_of_paragraph.DeepEquivalent());
     if (visible_end_of_paragraph.IsNotNull() &&
@@ -326,7 +324,7 @@ void IndentOutdentCommand::OutdentParagraph(EditingState* editing_state) {
               : visible_start_of_paragraph.DeepEquivalent().AnchorNode());
     }
 
-    GetDocument().UpdateStyleAndLayout();
+    GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
 
     // Re-canonicalize visible{Start,End}OfParagraph, make them valid again
     // after DOM change.
@@ -353,7 +351,7 @@ void IndentOutdentCommand::OutdentParagraph(EditingState* editing_state) {
   if (editing_state->IsAborted())
     return;
 
-  GetDocument().UpdateStyleAndLayout();
+  GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
   start_of_paragraph_to_move = CreateVisiblePosition(
       start_of_paragraph_to_move.ToPositionWithAffinity());
   end_of_paragraph_to_move =
@@ -409,7 +407,7 @@ void IndentOutdentCommand::OutdentRegion(
     if (end_after_selection.IsNotNull() && !end_after_selection.IsConnected())
       break;
 
-    GetDocument().UpdateStyleAndLayout();
+    GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
     if (end_of_next_paragraph.IsNotNull() &&
         !end_of_next_paragraph.IsConnected()) {
       end_of_current_paragraph =

@@ -13,6 +13,7 @@
 #include "base/json/json_string_value_serializer.h"
 #include "base/sequenced_task_runner.h"
 #include "base/stl_util.h"
+#include "base/test/gmock_move_support.h"
 #include "base/test/scoped_mock_time_message_loop_task_runner.h"
 #include "base/test/test_mock_time_task_runner.h"
 #include "base/test/test_simple_task_runner.h"
@@ -40,7 +41,6 @@ using testing::AnyNumber;
 using testing::Invoke;
 using testing::Mock;
 using testing::Pointee;
-using testing::SaveArg;
 using testing::_;
 
 namespace em = enterprise_management;
@@ -100,8 +100,8 @@ bool ContainsSameEvents(const Events& expected,
 }
 
 base::Value ConvertEventsToValue(const Events& events, Profile* profile) {
+  base::Value context = reporting::GetContext(profile);
   base::Value event_list(base::Value::Type::LIST);
-  base::Value::ListStorage& mutable_list = event_list.GetList();
 
   for (auto it = events.begin(); it != events.end(); ++it) {
     const std::string& package = (*it).first;
@@ -109,8 +109,8 @@ base::Value ConvertEventsToValue(const Events& events, Profile* profile) {
          (*it).second) {
       base::Value wrapper;
       wrapper =
-          ConvertEventToValue(package, app_install_report_log_event, profile);
-      mutable_list.push_back(std::move(wrapper));
+          ConvertEventToValue(package, app_install_report_log_event, context);
+      event_list.Append(std::move(wrapper));
     }
   }
 
@@ -204,7 +204,7 @@ class AppInstallEventLogManagerTest : public testing::Test {
     events_[package_name].push_back(event_);
     manager_->Add({kPackageNames[app_index]}, event_);
     FlushNonDelayedTasks();
-    event_.set_timestamp(event_.timestamp() + 1);
+    event_.set_timestamp(event_.timestamp() + 1000);
   }
 
   void AddLogEntryForsetOfApps(const std::set<std::string>& packages) {
@@ -213,7 +213,7 @@ class AppInstallEventLogManagerTest : public testing::Test {
     }
     manager_->Add(packages, event_);
     FlushNonDelayedTasks();
-    event_.set_timestamp(event_.timestamp() + 1);
+    event_.set_timestamp(event_.timestamp() + 1000);
   }
 
   void AddLogEntryForAllApps() { AddLogEntryForsetOfApps(packages_); }
@@ -230,7 +230,6 @@ class AppInstallEventLogManagerTest : public testing::Test {
     base::Value event_list = ConvertEventsToValue(events_, /*profile=*/nullptr);
     base::Value context = reporting::GetContext(/*profile=*/nullptr);
 
-    AppendEventId(&event_list, context);
     events_value_ = RealtimeReportingJobConfiguration::BuildReport(
         std::move(event_list), std::move(context));
   }
@@ -241,12 +240,12 @@ class AppInstallEventLogManagerTest : public testing::Test {
     BuildReport();
 
     EXPECT_CALL(cloud_policy_client_,
-                UploadRealtimeReport(MatchEvents(&events_value_), _))
-        .WillOnce(SaveArg<1>(callback));
+                UploadRealtimeReport_(MatchEvents(&events_value_), _))
+        .WillOnce(MoveArg<1>(callback));
   }
 
-  void ReportUploadSuccess(const CloudPolicyClient::StatusCallback& callback) {
-    callback.Run(true /* success */);
+  void ReportUploadSuccess(CloudPolicyClient::StatusCallback callback) {
+    std::move(callback).Run(true /* success */);
     FlushNonDelayedTasks();
   }
 
@@ -255,10 +254,10 @@ class AppInstallEventLogManagerTest : public testing::Test {
     BuildReport();
 
     EXPECT_CALL(cloud_policy_client_,
-                UploadRealtimeReport(MatchEvents(&events_value_), _))
+                UploadRealtimeReport_(MatchEvents(&events_value_), _))
         .WillOnce(Invoke(
-            [](base::Value, const CloudPolicyClient::StatusCallback& callback) {
-              callback.Run(true /* success */);
+            [](base::Value&, CloudPolicyClient::StatusCallback& callback) {
+              std::move(callback).Run(true /* success */);
             }));
   }
 
@@ -328,7 +327,6 @@ class AppInstallEventLogManagerTest : public testing::Test {
 // Create a manager with an empty log. Verify that no store is scheduled and no
 // upload occurs.
 TEST_F(AppInstallEventLogManagerTest, CreateEmpty) {
-  EXPECT_CALL(cloud_policy_client_, UploadAppInstallReport(_, _)).Times(0);
   CreateManager();
 
   FastForwardUntilNoTasksRemain();
@@ -344,7 +342,6 @@ TEST_F(AppInstallEventLogManagerTest, CreateNonEmpty) {
   log.Add(kPackageNames[0], event_);
   log.Store();
 
-  EXPECT_CALL(cloud_policy_client_, UploadAppInstallReport(_, _)).Times(0);
   CreateManager();
   base::DeleteFile(log_file_path_, false /* recursive */);
 
@@ -358,7 +355,6 @@ TEST_F(AppInstallEventLogManagerTest, CreateNonEmpty) {
   events_.clear();
   VerifyAndDeleteLogFile();
 
-  EXPECT_CALL(cloud_policy_client_, UploadAppInstallReport(_, _)).Times(0);
   FastForwardUntilNoTasksRemain();
   EXPECT_FALSE(base::PathExists(log_file_path_));
 }
@@ -367,7 +363,6 @@ TEST_F(AppInstallEventLogManagerTest, CreateNonEmpty) {
 // five seconds and an expedited initial upload occurs after a total of fifteen
 // minutes.
 TEST_F(AppInstallEventLogManagerTest, AddBeforeInitialUpload) {
-  EXPECT_CALL(cloud_policy_client_, UploadAppInstallReport(_, _)).Times(0);
   CreateManager();
 
   const base::TimeDelta offset = base::TimeDelta::FromMinutes(2);
@@ -390,7 +385,6 @@ TEST_F(AppInstallEventLogManagerTest, AddBeforeInitialUpload) {
   events_.clear();
   VerifyAndDeleteLogFile();
 
-  EXPECT_CALL(cloud_policy_client_, UploadAppInstallReport(_, _)).Times(0);
   FastForwardUntilNoTasksRemain();
   EXPECT_FALSE(base::PathExists(log_file_path_));
 }
@@ -399,7 +393,6 @@ TEST_F(AppInstallEventLogManagerTest, AddBeforeInitialUpload) {
 // stores are scheduled after five and eleven seconds and an upload occurs
 // after three hours.
 TEST_F(AppInstallEventLogManagerTest, Add) {
-  EXPECT_CALL(cloud_policy_client_, UploadAppInstallReport(_, _)).Times(0);
   CreateManager();
 
   const base::TimeDelta offset = base::TimeDelta::FromMinutes(20);
@@ -438,7 +431,6 @@ TEST_F(AppInstallEventLogManagerTest, Add) {
   events_.clear();
   VerifyAndDeleteLogFile();
 
-  EXPECT_CALL(cloud_policy_client_, UploadAppInstallReport(_, _)).Times(0);
   FastForwardUntilNoTasksRemain();
   EXPECT_FALSE(base::PathExists(log_file_path_));
 }
@@ -447,7 +439,6 @@ TEST_F(AppInstallEventLogManagerTest, Add) {
 // that a store is scheduled after five seconds and an upload occurs after three
 // hours.
 TEST_F(AppInstallEventLogManagerTest, AddForMultipleApps) {
-  EXPECT_CALL(cloud_policy_client_, UploadAppInstallReport(_, _)).Times(0);
   CreateManager();
 
   const base::TimeDelta offset = base::TimeDelta::FromMinutes(20);
@@ -470,7 +461,6 @@ TEST_F(AppInstallEventLogManagerTest, AddForMultipleApps) {
   events_.clear();
   VerifyAndDeleteLogFile();
 
-  EXPECT_CALL(cloud_policy_client_, UploadAppInstallReport(_, _)).Times(0);
   FastForwardUntilNoTasksRemain();
   EXPECT_FALSE(base::PathExists(log_file_path_));
 }
@@ -478,7 +468,6 @@ TEST_F(AppInstallEventLogManagerTest, AddForMultipleApps) {
 // Wait twenty minutes. Add an identical log entry for an empty set of apps.
 // Verify that no store is scheduled and no upload occurs.
 TEST_F(AppInstallEventLogManagerTest, AddForZeroApps) {
-  EXPECT_CALL(cloud_policy_client_, UploadAppInstallReport(_, _)).Times(0);
   CreateManager();
 
   const base::TimeDelta offset = base::TimeDelta::FromMinutes(20);
@@ -493,7 +482,6 @@ TEST_F(AppInstallEventLogManagerTest, AddForZeroApps) {
 // threshold for expedited upload. Verify that a store is scheduled after five
 // seconds and an upload occurs after fifteen minutes.
 TEST_F(AppInstallEventLogManagerTest, AddToTriggerMaxSizeExpedited) {
-  EXPECT_CALL(cloud_policy_client_, UploadAppInstallReport(_, _)).Times(0);
   CreateManager();
 
   const base::TimeDelta offset = base::TimeDelta::FromMinutes(20);
@@ -518,7 +506,6 @@ TEST_F(AppInstallEventLogManagerTest, AddToTriggerMaxSizeExpedited) {
   events_.clear();
   VerifyAndDeleteLogFile();
 
-  EXPECT_CALL(cloud_policy_client_, UploadAppInstallReport(_, _)).Times(0);
   FastForwardUntilNoTasksRemain();
   EXPECT_FALSE(base::PathExists(log_file_path_));
 }
@@ -527,7 +514,6 @@ TEST_F(AppInstallEventLogManagerTest, AddToTriggerMaxSizeExpedited) {
 // exceeds the threshold for expedited upload. Verify that a store is scheduled
 // after five seconds and an upload occurs after fifteen minutes.
 TEST_F(AppInstallEventLogManagerTest, AddToTriggerTotalSizeExpedited) {
-  EXPECT_CALL(cloud_policy_client_, UploadAppInstallReport(_, _)).Times(0);
   CreateManager();
 
   const base::TimeDelta offset = base::TimeDelta::FromMinutes(20);
@@ -555,7 +541,6 @@ TEST_F(AppInstallEventLogManagerTest, AddToTriggerTotalSizeExpedited) {
   events_.clear();
   VerifyAndDeleteLogFile();
 
-  EXPECT_CALL(cloud_policy_client_, UploadAppInstallReport(_, _)).Times(0);
   FastForwardUntilNoTasksRemain();
   EXPECT_FALSE(base::PathExists(log_file_path_));
 }
@@ -566,7 +551,6 @@ TEST_F(AppInstallEventLogManagerTest, AddToTriggerTotalSizeExpedited) {
 // minutes.
 TEST_F(AppInstallEventLogManagerTest,
        AddForMultipleAppsToTriggerTotalSizeExpedited) {
-  EXPECT_CALL(cloud_policy_client_, UploadAppInstallReport(_, _)).Times(0);
   CreateManager();
 
   const base::TimeDelta offset = base::TimeDelta::FromMinutes(20);
@@ -592,7 +576,6 @@ TEST_F(AppInstallEventLogManagerTest,
   events_.clear();
   VerifyAndDeleteLogFile();
 
-  EXPECT_CALL(cloud_policy_client_, UploadAppInstallReport(_, _)).Times(0);
   FastForwardUntilNoTasksRemain();
   EXPECT_FALSE(base::PathExists(log_file_path_));
 }
@@ -602,7 +585,6 @@ TEST_F(AppInstallEventLogManagerTest,
 // entry. Complete the upload. Verify that the pending log entry is stored.
 // Then, verify that a regular upload occurs three hours later.
 TEST_F(AppInstallEventLogManagerTest, RequestUploadAddUpload) {
-  EXPECT_CALL(cloud_policy_client_, UploadAppInstallReport(_, _)).Times(0);
   CreateManager();
   AddLogEntry(0 /* app_index */);
 
@@ -623,10 +605,9 @@ TEST_F(AppInstallEventLogManagerTest, RequestUploadAddUpload) {
   EXPECT_FALSE(base::PathExists(log_file_path_));
 
   AddLogEntry(0 /* app_index */);
-  ReportUploadSuccess(upload_callback);
+  ReportUploadSuccess(std::move(upload_callback));
   VerifyAndDeleteLogFile();
 
-  EXPECT_CALL(cloud_policy_client_, UploadAppInstallReport(_, _)).Times(0);
   FastForwardTo(kExpeditedUploadDelay + kUploadInterval - kOneMs);
   Mock::VerifyAndClearExpectations(&cloud_policy_client_);
   EXPECT_FALSE(base::PathExists(log_file_path_));
@@ -637,7 +618,6 @@ TEST_F(AppInstallEventLogManagerTest, RequestUploadAddUpload) {
   events_.clear();
   VerifyAndDeleteLogFile();
 
-  EXPECT_CALL(cloud_policy_client_, UploadAppInstallReport(_, _)).Times(0);
   FastForwardUntilNoTasksRemain();
   EXPECT_FALSE(base::PathExists(log_file_path_));
 }
@@ -648,7 +628,6 @@ TEST_F(AppInstallEventLogManagerTest, RequestUploadAddUpload) {
 // the upload. Verify that the pending log entries are stored. Then, verify that
 // an expedited upload occurs fifteen minutes later.
 TEST_F(AppInstallEventLogManagerTest, RequestUploadAddExpeditedUpload) {
-  EXPECT_CALL(cloud_policy_client_, UploadAppInstallReport(_, _)).Times(0);
   CreateManager();
   AddLogEntry(0 /* app_index */);
 
@@ -671,10 +650,9 @@ TEST_F(AppInstallEventLogManagerTest, RequestUploadAddExpeditedUpload) {
   for (int i = 0; i <= kMaxSizeExpeditedUploadThreshold; ++i) {
     AddLogEntry(0 /* app_index */);
   }
-  ReportUploadSuccess(upload_callback);
+  ReportUploadSuccess(std::move(upload_callback));
   VerifyAndDeleteLogFile();
 
-  EXPECT_CALL(cloud_policy_client_, UploadAppInstallReport(_, _)).Times(0);
   FastForwardTo(kExpeditedUploadDelay + kExpeditedUploadDelay - kOneMs);
   Mock::VerifyAndClearExpectations(&cloud_policy_client_);
   EXPECT_FALSE(base::PathExists(log_file_path_));
@@ -685,7 +663,6 @@ TEST_F(AppInstallEventLogManagerTest, RequestUploadAddExpeditedUpload) {
   events_.clear();
   VerifyAndDeleteLogFile();
 
-  EXPECT_CALL(cloud_policy_client_, UploadAppInstallReport(_, _)).Times(0);
   FastForwardUntilNoTasksRemain();
   EXPECT_FALSE(base::PathExists(log_file_path_));
 }
@@ -696,7 +673,6 @@ TEST_F(AppInstallEventLogManagerTest, RequestUploadAddExpeditedUpload) {
 // entry. Complete the upload. Verify that the pending log entry is stored.
 // Then, verify that a regular upload occurs three hours later.
 TEST_F(AppInstallEventLogManagerTest, RequestExpeditedUploadAddUpload) {
-  EXPECT_CALL(cloud_policy_client_, UploadAppInstallReport(_, _)).Times(0);
   CreateManager();
 
   const base::TimeDelta offset = base::TimeDelta::FromMinutes(20);
@@ -723,10 +699,9 @@ TEST_F(AppInstallEventLogManagerTest, RequestExpeditedUploadAddUpload) {
   EXPECT_FALSE(base::PathExists(log_file_path_));
 
   AddLogEntry(0 /* app_index */);
-  ReportUploadSuccess(upload_callback);
+  ReportUploadSuccess(std::move(upload_callback));
   VerifyAndDeleteLogFile();
 
-  EXPECT_CALL(cloud_policy_client_, UploadAppInstallReport(_, _)).Times(0);
   FastForwardTo(offset + kExpeditedUploadDelay + kUploadInterval - kOneMs);
   Mock::VerifyAndClearExpectations(&cloud_policy_client_);
   EXPECT_FALSE(base::PathExists(log_file_path_));
@@ -737,7 +712,6 @@ TEST_F(AppInstallEventLogManagerTest, RequestExpeditedUploadAddUpload) {
   events_.clear();
   VerifyAndDeleteLogFile();
 
-  EXPECT_CALL(cloud_policy_client_, UploadAppInstallReport(_, _)).Times(0);
   FastForwardUntilNoTasksRemain();
   EXPECT_FALSE(base::PathExists(log_file_path_));
 }
@@ -745,7 +719,6 @@ TEST_F(AppInstallEventLogManagerTest, RequestExpeditedUploadAddUpload) {
 // Add a log entry. Destroy the manager. Verify that an immediate store is
 // scheduled during destruction.
 TEST_F(AppInstallEventLogManagerTest, StoreOnShutdown) {
-  EXPECT_CALL(cloud_policy_client_, UploadAppInstallReport(_, _)).Times(0);
   CreateManager();
 
   AddLogEntry(0 /* app_index */);
@@ -791,7 +764,6 @@ TEST_F(AppInstallEventLogManagerTest, Clear) {
 // cleared. Create a manager. Verify that the log file is deleted before the
 // manager attempts to load it.
 TEST_F(AppInstallEventLogManagerTest, RunClearRun) {
-  EXPECT_CALL(cloud_policy_client_, UploadAppInstallReport(_, _)).Times(0);
   CreateManager();
 
   AddLogEntry(0 /* app_index */);

@@ -11,7 +11,10 @@
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extensions_test.h"
 #include "extensions/browser/process_manager.h"
+#include "extensions/browser/unloaded_extension_reason.h"
 #include "extensions/common/extension_builder.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/remote.h"
 
 namespace extensions {
 
@@ -51,8 +54,8 @@ class KeepAliveTest : public ExtensionsTest {
   }
 
   void CreateKeepAlive(mojo::PendingReceiver<KeepAlive> receiver) {
-    KeepAliveImpl::Create(browser_context(), extension_.get(),
-                          std::move(receiver), nullptr);
+    KeepAliveImpl::Create(browser_context(), extension_.get(), nullptr,
+                          std::move(receiver));
   }
 
   const Extension* extension() { return extension_.get(); }
@@ -78,8 +81,8 @@ class KeepAliveTest : public ExtensionsTest {
 };
 
 TEST_F(KeepAliveTest, Basic) {
-  mojo::InterfacePtr<KeepAlive> keep_alive;
-  CreateKeepAlive(mojo::MakeRequest(&keep_alive));
+  mojo::PendingRemote<KeepAlive> keep_alive;
+  CreateKeepAlive(keep_alive.InitWithNewPipeAndPassReceiver());
   EXPECT_EQ(1, GetKeepAliveCount());
   EXPECT_EQ(1u, GetActivities().count(mojo_activity_));
 
@@ -90,13 +93,13 @@ TEST_F(KeepAliveTest, Basic) {
 }
 
 TEST_F(KeepAliveTest, TwoKeepAlives) {
-  mojo::InterfacePtr<KeepAlive> keep_alive;
-  CreateKeepAlive(mojo::MakeRequest(&keep_alive));
+  mojo::PendingRemote<KeepAlive> keep_alive;
+  CreateKeepAlive(keep_alive.InitWithNewPipeAndPassReceiver());
   EXPECT_EQ(1, GetKeepAliveCount());
   EXPECT_EQ(1u, GetActivities().count(mojo_activity_));
 
-  mojo::InterfacePtr<KeepAlive> other_keep_alive;
-  CreateKeepAlive(mojo::MakeRequest(&other_keep_alive));
+  mojo::PendingRemote<KeepAlive> other_keep_alive;
+  CreateKeepAlive(other_keep_alive.InitWithNewPipeAndPassReceiver());
   EXPECT_EQ(2, GetKeepAliveCount());
   EXPECT_EQ(2u, GetActivities().count(mojo_activity_));
 
@@ -112,8 +115,8 @@ TEST_F(KeepAliveTest, TwoKeepAlives) {
 }
 
 TEST_F(KeepAliveTest, UnloadExtension) {
-  mojo::InterfacePtr<KeepAlive> keep_alive;
-  CreateKeepAlive(mojo::MakeRequest(&keep_alive));
+  mojo::Remote<KeepAlive> keep_alive;
+  CreateKeepAlive(keep_alive.BindNewPipeAndPassReceiver());
   EXPECT_EQ(1, GetKeepAliveCount());
   EXPECT_EQ(1u, GetActivities().count(mojo_activity_));
 
@@ -153,13 +156,13 @@ TEST_F(KeepAliveTest, UnloadExtension) {
 
   // Wait for |keep_alive| to disconnect.
   base::RunLoop run_loop;
-  keep_alive.set_connection_error_handler(run_loop.QuitClosure());
+  keep_alive.set_disconnect_handler(run_loop.QuitClosure());
   run_loop.Run();
 }
 
 TEST_F(KeepAliveTest, Shutdown) {
-  mojo::InterfacePtr<KeepAlive> keep_alive;
-  CreateKeepAlive(mojo::MakeRequest(&keep_alive));
+  mojo::Remote<KeepAlive> keep_alive;
+  CreateKeepAlive(keep_alive.BindNewPipeAndPassReceiver());
   EXPECT_EQ(1, GetKeepAliveCount());
   EXPECT_EQ(1u, GetActivities().count(mojo_activity_));
 
@@ -171,7 +174,7 @@ TEST_F(KeepAliveTest, Shutdown) {
 
   // Wait for |keep_alive| to disconnect.
   base::RunLoop run_loop;
-  keep_alive.set_connection_error_handler(run_loop.QuitClosure());
+  keep_alive.set_disconnect_handler(run_loop.QuitClosure());
   run_loop.Run();
 }
 

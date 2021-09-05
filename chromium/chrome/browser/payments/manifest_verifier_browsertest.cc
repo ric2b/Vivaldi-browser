@@ -23,6 +23,7 @@
 #include "net/url_request/url_request_context_getter.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/re2/src/re2/re2.h"
+#include "url/origin.h"
 
 namespace payments {
 namespace {
@@ -59,7 +60,8 @@ class ManifestVerifierBrowserTest : public InProcessBrowserTest {
         Profile::FromBrowserContext(context),
         ServiceAccessType::EXPLICIT_ACCESS);
 
-    ManifestVerifier verifier(web_contents, downloader.get(), parser.get(),
+    ManifestVerifier verifier(url::Origin::Create(GURL("https://chromium.org")),
+                              web_contents, downloader.get(), parser.get(),
                               cache.get());
 
     base::RunLoop run_loop;
@@ -531,8 +533,8 @@ IN_PROC_BROWSER_TEST_F(ManifestVerifierBrowserTest, ThreeTypesOfMethods) {
 IN_PROC_BROWSER_TEST_F(ManifestVerifierBrowserTest,
                        SinglePaymentMethodName404) {
   std::string expected_pattern =
-      "Unable to make a HEAD request to "
-      "\"https://127.0.0.1:\\d+/404.test/webpay\" for payment method manifest.";
+      "Unable to download payment manifest "
+      "\"https://127.0.0.1:\\d+/404.test/webpay\".";
   {
     content::PaymentAppProvider::PaymentApps apps;
     apps[0] = std::make_unique<content::StoredPaymentApp>();
@@ -570,9 +572,8 @@ IN_PROC_BROWSER_TEST_F(ManifestVerifierBrowserTest,
 IN_PROC_BROWSER_TEST_F(ManifestVerifierBrowserTest,
                        MultiplePaymentMethodName404) {
   std::string expected_pattern =
-      "Unable to make a HEAD request to "
-      "\"https://127.0.0.1:\\d+/404(aswell)?.test/webpay\" for payment method "
-      "manifest.";
+      "Unable to download payment manifest "
+      "\"https://127.0.0.1:\\d+/404(aswell)?.test/webpay\".";
   {
     content::PaymentAppProvider::PaymentApps apps;
     apps[0] = std::make_unique<content::StoredPaymentApp>();

@@ -12,12 +12,12 @@
 #include "components/page_load_metrics/browser/page_load_metrics_util.h"
 #include "components/page_load_metrics/browser/page_load_tracker.h"
 #include "content/public/browser/global_request_id.h"
-#include "content/public/common/resource_type.h"
 #include "content/public/test/navigation_simulator.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_source.h"
+#include "third_party/blink/public/mojom/loader/resource_load_info.mojom.h"
 #include "url/gurl.h"
 
 namespace internal {
@@ -114,12 +114,13 @@ class LocalNetworkRequestsPageLoadMetricsObserverTest
     net::IPAddress address;
     ASSERT_TRUE(address.AssignFromIPLiteral(resource.host_ip));
     page_load_metrics::ExtraRequestCompleteInfo request_info(
-        GURL(resource.url), net::IPEndPoint(address, resource.port),
-        -1 /* frame_tree_node_id */, !net_error /* was_cached */,
+        url::Origin::Create(GURL(resource.url)),
+        net::IPEndPoint(address, resource.port), -1 /* frame_tree_node_id */,
+        !net_error /* was_cached */,
         (net_error ? 1024 * 20 : 0) /* raw_body_bytes */,
         0 /* original_network_content_length */,
         nullptr /* data_reduction_proxy_data */,
-        content::ResourceType::kMainFrame, net_error,
+        network::mojom::RequestDestination::kDocument, net_error,
         {} /* load_timing_info */);
 
     tester()->SimulateLoadedResource(
@@ -785,11 +786,12 @@ TEST_F(LocalNetworkRequestsPageLoadMetricsObserverTest,
   // Load a resource that has the IP address in the URL but returned an empty
   // socket address for some reason.
   PageLoadMetricsObserverTestHarness::tester()->SimulateLoadedResource(
-      {GURL(internal::kDiffSubnetRequest2.url), net::IPEndPoint(),
-       -1 /* frame_tree_node_id */, true /* was_cached */,
+      {url::Origin::Create(GURL(internal::kDiffSubnetRequest2.url)),
+       net::IPEndPoint(), -1 /* frame_tree_node_id */, true /* was_cached */,
        1024 * 20 /* raw_body_bytes */, 0 /* original_network_content_length */,
        nullptr /* data_reduction_proxy_data */,
-       content::ResourceType::kMainFrame, 0, nullptr /* load_timing_info */},
+       network::mojom::RequestDestination::kDocument, 0,
+       nullptr /* load_timing_info */},
       GetGlobalRequestID());
   DeleteContents();
 
@@ -812,11 +814,12 @@ TEST_F(LocalNetworkRequestsPageLoadMetricsObserverTest,
   // Load a resource that doesn't have the IP address in the URL and returned an
   // empty socket address (e.g., failed DNS resolution).
   PageLoadMetricsObserverTestHarness::tester()->SimulateLoadedResource(
-      {GURL(internal::kPrivatePage.url), net::IPEndPoint(),
+      {url::Origin::Create(GURL(internal::kPrivatePage.url)), net::IPEndPoint(),
        -1 /* frame_tree_node_id */, false /* was_cached */,
        0 /* raw_body_bytes */, 0 /* original_network_content_length */,
        nullptr /* data_reduction_proxy_data */,
-       content::ResourceType::kMainFrame, -20, nullptr /* load_timing_info */},
+       network::mojom::RequestDestination::kDocument, -20,
+       nullptr /* load_timing_info */},
       GetGlobalRequestID());
   DeleteContents();
 

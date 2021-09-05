@@ -4,10 +4,13 @@
 
 #include "chrome/browser/resource_coordinator/tab_lifecycle_unit_source.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/stl_util.h"
 #include "base/task/post_task.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/resource_coordinator/discard_metrics_lifecycle_unit_observer.h"
 #include "chrome/browser/resource_coordinator/lifecycle_unit_source_observer.h"
@@ -17,13 +20,13 @@
 #include "chrome/browser/resource_coordinator/tracing_lifecycle_unit_observer.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
+#include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/recently_audible_helper.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/pref_names.h"
 #include "components/performance_manager/performance_manager_impl.h"
 #include "components/performance_manager/public/graph/page_node.h"
-#include "components/performance_manager/public/web_contents_proxy.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -173,16 +176,23 @@ class TabLifecycleStateObserver
 };
 
 TabLifecycleUnitSource::TabLifecycleUnitSource(
+    InterventionPolicyDatabase* intervention_policy_database,
     UsageClock* usage_clock)
-    : browser_tab_strip_tracker_(this, nullptr, this),
+    : browser_tab_strip_tracker_(this, nullptr),
+      intervention_policy_database_(intervention_policy_database),
       usage_clock_(usage_clock) {
   // In unit tests, tabs might already exist when TabLifecycleUnitSource is
   // instantiated. No TabLifecycleUnit is created for these tabs.
 
+  DCHECK(intervention_policy_database_);
+
+  BrowserList::AddObserver(this);
   browser_tab_strip_tracker_.Init();
 }
 
-TabLifecycleUnitSource::~TabLifecycleUnitSource() = default;
+TabLifecycleUnitSource::~TabLifecycleUnitSource() {
+  BrowserList::RemoveObserver(this);
+}
 
 void TabLifecycleUnitSource::Start() {
   // TODO(sebmarchand): Remove the "IsAvailable" check, or merge the TM into the
@@ -318,6 +328,28 @@ void TabLifecycleUnitSource::OnTabInserted(TabStripModel* tab_strip_model,
     lifecycle_unit->AddObserver(new DiscardMetricsLifecycleUnitObserver());
     lifecycle_unit->AddObserver(new TracingLifecycleUnitObserver());
 
+    auto page_node =
+        performance_manager::PerformanceManager::GetPageNodeForWebContents(
+            contents);
+
+    performance_manager::PerformanceManager::CallOnGraph(
+        FROM_HERE,
+        base::BindOnce(
+            [](base::WeakPtr<performance_manager::PageNode> page_node,
+               scoped_refptr<base::SingleThreadTaskRunner> runner) {
+              if (!page_node)
+                return;
+              runner->PostTask(
+                  FROM_HERE,
+                  base::BindOnce(
+                      &TabLifecycleUnitSource::SetInitialStateFromPageNodeData,
+                      page_node->GetContentsProxy(),
+                      page_node->GetOriginTrialFreezePolicy(),
+                      page_node->IsHoldingWebLock(),
+                      page_node->IsHoldingIndexedDBLock()));
+            },
+            std::move(page_node), base::ThreadTaskRunnerHandle::Get()));
+
     NotifyLifecycleUnitCreated(lifecycle_unit);
   }
 }
@@ -369,7 +401,6 @@ void TabLifecycleUnitSource::OnTabStripModelChanged(
       break;
     }
     case TabStripModelChange::kMoved:
-    case TabStripModelChange::kGroupChanged:
     case TabStripModelChange::kSelectionOnly:
       break;
   }
@@ -407,11 +438,25 @@ void TabLifecycleUnitSource::OnLifecycleStateChanged(
     performance_manager::mojom::LifecycleState state) {
   TabLifecycleUnit* lifecycle_unit = GetTabLifecycleUnit(web_contents);
 
-  // Some WebContents aren't attached to a tab, so there is no corresponding
-  // TabLifecycleUnit.
-  // TODO(fdoray): This may want to filter for the navigation_id.
+  // Lifecycle state is updated independently from navigations. Therefore, there
+  // is no need to filter out the event if it was generated before the last
+  // navigation.
   if (lifecycle_unit)
     lifecycle_unit->UpdateLifecycleState(state);
+}
+
+// static
+void TabLifecycleUnitSource::SetInitialStateFromPageNodeData(
+    const performance_manager::WebContentsProxy& contents_proxy,
+    performance_manager::mojom::InterventionPolicy origin_trial_policy,
+    bool is_holding_weblock,
+    bool is_holding_indexeddb_lock) {
+  if (!contents_proxy.Get())
+    return;
+  TabLifecycleUnit* lifecycle_unit = GetTabLifecycleUnit(contents_proxy.Get());
+  DCHECK(lifecycle_unit);
+  lifecycle_unit->SetInitialStateFromPageNodeData(
+      origin_trial_policy, is_holding_weblock, is_holding_indexeddb_lock);
 }
 
 // static

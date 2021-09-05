@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
@@ -40,6 +41,7 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "net/base/net_errors.h"
+#include "net/dns/public/resolve_error_info.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -143,11 +145,13 @@ error_page::Error ProbeErrorForURL(error_page::DnsProbeStatus status,
 }
 
 error_page::Error NetErrorForURL(net::Error net_error, const GURL& url) {
-  return error_page::Error::NetError(url, net_error, false);
+  return error_page::Error::NetError(url, net_error,
+                                     net::ResolveErrorInfo(net::OK), false);
 }
 
 error_page::Error NetError(net::Error net_error) {
-  return error_page::Error::NetError(GURL(kFailedUrl), net_error, false);
+  return error_page::Error::NetError(GURL(kFailedUrl), net_error,
+                                     net::ResolveErrorInfo(net::OK), false);
 }
 
 // Convenience functions that create an error string for a non-POST request.
@@ -399,9 +403,8 @@ class NetErrorHelperCoreTest : public testing::Test,
 
     // Check the body of the request.
 
-    base::JSONReader reader;
-    std::unique_ptr<base::Value> parsed_body(
-        reader.ReadDeprecated(navigation_correction_request_body));
+    base::Optional<base::Value> parsed_body =
+        base::JSONReader::Read(navigation_correction_request_body);
     ASSERT_TRUE(parsed_body);
     base::DictionaryValue* dict = NULL;
     ASSERT_TRUE(parsed_body->GetAsDictionary(&dict));
@@ -450,9 +453,8 @@ class NetErrorHelperCoreTest : public testing::Test,
 
     // Check the body of the request.
 
-    base::JSONReader reader;
-    std::unique_ptr<base::Value> parsed_body(
-        reader.ReadDeprecated(tracking_request_body));
+    base::Optional<base::Value> parsed_body =
+        base::JSONReader::Read(tracking_request_body);
     ASSERT_TRUE(parsed_body);
     base::DictionaryValue* dict = NULL;
     ASSERT_TRUE(parsed_body->GetAsDictionary(&dict));

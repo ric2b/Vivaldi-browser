@@ -13,19 +13,17 @@
 
 namespace performance_manager {
 
-ProcessNodeImpl::ProcessNodeImpl(GraphImpl* graph,
-                                 RenderProcessHostProxy render_process_proxy)
-    : TypedNodeBase(graph),
-      render_process_host_proxy_(std::move(render_process_proxy)) {
+ProcessNodeImpl::ProcessNodeImpl(RenderProcessHostProxy render_process_proxy)
+    : render_process_host_proxy_(std::move(render_process_proxy)) {
   DETACH_FROM_SEQUENCE(sequence_checker_);
 }
 
 ProcessNodeImpl::~ProcessNodeImpl() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-}
-
-void ProcessNodeImpl::SetCPUUsage(double cpu_usage) {
-  cpu_usage_ = cpu_usage;
+  // Crash if this process node is destroyed while still hosting a worker node.
+  // TODO(https://crbug.com/1058705): Turn this into a DCHECK once the issue is
+  //                                  resolved.
+  CHECK(worker_nodes_.empty());
 }
 
 void ProcessNodeImpl::Bind(
@@ -118,6 +116,10 @@ void ProcessNodeImpl::RemoveWorker(WorkerNodeImpl* worker_node) {
   worker_nodes_.erase(worker_node);
 }
 
+void ProcessNodeImpl::set_priority(base::TaskPriority priority) {
+  priority_.SetAndMaybeNotify(this, priority);
+}
+
 void ProcessNodeImpl::SetProcessImpl(base::Process process,
                                      base::ProcessId new_pid,
                                      base::Time launch_time) {
@@ -132,7 +134,6 @@ void ProcessNodeImpl::SetProcessImpl(base::Process process,
   // process.
   private_footprint_kb_ = 0;
   resident_set_kb_ = 0;
-  cumulative_cpu_usage_ = base::TimeDelta();
 
   process_id_ = new_pid;
   launch_time_ = launch_time;
@@ -191,16 +192,6 @@ bool ProcessNodeImpl::GetMainThreadTaskLoadIsLow() const {
   return main_thread_task_load_is_low();
 }
 
-double ProcessNodeImpl::GetCpuUsage() const {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  return cpu_usage();
-}
-
-base::TimeDelta ProcessNodeImpl::GetCumulativeCpuUsage() const {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  return cumulative_cpu_usage();
-}
-
 uint64_t ProcessNodeImpl::GetPrivateFootprintKb() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return private_footprint_kb();
@@ -217,14 +208,18 @@ const RenderProcessHostProxy& ProcessNodeImpl::GetRenderProcessHostProxy()
   return render_process_host_proxy();
 }
 
+base::TaskPriority ProcessNodeImpl::GetPriority() const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  return priority();
+}
+
 void ProcessNodeImpl::OnAllFramesInProcessFrozen() {
   for (auto* observer : GetObservers())
     observer->OnAllFramesInProcessFrozen(this);
 }
 
-void ProcessNodeImpl::LeaveGraph() {
+void ProcessNodeImpl::OnBeforeLeavingGraph() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  NodeBase::LeaveGraph();
 
   // Make as if we're transitioning to the null PID before we die to clear this
   // instance from the PID map.

@@ -17,11 +17,13 @@ namespace mojo {
 
 TEST(NetworkIsolationKeyMojomTraitsTest, SerializeAndDeserialize) {
   std::vector<net::NetworkIsolationKey> keys = {
-      net::NetworkIsolationKey(),
+      net::NetworkIsolationKey(), net::NetworkIsolationKey::CreateTransient(),
+      net::NetworkIsolationKey::CreateOpaqueAndNonTransient(),
       net::NetworkIsolationKey(url::Origin::Create(GURL("http://a.test/")),
                                url::Origin::Create(GURL("http://b.test/")))};
 
   for (auto original : keys) {
+    SCOPED_TRACE(original.ToDebugString());
     net::NetworkIsolationKey copied;
     EXPECT_TRUE(mojo::test::SerializeAndDeserialize<
                 network::mojom::NetworkIsolationKey>(&original, &copied));
@@ -43,16 +45,54 @@ class NetworkIsolationKeyMojomTraitsWithFrameOriginTest : public testing::Test {
 TEST_F(NetworkIsolationKeyMojomTraitsWithFrameOriginTest,
        SerializeAndDeserialize) {
   std::vector<net::NetworkIsolationKey> keys = {
-      net::NetworkIsolationKey(),
+      net::NetworkIsolationKey(), net::NetworkIsolationKey::CreateTransient(),
+      net::NetworkIsolationKey::CreateOpaqueAndNonTransient(),
       net::NetworkIsolationKey(url::Origin::Create(GURL("http://a.test/")),
                                url::Origin::Create(GURL("http://b.test/")))};
 
   for (auto original : keys) {
+    SCOPED_TRACE(original.ToDebugString());
     net::NetworkIsolationKey copied;
     EXPECT_TRUE(mojo::test::SerializeAndDeserialize<
                 network::mojom::NetworkIsolationKey>(&original, &copied));
     EXPECT_EQ(original, copied);
+    EXPECT_EQ(original.GetTopFrameOrigin(), copied.GetTopFrameOrigin());
+    EXPECT_EQ(original.GetFrameOrigin(), copied.GetFrameOrigin());
+    EXPECT_EQ(original.IsTransient(), copied.IsTransient());
   }
+}
+
+class NetworkIsolationKeyMojomTraitsWithRegistrableDomain
+    : public testing::Test {
+ public:
+  NetworkIsolationKeyMojomTraitsWithRegistrableDomain() {
+    feature_list_.InitWithFeatures(
+        {net::features::kUseRegistrableDomainInNetworkIsolationKey,
+         net::features::kAppendFrameOriginToNetworkIsolationKey},
+        {});
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+TEST_F(NetworkIsolationKeyMojomTraitsWithRegistrableDomain,
+       SerializeAndDeserialize) {
+  url::Origin origin_a = url::Origin::Create(GURL("http://a.foo.test/"));
+  url::Origin origin_b = url::Origin::Create(GURL("http://b.foo.test/"));
+  url::Origin domain = url::Origin::Create(GURL("http://foo.test/"));
+  net::NetworkIsolationKey original(origin_a, origin_b);
+  EXPECT_EQ(origin_a, original.GetTopFrameOrigin());
+  EXPECT_EQ(origin_b, original.GetFrameOrigin());
+
+  net::NetworkIsolationKey copied;
+  EXPECT_TRUE(
+      mojo::test::SerializeAndDeserialize<network::mojom::NetworkIsolationKey>(
+          &original, &copied));
+  EXPECT_EQ(original, copied);
+
+  EXPECT_EQ(origin_a, copied.GetTopFrameOrigin());
+  EXPECT_EQ(origin_b, copied.GetFrameOrigin());
 }
 
 }  // namespace mojo

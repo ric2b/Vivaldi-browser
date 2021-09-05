@@ -5,6 +5,7 @@
 #include "content/browser/tracing/cast_tracing_agent.h"
 
 #include <utility>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -13,10 +14,11 @@
 #include "base/sequence_checker.h"
 #include "base/strings/string_util.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/trace_event/trace_config.h"
+#include "chromecast/tracing/system_tracer.h"
 #include "chromecast/tracing/system_tracing_common.h"
 #include "content/public/browser/browser_thread.h"
-#include "services/service_manager/public/cpp/connector.h"
 #include "services/tracing/public/cpp/perfetto/perfetto_traced_process.h"
 #include "services/tracing/public/cpp/perfetto/system_trace_writer.h"
 #include "services/tracing/public/mojom/constants.mojom.h"
@@ -201,9 +203,8 @@ class CastDataSource : public tracing::PerfettoTracedProcess::DataSourceBase {
 
   CastDataSource()
       : DataSourceBase(tracing::mojom::kSystemTraceDataSourceName),
-        worker_task_runner_(base::CreateSequencedTaskRunner(
-            {base::ThreadPool(), base::MayBlock(),
-             base::TaskPriority::BEST_EFFORT,
+        worker_task_runner_(base::ThreadPool::CreateSequencedTaskRunner(
+            {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
              base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})) {
     DETACH_FROM_SEQUENCE(perfetto_sequence_checker_);
   }
@@ -260,65 +261,17 @@ class CastDataSource : public tracing::PerfettoTracedProcess::DataSourceBase {
 
 }  // namespace
 
-CastTracingAgent::CastTracingAgent()
-    : BaseAgent("systemTraceEvents",
-                tracing::mojom::TraceDataType::STRING,
-                base::kNullProcessId),
-      worker_task_runner_(base::CreateSequencedTaskRunner(
-          {base::ThreadPool(), base::MayBlock(),
-           base::TaskPriority::BEST_EFFORT,
-           base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})) {
+CastTracingAgent::CastTracingAgent() {
   tracing::PerfettoTracedProcess::Get()->AddDataSource(
       CastDataSource::GetInstance());
 }
 
 CastTracingAgent::~CastTracingAgent() = default;
 
-// tracing::mojom::Agent. Called by Mojo internals on the UI thread.
-void CastTracingAgent::StartTracing(const std::string& config,
-                                    base::TimeTicks coordinator_time,
-                                    Agent::StartTracingCallback callback) {
-  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
-  DCHECK(!session_);
-  session_ = std::make_unique<CastSystemTracingSession>(worker_task_runner_);
-  session_->StartTracing(
-      config, base::BindOnce(&CastTracingAgent::StartTracingCallbackProxy,
-                             base::Unretained(this), std::move(callback)));
-}
-
-void CastTracingAgent::StopAndFlush(
-    mojo::PendingRemote<tracing::mojom::Recorder> recorder) {
-  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
-  // This may be called even if we are not tracing.
-  if (!session_)
-    return;
-  recorder_.Bind(std::move(recorder));
-  session_->StopTracing(base::BindRepeating(&CastTracingAgent::HandleTraceData,
-                                            base::Unretained(this)));
-}
 
 void CastTracingAgent::GetCategories(std::set<std::string>* category_set) {
   for (size_t i = 0; i < chromecast::tracing::kCategoryCount; ++i) {
     category_set->insert(chromecast::tracing::kCategories[i]);
-  }
-}
-
-void CastTracingAgent::StartTracingCallbackProxy(
-    Agent::StartTracingCallback callback,
-    bool success) {
-  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
-  if (!success)
-    session_.reset();
-  std::move(callback).Run(success);
-}
-
-void CastTracingAgent::HandleTraceData(chromecast::SystemTracer::Status status,
-                                       std::string trace_data) {
-  if (recorder_ && status != chromecast::SystemTracer::Status::FAIL)
-    recorder_->AddChunk(std::move(trace_data));
-  if (status != chromecast::SystemTracer::Status::KEEP_GOING) {
-    recorder_.reset();
-    session_.reset();
   }
 }
 

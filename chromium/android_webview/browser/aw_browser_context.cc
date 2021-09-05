@@ -32,6 +32,7 @@
 #include "components/autofill/core/browser/autocomplete_history_manager.h"
 #include "components/autofill/core/common/autofill_prefs.h"
 #include "components/cdm/browser/media_drm_storage_impl.h"
+#include "components/crash/core/common/crash_key.h"
 #include "components/download/public/common/in_progress_download_manager.h"
 #include "components/keyed_service/core/simple_key_map.h"
 #include "components/policy/core/browser/browser_policy_connector_base.h"
@@ -43,11 +44,11 @@
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/pref_service_factory.h"
-#include "components/safe_browsing/common/safe_browsing_prefs.h"
+#include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "components/url_formatter/url_fixer.h"
 #include "components/user_prefs/user_prefs.h"
 #include "components/variations/net/variations_http_headers.h"
-#include "components/visitedlink/browser/visitedlink_master.h"
+#include "components/visitedlink/browser/visitedlink_writer.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/cors_exempt_headers.h"
@@ -71,6 +72,9 @@ const void* const kDownloadManagerDelegateKey = &kDownloadManagerDelegateKey;
 
 AwBrowserContext* g_browser_context = NULL;
 
+crash_reporter::CrashKeyString<1> g_web_view_compat_crash_key(
+    "WEBLAYER_WEB_VIEW_COMPAT_MODE");
+
 // Empty method to skip origin security check as DownloadManager will set its
 // own method.
 bool IgnoreOriginSecurityCheck(const GURL& url) {
@@ -79,6 +83,7 @@ bool IgnoreOriginSecurityCheck(const GURL& url) {
 
 void MigrateProfileData(base::FilePath cache_path,
                         base::FilePath context_storage_path) {
+  TRACE_EVENT0("startup", "MigrateProfileData");
   FilePath old_cache_path;
   base::PathService::Get(base::DIR_CACHE, &old_cache_path);
   old_cache_path = old_cache_path.DirName().Append(
@@ -142,6 +147,10 @@ AwBrowserContext::AwBrowserContext()
       simple_factory_key_(GetPath(), IsOffTheRecord()) {
   DCHECK(!g_browser_context);
 
+  TRACE_EVENT0("startup", "AwBrowserContext::AwBrowserContext");
+
+  g_web_view_compat_crash_key.Set("0");
+
   if (IsDefaultBrowserContext()) {
     MigrateProfileData(GetCacheDir(), GetContextStoragePath());
   }
@@ -153,9 +162,9 @@ AwBrowserContext::AwBrowserContext()
 
   CreateUserPrefService();
 
-  visitedlink_master_.reset(
-      new visitedlink::VisitedLinkMaster(this, this, false));
-  visitedlink_master_->Init();
+  visitedlink_writer_.reset(
+      new visitedlink::VisitedLinkWriter(this, this, false));
+  visitedlink_writer_->Init();
 
   form_database_service_.reset(
       new AwFormDatabaseService(context_storage_path_));
@@ -253,6 +262,7 @@ void AwBrowserContext::RegisterPrefs(PrefRegistrySimple* registry) {
 }
 
 void AwBrowserContext::CreateUserPrefService() {
+  TRACE_EVENT0("startup", "AwBrowserContext::CreateUserPrefService");
   auto pref_registry = base::MakeRefCounted<user_prefs::PrefRegistrySyncable>();
 
   RegisterPrefs(pref_registry.get());
@@ -309,8 +319,8 @@ std::vector<std::string> AwBrowserContext::GetAuthSchemes() {
 }
 
 void AwBrowserContext::AddVisitedURLs(const std::vector<GURL>& urls) {
-  DCHECK(visitedlink_master_);
-  visitedlink_master_->AddURLs(urls);
+  DCHECK(visitedlink_writer_);
+  visitedlink_writer_->AddURLs(urls);
 }
 
 AwQuotaManagerBridge* AwBrowserContext::GetQuotaManagerBridge() {
@@ -318,6 +328,10 @@ AwQuotaManagerBridge* AwBrowserContext::GetQuotaManagerBridge() {
     quota_manager_bridge_ = AwQuotaManagerBridge::Create(this);
   }
   return quota_manager_bridge_.get();
+}
+
+void AwBrowserContext::SetWebLayerRunningInSameProcess(JNIEnv* env) {
+  g_web_view_compat_crash_key.Set("1");
 }
 
 AwFormDatabaseService* AwBrowserContext::GetFormDatabaseService() {
@@ -426,7 +440,8 @@ AwBrowserContext::RetriveInProgressDownloadManager() {
   return new download::InProgressDownloadManager(
       nullptr, base::FilePath(), nullptr,
       base::BindRepeating(&IgnoreOriginSecurityCheck),
-      base::BindRepeating(&content::DownloadRequestUtils::IsURLSafe), nullptr);
+      base::BindRepeating(&content::DownloadRequestUtils::IsURLSafe),
+      /*wake_lock_provider_binder*/ base::NullCallback());
 }
 
 void AwBrowserContext::RebuildTable(
@@ -472,7 +487,10 @@ AwBrowserContext::GetNetworkContextParams(
   context_params->cookie_manager_params =
       network::mojom::CookieManagerParams::New();
   context_params->cookie_manager_params->allow_file_scheme_cookies =
-      GetCookieManager()->AllowFileSchemeCookies();
+      GetCookieManager()->GetAllowFileSchemeCookies();
+  // Set all cookies to Legacy on Android WebView, for compatibility reasons.
+  context_params->cookie_manager_params->cookie_access_delegate_type =
+      network::mojom::CookieAccessDelegateType::ALWAYS_LEGACY;
 
   context_params->initial_ssl_config = network::mojom::SSLConfig::New();
   // Allow SHA-1 to be used for locally-installed trust anchors, as WebView

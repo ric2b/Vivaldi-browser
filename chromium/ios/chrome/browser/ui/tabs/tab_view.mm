@@ -14,15 +14,15 @@
 #include "ios/chrome/browser/drag_and_drop/drop_and_navigate_delegate.h"
 #include "ios/chrome/browser/drag_and_drop/drop_and_navigate_interaction.h"
 #include "ios/chrome/browser/system_flags.h"
+#import "ios/chrome/browser/ui/elements/fade_truncating_label.h"
 #import "ios/chrome/browser/ui/image_util/image_util.h"
 #include "ios/chrome/browser/ui/util/rtl_geometry.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
-#import "ios/chrome/common/colors/semantic_color_names.h"
-#import "ios/chrome/common/highlight_button.h"
-#import "ios/chrome/common/ui_util/constraints_ui_util.h"
+#import "ios/chrome/common/ui/colors/semantic_color_names.h"
+#import "ios/chrome/common/ui/elements/highlight_button.h"
+#import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/third_party/material_components_ios/src/components/ActivityIndicator/src/MaterialActivityIndicator.h"
-#include "third_party/google_toolbox_for_mac/src/iPhone/GTMFadeTruncatingLabel.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -37,17 +37,16 @@
 namespace {
 
 // Tab close button insets.
-const CGFloat kTabCloseTopInset = -1.0;
+const CGFloat kTabCloseTopInset = 1.0;
 const CGFloat kTabCloseLeftInset = 0.0;
 const CGFloat kTabCloseBottomInset = 0.0;
 const CGFloat kTabCloseRightInset = 0.0;
 const CGFloat kTabBackgroundLeftCapInset = 34.0;
-const CGFloat kFaviconLeftInset = 23.5;
-const CGFloat kFaviconVerticalOffset = 2.0;
+const CGFloat kFaviconLeftInset = 28;
+const CGFloat kFaviconVerticalOffset = 1.0;
 const CGFloat kTabStripLineMargin = 2.5;
 const CGFloat kTabStripLineHeight = 0.5;
-const CGFloat kCloseButtonHorizontalShift = 19;
-const CGFloat kCloseButtonVerticalShift = 4.0;
+const CGFloat kCloseButtonHorizontalShift = 22;
 const CGFloat kTitleLeftMargin = 8.0;
 const CGFloat kTitleRightMargin = 0.0;
 
@@ -70,7 +69,7 @@ UIImage* DefaultFaviconImage() {
   UIButton* _closeButton;
 
   // View that draws the tab title.
-  GTMFadeTruncatingLabel* _titleLabel;
+  FadeTruncatingLabel* _titleLabel;
 
   // Background image for this tab.
   UIImageView* _backgroundImageView;
@@ -157,9 +156,9 @@ UIImage* DefaultFaviconImage() {
     return;
   if (base::i18n::GetStringDirection(base::SysNSStringToUTF16(title)) ==
       base::i18n::RIGHT_TO_LEFT) {
-    [_titleLabel setTruncateMode:GTMFadeTruncatingHead];
+    _titleLabel.truncateMode = FadeTruncatingHead;
   } else {
-    [_titleLabel setTruncateMode:GTMFadeTruncatingTail];
+    _titleLabel.truncateMode = FadeTruncatingTail;
   }
   _titleLabel.text = title;
   [_closeButton setAccessibilityValue:title];
@@ -301,15 +300,8 @@ UIImage* DefaultFaviconImage() {
   [self addSubview:_closeButton];
 
   // Add fade truncating label.
-  _titleLabel = [[GTMFadeTruncatingLabel alloc] initWithFrame:CGRectZero];
+  _titleLabel = [[FadeTruncatingLabel alloc] initWithFrame:CGRectZero];
   [_titleLabel setTranslatesAutoresizingMaskIntoConstraints:NO];
-
-  // Setting NSLineBreakByCharWrapping fixes an issue where the beginning of the
-  // text is truncated for RTL text writing direction. Anyway since the label is
-  // only one line and the end of the text is faded behind a gradient mask, it
-  // is visually almost equivalent to NSLineBreakByClipping.
-  [_titleLabel setLineBreakMode:NSLineBreakByCharWrapping];
-
   [_titleLabel setTextAlignment:NSTextAlignmentNatural];
   [self addSubview:_titleLabel];
 
@@ -340,22 +332,19 @@ UIImage* DefaultFaviconImage() {
     @"H:|-faviconLeftInset-[favicon(faviconSize)]",
     @"V:|-faviconVerticalOffset-[favicon]-0-|",
     @"H:[close(==closeButtonSize)]-closeButtonHorizontalShift-|",
-    @"V:|-closeButtonVerticalShift-[close]-0-|",
+    @"V:|-0-[close]-0-|",
     @"H:[favicon]-titleLeftMargin-[title]-titleRightMargin-[close]",
     @"V:[title(==titleHeight)]",
   ];
 
-  CGFloat faviconLeftInset = kFaviconLeftInset;
-  CGFloat faviconVerticalOffset = kFaviconVerticalOffset;
   NSDictionary* metrics = @{
     @"closeButtonSize" : @(kCloseButtonSize),
     @"closeButtonHorizontalShift" : @(kCloseButtonHorizontalShift),
-    @"closeButtonVerticalShift" : @(kCloseButtonVerticalShift),
     @"titleLeftMargin" : @(kTitleLeftMargin),
     @"titleRightMargin" : @(kTitleRightMargin),
     @"titleHeight" : @(kFaviconSize),
-    @"faviconLeftInset" : @(AlignValueToPixel(faviconLeftInset)),
-    @"faviconVerticalOffset" : @(faviconVerticalOffset),
+    @"faviconLeftInset" : @(kFaviconLeftInset),
+    @"faviconVerticalOffset" : @(kFaviconVerticalOffset),
     @"faviconSize" : @(kFaviconSize),
   };
   ApplyVisualConstraintsWithMetrics(constraints, viewsDictionary, metrics);
@@ -390,33 +379,40 @@ UIImage* DefaultFaviconImage() {
   // Style the close button tint color.
   NSString* closeButtonColorName;
   if (selected) {
-    closeButtonColorName = useIncognitoFallback ? @"close_button_dark_color"
-                                                : @"close_button_color";
+    closeButtonColorName =
+        useIncognitoFallback ? kCloseButtonDarkColor : kGrey600Color;
   } else {
-    closeButtonColorName = @"tabstrip_inactive_tab_close_button_color";
+    closeButtonColorName = kGrey500Color;
   }
   _closeButton.tintColor = [UIColor colorNamed:closeButtonColorName];
 
-  // Style the favicon tint color and the title label.
+  // Style the favicon tint color.
   NSString* faviconColorName;
   if (selected) {
     faviconColorName =
-        useIncognitoFallback ? kTextPrimaryDarkColor : kTextPrimaryColor;
+        useIncognitoFallback ? kCloseButtonDarkColor : kGrey600Color;
   } else {
-    faviconColorName = @"tabstrip_inactive_tab_text_color";
+    faviconColorName = kGrey500Color;
   }
   _faviconView.tintColor = [UIColor colorNamed:faviconColorName];
-  self.titleLabel.textColor = _faviconView.tintColor;
 
-  // Update font weight and accessibility label.
-  UIFontWeight fontWeight =
-      selected ? UIFontWeightSemibold : UIFontWeightMedium;
-  self.titleLabel.font = [UIFont systemFontOfSize:kFontSize weight:fontWeight];
+  // Style the title tint color.
+  NSString* titleColorName = nil;
+  if (selected) {
+    titleColorName =
+        useIncognitoFallback ? kTextPrimaryDarkColor : kTextPrimaryColor;
+  } else {
+    titleColorName = kGrey600Color;
+  }
+  _titleLabel.textColor = [UIColor colorNamed:titleColorName];
+
+  _titleLabel.font = [UIFont systemFontOfSize:kFontSize
+                                       weight:UIFontWeightMedium];
   // It would make more sense to set active/inactive on tab_view itself, but
   // tab_view is not an an accessible element, and making it one would add
   // several complicated layers to UIA.  Instead, simply set active/inactive
   // here to be used by UIA.
-  [self.titleLabel setAccessibilityValue:(selected ? @"active" : @"inactive")];
+  [_titleLabel setAccessibilityValue:(selected ? @"active" : @"inactive")];
 }
 
 #pragma mark - DropAndNavigateDelegate
@@ -433,6 +429,12 @@ UIImage* DefaultFaviconImage() {
 
 - (void)tabWasTapped {
   [_delegate tabViewTapped:self];
+}
+
+#pragma mark - Properties
+
+- (UILabel*)titleLabel {
+  return _titleLabel;
 }
 
 @end

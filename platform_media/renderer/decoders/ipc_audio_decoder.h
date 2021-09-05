@@ -14,7 +14,6 @@
 #include "base/threading/thread_checker.h"
 #include "media/base/media_export.h"
 #include "platform_media/renderer/pipeline/ipc_media_pipeline_host.h"
-#include "platform_media/renderer/decoders/ipc_factory.h"
 
 namespace base {
 class SequencedTaskRunner;
@@ -32,6 +31,14 @@ class FFmpegURLProtocol;
 class MEDIA_EXPORT IPCAudioDecoder {
  public:
 
+  class MEDIA_EXPORT ScopedDisableForTesting {
+  public:
+    ScopedDisableForTesting();
+    ~ScopedDisableForTesting();
+  };
+
+  static bool IsAvailable();
+
   explicit IPCAudioDecoder(FFmpegURLProtocol* protocol);
   ~IPCAudioDecoder();
 
@@ -47,18 +54,16 @@ class MEDIA_EXPORT IPCAudioDecoder {
  private:
   class InMemoryDataSource;
 
-  void OnInitialized(bool success,
-                     int bitrate,
-                     const PlatformMediaTimeInfo& time_info,
-                     const PlatformAudioConfig& audio_config,
-                     const PlatformVideoConfig& video_config);
+  void OnInitialized(bool success);
   void ReadInternal();
   void DataReady(DemuxerStream::Status status,
                  scoped_refptr<DecoderBuffer> buffer);
 
-  void RunCreatorOnMainThread(
-      DataSource* data_source,
-      std::unique_ptr<IPCMediaPipelineHost>* ipc_media_pipeline_host);
+  void RunCreatorOnMainThread();
+
+  static void FinishHostOnMediaThread(
+      std::unique_ptr<InMemoryDataSource> data_source,
+      std::unique_ptr<IPCMediaPipelineHost> ipc_media_pipeline_host);
 
   std::unique_ptr<InMemoryDataSource> data_source_;
 
@@ -73,9 +78,7 @@ class MEDIA_EXPORT IPCAudioDecoder {
   int frames_read_;
 
   std::unique_ptr<IPCMediaPipelineHost> ipc_media_pipeline_host_;
-  base::WaitableEvent media_task_done_;
-
-  IPCFactory factory_;
+  base::WaitableEvent async_task_done_;
 
   base::ThreadChecker thread_checker_;
 

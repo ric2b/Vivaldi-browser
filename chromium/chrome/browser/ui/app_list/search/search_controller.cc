@@ -20,20 +20,17 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
-#include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/app_list_controller_delegate.h"
 #include "chrome/browser/ui/app_list/app_list_model_updater.h"
 #include "chrome/browser/ui/app_list/search/chrome_search_result.h"
 #include "chrome/browser/ui/app_list/search/cros_action_history/cros_action_recorder.h"
 #include "chrome/browser/ui/app_list/search/search_provider.h"
-#include "chrome/browser/ui/app_list/search/search_result_ranker/app_list_launch_recorder.h"
+#include "chrome/browser/ui/app_list/search/search_result_ranker/chip_ranker.h"
 #include "chrome/browser/ui/app_list/search/search_result_ranker/histogram_util.h"
 #include "chrome/browser/ui/app_list/search/search_result_ranker/ranking_item_util.h"
 #include "chrome/browser/ui/app_list/search/search_result_ranker/search_result_ranker.h"
-#include "third_party/metrics_proto/chrome_os_app_list_launch_event.pb.h"
-
-using metrics::ChromeOSAppListLaunchEventProto;
+#include "components/metrics/structured/structured_events.h"
 
 namespace app_list {
 
@@ -79,16 +76,8 @@ SearchController::SearchController(AppListModelUpdater* model_updater,
 
 SearchController::~SearchController() {}
 
-void SearchController::InitializeRankers(
-    service_manager::Connector* connector) {
-  std::unique_ptr<SearchResultRanker> ranker =
-      std::make_unique<SearchResultRanker>(
-          profile_,
-          HistoryServiceFactory::GetForProfile(
-              profile_, ServiceAccessType::EXPLICIT_ACCESS),
-          connector);
-  ranker->InitializeRankers(this);
-  mixer_->SetNonAppSearchResultRanker(std::move(ranker));
+void SearchController::InitializeRankers() {
+  mixer_->InitializeRankers(profile_, this);
 }
 
 void SearchController::Start(const base::string16& query) {
@@ -178,11 +167,11 @@ void SearchController::OnSearchResultsDisplayed(
     const ash::SearchResultIdWithPositionIndices& results,
     int launched_index) {
   // Log the impression.
-  mixer_->GetNonAppSearchResultRanker()->LogSearchResults(
-      trimmed_query, results, launched_index);
+  mixer_->search_result_ranker()->LogSearchResults(trimmed_query, results,
+                                                   launched_index);
 
   if (trimmed_query.empty()) {
-    mixer_->GetNonAppSearchResultRanker()->ZeroStateResultsDisplayed(results);
+    mixer_->search_result_ranker()->ZeroStateResultsDisplayed(results);
 
     // Extract result types for logging.
     std::vector<RankingItemType> result_types;
@@ -202,8 +191,7 @@ ChromeSearchResult* SearchController::GetResultByTitleForTest(
       if (result->title() == target_title &&
           result->result_type() ==
               ash::AppListSearchResultType::kInstalledApp &&
-          result->display_type() !=
-              ash::SearchResultDisplayType::kRecommendation) {
+          !result->is_recommendation()) {
         return result.get();
       }
     }
@@ -211,44 +199,27 @@ ChromeSearchResult* SearchController::GetResultByTitleForTest(
   return nullptr;
 }
 
-SearchResultRanker* SearchController::GetNonAppSearchResultRanker() {
-  return mixer_->GetNonAppSearchResultRanker();
-}
-
 int SearchController::GetLastQueryLength() const {
   return last_query_.size();
 }
 
 void SearchController::Train(AppLaunchData&& app_launch_data) {
+  app_launch_data.query = base::UTF16ToUTF8(last_query_);
+
   if (app_list_features::IsAppListLaunchRecordingEnabled()) {
-    ChromeOSAppListLaunchEventProto::LaunchType launch_type;
-    if (app_launch_data.ranking_item_type == RankingItemType::kApp ||
-        app_launch_data.ranking_item_type == RankingItemType::kArcAppShortcut) {
-      launch_type = ChromeOSAppListLaunchEventProto::APP_TILES;
-    } else {
-      launch_type = ChromeOSAppListLaunchEventProto::RESULTS_LIST;
-    }
+    // Record a structured metrics event.
+    const base::Time now = base::Time::Now();
+    base::Time::Exploded now_exploded;
+    now.LocalExplode(&now_exploded);
 
-    ChromeOSAppListLaunchEventProto::SearchProviderType provider_type;
-    switch (app_launch_data.ranking_item_type) {
-      case RankingItemType::kOmniboxGeneric:
-        provider_type = ChromeOSAppListLaunchEventProto::OMNIBOX;
-        break;
-      case RankingItemType::kZeroStateFile:
-        provider_type = ChromeOSAppListLaunchEventProto::ZERO_STATE_FILE;
-        break;
-      case RankingItemType::kDriveQuickAccess:
-        provider_type = ChromeOSAppListLaunchEventProto::DRIVE_QUICK_ACCESS;
-        break;
-      default:
-        provider_type = ChromeOSAppListLaunchEventProto::PROVIDER_UNSPECIFIED;
-        break;
-    }
-
-    // TODO(951287): Record the last-used domain.
-    AppListLaunchRecorder::GetInstance()->Record(
-        {launch_type, provider_type, NormalizeId(app_launch_data.id),
-         base::UTF16ToUTF8(last_query_), std::string(), last_launched_app_id_});
+    metrics::structured::events::LauncherUsage()
+        .SetTarget(NormalizeId(app_launch_data.id))
+        .SetApp(last_launched_app_id_)
+        .SetSearchQuery(base::UTF16ToUTF8(last_query_))
+        .SetSearchQueryLength(last_query_.size())
+        .SetProviderType(static_cast<int>(app_launch_data.ranking_item_type))
+        .SetHour(now_exploded.hour)
+        .Record();
 
     // Only record the last launched app if the hashed logging feature flag is
     // enabled, because it is only used by hashed logging.
@@ -269,9 +240,7 @@ void SearchController::Train(AppLaunchData&& app_launch_data) {
        {"Query", static_cast<int>(
                      base::HashMetricName(base::UTF16ToUTF8(last_query_)))}});
 
-  for (const auto& provider : providers_)
-    provider->Train(app_launch_data.id, app_launch_data.ranking_item_type);
-  app_launch_data.query = base::UTF16ToUTF8(last_query_);
+  // Train all search result ranking models.
   mixer_->Train(app_launch_data);
 }
 

@@ -77,8 +77,8 @@ class AudioRendererMixerTest
     EXPECT_CALL(*sink_.get(), Start());
     EXPECT_CALL(*sink_.get(), Stop());
 
-    mixer_.reset(
-        new AudioRendererMixer(output_parameters_, sink_, base::Bind(&LogUma)));
+    mixer_.reset(new AudioRendererMixer(output_parameters_, sink_,
+                                        base::BindRepeating(&LogUma)));
     mixer_callback_ = sink_->callback();
 
     audio_bus_ = AudioBus::Create(output_parameters_);
@@ -526,7 +526,7 @@ TEST_P(AudioRendererMixerBehavioralTest, MixerPausesStream) {
 }
 
 INSTANTIATE_TEST_SUITE_P(
-    /* no prefix */,
+    All,
     AudioRendererMixerTest,
     testing::Values(
         // No resampling, 1 input sample rate.
@@ -560,7 +560,7 @@ INSTANTIATE_TEST_SUITE_P(
 // support single item lists and we don't want these test cases to run for every
 // parameter set.
 INSTANTIATE_TEST_SUITE_P(
-    /* no prefix */,
+    All,
     AudioRendererMixerBehavioralTest,
     testing::ValuesIn(std::vector<AudioRendererMixerTestData>(
         1,

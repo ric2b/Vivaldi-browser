@@ -2,750 +2,474 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-cr.define('settings_privacy_page', function() {
-  /**
-   * @param {!Element} element
-   * @param {boolean} displayed
-   */
-  function assertVisible(element, displayed) {
-    assertEquals(
-        displayed, window.getComputedStyle(element)['display'] != 'none');
-  }
+// clang-format off
+// #import {CookieControlsMode, SiteSettingsPrefsBrowserProxyImpl} from 'chrome://settings/lazy_load.js';
+// #import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+// #import {MetricsBrowserProxyImpl, PrivacyElementInteractions, PrivacyPageBrowserProxyImpl, SyncBrowserProxyImpl, HatsBrowserProxyImpl, Router, routes} from 'chrome://settings/settings.js';
+// #import {TestMetricsBrowserProxy} from 'chrome://test/settings/test_metrics_browser_proxy.m.js';
+// #import {TestPrivacyPageBrowserProxy} from 'chrome://test/settings/test_privacy_page_browser_proxy.m.js';
+// #import {TestSyncBrowserProxy} from 'chrome://test/settings/test_sync_browser_proxy.m.js';
+// #import {TestHatsBrowserProxy} from 'chrome://test/settings/test_hats_browser_proxy.m.js';
+// #import {TestSiteSettingsPrefsBrowserProxy} from 'chrome://test/settings/test_site_settings_prefs_browser_proxy.m.js';
+// #import {isMac, isWindows} from 'chrome://resources/js/cr.m.js';
+// #import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+// #import {whenAttributeIs, flushTasks, isChildVisible} from 'chrome://test/test_util.m.js';
+// clang-format on
 
-  /** @implements {settings.ClearBrowsingDataBrowserProxy} */
-  class TestClearBrowsingDataBrowserProxy extends TestBrowserProxy {
-    constructor() {
-      super(['initialize', 'clearBrowsingData']);
+suite('PrivacyPageUMACheck', function() {
+  /** @type {settings.TestPrivacyPageBrowserProxy} */
+  let testBrowserProxy;
 
-      /**
-       * The promise to return from |clearBrowsingData|.
-       * Allows testing code to test what happens after the call is made, and
-       * before the browser responds.
-       * @private {?Promise}
-       */
-      this.clearBrowsingDataPromise_ = null;
-    }
+  /** @type {settings.TestMetricsBrowserProxy} */
+  let testMetricsBrowserProxy;
 
-    /** @param {!Promise} promise */
-    setClearBrowsingDataPromise(promise) {
-      this.clearBrowsingDataPromise_ = promise;
-    }
+  /** @type {SettingsPrivacyPageElement} */
+  let page;
 
-    /** @override */
-    clearBrowsingData(dataTypes, timePeriod) {
-      this.methodCalled('clearBrowsingData', [dataTypes, timePeriod]);
-      cr.webUIListenerCallback('browsing-data-removing', true);
-      return this.clearBrowsingDataPromise_ !== null ?
-          this.clearBrowsingDataPromise_ :
-          Promise.resolve();
-    }
+  suiteSetup(function() {
+    loadTimeData.overrideValues({
+      privacySettingsRedesignEnabled: false,
+    });
+  });
 
-    /** @override */
-    initialize() {
-      this.methodCalled('initialize');
-      return Promise.resolve(false);
-    }
-  }
-
-  function getClearBrowsingDataPrefs() {
-    return {
-      browser: {
-        clear_data: {
-          time_period: {
-            key: 'browser.clear_data.time_period',
-            type: chrome.settingsPrivate.PrefType.NUMBER,
-            value: 0,
-          },
-          time_period_basic: {
-            key: 'browser.clear_data.time_period_basic',
-            type: chrome.settingsPrivate.PrefType.NUMBER,
-            value: 0,
-          },
-          browsing_history: {
-            key: 'browser.clear_data.browsing_history',
-            type: chrome.settingsPrivate.PrefType.BOOLEAN,
-            value: false,
-          },
-          cookies: {
-            key: 'browser.clear_data.cookies',
-            type: chrome.settingsPrivate.PrefType.BOOLEAN,
-            value: false,
-          },
-          cookies_basic: {
-            key: 'browser.clear_data.cookies_basic',
-            type: chrome.settingsPrivate.PrefType.BOOLEAN,
-            value: false,
-          },
-          cache_basic: {
-            key: 'browser.clear_data.cache_basic',
-            type: chrome.settingsPrivate.PrefType.BOOLEAN,
-            value: false,
-          },
-        },
-        last_clear_browsing_data_tab: {
-          key: 'browser.last_clear_browsing_data_tab',
-          type: chrome.settingsPrivate.PrefType.NUMBER,
-          value: 0,
-        },
-      }
+  setup(function() {
+    testMetricsBrowserProxy = new TestMetricsBrowserProxy();
+    settings.MetricsBrowserProxyImpl.instance_ = testMetricsBrowserProxy;
+    testBrowserProxy = new TestPrivacyPageBrowserProxy();
+    settings.PrivacyPageBrowserProxyImpl.instance_ = testBrowserProxy;
+    const testSyncBrowserProxy = new TestSyncBrowserProxy();
+    settings.SyncBrowserProxyImpl.instance_ = testSyncBrowserProxy;
+    PolymerTest.clearBody();
+    page = document.createElement('settings-privacy-page');
+    page.prefs = {
+      profile: {password_manager_leak_detection: {value: true}},
+      signin: {
+        allowed_on_next_startup:
+            {type: chrome.settingsPrivate.PrefType.BOOLEAN, value: true}
+      },
+      safebrowsing: {
+        enabled: {value: true},
+        scout_reporting_enabled: {value: true},
+        enhanced: {value: false}
+      },
     };
-  }
+    document.body.appendChild(page);
+    Polymer.dom.flush();
+  });
 
-  function registerNativeCertificateManagerTests() {
-    suite('NativeCertificateManager', function() {
-      /** @type {settings.TestPrivacyPageBrowserProxy} */
-      let testBrowserProxy;
+  teardown(function() {
+    page.remove();
+  });
 
-      /** @type {SettingsPrivacyPageElement} */
-      let page;
+  test('LogAllPrivacyPageClicks', async function() {
+    page.$$('#manageCertificates').click();
+    let result =
+        await testMetricsBrowserProxy.whenCalled('recordSettingsPageHistogram');
+    assertEquals(
+        settings.PrivacyElementInteractions.MANAGE_CERTIFICATES, result);
 
-      setup(function() {
-        testBrowserProxy = new TestPrivacyPageBrowserProxy();
-        settings.PrivacyPageBrowserProxyImpl.instance_ = testBrowserProxy;
-        PolymerTest.clearBody();
-        page = document.createElement('settings-privacy-page');
-        document.body.appendChild(page);
-      });
+    settings.Router.getInstance().navigateTo(settings.routes.PRIVACY);
+    testMetricsBrowserProxy.reset();
 
-      teardown(function() {
-        page.remove();
-      });
+    page.$$('#canMakePaymentToggle').click();
+    result =
+        await testMetricsBrowserProxy.whenCalled('recordSettingsPageHistogram');
+    assertEquals(settings.PrivacyElementInteractions.PAYMENT_METHOD, result);
 
-      test('NativeCertificateManager', function() {
-        page.$$('#manageCertificates').click();
-        return testBrowserProxy.whenCalled('showManageSSLCertificates');
-      });
+    settings.Router.getInstance().navigateTo(settings.routes.PRIVACY);
+    testMetricsBrowserProxy.reset();
+
+    page.$$('#safeBrowsingToggle').click();
+    result =
+        await testMetricsBrowserProxy.whenCalled('recordSettingsPageHistogram');
+    assertEquals(settings.PrivacyElementInteractions.SAFE_BROWSING, result);
+  });
+
+  test('LogSafeBrowsingReportingToggleClick', function() {
+    page.$$('#safeBrowsingReportingToggle').click();
+    return testMetricsBrowserProxy.whenCalled('recordSettingsPageHistogram')
+        .then(result => {
+          assertEquals(
+              settings.PrivacyElementInteractions.IMPROVE_SECURITY, result);
+        });
+  });
+});
+
+suite('NativeCertificateManager', function() {
+  /** @type {settings.TestPrivacyPageBrowserProxy} */
+  let testBrowserProxy;
+
+  /** @type {SettingsPrivacyPageElement} */
+  let page;
+
+  suiteSetup(function() {
+    assertTrue(cr.isMac || cr.isWindows);
+    loadTimeData.overrideValues({
+      privacySettingsRedesignEnabled: false,
+    });
+  });
+
+  setup(function() {
+    testBrowserProxy = new TestPrivacyPageBrowserProxy();
+    settings.PrivacyPageBrowserProxyImpl.instance_ = testBrowserProxy;
+    PolymerTest.clearBody();
+    page = document.createElement('settings-privacy-page');
+    document.body.appendChild(page);
+  });
+
+  teardown(function() {
+    page.remove();
+  });
+
+  test('NativeCertificateManager', function() {
+    page.$$('#manageCertificates').click();
+    return testBrowserProxy.whenCalled('showManageSSLCertificates');
+  });
+});
+
+suite('PrivacyPage', function() {
+  /** @type {SettingsPrivacyPageElement} */
+  let page;
+
+  suiteSetup(function() {
+    loadTimeData.overrideValues({
+      privacySettingsRedesignEnabled: false,
+    });
+  });
+
+  setup(async function() {
+    PolymerTest.clearBody();
+    /* #ignore */ await settings.forceLazyLoaded();
+
+    const testBrowserProxy = new TestPrivacyPageBrowserProxy();
+    settings.PrivacyPageBrowserProxyImpl.instance_ = testBrowserProxy;
+    const testSyncBrowserProxy = new TestSyncBrowserProxy();
+    settings.SyncBrowserProxyImpl.instance_ = testSyncBrowserProxy;
+
+    page = document.createElement('settings-privacy-page');
+    page.prefs = {
+      profile: {password_manager_leak_detection: {value: true}},
+      signin: {
+        allowed_on_next_startup:
+            {type: chrome.settingsPrivate.PrefType.BOOLEAN, value: true}
+      },
+      safebrowsing: {
+        enabled: {value: true},
+        scout_reporting_enabled: {value: true},
+        enhanced: {value: false}
+      },
+    };
+    document.body.appendChild(page);
+    return testSyncBrowserProxy.whenCalled('getSyncStatus');
+  });
+
+  teardown(function() {
+    page.remove();
+    settings.Router.getInstance().navigateTo(settings.routes.BASIC);
+  });
+
+  test('showClearBrowsingDataDialog', function() {
+    assertFalse(!!page.$$('settings-clear-browsing-data-dialog'));
+    page.$$('#clearBrowsingData').click();
+    Polymer.dom.flush();
+
+    const dialog = page.$$('settings-clear-browsing-data-dialog');
+    assertTrue(!!dialog);
+
+    // Ensure that the dialog is fully opened before returning from this
+    // test, otherwise asynchronous code run in attached() can cause flaky
+    // errors.
+    return test_util.whenAttributeIs(
+        dialog.$$('#clearBrowsingDataDialog'), 'open', '');
+  });
+
+  test('safeBrowsingReportingToggle', function() {
+    const safeBrowsingToggle = page.$$('#safeBrowsingToggle');
+    const safeBrowsingReportingToggle = page.$$('#safeBrowsingReportingToggle');
+    assertTrue(safeBrowsingToggle.checked);
+    assertFalse(safeBrowsingReportingToggle.disabled);
+    assertTrue(safeBrowsingReportingToggle.checked);
+    safeBrowsingToggle.click();
+    Polymer.dom.flush();
+
+    assertFalse(safeBrowsingToggle.checked);
+    assertTrue(safeBrowsingReportingToggle.disabled);
+    assertFalse(safeBrowsingReportingToggle.checked);
+    assertTrue(page.prefs.safebrowsing.scout_reporting_enabled.value);
+    safeBrowsingToggle.click();
+    Polymer.dom.flush();
+
+    assertTrue(safeBrowsingToggle.checked);
+    assertFalse(safeBrowsingReportingToggle.disabled);
+    assertTrue(safeBrowsingReportingToggle.checked);
+  });
+
+  test('ElementVisibility', async function() {
+    await test_util.flushTasks();
+    assertFalse(test_util.isChildVisible(page, '#cookiesLinkRow'));
+    assertFalse(test_util.isChildVisible(page, '#securityLinkRow'));
+    assertFalse(test_util.isChildVisible(page, '#permissionsLinkRow'));
+
+    assertTrue(test_util.isChildVisible(page, '#clearBrowsingData'));
+    assertTrue(
+        test_util.isChildVisible(page, '#site-settings-subpage-trigger'));
+    assertTrue(test_util.isChildVisible(page, '#moreExpansion'));
+
+    page.$$('#moreExpansion').click();
+
+    assertTrue(test_util.isChildVisible(page, '#safeBrowsingToggle'));
+    assertTrue(test_util.isChildVisible(page, '#passwordsLeakDetectionToggle'));
+    assertTrue(test_util.isChildVisible(page, '#safeBrowsingReportingToggle'));
+    assertTrue(test_util.isChildVisible(page, '#doNotTrack'));
+    assertTrue(test_util.isChildVisible(page, '#canMakePaymentToggle'));
+    if (loadTimeData.getBoolean('enableSecurityKeysSubpage')) {
+      assertTrue(
+          test_util.isChildVisible(page, '#security-keys-subpage-trigger'));
+    }
+  });
+
+  test('BlockThirdPartyCookiesToggle', async function() {
+    page.prefs.profile.block_third_party_cookies = {value: false};
+    page.prefs.profile.cookie_controls_mode = {
+      value: settings.CookieControlsMode.DISABLED
+    };
+    settings.Router.getInstance().navigateTo(
+        settings.routes.SITE_SETTINGS_COOKIES);
+    Polymer.dom.flush();
+
+    page.$$('#blockThirdPartyCookies').click();
+    Polymer.dom.flush();
+    assertTrue(page.prefs.profile.block_third_party_cookies.value);
+    assertEquals(
+        page.prefs.profile.cookie_controls_mode.value,
+        settings.CookieControlsMode.ENABLED);
+
+    page.$$('#blockThirdPartyCookies').click();
+    Polymer.dom.flush();
+    assertFalse(page.prefs.profile.block_third_party_cookies.value);
+    assertEquals(
+        page.prefs.profile.cookie_controls_mode.value,
+        settings.CookieControlsMode.DISABLED);
+  });
+});
+
+suite('PrivacyPageRedesignEnabled', function() {
+  /** @type {SettingsPrivacyPageElement} */
+  let page;
+
+  /** @type {TestSiteSettingsPrefsBrowserProxy}*/
+  let siteSettingsBrowserProxy = null;
+
+  /** @type {Array<string>} */
+  const testLabels = ['test label 1', 'test label 2'];
+
+  suiteSetup(function() {
+    loadTimeData.overrideValues({
+      privacySettingsRedesignEnabled: true,
+    });
+  });
+
+  setup(function() {
+    siteSettingsBrowserProxy = new TestSiteSettingsPrefsBrowserProxy();
+    settings.SiteSettingsPrefsBrowserProxyImpl.instance_ =
+        siteSettingsBrowserProxy;
+    siteSettingsBrowserProxy.setResultFor(
+        'getCookieSettingDescription', Promise.resolve(testLabels[0]));
+    PolymerTest.clearBody();
+    page = document.createElement('settings-privacy-page');
+    document.body.appendChild(page);
+    return test_util.flushTasks();
+  });
+
+  teardown(function() {
+    page.remove();
+  });
+
+  test('ElementVisibility', function() {
+    assertTrue(test_util.isChildVisible(page, '#clearBrowsingData'));
+    assertTrue(test_util.isChildVisible(page, '#cookiesLinkRow'));
+    assertTrue(test_util.isChildVisible(page, '#securityLinkRow'));
+    assertTrue(test_util.isChildVisible(page, '#permissionsLinkRow'));
+
+    ['#site-settings-subpage-trigger',
+     '#moreExpansion',
+     '#safeBrowsingToggle',
+     '#passwordsLeakDetectionToggle',
+     '#safeBrowsingToggle',
+     '#safeBrowsingReportingToggle',
+     '#doNotTrack',
+     '#canMakePaymentToggle',
+     '#security-keys-subpage-trigger',
+    ].forEach(selector => {
+      assertFalse(test_util.isChildVisible(page, selector));
+    });
+  });
+
+  test('CookiesLinkRowSublabel', async function() {
+    await siteSettingsBrowserProxy.whenCalled('getCookieSettingDescription');
+    Polymer.dom.flush();
+    assertEquals(page.$$('#cookiesLinkRow').subLabel, testLabels[0]);
+
+    cr.webUIListenerCallback('cookieSettingDescriptionChanged', testLabels[1]);
+    assertEquals(page.$$('#cookiesLinkRow').subLabel, testLabels[1]);
+  });
+});
+
+suite('PrivacyPageSound', function() {
+  /** @type {settings.TestPrivacyPageBrowserProxy} */
+  let testBrowserProxy;
+
+  /** @type {SettingsPrivacyPageElement} */
+  let page;
+
+  function flushAsync() {
+    Polymer.dom.flush();
+    return new Promise(resolve => {
+      page.async(resolve);
     });
   }
 
-  function registerPrivacyPageTests() {
-    suite('PrivacyPage', function() {
-      /** @type {SettingsPrivacyPageElement} */
-      let page;
-
-      setup(function() {
-        page = document.createElement('settings-privacy-page');
-        page.prefs = {
-          signin: {
-            allowed_on_next_startup:
-                {type: chrome.settingsPrivate.PrefType.BOOLEAN, value: true},
-          },
-        };
-        document.body.appendChild(page);
-      });
-
-      teardown(function() {
-        page.remove();
-      });
-
-      test('showClearBrowsingDataDialog', function() {
-        assertFalse(!!page.$$('settings-clear-browsing-data-dialog'));
-        page.$$('#clearBrowsingData').click();
-        Polymer.dom.flush();
-
-        const dialog = page.$$('settings-clear-browsing-data-dialog');
-        assertTrue(!!dialog);
-
-        // Ensure that the dialog is fully opened before returning from this
-        // test, otherwise asynchronous code run in attached() can cause flaky
-        // errors.
-        return test_util.whenAttributeIs(
-            dialog.$$('#clearBrowsingDataDialog'), 'open', '');
-      });
-
-      if (!cr.isChromeOS) {
-        test('signinAllowedToggle', function() {
-          const toggle = page.$.signinAllowedToggle;
-
-          page.syncStatus = {signedIn: false};
-          // Check initial setup.
-          assertTrue(toggle.checked);
-          assertTrue(page.prefs.signin.allowed_on_next_startup.value);
-          assertFalse(page.$.toast.open);
-
-          // When the user is signed out, clicking the toggle should work
-          // normally and the restart toast should be opened.
-          toggle.click();
-          assertFalse(toggle.checked);
-          assertFalse(page.prefs.signin.allowed_on_next_startup.value);
-          assertTrue(page.$.toast.open);
-
-          // Clicking it again, turns the toggle back on. The toast remains
-          // open.
-          toggle.click();
-          assertTrue(toggle.checked);
-          assertTrue(page.prefs.signin.allowed_on_next_startup.value);
-          assertTrue(page.$.toast.open);
-
-          // Reset toast.
-          page.showRestart_ = false;
-          assertFalse(page.$.toast.open);
-
-          page.syncStatus = {signedIn: true};
-          // When the user is signed in, clicking the toggle should open the
-          // sign-out dialog.
-          assertFalse(!!page.$$('settings-signout-dialog'));
-          toggle.click();
-          return test_util.eventToPromise('cr-dialog-open', page)
-              .then(function() {
-                Polymer.dom.flush();
-                // The toggle remains on.
-                assertTrue(toggle.checked);
-                assertTrue(page.prefs.signin.allowed_on_next_startup.value);
-                assertFalse(page.$.toast.open);
-
-                const signoutDialog = page.$$('settings-signout-dialog');
-                assertTrue(!!signoutDialog);
-                assertTrue(signoutDialog.$$('#dialog').open);
-
-                // The user clicks cancel.
-                const cancel = signoutDialog.$$('#disconnectCancel');
-                cancel.click();
-
-                return test_util.eventToPromise('close', signoutDialog);
-              })
-              .then(function() {
-                Polymer.dom.flush();
-                assertFalse(!!page.$$('settings-signout-dialog'));
-
-                // After the dialog is closed, the toggle remains turned on.
-                assertTrue(toggle.checked);
-                assertTrue(page.prefs.signin.allowed_on_next_startup.value);
-                assertFalse(page.$.toast.open);
-
-                // The user clicks the toggle again.
-                toggle.click();
-                return test_util.eventToPromise('cr-dialog-open', page);
-              })
-              .then(function() {
-                Polymer.dom.flush();
-                const signoutDialog = page.$$('settings-signout-dialog');
-                assertTrue(!!signoutDialog);
-                assertTrue(signoutDialog.$$('#dialog').open);
-
-                // The user clicks confirm, which signs them out.
-                const disconnectConfirm =
-                    signoutDialog.$$('#disconnectConfirm');
-                disconnectConfirm.click();
-
-                return test_util.eventToPromise('close', signoutDialog);
-              })
-              .then(function() {
-                Polymer.dom.flush();
-                // After the dialog is closed, the toggle is turned off and the
-                // toast is shown.
-                assertFalse(toggle.checked);
-                assertFalse(page.prefs.signin.allowed_on_next_startup.value);
-                assertTrue(page.$.toast.open);
-              });
-        });
-      }
-    });
+  function getToggleElement() {
+    return page.$$('settings-animated-pages')
+        .queryEffectiveChildren('settings-subpage')
+        .queryEffectiveChildren('#block-autoplay-setting');
   }
 
-  function registerClearBrowsingDataTestsDice() {
-    suite('ClearBrowsingDataDice', function() {
-      /** @type {settings.TestClearBrowsingDataBrowserProxy} */
-      let testBrowserProxy;
-
-      /** @type {TestSyncBrowserProxy} */
-      let testSyncBrowserProxy;
-
-      /** @type {SettingsClearBrowsingDataDialogElement} */
-      let element;
-
-      suiteSetup(function() {
-        loadTimeData.overrideValues({
-          diceEnabled: true,
-        });
-      });
-
-      setup(function() {
-        testBrowserProxy = new TestClearBrowsingDataBrowserProxy();
-        settings.ClearBrowsingDataBrowserProxyImpl.instance_ = testBrowserProxy;
-        testSyncBrowserProxy = new TestSyncBrowserProxy();
-        settings.SyncBrowserProxyImpl.instance_ = testSyncBrowserProxy;
-        PolymerTest.clearBody();
-        element = document.createElement('settings-clear-browsing-data-dialog');
-        element.set('prefs', getClearBrowsingDataPrefs());
-        document.body.appendChild(element);
-        return testBrowserProxy.whenCalled('initialize').then(() => {
-          assertTrue(element.$$('#clearBrowsingDataDialog').open);
-        });
-      });
-
-      teardown(function() {
-        element.remove();
-      });
-
-      test('ClearBrowsingDataSyncAccountInfoDice', function() {
-        // Not syncing: the footer is hidden.
-        cr.webUIListenerCallback('sync-status-changed', {
-          signedIn: false,
-          hasError: false,
-        });
-        Polymer.dom.flush();
-        const footer = element.$$('#clearBrowsingDataDialog [slot=footer]');
-        assertTrue(footer.hidden);
-
-        // Syncing: the footer is shown, with the normal sync info.
-        cr.webUIListenerCallback('sync-status-changed', {
-          signedIn: true,
-          hasError: false,
-        });
-        Polymer.dom.flush();
-        assertFalse(footer.hidden);
-        assertVisible(element.$$('#sync-info'), true);
-        assertVisible(element.$$('#sync-paused-info'), false);
-        assertVisible(element.$$('#sync-passphrase-error-info'), false);
-        assertVisible(element.$$('#sync-other-error-info'), false);
-
-        // Sync is paused.
-        cr.webUIListenerCallback('sync-status-changed', {
-          signedIn: true,
-          hasError: true,
-          statusAction: settings.StatusAction.REAUTHENTICATE,
-        });
-        Polymer.dom.flush();
-        assertVisible(element.$$('#sync-info'), false);
-        assertVisible(element.$$('#sync-paused-info'), true);
-        assertVisible(element.$$('#sync-passphrase-error-info'), false);
-        assertVisible(element.$$('#sync-other-error-info'), false);
-
-        // Sync passphrase error.
-        cr.webUIListenerCallback('sync-status-changed', {
-          signedIn: true,
-          hasError: true,
-          statusAction: settings.StatusAction.ENTER_PASSPHRASE,
-        });
-        Polymer.dom.flush();
-        assertVisible(element.$$('#sync-info'), false);
-        assertVisible(element.$$('#sync-paused-info'), false);
-        assertVisible(element.$$('#sync-passphrase-error-info'), true);
-        assertVisible(element.$$('#sync-other-error-info'), false);
-
-        // Other sync error.
-        cr.webUIListenerCallback('sync-status-changed', {
-          signedIn: true,
-          hasError: true,
-          statusAction: settings.StatusAction.NO_ACTION,
-        });
-        Polymer.dom.flush();
-        assertVisible(element.$$('#sync-info'), false);
-        assertVisible(element.$$('#sync-paused-info'), false);
-        assertVisible(element.$$('#sync-passphrase-error-info'), false);
-        assertVisible(element.$$('#sync-other-error-info'), true);
-      });
-
-      test('ClearBrowsingDataPauseSyncDice', function() {
-        cr.webUIListenerCallback('sync-status-changed', {
-          signedIn: true,
-          hasError: false,
-        });
-        Polymer.dom.flush();
-        assertFalse(
-            element.$$('#clearBrowsingDataDialog [slot=footer]').hidden);
-        const syncInfo = element.$$('#sync-info');
-        assertVisible(syncInfo, true);
-        const signoutLink = syncInfo.querySelector('a[href]');
-        assertTrue(!!signoutLink);
-        assertEquals(0, testSyncBrowserProxy.getCallCount('pauseSync'));
-        signoutLink.click();
-        assertEquals(1, testSyncBrowserProxy.getCallCount('pauseSync'));
-      });
-
-      test('ClearBrowsingDataStartSignInDice', function() {
-        cr.webUIListenerCallback('sync-status-changed', {
-          signedIn: true,
-          hasError: true,
-          statusAction: settings.StatusAction.REAUTHENTICATE,
-        });
-        Polymer.dom.flush();
-        assertFalse(
-            element.$$('#clearBrowsingDataDialog [slot=footer]').hidden);
-        const syncInfo = element.$$('#sync-paused-info');
-        assertVisible(syncInfo, true);
-        const signinLink = syncInfo.querySelector('a[href]');
-        assertTrue(!!signinLink);
-        assertEquals(0, testSyncBrowserProxy.getCallCount('startSignIn'));
-        signinLink.click();
-        assertEquals(1, testSyncBrowserProxy.getCallCount('startSignIn'));
-      });
-
-      test('ClearBrowsingDataHandlePassphraseErrorDice', function() {
-        cr.webUIListenerCallback('sync-status-changed', {
-          signedIn: true,
-          hasError: true,
-          statusAction: settings.StatusAction.ENTER_PASSPHRASE,
-        });
-        Polymer.dom.flush();
-        assertFalse(
-            element.$$('#clearBrowsingDataDialog [slot=footer]').hidden);
-        const syncInfo = element.$$('#sync-passphrase-error-info');
-        assertVisible(syncInfo, true);
-        const passphraseLink = syncInfo.querySelector('a[href]');
-        assertTrue(!!passphraseLink);
-        passphraseLink.click();
-        assertEquals(settings.routes.SYNC, settings.getCurrentRoute());
-      });
+  suiteSetup(function() {
+    loadTimeData.overrideValues({
+      privacySettingsRedesignEnabled: false,
     });
-  }
+  });
 
-  function registerClearBrowsingDataTests() {
-    suite('ClearBrowsingData', function() {
-      /** @type {settings.TestClearBrowsingDataBrowserProxy} */
-      let testBrowserProxy;
+  setup(() => {
+    loadTimeData.overrideValues({enableBlockAutoplayContentSetting: true});
 
-      /** @type {SettingsClearBrowsingDataDialogElement} */
-      let element;
+    testBrowserProxy = new TestPrivacyPageBrowserProxy();
+    settings.PrivacyPageBrowserProxyImpl.instance_ = testBrowserProxy;
+    PolymerTest.clearBody();
 
-      suiteSetup(function() {
-        loadTimeData.overrideValues({
-          diceEnabled: false,
-        });
-      });
+    settings.Router.getInstance().navigateTo(
+        settings.routes.SITE_SETTINGS_SOUND);
+    page = document.createElement('settings-privacy-page');
+    document.body.appendChild(page);
+    return flushAsync();
+  });
 
-      setup(function() {
-        testBrowserProxy = new TestClearBrowsingDataBrowserProxy();
-        settings.ClearBrowsingDataBrowserProxyImpl.instance_ = testBrowserProxy;
-        PolymerTest.clearBody();
-        element = document.createElement('settings-clear-browsing-data-dialog');
-        element.set('prefs', getClearBrowsingDataPrefs());
-        document.body.appendChild(element);
-        return testBrowserProxy.whenCalled('initialize');
-      });
+  teardown(() => {
+    page.remove();
+  });
 
-      teardown(function() {
-        element.remove();
-      });
+  test('UpdateStatus', () => {
+    assertTrue(getToggleElement().hasAttribute('disabled'));
+    assertFalse(getToggleElement().hasAttribute('checked'));
 
-      test('ClearBrowsingDataTap', function() {
-        assertTrue(element.$$('#clearBrowsingDataDialog').open);
+    cr.webUIListenerCallback(
+        'onBlockAutoplayStatusChanged', {pref: {value: true}, enabled: true});
 
-        const cancelButton = element.$$('.cancel-button');
-        assertTrue(!!cancelButton);
-        const actionButton = element.$$('.action-button');
-        assertTrue(!!actionButton);
-        const spinner = element.$$('paper-spinner-lite');
-        assertTrue(!!spinner);
+    return flushAsync().then(() => {
+      // Check that we are on and enabled.
+      assertFalse(getToggleElement().hasAttribute('disabled'));
+      assertTrue(getToggleElement().hasAttribute('checked'));
 
-        // Select a datatype for deletion to enable the clear button.
-        const cookieCheckbox = element.$$('#cookiesCheckboxBasic');
-        assertTrue(!!cookieCheckbox);
-        cookieCheckbox.$.checkbox.click();
+      // Toggle the pref off.
+      cr.webUIListenerCallback(
+          'onBlockAutoplayStatusChanged',
+          {pref: {value: false}, enabled: true});
 
-        assertFalse(cancelButton.disabled);
-        assertFalse(actionButton.disabled);
-        assertFalse(spinner.active);
-
-        const promiseResolver = new PromiseResolver();
-        testBrowserProxy.setClearBrowsingDataPromise(promiseResolver.promise);
-        actionButton.click();
-
-        return testBrowserProxy.whenCalled('clearBrowsingData')
-            .then(function(args) {
-              const dataTypes = args[0];
-              const timePeriod = args[1];
-              assertEquals(1, dataTypes.length);
-              assertEquals('browser.clear_data.cookies_basic', dataTypes[0]);
-              assertTrue(element.$$('#clearBrowsingDataDialog').open);
-              assertTrue(cancelButton.disabled);
-              assertTrue(actionButton.disabled);
-              assertTrue(spinner.active);
-
-              // Simulate signal from browser indicating that clearing has
-              // completed.
-              cr.webUIListenerCallback('browsing-data-removing', false);
-              promiseResolver.resolve();
-              // Yields to the message loop to allow the callback chain of the
-              // Promise that was just resolved to execute before the
-              // assertions.
-            })
-            .then(function() {
-              assertFalse(element.$$('#clearBrowsingDataDialog').open);
-              assertFalse(cancelButton.disabled);
-              assertFalse(actionButton.disabled);
-              assertFalse(spinner.active);
-              assertFalse(!!element.$$('#notice'));
-            });
-      });
-
-      test('ClearBrowsingDataClearButton', function() {
-        assertTrue(element.$$('#clearBrowsingDataDialog').open);
-
-        const actionButton = element.$$('.action-button');
-        assertTrue(!!actionButton);
-        const cookieCheckboxBasic = element.$$('#cookiesCheckboxBasic');
-        assertTrue(!!cookieCheckboxBasic);
-        // Initially the button is disabled because all checkboxes are off.
-        assertTrue(actionButton.disabled);
-        // The button gets enabled if any checkbox is selected.
-        cookieCheckboxBasic.$.checkbox.click();
-        assertTrue(cookieCheckboxBasic.checked);
-        assertFalse(actionButton.disabled);
-        // Switching to advanced disables the button.
-        element.$$('cr-tabs').selected = 1;
-        assertTrue(actionButton.disabled);
-        // Switching back enables it again.
-        element.$$('cr-tabs').selected = 0;
-        assertFalse(actionButton.disabled);
-      });
-
-      test('showHistoryDeletionDialog', function() {
-        assertTrue(element.$$('#clearBrowsingDataDialog').open);
-        const actionButton = element.$$('.action-button');
-        assertTrue(!!actionButton);
-
-        // Select a datatype for deletion to enable the clear button.
-        const cookieCheckbox = element.$$('#cookiesCheckboxBasic');
-        assertTrue(!!cookieCheckbox);
-        cookieCheckbox.$.checkbox.click();
-        assertFalse(actionButton.disabled);
-
-        const promiseResolver = new PromiseResolver();
-        testBrowserProxy.setClearBrowsingDataPromise(promiseResolver.promise);
-        actionButton.click();
-
-        return testBrowserProxy.whenCalled('clearBrowsingData')
-            .then(function() {
-              // Passing showNotice = true should trigger the notice about other
-              // forms of browsing history to open, and the dialog to stay open.
-              promiseResolver.resolve(true /* showNotice */);
-
-              // Yields to the message loop to allow the callback chain of the
-              // Promise that was just resolved to execute before the
-              // assertions.
-            })
-            .then(function() {
-              Polymer.dom.flush();
-              const notice = element.$$('#notice');
-              assertTrue(!!notice);
-              const noticeActionButton = notice.$$('.action-button');
-              assertTrue(!!noticeActionButton);
-
-              assertTrue(element.$$('#clearBrowsingDataDialog').open);
-              assertTrue(notice.$$('#dialog').open);
-
-              noticeActionButton.click();
-
-              return new Promise(function(resolve, reject) {
-                // Tapping the action button will close the notice. Move to the
-                // end of the message loop to allow the closing event to
-                // propagate to the parent dialog. The parent dialog should
-                // subsequently close as well.
-                setTimeout(function() {
-                  const notice = element.$$('#notice');
-                  assertFalse(!!notice);
-                  assertFalse(element.$$('#clearBrowsingDataDialog').open);
-                  resolve();
-                }, 0);
-              });
-            });
-      });
-
-      test('Counters', function() {
-        assertTrue(element.$$('#clearBrowsingDataDialog').open);
-
-        const checkbox = element.$$('#cacheCheckboxBasic');
-        assertEquals('browser.clear_data.cache_basic', checkbox.pref.key);
-
-        // Simulate a browsing data counter result for history. This checkbox's
-        // sublabel should be updated.
-        cr.webUIListenerCallback(
-            'update-counter-text', checkbox.pref.key, 'result');
-        assertEquals('result', checkbox.subLabel);
-      });
-
-      test('history rows are hidden for supervised users', function() {
-        assertFalse(loadTimeData.getBoolean('isSupervised'));
-        assertFalse(element.$$('#browsingCheckbox').hidden);
-        assertFalse(element.$$('#browsingCheckboxBasic').hidden);
-        assertFalse(element.$$('#downloadCheckbox').hidden);
-
-        element.remove();
-        testBrowserProxy.reset();
-        loadTimeData.overrideValues({isSupervised: true});
-
-        element = document.createElement('settings-clear-browsing-data-dialog');
-        document.body.appendChild(element);
-        Polymer.dom.flush();
-
-        return testBrowserProxy.whenCalled('initialize').then(function() {
-          assertTrue(element.$$('#browsingCheckbox').hidden);
-          assertTrue(element.$$('#browsingCheckboxBasic').hidden);
-          assertTrue(element.$$('#downloadCheckbox').hidden);
-        });
-      });
-
-      // When Dice is disabled, the footer is never shown.
-      test('ClearBrowsingDataSyncAccountInfo', function() {
-        assertTrue(element.$$('#clearBrowsingDataDialog').open);
-
-        // Not syncing.
-        cr.webUIListenerCallback('sync-status-changed', {
-          signedIn: false,
-          hasError: false,
-        });
-        Polymer.dom.flush();
-        assertTrue(element.$$('#clearBrowsingDataDialog [slot=footer]').hidden);
-
-        // Syncing.
-        cr.webUIListenerCallback('sync-status-changed', {
-          signedIn: true,
-          hasError: false,
-        });
-        Polymer.dom.flush();
-        assertTrue(element.$$('#clearBrowsingDataDialog [slot=footer]').hidden);
-
-        // Sync passphrase error.
-        cr.webUIListenerCallback('sync-status-changed', {
-          signedIn: true,
-          hasError: true,
-          statusAction: settings.StatusAction.ENTER_PASSPHRASE,
-        });
-        Polymer.dom.flush();
-        assertTrue(element.$$('#clearBrowsingDataDialog [slot=footer]').hidden);
-
-        // Other sync error.
-        cr.webUIListenerCallback('sync-status-changed', {
-          signedIn: true,
-          hasError: true,
-          statusAction: settings.StatusAction.NO_ACTION,
-        });
-        Polymer.dom.flush();
-        assertTrue(element.$$('#clearBrowsingDataDialog [slot=footer]').hidden);
-      });
-    });
-  }
-
-  function registerPrivacyPageSoundTests() {
-    suite('PrivacyPageSound', function() {
-      /** @type {settings.TestPrivacyPageBrowserProxy} */
-      let testBrowserProxy;
-
-      /** @type {SettingsPrivacyPageElement} */
-      let page;
-
-      function flushAsync() {
-        Polymer.dom.flush();
-        return new Promise(resolve => {
-          page.async(resolve);
-        });
-      }
-
-      function getToggleElement() {
-        return page.$$('settings-animated-pages')
-            .queryEffectiveChildren('settings-subpage')
-            .queryEffectiveChildren('#block-autoplay-setting');
-      }
-
-      setup(() => {
-        loadTimeData.overrideValues({
-          enableBlockAutoplayContentSetting: true
-        });
-
-        testBrowserProxy = new TestPrivacyPageBrowserProxy();
-        settings.PrivacyPageBrowserProxyImpl.instance_ = testBrowserProxy;
-        PolymerTest.clearBody();
-
-        settings.router.navigateTo(settings.routes.SITE_SETTINGS_SOUND);
-        page = document.createElement('settings-privacy-page');
-        document.body.appendChild(page);
-        return flushAsync();
-      });
-
-      teardown(() => {
-        page.remove();
-      });
-
-      test('UpdateStatus', () => {
-        assertTrue(getToggleElement().hasAttribute('disabled'));
+      return flushAsync().then(() => {
+        // Check that we are off and enabled.
+        assertFalse(getToggleElement().hasAttribute('disabled'));
         assertFalse(getToggleElement().hasAttribute('checked'));
 
+        // Disable the autoplay status toggle.
         cr.webUIListenerCallback(
             'onBlockAutoplayStatusChanged',
-            {pref: {value: true}, enabled: true});
+            {pref: {value: false}, enabled: false});
 
         return flushAsync().then(() => {
-          // Check that we are on and enabled.
-          assertFalse(getToggleElement().hasAttribute('disabled'));
-          assertTrue(getToggleElement().hasAttribute('checked'));
+          // Check that we are off and disabled.
+          assertTrue(getToggleElement().hasAttribute('disabled'));
+          assertFalse(getToggleElement().hasAttribute('checked'));
+        });
+      });
+    });
+  });
 
-          // Toggle the pref off.
-          cr.webUIListenerCallback(
-              'onBlockAutoplayStatusChanged',
-              {pref: {value: false}, enabled: true});
+  test('Hidden', () => {
+    assertTrue(loadTimeData.getBoolean('enableBlockAutoplayContentSetting'));
+    assertFalse(getToggleElement().hidden);
 
-          return flushAsync().then(() => {
-            // Check that we are off and enabled.
-            assertFalse(getToggleElement().hasAttribute('disabled'));
-            assertFalse(getToggleElement().hasAttribute('checked'));
+    loadTimeData.overrideValues({enableBlockAutoplayContentSetting: false});
 
-            // Disable the autoplay status toggle.
-            cr.webUIListenerCallback(
-                'onBlockAutoplayStatusChanged',
-                {pref: {value: false}, enabled: false});
+    page.remove();
+    page = document.createElement('settings-privacy-page');
+    document.body.appendChild(page);
 
-            return flushAsync().then(() => {
-              // Check that we are off and disabled.
-              assertTrue(getToggleElement().hasAttribute('disabled'));
-              assertFalse(getToggleElement().hasAttribute('checked'));
-            });
+    return flushAsync().then(() => {
+      assertFalse(loadTimeData.getBoolean('enableBlockAutoplayContentSetting'));
+      assertTrue(getToggleElement().hidden);
+    });
+  });
+
+  test('Click', () => {
+    assertTrue(getToggleElement().hasAttribute('disabled'));
+    assertFalse(getToggleElement().hasAttribute('checked'));
+
+    cr.webUIListenerCallback(
+        'onBlockAutoplayStatusChanged', {pref: {value: true}, enabled: true});
+
+    return flushAsync().then(() => {
+      // Check that we are on and enabled.
+      assertFalse(getToggleElement().hasAttribute('disabled'));
+      assertTrue(getToggleElement().hasAttribute('checked'));
+
+      // Click on the toggle and wait for the proxy to be called.
+      getToggleElement().click();
+      return testBrowserProxy.whenCalled('setBlockAutoplayEnabled')
+          .then((enabled) => {
+            assertFalse(enabled);
           });
-        });
-      });
-
-      test('Hidden', () => {
-        assertTrue(
-            loadTimeData.getBoolean('enableBlockAutoplayContentSetting'));
-        assertFalse(getToggleElement().hidden);
-
-        loadTimeData.overrideValues({enableBlockAutoplayContentSetting: false});
-
-        page.remove();
-        page = document.createElement('settings-privacy-page');
-        document.body.appendChild(page);
-
-        return flushAsync().then(() => {
-          assertFalse(
-              loadTimeData.getBoolean('enableBlockAutoplayContentSetting'));
-          assertTrue(getToggleElement().hidden);
-        });
-      });
-
-      test('Click', () => {
-        assertTrue(getToggleElement().hasAttribute('disabled'));
-        assertFalse(getToggleElement().hasAttribute('checked'));
-
-        cr.webUIListenerCallback(
-            'onBlockAutoplayStatusChanged',
-            {pref: {value: true}, enabled: true});
-
-        return flushAsync().then(() => {
-          // Check that we are on and enabled.
-          assertFalse(getToggleElement().hasAttribute('disabled'));
-          assertTrue(getToggleElement().hasAttribute('checked'));
-
-          // Click on the toggle and wait for the proxy to be called.
-          getToggleElement().click();
-          return testBrowserProxy.whenCalled('setBlockAutoplayEnabled')
-              .then((enabled) => {
-                assertFalse(enabled);
-              });
-        });
-      });
     });
-  }
+  });
+});
 
-  if (cr.isMac || cr.isWindows) {
-    registerNativeCertificateManagerTests();
-  }
+suite('HappinessTrackingSurveys', function() {
+  /** @type {settings.TestHatsBrowserProxy} */
+  let testHatsBrowserProxy;
 
-  if (!cr.isChromeOS) {
-    registerClearBrowsingDataTestsDice();
-  }
+  /** @type {SettingsPrivacyPageElement} */
+  let page;
 
-  registerClearBrowsingDataTests();
-  registerPrivacyPageTests();
-  registerPrivacyPageSoundTests();
+  setup(function() {
+    testHatsBrowserProxy = new TestHatsBrowserProxy();
+    settings.HatsBrowserProxyImpl.instance_ = testHatsBrowserProxy;
+    PolymerTest.clearBody();
+    page = document.createElement('settings-privacy-page');
+    document.body.appendChild(page);
+    return test_util.flushTasks();
+  });
+
+  teardown(function() {
+    page.remove();
+  });
+
+  test('ClearBrowsingDataTrigger', function() {
+    page.$$('#clearBrowsingData').click();
+    return testHatsBrowserProxy.whenCalled('tryShowSurvey');
+  });
+
+  test('CookiesTrigger', function() {
+    page.$$('#cookiesLinkRow').click();
+    return testHatsBrowserProxy.whenCalled('tryShowSurvey');
+  });
+
+  test('SecurityTrigger', function() {
+    page.$$('#securityLinkRow').click();
+    return testHatsBrowserProxy.whenCalled('tryShowSurvey');
+  });
+
+  test('PermissionsTrigger', function() {
+    page.$$('#permissionsLinkRow').click();
+    return testHatsBrowserProxy.whenCalled('tryShowSurvey');
+  });
 });

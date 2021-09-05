@@ -131,7 +131,7 @@ class CORE_EXPORT ThreadableLoader final
 
   void SetDefersLoading(bool);
 
-  void Trace(blink::Visitor* visitor) override;
+  void Trace(Visitor* visitor) override;
 
  private:
   class AssignOnScopeExit;
@@ -161,7 +161,6 @@ class CORE_EXPORT ThreadableLoader final
                         const ResourceResponse&) override;
   void RedirectBlocked() override;
   void DataDownloaded(Resource*, uint64_t) override;
-  void DidReceiveResourceTiming(Resource*, const ResourceTimingInfo&) override;
   void DidDownloadToBlob(Resource*, scoped_refptr<BlobDataHandle>) override;
 
   // Notify Inspector and log to console about resource response. Use this

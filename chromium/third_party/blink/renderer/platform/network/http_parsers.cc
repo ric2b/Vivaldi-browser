@@ -42,6 +42,7 @@
 #include "third_party/blink/renderer/platform/network/http_names.h"
 #include "third_party/blink/renderer/platform/wtf/date_math.h"
 #include "third_party/blink/renderer/platform/wtf/math_extras.h"
+#include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
 #include "third_party/blink/renderer/platform/wtf/text/character_names.h"
 #include "third_party/blink/renderer/platform/wtf/text/parsing_utilities.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
@@ -408,17 +409,17 @@ CacheControlHeader ParseCacheControlDirectives(
     for (wtf_size_t i = 0; i < directives_size; ++i) {
       // RFC2616 14.9.1: A no-cache directive with a value is only meaningful
       // for proxy caches.  It should be ignored by a browser level cache.
-      if (DeprecatedEqualIgnoringCase(directives[i].first, kNoCacheDirective) &&
+      if (EqualIgnoringASCIICase(directives[i].first, kNoCacheDirective) &&
           directives[i].second.IsEmpty()) {
         cache_control_header.contains_no_cache = true;
-      } else if (DeprecatedEqualIgnoringCase(directives[i].first,
-                                             kNoStoreDirective)) {
+      } else if (EqualIgnoringASCIICase(directives[i].first,
+                                        kNoStoreDirective)) {
         cache_control_header.contains_no_store = true;
-      } else if (DeprecatedEqualIgnoringCase(directives[i].first,
-                                             kMustRevalidateDirective)) {
+      } else if (EqualIgnoringASCIICase(directives[i].first,
+                                        kMustRevalidateDirective)) {
         cache_control_header.contains_must_revalidate = true;
-      } else if (DeprecatedEqualIgnoringCase(directives[i].first,
-                                             kMaxAgeDirective)) {
+      } else if (EqualIgnoringASCIICase(directives[i].first,
+                                        kMaxAgeDirective)) {
         if (cache_control_header.max_age) {
           // First max-age directive wins if there are multiple ones.
           continue;
@@ -427,8 +428,8 @@ CacheControlHeader ParseCacheControlDirectives(
         double max_age = directives[i].second.ToDouble(&ok);
         if (ok)
           cache_control_header.max_age = base::TimeDelta::FromSecondsD(max_age);
-      } else if (DeprecatedEqualIgnoringCase(directives[i].first,
-                                             kStaleWhileRevalidateDirective)) {
+      } else if (EqualIgnoringASCIICase(directives[i].first,
+                                        kStaleWhileRevalidateDirective)) {
         if (cache_control_header.stale_while_revalidate) {
           // First stale-while-revalidate directive wins if there are multiple
           // ones.
@@ -497,10 +498,13 @@ bool ParseMultipartHeadersFromBody(const char* bytes,
     size_t iterator = 0;
 
     response->ClearHttpHeaderField(header);
+    Vector<AtomicString> values;
     while (response_headers->EnumerateHeader(&iterator, header_string_piece,
                                              &value)) {
-      response->AddHttpHeaderField(header, WebString::FromLatin1(value));
+      const AtomicString atomic_value = WebString::FromLatin1(value);
+      values.push_back(atomic_value);
     }
+    response->AddHttpHeaderFieldWithMultipleValues(header, values);
   }
   return true;
 }

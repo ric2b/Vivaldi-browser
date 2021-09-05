@@ -4,7 +4,7 @@
 
 syntax = "proto2";
 
-import "web_app_specifics.proto";
+import "components/sync/protocol/web_app_specifics.proto";
 
 option optimize_for = LITE_RUNTIME;
 
@@ -12,10 +12,26 @@ package web_app;
 
 // Local data: Information about web app icon.
 message WebAppIconInfoProto {
-  // The URL of the app icon.
-  required string url = 1;
   // The size of the square app icon, in raw pixels.
-  required int32 size_in_px = 2;
+  required int32 size_in_px = 1;
+  // The URL of the app icon.
+  optional string url = 2;
+}
+
+// A mapping between a MIME type and a set of file extensions for a file handler
+// "accept" entry. See chrome/browser/web_applications/web_app.h for details.
+message WebAppFileHandlerAcceptProto {
+  required string mimetype = 1;
+  repeated string file_extensions = 2;
+}
+
+// A file handler "action" associated with a set of "accept" entries, each of
+// which specifies a MIME type and corresponding set of file extensions that the
+// handler can handle. See chrome/browser/web_applications/web_app.h for
+// details.
+message WebAppFileHandlerProto {
+  required string action = 1;
+  repeated WebAppFileHandlerAcceptProto accept = 2;
 }
 
 // A set to track simultaneous installs and uninstalls from multiple install
@@ -40,15 +56,32 @@ message WebAppProto {
   // |name| and |theme_color|. A random last update wins.
   required sync_pb.WebAppSpecifics sync_data = 1;
 
+  // This enum should be synced with
+  // third_party/blink/public/mojom/manifest/display_mode.mojom
+  enum DisplayMode {
+    // UNDEFINED if optional |display_mode| is absent.
+    BROWSER = 1;
+    MINIMAL_UI = 2;
+    STANDALONE = 3;
+    FULLSCREEN = 4;
+  }
+
   // Local data. May vary across devices. Not to be synced.
   //
   required string name = 2;
   optional uint32 theme_color = 3;
   optional string description = 4;
-  optional string scope = 5;
-  required SourcesProto sources = 6;
-  required bool is_locally_installed = 7;
-  optional bool is_in_sync_install = 8;
+  optional DisplayMode display_mode = 5;
+  optional string scope = 6;
+  required SourcesProto sources = 7;
+  required bool is_locally_installed = 8;
+  optional bool is_in_sync_install = 9;
   // A list of icon infos.
-  repeated WebAppIconInfoProto icons = 9;
+  repeated WebAppIconInfoProto icon_infos = 10;
+  // A list of icon sizes we successfully downloaded to store on disk.
+  repeated int32 downloaded_icon_sizes = 11;
+  // A list of file handlers.
+  repeated WebAppFileHandlerProto file_handlers = 12;
+  // A list of additional search terms to use when searching for the app.
+  repeated string additional_search_terms = 13;
 }

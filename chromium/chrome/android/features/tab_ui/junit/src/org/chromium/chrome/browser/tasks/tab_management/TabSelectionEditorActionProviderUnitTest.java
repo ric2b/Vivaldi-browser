@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.tasks.tab_management;
 
+import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
@@ -24,10 +25,11 @@ import org.robolectric.annotation.Config;
 
 import org.chromium.base.UserDataHost;
 import org.chromium.base.metrics.RecordHistogram;
-import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabImpl;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelFilterProvider;
+import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorImpl;
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
 import org.chromium.chrome.test.util.browser.Features;
@@ -36,10 +38,12 @@ import org.chromium.testing.local.LocalRobolectricTestRunner;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Tests for {@link TabSelectionEditorActionProvider}.
  */
+@SuppressWarnings("ResultOfMethodCallIgnored")
 @RunWith(LocalRobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
 public class TabSelectionEditorActionProviderUnitTest {
@@ -64,12 +68,11 @@ public class TabSelectionEditorActionProviderUnitTest {
     @Mock
     TabGroupModelFilter mTabGroupModelFilter;
 
-    private Tab mTab1;
-    private Tab mTab2;
+    private TabImpl mTab1;
+    private TabImpl mTab2;
 
     @Before
     public void setUp() {
-        RecordUserAction.setDisabledForTests(true);
         RecordHistogram.setDisabledForTests(true);
 
         MockitoAnnotations.initMocks(this);
@@ -90,18 +93,16 @@ public class TabSelectionEditorActionProviderUnitTest {
 
     @After
     public void tearDown() {
-        RecordUserAction.setDisabledForTests(false);
         RecordHistogram.setDisabledForTests(false);
     }
 
     @Test
     public void testGroupAction() {
         TabSelectionEditorActionProvider tabSelectionEditorActionProvider =
-                new TabSelectionEditorActionProvider(mTabModelSelector,
-                        mTabSelectionEditorController,
+                new TabSelectionEditorActionProvider(mTabSelectionEditorController,
                         TabSelectionEditorActionProvider.TabSelectionEditorAction.GROUP);
         List<Tab> selectedTabs = new ArrayList<>(Arrays.asList(mTab1, mTab2));
-        tabSelectionEditorActionProvider.processSelectedTabs(selectedTabs);
+        tabSelectionEditorActionProvider.processSelectedTabs(selectedTabs, mTabModelSelector);
 
         verify(mTabGroupModelFilter)
                 .mergeListOfTabsToGroup(eq(selectedTabs), eq(mTab2), eq(false), eq(true));
@@ -111,23 +112,52 @@ public class TabSelectionEditorActionProviderUnitTest {
     @Test
     public void testUngroupAction() {
         TabSelectionEditorActionProvider tabSelectionEditorActionProvider =
-                new TabSelectionEditorActionProvider(mTabModelSelector,
-                        mTabSelectionEditorController,
+                new TabSelectionEditorActionProvider(mTabSelectionEditorController,
                         TabSelectionEditorActionProvider.TabSelectionEditorAction.UNGROUP);
         List<Tab> selectedTabs = new ArrayList<>(Arrays.asList(mTab1, mTab2));
-        tabSelectionEditorActionProvider.processSelectedTabs(selectedTabs);
+        tabSelectionEditorActionProvider.processSelectedTabs(selectedTabs, mTabModelSelector);
 
         verify(mTabGroupModelFilter).moveTabOutOfGroup(TAB1_ID);
         verify(mTabGroupModelFilter).moveTabOutOfGroup(TAB2_ID);
         verify(mTabSelectionEditorController).hide();
     }
 
-    private Tab prepareTab(int id, String title) {
-        Tab tab = mock(Tab.class);
+    @Test
+    public void testCloseAction() {
+        TabSelectionEditorActionProvider tabSelectionEditorActionProvider =
+                new TabSelectionEditorActionProvider(mTabSelectionEditorController,
+                        TabSelectionEditorActionProvider.TabSelectionEditorAction.CLOSE);
+        List<Tab> selectedTabs = new ArrayList<>(Arrays.asList(mTab1, mTab2));
+        tabSelectionEditorActionProvider.processSelectedTabs(selectedTabs, mTabModelSelector);
+
+        verify(mTabModel).closeMultipleTabs(selectedTabs, true);
+        verify(mTabSelectionEditorController).hide();
+    }
+
+    @Test
+    public void testCustomizeAction() {
+        AtomicBoolean isProcessed = new AtomicBoolean();
+
+        TabSelectionEditorActionProvider tabSelectionEditorActionProvider =
+                new TabSelectionEditorActionProvider() {
+                    @Override
+                    void processSelectedTabs(
+                            List<Tab> selectedTabs, TabModelSelector tabModelSelector) {
+                        isProcessed.set(true);
+                    }
+                };
+        List<Tab> selectedTabs = new ArrayList<>(Arrays.asList(mTab1, mTab2));
+        tabSelectionEditorActionProvider.processSelectedTabs(selectedTabs, mTabModelSelector);
+
+        assertTrue(isProcessed.get());
+    }
+
+    private TabImpl prepareTab(int id, String title) {
+        TabImpl tab = mock(TabImpl.class);
         when(tab.getView()).thenReturn(mock(View.class));
         when(tab.getUserDataHost()).thenReturn(new UserDataHost());
         doReturn(id).when(tab).getId();
-        doReturn("").when(tab).getUrl();
+        doReturn("").when(tab).getUrlString();
         doReturn(title).when(tab).getTitle();
         doReturn(false).when(tab).isClosing();
         return tab;

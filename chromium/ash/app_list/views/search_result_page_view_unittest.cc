@@ -77,7 +77,7 @@ class SearchResultPageViewTest
     // Setting up views.
     delegate_ = std::make_unique<AppListTestViewDelegate>();
     app_list_view_ = new AppListView(delegate_.get());
-    app_list_view_->InitView(false /*is_tablet_mode*/, GetContext());
+    app_list_view_->InitView(/*is_tablet_mode=*/false, GetContext());
     app_list_view_->Show(false /*is_side_shelf*/, false /*is_tablet_mode*/);
 
     ContentsView* contents_view =
@@ -119,7 +119,7 @@ class SearchResultPageViewTest
 // Instantiate the Boolean which is used to toggle answer cards in
 // the parameterized tests.
 INSTANTIATE_TEST_SUITE_P(
-    ,
+    All,
     SearchResultPageViewTest,
     ::testing::Values(AnswerCardState::ANSWER_CARD_OFF,
                       AnswerCardState::ANSWER_CARD_ON_WITHOUT_RESULT,

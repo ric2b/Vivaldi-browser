@@ -144,7 +144,7 @@ class CORE_EXPORT LayoutBoxModelObject : public LayoutObject {
   // Populates StickyPositionConstraints, setting the sticky box rect,
   // containing block rect and updating the constraint offsets according to the
   // available space.
-  FloatRect ComputeStickyConstrainingRect() const;
+  PhysicalRect ComputeStickyConstrainingRect() const;
   void UpdateStickyPositionConstraints() const;
   PhysicalOffset StickyPositionOffset() const;
   bool IsSlowRepaintConstrainedObject() const;
@@ -185,13 +185,13 @@ class CORE_EXPORT LayoutBoxModelObject : public LayoutObject {
 
   bool UsesCompositedScrolling() const;
 
-  // Returns which layers backgrounds should be painted into for overflow
-  // scrolling boxes.
+  // Returns which layers backgrounds should be painted into for a overflow
+  // scrolling box if it uses composited scrolling.
   // TODO(yigu): PaintLayerScrollableArea::ComputeNeedsCompositedScrolling
   // calls this method to obtain main thread scrolling reasons due to
   // background paint location. Once the cases get handled on compositor the
   // parameter "reasons" could be removed.
-  BackgroundPaintLocation GetBackgroundPaintLocation(
+  BackgroundPaintLocation ComputeBackgroundPaintLocationIfComposited(
       uint32_t* main_thread_scrolling_reasons = nullptr) const;
 
   // These return the CSS computed padding values.
@@ -415,7 +415,6 @@ class CORE_EXPORT LayoutBoxModelObject : public LayoutObject {
       LayoutGeometryMap&) const override;
 
   void ContentChanged(ContentChangeType);
-  bool HasAcceleratedCompositing() const;
 
   // Returns true if the background is painted opaque in the given rect.
   // The query rect is given in local coordinate system.
@@ -581,6 +580,13 @@ class CORE_EXPORT LayoutBoxModelObject : public LayoutObject {
 };
 
 DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutBoxModelObject, IsBoxModelObject());
+
+template <>
+struct DowncastTraits<LayoutBoxModelObject> {
+  static bool AllowFrom(const LayoutObject& object) {
+    return object.IsBoxModelObject();
+  }
+};
 
 }  // namespace blink
 

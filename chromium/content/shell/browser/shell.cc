@@ -95,12 +95,6 @@ Shell::Shell(std::unique_ptr<WebContents> web_contents,
   if (switches::IsRunWebTestsSwitchPresent()) {
     headless_ = !base::CommandLine::ForCurrentProcess()->HasSwitch(
         switches::kDisableHeadlessMode);
-    // Disable occlusion tracking. In a headless shell WebContents would always
-    // behave as if they were occluded, i.e. would not render frames and would
-    // not receive input events. For non-headless mode we do not want tests
-    // running in parallel to trigger occlusion tracking.
-    base::CommandLine::ForCurrentProcess()->AppendSwitch(
-        switches::kDisableBackgroundingOccludedWindowsForTesting);
   }
 
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -192,8 +186,8 @@ void Shell::SetMainMessageLoopQuitClosure(base::OnceClosure quit_closure) {
 }
 
 void Shell::QuitMainMessageLoopForTesting() {
-  DCHECK(*g_quit_main_message_loop);
-  std::move(*g_quit_main_message_loop).Run();
+  if (*g_quit_main_message_loop)
+    std::move(*g_quit_main_message_loop).Run();
 }
 
 void Shell::SetShellCreatedCallback(
@@ -498,7 +492,8 @@ blink::mojom::DisplayMode Shell::GetDisplayMode(
 void Shell::RequestToLockMouse(WebContents* web_contents,
                                bool user_gesture,
                                bool last_unlocked_by_target) {
-  web_contents->GotResponseToLockMouseRequest(true);
+  web_contents->GotResponseToLockMouseRequest(
+      blink::mojom::PointerLockResult::kSuccess);
 }
 
 void Shell::CloseContents(WebContents* source) {
@@ -513,16 +508,19 @@ bool Shell::CanOverscrollContent() {
 #endif
 }
 
-void Shell::DidNavigateMainFramePostCommit(WebContents* web_contents) {
-  PlatformSetAddressBarURL(web_contents->GetVisibleURL());
+void Shell::NavigationStateChanged(WebContents* source,
+                                   InvalidateTypes changed_flags) {
+  if (changed_flags & INVALIDATE_TYPE_URL)
+    PlatformSetAddressBarURL(source->GetVisibleURL());
 }
 
 JavaScriptDialogManager* Shell::GetJavaScriptDialogManager(
     WebContents* source) {
   if (!dialog_manager_) {
-    dialog_manager_.reset(switches::IsRunWebTestsSwitchPresent()
-                              ? new WebTestJavaScriptDialogManager
-                              : new ShellJavaScriptDialogManager);
+    if (switches::IsRunWebTestsSwitchPresent())
+      dialog_manager_ = std::make_unique<WebTestJavaScriptDialogManager>();
+    else
+      dialog_manager_ = std::make_unique<ShellJavaScriptDialogManager>();
   }
   return dialog_manager_.get();
 }
@@ -568,23 +566,22 @@ void Shell::ActivateContents(WebContents* contents) {
   contents->GetRenderViewHost()->GetWidget()->Focus();
 }
 
-std::unique_ptr<WebContents> Shell::SwapWebContents(
-    WebContents* old_contents,
-    std::unique_ptr<WebContents> new_contents,
-    bool did_start_load,
-    bool did_finish_load) {
-  DCHECK_EQ(old_contents, web_contents_.get());
-  new_contents->SetDelegate(this);
+std::unique_ptr<WebContents> Shell::ActivatePortalWebContents(
+    WebContents* predecessor_contents,
+    std::unique_ptr<WebContents> portal_contents) {
+  DCHECK_EQ(predecessor_contents, web_contents_.get());
+  portal_contents->SetDelegate(this);
   web_contents_->SetDelegate(nullptr);
   for (auto* shell_devtools_bindings :
-       ShellDevToolsBindings::GetInstancesForWebContents(old_contents)) {
-    shell_devtools_bindings->UpdateInspectedWebContents(new_contents.get());
+       ShellDevToolsBindings::GetInstancesForWebContents(
+           predecessor_contents)) {
+    shell_devtools_bindings->UpdateInspectedWebContents(portal_contents.get());
   }
-  std::swap(web_contents_, new_contents);
+  std::swap(web_contents_, portal_contents);
   PlatformSetContents();
   PlatformSetAddressBarURL(web_contents_->GetVisibleURL());
   LoadingStateChanged(web_contents_.get(), true);
-  return new_contents;
+  return portal_contents;
 }
 
 bool Shell::ShouldAllowRunningInsecureContent(WebContents* web_contents,

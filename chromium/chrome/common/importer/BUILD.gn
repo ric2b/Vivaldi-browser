@@ -5,9 +5,7 @@
 import("//mojo/public/tools/bindings/mojom.gni")
 
 mojom("interfaces") {
-  sources = [
-    "profile_import.mojom",
-  ]
+  sources = [ "profile_import.mojom" ]
 
   public_deps = [
     "//components/autofill/core/common/mojom:mojo_types",
@@ -50,7 +48,6 @@ source_set("importer") {
   deps = [
     "//base",
     "//chrome/app:generated_resources",
-    "//chrome/common:common_param_traits_macros",
     "//chrome/common:ini_parser",
     "//components/autofill/core/common",
     "//components/favicon_base",

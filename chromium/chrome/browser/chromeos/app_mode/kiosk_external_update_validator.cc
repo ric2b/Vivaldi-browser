@@ -9,10 +9,8 @@
 #include "base/task/post_task.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/system_connector.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/manifest_constants.h"
-#include "services/service_manager/public/cpp/connector.h"
 
 namespace chromeos {
 
@@ -32,7 +30,6 @@ KioskExternalUpdateValidator::~KioskExternalUpdateValidator() {
 
 void KioskExternalUpdateValidator::Start() {
   auto unpacker = base::MakeRefCounted<extensions::SandboxedUnpacker>(
-      content::GetSystemConnector()->Clone(),
       extensions::Manifest::EXTERNAL_PREF, extensions::Extension::NO_FLAGS,
       crx_unpack_dir_, backend_task_runner_.get(), this);
   if (!backend_task_runner_->PostTask(
@@ -60,7 +57,7 @@ void KioskExternalUpdateValidator::OnUnpackSuccess(
     std::unique_ptr<base::DictionaryValue> original_manifest,
     const extensions::Extension* extension,
     const SkBitmap& install_icon,
-    const base::Optional<int>& dnr_ruleset_checksum) {
+    extensions::declarative_net_request::RulesetChecksums ruleset_checksums) {
   DCHECK(crx_file_.extension_id == extension->id());
 
   std::string minimum_browser_version;

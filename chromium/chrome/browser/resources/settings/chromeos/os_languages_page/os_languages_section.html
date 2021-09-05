@@ -5,8 +5,9 @@
 <link rel="import" href="os_languages_page.html">
 <link rel="import" href="../../i18n_setup.html">
 <link rel="import" href="../../languages_page/languages.html">
-<link rel="import" href="../../languages_page/manage_input_methods_page.html">
-<link rel="import" href="../../route.html">
+<link rel="import" href="manage_input_methods_page.html">
+<link rel="import" href="../os_route.html">
+<link rel="import" href="../../router.html">
 <link rel="import" href="../../settings_page/settings_animated_pages.html">
 <link rel="import" href="../../settings_page/settings_subpage.html">
 <link rel="import" href="../../settings_shared_css.html">
@@ -25,18 +26,14 @@
     <settings-animated-pages id="pages" section="languages"
         focus-config="[[focusConfig_]]">
       <div route-path="default">
-        <div id="languagesSubpageTrigger" class="settings-box first two-line"
-            on-click="onLanguagesTap_" actionable>
-          <div class="start">
-            <div>$i18n{osLanguagesPageTitle}</div>
-            <div class="secondary">
-              [[getLanguageDisplayName_(languages.prospectiveUILanguage)]],
-              [[getInputMethodDisplayName_(languages.inputMethods.currentId)]]
-            </div>
-          </div>
-          <cr-icon-button class="subpage-arrow"
-              aria-label="$i18n{osLanguagesPageTitle}"></cr-icon-button>
-        </div>
+        <cr-link-row
+            id="languagesSubpageTrigger"
+            label="$i18n{osLanguagesPageTitle}"
+            sub-label="[[getSubLabel_(languages.prospectiveUILanguage,
+                languages.inputMethods.currentId)]]"
+            on-click="onLanguagesTap_"
+            role-description="$i18n{subpageArrowRoleDescription}">
+        </cr-link-row>
       </div>
 
       <!-- "Language and input" sub-page. -->
@@ -45,6 +42,7 @@
             associated-control="[[$$('#languagesSubpageTrigger')]]"
             page-title="$i18n{osLanguagesPageTitle}">
           <os-settings-languages-page
+              focus-config="[[focusConfig_]]"
               language-helper="{{languageHelper}}"
               languages="{{languages}}"
               prefs="{{prefs}}">

@@ -23,7 +23,8 @@ class StubLayerTreeHostClient : public LayerTreeHostClient {
   void OnDeferMainFrameUpdatesChanged(bool) override {}
   void OnDeferCommitsChanged(bool) override {}
   void RecordStartOfFrameMetrics() override {}
-  void RecordEndOfFrameMetrics(base::TimeTicks) override {}
+  void RecordEndOfFrameMetrics(base::TimeTicks,
+                               ActiveFrameSequenceTrackers) override {}
   std::unique_ptr<BeginMainFrameMetrics> GetBeginMainFrameMetrics() override;
   void BeginMainFrameNotExpectedSoon() override {}
   void BeginMainFrameNotExpectedUntil(base::TimeTicks time) override {}
@@ -39,7 +40,7 @@ class StubLayerTreeHostClient : public LayerTreeHostClient {
   void DidInitializeLayerTreeFrameSink() override {}
   void DidFailToInitializeLayerTreeFrameSink() override {}
   void WillCommit() override {}
-  void DidCommit() override {}
+  void DidCommit(base::TimeTicks) override {}
   void DidCommitAndDrawFrame() override {}
   void DidReceiveCompositorFrameAck() override {}
   void DidCompletePageScaleAnimation() override {}

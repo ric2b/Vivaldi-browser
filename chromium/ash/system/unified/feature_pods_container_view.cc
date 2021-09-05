@@ -42,7 +42,7 @@ void FeaturePodsContainerView::SetExpandedAmount(double expanded_amount) {
     // When collapsing from page > 1, each row of buttons fades out one by one
     // and once expanded_amount is less than kCollapseThreshold we begin to
     // fade in the single row of buttons for the collapsed state.
-    if (expanded_amount_ < kCollapseThreshold &&
+    if (expanded_amount_ > 0.0 && expanded_amount_ < kCollapseThreshold &&
         pagination_model_->selected_page() > 0) {
       button->SetExpandedAmount(1.0 - expanded_amount,
                                 true /* fade_icon_button */);
@@ -79,7 +79,8 @@ int FeaturePodsContainerView::GetExpandedHeight() const {
 
   return kUnifiedFeaturePodBottomPadding +
          (kUnifiedFeaturePodVerticalPadding + kUnifiedFeaturePodSize.height()) *
-             number_of_lines;
+             std::max(0, number_of_lines - 1) +
+         kUnifiedFeaturePodSize.height() + kUnifiedFeaturePodTopPadding;
 }
 
 int FeaturePodsContainerView::GetCollapsedHeight() const {
@@ -163,7 +164,7 @@ int FeaturePodsContainerView::GetVisibleCount() const {
       });
 }
 
-void FeaturePodsContainerView::EnsurePageWithButton(FeaturePodButton* button) {
+void FeaturePodsContainerView::EnsurePageWithButton(views::View* button) {
   int index = visible_buttons_.GetIndexOfView(button->parent());
   if (index < 0)
     return;
@@ -225,14 +226,35 @@ gfx::Point FeaturePodsContainerView::GetButtonPosition(
       y * expanded_amount_ + collapsed_y * (1.0 - expanded_amount_));
 }
 
-void FeaturePodsContainerView::SetMaxHeight(int max_height) {
-  int feature_pod_rows =
-      (max_height - kUnifiedFeaturePodBottomPadding -
-       kUnifiedFeaturePodTopPadding) /
-      (kUnifiedFeaturePodSize.height() + kUnifiedFeaturePodVerticalPadding);
+int FeaturePodsContainerView::CalculateRowsFromHeight(int height) {
+  int available_height =
+      height - kUnifiedFeaturePodBottomPadding - kUnifiedFeaturePodTopPadding;
+  int row_height =
+      kUnifiedFeaturePodSize.height() + kUnifiedFeaturePodVerticalPadding;
 
-  feature_pod_rows = std::min(feature_pod_rows, kUnifiedFeaturePodMaxRows);
-  feature_pod_rows = std::max(feature_pod_rows, kUnifiedFeaturePodMinRows);
+  // Only use the max number of rows when there is enough space
+  // to show the fully expanded message center and quick settings.
+  if (available_height > (kUnifiedFeaturePodMaxRows * row_height) &&
+      available_height - (kUnifiedFeaturePodMaxRows * row_height) >
+          kMessageCenterCollapseThreshold) {
+    return kUnifiedFeaturePodMaxRows;
+  }
+
+  // Use 1 less than the max number of rows when there is enough
+  // space to show the message center in the collapsed state along
+  // with the expanded quick settings.
+  int feature_pod_rows = kUnifiedFeaturePodMaxRows - 1;
+  if (available_height > (feature_pod_rows * row_height) &&
+      available_height - (feature_pod_rows * row_height) >
+          kStackedNotificationBarHeight) {
+    return feature_pod_rows;
+  }
+
+  return kUnifiedFeaturePodMinRows;
+}
+
+void FeaturePodsContainerView::SetMaxHeight(int max_height) {
+  int feature_pod_rows = CalculateRowsFromHeight(max_height);
 
   if (feature_pod_rows_ != feature_pod_rows) {
     feature_pod_rows_ = feature_pod_rows;

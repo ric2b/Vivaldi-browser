@@ -63,7 +63,7 @@ class SVGPoint final : public SVGPropertyHelper<SVGPoint> {
   SVGParsingError SetValueAsString(const String&);
 
   void Add(SVGPropertyBase*, SVGElement*) override;
-  void CalculateAnimatedValue(SVGAnimationElement*,
+  void CalculateAnimatedValue(const SVGAnimateElement&,
                               float percentage,
                               unsigned repeat_count,
                               SVGPropertyBase* from,
@@ -81,8 +81,6 @@ class SVGPoint final : public SVGPropertyHelper<SVGPoint> {
 
   FloatPoint value_;
 };
-
-DEFINE_SVG_PROPERTY_TYPE_CASTS(SVGPoint);
 
 }  // namespace blink
 

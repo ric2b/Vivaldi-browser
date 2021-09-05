@@ -43,7 +43,6 @@
 #include "services/network/public/cpp/features.h"
 #include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
 #include "third_party/blink/public/platform/web_data.h"
-#include "third_party/blink/public/platform/web_float_point.h"
 #include "third_party/blink/public/platform/web_security_origin.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_url.h"
@@ -135,10 +134,11 @@ mojo::SharedRemote<mojom::ChildProcessHost> GetChildProcessHost() {
 
 // An implementation of BrowserInterfaceBroker which forwards to the
 // ChildProcessHost interface. This lives on the IO thread.
-class BrowserInterfaceBrokerProxyImpl
+class ThreadSafeBrowserInterfaceBrokerProxyImpl
     : public blink::ThreadSafeBrowserInterfaceBrokerProxy {
  public:
-  BrowserInterfaceBrokerProxyImpl() : process_host_(GetChildProcessHost()) {}
+  ThreadSafeBrowserInterfaceBrokerProxyImpl()
+      : process_host_(GetChildProcessHost()) {}
 
   // blink::ThreadSafeBrowserInterfaceBrokerProxy implementation:
   void GetInterfaceImpl(mojo::GenericPendingReceiver receiver) override {
@@ -147,11 +147,11 @@ class BrowserInterfaceBrokerProxyImpl
   }
 
  private:
-  ~BrowserInterfaceBrokerProxyImpl() override = default;
+  ~ThreadSafeBrowserInterfaceBrokerProxyImpl() override = default;
 
   const mojo::SharedRemote<mojom::ChildProcessHost> process_host_;
 
-  DISALLOW_COPY_AND_ASSIGN(BrowserInterfaceBrokerProxyImpl);
+  DISALLOW_COPY_AND_ASSIGN(ThreadSafeBrowserInterfaceBrokerProxyImpl);
 };
 
 }  // namespace
@@ -170,7 +170,7 @@ BlinkPlatformImpl::BlinkPlatformImpl(
     : main_thread_task_runner_(std::move(main_thread_task_runner)),
       io_thread_task_runner_(std::move(io_thread_task_runner)),
       browser_interface_broker_proxy_(
-          base::MakeRefCounted<BrowserInterfaceBrokerProxyImpl>()),
+          base::MakeRefCounted<ThreadSafeBrowserInterfaceBrokerProxyImpl>()),
       native_theme_engine_(GetWebThemeEngine()) {}
 
 BlinkPlatformImpl::~BlinkPlatformImpl() = default;
@@ -250,7 +250,7 @@ blink::WebCrypto* BlinkPlatformImpl::Crypto() {
 }
 
 blink::ThreadSafeBrowserInterfaceBrokerProxy*
-BlinkPlatformImpl::GetBrowserInterfaceBrokerProxy() {
+BlinkPlatformImpl::GetBrowserInterfaceBroker() {
   return browser_interface_broker_proxy_.get();
 }
 

@@ -5,8 +5,8 @@
 #include "chrome/browser/web_applications/test/test_app_registrar.h"
 
 #include "base/callback.h"
+#include "base/logging.h"
 #include "base/stl_util.h"
-#include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
 #include "url/gurl.h"
 
 namespace web_app {
@@ -29,14 +29,6 @@ void TestAppRegistrar::RemoveExternalAppByInstallUrl(const GURL& install_url) {
   RemoveExternalApp(*LookupExternalAppId(install_url));
 }
 
-void TestAppRegistrar::SimulateExternalAppUninstalledByUser(
-    const AppId& app_id) {
-  DCHECK(!base::Contains(user_uninstalled_external_apps_, app_id));
-  user_uninstalled_external_apps_.insert(app_id);
-  if (base::Contains(installed_apps_, app_id))
-    RemoveExternalApp(app_id);
-}
-
 bool TestAppRegistrar::IsInstalled(const AppId& app_id) const {
   return base::Contains(installed_apps_, app_id);
 }
@@ -44,11 +36,6 @@ bool TestAppRegistrar::IsInstalled(const AppId& app_id) const {
 bool TestAppRegistrar::IsLocallyInstalled(const AppId& app_id) const {
   NOTIMPLEMENTED();
   return false;
-}
-
-bool TestAppRegistrar::WasExternalAppUninstalledByUser(
-    const AppId& app_id) const {
-  return base::Contains(user_uninstalled_external_apps_, app_id);
 }
 
 bool TestAppRegistrar::WasInstalledByUser(const AppId& app_id) const {
@@ -87,12 +74,6 @@ bool TestAppRegistrar::HasExternalAppWithInstallSource(
   return it != installed_apps_.end();
 }
 
-base::Optional<AppId> TestAppRegistrar::FindAppWithUrlInScope(
-    const GURL& url) const {
-  NOTIMPLEMENTED();
-  return base::nullopt;
-}
-
 int TestAppRegistrar::CountUserInstalledApps() const {
   NOTIMPLEMENTED();
   return 0;
@@ -122,7 +103,8 @@ const GURL& TestAppRegistrar::GetAppLaunchURL(const AppId& app_id) const {
   return iterator->second.launch_url;
 }
 
-base::Optional<GURL> TestAppRegistrar::GetAppScope(const AppId& app_id) const {
+base::Optional<GURL> TestAppRegistrar::GetAppScopeInternal(
+    const AppId& app_id) const {
   const auto& result = installed_apps_.find(app_id);
   if (result == installed_apps_.end())
     return base::nullopt;
@@ -130,18 +112,38 @@ base::Optional<GURL> TestAppRegistrar::GetAppScope(const AppId& app_id) const {
   return base::make_optional(result->second.install_url);
 }
 
-blink::mojom::DisplayMode TestAppRegistrar::GetAppDisplayMode(
+DisplayMode TestAppRegistrar::GetAppDisplayMode(const AppId& app_id) const {
+  NOTIMPLEMENTED();
+  return DisplayMode::kBrowser;
+}
+
+DisplayMode TestAppRegistrar::GetAppUserDisplayMode(const AppId& app_id) const {
+  NOTIMPLEMENTED();
+  return DisplayMode::kBrowser;
+}
+
+std::vector<WebApplicationIconInfo> TestAppRegistrar::GetAppIconInfos(
     const AppId& app_id) const {
   NOTIMPLEMENTED();
-  return blink::mojom::DisplayMode::kBrowser;
+  return {};
+}
+
+std::vector<SquareSizePx> TestAppRegistrar::GetAppDownloadedIconSizes(
+    const AppId& app_id) const {
+  NOTIMPLEMENTED();
+  return {};
 }
 
 std::vector<AppId> TestAppRegistrar::GetAppIds() const {
   std::vector<AppId> result;
-  for (const std::pair<AppId, AppInfo>& it : installed_apps_) {
+  for (const std::pair<const AppId, AppInfo>& it : installed_apps_) {
     result.push_back(it.first);
   }
   return result;
+}
+
+WebAppRegistrar* TestAppRegistrar::AsWebAppRegistrar() {
+  return nullptr;
 }
 
 }  // namespace web_app

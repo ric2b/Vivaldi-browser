@@ -5,6 +5,8 @@
 #include "extensions/common/api/declarative_net_request/dnr_manifest_handler.h"
 
 #include "base/files/file_path.h"
+#include "base/strings/string_number_conversions.h"
+#include "extensions/common/api/declarative_net_request.h"
 #include "extensions/common/api/declarative_net_request/constants.h"
 #include "extensions/common/api/declarative_net_request/dnr_manifest_data.h"
 #include "extensions/common/api/declarative_net_request/utils.h"
@@ -13,11 +15,13 @@
 #include "extensions/common/manifest_constants.h"
 #include "extensions/common/manifest_handlers/permissions_parser.h"
 #include "extensions/common/permissions/api_permission.h"
+#include "tools/json_schema_compiler/util.h"
 
 namespace extensions {
 
 namespace keys = manifest_keys;
 namespace errors = manifest_errors;
+namespace dnr_api = api::declarative_net_request;
 
 namespace declarative_net_request {
 
@@ -45,30 +49,72 @@ bool DNRManifestHandler::Parse(Extension* extension, base::string16* error) {
     return false;
   }
 
-  // Only a single rules file is supported currently.
   const base::ListValue* rules_file_list = nullptr;
-  std::string json_ruleset_location;
-  if (!dict->GetList(keys::kDeclarativeRuleResourcesKey, &rules_file_list) ||
-      rules_file_list->GetSize() != 1u ||
-      !rules_file_list->GetString(0, &json_ruleset_location)) {
+  if (!dict->GetList(keys::kDeclarativeRuleResourcesKey, &rules_file_list)) {
     *error = ErrorUtils::FormatErrorMessageUTF16(
         errors::kInvalidDeclarativeRulesFileKey,
         keys::kDeclarativeNetRequestKey, keys::kDeclarativeRuleResourcesKey);
     return false;
   }
 
-  ExtensionResource resource = extension->GetResource(json_ruleset_location);
-  if (resource.empty() || resource.relative_path().ReferencesParent()) {
-    *error = ErrorUtils::FormatErrorMessageUTF16(
-        errors::kRulesFileIsInvalid, keys::kDeclarativeNetRequestKey,
-        keys::kDeclarativeRuleResourcesKey);
+  std::vector<dnr_api::Ruleset> rulesets;
+  if (!json_schema_compiler::util::PopulateArrayFromList(*rules_file_list,
+                                                         &rulesets, error)) {
     return false;
+  }
+
+  // TODO(crbug.com/953894): Extension should be able to specify zero rulesets.
+  if (rulesets.empty()) {
+    *error = ErrorUtils::FormatErrorMessageUTF16(
+        errors::kInvalidDeclarativeRulesFileKey,
+        keys::kDeclarativeNetRequestKey, keys::kDeclarativeRuleResourcesKey);
+    return false;
+  }
+
+  if (rulesets.size() >
+      static_cast<size_t>(dnr_api::MAX_NUMBER_OF_STATIC_RULESETS)) {
+    *error = ErrorUtils::FormatErrorMessageUTF16(
+        errors::kRulesetCountExceeded, keys::kDeclarativeNetRequestKey,
+        keys::kDeclarativeRuleResourcesKey,
+        base::NumberToString(dnr_api::MAX_NUMBER_OF_STATIC_RULESETS));
+    return false;
+  }
+
+  // Validates the ruleset at the given |index|. On success, returns true and
+  // populates |info|. On failure, returns false and populates |error|.
+  auto get_ruleset_info = [extension, error, &rulesets](
+                              int index, DNRManifestData::RulesetInfo* info) {
+    // Path validation.
+    ExtensionResource resource = extension->GetResource(rulesets[index].path);
+    if (resource.empty() || resource.relative_path().ReferencesParent()) {
+      *error = ErrorUtils::FormatErrorMessageUTF16(
+          errors::kRulesFileIsInvalid, keys::kDeclarativeNetRequestKey,
+          keys::kDeclarativeRuleResourcesKey, rulesets[index].path);
+      return false;
+    }
+
+    info->relative_path = resource.relative_path().NormalizePathSeparators();
+    info->id = kMinValidStaticRulesetID + index;
+    return true;
+  };
+
+  std::vector<DNRManifestData::RulesetInfo> rulesets_info;
+  rulesets_info.reserve(rulesets.size());
+
+  // Note: the static_cast<int> below is safe because we did already verify that
+  // |rulesets.size()| <= dnr_api::MAX_NUMBER_OF_STATIC_RULESETS, which is an
+  // integer.
+  for (int i = 0; i < static_cast<int>(rulesets.size()); ++i) {
+    DNRManifestData::RulesetInfo info;
+    if (!get_ruleset_info(i, &info))
+      return false;
+
+    rulesets_info.push_back(std::move(info));
   }
 
   extension->SetManifestData(
       keys::kDeclarativeNetRequestKey,
-      std::make_unique<DNRManifestData>(
-          resource.relative_path().NormalizePathSeparators()));
+      std::make_unique<DNRManifestData>(std::move(rulesets_info)));
   return true;
 }
 
@@ -81,20 +127,23 @@ bool DNRManifestHandler::Validate(const Extension* extension,
       extension->GetManifestData(manifest_keys::kDeclarativeNetRequestKey));
   DCHECK(data);
 
-  // Check file path validity. We don't use Extension::GetResource since it
-  // returns a failure if the relative path contains Windows path separators and
-  // we have already normalized the path separators.
-  if (!ExtensionResource::GetFilePath(
-           extension->path(), data->ruleset_relative_path,
-           ExtensionResource::SYMLINKS_MUST_RESOLVE_WITHIN_ROOT)
-           .empty()) {
-    return true;
+  for (const DNRManifestData::RulesetInfo& info : data->rulesets) {
+    // Check file path validity. We don't use Extension::GetResource since it
+    // returns a failure if the relative path contains Windows path separators
+    // and we have already normalized the path separators.
+    if (ExtensionResource::GetFilePath(
+            extension->path(), info.relative_path,
+            ExtensionResource::SYMLINKS_MUST_RESOLVE_WITHIN_ROOT)
+            .empty()) {
+      *error = ErrorUtils::FormatErrorMessage(
+          errors::kRulesFileIsInvalid, keys::kDeclarativeNetRequestKey,
+          keys::kDeclarativeRuleResourcesKey,
+          info.relative_path.AsUTF8Unsafe());
+      return false;
+    }
   }
 
-  *error = ErrorUtils::FormatErrorMessage(errors::kRulesFileIsInvalid,
-                                          keys::kDeclarativeNetRequestKey,
-                                          keys::kDeclarativeRuleResourcesKey);
-  return false;
+  return true;
 }
 
 base::span<const char* const> DNRManifestHandler::Keys() const {

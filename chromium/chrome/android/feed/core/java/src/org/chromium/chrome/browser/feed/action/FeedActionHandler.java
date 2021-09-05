@@ -4,17 +4,22 @@
 
 package org.chromium.chrome.browser.feed.action;
 
+import android.app.Activity;
+
 import androidx.annotation.NonNull;
 
-import com.google.android.libraries.feed.api.client.knowncontent.ContentMetadata;
-import com.google.android.libraries.feed.api.host.action.ActionApi;
-
-import org.chromium.chrome.browser.ChromeFeatureList;
+import org.chromium.base.ContextUtils;
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.feed.FeedLoggingBridge;
 import org.chromium.chrome.browser.feed.FeedOfflineIndicator;
+import org.chromium.chrome.browser.feed.library.api.client.knowncontent.ContentMetadata;
+import org.chromium.chrome.browser.feed.library.api.host.action.ActionApi;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.help.HelpAndFeedback;
 import org.chromium.chrome.browser.native_page.NativePageNavigationDelegate;
 import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.suggestions.NavigationRecorder;
 import org.chromium.chrome.browser.suggestions.SuggestionsConfig;
 import org.chromium.chrome.browser.tab.Tab;
@@ -25,6 +30,8 @@ import org.chromium.network.mojom.ReferrerPolicy;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.mojom.WindowOpenDisposition;
 
+import java.util.HashMap;
+
 /**
  * Handles the actions user can trigger on the feed.
  */
@@ -34,6 +41,23 @@ public class FeedActionHandler implements ActionApi {
     private final FeedOfflineIndicator mOfflineIndicator;
     private final OfflinePageBridge mOfflinePageBridge;
     private final FeedLoggingBridge mLoggingBridge;
+    private final Activity mActivity;
+    private final Profile mProfile;
+    private static final String TAG = "FeedActionHandler";
+    private static final String FEEDBACK_REPORT_TYPE = "USER_INITIATED_FEEDBACK_REPORT";
+
+    // This must match the FeedSendFeedbackType enum in enums.xml.
+    public @interface FeedFeedbackType {
+        int FEEDBACK_TAPPED_ON_CARD = 0;
+        int FEEDBACK_TAPPED_ON_PAGE = 1;
+        int NUM_ENTRIES = 2;
+    }
+
+    // Map key names - These will be printed with the values in the feedback report.
+    public static final String CARD_URL = "CardUrl";
+    public static final String CARD_PUBLISHER = "CardPublisher";
+    public static final String CARD_PUBLISHING_DATE = "CardPublishingDate";
+    public static final String CARD_TITLE = "CardTitle";
 
     /**
      * @param delegate The {@link NativePageNavigationDelegate} that this handler calls when
@@ -48,17 +72,22 @@ public class FeedActionHandler implements ActionApi {
             @NonNull Runnable suggestionConsumedObserver,
             @NonNull FeedOfflineIndicator offlineIndicator,
             @NonNull OfflinePageBridge offlinePageBridge,
-            @NonNull FeedLoggingBridge loggingBridge) {
+            @NonNull FeedLoggingBridge loggingBridge,
+            Activity activity,
+            Profile profile) {
         mDelegate = delegate;
         mSuggestionConsumedObserver = suggestionConsumedObserver;
         mOfflineIndicator = offlineIndicator;
         mOfflinePageBridge = offlinePageBridge;
         mLoggingBridge = loggingBridge;
+        mActivity = activity;
+        mProfile = profile;
     }
 
     @Override
     public void openUrl(String url) {
         openOfflineIfPossible(WindowOpenDisposition.CURRENT_TAB, url);
+        mLoggingBridge.reportFeedInteraction();
     }
 
     @Override
@@ -70,6 +99,7 @@ public class FeedActionHandler implements ActionApi {
     public void openUrlInIncognitoMode(String url) {
         mDelegate.openUrl(WindowOpenDisposition.OFF_THE_RECORD, createLoadUrlParams(url));
         mSuggestionConsumedObserver.run();
+        mLoggingBridge.reportFeedInteraction();
     }
 
     @Override
@@ -80,6 +110,7 @@ public class FeedActionHandler implements ActionApi {
     @Override
     public void openUrlInNewTab(String url) {
         openOfflineIfPossible(WindowOpenDisposition.NEW_BACKGROUND_TAB, url);
+        mLoggingBridge.reportFeedInteraction();
     }
 
     @Override
@@ -102,6 +133,7 @@ public class FeedActionHandler implements ActionApi {
         mDelegate.openUrl(
                 WindowOpenDisposition.SAVE_TO_DISK, createLoadUrlParams(contentMetadata.getUrl()));
         mSuggestionConsumedObserver.run();
+        mLoggingBridge.reportFeedInteraction();
     }
 
     @Override
@@ -110,8 +142,42 @@ public class FeedActionHandler implements ActionApi {
     }
 
     @Override
+    public void sendFeedback(ContentMetadata contentMetadata) {
+        RecordHistogram.recordEnumeratedHistogram("ContentSuggestions.Feed.SendFeedback",
+                FeedFeedbackType.FEEDBACK_TAPPED_ON_CARD, FeedFeedbackType.NUM_ENTRIES);
+        HashMap<String, String> feedContext = new HashMap<String, String>();
+
+        if (contentMetadata != null) {
+            // Get the pieces of metadata that we need.
+            String articlePublishingDate = String.valueOf(contentMetadata.getTimePublished());
+            String articleUrl = contentMetadata.getUrl();
+            String title = contentMetadata.getTitle();
+            String originalPublisher = contentMetadata.getPublisher();
+            // TODO(https://crbug.com/1992269) - Get the other data to add in.
+
+            // Fill the context map with the card specific data.
+            feedContext.put(CARD_URL, articleUrl);
+            feedContext.put(CARD_PUBLISHER, originalPublisher);
+            feedContext.put(CARD_PUBLISHING_DATE, articlePublishingDate);
+            feedContext.put(CARD_TITLE, title);
+        }
+
+        String feedbackContext = "mobile_browser";
+        // Reports for Chrome mobile must have a contextTag of the form
+        // com.chrome.canary.USER_INITIATED_FEEDBACK_REPORT, or they will be discarded.
+        String contextTag =
+                ContextUtils.getApplicationContext().getPackageName() + "." + FEEDBACK_REPORT_TYPE;
+
+        HelpAndFeedback.getInstance().showFeedback(mActivity, mProfile, contentMetadata.getUrl(),
+                contextTag, feedContext, feedbackContext);
+        mLoggingBridge.reportFeedInteraction();
+        return;
+    }
+
+    @Override
     public void learnMore() {
         mDelegate.navigateToHelpPage();
+        mLoggingBridge.reportFeedInteraction();
     }
 
     @Override

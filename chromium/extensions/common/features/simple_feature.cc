@@ -118,6 +118,8 @@ std::string GetDisplayName(Feature::Context context) {
       return "hosted app";
     case Feature::WEBUI_CONTEXT:
       return "webui";
+    case Feature::WEBUI_UNTRUSTED_CONTEXT:
+      return "webui untrusted";
     case Feature::LOCK_SCREEN_EXTENSION_CONTEXT:
       return "lock screen app";
   }
@@ -229,9 +231,9 @@ Feature::Availability SimpleFeature::IsAvailableToManifest(
   if (!manifest_availability.is_available())
     return manifest_availability;
 
-  return CheckDependencies(base::Bind(&IsAvailableToManifestForBind, hashed_id,
-                                      type, location, manifest_version,
-                                      platform));
+  return CheckDependencies(base::BindRepeating(&IsAvailableToManifestForBind,
+                                               hashed_id, type, location,
+                                               manifest_version, platform));
 }
 
 Feature::Availability SimpleFeature::IsAvailableToContext(
@@ -269,9 +271,9 @@ Feature::Availability SimpleFeature::IsAvailableToContext(
 
   // TODO(kalman): Assert that if the context was a webpage or WebUI context
   // then at some point a "matches" restriction was checked.
-  return CheckDependencies(base::Bind(&IsAvailableToContextForBind,
-                                      base::RetainedRef(extension), context,
-                                      url, platform));
+  return CheckDependencies(base::BindRepeating(&IsAvailableToContextForBind,
+                                               base::RetainedRef(extension),
+                                               context, url, platform));
 }
 
 Feature::Availability SimpleFeature::IsAvailableToEnvironment() const {
@@ -280,7 +282,8 @@ Feature::Availability SimpleFeature::IsAvailableToEnvironment() const {
                                  GetCurrentFeatureSessionType());
   if (!environment_availability.is_available())
     return environment_availability;
-  return CheckDependencies(base::Bind(&IsAvailableToEnvironmentForBind));
+  return CheckDependencies(
+      base::BindRepeating(&IsAvailableToEnvironmentForBind));
 }
 
 std::string SimpleFeature::GetAvailabilityMessage(
@@ -459,6 +462,8 @@ bool SimpleFeature::MatchesManifestLocation(
     case SimpleFeature::POLICY_LOCATION:
       return manifest_location == Manifest::EXTERNAL_POLICY ||
              manifest_location == Manifest::EXTERNAL_POLICY_DOWNLOAD;
+    case SimpleFeature::UNPACKED_LOCATION:
+      return Manifest::IsUnpackedLocation(manifest_location);
   }
   NOTREACHED();
   return false;
@@ -479,7 +484,8 @@ bool SimpleFeature::MatchesSessionTypes(FeatureSessionType session_type) const {
 }
 
 Feature::Availability SimpleFeature::CheckDependencies(
-    const base::Callback<Availability(const Feature*)>& checker) const {
+    const base::RepeatingCallback<Availability(const Feature*)>& checker)
+    const {
   for (const auto& dep_name : dependencies_) {
     const Feature* dependency =
         ExtensionAPI::GetSharedInstance()->GetFeatureDependency(dep_name);
@@ -648,8 +654,10 @@ Feature::Availability SimpleFeature::GetContextAvailability(
   // TODO(kalman): Consider checking |matches_| regardless of context type.
   // Fewer surprises, and if the feature configuration wants to isolate
   // "matches" from say "blessed_extension" then they can use complex features.
-  if ((context == WEB_PAGE_CONTEXT || context == WEBUI_CONTEXT) &&
-      !matches_.MatchesURL(url)) {
+  const bool supports_url_matching = context == WEB_PAGE_CONTEXT ||
+                                     context == WEBUI_CONTEXT ||
+                                     context == WEBUI_UNTRUSTED_CONTEXT;
+  if (supports_url_matching && !matches_.MatchesURL(url)) {
     return CreateAvailability(INVALID_URL, url);
   }
 

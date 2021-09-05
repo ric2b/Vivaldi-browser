@@ -20,22 +20,19 @@
 // With:
 //   Value of: actual()      Actual: "ACTION_DRAW"
 //   Expected: expected()  Which is: "ACTION_NONE"
-#define EXPECT_ENUM_EQ(enum_tostring, expected, actual)        \
-  EXPECT_STREQ(SchedulerStateMachine::enum_tostring(expected), \
-               SchedulerStateMachine::enum_tostring(actual))
+#define EXPECT_ENUM_EQ(enum_tostring, expected, actual) \
+  EXPECT_EQ(enum_tostring(expected), enum_tostring(actual))
 
 #define EXPECT_IMPL_FRAME_STATE(expected)               \
   EXPECT_ENUM_EQ(BeginImplFrameStateToString, expected, \
-                 state.begin_impl_frame_state())        \
-      << state.AsValue()->ToString()
+                 state.begin_impl_frame_state())
 
 #define EXPECT_MAIN_FRAME_STATE(expected)               \
   EXPECT_ENUM_EQ(BeginMainFrameStateToString, expected, \
                  state.BeginMainFrameState())
 
-#define EXPECT_ACTION(expected)                                \
-  EXPECT_ENUM_EQ(ActionToString, expected, state.NextAction()) \
-      << state.AsValue()->ToString()
+#define EXPECT_ACTION(expected) \
+  EXPECT_ENUM_EQ(ActionToString, expected, state.NextAction())
 
 #define EXPECT_ACTION_UPDATE_STATE(action)                            \
   EXPECT_ACTION(action);                                              \
@@ -62,6 +59,69 @@
 namespace cc {
 
 namespace {
+
+const char* BeginImplFrameStateToString(
+    SchedulerStateMachine::BeginImplFrameState state) {
+  using BeginImplFrameState = SchedulerStateMachine::BeginImplFrameState;
+  switch (state) {
+    case BeginImplFrameState::IDLE:
+      return "BeginImplFrameState::IDLE";
+    case BeginImplFrameState::INSIDE_BEGIN_FRAME:
+      return "BeginImplFrameState::INSIDE_BEGIN_FRAME";
+    case BeginImplFrameState::INSIDE_DEADLINE:
+      return "BeginImplFrameState::INSIDE_DEADLINE";
+  }
+  NOTREACHED();
+  return "???";
+}
+const char* BeginMainFrameStateToString(
+    SchedulerStateMachine::BeginMainFrameState state) {
+  using BeginMainFrameState = SchedulerStateMachine::BeginMainFrameState;
+  switch (state) {
+    case BeginMainFrameState::IDLE:
+      return "BeginMainFrameState::IDLE";
+    case BeginMainFrameState::SENT:
+      return "BeginMainFrameState::SENT";
+    case BeginMainFrameState::READY_TO_COMMIT:
+      return "BeginMainFrameState::READY_TO_COMMIT";
+  }
+  NOTREACHED();
+  return "???";
+}
+
+const char* ActionToString(SchedulerStateMachine::Action action) {
+  using Action = SchedulerStateMachine::Action;
+  switch (action) {
+    case Action::NONE:
+      return "Action::NONE";
+    case Action::SEND_BEGIN_MAIN_FRAME:
+      return "Action::SEND_BEGIN_MAIN_FRAME";
+    case Action::COMMIT:
+      return "Action::COMMIT";
+    case Action::ACTIVATE_SYNC_TREE:
+      return "Action::ACTIVATE_SYNC_TREE";
+    case Action::DRAW_IF_POSSIBLE:
+      return "Action::DRAW_IF_POSSIBLE";
+    case Action::DRAW_FORCED:
+      return "Action::DRAW_FORCED";
+    case Action::DRAW_ABORT:
+      return "Action::DRAW_ABORT";
+    case Action::BEGIN_LAYER_TREE_FRAME_SINK_CREATION:
+      return "Action::BEGIN_LAYER_TREE_FRAME_SINK_CREATION";
+    case Action::PREPARE_TILES:
+      return "Action::PREPARE_TILES";
+    case Action::INVALIDATE_LAYER_TREE_FRAME_SINK:
+      return "Action::INVALIDATE_LAYER_TREE_FRAME_SINK";
+    case Action::PERFORM_IMPL_SIDE_INVALIDATION:
+      return "Action::PERFORM_IMPL_SIDE_INVALIDATION";
+    case Action::NOTIFY_BEGIN_MAIN_FRAME_NOT_EXPECTED_UNTIL:
+      return "Action::NOTIFY_BEGIN_MAIN_FRAME_NOT_EXPECTED_UNTIL";
+    case Action::NOTIFY_BEGIN_MAIN_FRAME_NOT_EXPECTED_SOON:
+      return "Action::NOTIFY_BEGIN_MAIN_FRAME_NOT_EXPECTED_SOON";
+  }
+  NOTREACHED();
+  return "???";
+}
 
 const bool kAnimateOnly = false;
 
@@ -90,7 +150,8 @@ class StateMachine : public SchedulerStateMachine {
   }
 
   void IssueNextBeginImplFrame() {
-    OnBeginImplFrame(0, next_begin_frame_number_++, kAnimateOnly);
+    OnBeginImplFrame(viz::BeginFrameId(0, next_begin_frame_number_++),
+                     kAnimateOnly);
   }
 
   void SetBeginMainFrameState(BeginMainFrameState cs) {
@@ -799,8 +860,7 @@ TEST(SchedulerStateMachineTest, TestNextActionDrawsOnBeginImplFrame) {
       // Case 2: needs_begin_main_frame=true
       state.SetNeedsBeginMainFrame();
       EXPECT_NE(SchedulerStateMachine::Action::DRAW_IF_POSSIBLE,
-                state.NextAction())
-          << state.AsValue()->ToString();
+                state.NextAction());
     }
   }
 
@@ -867,8 +927,7 @@ TEST(SchedulerStateMachineTest, TestNoBeginMainFrameStatesRedrawWhenInvisible) {
       // Case 2: needs_begin_main_frame=true.
       state.SetNeedsBeginMainFrame();
       EXPECT_NE(SchedulerStateMachine::Action::DRAW_IF_POSSIBLE,
-                state.NextAction())
-          << state.AsValue()->ToString();
+                state.NextAction());
     }
   }
 }
@@ -1071,9 +1130,9 @@ TEST(SchedulerStateMachineTest, DontCommitWithoutDrawWithoutPendingTree) {
 
   // Start clean and set commit.
   state.SetNeedsBeginMainFrame();
-
+  viz::BeginFrameId frame_id = viz::BeginFrameId(0, 10);
   // Make a main frame, commit and activate it. But don't draw it.
-  state.OnBeginImplFrame(0, 10, kAnimateOnly);
+  state.OnBeginImplFrame(frame_id, kAnimateOnly);
   EXPECT_ACTION_UPDATE_STATE(
       SchedulerStateMachine::Action::SEND_BEGIN_MAIN_FRAME);
   state.NotifyReadyToCommit();
@@ -1084,7 +1143,8 @@ TEST(SchedulerStateMachineTest, DontCommitWithoutDrawWithoutPendingTree) {
   // Try to make a new main frame before drawing, but since we would clobber the
   // active tree, we will not do so.
   state.SetNeedsBeginMainFrame();
-  state.OnBeginImplFrame(0, 11, kAnimateOnly);
+  frame_id.sequence_number++;
+  state.OnBeginImplFrame(frame_id, kAnimateOnly);
   EXPECT_ACTION_UPDATE_STATE(SchedulerStateMachine::Action::NONE);
 }
 
@@ -1151,7 +1211,8 @@ TEST(SchedulerStateMachineTest, TestFullCycleWithCommitToActive) {
   state.SetNeedsBeginMainFrame();
 
   // Begin the frame.
-  state.OnBeginImplFrame(0, 10, kAnimateOnly);
+  viz::BeginFrameId frame_id = viz::BeginFrameId(0, 10);
+  state.OnBeginImplFrame(frame_id, kAnimateOnly);
   EXPECT_ACTION_UPDATE_STATE(
       SchedulerStateMachine::Action::SEND_BEGIN_MAIN_FRAME);
   EXPECT_MAIN_FRAME_STATE(SchedulerStateMachine::BeginMainFrameState::SENT);
@@ -1177,7 +1238,8 @@ TEST(SchedulerStateMachineTest, TestFullCycleWithCommitToActive) {
 
   // Can't BeginMainFrame yet since last commit hasn't been drawn yet.
   state.SetNeedsBeginMainFrame();
-  state.OnBeginImplFrame(0, 11, kAnimateOnly);
+  frame_id.sequence_number++;
+  state.OnBeginImplFrame(frame_id, kAnimateOnly);
   EXPECT_ACTION_UPDATE_STATE(SchedulerStateMachine::Action::NONE);
 
   // Now call ready to draw which will allow the draw to happen and
@@ -1190,7 +1252,8 @@ TEST(SchedulerStateMachineTest, TestFullCycleWithCommitToActive) {
   EXPECT_ACTION_UPDATE_STATE(SchedulerStateMachine::Action::NONE);
 
   // Can't BeginMainFrame yet since we're submit-frame throttled.
-  state.OnBeginImplFrame(0, 12, kAnimateOnly);
+  frame_id.sequence_number++;
+  state.OnBeginImplFrame(frame_id, kAnimateOnly);
   EXPECT_ACTION_UPDATE_STATE(SchedulerStateMachine::Action::NONE);
 
   // CompositorFrameAck unblocks BeginMainFrame.
@@ -1211,7 +1274,8 @@ TEST(SchedulerStateMachineTest, TestFullCycleWithCommitToActive) {
 
   // When commits are deferred, we don't block the deadline.
   state.SetDeferBeginMainFrame(true);
-  state.OnBeginImplFrame(0, 13, kAnimateOnly);
+  frame_id.sequence_number++;
+  state.OnBeginImplFrame(frame_id, kAnimateOnly);
   EXPECT_NE(SchedulerStateMachine::BeginImplFrameDeadlineMode::BLOCKED,
             state.CurrentBeginImplFrameDeadlineMode());
 }
@@ -1592,7 +1656,8 @@ TEST(SchedulerStateMachineTest, TestContextLostWhileCommitInProgress) {
 
   // Set damage and expect a draw.
   state.SetNeedsRedraw(true);
-  state.OnBeginImplFrame(0, 10, kAnimateOnly);
+  viz::BeginFrameId frame_id = viz::BeginFrameId(0, 10);
+  state.OnBeginImplFrame(frame_id, kAnimateOnly);
   EXPECT_ACTION_UPDATE_STATE(
       SchedulerStateMachine::Action::SEND_BEGIN_MAIN_FRAME);
   EXPECT_ACTION_UPDATE_STATE(SchedulerStateMachine::Action::NONE);
@@ -1626,7 +1691,8 @@ TEST(SchedulerStateMachineTest, TestContextLostWhileCommitInProgress) {
   EXPECT_ACTION(
       SchedulerStateMachine::Action::BEGIN_LAYER_TREE_FRAME_SINK_CREATION);
 
-  state.OnBeginImplFrame(0, 11, kAnimateOnly);
+  frame_id.sequence_number++;
+  state.OnBeginImplFrame(frame_id, kAnimateOnly);
   EXPECT_IMPL_FRAME_STATE(
       SchedulerStateMachine::BeginImplFrameState::INSIDE_BEGIN_FRAME);
   EXPECT_ACTION(SchedulerStateMachine::Action::NONE);
@@ -2539,7 +2605,8 @@ TEST(SchedulerStateMachineTest, TestFullPipelineMode) {
   state.SetCanDraw(false);
 
   // Begin the frame.
-  state.OnBeginImplFrame(0, 10, kAnimateOnly);
+  viz::BeginFrameId frame_id = viz::BeginFrameId(0, 10);
+  state.OnBeginImplFrame(frame_id, kAnimateOnly);
   EXPECT_EQ(SchedulerStateMachine::BeginImplFrameDeadlineMode::BLOCKED,
             state.CurrentBeginImplFrameDeadlineMode());
 
@@ -2612,7 +2679,8 @@ TEST(SchedulerStateMachineTest, TestFullPipelineMode) {
 
   // Redraw should happen immediately since there is no pending tree and active
   // tree is ready to draw.
-  state.OnBeginImplFrame(0, 11, kAnimateOnly);
+  frame_id.sequence_number++;
+  state.OnBeginImplFrame(frame_id, kAnimateOnly);
   EXPECT_ACTION_UPDATE_STATE(SchedulerStateMachine::Action::NONE);
   EXPECT_EQ(SchedulerStateMachine::BeginImplFrameDeadlineMode::IMMEDIATE,
             state.CurrentBeginImplFrameDeadlineMode());
@@ -2632,7 +2700,8 @@ TEST(SchedulerStateMachineTest, TestFullPipelineMode) {
   state.SetNeedsRedraw(true);
   state.SetNeedsBeginMainFrame();
 
-  state.OnBeginImplFrame(0, 12, kAnimateOnly);
+  frame_id.sequence_number++;
+  state.OnBeginImplFrame(frame_id, kAnimateOnly);
   EXPECT_ACTION_UPDATE_STATE(
       SchedulerStateMachine::Action::SEND_BEGIN_MAIN_FRAME);
   EXPECT_ACTION_UPDATE_STATE(SchedulerStateMachine::Action::NONE);
@@ -2665,7 +2734,8 @@ TEST(SchedulerStateMachineTest, AllowSkippingActiveTreeFirstDraws) {
   // drawn in this frame.
   bool needs_first_draw_on_activation = false;
   state.SetNeedsImplSideInvalidation(needs_first_draw_on_activation);
-  state.OnBeginImplFrame(0, 1, kAnimateOnly);
+  viz::BeginFrameId frame_id = viz::BeginFrameId(0, 1);
+  state.OnBeginImplFrame(frame_id, kAnimateOnly);
   state.OnBeginImplFrameDeadline();
   EXPECT_ACTION_UPDATE_STATE(
       SchedulerStateMachine::Action::PERFORM_IMPL_SIDE_INVALIDATION);
@@ -2675,7 +2745,8 @@ TEST(SchedulerStateMachineTest, AllowSkippingActiveTreeFirstDraws) {
 
   // Now we have a main frame.
   state.SetNeedsBeginMainFrame();
-  state.OnBeginImplFrame(0, 2, kAnimateOnly);
+  frame_id.sequence_number++;
+  state.OnBeginImplFrame(frame_id, kAnimateOnly);
   EXPECT_ACTION_UPDATE_STATE(
       SchedulerStateMachine::Action::SEND_BEGIN_MAIN_FRAME);
   state.NotifyReadyToCommit();
@@ -2694,7 +2765,8 @@ TEST(SchedulerStateMachineTest, DelayDrawIfAnimationWorkletsPending) {
   // This test verifies that having pending mutations from Animation Worklets on
   // the active tree will not trigger the deadline early.
   state.SetNeedsBeginMainFrame();
-  state.OnBeginImplFrame(0, 10, kAnimateOnly);
+  viz::BeginFrameId frame_id = viz::BeginFrameId(0, 10);
+  state.OnBeginImplFrame(frame_id, kAnimateOnly);
   EXPECT_ACTION_UPDATE_STATE(
       SchedulerStateMachine::Action::SEND_BEGIN_MAIN_FRAME);
   state.NotifyReadyToCommit();
@@ -2758,7 +2830,8 @@ TEST(SchedulerStateMachineTest, BlockActivationIfAnimationWorkletsPending) {
 
   // Verify that pending mutations from Animation Worklets block activation.
   state.SetNeedsBeginMainFrame();
-  state.OnBeginImplFrame(0, 10, kAnimateOnly);
+  viz::BeginFrameId frame_id = viz::BeginFrameId(0, 10);
+  state.OnBeginImplFrame(frame_id, kAnimateOnly);
   EXPECT_ACTION_UPDATE_STATE(
       SchedulerStateMachine::Action::SEND_BEGIN_MAIN_FRAME);
   state.NotifyReadyToCommit();
@@ -2780,7 +2853,8 @@ TEST(SchedulerStateMachineTest, BlockActivationIfPaintWorkletsPending) {
   SET_UP_STATE(state);
 
   state.SetNeedsBeginMainFrame();
-  state.OnBeginImplFrame(0, 10, kAnimateOnly);
+  viz::BeginFrameId frame_id = viz::BeginFrameId(0, 10);
+  state.OnBeginImplFrame(frame_id, kAnimateOnly);
   EXPECT_ACTION_UPDATE_STATE(
       SchedulerStateMachine::Action::SEND_BEGIN_MAIN_FRAME);
   state.NotifyReadyToCommit();
@@ -2807,7 +2881,8 @@ TEST(SchedulerStateMachineTest,
   SET_UP_STATE(state);
 
   state.SetNeedsBeginMainFrame();
-  state.OnBeginImplFrame(0, 10, kAnimateOnly);
+  viz::BeginFrameId frame_id = viz::BeginFrameId(0, 10);
+  state.OnBeginImplFrame(frame_id, kAnimateOnly);
   EXPECT_ACTION_UPDATE_STATE(
       SchedulerStateMachine::Action::SEND_BEGIN_MAIN_FRAME);
   state.NotifyReadyToCommit();

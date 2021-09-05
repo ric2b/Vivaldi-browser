@@ -13,6 +13,7 @@ import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.SystemClock;
 import android.util.Pair;
 import android.view.View;
 import android.view.ViewTreeObserver;
@@ -60,6 +61,7 @@ public class SplashActivity extends Activity {
         super.onCreate(savedInstanceState);
 
         showSplashScreen();
+        final long splashAddedToLayoutTimeMs = SystemClock.elapsedRealtime();
 
         // On Android O+, if:
         // - Chrome is translucent
@@ -74,7 +76,7 @@ public class SplashActivity extends Activity {
         }
 
         mPendingLaunch = true;
-        selectHostBrowser();
+        selectHostBrowser(splashAddedToLayoutTimeMs);
     }
 
     @Override
@@ -97,7 +99,7 @@ public class SplashActivity extends Activity {
 
         mPendingLaunch = true;
 
-        selectHostBrowser();
+        selectHostBrowser(-1 /* splashShownTimeMs */);
     }
 
     @Override
@@ -129,7 +131,7 @@ public class SplashActivity extends Activity {
         super.onDestroy();
     }
 
-    private void selectHostBrowser() {
+    private void selectHostBrowser(final long splashShownTimeMs) {
         new LaunchHostBrowserSelector(this).selectHostBrowser(
                 new LaunchHostBrowserSelector.Callback() {
                     @Override
@@ -142,7 +144,7 @@ public class SplashActivity extends Activity {
                         HostBrowserLauncherParams params =
                                 HostBrowserLauncherParams.createForIntent(SplashActivity.this,
                                         getIntent(), hostBrowserPackageName, dialogShown,
-                                        -1 /* launchTimeMs */);
+                                        -1 /* launchTimeMs */, splashShownTimeMs);
                         onHostBrowserSelected(params);
                     }
                 });
@@ -150,10 +152,7 @@ public class SplashActivity extends Activity {
 
     private void showSplashScreen() {
         Bundle metadata = WebApkUtils.readMetaData(this);
-        int themeColor = (int) WebApkMetaDataUtils.getLongFromMetaData(
-                metadata, WebApkMetaDataKeys.THEME_COLOR, Color.BLACK);
-        WebApkUtils.setStatusBarColor(
-                getWindow(), WebApkUtils.getDarkenedColorForStatusBar(themeColor));
+        updateStatusBar(metadata);
 
         int orientation = WebApkUtils.computeScreenLockOrientationFromMetaData(this, metadata);
         if (orientation != ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) {
@@ -173,6 +172,19 @@ public class SplashActivity extends Activity {
                     }
                 });
         setContentView(mSplashView);
+    }
+
+    /**
+     * Sets the the color of the status bar and status bar icons.
+     */
+    private void updateStatusBar(Bundle metadata) {
+        int statusBarColor = (int) WebApkMetaDataUtils.getLongFromMetaData(
+                metadata, WebApkMetaDataKeys.THEME_COLOR, Color.WHITE);
+        WebApkUtils.setStatusBarColor(getWindow(), statusBarColor);
+        boolean needsDarkStatusBarIcons =
+                !WebApkUtils.shouldUseLightForegroundOnBackground(statusBarColor);
+        WebApkUtils.setStatusBarIconColor(
+                getWindow().getDecorView().getRootView(), needsDarkStatusBarIcons);
     }
 
     /** Called once the host browser has been selected. */

@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="da">
 <translation id="1017280919048282932">&amp;Tilføj til ordbog</translation>
+<translation id="1029317248976101138">Zoom</translation>
 <translation id="1031362278801463162">Indlæser eksempel</translation>
 <translation id="1047431265488717055">Kopiér linkte&amp;kst</translation>
 <translation id="1049795001945932310">&amp;Sprogindstillinger</translation>
@@ -54,6 +55,7 @@
 <translation id="1886996562706621347">Tillad, at websites må bede om at håndtere protokoller som standard (anbefales)</translation>
 <translation id="1901303067676059328">Vælg &amp;alle</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
+<translation id="1936931585862840749">Brug et tal til at angive, hvor mange kopier der skal udskrives (1 til <ph name="MAX_COPIES" />).</translation>
 <translation id="1963227389609234879">Slet alle</translation>
 <translation id="1994173015038366702">Webadresse</translation>
 <translation id="2019718679933488176">&amp;Åbn lyd på ny fane</translation>
@@ -66,7 +68,6 @@
 <translation id="2150139952286079145">Søg efter destinationer</translation>
 <translation id="215753907730220065">Afslut fuld skærm</translation>
 <translation id="2177950615300672361">Inkognitofane: <ph name="TAB_NAME" /></translation>
-<translation id="218070003709087997">Brug et tal til at angive, hvor mange kopier der skal udskrives (1 til 999).</translation>
 <translation id="219008588003277019">Native Client-modul: <ph name="NEXE_NAME" /></translation>
 <translation id="220138918934036434">Skjul knap</translation>
 <translation id="2218515861914035131">Indsæt som almindelig tekst</translation>
@@ -78,11 +79,9 @@
 <translation id="2282146716419988068">GPU-proces</translation>
 <translation id="2301382460326681002">Udvidelsens rodmappe er ugyldig.</translation>
 <translation id="2318143611928805047">Papirstørrelse</translation>
-<translation id="2318923050469484167">Aktuel inkognitosession (<ph name="EMBEDDING" />)</translation>
 <translation id="2322193970951063277">Sidehoveder og -fødder</translation>
 <translation id="2326931316514688470">&amp;Genindlæs app</translation>
 <translation id="2327492829706409234">Aktivér app</translation>
-<translation id="2344028582131185878">Automatiske downloads</translation>
 <translation id="2348176352564285430">App: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">Vælg udvidelsens mappe.</translation>
 <translation id="2379281330731083556">Udskriv ved brug af systems dialogboks... <ph name="SHORTCUT_KEY" /></translation>
@@ -95,14 +94,14 @@
 <translation id="2470702053775288986">Understøttede udvidelser er blevet deaktiveret</translation>
 <translation id="2476578072172137802">Indstillinger for website</translation>
 <translation id="2482878487686419369">Underretninger</translation>
+<translation id="2498539833203011245">Minimer</translation>
 <translation id="2509495747794740764">Skaleringsværdien skal være et tal mellem 10 og 200.</translation>
 <translation id="253557089021624350">Optælling af Keepalive</translation>
 <translation id="2546283357679194313">Cookies og websidedata</translation>
 <translation id="2550212893339833758">Ombyttet hukommelse</translation>
 <translation id="2553440850688409052">Skjul dette plugin</translation>
-<translation id="2580924999637585241">I alt: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="26224892172169984">Tillad ingen websites at håndtere protokoller</translation>
-<translation id="2662876636500006917">Chromes netbutik</translation>
+<translation id="2662876636500006917">Chromes Webshop</translation>
 <translation id="2678063897982469759">Genaktiver</translation>
 <translation id="2721037002783622288">&amp;Søg efter billedet på <ph name="SEARCH_ENGINE" /></translation>
 <translation id="2785873697295365461">Filbeskrivelser</translation>
@@ -120,7 +119,6 @@
 <translation id="2932883381142163287">Rapportér misbrug</translation>
 <translation id="2941112035454246133">Lav</translation>
 <translation id="2972581237482394796">&amp;Annuller fortryd</translation>
-<translation id="299483336428448530">Installeret af din forælder.</translation>
 <translation id="3003623123441819449">CSS-cache</translation>
 <translation id="3008272652534848354">Nulstil tilladelser</translation>
 <translation id="3012631534724231212">(iframe)</translation>
@@ -274,7 +272,6 @@
 <translation id="5425042808445046667">Fortsæt download</translation>
 <translation id="5427459444770871191">Roter med &amp;uret</translation>
 <translation id="5431318178759467895">Farve</translation>
-<translation id="5472133193607270166">Når dette er slået til, kan websites ikke anvende din browseraktivitet på andre websites til at tilpasse annoncer. Nogle websites vil muligvis ikke fungere korrekt.</translation>
 <translation id="5483785310822538350">Tilbagekald adgang til fil og enhed</translation>
 <translation id="5485102783864353244">Tilføj app</translation>
 <translation id="5486561344817861625">Simuler genstart af browser</translation>
@@ -302,7 +299,6 @@
 <translation id="5804241973901381774">Tilladelser</translation>
 <translation id="5828633471261496623">Udskriver...</translation>
 <translation id="583281660410589416">Ukendt</translation>
-<translation id="5838456317242088717">Aktuel inkognitosession</translation>
 <translation id="5860491529813859533">Aktivér</translation>
 <translation id="5867841422488265304">Søg, eller skriv webadresse</translation>
 <translation id="5908769186679515905">Bloker websites fra at køre Flash</translation>
@@ -322,7 +318,6 @@
 <translation id="6147020289383635445">Visning af udskrift mislykkedes.</translation>
 <translation id="6156863943908443225">Scriptcache</translation>
 <translation id="6169666352732958425">Skrivebordet kunne ikke castes.</translation>
-<translation id="6196640612572343990">Bloker tredjeparts-cookies</translation>
 <translation id="6196854373336333322">Udvidelsen <ph name="EXTENSION_NAME" /> har taget kontrol over dine proxyindstillinger, hvilket betyder, at den kan ændre, ødelægge eller aflytte alt, hvad du foretager dig på nettet. Hvis du ikke er sikker på, hvorfor denne ændring er sket, er den sandsynligvis uønsket.</translation>
 <translation id="6206311232642889873">Kop&amp;ier billede</translation>
 <translation id="6239558157302047471">Genindlæs &amp;ramme</translation>
@@ -335,6 +330,7 @@
 <translation id="6295158916970320988">Alle websites</translation>
 <translation id="6295855836753816081">Gemmer...</translation>
 <translation id="6308937455967653460">Gem lin&amp;k som...</translation>
+<translation id="6315493146179903667">Læg alle forrest</translation>
 <translation id="6326855256003666642">Optælling af Keepalive</translation>
 <translation id="6374469231428023295">Prøv igen</translation>
 <translation id="6385543213911723544">Websites kan gemme og læse cookiedata</translation>
@@ -380,6 +376,7 @@
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">Vis &amp;knapper</translation>
 <translation id="7311079019872751559">Adgang til plugin, der ikke er gemt i sandbox</translation>
+<translation id="73174032666024687"><ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="7385854874724088939">Der gik noget galt, da du prøvede at udskrive. Tjek din printer, og prøv igen.</translation>
 <translation id="7412226954991670867">GPU-hukommelse</translation>
 <translation id="7421925624202799674">&amp;Vis sidens kilde</translation>
@@ -425,7 +422,7 @@
 <translation id="7982789257301363584">Netværk</translation>
 <translation id="7997826902155442747">Procesprioritet</translation>
 <translation id="7999229196265990314">Oprettede følgende filer:
-        
+
 Udvidelse: <ph name="EXTENSION_FILE" />
 Nøglefil: <ph name="KEY_FILE" />
 

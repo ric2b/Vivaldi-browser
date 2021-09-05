@@ -22,24 +22,24 @@ import android.media.AudioManager;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
-import android.support.v4.app.NotificationCompat;
-import android.support.v4.app.NotificationManagerCompat;
 import android.support.v4.media.MediaMetadataCompat;
 import android.support.v4.media.session.MediaSessionCompat;
 import android.support.v4.media.session.PlaybackStateCompat;
-import android.support.v7.media.MediaRouter;
 import android.text.TextUtils;
 import android.util.SparseArray;
 import android.view.KeyEvent;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
+import androidx.core.app.NotificationCompat;
+import androidx.core.app.NotificationManagerCompat;
+import androidx.mediarouter.media.MediaRouter;
 
 import org.chromium.base.CollectionUtil;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.SysUtils;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.notifications.ChromeNotification;
 import org.chromium.chrome.browser.notifications.ChromeNotificationBuilder;
@@ -875,6 +875,9 @@ public class MediaNotificationManager {
 
     private static boolean shouldIgnoreMediaNotificationInfo(
             MediaNotificationInfo oldInfo, MediaNotificationInfo newInfo) {
+        // If we don't have actions then we shouldn't display the notification.
+        if (newInfo.mediaSessionActions.isEmpty()) return true;
+
         return newInfo.equals(oldInfo)
                 || ((newInfo.isPaused && oldInfo != null && newInfo.tabId != oldInfo.tabId));
     }

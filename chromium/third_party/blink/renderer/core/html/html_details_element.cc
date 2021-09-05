@@ -44,10 +44,8 @@
 
 namespace blink {
 
-using namespace html_names;
-
 HTMLDetailsElement::HTMLDetailsElement(Document& document)
-    : HTMLElement(kDetailsTag, document), is_open_(false) {
+    : HTMLElement(html_names::kDetailsTag, document), is_open_(false) {
   UseCounter::Count(document, WebFeature::kDetailsElement);
   EnsureUserAgentShadowRoot();
 }
@@ -57,7 +55,7 @@ HTMLDetailsElement::~HTMLDetailsElement() = default;
 // static
 bool HTMLDetailsElement::IsFirstSummary(const Node& node) {
   DCHECK(IsA<HTMLDetailsElement>(node.parentElement()));
-  if (!IsHTMLSummaryElement(node))
+  if (!IsA<HTMLSummaryElement>(node))
     return false;
   return node.parentElement() &&
          &node ==
@@ -108,13 +106,13 @@ Element* HTMLDetailsElement::FindMainSummary() const {
   CHECK(!element || IsA<HTMLSlotElement>(element));
   HTMLSlotElement* slot = To<HTMLSlotElement>(element);
   DCHECK(slot->firstChild());
-  CHECK(IsHTMLSummaryElement(*slot->firstChild()));
+  CHECK(IsA<HTMLSummaryElement>(*slot->firstChild()));
   return To<Element>(slot->firstChild());
 }
 
 void HTMLDetailsElement::ParseAttribute(
     const AttributeModificationParams& params) {
-  if (params.name == kOpenAttr) {
+  if (params.name == html_names::kOpenAttr) {
     bool old_value = is_open_;
     is_open_ = !params.new_value.IsNull();
     if (is_open_ == old_value)
@@ -141,7 +139,7 @@ void HTMLDetailsElement::ParseAttribute(
     Element* summary = FindMainSummary();
     DCHECK(summary);
 
-    Element* control = ToHTMLSummaryElement(summary)->MarkerControl();
+    auto* control = To<HTMLSummaryElement>(summary)->MarkerControl();
     if (control && control->GetLayoutObject())
       control->GetLayoutObject()->SetShouldDoFullPaintInvalidation();
 
@@ -151,7 +149,7 @@ void HTMLDetailsElement::ParseAttribute(
 }
 
 void HTMLDetailsElement::ToggleOpen() {
-  setAttribute(kOpenAttr, is_open_ ? g_null_atom : g_empty_atom);
+  setAttribute(html_names::kOpenAttr, is_open_ ? g_null_atom : g_empty_atom);
 }
 
 bool HTMLDetailsElement::IsInteractiveContent() const {

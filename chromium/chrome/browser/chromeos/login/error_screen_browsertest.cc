@@ -98,9 +98,8 @@ class NetworkErrorScreenTest : public InProcessBrowserTest {
   std::string WifiElementSelector(const std::string& wifi_network_name) {
     return base::StrCat(
         {"$('offline-network-control').$$('#networkSelect')"
-         ".getNetworkListForTest()"
-         ".querySelector('cr-network-list-item[aria-label=\"",
-         wifi_network_name, "\"]')"});
+         ".getNetworkListItemByNameForTest('",
+         wifi_network_name, "')"});
   }
 
   void ClickOnWifiNetwork(const std::string& wifi_network_name) {
@@ -184,7 +183,7 @@ IN_PROC_BROWSER_TEST_F(NetworkErrorScreenTest, ConnectRequestCallback) {
 }
 
 // Test HideCallback is called after screen hides.
-IN_PROC_BROWSER_TEST_F(NetworkErrorScreenTest, DISABLED_HideCallback) {
+IN_PROC_BROWSER_TEST_F(NetworkErrorScreenTest, HideCallback) {
   bool callback_called = false;
   GetScreen()->SetHideCallback(
       base::BindLambdaForTesting([&]() { callback_called = true; }));
@@ -336,7 +335,7 @@ IN_PROC_BROWSER_TEST_F(KioskErrorScreenTest, OpenCertificateConfig) {
   DialogWindowWaiter waiter(
       l10n_util::GetStringUTF16(IDS_CERTIFICATE_MANAGER_TITLE));
 
-  test::OobeJS().ClickOnPath({"error-message-md-configure-certs-button"});
+  test::OobeJS().TapOnPath({"error-message-md-configure-certs-button"});
   waiter.Wait();
 }
 

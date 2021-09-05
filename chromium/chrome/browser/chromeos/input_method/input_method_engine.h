@@ -116,17 +116,34 @@ class InputMethodEngine : public ::input_method::InputMethodEngineBase {
   // Set the position of the cursor in the candidate window.
   bool SetCursorPosition(int context_id, int candidate_id, std::string* error);
 
+  // Dismiss suggestion window.
+  bool DismissSuggestion(int context_id, std::string* error);
+
+  // Set and show suggestion window.
+  bool SetSuggestion(int context_id,
+                     const base::string16& text,
+                     std::string* error);
+
+  // Commit the suggestion and hide the window.
+  bool AcceptSuggestion(int context_id, std::string* error);
+
   // Set the list of items that appears in the language menu when this IME is
   // active.
   bool SetMenuItems(
-      const std::vector<input_method::InputMethodManager::MenuItem>& items);
+      const std::vector<input_method::InputMethodManager::MenuItem>& items,
+      std::string* error);
 
   // Update the state of the menu items.
   bool UpdateMenuItems(
-      const std::vector<input_method::InputMethodManager::MenuItem>& items);
+      const std::vector<input_method::InputMethodManager::MenuItem>& items,
+      std::string* error);
 
   // Hides the input view window (from API call).
   void HideInputView();
+
+  // Determine if the key event should be processed by the key
+  // event handler.
+  bool IsValidKeyEvent(const ui::KeyEvent* ui_event) override;
 
  private:
   // input_method::InputMethodEngineBase:
@@ -137,9 +154,15 @@ class InputMethodEngine : public ::input_method::InputMethodEngineBase {
       uint32_t before,
       uint32_t after,
       const std::vector<ui::ImeTextSpan>& text_spans) override;
+
+  bool SetSelectionRange(uint32_t start, uint32_t end) override;
+
   void CommitTextToInputContext(int context_id,
                                 const std::string& text) override;
-  bool SendKeyEvent(ui::KeyEvent* event, const std::string& code) override;
+
+  bool SendKeyEvent(ui::KeyEvent* event,
+                    const std::string& code,
+                    std::string* error) override;
 
   // Enables overriding input view page to Virtual Keyboard window.
   void EnableInputView();

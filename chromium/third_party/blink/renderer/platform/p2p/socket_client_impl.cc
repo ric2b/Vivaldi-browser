@@ -4,13 +4,13 @@
 
 #include "third_party/blink/renderer/platform/p2p/socket_client_impl.h"
 
-#include "base/bind.h"
 #include "base/location.h"
 #include "base/time/time.h"
 #include "crypto/random.h"
 #include "services/network/public/cpp/p2p_param_traits.h"
 #include "third_party/blink/renderer/platform/p2p/socket_client_delegate.h"
 #include "third_party/blink/renderer/platform/p2p/socket_dispatcher.h"
+#include "third_party/blink/renderer/platform/wtf/functional.h"
 
 namespace {
 
@@ -34,8 +34,7 @@ P2PSocketClientImpl::P2PSocketClientImpl(
       state_(STATE_UNINITIALIZED),
       traffic_annotation_(traffic_annotation),
       random_socket_id_(0),
-      next_packet_id_(0),
-      binding_(this) {
+      next_packet_id_(0) {
   crypto::RandBytes(&random_socket_id_, sizeof(random_socket_id_));
 }
 
@@ -57,13 +56,12 @@ void P2PSocketClientImpl::Init(
 
   DCHECK_EQ(state_, STATE_UNINITIALIZED);
   state_ = STATE_OPENING;
-  network::mojom::blink::P2PSocketClientPtr socket_client;
-  binding_.Bind(mojo::MakeRequest(&socket_client));
-  binding_.set_connection_error_handler(base::BindOnce(
-      &P2PSocketClientImpl::OnConnectionError, base::Unretained(this)));
-  dispatcher_->GetP2PSocketManager()->get()->CreateSocket(
+  dispatcher_->GetP2PSocketManager()->CreateSocket(
       type, local_address, network::P2PPortRange(min_port, max_port),
-      remote_address, std::move(socket_client), mojo::MakeRequest(&socket_));
+      remote_address, receiver_.BindNewPipeAndPassRemote(),
+      socket_.BindNewPipeAndPassReceiver());
+  receiver_.set_disconnect_handler(WTF::Bind(
+      &P2PSocketClientImpl::OnConnectionError, WTF::Unretained(this)));
 }
 
 uint64_t P2PSocketClientImpl::Send(const net::IPEndPoint& address,
@@ -84,7 +82,7 @@ void P2PSocketClientImpl::SendWithPacketId(const net::IPEndPoint& address,
                                            const Vector<int8_t>& data,
                                            const rtc::PacketOptions& options,
                                            uint64_t packet_id) {
-  TRACE_EVENT_ASYNC_BEGIN0("p2p", "Send", packet_id);
+  TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("p2p", "Send", packet_id);
 
   socket_->Send(data, network::P2PPacketInfo(address, options, packet_id),
                 net::MutableNetworkTrafficAnnotationTag(traffic_annotation_));
@@ -134,19 +132,19 @@ void P2PSocketClientImpl::SendComplete(
 
 void P2PSocketClientImpl::IncomingTcpConnection(
     const net::IPEndPoint& socket_address,
-    network::mojom::blink::P2PSocketPtr socket,
-    network::mojom::blink::P2PSocketClientRequest client_request) {
+    mojo::PendingRemote<network::mojom::blink::P2PSocket> socket,
+    mojo::PendingReceiver<network::mojom::blink::P2PSocketClient>
+        client_receiver) {
   DCHECK_EQ(state_, STATE_OPEN);
 
   auto new_client =
       std::make_unique<P2PSocketClientImpl>(dispatcher_, traffic_annotation_);
   new_client->state_ = STATE_OPEN;
 
-  network::mojom::blink::P2PSocketClientPtr socket_client;
-  new_client->socket_ = std::move(socket);
-  new_client->binding_.Bind(std::move(client_request));
-  new_client->binding_.set_connection_error_handler(base::BindOnce(
-      &P2PSocketClientImpl::OnConnectionError, base::Unretained(this)));
+  new_client->socket_.Bind(std::move(socket));
+  new_client->receiver_.Bind(std::move(client_receiver));
+  new_client->receiver_.set_disconnect_handler(WTF::Bind(
+      &P2PSocketClientImpl::OnConnectionError, WTF::Unretained(this)));
 
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   if (delegate_) {

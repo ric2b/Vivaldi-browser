@@ -1,75 +1,58 @@
-// Copyright 2018 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#import "ios/chrome/browser/ui/autofill/manual_fill/full_card_requester.h"
+#include "ios/chrome/browser/ui/autofill/manual_fill/full_card_requester.h"
 
-#include <vector>
-
-#include "components/autofill/core/browser/data_model/credit_card.h"
-#include "components/autofill/ios/browser/autofill_driver_ios.h"
-#import "ios/chrome/browser/ui/autofill/manual_fill/full_card_request_result_delegate_bridge.h"
-#include "ios/chrome/browser/ui/payments/full_card_requester.h"
-#import "ios/chrome/browser/web_state_list/web_state_list.h"
-#include "ios/web/public/js_messaging/web_frame.h"
-#import "ios/web/public/js_messaging/web_frames_manager.h"
-#import "ios/web/public/web_state.h"
+#include "components/autofill/core/browser/autofill_manager.h"
+#include "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#include "ios/chrome/browser/ui/autofill/card_unmask_prompt_view_bridge.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
 
-namespace autofill {
-class CreditCard;
-}  // namespace autofill
+namespace {
 
-@interface ManualFillFullCardRequester ()
-
-// The ios::ChromeBrowserState instance passed to the initializer.
-@property(nonatomic, readonly) ios::ChromeBrowserState* browserState;
-
-// The WebStateList for this instance. Used to instantiate the child
-// coordinators lazily.
-@property(nonatomic, readonly) WebStateList* webStateList;
-
-@end
-
-@implementation ManualFillFullCardRequester {
-  std::unique_ptr<FullCardRequester> _fullCardRequester;
-  // Obj-C delegate to receive the success or failure result, when
-  // asking credit card unlocking.
-  std::unique_ptr<FullCardRequestResultDelegateBridge> _cardAssistant;
+autofill::CardUnmaskPromptView* CreateCardUnmaskPromptViewBridge(
+    autofill::CardUnmaskPromptControllerImpl* controller,
+    UIViewController* base_view_controller) {
+  return new autofill::CardUnmaskPromptViewBridge(controller,
+                                                  base_view_controller);
 }
 
-- (instancetype)initWithBrowserState:(ios::ChromeBrowserState*)browserState
-                        webStateList:(WebStateList*)webStateList
-                      resultDelegate:
-                          (id<FullCardRequestResultDelegateObserving>)delegate {
-  self = [super init];
-  if (self) {
-    _browserState = browserState;
-    _webStateList = webStateList;
-    _cardAssistant =
-        std::make_unique<FullCardRequestResultDelegateBridge>(delegate);
-  }
-  return self;
 }
 
-- (void)requestFullCreditCard:(autofill::CreditCard)card
-       withBaseViewController:(UIViewController*)viewController {
-  // Payment Request is only enabled in main frame.
-  web::WebState* webState = self.webStateList->GetActiveWebState();
-  web::WebFrame* mainFrame = webState->GetWebFramesManager()->GetMainWebFrame();
-  autofill::AutofillManager* autofillManager =
-      autofill::AutofillDriverIOS::FromWebStateAndWebFrame(webState, mainFrame)
-          ->autofill_manager();
-  DCHECK(autofillManager);
-  _fullCardRequester =
-      std::make_unique<FullCardRequester>(viewController, self.browserState);
-  _fullCardRequester->GetFullCard(card, autofillManager,
-                                  _cardAssistant->GetWeakPtr());
-  // TODO(crbug.com/845472): closing CVC requester doesn't restore icon bar
-  // above keyboard.
+FullCardRequester::FullCardRequester(UIViewController* base_view_controller,
+                                     ChromeBrowserState* browser_state)
+    : base_view_controller_(base_view_controller),
+      unmask_controller_(browser_state->GetPrefs(),
+                         browser_state->IsOffTheRecord()) {}
+
+void FullCardRequester::GetFullCard(
+    const autofill::CreditCard& card,
+    autofill::AutofillManager* autofill_manager,
+    base::WeakPtr<autofill::payments::FullCardRequest::ResultDelegate>
+        result_delegate) {
+  DCHECK(autofill_manager);
+  DCHECK(result_delegate);
+  autofill_manager->GetOrCreateFullCardRequest()->GetFullCard(
+      card, autofill::AutofillClient::UNMASK_FOR_PAYMENT_REQUEST,
+      result_delegate, AsWeakPtr());
 }
 
-@end
+void FullCardRequester::ShowUnmaskPrompt(
+    const autofill::CreditCard& card,
+    autofill::AutofillClient::UnmaskCardReason reason,
+    base::WeakPtr<autofill::CardUnmaskDelegate> delegate) {
+  unmask_controller_.ShowPrompt(
+      base::Bind(&CreateCardUnmaskPromptViewBridge,
+                 base::Unretained(&unmask_controller_),
+                 base::Unretained(base_view_controller_)),
+      card, reason, delegate);
+}
+
+void FullCardRequester::OnUnmaskVerificationResult(
+    autofill::AutofillClient::PaymentsRpcResult result) {
+  unmask_controller_.OnVerificationResult(result);
+}

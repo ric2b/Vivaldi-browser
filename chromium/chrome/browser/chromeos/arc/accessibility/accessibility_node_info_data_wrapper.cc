@@ -6,10 +6,11 @@
 
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "chrome/browser/chromeos/arc/accessibility/arc_accessibility_util.h"
 #include "chrome/browser/chromeos/arc/accessibility/ax_tree_source_arc.h"
-#include "components/exo/wm_helper.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node.h"
+#include "ui/accessibility/ax_role_properties.h"
 #include "ui/accessibility/platform/ax_android_constants.h"
 
 namespace arc {
@@ -29,8 +30,15 @@ using AXStringProperty = mojom::AccessibilityStringProperty;
 
 AccessibilityNodeInfoDataWrapper::AccessibilityNodeInfoDataWrapper(
     AXTreeSourceArc* tree_source,
-    AXNodeInfoData* node)
-    : tree_source_(tree_source), node_ptr_(node) {}
+    AXNodeInfoData* node,
+    bool is_clickable_leaf,
+    bool is_important)
+    : AccessibilityInfoDataWrapper(tree_source),
+      node_ptr_(node),
+      is_clickable_leaf_(is_clickable_leaf),
+      is_important_(is_important) {}
+
+AccessibilityNodeInfoDataWrapper::~AccessibilityNodeInfoDataWrapper() = default;
 
 bool AccessibilityNodeInfoDataWrapper::IsNode() const {
   return true;
@@ -58,24 +66,28 @@ bool AccessibilityNodeInfoDataWrapper::IsVisibleToUser() const {
   return GetProperty(AXBooleanProperty::VISIBLE_TO_USER);
 }
 
-bool AccessibilityNodeInfoDataWrapper::IsFocused() const {
-  return GetProperty(AXBooleanProperty::FOCUSED);
+bool AccessibilityNodeInfoDataWrapper::IsVirtualNode() const {
+  return node_ptr_->is_virtual_node;
 }
 
 bool AccessibilityNodeInfoDataWrapper::CanBeAccessibilityFocused() const {
-  // In Chrome, this means:
-  // a node with a non-generic role and:
-  // actionable nodes or top level scrollables with a name
+  // An important node with a non-generic role and:
+  // - actionable nodes
+  // - top level scrollables with a name
+  // - interesting leaf nodes
   ui::AXNodeData data;
   PopulateAXRole(&data);
   bool non_generic_role = data.role != ax::mojom::Role::kGenericContainer &&
-                          data.role != ax::mojom::Role::kGroup;
-  bool actionable = GetProperty(AXBooleanProperty::CLICKABLE) ||
+                          data.role != ax::mojom::Role::kGroup &&
+                          data.role != ax::mojom::Role::kList &&
+                          data.role != ax::mojom::Role::kGrid;
+  bool actionable = is_clickable_leaf_ ||
                     GetProperty(AXBooleanProperty::FOCUSABLE) ||
                     GetProperty(AXBooleanProperty::CHECKABLE);
   bool top_level_scrollable = HasProperty(AXStringProperty::TEXT) &&
                               GetProperty(AXBooleanProperty::SCROLLABLE);
-  return non_generic_role && (actionable || top_level_scrollable);
+  return is_important_ && non_generic_role &&
+         (actionable || top_level_scrollable || IsInterestingLeaf());
 }
 
 void AccessibilityNodeInfoDataWrapper::PopulateAXRole(
@@ -86,11 +98,8 @@ void AccessibilityNodeInfoDataWrapper::PopulateAXRole(
                                  class_name);
   }
 
-  if (!GetProperty(AXBooleanProperty::IMPORTANCE) &&
-      !HasProperty(AXStringProperty::TEXT) &&
-      !HasProperty(AXStringProperty::CONTENT_DESCRIPTION) &&
-      !tree_source_->IsRootOfNodeTree(GetId())) {
-    out_data->role = ax::mojom::Role::kIgnored;
+  if (role_) {
+    out_data->role = *role_;
     return;
   }
 
@@ -143,8 +152,8 @@ void AccessibilityNodeInfoDataWrapper::PopulateAXRole(
     // need additional information contained only in the CollectionInfo. The
     // CollectionInfo should be an ancestor of this node.
     AXCollectionInfoData* collection_info = nullptr;
-    for (const ArcAccessibilityInfoData* container =
-             static_cast<const ArcAccessibilityInfoData*>(this);
+    for (const AccessibilityInfoDataWrapper* container =
+             static_cast<const AccessibilityInfoDataWrapper*>(this);
          container;) {
       if (!container || !container->IsNode())
         break;
@@ -199,13 +208,13 @@ void AccessibilityNodeInfoDataWrapper::PopulateAXRole(
   // These mappings were taken from accessibility utils (Android -> Chrome) and
   // BrowserAccessibilityAndroid. They do not completely match the above two
   // sources.
+  // EditText is excluded because it can be a container (b/150827734).
   MAP_ROLE(ui::kAXAbsListViewClassname, ax::mojom::Role::kList);
   MAP_ROLE(ui::kAXButtonClassname, ax::mojom::Role::kButton);
   MAP_ROLE(ui::kAXCheckBoxClassname, ax::mojom::Role::kCheckBox);
   MAP_ROLE(ui::kAXCheckedTextViewClassname, ax::mojom::Role::kStaticText);
   MAP_ROLE(ui::kAXCompoundButtonClassname, ax::mojom::Role::kCheckBox);
   MAP_ROLE(ui::kAXDialogClassname, ax::mojom::Role::kDialog);
-  MAP_ROLE(ui::kAXEditTextClassname, ax::mojom::Role::kTextField);
   MAP_ROLE(ui::kAXGridViewClassname, ax::mojom::Role::kTable);
   MAP_ROLE(ui::kAXHorizontalScrollViewClassname, ax::mojom::Role::kScrollView);
   MAP_ROLE(ui::kAXImageClassname, ax::mojom::Role::kImage);
@@ -233,7 +242,9 @@ void AccessibilityNodeInfoDataWrapper::PopulateAXRole(
 
   std::string text;
   GetProperty(AXStringProperty::TEXT, &text);
-  if (!text.empty())
+  std::vector<AccessibilityInfoDataWrapper*> children;
+  GetChildren(&children);
+  if (!text.empty() && children.empty())
     out_data->role = ax::mojom::Role::kStaticText;
   else
     out_data->role = ax::mojom::Role::kGenericContainer;
@@ -261,24 +272,28 @@ void AccessibilityNodeInfoDataWrapper::PopulateAXState(
                                          : ax::mojom::CheckedState::kFalse);
   }
 
-  if (!GetProperty(AXBooleanProperty::ENABLED)) {
+  if (!GetProperty(AXBooleanProperty::ENABLED))
     out_data->SetRestriction(ax::mojom::Restriction::kDisabled);
-  }
 
-  if (!GetProperty(AXBooleanProperty::VISIBLE_TO_USER)) {
+  if (!GetProperty(AXBooleanProperty::VISIBLE_TO_USER))
     out_data->AddState(ax::mojom::State::kInvisible);
-  }
+
+  if (!is_important_)
+    out_data->AddState(ax::mojom::State::kIgnored);
 }
 
 void AccessibilityNodeInfoDataWrapper::Serialize(
     ui::AXNodeData* out_data) const {
-  PopulateAXRole(out_data);
+  AccessibilityInfoDataWrapper::Serialize(out_data);
+
+  bool is_node_tree_root = tree_source_->IsRootOfNodeTree(GetId());
 
   // String properties.
   int labelled_by = -1;
 
   // Accessible name computation is a concatenated string comprising of:
-  // content description, text, labelled by text, and pane title.
+  // content description, text, labelled by text, pane title, and cached name
+  // from previous events.
   std::string text;
   std::string content_description;
   std::string label;
@@ -287,7 +302,7 @@ void AccessibilityNodeInfoDataWrapper::Serialize(
   GetProperty(AXStringProperty::TEXT, &text);
 
   if (GetProperty(AXIntProperty::LABELED_BY, &labelled_by)) {
-    ArcAccessibilityInfoData* labelled_by_node =
+    AccessibilityInfoDataWrapper* labelled_by_node =
         tree_source_->GetFromId(labelled_by);
     if (labelled_by_node && labelled_by_node->IsNode()) {
       ui::AXNodeData labelled_by_data;
@@ -299,8 +314,13 @@ void AccessibilityNodeInfoDataWrapper::Serialize(
 
   GetProperty(AXStringProperty::PANE_TITLE, &pane_title);
 
+  // |hint_text| attribute in Android is often used as a placeholder text within
+  // textfields.
+  std::string hint_text;
+  GetProperty(AXStringProperty::HINT_TEXT, &hint_text);
+
   if (!text.empty() || !content_description.empty() || !label.empty() ||
-      !pane_title.empty()) {
+      !pane_title.empty() || !hint_text.empty() || cached_name_) {
     // Append non empty properties to name attribute.
     std::vector<std::string> names;
     if (!content_description.empty())
@@ -312,19 +332,31 @@ void AccessibilityNodeInfoDataWrapper::Serialize(
     // For a textField, the editable text is contained in the text property, and
     // this should be set as the value.
     // This ensures that the edited text will be read out appropriately.
-    if (out_data->role == ax::mojom::Role::kTextField) {
-      out_data->SetValue(text);
-    } else {
-      names.push_back(text);
+    if (!text.empty()) {
+      if (out_data->role == ax::mojom::Role::kTextField) {
+        // When the edited text is empty, Android framework shows |hint_text| in
+        // the text field and |text| is also populated with |hint_text|.
+        // Prevent the duplicated output of |hint_text|.
+        if (!GetProperty(AXBooleanProperty::SHOWING_HINT_TEXT))
+          out_data->SetValue(text);
+      } else {
+        names.push_back(text);
+      }
     }
+
+    // Append hint text as part of name attribute.
+    if (!hint_text.empty())
+      names.push_back(hint_text);
+
+    if (cached_name_ && !(*cached_name_).empty())
+      names.push_back(*cached_name_);
+
     // TODO (sarakato): Exposing all possible labels for a node, may result in
     // too much being spoken. For ARC ++, this may result in divergent behaviour
     // from Talkback.
-    if (names.size() == 1)
-      out_data->SetName(names[0]);
-    else if (names.size() > 1)
+    if (!names.empty())
       out_data->SetName(base::JoinString(names, " "));
-  } else if (GetProperty(AXBooleanProperty::CLICKABLE)) {
+  } else if (is_clickable_leaf_) {
     // Compute the name by joining all nodes with names.
     std::vector<std::string> names;
     ComputeNameFromContents(this, &names);
@@ -338,7 +370,7 @@ void AccessibilityNodeInfoDataWrapper::Serialize(
                                  role_description);
   }
 
-  if (out_data->role == ax::mojom::Role::kRootWebArea) {
+  if (is_node_tree_root) {
     std::string package_name;
     if (GetProperty(AXStringProperty::PACKAGE_NAME, &package_name)) {
       const std::string& url =
@@ -346,12 +378,6 @@ void AccessibilityNodeInfoDataWrapper::Serialize(
                              tree_source_->ax_tree_id().ToString().c_str());
       out_data->AddStringAttribute(ax::mojom::StringAttribute::kUrl, url);
     }
-  }
-
-  std::string place_holder;
-  if (GetProperty(AXStringProperty::HINT_TEXT, &place_holder)) {
-    out_data->AddStringAttribute(ax::mojom::StringAttribute::kPlaceholder,
-                                 place_holder);
   }
 
   // If it exists, set tooltip value as on node.
@@ -376,7 +402,7 @@ void AccessibilityNodeInfoDataWrapper::Serialize(
   if (GetProperty(AXBooleanProperty::SCROLLABLE)) {
     out_data->AddBoolAttribute(ax::mojom::BoolAttribute::kScrollable, true);
   }
-  if (GetProperty(AXBooleanProperty::CLICKABLE)) {
+  if (is_clickable_leaf_) {
     out_data->AddBoolAttribute(ax::mojom::BoolAttribute::kClickable, true);
   }
   if (GetProperty(AXBooleanProperty::SELECTED)) {
@@ -385,9 +411,6 @@ void AccessibilityNodeInfoDataWrapper::Serialize(
   if (GetProperty(AXBooleanProperty::SUPPORTS_TEXT_LOCATION)) {
     out_data->AddBoolAttribute(ax::mojom::BoolAttribute::kSupportsTextLocation,
                                true);
-  }
-  if (tree_source_->IsRootOfNodeTree(GetId())) {
-    out_data->AddBoolAttribute(ax::mojom::BoolAttribute::kModal, true);
   }
 
   // Range info.
@@ -401,29 +424,6 @@ void AccessibilityNodeInfoDataWrapper::Serialize(
                                 range_info->max);
   }
 
-  exo::WMHelper* wm_helper =
-      exo::WMHelper::HasInstance() ? exo::WMHelper::GetInstance() : nullptr;
-
-  // To get bounds of a node which can be passed to AXNodeData.location,
-  // - Root node must exist.
-  // - Window where this tree is attached to need to be focused.
-  if (tree_source_->GetRoot()->GetId() != ui::AXNode::kInvalidAXID &&
-      wm_helper) {
-    aura::Window* active_window = (tree_source_->is_notification() ||
-                                   tree_source_->is_input_method_window())
-                                      ? nullptr
-                                      : wm_helper->GetActiveWindow();
-    const gfx::Rect& local_bounds = tree_source_->GetBounds(
-        tree_source_->GetFromId(GetId()), active_window);
-    out_data->relative_bounds.bounds.SetRect(local_bounds.x(), local_bounds.y(),
-                                             local_bounds.width(),
-                                             local_bounds.height());
-  }
-  // TODO(katie): Try using offset_container_id to make bounds calculations
-  // more efficient. If this is the child of the root, set the
-  // offset_container_id to be the root. Otherwise, set it to the first node
-  // child of the root.
-
   // Integer properties.
   int32_t val;
   if (GetProperty(AXIntProperty::TEXT_SELECTION_START, &val) && val >= 0)
@@ -432,22 +432,35 @@ void AccessibilityNodeInfoDataWrapper::Serialize(
   if (GetProperty(AXIntProperty::TEXT_SELECTION_END, &val) && val >= 0)
     out_data->AddIntAttribute(ax::mojom::IntAttribute::kTextSelEnd, val);
 
-  std::vector<int32_t> standard_action_ids;
-  if (GetProperty(AXIntListProperty::STANDARD_ACTION_IDS,
-                  &standard_action_ids)) {
-    for (size_t i = 0; i < standard_action_ids.size(); ++i) {
-      switch (static_cast<AXActionType>(standard_action_ids[i])) {
-        case AXActionType::SCROLL_BACKWARD:
-          out_data->AddAction(ax::mojom::Action::kScrollBackward);
-          break;
-        case AXActionType::SCROLL_FORWARD:
-          out_data->AddAction(ax::mojom::Action::kScrollForward);
-          break;
-        default:
-          // unmapped
-          break;
-      }
-    }
+  if (GetProperty(AXIntProperty::LIVE_REGION, &val) && val >= 0 &&
+      static_cast<mojom::AccessibilityLiveRegionType>(val) !=
+          mojom::AccessibilityLiveRegionType::NONE) {
+    out_data->AddStringAttribute(
+        ax::mojom::StringAttribute::kLiveStatus,
+        ToLiveStatusString(
+            static_cast<mojom::AccessibilityLiveRegionType>(val)));
+  }
+  if (container_live_status_ != mojom::AccessibilityLiveRegionType::NONE) {
+    out_data->AddStringAttribute(
+        ax::mojom::StringAttribute::kContainerLiveStatus,
+        ToLiveStatusString(container_live_status_));
+  }
+
+  // Standard actions.
+  if (HasStandardAction(AXActionType::SCROLL_BACKWARD))
+    out_data->AddAction(ax::mojom::Action::kScrollBackward);
+
+  if (HasStandardAction(AXActionType::SCROLL_FORWARD))
+    out_data->AddAction(ax::mojom::Action::kScrollForward);
+
+  if (HasStandardAction(AXActionType::EXPAND)) {
+    out_data->AddAction(ax::mojom::Action::kExpand);
+    out_data->AddState(ax::mojom::State::kCollapsed);
+  }
+
+  if (HasStandardAction(AXActionType::COLLAPSE)) {
+    out_data->AddAction(ax::mojom::Action::kCollapse);
+    out_data->AddState(ax::mojom::State::kExpanded);
   }
 
   // Custom actions.
@@ -470,7 +483,7 @@ void AccessibilityNodeInfoDataWrapper::Serialize(
 }
 
 void AccessibilityNodeInfoDataWrapper::GetChildren(
-    std::vector<ArcAccessibilityInfoData*>* children) const {
+    std::vector<AccessibilityInfoDataWrapper*>* children) const {
   if (!node_ptr_->int_list_properties)
     return;
   auto it =
@@ -483,75 +496,40 @@ void AccessibilityNodeInfoDataWrapper::GetChildren(
 
 bool AccessibilityNodeInfoDataWrapper::GetProperty(
     AXBooleanProperty prop) const {
-  if (!node_ptr_->boolean_properties)
-    return false;
-
-  auto it = node_ptr_->boolean_properties->find(prop);
-  if (it == node_ptr_->boolean_properties->end())
-    return false;
-
-  return it->second;
+  return arc::GetBooleanProperty(node_ptr_, prop);
 }
 
 bool AccessibilityNodeInfoDataWrapper::GetProperty(AXIntProperty prop,
                                                    int32_t* out_value) const {
-  if (!node_ptr_->int_properties)
-    return false;
-
-  auto it = node_ptr_->int_properties->find(prop);
-  if (it == node_ptr_->int_properties->end())
-    return false;
-
-  *out_value = it->second;
-  return true;
+  return arc::GetProperty(node_ptr_->int_properties, prop, out_value);
 }
 
 bool AccessibilityNodeInfoDataWrapper::HasProperty(
     AXStringProperty prop) const {
-  if (!node_ptr_->string_properties)
-    return false;
-
-  auto it = node_ptr_->string_properties->find(prop);
-  return it != node_ptr_->string_properties->end();
+  return arc::HasProperty(node_ptr_->string_properties, prop);
 }
 
 bool AccessibilityNodeInfoDataWrapper::GetProperty(
     AXStringProperty prop,
     std::string* out_value) const {
-  if (!HasProperty(prop))
-    return false;
-
-  auto it = node_ptr_->string_properties->find(prop);
-  *out_value = it->second;
-  return true;
+  return arc::GetProperty(node_ptr_->string_properties, prop, out_value);
 }
 
 bool AccessibilityNodeInfoDataWrapper::GetProperty(
     AXIntListProperty prop,
     std::vector<int32_t>* out_value) const {
-  if (!node_ptr_->int_list_properties)
-    return false;
-
-  auto it = node_ptr_->int_list_properties->find(prop);
-  if (it == node_ptr_->int_list_properties->end())
-    return false;
-
-  *out_value = it->second;
-  return true;
+  return arc::GetProperty(node_ptr_->int_list_properties, prop, out_value);
 }
 
 bool AccessibilityNodeInfoDataWrapper::GetProperty(
     AXStringListProperty prop,
     std::vector<std::string>* out_value) const {
-  if (!node_ptr_->string_list_properties)
-    return false;
+  return arc::GetProperty(node_ptr_->string_list_properties, prop, out_value);
+}
 
-  auto it = node_ptr_->string_list_properties->find(prop);
-  if (it == node_ptr_->string_list_properties->end())
-    return false;
-
-  *out_value = it->second;
-  return true;
+bool AccessibilityNodeInfoDataWrapper::HasStandardAction(
+    AXActionType action) const {
+  return arc::HasStandardAction(node_ptr_, action);
 }
 
 bool AccessibilityNodeInfoDataWrapper::HasCoveringSpan(
@@ -598,12 +576,20 @@ void AccessibilityNodeInfoDataWrapper::ComputeNameFromContents(
   }
 
   // Otherwise, continue looking for a name in this subtree.
-  std::vector<ArcAccessibilityInfoData*> children;
+  std::vector<AccessibilityInfoDataWrapper*> children;
   data->GetChildren(&children);
-  for (ArcAccessibilityInfoData* child : children) {
+  for (AccessibilityInfoDataWrapper* child : children) {
     ComputeNameFromContents(
         static_cast<AccessibilityNodeInfoDataWrapper*>(child), names);
   }
+}
+
+bool AccessibilityNodeInfoDataWrapper::IsInterestingLeaf() const {
+  std::vector<AccessibilityInfoDataWrapper*> children;
+  GetChildren(&children);
+  // TODO(hirokisato) Even if the node has children, they might be empty. In
+  // this case we should return true.
+  return HasImportantProperty(node_ptr_) && children.empty();
 }
 
 }  // namespace arc

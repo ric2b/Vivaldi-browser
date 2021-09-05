@@ -17,6 +17,8 @@ import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutTab;
 import org.chromium.ui.base.LocalizationUtils;
 import org.chromium.ui.resources.ResourceManager;
 
+import org.chromium.ui.util.ColorUtils;
+
 /**
  * The Java component of what is basically a CC Layer that manages drawing the Tab Strip (which is
  * composed of {@link StripLayoutTab}s) to the screen.  This object keeps the layers up to date and
@@ -154,6 +156,14 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
         mNativePtr = 0;
     }
 
+    // Vivaldi
+    public void setTabStripBackgroundColor(int tabStripBackgroundColor) {
+        boolean useLightForegroundOnBackground =
+                ColorUtils.shouldUseLightForegroundOnBackground(tabStripBackgroundColor);
+        TabStripSceneLayerJni.get().setTabStripBackgroundColor(
+                mNativePtr, this, tabStripBackgroundColor, useLightForegroundOnBackground);
+    }
+
     @NativeMethods
     interface Natives {
         long init(TabStripSceneLayer caller);
@@ -182,5 +192,8 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
                 ResourceManager resourceManager);
         void setContentTree(
                 long nativeTabStripSceneLayer, TabStripSceneLayer caller, SceneLayer contentTree);
+        // Vivaldi
+        void setTabStripBackgroundColor(long nativeTabStripSceneLayer, TabStripSceneLayer caller,
+                int nativeTabStripBackgroundColor, boolean nativeUseLightForegroundOnBackground);
     }
 }

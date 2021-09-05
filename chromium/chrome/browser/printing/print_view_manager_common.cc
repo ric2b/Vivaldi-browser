@@ -20,8 +20,6 @@
 #include "chrome/browser/printing/print_view_manager_basic.h"
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
 
-#include "content/public/common/mime_handler_view_mode.h"
-
 namespace printing {
 
 namespace {
@@ -32,10 +30,7 @@ bool StoreFullPagePlugin(content::WebContents** result,
                          content::WebContents* guest_contents) {
   auto* guest_view =
       extensions::MimeHandlerViewGuest::FromWebContents(guest_contents);
-  // NOTE(andre@vivaldi.com) : With kMimeHandlerViewInCrossProcessFrame enabled
-  // there is no full page plugin.
-  if (guest_view && (content::MimeHandlerViewMode::UsesCrossProcessFrame() ||
-                     guest_view->is_full_page_plugin())) {
+  if (guest_view && guest_view->is_full_page_plugin()) {
     *result = guest_contents;
     return true;
   }
@@ -54,10 +49,11 @@ content::RenderFrameHost* GetRenderFrameHostToUse(
 
 }  // namespace
 
-void StartPrint(content::WebContents* contents,
-                mojom::PrintRendererAssociatedPtrInfo print_renderer,
-                bool print_preview_disabled,
-                bool has_selection) {
+void StartPrint(
+    content::WebContents* contents,
+    mojo::PendingAssociatedRemote<mojom::PrintRenderer> print_renderer,
+    bool print_preview_disabled,
+    bool has_selection) {
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
   using PrintViewManagerImpl = PrintViewManager;
 #else

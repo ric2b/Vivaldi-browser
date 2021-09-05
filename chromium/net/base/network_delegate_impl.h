@@ -9,6 +9,7 @@
 
 #include <set>
 
+#include "base/optional.h"
 #include "base/strings/string16.h"
 #include "net/base/completion_once_callback.h"
 #include "net/base/net_export.h"
@@ -27,7 +28,6 @@ namespace net {
 class CookieOptions;
 class HttpRequestHeaders;
 class HttpResponseHeaders;
-class ProxyInfo;
 class URLRequest;
 
 class NET_EXPORT NetworkDelegateImpl : public NetworkDelegate {
@@ -43,18 +43,13 @@ class NET_EXPORT NetworkDelegateImpl : public NetworkDelegate {
                                CompletionOnceCallback callback,
                                HttpRequestHeaders* headers) override;
 
-  void OnBeforeSendHeaders(URLRequest* request,
-                           const ProxyInfo& proxy_info,
-                           const ProxyRetryInfoMap& proxy_retry_info,
-                           HttpRequestHeaders* headers) override;
-
   int OnHeadersReceived(
       URLRequest* request,
       CompletionOnceCallback callback,
       const HttpResponseHeaders* original_response_headers,
       scoped_refptr<HttpResponseHeaders>* override_response_headers,
       const IPEndPoint& endpoint,
-      GURL* allowed_unsafe_redirect_url) override;
+      base::Optional<GURL>* preserve_fragment_on_redirect_url) override;
 
   void OnBeforeRedirect(URLRequest* request, const GURL& new_location) override;
 
@@ -77,7 +72,7 @@ class NET_EXPORT NetworkDelegateImpl : public NetworkDelegate {
 
   bool OnForcePrivacyMode(
       const GURL& url,
-      const GURL& site_for_cookies,
+      const SiteForCookies& site_for_cookies,
       const base::Optional<url::Origin>& top_frame_origin) const override;
 
   bool OnCancelURLRequestWithPolicyViolatingReferrerHeader(

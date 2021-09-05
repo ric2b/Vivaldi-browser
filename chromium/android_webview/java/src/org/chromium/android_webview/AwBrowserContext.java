@@ -7,10 +7,11 @@ package org.chromium.android_webview;
 import android.content.Context;
 import android.content.SharedPreferences;
 
+import androidx.annotation.VisibleForTesting;
+
 import org.chromium.android_webview.common.PlatformServiceBridge;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.StrictModeContext;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
@@ -147,6 +148,11 @@ public class AwBrowserContext {
         return sInstance;
     }
 
+    // See comments in WebViewChromiumFactoryProvider for details.
+    public void setWebLayerRunningInSameProcess() {
+        AwBrowserContextJni.get().setWebLayerRunningInSameProcess(mNativeAwBrowserContext);
+    }
+
     @CalledByNative
     public static AwBrowserContext create(long nativeAwBrowserContext, boolean isDefault) {
         SharedPreferences sharedPreferences;
@@ -163,5 +169,6 @@ public class AwBrowserContext {
     interface Natives {
         AwBrowserContext getDefaultJava();
         long getQuotaManagerBridge(long nativeAwBrowserContext);
+        void setWebLayerRunningInSameProcess(long nativeAwBrowserContext);
     }
 }

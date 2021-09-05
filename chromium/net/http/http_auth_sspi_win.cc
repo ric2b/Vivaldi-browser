@@ -220,7 +220,6 @@ Error MapInitializeSecurityContextStatusToError(SECURITY_STATUS status) {
     case SEC_E_INVALID_TOKEN:
       return ERR_INVALID_RESPONSE;
     case SEC_E_LOGON_DENIED:
-      return ERR_ACCESS_DENIED;
     case SEC_E_NO_CREDENTIALS:
     case SEC_E_WRONG_PRINCIPAL:
       return ERR_INVALID_AUTH_CREDENTIALS;
@@ -355,11 +354,13 @@ SECURITY_STATUS SSPILibraryDefault::FreeContextBuffer(PVOID pvContextBuffer) {
   return ::FreeContextBuffer(pvContextBuffer);
 }
 
-HttpAuthSSPI::HttpAuthSSPI(SSPILibrary* library, const std::string& scheme)
+HttpAuthSSPI::HttpAuthSSPI(SSPILibrary* library, HttpAuth::Scheme scheme)
     : library_(library),
       scheme_(scheme),
       delegation_type_(DelegationType::kNone) {
   DCHECK(library_);
+  DCHECK(scheme_ == HttpAuth::AUTH_SCHEME_NEGOTIATE ||
+         scheme_ == HttpAuth::AUTH_SCHEME_NTLM);
   SecInvalidateHandle(&cred_);
   SecInvalidateHandle(&ctxt_);
 }
@@ -437,7 +438,11 @@ int HttpAuthSSPI::GenerateAuthToken(const AuthCredentials* credentials,
   base::Base64Encode(encode_input, &encode_output);
   // OK, we are done with |out_buf|
   free(out_buf);
-  *auth_token = scheme_ + " " + encode_output;
+  if (scheme_ == HttpAuth::AUTH_SCHEME_NEGOTIATE) {
+    *auth_token = "Negotiate " + encode_output;
+  } else {
+    *auth_token = "NTLM " + encode_output;
+  }
   return OK;
 }
 
@@ -507,7 +512,7 @@ int HttpAuthSSPI::GetNextSecurityToken(const std::string& spn,
     sec_channel_bindings_buffer.resize(sizeof(SEC_CHANNEL_BINDINGS));
     SEC_CHANNEL_BINDINGS* bindings_desc =
         reinterpret_cast<SEC_CHANNEL_BINDINGS*>(
-            &sec_channel_bindings_buffer.front());
+            sec_channel_bindings_buffer.data());
     bindings_desc->cbApplicationDataLength = channel_bindings.size();
     bindings_desc->dwApplicationDataOffset = sizeof(SEC_CHANNEL_BINDINGS);
     sec_channel_bindings_buffer.insert(sec_channel_bindings_buffer.end(),
@@ -519,7 +524,7 @@ int HttpAuthSSPI::GetNextSecurityToken(const std::string& spn,
     SecBuffer& sec_buffer = in_buffers[in_buffer_desc.cBuffers++];
     sec_buffer.BufferType = SECBUFFER_CHANNEL_BINDINGS;
     sec_buffer.cbBuffer = sec_channel_bindings_buffer.size();
-    sec_buffer.pvBuffer = &sec_channel_bindings_buffer.front();
+    sec_buffer.pvBuffer = sec_channel_bindings_buffer.data();
   }
 
   if (in_buffer_desc.cBuffers > 0)

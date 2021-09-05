@@ -10,7 +10,9 @@
 #include <deque>
 
 #include "base/callback_helpers.h"
+#include "base/optional.h"
 #include "base/strings/stringprintf.h"
+#include "common/platform_media_pipeline_types.h"
 #include "media/base/data_buffer.h"
 #include "media/base/timestamp_constants.h"
 
@@ -66,7 +68,7 @@ base::TimeDelta AVFDataBufferQueue::Queue::GetDuration() const {
 
 
 AVFDataBufferQueue::AVFDataBufferQueue(
-    Type type,
+    PlatformMediaDataType type,
     const base::TimeDelta& capacity,
     const base::Closure& capacity_available_cb,
     const base::Closure& capacity_depleted_cb)
@@ -83,14 +85,15 @@ AVFDataBufferQueue::AVFDataBufferQueue(
 
 AVFDataBufferQueue::~AVFDataBufferQueue() = default;
 
-void AVFDataBufferQueue::Read(const ReadCB& read_cb) {
+void AVFDataBufferQueue::Read(IPCDecodingBuffer ipc_decoding_buffer) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(read_cb_.is_null());
+  DCHECK(ipc_decoding_buffer);
+  DCHECK(!ipc_decoding_buffer_);
 
   VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__
           << " Read()";
 
-  read_cb_ = read_cb;
+  ipc_decoding_buffer_ = std::move(ipc_decoding_buffer);
   SatisfyPendingRead();
 }
 
@@ -101,9 +104,9 @@ void AVFDataBufferQueue::BufferReady(
   DCHECK(!end_of_stream_) << "Can't enqueue buffers anymore";
 
   VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__
-          << (type_ == AUDIO ? " AUDIO" : " VIDEO")
-          << " buffer ready: timestamp="
-          << buffer->timestamp().InMicroseconds()
+          << (type_ == PlatformMediaDataType::PLATFORM_MEDIA_AUDIO ? " AUDIO"
+                                                                   : " VIDEO")
+          << " buffer ready: timestamp=" << buffer->timestamp().InMicroseconds()
           << " duration=" << buffer->duration().InMicroseconds()
           << " size=" << buffer->data_size();
 
@@ -146,35 +149,56 @@ size_t AVFDataBufferQueue::memory_usage() const {
 }
 
 std::string AVFDataBufferQueue::DescribeBufferSize() const {
-  return base::StringPrintf("Have %lld us of queued %s data, queue size: %lu",
-                            buffer_queue_->GetDuration().InMicroseconds(),
-                            type_ == AUDIO ? "AUDIO" : "VIDEO",
-                            buffer_queue_->data_size());
+  return base::StringPrintf(
+      "Have %lld us of queued %s data, queue size: %zu",
+      buffer_queue_->GetDuration().InMicroseconds(),
+      (type_ == PlatformMediaDataType::PLATFORM_MEDIA_AUDIO ? " AUDIO"
+                                                            : " VIDEO"),
+      buffer_queue_->data_size());
 }
 
 void AVFDataBufferQueue::SatisfyPendingRead() {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  if (!read_cb_.is_null()) {
+  if (ipc_decoding_buffer_) {
+    base::Optional<MediaDataStatus> status;
     scoped_refptr<DataBuffer> buffer;
 
     if (end_of_stream_) {
-      buffer = !buffer_queue_->empty() ? buffer_queue_->Pop()
-                                       : DataBuffer::CreateEOSBuffer();
+      if (buffer_queue_->empty()) {
+        status = MediaDataStatus::kEOS;
+      } else {
+        status = MediaDataStatus::kOk;
+        buffer = buffer_queue_->Pop();
+      }
     } else if (!HasAvailableCapacity() ||
                (catching_up_ && !buffer_queue_->empty())) {
       // The condition above will allow the queue to collect some number of
       // buffers before we start to return them.  Unless we are in the
       // "catching up" mode, which is when we want to return the buffers as
       // quickly as possible.
+      status = MediaDataStatus::kOk;
       buffer = buffer_queue_->Pop();
       catching_up_ = true;
     }
 
-    if (buffer.get() != NULL) {
-      VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__
-              << " " << DescribeBufferSize();
-      std::move(read_cb_).Run(buffer);
+    if (status) {
+      VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " "
+              << DescribeBufferSize();
+
+      if (*status == MediaDataStatus::kOk) {
+        size_t data_size = buffer->data_size();
+        uint8* memory = ipc_decoding_buffer_.PrepareMemory(data_size);
+        if (!memory) {
+          *status = MediaDataStatus::kMediaError;
+        } else {
+          memcpy(memory, buffer->data(), data_size);
+          ipc_decoding_buffer_.set_timestamp(buffer->timestamp());
+          ipc_decoding_buffer_.set_duration(buffer->duration());
+        }
+      }
+      ipc_decoding_buffer_.set_status(*status);
+      IPCDecodingBuffer::Reply(std::move(ipc_decoding_buffer_));
     } else {
       VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__
               << " Not enough data available to satisfy read request. Request "

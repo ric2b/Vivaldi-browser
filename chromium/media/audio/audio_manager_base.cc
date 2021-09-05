@@ -14,6 +14,7 @@
 #include "base/optional.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "build/buildflag.h"
@@ -61,6 +62,18 @@ enum StreamFormat {
   STREAM_FORMAT_FAKE = 4,
   STREAM_FORMAT_MAX = 4,
 };
+
+PRINTF_FORMAT(2, 3)
+void SendLogMessage(const AudioManagerBase::LogCallback& callback,
+                    const char* format,
+                    ...) {
+  if (callback.is_null())
+    return;
+  va_list args;
+  va_start(args, format);
+  callback.Run("AMB::" + base::StringPrintV(format, args));
+  va_end(args);
+}
 
 }  // namespace
 
@@ -187,6 +200,9 @@ AudioOutputStream* AudioManagerBase::MakeAudioOutputStream(
     return nullptr;
   }
 
+  SendLogMessage(log_callback, "%s({device_id=%s}, {params=[%s]})", __func__,
+                 device_id.c_str(), params.AsHumanReadableString().c_str());
+
   // Limit the number of audio streams opened. This is to prevent using
   // excessive resources for a large number of audio streams. More
   // importantly it prevents instability on certain systems.
@@ -223,6 +239,8 @@ AudioOutputStream* AudioManagerBase::MakeAudioOutputStream(
 
   if (stream) {
     ++num_output_streams_;
+    SendLogMessage(log_callback, "%s => (number of streams=%d)", __func__,
+                   output_stream_count());
   }
 
   return stream;
@@ -245,6 +263,9 @@ AudioInputStream* AudioManagerBase::MakeAudioInputStream(
           switches::kFailAudioStreamCreation)) {
     return nullptr;
   }
+
+  SendLogMessage(log_callback, "%s({device_id=%s}, {params=[%s]})", __func__,
+                 device_id.c_str(), params.AsHumanReadableString().c_str());
 
   if (!params.IsValid() || (params.channels() > kMaxInputChannels) ||
       device_id.empty()) {
@@ -281,6 +302,10 @@ AudioInputStream* AudioManagerBase::MakeAudioInputStream(
 
   if (stream) {
     input_streams_.insert(stream);
+    if (!log_callback.is_null()) {
+      SendLogMessage(log_callback, "%s => (number of streams=%d)", __func__,
+                     input_stream_count());
+    }
 
     if (!params.IsBitstreamFormat() && debug_recording_manager_) {
       // Using unretained for |debug_recording_manager_| is safe since it

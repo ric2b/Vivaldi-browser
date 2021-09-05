@@ -29,6 +29,7 @@
 <translation id="1243314992276662751">アップロード</translation>
 <translation id="1249250836236328755">ジャンル</translation>
 <translation id="1278813325885878377">ハンガリー語 QWERTY キーボード</translation>
+<translation id="1293556467332435079">ファイル</translation>
 <translation id="1297922636971898492">Google ドライブは現在ご利用いただけません。Google ドライブが利用可能になったときに、自動的にアップロードを再開します。</translation>
 <translation id="1307931752636661898">[Linux ファイル] を表示できません</translation>
 <translation id="1310751437842832374">文字変換（mausam → ନମସ୍ତେ）</translation>
@@ -80,6 +81,7 @@
 <translation id="1847880352285315359">保存されました</translation>
 <translation id="1864756863218646478">ファイルが見つかりませんでした。</translation>
 <translation id="1921986354447415460">トルコ語-F キーボード</translation>
+<translation id="1924372192547904021">「<ph name="DRIVE_NAME" />」をフォーマットしました</translation>
 <translation id="1931134289871235022">スロバキア語</translation>
 <translation id="1933345018156373194">移動できませんでした。予期しないエラー: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="1936717151811561466">フィンランド語</translation>
@@ -163,6 +165,7 @@
 <translation id="2942290791863759244">ドイツ語（NEO 2）キーボード</translation>
 <translation id="2943400156390503548">スライド</translation>
 <translation id="2943503720238418293">もう少し短い名前にしてください</translation>
+<translation id="2949781154072577687">「<ph name="DRIVE_NAME" />」をフォーマットしています...</translation>
 <translation id="2951236788251446349">クラゲ</translation>
 <translation id="2963783323012015985">トルコ語のキーボード</translation>
 <translation id="2966459079597787514">スウェーデン語のキーボード</translation>
@@ -275,6 +278,7 @@
 <translation id="4336032328163998280">コピーできませんでした。<ph name="ERROR_MESSAGE" /></translation>
 <translation id="4364327530094270451">メロン</translation>
 <translation id="4372884569765913867">1×1</translation>
+<translation id="4394214039309501350">外部リンク</translation>
 <translation id="4425149324548788773">マイドライブ</translation>
 <translation id="4465830120256509958">ポルトガル語（ブラジル）のキーボード</translation>
 <translation id="4470564870223067757">ハングル（2 ボル式）</translation>
@@ -505,6 +509,7 @@
 <translation id="6878261347041253038">デバナーガリ語キーボード（表音）</translation>
 <translation id="6885780034956018177">カタツムリ</translation>
 <translation id="6896758677409633944">コピー</translation>
+<translation id="6898028766943174120">その他のサブフォルダ...</translation>
 <translation id="691516599546977041"><ph name="FOLDER_NAME" /> に保存できません。編集した画像はダウンロード フォルダに保存されます。</translation>
 <translation id="6915678159055240887">Chromebox</translation>
 <translation id="6918340160281024199">US Workman</translation>
@@ -517,6 +522,7 @@
 <translation id="696203921837389374">モバイルデータとの同期を有効にする</translation>
 <translation id="6965382102122355670">OK</translation>
 <translation id="6970230597523682626">ブルガリア語</translation>
+<translation id="6973630695168034713">フォルダ</translation>
 <translation id="6978611942794658017">このファイルは Windows ソフトウェアを使用する PC 用に作成されています。Chrome OS を実行するデバイスとは互換性がありません。Chrome ウェブストアで代わりのアプリをお探しください。</translation>
 <translation id="6979158407327259162">Google ドライブ</translation>
 <translation id="6990081529015358884">空き容量が不足しています</translation>
@@ -564,9 +570,11 @@
 <translation id="7589661784326793847">少々お待ちください</translation>
 <translation id="7603724359189955920">グリッド</translation>
 <translation id="7627790789328695202"><ph name="FILE_NAME" /> は既に存在しています。名前を変更してもう一度お試しください。</translation>
+<translation id="7628656427739290098"><ph name="PERCENT" />% 完了しました。</translation>
 <translation id="7649070708921625228">ヘルプ</translation>
 <translation id="7654209398114106148"><ph name="NUMBER_OF_ITEMS" /> 個のアイテムを移動しています...</translation>
 <translation id="7658239707568436148">キャンセル</translation>
+<translation id="7695430100978772476">「<ph name="DRIVE_NAME" />」をフォーマットできませんでした</translation>
 <translation id="770015031906360009">ギリシャ語</translation>
 <translation id="7706319470528945664">ポルトガル語のキーボード</translation>
 <translation id="7711920809702896782">画像情報</translation>

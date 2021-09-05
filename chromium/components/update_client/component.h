@@ -36,8 +36,8 @@ class Configurator;
 struct CrxUpdateItem;
 struct UpdateContext;
 
-// Describes a CRX component managed by the UpdateEngine. Each |Component| is
-// associated with an UpdateContext.
+// Describes a CRX component managed by the UpdateEngine. Each instance of
+// this class is associated with one instance of UpdateContext.
 class Component {
  public:
   using Events = UpdateClient::Observer::Events;
@@ -61,6 +61,10 @@ class Component {
       const base::Optional<ProtocolParser::Result>& result,
       ErrorCategory error_category,
       int error);
+
+  // Called by the UpdateEngine when a component enters a wait for throttling
+  // purposes.
+  void NotifyWait();
 
   // Returns true if the component has reached a final state and no further
   // handling and state transitions are possible.
@@ -370,6 +374,9 @@ class Component {
   void ChangeState(std::unique_ptr<State> next_state);
 
   // Notifies registered observers about changes in the state of the component.
+  // If an UpdateClient::CrxStateChangeCallback is provided as an argument to
+  // UpdateClient::Install or UpdateClient::Update function calls, then the
+  // callback is invoked as well.
   void NotifyObservers(Events event) const;
 
   void SetParseResult(const ProtocolParser::Result& result);
@@ -383,6 +390,8 @@ class Component {
   base::Value MakeEventActionRun(bool succeeded,
                                  int error_code,
                                  int extra_code1) const;
+
+  std::unique_ptr<CrxInstaller::InstallParams> install_params() const;
 
   base::ThreadChecker thread_checker_;
 
@@ -436,6 +445,14 @@ class Component {
   ErrorCategory diff_error_category_ = ErrorCategory::kNone;
   int diff_error_code_ = 0;
   int diff_extra_code1_ = 0;
+
+  // Contains app-specific custom response attributes from the server, sent in
+  // the last update check.
+  std::map<std::string, std::string> custom_attrs_;
+
+  // Contains the optional |run| and |arguments| values in the update response
+  // manifest. This data is provided as an argument to the |Install| call.
+  base::Optional<CrxInstaller::InstallParams> install_params_;
 
   // Contains the events which are therefore serialized in the requests.
   std::vector<base::Value> events_;

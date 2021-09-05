@@ -43,6 +43,21 @@ class ASH_EXPORT LoginAuthUserView
       public views::ButtonListener,
       public chromeos::PowerManagerClient::Observer {
  public:
+  // Flags which describe the set of currently visible auth methods.
+  enum AuthMethods {
+    AUTH_NONE = 0,                     // No extra auth methods.
+    AUTH_PASSWORD = 1 << 0,            // Display password.
+    AUTH_PIN = 1 << 1,                 // Display PIN keyboard.
+    AUTH_TAP = 1 << 2,                 // Tap to unlock.
+    AUTH_ONLINE_SIGN_IN = 1 << 3,      // Force online sign-in.
+    AUTH_FINGERPRINT = 1 << 4,         // Use fingerprint to unlock.
+    AUTH_EXTERNAL_BINARY = 1 << 5,     // Authenticate via an external binary.
+    AUTH_CHALLENGE_RESPONSE = 1 << 6,  // Authenticate via challenge-response
+                                       // protocol using security token.
+    AUTH_DISABLED = 1 << 7,  // Disable all the auth methods and show a
+                             // message to user.
+  };
+
   // TestApi is used for tests to get internal implementation details.
   class ASH_EXPORT TestApi {
    public:
@@ -56,6 +71,7 @@ class ASH_EXPORT LoginAuthUserView
     views::View* disabled_auth_message() const;
     views::Button* external_binary_auth_button() const;
     views::Button* external_binary_enrollment_button() const;
+    bool HasAuthMethod(AuthMethods auth_method) const;
 
    private:
     LoginAuthUserView* const view_;
@@ -86,21 +102,6 @@ class ASH_EXPORT LoginAuthUserView
     OnEasyUnlockIconHovered on_easy_unlock_icon_hovered;
     // Called when the easy unlock icon is tapped.
     OnEasyUnlockIconTapped on_easy_unlock_icon_tapped;
-  };
-
-  // Flags which describe the set of currently visible auth methods.
-  enum AuthMethods {
-    AUTH_NONE = 0,                     // No extra auth methods.
-    AUTH_PASSWORD = 1 << 0,            // Display password.
-    AUTH_PIN = 1 << 1,                 // Display PIN keyboard.
-    AUTH_TAP = 1 << 2,                 // Tap to unlock.
-    AUTH_ONLINE_SIGN_IN = 1 << 3,      // Force online sign-in.
-    AUTH_FINGERPRINT = 1 << 4,         // Use fingerprint to unlock.
-    AUTH_EXTERNAL_BINARY = 1 << 5,     // Authenticate via an external binary.
-    AUTH_CHALLENGE_RESPONSE = 1 << 6,  // Authenticate via challenge-response
-                                       // protocol using security token.
-    AUTH_DISABLED = 1 << 7,  // Disable all the auth methods and show a
-                             // message to user.
   };
 
   LoginAuthUserView(const LoginUserInfo& user, const Callbacks& callbacks);
@@ -135,13 +136,6 @@ class ASH_EXPORT LoginAuthUserView
   // Set the parameters needed to render the message that is shown to user when
   // auth method is |AUTH_DISABLED|.
   void SetAuthDisabledMessage(const AuthDisabledData& auth_disabled_data);
-
-  // Called to request the user to enter the PIN of the security token (e.g.,
-  // the smart card).
-  void RequestSecurityTokenPin(SecurityTokenPinRequest request);
-
-  // Called to close the UI previously opened with RequestSecurityTokenPin().
-  void ClearSecurityTokenPinRequest();
 
   const LoginUserInfo& current_user() const;
 
@@ -199,9 +193,6 @@ class ASH_EXPORT LoginAuthUserView
   // starts the asynchronous authentication process against a security token.
   void AttemptAuthenticateWithChallengeResponse();
 
-  // Aborts the current active security token PIN request, if there's one.
-  void AbortSecurityTokenPinRequest();
-
   AuthMethods auth_methods_ = AUTH_NONE;
   // True if the user's password might be a PIN. PIN is hashed differently from
   // password. The PIN keyboard may not always be visible even when the user
@@ -230,9 +221,6 @@ class ASH_EXPORT LoginAuthUserView
   // |CaptureStateForAnimationPreLayout| and consumed by
   // |ApplyAnimationPostLayout|.
   std::unique_ptr<AnimationState> cached_animation_state_;
-
-  // Parameters of the active security token PIN request, if there's one.
-  base::Optional<SecurityTokenPinRequest> security_token_pin_request_;
 
   ScopedObserver<chromeos::PowerManagerClient,
                  chromeos::PowerManagerClient::Observer>

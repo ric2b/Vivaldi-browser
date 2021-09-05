@@ -83,8 +83,7 @@ class ShellSurfaceWidget : public views::Widget {
   DISALLOW_COPY_AND_ASSIGN(ShellSurfaceWidget);
 };
 
-class CustomFrameView : public ash::NonClientFrameViewAsh,
-                        public aura::WindowObserver {
+class CustomFrameView : public ash::NonClientFrameViewAsh {
  public:
   using ShapeRects = std::vector<gfx::Rect>;
 
@@ -99,16 +98,9 @@ class CustomFrameView : public ash::NonClientFrameViewAsh,
     SetVisible(enabled);
     if (!enabled)
       NonClientFrameViewAsh::SetShouldPaintHeader(false);
-
-    frame()->GetNativeWindow()->AddObserver(this);
   }
 
-  ~CustomFrameView() override {
-    if (frame() && frame()->GetNativeWindow() &&
-        frame()->GetNativeWindow()->HasObserver(this)) {
-      frame()->GetNativeWindow()->RemoveObserver(this);
-    }
-  }
+  ~CustomFrameView() override = default;
 
   // Overridden from ash::NonClientFrameViewAsh:
   void SetShouldPaintHeader(bool paint) override {
@@ -116,11 +108,6 @@ class CustomFrameView : public ash::NonClientFrameViewAsh,
       NonClientFrameViewAsh::SetShouldPaintHeader(paint);
       return;
     }
-  }
-
-  void OnWindowDestroying(aura::Window* window) override {
-    DCHECK_EQ(frame()->GetNativeWindow(), window);
-    window->RemoveObserver(this);
   }
 
   // Overridden from views::NonClientFrameView:
@@ -288,6 +275,17 @@ class CustomWindowStateDelegate : public ash::WindowStateDelegate {
   DISALLOW_COPY_AND_ASSIGN(CustomWindowStateDelegate);
 };
 
+void CloseAllTransientChildren(aura::Window* window) {
+  // Deleting a window may delete other transient children, so
+  // delete them by popping from the list.
+  for (;;) {
+    auto list = wm::GetTransientChildren(window);
+    if (list.empty())
+      return;
+    wm::RemoveTransientChild(window, *list.begin());
+  }
+}
+
 }  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -318,8 +316,7 @@ ShellSurfaceBase::~ShellSurfaceBase() {
     widget_->GetNativeWindow()->RemoveObserver(this);
     widget_->RemoveObserver(this);
     // Remove transient children so they are not automatically destroyed.
-    for (auto* child : wm::GetTransientChildren(widget_->GetNativeWindow()))
-      wm::RemoveTransientChild(widget_->GetNativeWindow(), child);
+    CloseAllTransientChildren(widget_->GetNativeWindow());
     if (widget_->IsVisible())
       widget_->Hide();
     widget_->CloseNow();
@@ -421,8 +418,10 @@ void ShellSurfaceBase::SetStartupId(const char* startup_id) {
 }
 
 void ShellSurfaceBase::SetChildAxTreeId(ui::AXTreeID child_ax_tree_id) {
-  child_ax_tree_id_ = child_ax_tree_id;
+  if (child_ax_tree_id_ == child_ax_tree_id)
+    return;
 
+  child_ax_tree_id_ = child_ax_tree_id;
   this->NotifyAccessibilityEvent(ax::mojom::Event::kChildrenChanged, false);
 }
 
@@ -621,6 +620,11 @@ void ShellSurfaceBase::OnSetApplicationId(const char* application_id) {
   SetApplicationId(application_id);
 }
 
+void ShellSurfaceBase::OnActivationRequested() {
+  if (widget_ && HasPermissionToActivate(widget_->GetNativeWindow()))
+    this->Activate();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // SurfaceObserver overrides:
 
@@ -636,8 +640,7 @@ void ShellSurfaceBase::OnSurfaceDestroying(Surface* surface) {
   // run using the current surface contents.
   if (widget_) {
     // Remove transient children so they are not automatically hidden.
-    for (auto* child : wm::GetTransientChildren(widget_->GetNativeWindow()))
-      wm::RemoveTransientChild(widget_->GetNativeWindow(), child);
+    CloseAllTransientChildren(widget_->GetNativeWindow());
     widget_->Hide();
   }
 
@@ -700,6 +703,8 @@ bool ShellSurfaceBase::OnCloseRequested(
 
 void ShellSurfaceBase::WindowClosing() {
   SetEnabled(false);
+  if (widget_)
+    widget_->RemoveObserver(this);
   widget_ = nullptr;
 }
 
@@ -879,7 +884,6 @@ void ShellSurfaceBase::CreateShellSurfaceWidget(
     activatable_ = false;
     DisableMovement();
   }
-
   views::Widget::InitParams params;
   params.type = emulate_x11_override_redirect
                     ? views::Widget::InitParams::TYPE_MENU
@@ -887,8 +891,8 @@ void ShellSurfaceBase::CreateShellSurfaceWidget(
                                  : views::Widget::InitParams::TYPE_WINDOW);
   params.ownership = views::Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET;
   params.delegate = this;
-  params.shadow_type = views::Widget::InitParams::SHADOW_TYPE_NONE;
-  params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
+  params.shadow_type = views::Widget::InitParams::ShadowType::kNone;
+  params.opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;
   params.show_state = show_state;
   // Make shell surface a transient child if |parent_| has been set and
   // container_ isn't specified.
@@ -927,6 +931,7 @@ void ShellSurfaceBase::CreateShellSurfaceWidget(
   SetShellApplicationId(window, application_id_);
   SetShellStartupId(window, startup_id_);
   SetShellMainSurface(window, root_surface());
+  SetArcAppType(window);
 
   // Start tracking changes to window bounds and window state.
   window->AddObserver(this);

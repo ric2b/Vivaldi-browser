@@ -29,6 +29,7 @@
 #include "google_apis/gcm/engine/unregistration_request.h"
 #include "google_apis/gcm/protocol/android_checkin.pb.h"
 #include "google_apis/gcm/protocol/checkin.pb.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "net/http/http_status_code.h"
 #include "services/network/public/mojom/proxy_resolving_socket.mojom.h"
 
@@ -72,8 +73,8 @@ class GCMInternalsBuilder {
   virtual std::unique_ptr<ConnectionFactory> BuildConnectionFactory(
       const std::vector<GURL>& endpoints,
       const net::BackoffEntry::Policy& backoff_policy,
-      base::RepeatingCallback<
-          void(network::mojom::ProxyResolvingSocketFactoryRequest)>
+      base::RepeatingCallback<void(
+          mojo::PendingReceiver<network::mojom::ProxyResolvingSocketFactory>)>
           get_socket_factory_callback,
       scoped_refptr<base::SequencedTaskRunner> io_task_runner,
       GCMStatsRecorder* recorder,
@@ -114,10 +115,11 @@ class GCMClientImpl
   void Initialize(
       const ChromeBuildInfo& chrome_build_info,
       const base::FilePath& store_path,
+      bool remove_account_mappings_with_email_key,
       const scoped_refptr<base::SequencedTaskRunner>& blocking_task_runner,
       scoped_refptr<base::SequencedTaskRunner> io_task_runner,
-      base::RepeatingCallback<
-          void(network::mojom::ProxyResolvingSocketFactoryRequest)>
+      base::RepeatingCallback<void(
+          mojo::PendingReceiver<network::mojom::ProxyResolvingSocketFactory>)>
           get_socket_factory_callback,
       const scoped_refptr<network::SharedURLLoaderFactory>& url_loader_factory,
       network::NetworkConnectionTracker* network_connection_tracker,
@@ -278,7 +280,8 @@ class GCMClientImpl
   void DefaultStoreCallback(bool success);
 
   // Callback for store operation where result does not matter.
-  void IgnoreWriteResultCallback(bool success);
+  void IgnoreWriteResultCallback(const std::string& operation_suffix_for_uma,
+                                 bool success);
 
   // Callback for destroying the GCM store.
   void DestroyStoreCallback(bool success);
@@ -372,7 +375,7 @@ class GCMClientImpl
 
   std::unique_ptr<ConnectionFactory> connection_factory_;
   base::RepeatingCallback<void(
-      network::mojom::ProxyResolvingSocketFactoryRequest)>
+      mojo::PendingReceiver<network::mojom::ProxyResolvingSocketFactory>)>
       get_socket_factory_callback_;
 
   scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;

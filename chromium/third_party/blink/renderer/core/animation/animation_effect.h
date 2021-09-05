@@ -72,7 +72,9 @@ class CORE_EXPORT AnimationEffect : public ScriptWrappable {
     virtual ~EventDelegate() = default;
     virtual bool RequiresIterationEvents(const AnimationEffect&) = 0;
     virtual void OnEventCondition(const AnimationEffect&, Timing::Phase) = 0;
-    virtual void Trace(blink::Visitor* visitor) {}
+    virtual bool IsAnimationEventDelegate() const { return false; }
+    virtual bool IsTransitionEventDelegate() const { return false; }
+    virtual void Trace(Visitor* visitor) {}
   };
 
   ~AnimationEffect() override = default;
@@ -96,16 +98,23 @@ class CORE_EXPORT AnimationEffect : public ScriptWrappable {
   AnimationTimeDelta TimeToReverseEffectChange() const {
     return EnsureCalculated().time_to_reverse_effect_change;
   }
-  double LocalTime() const { return EnsureCalculated().local_time; }
+  double LocalTime() const {
+    return EnsureCalculated().local_time.value_or(Timing::NullValue());
+  }
 
   const Timing& SpecifiedTiming() const { return timing_; }
   void UpdateSpecifiedTiming(const Timing&);
+  void SetIgnoreCssTimingProperties();
+
   EventDelegate* GetEventDelegate() { return event_delegate_; }
+  void SetEventDelegate(EventDelegate* delegate) { event_delegate_ = delegate; }
 
   EffectTiming* getTiming() const;
   ComputedEffectTiming* getComputedTiming() const;
   void updateTiming(OptionalEffectTiming*,
                     ExceptionState& = ASSERT_NO_EXCEPTION);
+  double GetCancelTime() const { return cancel_time_; }
+  void SetCancelTime(double cancel_time) { cancel_time_ = cancel_time; }
 
   // Attach/Detach the AnimationEffect from its owning animation.
   virtual void Attach(AnimationEffectOwner* owner) { owner_ = owner; }
@@ -116,7 +125,7 @@ class CORE_EXPORT AnimationEffect : public ScriptWrappable {
 
   const Animation* GetAnimationForTesting() const { return GetAnimation(); }
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  protected:
   explicit AnimationEffect(const Timing&, EventDelegate* = nullptr);
@@ -124,7 +133,8 @@ class CORE_EXPORT AnimationEffect : public ScriptWrappable {
   // When AnimationEffect receives a new inherited time via updateInheritedTime
   // it will (if necessary) recalculate timings and (if necessary) call
   // updateChildrenAndEffects.
-  void UpdateInheritedTime(double inherited_time, TimingUpdateReason) const;
+  void UpdateInheritedTime(base::Optional<double> inherited_time,
+                           TimingUpdateReason) const;
   void Invalidate() const { needs_update_ = true; }
   void InvalidateAndNotifyOwner() const;
   bool RequiresIterationEvents() const {
@@ -144,8 +154,8 @@ class CORE_EXPORT AnimationEffect : public ScriptWrappable {
 
   virtual AnimationTimeDelta CalculateTimeToEffectChange(
       bool forwards,
-      double local_time,
-      double time_to_next_iteration) const = 0;
+      base::Optional<double> local_time,
+      AnimationTimeDelta time_to_next_iteration) const = 0;
 
   const Animation* GetAnimation() const;
   Animation* GetAnimation();
@@ -156,7 +166,8 @@ class CORE_EXPORT AnimationEffect : public ScriptWrappable {
 
   mutable Timing::CalculatedTiming calculated_;
   mutable bool needs_update_;
-  mutable double last_update_time_;
+  mutable base::Optional<double> last_update_time_;
+  double cancel_time_;
   const Timing::CalculatedTiming& EnsureCalculated() const;
 };
 

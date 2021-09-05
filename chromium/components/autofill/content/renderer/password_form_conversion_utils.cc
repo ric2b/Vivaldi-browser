@@ -128,19 +128,17 @@ bool IsGaiaWithSkipSavePasswordForm(const blink::WebFormElement& form) {
   return should_skip_password == "1";
 }
 
-std::unique_ptr<PasswordForm> CreateSimplifiedPasswordFormFromWebForm(
+std::unique_ptr<FormData> CreateFormDataFromWebForm(
     const WebFormElement& web_form,
     const FieldDataManager* field_data_manager,
     UsernameDetectorCache* username_detector_cache) {
   if (web_form.IsNull())
     return nullptr;
 
-  auto password_form = std::make_unique<PasswordForm>();
-  password_form->origin =
+  auto form_data = std::make_unique<FormData>();
+  form_data->url =
       form_util::GetCanonicalOriginForDocument(web_form.GetDocument());
-  password_form->signon_realm = GetSignOnRealm(password_form->origin);
-
-  password_form->form_data.is_gaia_with_skip_save_password_form =
+  form_data->is_gaia_with_skip_save_password_form =
       IsGaiaWithSkipSavePasswordForm(web_form) ||
       IsGaiaReauthenticationForm(web_form);
 
@@ -151,19 +149,16 @@ std::unique_ptr<PasswordForm> CreateSimplifiedPasswordFormFromWebForm(
 
   if (!WebFormElementToFormData(web_form, WebFormControlElement(),
                                 field_data_manager, form_util::EXTRACT_VALUE,
-                                &password_form->form_data,
-                                nullptr /* FormFieldData */)) {
+                                form_data.get(), nullptr /* FormFieldData */)) {
     return nullptr;
   }
-  password_form->form_data.username_predictions =
-      GetUsernamePredictions(control_elements.ReleaseVector(),
-                             password_form->form_data, username_detector_cache);
+  form_data->username_predictions = GetUsernamePredictions(
+      control_elements.ReleaseVector(), *form_data, username_detector_cache);
 
-  return password_form;
+  return form_data;
 }
 
-std::unique_ptr<PasswordForm>
-CreateSimplifiedPasswordFormFromUnownedInputElements(
+std::unique_ptr<FormData> CreateFormDataFromUnownedInputElements(
     const WebLocalFrame& frame,
     const FieldDataManager* field_data_manager,
     UsernameDetectorCache* username_detector_cache) {
@@ -174,20 +169,19 @@ CreateSimplifiedPasswordFormFromUnownedInputElements(
   if (control_elements.empty())
     return nullptr;
 
-  auto password_form = std::make_unique<PasswordForm>();
+  auto form_data = std::make_unique<FormData>();
   if (!UnownedPasswordFormElementsAndFieldSetsToFormData(
           fieldsets, control_elements, nullptr, frame.GetDocument(),
-          field_data_manager, form_util::EXTRACT_VALUE,
-          &password_form->form_data, nullptr /* FormFieldData */)) {
+          field_data_manager, form_util::EXTRACT_VALUE, form_data.get(),
+          nullptr /* FormFieldData */)) {
     return nullptr;
   }
 
-  password_form->origin =
+  form_data->url =
       form_util::GetCanonicalOriginForDocument(frame.GetDocument());
-  password_form->signon_realm = GetSignOnRealm(password_form->origin);
-  password_form->form_data.username_predictions = GetUsernamePredictions(
-      control_elements, password_form->form_data, username_detector_cache);
-  return password_form;
+  form_data->username_predictions = GetUsernamePredictions(
+      control_elements, *form_data, username_detector_cache);
+  return form_data;
 }
 
 std::string GetSignOnRealm(const GURL& origin) {

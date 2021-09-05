@@ -29,14 +29,10 @@ _protocol_generated = [
 action("protocol_compatibility") {
   visibility = [ ":*" ]  # Only targets in this file can depend on this.
   script = "$_inspector_protocol/check_protocol_compatibility.py"
-  inputs = [
-    "protocol.json",
-  ]
+  inputs = [ "protocol.json" ]
 
   _stamp = "$target_gen_dir/protocol.stamp"
-  outputs = [
-    _stamp,
-  ]
+  outputs = [ _stamp ]
 
   args = [
     "--stamp",
@@ -49,9 +45,7 @@ inspector_protocol_generate("protocol_generated_sources") {
   inspector_protocol_dir = _inspector_protocol
   visibility = [ ":*" ]  # Only targets in this file can depend on this.
 
-  deps = [
-    ":protocol_compatibility",
-  ]
+  deps = [ ":protocol_compatibility" ]
 
   out_dir = target_gen_dir
   config_file = "inspector_protocol_config.json"
@@ -107,12 +101,12 @@ component("ui_devtools") {
   }
 
   deps = [
-    ":devtools_protocol_encoding",
     ":protocol_generated_sources",
     "//base",
     "//mojo/public/cpp/bindings",
     "//mojo/public/cpp/system",
     "//net",
+    "//third_party/inspector_protocol:crdtp",
     "//ui/gfx",
   ]
 
@@ -134,20 +128,9 @@ static_library("test_support") {
     "ui_devtools_unittest_utils.h",
   ]
   public_deps = [
-    ":devtools_protocol_encoding",
     ":ui_devtools",
     "//testing/gmock",
-  ]
-}
-
-static_library("devtools_protocol_encoding") {
-  sources = [
-    "devtools_protocol_encoding.cc",
-    "devtools_protocol_encoding.h",
-  ]
-  deps = [
-    "//base",
-    "//third_party/inspector_protocol:encoding",
+    "//third_party/inspector_protocol:crdtp",
   ]
 }
 
@@ -164,9 +147,7 @@ source_set("unit_tests") {
     "devtools_server_unittest.cc",
   ]
 
-  data = [
-    "//components/test/data/ui_devtools/test_file.cc",
-  ]
+  data = [ "//components/test/data/ui_devtools/test_file.cc" ]
 
   deps = [
     ":test_support",

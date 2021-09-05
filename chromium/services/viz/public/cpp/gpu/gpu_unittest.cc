@@ -4,8 +4,11 @@
 
 #include "services/viz/public/cpp/gpu/gpu.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_pump_type.h"
 #include "base/run_loop.h"
 #include "base/synchronization/waitable_event.h"
@@ -13,7 +16,9 @@
 #include "build/build_config.h"
 #include "gpu/config/gpu_feature_info.h"
 #include "gpu/config/gpu_info.h"
-#include "mojo/public/cpp/bindings/binding_set.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/receiver_set.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace viz {
@@ -31,8 +36,8 @@ class TestGpuImpl : public mojom::Gpu {
 
   void CloseBindingOnRequest() { close_binding_on_request_ = true; }
 
-  void BindRequest(mojom::GpuRequest request) {
-    bindings_.AddBinding(this, std::move(request));
+  void BindReceiver(mojo::PendingReceiver<mojom::Gpu> receiver) {
+    receivers_.Add(this, std::move(receiver));
   }
 
   // mojom::Gpu overrides:
@@ -42,7 +47,7 @@ class TestGpuImpl : public mojom::Gpu {
   void EstablishGpuChannel(EstablishGpuChannelCallback callback) override {
     if (close_binding_on_request_) {
       // Don't run |callback| and trigger a connection error on the other end.
-      bindings_.CloseAllBindings();
+      receivers_.Clear();
       return;
     }
 
@@ -71,7 +76,7 @@ class TestGpuImpl : public mojom::Gpu {
  private:
   bool request_will_succeed_ = true;
   bool close_binding_on_request_ = false;
-  mojo::BindingSet<mojom::Gpu> bindings_;
+  mojo::ReceiverSet<mojom::Gpu> receivers_;
 
   // Closing this handle will result in GpuChannelHost being lost.
   mojo::ScopedMessagePipeHandle gpu_channel_handle_;
@@ -127,7 +132,7 @@ class GpuTest : public testing::Test {
   // testing::Test:
   void SetUp() override {
     gpu_impl_ = std::make_unique<TestGpuImpl>();
-    gpu_ = base::WrapUnique(new Gpu(GetPtr(), io_thread_.task_runner()));
+    gpu_ = base::WrapUnique(new Gpu(GetRemote(), io_thread_.task_runner()));
   }
 
   void TearDown() override {
@@ -136,13 +141,13 @@ class GpuTest : public testing::Test {
   }
 
  private:
-  mojom::GpuPtr GetPtr() {
-    mojom::GpuPtr ptr;
+  mojo::PendingRemote<mojom::Gpu> GetRemote() {
+    mojo::PendingRemote<mojom::Gpu> remote;
     io_thread_.task_runner()->PostTask(
-        FROM_HERE, base::BindOnce(&TestGpuImpl::BindRequest,
+        FROM_HERE, base::BindOnce(&TestGpuImpl::BindReceiver,
                                   base::Unretained(gpu_impl_.get()),
-                                  base::Passed(MakeRequest(&ptr))));
-    return ptr;
+                                  remote.InitWithNewPipeAndPassReceiver()));
+    return remote;
   }
 
   void DestroyGpuImplOnIO() {

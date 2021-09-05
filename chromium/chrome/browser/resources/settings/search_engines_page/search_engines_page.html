@@ -13,6 +13,7 @@
 <link rel="import" href="search_engines_list.html">
 <link rel="import" href="omnibox_extension_entry.html">
 <link rel="import" href="../global_scroll_target_behavior.html">
+<link rel="import" href="../route.html">
 <link rel="import" href="../settings_shared_css.html">
 <link rel="import" href="../settings_vars_css.html">
 
@@ -76,6 +77,7 @@
           items="[[matchingExtensions_]]" preserve-focus risk-selection>
         <template>
           <settings-omnibox-extension-entry engine="[[item]]"
+              focus-row-index="[[index]]"
               tabindex$="[[tabIndex]]" iron-list-tab-index="[[tabIndex]]"
               last-focused="{{omniboxExtensionlastFocused_}}"
               list-blurred="{{omniboxExtensionListBlurred_}}">

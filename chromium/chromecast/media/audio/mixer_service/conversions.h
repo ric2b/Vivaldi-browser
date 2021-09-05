@@ -14,10 +14,14 @@ namespace media {
 namespace mixer_service {
 
 media::SampleFormat ConvertSampleFormat(SampleFormat format);
+SampleFormat ConvertSampleFormat(media::SampleFormat format);
 int GetSampleSizeBytes(SampleFormat format);
 
 ContentType ConvertContentType(media::AudioContentType content_type);
 media::AudioContentType ConvertContentType(ContentType type);
+
+ChannelLayout ConvertChannelLayout(media::ChannelLayout channel_layout);
+media::ChannelLayout ConvertChannelLayout(ChannelLayout channel_layout);
 
 }  // namespace mixer_service
 }  // namespace media

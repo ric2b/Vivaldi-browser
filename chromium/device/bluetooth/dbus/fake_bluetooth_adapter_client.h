@@ -42,9 +42,6 @@ class DEVICE_BLUETOOTH_EXPORT FakeBluetoothAdapterClient
   ~FakeBluetoothAdapterClient() override;
   int GetPauseCount() { return pause_count_; }
   int GetUnpauseCount() { return unpause_count_; }
-  uint32_t set_long_term_keys_call_count() {
-    return set_long_term_keys_call_count_;
-  }
 
   // BluetoothAdapterClient overrides
   void Init(dbus::Bus* bus, const std::string& bluetooth_service_name) override;
@@ -57,30 +54,27 @@ class DEVICE_BLUETOOTH_EXPORT FakeBluetoothAdapterClient
   void StopDiscovery(const dbus::ObjectPath& object_path,
                      ResponseCallback callback) override;
   void PauseDiscovery(const dbus::ObjectPath& object_path,
-                      const base::Closure& callback,
+                      base::OnceClosure callback,
                       ErrorCallback error_callback) override;
   void UnpauseDiscovery(const dbus::ObjectPath& object_path,
-                        const base::Closure& callback,
+                        base::OnceClosure callback,
                         ErrorCallback error_callback) override;
   void RemoveDevice(const dbus::ObjectPath& object_path,
                     const dbus::ObjectPath& device_path,
-                    const base::Closure& callback,
+                    base::OnceClosure callback,
                     ErrorCallback error_callback) override;
   void SetDiscoveryFilter(const dbus::ObjectPath& object_path,
                           const DiscoveryFilter& discovery_filter,
-                          const base::Closure& callback,
+                          base::OnceClosure callback,
                           ErrorCallback error_callback) override;
   void CreateServiceRecord(const dbus::ObjectPath& object_path,
                            const bluez::BluetoothServiceRecordBlueZ& record,
-                           const ServiceRecordCallback& callback,
+                           ServiceRecordCallback callback,
                            ErrorCallback error_callback) override;
   void RemoveServiceRecord(const dbus::ObjectPath& object_path,
                            uint32_t handle,
-                           const base::Closure& callback,
+                           base::OnceClosure callback,
                            ErrorCallback error_callback) override;
-  void SetLongTermKeys(const dbus::ObjectPath& object_path,
-                       const std::vector<std::vector<uint8_t>>& long_term_keys,
-                       ErrorCallback error_callback) override;
 
   // Sets the current simulation timeout interval.
   void SetSimulationIntervalMs(int interval_ms);
@@ -113,7 +107,6 @@ class DEVICE_BLUETOOTH_EXPORT FakeBluetoothAdapterClient
   static const char kSecondAdapterPath[];
   static const char kSecondAdapterName[];
   static const char kSecondAdapterAddress[];
-
  private:
   // Property callback passed when we create Properties* structures.
   void OnPropertyChanged(const std::string& property_name);
@@ -121,6 +114,9 @@ class DEVICE_BLUETOOTH_EXPORT FakeBluetoothAdapterClient
   // Posts the delayed task represented by |callback| onto the current
   // message loop to be executed after |simulation_interval_ms_| milliseconds.
   void PostDelayedTask(base::OnceClosure callback);
+
+  // Utility function to update the discovering property.
+  void UpdateDiscoveringProperty(bool discovering);
 
   // List of observers interested in event notifications from us.
   base::ObserverList<Observer>::Unchecked observers_;
@@ -160,7 +156,9 @@ class DEVICE_BLUETOOTH_EXPORT FakeBluetoothAdapterClient
   // Service records manually registered with this adapter by handle.
   std::map<uint32_t, BluetoothServiceRecordBlueZ> records_;
 
-  uint32_t set_long_term_keys_call_count_;
+  // Note: This should remain the last member so it'll be destroyed and
+  // invalidate its weak pointers before any other members are destroyed.
+  base::WeakPtrFactory<FakeBluetoothAdapterClient> weak_ptr_factory_{this};
 };
 
 }  // namespace bluez

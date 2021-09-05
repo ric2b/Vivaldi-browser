@@ -33,10 +33,6 @@ namespace {
 
 const char kTestCacheGuid[] = "test_cache_guid";
 
-base::RepeatingCallback<std::string()> TestCacheGuidGenerator() {
-  return base::BindRepeating([]() -> std::string { return kTestCacheGuid; });
-}
-
 // A handler that simply sets |catastrophic_error_handler_was_called| to true.
 void CatastrophicErrorHandler(bool* catastrophic_error_handler_was_called) {
   *catastrophic_error_handler_was_called = true;
@@ -69,11 +65,10 @@ class MigrationTest : public testing::TestWithParam<int> {
 
   static bool LoadAndIgnoreReturnedData(DirectoryBackingStore *dbs) {
     Directory::MetahandlesMap tmp_handles_map;
-    JournalIndex delete_journals;
     MetahandleSet metahandles_to_purge;
     Directory::KernelLoadInfo kernel_load_info;
-    DirOpenResult result = dbs->Load(&tmp_handles_map, &delete_journals,
-                                     &metahandles_to_purge, &kernel_load_info);
+    DirOpenResult result =
+        dbs->Load(&tmp_handles_map, &metahandles_to_purge, &kernel_load_info);
     return result == OPENED_NEW || result == OPENED_EXISTING;
   }
 
@@ -3586,12 +3581,10 @@ TEST_F(DirectoryBackingStoreTest, MigrateVersion79To80) {
 
   // Ensure the bag_of_chips has been set.
   Directory::MetahandlesMap handles_map;
-  JournalIndex delete_journals;
   MetahandleSet metahandles_to_purge;
   Directory::KernelLoadInfo load_info;
 
-  ASSERT_TRUE(dbs.Load(&handles_map, &delete_journals, &metahandles_to_purge,
-                       &load_info));
+  ASSERT_TRUE(dbs.Load(&handles_map, &metahandles_to_purge, &load_info));
   // Check that the initial value is the serialization of an empty ChipBag.
   sync_pb::ChipBag chip_bag;
   std::string serialized_chip_bag;
@@ -3847,12 +3840,10 @@ TEST_F(DirectoryBackingStoreTest, DetectInvalidPosition) {
 
   // Trying to unpack this entry should signal that the DB is corrupted.
   Directory::MetahandlesMap handles_map;
-  JournalIndex delete_journals;
   MetahandleSet metahandles_to_purge;
   Directory::KernelLoadInfo kernel_load_info;
   EXPECT_EQ(FAILED_DATABASE_CORRUPT,
-            dbs.Load(&handles_map, &delete_journals, &metahandles_to_purge,
-                     &kernel_load_info));
+            dbs.Load(&handles_map, &metahandles_to_purge, &kernel_load_info));
 }
 
 TEST_F(DirectoryBackingStoreTest, DetectCorruptedRoot) {
@@ -3863,12 +3854,10 @@ TEST_F(DirectoryBackingStoreTest, DetectCorruptedRoot) {
   TestDirectoryBackingStore dbs(GetUsername(), &connection);
 
   Directory::MetahandlesMap handles_map;
-  JournalIndex delete_journals;
   MetahandleSet metahandles_to_purge;
   Directory::KernelLoadInfo kernel_load_info;
   EXPECT_EQ(FAILED_DATABASE_CORRUPT,
-            dbs.Load(&handles_map, &delete_journals, &metahandles_to_purge,
-                     &kernel_load_info));
+            dbs.Load(&handles_map, &metahandles_to_purge, &kernel_load_info));
 }
 
 TEST_P(MigrationTest, ToCurrentVersion) {
@@ -3967,14 +3956,13 @@ TEST_P(MigrationTest, ToCurrentVersion) {
 
   syncable::Directory::KernelLoadInfo dir_info;
   Directory::MetahandlesMap handles_map;
-  JournalIndex delete_journals;
   MetahandleSet metahandles_to_purge;
 
   {
-    OnDiskDirectoryBackingStore dbs(GetUsername(), TestCacheGuidGenerator(),
+    OnDiskDirectoryBackingStore dbs(GetUsername(), kTestCacheGuid,
                                     GetDatabasePath());
-    ASSERT_EQ(OPENED_EXISTING, dbs.Load(&handles_map, &delete_journals,
-                                        &metahandles_to_purge, &dir_info));
+    ASSERT_EQ(OPENED_EXISTING,
+              dbs.Load(&handles_map, &metahandles_to_purge, &dir_info));
     if (!metahandles_to_purge.empty())
       dbs.DeleteEntries(DirectoryBackingStore::METAS_TABLE,
                         metahandles_to_purge);
@@ -4272,9 +4260,7 @@ class OnDiskDirectoryBackingStoreForTest : public OnDiskDirectoryBackingStore {
 OnDiskDirectoryBackingStoreForTest::OnDiskDirectoryBackingStoreForTest(
     const std::string& dir_name,
     const base::FilePath& backing_filepath)
-    : OnDiskDirectoryBackingStore(dir_name,
-                                  TestCacheGuidGenerator(),
-                                  backing_filepath),
+    : OnDiskDirectoryBackingStore(dir_name, kTestCacheGuid, backing_filepath),
       first_open_failed_(false) {}
 
 OnDiskDirectoryBackingStoreForTest::~OnDiskDirectoryBackingStoreForTest() { }
@@ -4298,7 +4284,7 @@ bool OnDiskDirectoryBackingStoreForTest::DidFailFirstOpenAttempt() {
 // due to read-only file system), is not tested here.
 TEST_F(DirectoryBackingStoreTest, MinorCorruption) {
   {
-    OnDiskDirectoryBackingStore dbs(GetUsername(), TestCacheGuidGenerator(),
+    OnDiskDirectoryBackingStore dbs(GetUsername(), kTestCacheGuid,
                                     GetDatabasePath());
     EXPECT_TRUE(LoadAndIgnoreReturnedData(&dbs));
   }
@@ -4321,7 +4307,7 @@ TEST_F(DirectoryBackingStoreTest, MinorCorruption) {
 
 TEST_F(DirectoryBackingStoreTest, MinorCorruptionAndUpgrade) {
   {
-    OnDiskDirectoryBackingStore dbs(GetUsername(), TestCacheGuidGenerator(),
+    OnDiskDirectoryBackingStore dbs(GetUsername(), kTestCacheGuid,
                                     GetDatabasePath());
     EXPECT_TRUE(LoadAndIgnoreReturnedData(&dbs));
   }
@@ -4355,12 +4341,10 @@ TEST_F(DirectoryBackingStoreTest, DeleteEntries) {
   SetUpCurrentDatabaseAndCheckVersion(&connection);
   TestDirectoryBackingStore dbs(GetUsername(), &connection);
   Directory::MetahandlesMap handles_map;
-  JournalIndex delete_journals;
   MetahandleSet metahandles_to_purge;
   Directory::KernelLoadInfo kernel_load_info;
 
-  dbs.Load(&handles_map, &delete_journals, &metahandles_to_purge,
-           &kernel_load_info);
+  dbs.Load(&handles_map, &metahandles_to_purge, &kernel_load_info);
   size_t initial_size = handles_map.size();
   ASSERT_LT(0U, initial_size) << "Test requires handles_map to delete.";
   int64_t first_to_die = handles_map.begin()->second->ref(META_HANDLE);
@@ -4402,12 +4386,11 @@ TEST_F(DirectoryBackingStoreTest, IncreaseDatabasePageSizeFrom4KTo32K) {
   SetUpCurrentDatabaseAndCheckVersion(&connection);
   TestDirectoryBackingStore dbs(GetUsername(), &connection);
   Directory::MetahandlesMap handles_map;
-  JournalIndex delete_journals;
   MetahandleSet metahandles_to_purge;
   Directory::KernelLoadInfo kernel_load_info;
 
-  DirOpenResult open_result = dbs.Load(
-      &handles_map, &delete_journals, &metahandles_to_purge, &kernel_load_info);
+  DirOpenResult open_result =
+      dbs.Load(&handles_map, &metahandles_to_purge, &kernel_load_info);
   EXPECT_EQ(open_result, OPENED_EXISTING);
 
   // Set up database's page size to 4096
@@ -4432,7 +4415,7 @@ TEST_F(DirectoryBackingStoreTest, CatastrophicErrorHandler_KeptAcrossReset) {
   ASSERT_FALSE(dbs.db_->has_error_callback());
   // Set one and see that it was set.
   dbs.SetCatastrophicErrorHandler(
-      base::Bind(&CatastrophicErrorHandler, nullptr));
+      base::BindRepeating(&CatastrophicErrorHandler, nullptr));
   EXPECT_TRUE(dbs.db_->has_error_callback());
   // Recreate the Connection and see that the handler remains set.
   dbs.ResetAndCreateConnection();
@@ -4444,8 +4427,8 @@ TEST_F(DirectoryBackingStoreTest, CatastrophicErrorHandler_KeptAcrossReset) {
 TEST_F(DirectoryBackingStoreTest,
        CatastrophicErrorHandler_InvocationDuringLoad) {
   bool was_called = false;
-  const base::Closure handler =
-      base::Bind(&CatastrophicErrorHandler, &was_called);
+  const base::RepeatingClosure handler =
+      base::BindRepeating(&CatastrophicErrorHandler, &was_called);
   {
     OnDiskDirectoryBackingStoreForTest dbs(GetUsername(), GetDatabasePath());
     dbs.SetCatastrophicErrorHandler(handler);
@@ -4488,8 +4471,8 @@ TEST_F(DirectoryBackingStoreTest,
 TEST_F(DirectoryBackingStoreTest,
        CatastrophicErrorHandler_InvocationDuringSaveChanges) {
   bool was_called = false;
-  const base::Closure handler =
-      base::Bind(&CatastrophicErrorHandler, &was_called);
+  const base::RepeatingClosure handler =
+      base::BindRepeating(&CatastrophicErrorHandler, &was_called);
   // Create a DB with many entries.
   OnDiskDirectoryBackingStoreForTest dbs(GetUsername(), GetDatabasePath());
   dbs.SetCatastrophicErrorHandler(handler);

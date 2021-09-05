@@ -10,6 +10,7 @@
 
 #include "base/callback_forward.h"
 #include "base/macros.h"
+#include "url/gurl.h"
 
 class Profile;
 
@@ -61,7 +62,8 @@ enum class PrinterSetupSource {
   kSettings = 1,           // Printer was setup from Settings.
   kAutoUsbConfigurer = 2,  // Printer was setup by automatic USB configurer.
   kArcPrintService = 3,    // Printer was setup by arc print service.
-  kMaxValue = kArcPrintService,
+  kExtensionApi = 4,       // Printer was setup via Extensions API.
+  kMaxValue = kExtensionApi,
 };
 
 using PrinterSetupCallback = base::OnceCallback<void(PrinterSetupResult)>;
@@ -89,6 +91,14 @@ class PrinterConfigurer {
 
   // Records UMA metrics for USB printer setup.
   static void RecordUsbPrinterSetupSource(UsbPrinterSetupSource source);
+
+  // Test method to override the printer configurer for testing.
+  static void SetPrinterConfigurerForTesting(
+      std::unique_ptr<PrinterConfigurer> printer_configurer);
+
+  // Returns a generated EULA GURL for the provided |license|. |license| is the
+  // identifier tag of the printer's license information.
+  static GURL GeneratePrinterEulaUrl(const std::string& license);
 
  protected:
   PrinterConfigurer() = default;

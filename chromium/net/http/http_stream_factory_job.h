@@ -16,6 +16,7 @@
 #include "net/base/net_export.h"
 #include "net/base/proxy_server.h"
 #include "net/base/request_priority.h"
+#include "net/dns/public/resolve_error_info.h"
 #include "net/http/bidirectional_stream_impl.h"
 #include "net/http/http_auth.h"
 #include "net/http/http_auth_controller.h"
@@ -212,6 +213,7 @@ class HttpStreamFactory::Job
   const SSLConfig& server_ssl_config() const;
   const SSLConfig& proxy_ssl_config() const;
   const ProxyInfo& proxy_info() const;
+  ResolveErrorInfo resolve_error_info() const;
 
   JobType job_type() const { return job_type_; }
 
@@ -282,6 +284,7 @@ class HttpStreamFactory::Job
   int DoLoop(int result);
   int StartInternal();
   int DoInitConnectionImpl();
+  int DoInitConnectionImplQuic();
 
   // If this is a QUIC alt job, then this function is called when host
   // resolution completes. It's called with the next result after host
@@ -311,9 +314,6 @@ class HttpStreamFactory::Job
   // nothing if |stream_factory_| is for WebSocket.
   int SetSpdyHttpStreamOrBidirectionalStreamImpl(
       base::WeakPtr<SpdySession> session);
-
-  // Returns to STATE_INIT_CONNECTION and resets some state.
-  void ReturnToStateInitConnection(bool close_connection);
 
   // SpdySessionPool::SpdySessionRequest::Delegate implementation:
   void OnSpdySessionAvailable(base::WeakPtr<SpdySession> spdy_session) override;
@@ -471,6 +471,8 @@ class HttpStreamFactory::Job
   base::OnceClosure restart_with_auth_callback_;
 
   NetErrorDetails net_error_details_;
+
+  ResolveErrorInfo resolve_error_info_;
 
   std::unique_ptr<SpdySessionPool::SpdySessionRequest> spdy_session_request_;
 

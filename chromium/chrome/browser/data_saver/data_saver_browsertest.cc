@@ -6,10 +6,12 @@
 
 #include "base/barrier_closure.h"
 #include "base/bind.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/data_reduction_proxy/data_reduction_proxy_chrome_settings.h"
 #include "chrome/browser/data_reduction_proxy/data_reduction_proxy_chrome_settings_factory.h"
+#include "chrome/browser/previews/previews_test_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -24,6 +26,7 @@
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
 #include "services/network/public/cpp/network_quality_tracker.h"
+#include "third_party/blink/public/common/features.h"
 
 namespace {
 
@@ -180,12 +183,15 @@ class DataSaverBrowserTest : public InProcessBrowserTest {
     SetDataSaverEnabled(browser()->profile(), enabled);
   }
 
-  void VerifySaveDataHeader(const std::string& expected_header_value) {
+  void VerifySaveDataHeader(const std::string& expected_header_value,
+                            Browser* browser = nullptr) {
+    if (!browser)
+      browser = InProcessBrowserTest::browser();
     ui_test_utils::NavigateToURL(
-        browser(), embedded_test_server()->GetURL("/echoheader?Save-Data"));
+        browser, embedded_test_server()->GetURL("/echoheader?Save-Data"));
     std::string header_value;
     EXPECT_TRUE(content::ExecuteScriptAndExtractString(
-        browser()->tab_strip_model()->GetActiveWebContents(),
+        browser->tab_strip_model()->GetActiveWebContents(),
         "window.domAutomationController.send(document.body.textContent);",
         &header_value));
     EXPECT_EQ(expected_header_value, header_value);
@@ -202,6 +208,12 @@ IN_PROC_BROWSER_TEST_F(DataSaverBrowserTest, DataSaverDisabled) {
   ASSERT_TRUE(embedded_test_server()->Start());
   EnableDataSaver(false);
   VerifySaveDataHeader("None");
+}
+
+IN_PROC_BROWSER_TEST_F(DataSaverBrowserTest, DataSaverDisabledInIncognito) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  EnableDataSaver(true);
+  VerifySaveDataHeader("None", CreateIncognitoBrowser());
 }
 
 class DataSaverWithServerBrowserTest : public InProcessBrowserTest {
@@ -270,16 +282,16 @@ IN_PROC_BROWSER_TEST_F(DataSaverWithServerBrowserTest, ReloadPage) {
   // correct save-data header.
   expected_save_data_header_ = "on";
   chrome::Reload(browser(), WindowOpenDisposition::CURRENT_TAB);
-  content::WaitForLoadStop(
-      browser()->tab_strip_model()->GetActiveWebContents());
+  EXPECT_TRUE(content::WaitForLoadStop(
+      browser()->tab_strip_model()->GetActiveWebContents()));
 
   // Reload the webpage with data saver disabled, and expect all the resources
   // will get no save-data header.
   EnableDataSaver(false);
   expected_save_data_header_ = "";
   chrome::Reload(browser(), WindowOpenDisposition::CURRENT_TAB);
-  content::WaitForLoadStop(
-      browser()->tab_strip_model()->GetActiveWebContents());
+  EXPECT_TRUE(content::WaitForLoadStop(
+      browser()->tab_strip_model()->GetActiveWebContents()));
 }
 
 // Test that the data saver receives changes in effective connection type.
@@ -609,4 +621,62 @@ IN_PROC_BROWSER_TEST_P(DataSaverForWorkerBrowserTest,
   EXPECT_EQ(expected,
             content::EvalJs(GetActiveWebContents(),
                             "fetch_from_page('/echoheader?Save-Data');"));
+}
+
+class DataSaverWithImageServerBrowserTest : public InProcessBrowserTest {
+ public:
+  void SetUp() override {
+    test_server_.reset(new net::EmbeddedTestServer());
+    test_server_->RegisterRequestMonitor(base::BindRepeating(
+        &DataSaverWithImageServerBrowserTest::MonitorImageRequest,
+        base::Unretained(this)));
+    test_server_->ServeFilesFromSourceDirectory(GetChromeTestDataDir());
+    LOG(WARNING) << GetChromeTestDataDir();
+    ASSERT_TRUE(test_server_->Start());
+
+    scoped_feature_list_.InitWithFeatures({blink::features::kSaveDataImgSrcset},
+                                          {});
+
+    InProcessBrowserTest::SetUp();
+  }
+
+  void EnableDataSaver(bool enabled) {
+    SetDataSaverEnabled(browser()->profile(), enabled);
+  }
+
+  void SetImagesNotToLoad(const std::vector<std::string>& imgs_not_to_load) {
+    imgs_not_to_load_ = std::vector<std::string>(imgs_not_to_load);
+  }
+
+  std::unique_ptr<net::EmbeddedTestServer> test_server_;
+
+ private:
+  // Called by |test_server_|.
+  void MonitorImageRequest(const net::test_server::HttpRequest& request) {
+    for (const auto& img : imgs_not_to_load_)
+      EXPECT_FALSE(request.GetURL().path() == img);
+  }
+
+  base::test::ScopedFeatureList scoped_feature_list_;
+  std::vector<std::string> imgs_not_to_load_;
+};
+
+IN_PROC_BROWSER_TEST_F(DataSaverWithImageServerBrowserTest,
+                       ImgSrcset_DataSaverEnabled) {
+  EnableDataSaver(true);
+  SetImagesNotToLoad({"/data_saver/red.jpg"});
+
+  base::HistogramTester histogram_tester;
+  ui_test_utils::NavigateToURL(
+      browser(), test_server_->GetURL("/data_saver/image_srcset.html"));
+}
+
+IN_PROC_BROWSER_TEST_F(DataSaverWithImageServerBrowserTest,
+                       ImgSrcset_DataSaverDisabled) {
+  EnableDataSaver(false);
+  SetImagesNotToLoad({"/data_saver/green.jpg"});
+
+  base::HistogramTester histogram_tester;
+  ui_test_utils::NavigateToURL(
+      browser(), test_server_->GetURL("/data_saver/image_srcset.html"));
 }

@@ -10,7 +10,6 @@
 #include "base/values.h"
 #include "chrome/common/extensions/api/extension_action/action_info.h"
 #include "chrome/common/extensions/extension_constants.h"
-#include "chrome/grit/generated_resources.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/file_util.h"
 #include "extensions/common/image_util.h"
@@ -100,24 +99,29 @@ bool ExtensionActionHandler::Validate(
     const Extension* extension,
     std::string* error,
     std::vector<InstallWarning>* warnings) const {
-  int error_message = 0;
-  const ActionInfo* action = ActionInfo::GetPageActionInfo(extension);
-  if (action) {
-    error_message = IDS_EXTENSION_LOAD_ICON_FOR_PAGE_ACTION_FAILED;
-  } else {
-    action = ActionInfo::GetBrowserActionInfo(extension);
-    error_message = IDS_EXTENSION_LOAD_ICON_FOR_BROWSER_ACTION_FAILED;
+  const ActionInfo* action = ActionInfo::GetAnyActionInfo(extension);
+  if (!action || action->default_icon.empty())
+    return true;
+
+  const char* manifest_key = nullptr;
+  switch (action->type) {
+    case ActionInfo::TYPE_ACTION:
+      manifest_key = manifest_keys::kAction;
+      break;
+    case ActionInfo::TYPE_BROWSER:
+      manifest_key = manifest_keys::kBrowserAction;
+      break;
+    case ActionInfo::TYPE_PAGE:
+      manifest_key = manifest_keys::kPageAction;
+      break;
   }
+  DCHECK(manifest_key);
 
   // Analyze the icons for visibility using the default toolbar color, since
   // the majority of Chrome users don't modify their theme.
-  if (action && !action->default_icon.empty() &&
-      !file_util::ValidateExtensionIconSet(
-          action->default_icon, extension, error_message,
-          image_util::kDefaultToolbarColor, error)) {
-    return false;
-  }
-  return true;
+  return file_util::ValidateExtensionIconSet(
+      action->default_icon, extension, manifest_key,
+      image_util::kDefaultToolbarColor, error);
 }
 
 bool ExtensionActionHandler::AlwaysParseForType(Manifest::Type type) const {

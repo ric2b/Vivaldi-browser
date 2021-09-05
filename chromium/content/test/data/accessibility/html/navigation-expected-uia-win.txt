@@ -1,3 +1,4 @@
-document
-++navigation
-++++link Name='Don't click on me'
+Document
+++Group
+++++Hyperlink Name='Don't click on me'
+++++++Text Name='Don't click on me' IsControlElement=false

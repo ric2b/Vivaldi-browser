@@ -3,7 +3,7 @@
 <translationbundle lang="fa">
 <translation id="1033008476608128425">چشم‌انداز ۳</translation>
 <translation id="1118377629180821201">چشم‌انداز ۱۲</translation>
-<translation id="1158503667684816647">عدم نمایش مجدد تاییدیه‌ی خروج</translation>
+<translation id="1158503667684816647">عدم نمایش مجدد تأییدیه‌ی خروج</translation>
 <translation id="1276145862619442150">شماره گیری سریع</translation>
 <translation id="1281950884873973195">حیوان ۶</translation>
 <translation id="1411638389238344450">ارسال پیوند از طریق ایمیل</translation>
@@ -45,7 +45,6 @@
 <translation id="3542768452570884558">گشودن پیوند در پنجره جدید</translation>
 <translation id="3588820906588687999">گشودن &amp;تصویر در زبانه‌ی جدید</translation>
 <translation id="3601066750251199488">هیولا ۳</translation>
-<translation id="366643050267431920">افزودن به عنوان رویداد</translation>
 <translation id="3732157130969736834">پیوند نشانک</translation>
 <translation id="3732388226447288666">حیوان ۲</translation>
 <translation id="3732439195215136813">حیوان ۵</translation>
@@ -68,9 +67,8 @@
 <translation id="4636708767492582204">ارسال با ایمیل</translation>
 <translation id="4677434526832593569">حیوان ۸</translation>
 <translation id="4881695831933465202">باز کردن</translation>
-<translation id="4973311370126107785">امکان اجرای جاوااسکریپت از طریق اپل‌اسکریپت غیرفعال شده. برای فعال‌سازی آن، به بخش ابزارها در نوار منو رفته و گزینه‌ی اجرای جاوااسکریپت از طریق رخدادهای اپلی را انتخاب نمایید.</translation>
 <translation id="5014281392052865061">تماس‌های سریع واردشده</translation>
-<translation id="5092656712000637858">افزودن  صفحه به پنل وب</translation>
+<translation id="5092656712000637858">افزودن صفحه به پنل وب</translation>
 <translation id="5177818338935286353">هیولا ۷</translation>
 <translation id="5213743983876949565">حیوان ۱</translation>
 <translation id="5238244642230426581">نشانک‌های واردشده</translation>
@@ -89,8 +87,9 @@
 <translation id="6229528619562190452">برای به‌روزرسانی ویوالدی اینجا کلیک کنید.</translation>
 <translation id="6234173136417926046">استفاده از تصویر به‌عنوان پس‌زمینه‌ی صفحه‌ی آغاز</translation>
 <translation id="630690498669249215">پرونده‌ی نشانک‌های Opera</translation>
+<translation id="6339818817272922368">حساب محلی</translation>
 <translation id="6438786710866753178">چشم‌انداز ۴</translation>
-<translation id="6477028720702061455">انتخاب پوشه‌ی حساب Opera برای وارد کردن</translation>
+<translation id="6477028720702061455">انتخاب پوشه‌ی پروفایل اپرا برای وارد کردن</translation>
 <translation id="6510706699590490869">&amp;به‌روزرسانی ویوالدی</translation>
 <translation id="6538338088414940408">گشودن پیوند در زبانه‌ی پس‌زمینه</translation>
 <translation id="6551219277044048123">افزودن موتور &amp;جستجو...</translation>
@@ -103,7 +102,8 @@
 <translation id="7496505986576158197">ویوالدی توسط پروژه‌ی منبع‌باز <ph name="BEGIN_LINK_CHROMIUM" />کرومیوم<ph name="END_LINK_CHROMIUM" /> و سایر <ph name="BEGIN_LINK_OSS" />نرم‌افزارهای منبع‌باز<ph name="END_LINK_OSS" /> ساخته شده است.</translation>
 <translation id="7715497554424665066">&amp;نادیده گرفتن به‌روزرسانی</translation>
 <translation id="7724603315864178912">برش</translation>
-<translation id="7865983598101744945">تایید خروج</translation>
+<translation id="7793738202466490491">افزودن به‌عنوان رویداد تقویم</translation>
+<translation id="7865983598101744945">تأیید خروج</translation>
 <translation id="7957213167373139414">تقویم من</translation>
 <translation id="8027581147000338959">در پنجره‌ای جدید باز کن</translation>
 <translation id="8099620695029051217">کپی آدرس صفحه</translation>
@@ -112,6 +112,7 @@
 <translation id="8331671104904436324">بازگشایی در زبانه‌ی پس‌زمینه</translation>
 <translation id="8373293945112511707">چشم‌انداز ۱</translation>
 <translation id="8427094907586191051">چشم‌انداز ۱۷</translation>
+<translation id="8446668873108041390">قابلیت اجرای جاوااسکریپت از طریق اپل اسکریپت خاموش می‌باشد. در بخش تنظیمات &gt; حریم خصوصی &gt; بخش رویدادهای Apple، تنظیمات لازم برای اجرای جاوااسکریپت وجود دارد.</translation>
 <translation id="8539196077526389150">چشم‌انداز ۱۳</translation>
 <translation id="8624587806981488221">&amp;بارگذاری مجدد تصویر</translation>
 <translation id="864444594187862076">Opera نسخه 15+ (Developer)</translation>
@@ -123,7 +124,7 @@
 <translation id="8894900864683381599">افزودن پیوند به پنل وب</translation>
 <translation id="8912720443398351457">آیا واقعاً می خواهید از ویوالدی خارج شوید؟</translation>
 <translation id="8947109330183116400">انتخاب پرونده‌ی HTML نشانک‌ها</translation>
-<translation id="9017566390391482291">انتخاب پوشه‌ی حساب ویوالدی برای وارد کردن</translation>
+<translation id="9017566390391482291">انتخاب پوشه‌ی پروفایل ویوالدی برای وارد کردن</translation>
 <translation id="9065203028668620118">ویرایش</translation>
 <translation id="9157539936604258187">گشودن پیوند</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>

@@ -7,6 +7,7 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/banners/app_banner_metrics.h"
@@ -43,6 +44,27 @@ bool gDisableTriggeringForTesting = false;
 
 namespace banners {
 
+AppBannerManagerDesktop::CreateAppBannerManagerForTesting
+    AppBannerManagerDesktop::override_app_banner_manager_desktop_for_testing_ =
+        nullptr;
+
+// static
+void AppBannerManagerDesktop::CreateForWebContents(
+    content::WebContents* web_contents) {
+  if (FromWebContents(web_contents))
+    return;
+
+  if (override_app_banner_manager_desktop_for_testing_) {
+    web_contents->SetUserData(
+        UserDataKey(),
+        override_app_banner_manager_desktop_for_testing_(web_contents));
+    return;
+  }
+  web_contents->SetUserData(
+      UserDataKey(),
+      base::WrapUnique(new AppBannerManagerDesktop(web_contents)));
+}
+
 // static
 AppBannerManager* AppBannerManager::FromWebContents(
     content::WebContents* web_contents) {
@@ -51,6 +73,11 @@ AppBannerManager* AppBannerManager::FromWebContents(
 
 void AppBannerManagerDesktop::DisableTriggeringForTesting() {
   gDisableTriggeringForTesting = true;
+}
+
+TestAppBannerManagerDesktop*
+AppBannerManagerDesktop::AsTestAppBannerManagerDesktopForTesting() {
+  return nullptr;
 }
 
 AppBannerManagerDesktop::AppBannerManagerDesktop(
@@ -122,6 +149,27 @@ web_app::AppRegistrar& AppBannerManagerDesktop::registrar() {
   return provider->registrar();
 }
 
+// TODO(https://crbug.com/930612): Move out into a more general purpose
+// installability check class.
+bool AppBannerManagerDesktop::IsExternallyInstalledWebApp() {
+  // Public method, so ensure processing is finished before using manifest.
+  if (manifest_.start_url.is_valid()) {
+    // Use manifest as source of truth if available.
+    web_app::AppId manifest_app_id =
+        web_app::GenerateAppIdFromURL(manifest_.start_url);
+    return registrar().HasExternalApp(manifest_app_id);
+  }
+  // Check URL wouldn't collide with an external app's install URL.
+  const GURL& url = web_contents()->GetLastCommittedURL();
+  if (registrar().LookupExternalAppId(url).has_value())
+    return true;
+  // Check an app created for this page wouldn't collide with any external app.
+  web_app::AppId possible_app_id = web_app::GenerateAppIdFromURL(url);
+  if (registrar().HasExternalApp(possible_app_id))
+    return true;
+  return false;
+}
+
 bool AppBannerManagerDesktop::IsWebAppConsideredInstalled() {
   DCHECK(!manifest_.IsEmpty());
   return registrar().IsLocallyInstalled(manifest_.start_url);
@@ -130,12 +178,14 @@ bool AppBannerManagerDesktop::IsWebAppConsideredInstalled() {
 bool AppBannerManagerDesktop::ShouldAllowWebAppReplacementInstall() {
   web_app::AppId app_id = web_app::GenerateAppIdFromURL(manifest_.start_url);
   DCHECK(registrar().IsLocallyInstalled(app_id));
-  auto display_mode = registrar().GetAppDisplayMode(app_id);
+  if (IsExternallyInstalledWebApp())
+    return false;
+  auto display_mode = registrar().GetAppUserDisplayMode(app_id);
   return display_mode == blink::mojom::DisplayMode::kBrowser;
 }
 
 void AppBannerManagerDesktop::ShowBannerUi(WebappInstallSource install_source) {
-  RecordDidShowBanner("AppBanner.WebApp.Shown");
+  RecordDidShowBanner();
   TrackDisplayEvent(DISPLAY_EVENT_WEB_APP_BANNER_CREATED);
   ReportStatus(SHOWING_APP_INSTALLATION_DIALOG);
   CreateWebApp(install_source);
@@ -166,9 +216,10 @@ void AppBannerManagerDesktop::OnWebAppInstalled(
   base::Optional<web_app::AppId> app_id =
       registrar().FindAppWithUrlInScope(validated_url_);
   if (app_id.has_value() && *app_id == installed_app_id &&
-      registrar().GetAppDisplayMode(*app_id) ==
+      registrar().GetAppUserDisplayMode(*app_id) ==
           blink::mojom::DisplayMode::kStandalone) {
-    OnInstall(blink::mojom::DisplayMode::kStandalone);
+    OnInstall(registrar().GetAppDisplayMode(*app_id));
+    SetInstallableWebAppCheckResult(InstallableWebAppCheckResult::kNo);
   }
 }
 
@@ -199,13 +250,13 @@ void AppBannerManagerDesktop::DidFinishCreatingWebApp(
   if (code == web_app::InstallResultCode::kSuccessNewInstall) {
     SendBannerAccepted();
     TrackUserResponse(USER_RESPONSE_WEB_APP_ACCEPTED);
-    AppBannerSettingsHelper::RecordBannerInstallEvent(
-        contents, GetAppIdentifier(), AppBannerSettingsHelper::WEB);
+    AppBannerSettingsHelper::RecordBannerInstallEvent(contents,
+                                                      GetAppIdentifier());
   } else if (code == web_app::InstallResultCode::kUserInstallDeclined) {
     SendBannerDismissed();
     TrackUserResponse(USER_RESPONSE_WEB_APP_DISMISSED);
-    AppBannerSettingsHelper::RecordBannerDismissEvent(
-        contents, GetAppIdentifier(), AppBannerSettingsHelper::WEB);
+    AppBannerSettingsHelper::RecordBannerDismissEvent(contents,
+                                                      GetAppIdentifier());
   }
 }
 

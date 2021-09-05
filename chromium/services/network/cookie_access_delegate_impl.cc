@@ -9,14 +9,31 @@
 namespace network {
 
 CookieAccessDelegateImpl::CookieAccessDelegateImpl(
+    mojom::CookieAccessDelegateType type,
     const CookieSettings* cookie_settings)
-    : cookie_settings_(cookie_settings) {}
+    : type_(type), cookie_settings_(cookie_settings) {
+  if (type == mojom::CookieAccessDelegateType::USE_CONTENT_SETTINGS) {
+    DCHECK(cookie_settings);
+  }
+}
 
 CookieAccessDelegateImpl::~CookieAccessDelegateImpl() = default;
 
 net::CookieAccessSemantics CookieAccessDelegateImpl::GetAccessSemantics(
     const net::CanonicalCookie& cookie) const {
+  if (type_ == mojom::CookieAccessDelegateType::ALWAYS_LEGACY)
+    return net::CookieAccessSemantics::LEGACY;
   return cookie_settings_->GetCookieAccessSemanticsForDomain(cookie.Domain());
+}
+
+bool CookieAccessDelegateImpl::ShouldIgnoreSameSiteRestrictions(
+    const GURL& url,
+    const net::SiteForCookies& site_for_cookies) const {
+  if (cookie_settings_) {
+    return cookie_settings_->ShouldIgnoreSameSiteRestrictions(
+        url, site_for_cookies.RepresentativeUrl());
+  }
+  return false;
 }
 
 }  // namespace network

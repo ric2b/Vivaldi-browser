@@ -8,6 +8,7 @@
 
 #include "base/logging.h"
 #include "base/threading/thread_restrictions.h"
+#include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
 #include "components/keyed_service/core/service_access_type.h"
 #include "components/password_manager/core/browser/password_store_default.h"
 #include "components/sync/driver/sync_service.h"
@@ -25,6 +26,7 @@
 #import "ios/web_view/internal/sync/web_view_profile_sync_service_factory.h"
 #include "ios/web_view/internal/web_view_browser_state.h"
 #include "ios/web_view/internal/web_view_global_state_util.h"
+#include "ios/web_view/internal/webdata_services/web_view_web_data_service_wrapper_factory.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -85,7 +87,7 @@ CWVWebViewConfiguration* gIncognitoConfiguration = nil;
   static dispatch_once_t onceToken;
   dispatch_once(&onceToken, ^{
     auto browserState = std::make_unique<ios_web_view::WebViewBrowserState>(
-        /*off_the_record = */ false);
+        /* off_the_record = */ false);
     gDefaultConfiguration = [[CWVWebViewConfiguration alloc]
         initWithBrowserState:std::move(browserState)];
   });
@@ -97,7 +99,7 @@ CWVWebViewConfiguration* gIncognitoConfiguration = nil;
   dispatch_once(&onceToken, ^{
     CWVWebViewConfiguration* defaultConfiguration = [self defaultConfiguration];
     auto browserState = std::make_unique<ios_web_view::WebViewBrowserState>(
-        /*off_the_record = */ true, defaultConfiguration.browserState);
+        /* off_the_record = */ true, defaultConfiguration.browserState);
     gIncognitoConfiguration = [[CWVWebViewConfiguration alloc]
         initWithBrowserState:std::move(browserState)];
   });
@@ -163,12 +165,21 @@ CWVWebViewConfiguration* gIncognitoConfiguration = nil;
     autofill::PersonalDataManager* personalDataManager =
         ios_web_view::WebViewPersonalDataManagerFactory::GetForBrowserState(
             self.browserState);
+    scoped_refptr<autofill::AutofillWebDataService> autofillWebDataService =
+        ios_web_view::WebViewWebDataServiceWrapperFactory::
+            GetAutofillWebDataForBrowserState(
+                self.browserState, ServiceAccessType::EXPLICIT_ACCESS);
+    scoped_refptr<password_manager::PasswordStore> passwordStore =
+        ios_web_view::WebViewPasswordStoreFactory::GetForBrowserState(
+            self.browserState, ServiceAccessType::EXPLICIT_ACCESS);
 
-    _syncController =
-        [[CWVSyncController alloc] initWithSyncService:syncService
-                                       identityManager:identityManager
-                                 signinErrorController:signinErrorController
-                                   personalDataManager:personalDataManager];
+    _syncController = [[CWVSyncController alloc]
+           initWithSyncService:syncService
+               identityManager:identityManager
+         signinErrorController:signinErrorController
+           personalDataManager:personalDataManager
+        autofillWebDataService:autofillWebDataService.get()
+                 passwordStore:passwordStore.get()];
   }
   return _syncController;
 }
@@ -194,6 +205,9 @@ CWVWebViewConfiguration* gIncognitoConfiguration = nil;
   for (CWVWebView* webView in _webViews) {
     [webView shutDown];
   }
+#if BUILDFLAG(IOS_WEB_VIEW_ENABLE_SYNC)
+  [_syncController shutDown];
+#endif  // BUILDFLAG(IOS_WEB_VIEW_ENABLE_SYNC)
   _browserState.reset();
 }
 

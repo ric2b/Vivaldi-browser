@@ -173,11 +173,33 @@ void WebViewFindHelper::FindReply(int request_id,
   if (!find_info->replied() && !find_info->options()->find_next)
     find_update_event_.reset(new FindUpdateEvent(find_info->search_text()));
 
+
+  double scale = 1.0f;
+  display::Screen* screen = display::Screen::GetScreen();
+  if (screen) {
+    // Make sure we use the display of the toplevel window.
+    gfx::NativeWindow window = webview_guest_->
+      web_contents()->GetTopLevelNativeWindow();
+
+    display::Display display =
+      screen->GetDisplayNearestWindow(window);
+
+    scale = display.device_scale_factor();
+    gfx::Rect scaled_selection_rect =
+      gfx::ConvertRectToDIP(scale, selection_rect);
+
+    find_info->AggregateResults(number_of_matches, scaled_selection_rect,
+      active_match_ordinal, final_update);
+    find_update_event_->AggregateResults(number_of_matches,
+      scaled_selection_rect, active_match_ordinal, final_update);
+
+  } else {
   // Aggregate the find results.
   find_info->AggregateResults(number_of_matches, selection_rect,
                               active_match_ordinal, final_update);
   find_update_event_->AggregateResults(number_of_matches, selection_rect,
                                       active_match_ordinal, final_update);
+  }
 
   // Propagate incremental results to the |findupdate| event.
   DispatchFindUpdateEvent(false /* canceled */, final_update);
@@ -209,16 +231,7 @@ void WebViewFindHelper::FindResults::AggregateResults(
     // No match found, so the selection rectangle is empty.
     selection_rect_ = gfx::Rect();
   } else if (!selection_rect.IsEmpty()) {
-    double scale = 1.0f;
-    display::Screen* screen = display::Screen::GetScreen();
-    if (screen) {
-      scale = screen
-                  ->GetDisplayNearestPoint(
-                      gfx::Point(selection_rect.x(), selection_rect.y()))
-                  .device_scale_factor();
-    }
-    selection_rect_ = gfx::ConvertRectToDIP(scale, selection_rect);
-
+    selection_rect_ = selection_rect;
   }
 }
 

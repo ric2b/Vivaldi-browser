@@ -1,38 +1,95 @@
 import("//build/config/jumbo.gni")
 
-jumbo_static_library("apis") {
+config("delay_load_mf") {
+  ldflags = [
+    "/DELAYLOAD:mfplat.dll",
+  ]
+}
+
+static_library("apis") {
   public_deps = [
     "//chrome/common:mojo_bindings",
+    "//components/favicon/core",
   ]
   deps = [
-    "../tools",
     "//apps:apps",
     "//base:base",
     "//chrome/app:command_ids",
     "//chrome/app/theme:theme_resources",
-    "//chrome/browser/extensions:extensions",
-    "//components/bookmarks/browser:browser",
-    "//components/favicon/core:core",
+    "//chrome/browser/devtools",
+    "//chrome/browser/extensions",
+    "//chrome/browser/media/router",
+    "//chrome/common:buildflags",
+    "//chrome/common/apps/platform_apps",
+    "//chrome/common/extensions/api",
+    "//chrome/common/media_router/mojom:media_router",
+    "//components/autofill/core/common",
+    "//components/bookmarks/browser",
+    "//components/browser_sync",
+    "//components/infobars/core",
+    "//components/javascript_dialogs",
+    "//components/keep_alive_registry",
+    "//components/keyed_service/content",
     "//components/language/core/browser",
+    "//components/password_manager/core/browser",
+    "//components/permissions",
+    "//components/pref_registry",
+    "//components/sessions",
     "//components/search_engines",
+    "//components/sync",
+    "//components/sync_device_info",
     "//components/version_info",
-    "//components/zoom:zoom",
+    "//components/web_modal",
+    "//components/zoom",
+    #"//content/browser",
     "//content/public/browser",
 
     #"//content/public/common",
     "//extensions/browser",
+    "//printing/buildflags",
     "//skia:skia",
     "//third_party/cacheinvalidation",
     "//third_party/blink/public:blink_headers",
+    #"//third_party/blink/renderer/platform",
+    "//ui/shell_dialogs",
+    "//ui/views",
+    "//vivaldi/calendar",
+    "//vivaldi/components/request_filter/adblock_filter",
+    "//vivaldi/contact",
+    "//vivaldi/extensions/helper",
+    "//vivaldi/extensions/helper:app_helper",
     "//vivaldi/extensions/schema",
+    "//vivaldi/extensions/tools",
+    "//vivaldi/menus",
+    "//vivaldi/notes",
+    "//vivaldi/notes:browser",
+    "//vivaldi/prefs",
+    "//vivaldi/prefs:browser_prefs",
     "//vivaldi/prefs:prefs_files_generator",
+    "//vivaldi/prefs:prefs_strings",
+    "//vivaldi/ui",
     "//vivaldi/ui:skia_utils",
+    "//vivaldi/vivaldi_account",
   ]
+  allow_circular_includes_from = [
+    "//chrome/browser/extensions",
+    "//vivaldi/extensions/helper:app_helper",
+    "//vivaldi/extensions/tools",
+  ]
+  # Needed for media support detection in vivaldi.utilities
+  if (is_win) {
+    libs = [
+      "mfplat.lib",
+    ]
+    # MediaFoundation is not available on Windows N, so must be delay loaded.
+    all_dependent_configs = [ ":delay_load_mf" ]
+  }
+
   sources = [
     "access_keys/access_keys_api.cc",
     "access_keys/access_keys_api.h",
     "auto_update/auto_update_api_linux.cc",
-    "auto_update/auto_update_api_mac.cc",
+    "auto_update/auto_update_api_mac.mm",
     "auto_update/auto_update_api_win.cc",
     "auto_update/auto_update_api.h",
     "bookmark_context_menu/bookmark_context_menu_api.cc",
@@ -43,6 +100,8 @@ jumbo_static_library("apis") {
     "calendar/calendar_api.h",
     "contacts/contacts_api.cc",
     "contacts/contacts_api.h",
+    "content_blocking/content_blocking_api.cc",
+    "content_blocking/content_blocking_api.h",
     "context_menu/context_menu_api.cc",
     "context_menu/context_menu_api.h",
     "devtools/devtools_private_api.cc",
@@ -65,12 +124,16 @@ jumbo_static_library("apis") {
     "infobars/infobars_api.h",
     "mail/mail_private_api.cc",
     "mail/mail_private_api.h",
+    "menu_content/menu_content_api.cc",
+    "menu_content/menu_content_api.h",
     "menubar/menubar_api.cc",
     "menubar/menubar_api.h",
     "menubar_menu/menubar_menu_api.cc",
     "menubar_menu/menubar_menu_api.h",
     "notes/notes_api.cc",
     "notes/notes_api.h",
+    "pip_private/pip_private_api.cc",
+    "pip_private/pip_private_api.h",
     "prefs/prefs_api.cc",
     "prefs/prefs_api.h",
     "runtime/runtime_api.cpp",

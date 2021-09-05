@@ -8,6 +8,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <string>
+#include <vector>
+
 #include "base/android/scoped_java_ref.h"
 #include "base/macros.h"
 #include "base/timer/elapsed_timer.h"
@@ -39,16 +42,15 @@ class CONTENT_EXPORT BrowserAccessibilityAndroid : public BrowserAccessibility {
   bool IsCollectionItem() const;
   bool IsContentInvalid() const;
   bool IsDismissable() const;
-  bool IsEditableText() const;
   bool IsEnabled() const;
   bool IsExpanded() const;
   bool IsFocusable() const;
   bool IsFocused() const;
+  bool IsFormDescendant() const;
   bool IsHeading() const;
   bool IsHierarchical() const;
   bool IsLink() const;
   bool IsMultiLine() const;
-  bool IsPassword() const;
   bool IsRangeType() const;
   bool IsScrollable() const;
   bool IsSelected() const;
@@ -59,6 +61,9 @@ class CONTENT_EXPORT BrowserAccessibilityAndroid : public BrowserAccessibility {
   // Nodes that have a generic role, no accessible name, and aren't
   // focusable or clickable aren't interesting.
   bool IsInterestingOnAndroid() const;
+
+  // Is a heading whose only child is a link.
+  bool IsHeadingLink() const;
 
   // If this node is interesting (IsInterestingOnAndroid() returns true),
   // returns |this|. If not, it recursively checks all of the
@@ -104,7 +109,7 @@ class CONTENT_EXPORT BrowserAccessibilityAndroid : public BrowserAccessibility {
   int GetMinScrollY() const;
   int GetMaxScrollX() const;
   int GetMaxScrollY() const;
-  bool Scroll(int direction) const;
+  bool Scroll(int direction, bool is_page_scroll) const;
 
   int GetTextChangeFromIndex() const;
   int GetTextChangeAddedCount() const;
@@ -150,6 +155,15 @@ class CONTENT_EXPORT BrowserAccessibilityAndroid : public BrowserAccessibility {
   void GetWordBoundaries(std::vector<int32_t>* word_starts,
                          std::vector<int32_t>* word_ends,
                          int offset);
+
+  // Return the target of a link or the source of an image.
+  base::string16 GetTargetUrl() const;
+
+  // On Android, spelling errors are returned as "suggestions". Retreive
+  // all of the suggestions for a given text field as vectors of start
+  // and end offsets.
+  void GetSuggestions(std::vector<int>* suggestion_starts,
+                      std::vector<int>* suggestion_ends) const;
 
   // Used to keep track of when to stop reporting content_invalid.
   // Timer only applies if node has focus.

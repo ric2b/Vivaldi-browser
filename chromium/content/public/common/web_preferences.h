@@ -121,7 +121,6 @@ struct CONTENT_EXPORT WebPreferences {
   bool flash_stage3d_baseline_enabled;
   bool privileged_webgl_extensions_enabled;
   bool webgl_errors_to_console_enabled;
-  bool mock_scrollbars_enabled;
   bool hide_scrollbars;
   bool accelerated_2d_canvas_enabled;
   bool antialiased_2d_canvas_disabled;
@@ -181,7 +180,6 @@ struct CONTENT_EXPORT WebPreferences {
   bool smart_insert_delete_enabled;
   bool spatial_navigation_enabled;
   bool caret_browsing_enabled;
-  bool use_solid_color_scrollbars;
   bool navigate_on_drag_drop;
   blink::mojom::V8CacheOptions v8_cache_options;
   bool record_whole_document;
@@ -201,6 +199,8 @@ struct CONTENT_EXPORT WebPreferences {
 
   bool user_gesture_required_for_presentation;
 
+  bool text_tracks_enabled;
+
   // These fields specify the foreground and background color for WebVTT text
   // tracks. Their values can be any legal CSS color descriptor.
   std::string text_track_background_color;
@@ -212,6 +212,7 @@ struct CONTENT_EXPORT WebPreferences {
   std::string text_track_text_size;
   std::string text_track_text_shadow;
   std::string text_track_font_family;
+  std::string text_track_font_style;
   // Specifies the value for CSS font-variant property.
   std::string text_track_font_variant;
 
@@ -267,8 +268,6 @@ struct CONTENT_EXPORT WebPreferences {
   // If enabled, fullscreen should be entered/exited when the device is rotated
   // to/from the orientation of the video.
   bool video_rotate_to_fullscreen_enabled;
-  // If enabled, video fullscreen detection will be enabled.
-  bool video_fullscreen_detection_enabled;
   bool embedded_media_experience_enabled;
   // Enable 8 (#RRGGBBAA) and 4 (#RGBA) value hex colors in CSS Android
   // WebView quirk (http://crbug.com/618472).
@@ -283,6 +282,9 @@ struct CONTENT_EXPORT WebPreferences {
   bool disable_features_depending_on_viz;
   // Don't accelerate small canvases to avoid crashes TODO(crbug.com/1004304)
   bool disable_accelerated_small_canvases;
+  // Re-enable Web Components v0 on Webview, temporarily. This should get
+  // removed when crbug.com/1021631 gets fixed.
+  bool reenable_web_components_v0;
 #endif  // defined(OS_ANDROID)
 
   // Enable forcibly modifying content rendering to result in a light on dark
@@ -350,6 +352,10 @@ struct CONTENT_EXPORT WebPreferences {
   std::map<net::EffectiveConnectionType, int>
       lazy_image_loading_distance_thresholds_px;
   std::map<net::EffectiveConnectionType, int> lazy_image_first_k_fully_load;
+
+  // Setting to false disables upgrades to HTTPS for HTTP resources in HTTPS
+  // sites.
+  bool allow_mixed_content_upgrades;
 
   // Vivaldi specific preferences:
   // Maps to the Cycle focus setting in Vivaldi.

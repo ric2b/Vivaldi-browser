@@ -84,11 +84,6 @@ const char kAutofillLastVersionDisusedAddressesDeleted[] =
 const char kAutofillLastVersionDisusedCreditCardsDeleted[] =
     "autofill.last_version_disused_credit_cards_deleted";
 
-// Boolean that is set to denote whether user cancelled/rejected local card
-// migration prompt.
-const char kAutofillMigrateLocalCardsCancelledPrompt[] =
-    "autofill.migrate_local_card_cancelled_state";
-
 // Boolean that is true if the orphan rows in the autofill table were removed.
 const char kAutofillOrphanRowsRemoved[] = "autofill.orphan_rows_removed";
 
@@ -175,8 +170,6 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
       prefs::kAutofillLastVersionDisusedCreditCardsDeleted, 0);
   registry->RegisterIntegerPref(prefs::kAutocompleteLastVersionRetentionPolicy,
                                 0);
-  registry->RegisterBooleanPref(
-      prefs::kAutofillMigrateLocalCardsCancelledPrompt, false);
   registry->RegisterBooleanPref(prefs::kAutofillOrphanRowsRemoved, false);
   registry->RegisterStringPref(prefs::kAutofillUploadEncodingSeed, "");
   registry->RegisterDictionaryPref(prefs::kAutofillUploadEvents);
@@ -223,16 +216,7 @@ void MigrateDeprecatedAutofillPrefs(PrefService* prefs) {
 }
 
 bool IsAutocompleteEnabled(const PrefService* prefs) {
-  return IsProfileAutofillEnabled(prefs);
-}
-
-bool IsAutofillEnabled(const PrefService* prefs) {
-  return IsProfileAutofillEnabled(prefs) || IsCreditCardAutofillEnabled(prefs);
-}
-
-void SetAutofillEnabled(PrefService* prefs, bool enabled) {
-  SetProfileAutofillEnabled(prefs, enabled);
-  SetCreditCardAutofillEnabled(prefs, enabled);
+  return IsAutofillProfileEnabled(prefs);
 }
 
 bool IsCreditCardFIDOAuthEnabled(PrefService* prefs) {
@@ -243,11 +227,11 @@ void SetCreditCardFIDOAuthEnabled(PrefService* prefs, bool enabled) {
   prefs->SetBoolean(kAutofillCreditCardFidoAuthEnabled, enabled);
 }
 
-bool IsCreditCardAutofillEnabled(const PrefService* prefs) {
+bool IsAutofillCreditCardEnabled(const PrefService* prefs) {
   return prefs->GetBoolean(kAutofillCreditCardEnabled);
 }
 
-void SetCreditCardAutofillEnabled(PrefService* prefs, bool enabled) {
+void SetAutofillCreditCardEnabled(PrefService* prefs, bool enabled) {
   prefs->SetBoolean(kAutofillCreditCardEnabled, enabled);
 }
 
@@ -255,29 +239,20 @@ bool IsAutofillManaged(const PrefService* prefs) {
   return prefs->IsManagedPreference(kAutofillEnabledDeprecated);
 }
 
-bool IsProfileAutofillManaged(const PrefService* prefs) {
+bool IsAutofillProfileManaged(const PrefService* prefs) {
   return prefs->IsManagedPreference(kAutofillProfileEnabled);
 }
 
-bool IsCreditCardAutofillManaged(const PrefService* prefs) {
+bool IsAutofillCreditCardManaged(const PrefService* prefs) {
   return prefs->IsManagedPreference(kAutofillCreditCardEnabled);
 }
 
-bool IsProfileAutofillEnabled(const PrefService* prefs) {
+bool IsAutofillProfileEnabled(const PrefService* prefs) {
   return prefs->GetBoolean(kAutofillProfileEnabled);
 }
 
-void SetProfileAutofillEnabled(PrefService* prefs, bool enabled) {
+void SetAutofillProfileEnabled(PrefService* prefs, bool enabled) {
   prefs->SetBoolean(kAutofillProfileEnabled, enabled);
-}
-
-bool IsLocalCardMigrationPromptPreviouslyCancelled(const PrefService* prefs) {
-  return prefs->GetBoolean(kAutofillMigrateLocalCardsCancelledPrompt);
-}
-
-void SetLocalCardMigrationPromptPreviouslyCancelled(PrefService* prefs,
-                                                    bool enabled) {
-  prefs->SetBoolean(kAutofillMigrateLocalCardsCancelledPrompt, enabled);
 }
 
 bool IsPaymentsIntegrationEnabled(const PrefService* prefs) {
@@ -296,13 +271,14 @@ std::string GetAllProfilesValidityMapsEncodedString(const PrefService* prefs) {
 }
 
 void SetUserOptedInWalletSyncTransport(PrefService* prefs,
-                                       const std::string& account_id,
+                                       const CoreAccountId& account_id,
                                        bool opted_in) {
   // Get the hash of the account id. The hashing here is only a secondary bit of
   // obfuscation. The primary privacy guarantees are handled by clearing this
   // whenever cookies are cleared.
   std::string account_hash;
-  base::Base64Encode(crypto::SHA256HashString(account_id), &account_hash);
+  base::Base64Encode(crypto::SHA256HashString(account_id.ToString()),
+                     &account_hash);
 
   DictionaryPrefUpdate update(prefs, prefs::kAutofillSyncTransportOptIn);
   int value = GetSyncTransportOptInBitFieldForAccount(prefs, account_hash);
@@ -325,10 +301,11 @@ void SetUserOptedInWalletSyncTransport(PrefService* prefs,
 }
 
 bool IsUserOptedInWalletSyncTransport(const PrefService* prefs,
-                                      const std::string& account_id) {
+                                      const CoreAccountId& account_id) {
   // Get the hash of the account id.
   std::string account_hash;
-  base::Base64Encode(crypto::SHA256HashString(account_id), &account_hash);
+  base::Base64Encode(crypto::SHA256HashString(account_id.ToString()),
+                     &account_hash);
 
   // Return whether the wallet opt-in bit is set.
   return GetSyncTransportOptInBitFieldForAccount(prefs, account_hash) &

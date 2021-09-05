@@ -46,6 +46,8 @@ std::map<char, std::string> dateFormatMods = {
     {'x', "ll"},       {'X', "LTS"},  {'y', "YY"},         {'Y', "YYYY"},
     {'z', ""},         {'Z', ""},     {'f', "SSS"},        {'r', "HH:mm:ss A"}};
 
+// TODO: Three known languages that still might need special treatment are
+// Tongan, Farsi and Vietnamese, out of 92 tested so far.
 std::string getMomentJsFormatString(const char* fmt, bool short_date) {
   std::string s = "";
   std::map<char,std::string>::iterator it;
@@ -67,9 +69,8 @@ std::string getMomentJsFormatString(const char* fmt, bool short_date) {
         continue;
       }
 
-      // Seems to be a quirk of the Icelandic language to include the day twice
-      // for the short date (Of dozens of languages tested, only South Africa
-      // also had this problem)
+      // Seems to be a quirk of some locales (like Icelandic) to include
+      // the day twice for the short date
       if ((c == 'a' || c == 'A') && short_date) {
         i += 2;
         continue;
@@ -80,6 +81,13 @@ std::string getMomentJsFormatString(const char* fmt, bool short_date) {
         s += it->second;
       }
       i++;
+
+    // Norway adds 'kl.' in front of its time format. This code might seem
+    // like too much special-casing, but Norway really is the only country
+    // in the world that does this and 'kl' interferes with moment.js
+    // formatting.
+    } else if (fmt[i] == 'k' && fmt[i+1] == 'l' && fmt[i+2] == '.') {
+      i+=2;
     } else {
       s += fmt[i];
     }

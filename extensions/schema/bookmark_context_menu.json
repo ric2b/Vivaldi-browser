@@ -40,6 +40,12 @@
         "enum": ["title", "url", "nickname", "description", "dateadded"]
       },
       {
+        "id": "Edge",
+        "type": "string",
+        "description": "Defines position of menu items added in chrome code wrt bookmark items.",
+        "enum": [ "above", "below", "off" ]
+      },
+      {
         "id": "Icons",
         "type": "array",
         "description": "Icons encoded as base64",
@@ -58,6 +64,7 @@
             "properties": {
               "siblings": { "type": "array", "items": {"$ref": "FolderEntry"}, "description": "List of menu entries."},
               "id": {"type": "string", "description": "Bookmark folder id. Must match an id in the sibling list."},
+              "edge": {"$ref": "Edge", "optional": true, "description": "Where to place extra menu items"},
               "sortField": {"$ref": "SortField", "optional": true},
               "sortOrder": {"$ref": "SortOrder", "optional": true},
               "icons": {"$ref": "Icons", "description": "Default and folder icons."}

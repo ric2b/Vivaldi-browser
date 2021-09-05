@@ -4,16 +4,24 @@
 
 #include "chrome/browser/ui/app_list/search/drive_quick_access_provider.h"
 
+#include <algorithm>
 #include <memory>
 #include <utility>
 
+#include "ash/public/cpp/app_list/app_list_features.h"
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
+#include "base/task/thread_pool.h"
+#include "base/task_runner_util.h"
 #include "chrome/browser/chromeos/drive/drive_integration_service.h"
+#include "chrome/browser/ui/app_list/search/drive_quick_access_chip_result.h"
 #include "chrome/browser/ui/app_list/search/drive_quick_access_result.h"
+#include "chrome/browser/ui/app_list/search/search_controller.h"
+#include "content/public/browser/browser_task_traits.h"
+#include "content/public/browser/browser_thread.h"
 
 namespace app_list {
 namespace {
@@ -57,6 +65,15 @@ void LogDriveFSMounted(bool mounted) {
                         mounted);
 }
 
+// Given an absolute path representing a file in the user's Drive, returns a
+// reparented version of the path within the user's DriveFS mount.
+base::FilePath ReparentToDriveMount(
+    const base::FilePath& path,
+    const drive::DriveIntegrationService* drive_service) {
+  DCHECK(path.IsAbsolute());
+  return drive_service->GetMountPointPath().Append(path.value().substr(1));
+}
+
 // Given a vector of QuickAccessItems, return only those that exist on-disk.
 std::vector<drive::QuickAccessItem> FilterResults(
     const drive::DriveIntegrationService* drive_service,
@@ -64,8 +81,7 @@ std::vector<drive::QuickAccessItem> FilterResults(
   std::vector<drive::QuickAccessItem> valid_results;
   int num_filtered = 0;
   for (const auto& result : drive_results) {
-    if (base::PathExists(
-            drive_service->GetMountPointPath().Append(result.path))) {
+    if (base::PathExists(ReparentToDriveMount(result.path, drive_service))) {
       valid_results.emplace_back(result);
       ++num_filtered;
     }
@@ -78,18 +94,46 @@ std::vector<drive::QuickAccessItem> FilterResults(
 
 }  // namespace
 
-DriveQuickAccessProvider::DriveQuickAccessProvider(Profile* profile)
+DriveQuickAccessProvider::DriveQuickAccessProvider(
+    Profile* profile,
+    SearchController* search_controller)
     : profile_(profile),
       drive_service_(
-          drive::DriveIntegrationServiceFactory::GetForProfile(profile)) {
+          drive::DriveIntegrationServiceFactory::GetForProfile(profile)),
+      search_controller_(search_controller),
+      suggested_files_enabled_(app_list_features::IsSuggestedFilesEnabled()) {
   DCHECK(profile_);
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  task_runner_ = base::CreateSequencedTaskRunner(
-      {base::ThreadPool(), base::TaskPriority::BEST_EFFORT, base::MayBlock(),
+  task_runner_ = base::ThreadPool::CreateSequencedTaskRunner(
+      {base::TaskPriority::BEST_EFFORT, base::MayBlock(),
        base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
+
+  // Observe the drive integration service to warm the results cache once
+  // drivefs is mounted. This is necessary only if the suggested files
+  // experiment is enabled, so that results are ready for display in the
+  // suggested chips on the first launcher open after login.
+  if (suggested_files_enabled_ && drive_service_)
+    drive_service_->AddObserver(this);
 }
 
-DriveQuickAccessProvider::~DriveQuickAccessProvider() = default;
+DriveQuickAccessProvider::~DriveQuickAccessProvider() {
+  if (suggested_files_enabled_ && drive_service_)
+    drive_service_->RemoveObserver(this);
+}
+
+void DriveQuickAccessProvider::OnFileSystemMounted() {
+  // Warm up the result cache by fetching results from the Drive QuickAccess API
+  // as soon as DriveFS is mounted. This ensures the first use of the launcher
+  // displays Drive results. This is called on login, and when resuming from
+  // sleep.
+  GetQuickAccessItems(
+      base::BindOnce(&DriveQuickAccessProvider::StartSearchController,
+                     weak_factory_.GetWeakPtr()));
+}
+
+void DriveQuickAccessProvider::StartSearchController() {
+  search_controller_->Start(base::string16());
+}
 
 void DriveQuickAccessProvider::Start(const base::string16& query) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -114,15 +158,21 @@ void DriveQuickAccessProvider::Start(const base::string16& query) {
   UMA_HISTOGRAM_BOOLEAN("Apps.AppList.DriveQuickAccessProvider.CacheEmpty",
                         results_cache_.empty());
   if (results_cache_.empty()) {
-    GetQuickAccessItems();
+    GetQuickAccessItems(base::DoNothing());
     return;
   }
 
   SearchProvider::Results results;
   for (const auto& result : results_cache_) {
+    const auto& path = ReparentToDriveMount(result.path, drive_service_);
+
     results.emplace_back(std::make_unique<DriveQuickAccessResult>(
-        drive_service_->GetMountPointPath().Append(result.path),
-        result.confidence, profile_));
+        path, result.confidence, profile_));
+    // Add suggestion chip file results
+    if (suggested_files_enabled_) {
+      results.emplace_back(std::make_unique<DriveQuickAccessChipResult>(
+          path, result.confidence, profile_));
+    }
   }
   UMA_HISTOGRAM_TIMES("Apps.AppList.DriveQuickAccessProvider.Latency",
                       base::TimeTicks::Now() - query_start_time_);
@@ -131,10 +181,11 @@ void DriveQuickAccessProvider::Start(const base::string16& query) {
 
 void DriveQuickAccessProvider::AppListShown() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  GetQuickAccessItems();
+  GetQuickAccessItems(base::DoNothing());
 }
 
-void DriveQuickAccessProvider::GetQuickAccessItems() {
+void DriveQuickAccessProvider::GetQuickAccessItems(
+    base::OnceCallback<void()> on_done) {
   LogDriveFSMounted(drive_service_);
   if (!drive_service_)
     return;
@@ -146,10 +197,11 @@ void DriveQuickAccessProvider::GetQuickAccessItems() {
   drive_service_->GetQuickAccessItems(
       kMaxItems,
       base::BindOnce(&DriveQuickAccessProvider::OnGetQuickAccessItems,
-                     weak_factory_.GetWeakPtr()));
+                     weak_factory_.GetWeakPtr(), std::move(on_done)));
 }
 
 void DriveQuickAccessProvider::OnGetQuickAccessItems(
+    base::OnceCallback<void()> on_done,
     drive::FileError error,
     std::vector<drive::QuickAccessItem> drive_results) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -179,13 +231,26 @@ void DriveQuickAccessProvider::OnGetQuickAccessItems(
         task_runner_.get(), FROM_HERE,
         base::BindOnce(&FilterResults, drive_service_, drive_results),
         base::BindOnce(&DriveQuickAccessProvider::SetResultsCache,
-                       weak_factory_.GetWeakPtr()));
+                       weak_factory_.GetWeakPtr(), std::move(on_done)));
   }
 }
 
 void DriveQuickAccessProvider::SetResultsCache(
+    base::OnceCallback<void()> on_done,
     const std::vector<drive::QuickAccessItem>& drive_results) {
+  // Rescale items between 0 and 1
+  double hi = drive_results[0].confidence;
+  double lo = drive_results[0].confidence;
+  for (auto item : drive_results) {
+    hi = std::max(item.confidence, hi);
+    lo = std::min(item.confidence, lo);
+  }
+  for (auto item : drive_results) {
+    item.confidence = (item.confidence - lo) / (hi - lo);
+  }
+
   results_cache_ = std::move(drive_results);
+  std::move(on_done).Run();
 }
 
 }  // namespace app_list

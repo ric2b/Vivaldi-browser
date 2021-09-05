@@ -34,7 +34,7 @@ AudioWorkletProcessor::AudioWorkletProcessor(
     : global_scope_(global_scope), processor_port_(port), name_(name) {}
 
 bool AudioWorkletProcessor::Process(
-    Vector<AudioBus*>* input_buses,
+    Vector<scoped_refptr<AudioBus>>* input_buses,
     Vector<AudioBus*>* output_buses,
     HashMap<String, std::unique_ptr<AudioFloatArray>>* param_value_map) {
   DCHECK(global_scope_->IsContextThread());
@@ -60,7 +60,7 @@ MessagePort* AudioWorkletProcessor::port() const {
   return processor_port_.Get();
 }
 
-void AudioWorkletProcessor::Trace(blink::Visitor* visitor) {
+void AudioWorkletProcessor::Trace(Visitor* visitor) {
   visitor->Trace(global_scope_);
   visitor->Trace(processor_port_);
   ScriptWrappable::Trace(visitor);

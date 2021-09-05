@@ -18,13 +18,13 @@
 #include "base/base_switches.h"
 #include "base/bind.h"
 #include "base/command_line.h"
-#include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/no_destructor.h"
 #include "base/path_service.h"
 #include "base/scoped_native_library.h"
 #include "build/build_config.h"
-#include "components/crash/content/app/crash_reporter_client.h"
-#include "components/crash/content/app/crashpad.h"
+#include "components/crash/core/app/crash_reporter_client.h"
+#include "components/crash/core/app/crashpad.h"
 #include "components/version_info/android/channel_getter.h"
 #include "components/version_info/version_info.h"
 #include "components/version_info/version_info_values.h"
@@ -33,13 +33,11 @@ using base::android::AttachCurrentThread;
 
 namespace android_webview {
 
-constexpr unsigned int kCrashDumpPercentageForStable = 1;
-
 namespace {
 
 class AwCrashReporterClient : public crash_reporter::CrashReporterClient {
  public:
-  AwCrashReporterClient() {}
+  AwCrashReporterClient() = default;
 
   // crash_reporter::CrashReporterClient implementation.
   bool IsRunningUnattended() override { return false; }
@@ -78,31 +76,23 @@ class AwCrashReporterClient : public crash_reporter::CrashReporterClient {
     *sanitize_stacks = true;
   }
 
-  unsigned int GetCrashDumpPercentage() override {
-    if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-            switches::kEnableCrashReporterForTesting) ||
-        base::android::BuildInfo::GetInstance()->is_debug_android()) {
-      return 100;
-    }
-
-    version_info::Channel channel = version_info::android::GetChannel();
-    // Downsample unknown channel as a precaution in case it ends up being
-    // shipped.
-    if (channel == version_info::Channel::STABLE ||
-        channel == version_info::Channel::UNKNOWN) {
-      return kCrashDumpPercentageForStable;
-    }
-
-    return 100;
-  }
+  unsigned int GetCrashDumpPercentage() override { return 100; }
 
   bool GetBrowserProcessType(std::string* ptype) override {
-    *ptype = base::CommandLine::ForCurrentProcess()->HasSwitch(
-                 switches::kWebViewSandboxedRenderer)
-                 ? "browser"
-                 : "webview";
+    if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+            switches::kWebViewSandboxedRenderer)) {
+      // In single process mode the renderer and browser are in the same
+      // process. The process type is "webview" to distinguish this case,
+      // and for backwards compatibility.
+      *ptype = "webview";
+    } else {
+      // Otherwise, in multi process mode, "browser" suffices.
+      *ptype = "browser";
+    }
     return true;
   }
+
+  bool ShouldWriteMinidumpToLog() override { return true; }
 
   bool JavaExceptionFilter(
       const base::android::JavaRef<jthrowable>& java_exception) {
@@ -110,12 +100,14 @@ class AwCrashReporterClient : public crash_reporter::CrashReporterClient {
         AttachCurrentThread(), java_exception);
   }
 
+  static AwCrashReporterClient* Get() {
+    static base::NoDestructor<AwCrashReporterClient> crash_reporter_client;
+    return crash_reporter_client.get();
+  }
+
  private:
   DISALLOW_COPY_AND_ASSIGN(AwCrashReporterClient);
 };
-
-base::LazyInstance<AwCrashReporterClient>::Leaky g_crash_reporter_client =
-    LAZY_INSTANCE_INITIALIZER;
 
 #if defined(ARCH_CPU_X86_FAMILY)
 bool SafeToUseSignalHandler() {
@@ -191,7 +183,7 @@ void EnableCrashReporter(const std::string& process_type) {
   }
 #endif
 
-  AwCrashReporterClient* client = g_crash_reporter_client.Pointer();
+  AwCrashReporterClient* client = AwCrashReporterClient::Get();
   crash_reporter::SetCrashReporterClient(client);
   crash_reporter::InitializeCrashpad(process_type.empty(), process_type);
   if (process_type.empty()) {

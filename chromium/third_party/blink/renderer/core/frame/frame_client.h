@@ -33,9 +33,8 @@ class CORE_EXPORT FrameClient : public GarbageCollected<FrameClient> {
 
   virtual unsigned BackForwardLength() = 0;
 
-  virtual void FrameFocused() const = 0;
-
-  virtual void VisibilityChanged(blink::mojom::FrameVisibility visibility) = 0;
+  virtual void OnMainFrameDocumentIntersectionChanged(
+      const IntRect& intersection_rect) {}
 
   virtual base::UnguessableToken GetDevToolsFrameToken() const = 0;
 
@@ -44,7 +43,7 @@ class CORE_EXPORT FrameClient : public GarbageCollected<FrameClient> {
 
   virtual ~FrameClient() = default;
 
-  virtual void Trace(blink::Visitor* visitor) {}
+  virtual void Trace(Visitor* visitor) {}
 };
 
 }  // namespace blink

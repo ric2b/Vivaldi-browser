@@ -1,4 +1,19 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="cs">
+<translation id="3830627370375585318">Povolte prohlížeči Vivaldi přístup k síti v nastavení firewallu a antivirového programu.</translation>
+<translation id="4200102020577305737">Přejděte do
+          nabídky Vivaldi &gt;
+          <ph name="SETTINGS_TITLE" />
+          &gt;
+          <ph name="ADVANCED_TITLE" />
+          &gt;
+          <ph name="PROXIES_TITLE" />
+          &gt;
+          Nastavení místní sítě (LAN)
+          a zrušte zaškrtnutí políčka „Použít pro síť LAN proxy server“.</translation>
+<translation id="5248344925342018662">Prohlížíte si zabezpečenou stránku vygenerovanou prohlížečem Vivaldi</translation>
+<translation id="8187289872471304532">Přejděte do nabídky
+          Aplikace &gt; Nastavení systému &gt; Síť &gt; Rozšířená nastavení &gt; Servery proxy
+          a zrušte výběr všech vybraných serverů proxy.</translation>
 </translationbundle>

@@ -14,7 +14,8 @@ import android.database.ContentObserver;
 import android.os.Build;
 import android.os.Handler;
 import android.provider.Settings;
-import android.support.annotation.VisibleForTesting;
+
+import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
@@ -26,7 +27,7 @@ import org.chromium.base.annotations.JNINamespace;
  */
 @JNINamespace("chromecast")
 public final class CastSettingsManager {
-    private static final String TAG = "cr_CastSettingsManager";
+    private static final String TAG = "CastSettingsManager";
 
     private static final String PREFS_FILE_NAME = "CastSettings";
 

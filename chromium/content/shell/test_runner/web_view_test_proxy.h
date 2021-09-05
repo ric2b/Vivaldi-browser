@@ -20,13 +20,11 @@
 #include "content/shell/test_runner/web_widget_test_proxy.h"
 #include "third_party/blink/public/platform/web_drag_operation.h"
 #include "third_party/blink/public/platform/web_rect.h"
-#include "third_party/blink/public/platform/web_screen_info.h"
 #include "third_party/blink/public/platform/web_url_error.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/public/web/web_dom_message_event.h"
 #include "third_party/blink/public/web/web_history_commit_type.h"
 #include "third_party/blink/public/web/web_navigation_policy.h"
-#include "third_party/blink/public/web/web_text_direction.h"
 #include "third_party/blink/public/web/web_view_client.h"
 #include "third_party/blink/public/web/web_widget_client.h"
 
@@ -43,7 +41,6 @@ class TestInterfaces;
 class TestRunnerForSpecificView;
 class TextInputController;
 class WebTestDelegate;
-class WebTestInterfaces;
 
 // WebViewTestProxy is used to run web tests. This class is a partial fake
 // implementation of RenderViewImpl that overrides the minimal necessary
@@ -67,7 +64,7 @@ class TEST_RUNNER_EXPORT WebViewTestProxy : public content::RenderViewImpl {
   template <typename... Args>
   explicit WebViewTestProxy(Args&&... args)
       : RenderViewImpl(std::forward<Args>(args)...) {}
-  void Initialize(WebTestInterfaces* interfaces,
+  void Initialize(TestInterfaces* interfaces,
                   std::unique_ptr<WebTestDelegate> delegate);
 
   // WebViewClient implementation.
@@ -76,7 +73,7 @@ class TEST_RUNNER_EXPORT WebViewTestProxy : public content::RenderViewImpl {
                              const blink::WebWindowFeatures& features,
                              const blink::WebString& frame_name,
                              blink::WebNavigationPolicy policy,
-                             blink::WebSandboxFlags sandbox_flags,
+                             blink::mojom::WebSandboxFlags sandbox_flags,
                              const blink::FeaturePolicy::FeatureState&,
                              const blink::SessionStorageNamespaceId&
                                  session_storage_namespace_id) override;
@@ -85,7 +82,7 @@ class TEST_RUNNER_EXPORT WebViewTestProxy : public content::RenderViewImpl {
   void DidFocus(blink::WebLocalFrame* calling_frame) override;
 
   // Exposed for our TestRunner harness.
-  using RenderViewImpl::ApplyPageHidden;
+  using RenderViewImpl::ApplyPageVisibilityState;
 
   WebTestDelegate* delegate() { return delegate_.get(); }
   TestInterfaces* test_interfaces() { return test_interfaces_; }
@@ -96,8 +93,6 @@ class TEST_RUNNER_EXPORT WebViewTestProxy : public content::RenderViewImpl {
 
   void Reset();
   void BindTo(blink::WebLocalFrame* frame);
-
-  void GetScreenOrientationForTesting(blink::WebScreenInfo&);
 
  private:
   // RenderViewImpl has no public destructor.

@@ -9,6 +9,7 @@
 #include "android_webview/browser/gfx/parent_output_surface.h"
 #include "android_webview/browser/gfx/task_forwarding_sequence.h"
 #include "android_webview/browser/gfx/task_queue_web_view.h"
+#include "base/callback_helpers.h"
 
 namespace android_webview {
 
@@ -31,10 +32,6 @@ std::unique_ptr<gpu::SingleTaskSequence>
 SkiaOutputSurfaceDependencyWebView::CreateSequence() {
   return std::make_unique<TaskForwardingSequence>(
       this->task_queue_, this->gpu_service_->sync_point_manager());
-}
-
-bool SkiaOutputSurfaceDependencyWebView::IsUsingVulkan() {
-  return shared_context_state_ && shared_context_state_->GrContextIsVulkan();
 }
 
 gpu::SharedImageManager*
@@ -67,8 +64,13 @@ SkiaOutputSurfaceDependencyWebView::GetVulkanContextProvider() {
   return shared_context_state_->vk_context_provider();
 }
 
+viz::DawnContextProvider*
+SkiaOutputSurfaceDependencyWebView::GetDawnContextProvider() {
+  return nullptr;
+}
+
 const gpu::GpuPreferences&
-SkiaOutputSurfaceDependencyWebView::GetGpuPreferences() {
+SkiaOutputSurfaceDependencyWebView::GetGpuPreferences() const {
   return gpu_service_->gpu_preferences();
 }
 
@@ -104,8 +106,15 @@ gpu::SurfaceHandle SkiaOutputSurfaceDependencyWebView::GetSurfaceHandle() {
 
 scoped_refptr<gl::GLSurface>
 SkiaOutputSurfaceDependencyWebView::CreateGLSurface(
-    base::WeakPtr<gpu::ImageTransportSurfaceDelegate> stub) {
+    base::WeakPtr<gpu::ImageTransportSurfaceDelegate> stub,
+    gl::GLSurfaceFormat format) {
   return gl_surface_;
+}
+
+base::ScopedClosureRunner SkiaOutputSurfaceDependencyWebView::CacheGLSurface(
+    gl::GLSurface* surface) {
+  NOTREACHED();
+  return base::ScopedClosureRunner();
 }
 
 void SkiaOutputSurfaceDependencyWebView::RegisterDisplayContext(
@@ -119,10 +128,25 @@ void SkiaOutputSurfaceDependencyWebView::UnregisterDisplayContext(
 }
 
 void SkiaOutputSurfaceDependencyWebView::DidLoseContext(
-    bool offscreen,
     gpu::error::ContextLostReason reason,
     const GURL& active_url) {
   // No GpuChannelManagerDelegate here, so leave it no-op for now.
+  LOG(ERROR) << "SkiaRenderer detected lost context.";
+}
+
+base::TimeDelta
+SkiaOutputSurfaceDependencyWebView::GetGpuBlockedTimeSinceLastSwap() {
+  // WebView doesn't track how long GPU thread was blocked
+  return base::TimeDelta();
+}
+
+void SkiaOutputSurfaceDependencyWebView::ScheduleDelayedGPUTaskFromGPUThread(
+    base::OnceClosure task) {
+  task_queue_->ScheduleIdleTask(std::move(task));
+}
+
+bool SkiaOutputSurfaceDependencyWebView::NeedsSupportForExternalStencil() {
+  return true;
 }
 
 }  // namespace android_webview

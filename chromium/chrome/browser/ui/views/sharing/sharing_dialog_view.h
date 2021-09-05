@@ -15,7 +15,6 @@
 #include "ui/views/controls/styled_label_listener.h"
 
 namespace views {
-class ImageView;
 class StyledLabel;
 class View;
 }  // namespace views
@@ -43,11 +42,8 @@ class SharingDialogView : public SharingDialog,
   base::string16 GetWindowTitle() const override;
   void WindowClosing() override;
   void WebContentsDestroyed() override;
-  int GetDialogButtons() const override;
-  std::unique_ptr<views::View> CreateFootnoteView() override;
   gfx::Size CalculatePreferredSize() const override;
   void AddedToWidget() override;
-  void OnThemeChanged() override;
 
   // views::StyledLabelListener:
   void StyledLabelLinkClicked(views::StyledLabel* label,
@@ -69,13 +65,12 @@ class SharingDialogView : public SharingDialog,
   FRIEND_TEST_ALL_PREFIXES(SharingDialogViewTest, AppPressed);
   FRIEND_TEST_ALL_PREFIXES(SharingDialogViewTest, ThemeChangedEmptyList);
 
+  FRIEND_TEST_ALL_PREFIXES(ClickToCallBrowserTest, LeftClick_ChooseDevice);
+
   SharingDialogType GetDialogType() const;
 
   // LocationBarBubbleDelegateView:
   void Init() override;
-
-  // Shows a header image in the dialog view.
-  void MaybeShowHeaderImage();
 
   // Populates the dialog view containing valid devices and apps.
   void InitListView();
@@ -88,8 +83,6 @@ class SharingDialogView : public SharingDialog,
 
   // References to device and app buttons views.
   std::vector<HoverButton*> dialog_buttons_;
-  // References to device and app button icons.
-  std::vector<views::ImageView*> button_icons_;
 
   DISALLOW_COPY_AND_ASSIGN(SharingDialogView);
 };

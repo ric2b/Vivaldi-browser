@@ -318,8 +318,6 @@ TEST_F(SupervisedUserURLFilterTest, HasFilteredScheme) {
   EXPECT_TRUE(
       SupervisedUserURLFilter::HasFilteredScheme(GURL("ftp://example.com")));
   EXPECT_TRUE(
-      SupervisedUserURLFilter::HasFilteredScheme(GURL("gopher://example.com")));
-  EXPECT_TRUE(
       SupervisedUserURLFilter::HasFilteredScheme(GURL("ws://example.com")));
   EXPECT_TRUE(
       SupervisedUserURLFilter::HasFilteredScheme(GURL("wss://example.com")));
@@ -333,9 +331,13 @@ TEST_F(SupervisedUserURLFilterTest, HasFilteredScheme) {
       SupervisedUserURLFilter::HasFilteredScheme(GURL("chrome://example.com")));
   EXPECT_FALSE(
       SupervisedUserURLFilter::HasFilteredScheme(GURL("wtf://example.com")));
+  EXPECT_FALSE(
+      SupervisedUserURLFilter::HasFilteredScheme(GURL("gopher://example.com")));
 }
 
 TEST_F(SupervisedUserURLFilterTest, HostMatchesPattern) {
+  EXPECT_TRUE(SupervisedUserURLFilter::HostMatchesPattern("www.google.com",
+                                                          "google.com"));
   EXPECT_TRUE(
       SupervisedUserURLFilter::HostMatchesPattern("www.google.com",
                                                   "*.google.com"));

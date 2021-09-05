@@ -35,6 +35,9 @@ enum {
 // Default minimum protocol version.
 NET_EXPORT extern const uint16_t kDefaultSSLVersionMin;
 
+// Default minimum protocol version to warn about.
+NET_EXPORT extern const uint16_t kDefaultSSLVersionMinWarn;
+
 // Default maximum protocol version.
 NET_EXPORT extern const uint16_t kDefaultSSLVersionMax;
 
@@ -77,6 +80,10 @@ struct NET_EXPORT SSLConfig {
 
   // If true, causes only ECDHE cipher suites to be enabled.
   bool require_ecdhe = false;
+
+  // If true, causes 3DES cipher suites and SHA-1 signature algorithms in
+  // TLS 1.2 to be disabled.
+  bool disable_legacy_crypto = false;
 
   // TODO(wtc): move the following members to a new SSLParams structure.  They
   // are not SSL configuration settings.

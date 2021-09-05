@@ -81,7 +81,7 @@ class FakeVectorChangedEventHandler
     EXPECT_TRUE(SUCCEEDED(vector_->add_VectorChanged(this, &token_)));
   }
 
-  ~FakeVectorChangedEventHandler() {
+  ~FakeVectorChangedEventHandler() override {
     EXPECT_TRUE(SUCCEEDED(vector_->remove_VectorChanged(token_)));
   }
 
@@ -663,6 +663,7 @@ TEST(VectorTest, First) {
   hr = iterator->MoveNext(&has_current);
   EXPECT_FALSE(SUCCEEDED(hr));
   EXPECT_EQ(E_BOUNDS, hr);
+  EXPECT_FALSE(has_current);
   hr = iterator->get_Current(&current);
   EXPECT_FALSE(SUCCEEDED(hr));
   EXPECT_EQ(E_BOUNDS, hr);

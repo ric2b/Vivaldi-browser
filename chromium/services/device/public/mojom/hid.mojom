@@ -281,18 +281,56 @@ struct HidCollectionInfo {
 // keyboard/mouse combo device would expose separate logical HID devices for
 // keyboard and mouse functionality.
 struct HidDeviceInfo {
+  // A random GUID assigned to the device during enumeration. The device GUID is
+  // stable as long as the application is running and the device remains
+  // connected to the system.
   string guid;
+
+  // A platform-specific string identifier for the physical device. When a
+  // single physical device exposes multiple logical devices, the logical
+  // devices will have the same value for |physical_device_id|.
+  string physical_device_id;
+
+  // The vendor ID value reported by the device. Vendor IDs are 16-bit values
+  // assigned by the USB-IF or Bluetooth SIG to manufacturers of USB and
+  // Bluetooth devices.
+  // TODO(mattreynolds): Indicate whether the vendor ID was assigned by USB-IF
+  // or Bluetooth SIG.
   uint16 vendor_id;
+
+  // The product ID reported by the device. Product IDs are 16-bit values
+  // assigned by the manufacturer to identify a particular device model.
   uint16 product_id;
+
+  // The product name string reported by the device, or an empty string if no
+  // product name is available.
   string product_name;
+
+  // The USB serial number string, or an empty string if the device is not a USB
+  // device or has no serial number.
   string serial_number;
+
+  // The bus used to connect this device to the system.
   HidBusType bus_type;
+
+  // An array of bytes representing the HID report descriptor reported by the
+  // device, or an empty array if the report descriptor could not be read.
   array<uint8> report_descriptor;
+
+  // A structured representation of the information contained in the HID report
+  // descriptor.
   array<HidCollectionInfo> collections;
+
+  // True if the device uses report IDs.
   bool has_report_id;
+
+  // The maximum size in bytes of input, output, and feature reports supported
+  // by the device.
   uint64 max_input_report_size;
   uint64 max_output_report_size;
   uint64 max_feature_report_size;
+
+  // A platform-specific string identifier for the logical device.
   string device_node;
 };
 
@@ -314,20 +352,25 @@ interface HidManager {
   // Enumerates available devices and set as a client of HidManager.
   // The implementation of HidManager guarantees that the returned callback
   // will always be posted earlier than DeviceAdded() and DeviceRemoved().
-  // TODO(crbug.com/955171): Use |pending_associated_remote| instead of
-  // |associated| after supporting mojom_js_generator.py completely for
-  // associated interfaces.
-  GetDevicesAndSetClient(associated HidManagerClient client) =>
+  GetDevicesAndSetClient(pending_associated_remote<HidManagerClient> client) =>
                        (array<HidDeviceInfo> devices);
 
   // Enumerates available devices only.
   GetDevices() => (array<HidDeviceInfo> devices);
 
   // Opens a connection to a device by given guid. The callback will be run
-  // with null on failure. If a connection client is provided, it will be
-  // notified when input reports are received.
+  // with null on failure.
+  //
+  // |connection_client|, if provided, is notified when data is received from
+  // the HID device on this connection.
+  //
+  // |watcher|, if provided, is kept open as long as the HID connection is
+  // open. When the HID connection is closed, the watcher is also closed. This
+  // is useful when the connection closure should be handled somewhere other
+  // than where the |connection| and |connection_client| are held.
   Connect(string device_guid,
-          pending_remote<HidConnectionClient>? connection_client)
+          pending_remote<HidConnectionClient>? connection_client,
+          pending_remote<HidConnectionWatcher>? watcher)
       => (pending_remote<HidConnection>? connection);
 };
 
@@ -358,4 +401,17 @@ interface HidConnectionClient {
   // Notifies the client that an input report was received. A |report_id| of 0
   // is passed if report IDs are not used by the device.
   OnInputReport(uint8 report_id, array<uint8> buffer);
+};
+
+// A client interface for observing whether a HID connection is still active.
+// When the connection is closed, the HidConnectionWatcher pipe is also closed.
+//
+// This is useful when connection closure should be handled somewhere other than
+// where the connection itself is used. For instance, Chrome mediates access to
+// HidManager through a HID browser service that implements permissions and UI.
+// When the service creates a HID connection with HidManager::Connect, it binds
+// itself as a watcher so it can be notified when the connection is closed. This
+// allows the service to keep track of whether there are open connections for
+// the purpose of drawing an indicator icon when a tab is using a HID device.
+interface HidConnectionWatcher {
 };

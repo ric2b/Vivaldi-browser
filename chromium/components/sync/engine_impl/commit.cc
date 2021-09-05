@@ -51,8 +51,7 @@ Commit::~Commit() {
 }
 
 // static
-std::unique_ptr<Commit> Commit::Init(ModelTypeSet requested_types,
-                                     ModelTypeSet enabled_types,
+std::unique_ptr<Commit> Commit::Init(ModelTypeSet enabled_types,
                                      size_t max_entries,
                                      const std::string& account_name,
                                      const std::string& cache_guid,
@@ -62,7 +61,7 @@ std::unique_ptr<Commit> Commit::Init(ModelTypeSet requested_types,
                                      ExtensionsActivity* extensions_activity) {
   // Gather per-type contributions.
   ContributionMap contributions = commit_processor->GatherCommitContributions(
-      requested_types, max_entries, cookie_jar_mismatch, cookie_jar_empty);
+      max_entries, cookie_jar_mismatch, cookie_jar_empty);
 
   // Give up if no one had anything to commit.
   if (contributions.empty())
@@ -141,12 +140,16 @@ SyncerError Commit::PostAndProcessResponse(
 
   if (post_result.value() != SyncerError::SYNCER_OK) {
     LOG(WARNING) << "Post commit failed";
+    ReportFullCommitFailure(post_result);
     return post_result;
   }
 
   if (!response.has_commit()) {
     LOG(WARNING) << "Commit response has no commit body!";
-    return SyncerError(SyncerError::SERVER_RESPONSE_VALIDATION_FAILED);
+    const SyncerError syncer_error(
+        SyncerError::SERVER_RESPONSE_VALIDATION_FAILED);
+    ReportFullCommitFailure(syncer_error);
+    return syncer_error;
   }
 
   size_t message_entries = message_.commit().entries_size();
@@ -155,7 +158,10 @@ SyncerError Commit::PostAndProcessResponse(
     LOG(ERROR) << "Commit response has wrong number of entries! "
                << "Expected: " << message_entries << ", "
                << "Got: " << response_entries;
-    return SyncerError(SyncerError::SERVER_RESPONSE_VALIDATION_FAILED);
+    const SyncerError syncer_error(
+        SyncerError::SERVER_RESPONSE_VALIDATION_FAILED);
+    ReportFullCommitFailure(syncer_error);
+    return syncer_error;
   }
 
   if (cycle->context()->debug_info_getter()) {
@@ -198,6 +204,24 @@ void Commit::CleanUp() {
     it->second->CleanUp();
   }
   cleaned_up_ = true;
+}
+
+void Commit::ReportFullCommitFailure(SyncerError syncer_error) {
+  SyncCommitError commit_error = SyncCommitError::kServerError;
+  switch (syncer_error.value()) {
+    case SyncerError::NETWORK_CONNECTION_UNAVAILABLE:
+    case SyncerError::NETWORK_IO_ERROR:
+      commit_error = SyncCommitError::kNetworkError;
+      break;
+    case SyncerError::SERVER_RESPONSE_VALIDATION_FAILED:
+      commit_error = SyncCommitError::kBadServerResponse;
+      break;
+    default:
+      commit_error = SyncCommitError::kServerError;
+  }
+  for (auto& model_type_and_contribution : contributions_) {
+    model_type_and_contribution.second->ProcessCommitFailure(commit_error);
+  }
 }
 
 }  // namespace syncer

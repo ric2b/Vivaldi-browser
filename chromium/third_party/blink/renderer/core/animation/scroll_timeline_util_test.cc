@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/core/animation/scroll_timeline_util.h"
 
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_scroll_timeline_options.h"
 #include "third_party/blink/renderer/core/animation/document_timeline.h"
 #include "third_party/blink/renderer/core/html/html_div_element.h"
 #include "third_party/blink/renderer/core/testing/core_unit_test_helper.h"
@@ -51,7 +52,7 @@ TEST_F(ScrollTimelineUtilTest, ToCompositorScrollTimeline) {
   ScrollTimeline* timeline =
       ScrollTimeline::Create(GetDocument(), options, ASSERT_NO_EXCEPTION);
 
-  std::unique_ptr<CompositorScrollTimeline> compositor_timeline =
+  scoped_refptr<CompositorScrollTimeline> compositor_timeline =
       ToCompositorScrollTimeline(timeline);
   EXPECT_EQ(compositor_timeline->GetActiveIdForTest(), base::nullopt);
   EXPECT_EQ(compositor_timeline->GetPendingIdForTest(), element_id);
@@ -70,7 +71,7 @@ TEST_F(ScrollTimelineUtilTest, ToCompositorScrollTimelineNullParameter) {
 TEST_F(ScrollTimelineUtilTest,
        ToCompositorScrollTimelineDocumentTimelineParameter) {
   DocumentTimeline* timeline =
-      DocumentTimeline::Create(MakeGarbageCollected<Document>());
+      MakeGarbageCollected<DocumentTimeline>(MakeGarbageCollected<Document>());
   EXPECT_EQ(ToCompositorScrollTimeline(timeline), nullptr);
 }
 
@@ -83,9 +84,9 @@ TEST_F(ScrollTimelineUtilTest, ToCompositorScrollTimelineNullScrollSource) {
   CSSPrimitiveValue* end_scroll_offset = nullptr;
   ScrollTimeline* timeline = MakeGarbageCollected<ScrollTimeline>(
       &GetDocument(), scroll_source, ScrollTimeline::Block, start_scroll_offset,
-      end_scroll_offset, 100, Timing::FillMode::NONE);
+      end_scroll_offset, 100);
 
-  std::unique_ptr<CompositorScrollTimeline> compositor_timeline =
+  scoped_refptr<CompositorScrollTimeline> compositor_timeline =
       ToCompositorScrollTimeline(timeline);
   ASSERT_TRUE(compositor_timeline.get());
   EXPECT_EQ(compositor_timeline->GetPendingIdForTest(), base::nullopt);
@@ -103,7 +104,7 @@ TEST_F(ScrollTimelineUtilTest, ToCompositorScrollTimelineNullLayoutBox) {
   ScrollTimeline* timeline =
       ScrollTimeline::Create(GetDocument(), options, ASSERT_NO_EXCEPTION);
 
-  std::unique_ptr<CompositorScrollTimeline> compositor_timeline =
+  scoped_refptr<CompositorScrollTimeline> compositor_timeline =
       ToCompositorScrollTimeline(timeline);
   EXPECT_TRUE(compositor_timeline.get());
   // Here we just want to test the start/end scroll offset.

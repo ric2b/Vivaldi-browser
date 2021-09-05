@@ -32,7 +32,6 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/arc/arc_util.h"
-#include "content/public/browser/system_connector.h"
 
 namespace app_list {
 
@@ -45,8 +44,10 @@ namespace {
 // number of results to be displayed in UI.
 constexpr size_t kMaxAppsGroupResults = 7;
 constexpr size_t kMaxLauncherSearchResults = 2;
-constexpr size_t kMaxZeroStateFileResults = 6;
-constexpr size_t kMaxDriveQuickAccessResults = 6;
+// We need twice as many ZeroState and Drive file results as we need
+// duplicates of these results for the suggestion chips.
+constexpr size_t kMaxZeroStateFileResults = 20;
+constexpr size_t kMaxDriveQuickAccessResults = 10;
 constexpr size_t kMaxAppReinstallSearchResults = 1;
 // We show up to 6 Play Store results. However, part of Play Store results may
 // be filtered out because they may correspond to already installed Web apps. So
@@ -78,7 +79,7 @@ std::unique_ptr<SearchController> CreateSearchController(
                                          profile);
 
   // Set up rankers for search results.
-  controller->InitializeRankers(content::GetSystemConnector());
+  controller->InitializeRankers();
 
   // Add mixer groups. There are four main groups: answer card, apps
   // and omnibox. Each group has a "soft" maximum number of results. However, if
@@ -174,7 +175,7 @@ std::unique_ptr<SearchController> CreateSearchController(
         controller->AddGroup(kMaxDriveQuickAccessResults, 1.0, 0.0);
     controller->AddProvider(
         drive_quick_access_group_id,
-        std::make_unique<DriveQuickAccessProvider>(profile));
+        std::make_unique<DriveQuickAccessProvider>(profile, controller.get()));
   }
 
   return controller;

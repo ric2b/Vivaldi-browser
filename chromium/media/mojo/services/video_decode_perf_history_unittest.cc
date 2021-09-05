@@ -38,7 +38,6 @@ const bool kIsSmooth = true;
 const bool kIsNotSmooth = false;
 const bool kIsPowerEfficient = true;
 const bool kIsNotPowerEfficient = false;
-const url::Origin kOrigin = url::Origin::Create(GURL("http://example.com"));
 const bool kIsTopFrame = true;
 const uint64_t kPlayerId = 1234u;
 
@@ -347,6 +346,8 @@ class VideoDecodePerfHistoryTest : public testing::Test {
 
   // The VideoDecodeStatsReporter being tested.
   std::unique_ptr<VideoDecodePerfHistory> perf_history_;
+
+  const url::Origin kOrigin = url::Origin::Create(GURL("http://example.com"));
 };
 
 struct PerfHistoryTestParams {

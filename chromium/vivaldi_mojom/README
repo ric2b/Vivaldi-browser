@@ -1,0 +1,2 @@
+mojo targets are currently not buildable when they are not in a subfolder of
+chromium. They're placed here until a solution is found.

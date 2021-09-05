@@ -16,6 +16,7 @@
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/importer/importer_unittest_utils.h"
+#include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/common/importer/imported_bookmark_entry.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/bookmarks/browser/bookmark_model.h"
@@ -29,8 +30,8 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 using bookmarks::BookmarkModel;
-using bookmarks::UrlAndTitle;
 using bookmarks::TitledUrlMatch;
+using bookmarks::UrlAndTitle;
 
 class TestProfileWriter : public ProfileWriter {
  public:
@@ -43,6 +44,22 @@ class ProfileWriterTest : public testing::Test {
  public:
   ProfileWriterTest() {}
   ~ProfileWriterTest() override {}
+
+  void SetUp() override {
+    DCHECK(profile_dir_.CreateUniqueTempDir());
+    TestingProfile::Builder profile_builder;
+    profile_builder.SetPath(profile_dir_.GetPath());
+    profile_ = profile_builder.Build();
+
+    DCHECK(second_profile_dir_.CreateUniqueTempDir());
+    TestingProfile::Builder second_profile_builder;
+    second_profile_builder.SetPath(second_profile_dir_.GetPath());
+    second_profile_ = second_profile_builder.Build();
+  }
+
+  TestingProfile* profile() { return profile_.get(); }
+
+  TestingProfile* second_profile() { return second_profile_.get(); }
 
   // Create test bookmark entries to be added to ProfileWriter to
   // simulate bookmark importing.
@@ -110,6 +127,11 @@ class ProfileWriterTest : public testing::Test {
     loop.Run();
   }
 
+  // Creates a TemplateURL from the provided data.
+  std::unique_ptr<TemplateURL> CreateTemplateURL(const std::string& keyword,
+                                                 const std::string& url,
+                                                 const std::string& short_name);
+
  protected:
   std::vector<ImportedBookmarkEntry> bookmarks_;
   history::URLRows pages_;
@@ -127,31 +149,39 @@ class ProfileWriterTest : public testing::Test {
     bookmarks_.push_back(entry);
   }
 
+  // Profile directories that outlive |task_environment_| are needed because
+  // CreateHistoryService/CreateBookmarkModel use the directory to host
+  // databases. See https://crbug.com/546640 for more details.
+  base::ScopedTempDir profile_dir_;
+  base::ScopedTempDir second_profile_dir_;
+
   content::BrowserTaskEnvironment task_environment_;
+
+  std::unique_ptr<TestingProfile> profile_;
+  std::unique_ptr<TestingProfile> second_profile_;
 
   DISALLOW_COPY_AND_ASSIGN(ProfileWriterTest);
 };
 
 // Add bookmarks via ProfileWriter to profile1 when profile2 also exists.
 TEST_F(ProfileWriterTest, CheckBookmarksWithMultiProfile) {
-  TestingProfile profile2;
-  profile2.CreateBookmarkModel(true);
+  second_profile()->CreateBookmarkModel(true);
 
   BookmarkModel* bookmark_model2 =
-      BookmarkModelFactory::GetForBrowserContext(&profile2);
+      BookmarkModelFactory::GetForBrowserContext(second_profile());
   bookmarks::test::WaitForBookmarkModelToLoad(bookmark_model2);
   bookmarks::AddIfNotBookmarked(
       bookmark_model2, GURL("http://www.bing.com"), base::ASCIIToUTF16("Bing"));
-  TestingProfile profile1;
-  profile1.CreateBookmarkModel(true);
+
+  profile()->CreateBookmarkModel(true);
 
   CreateImportedBookmarksEntries();
   BookmarkModel* bookmark_model1 =
-      BookmarkModelFactory::GetForBrowserContext(&profile1);
+      BookmarkModelFactory::GetForBrowserContext(profile());
   bookmarks::test::WaitForBookmarkModelToLoad(bookmark_model1);
 
   scoped_refptr<TestProfileWriter> profile_writer(
-      new TestProfileWriter(&profile1));
+      new TestProfileWriter(profile()));
   profile_writer->AddBookmarks(bookmarks_,
                                base::ASCIIToUTF16("Imported from Firefox"));
 
@@ -166,16 +196,15 @@ TEST_F(ProfileWriterTest, CheckBookmarksWithMultiProfile) {
 
 // Verify that bookmarks are duplicated when added twice.
 TEST_F(ProfileWriterTest, CheckBookmarksAfterWritingDataTwice) {
-  TestingProfile profile;
-  profile.CreateBookmarkModel(true);
+  profile()->CreateBookmarkModel(true);
 
   CreateImportedBookmarksEntries();
   BookmarkModel* bookmark_model =
-      BookmarkModelFactory::GetForBrowserContext(&profile);
+      BookmarkModelFactory::GetForBrowserContext(profile());
   bookmarks::test::WaitForBookmarkModelToLoad(bookmark_model);
 
   scoped_refptr<TestProfileWriter> profile_writer(
-      new TestProfileWriter(&profile));
+      new TestProfileWriter(profile()));
   profile_writer->AddBookmarks(bookmarks_,
                                base::ASCIIToUTF16("Imported from Firefox"));
   std::vector<UrlAndTitle> bookmarks_record;
@@ -190,21 +219,63 @@ TEST_F(ProfileWriterTest, CheckBookmarksAfterWritingDataTwice) {
   VerifyBookmarksCount(bookmarks_record, bookmark_model, 2);
 }
 
+std::unique_ptr<TemplateURL> ProfileWriterTest::CreateTemplateURL(
+    const std::string& keyword,
+    const std::string& url,
+    const std::string& short_name) {
+  TemplateURLData data;
+  data.SetKeyword(base::ASCIIToUTF16(keyword));
+  data.SetShortName(base::ASCIIToUTF16(short_name));
+  data.SetURL(TemplateURLRef::DisplayURLToURLRef(base::ASCIIToUTF16(url)));
+  return std::make_unique<TemplateURL>(data);
+}
+
 // Verify that history entires are not duplicated when added twice.
 TEST_F(ProfileWriterTest, CheckHistoryAfterWritingDataTwice) {
-  TestingProfile profile;
-  ASSERT_TRUE(profile.CreateHistoryService(true, false));
-  profile.BlockUntilHistoryProcessesPendingRequests();
+  ASSERT_TRUE(profile()->CreateHistoryService(true, false));
+  profile()->BlockUntilHistoryProcessesPendingRequests();
 
   CreateHistoryPageEntries();
   scoped_refptr<TestProfileWriter> profile_writer(
-      new TestProfileWriter(&profile));
+      new TestProfileWriter(profile()));
   profile_writer->AddHistoryPage(pages_, history::SOURCE_FIREFOX_IMPORTED);
-  VerifyHistoryCount(&profile);
+  VerifyHistoryCount(profile());
   size_t original_history_count = history_count_;
   history_count_ = 0;
 
   profile_writer->AddHistoryPage(pages_, history::SOURCE_FIREFOX_IMPORTED);
-  VerifyHistoryCount(&profile);
+  VerifyHistoryCount(profile());
   EXPECT_EQ(original_history_count, history_count_);
+}
+
+TEST_F(ProfileWriterTest, AddKeywords) {
+  ASSERT_TRUE(profile()->CreateHistoryService(true, false));
+  TemplateURLServiceFactory::GetInstance()->SetTestingFactoryAndUse(
+      profile(),
+      base::BindRepeating(&TemplateURLServiceFactory::BuildInstanceFor));
+
+  TemplateURLService::OwnedTemplateURLVector keywords;
+  keywords.push_back(CreateTemplateURL("key1", "http://key1.com", "n1"));
+  // This entry will not be added since it has the same key as an existing
+  // keyword.
+  keywords.push_back(CreateTemplateURL("key1", "http://key1_1.com", "n1_1"));
+  keywords.push_back(CreateTemplateURL("key2", "http://key2.com", "n2"));
+  // This entry will not be added since the keyword contains spaces.
+  keywords.push_back(CreateTemplateURL("key 3", "http://key3.com", "n3"));
+
+  auto profile_writer = base::MakeRefCounted<TestProfileWriter>(profile());
+  profile_writer->AddKeywords(std::move(keywords), false);
+
+  TemplateURLService* turl_model =
+      TemplateURLServiceFactory::GetForProfile(profile());
+  auto turls = turl_model->GetTemplateURLs();
+  EXPECT_EQ(turls.size(), 2u);
+
+  EXPECT_EQ(turls[0]->keyword(), base::ASCIIToUTF16("key1"));
+  EXPECT_EQ(turls[0]->url(), "http://key1.com");
+  EXPECT_EQ(turls[0]->short_name(), base::ASCIIToUTF16("n1"));
+
+  EXPECT_EQ(turls[1]->keyword(), base::ASCIIToUTF16("key2"));
+  EXPECT_EQ(turls[1]->url(), "http://key2.com");
+  EXPECT_EQ(turls[1]->short_name(), base::ASCIIToUTF16("n2"));
 }

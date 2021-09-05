@@ -5,6 +5,7 @@
 #include "chrome/browser/download/android/download_controller.h"
 
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include "base/android/jni_android.h"
@@ -18,7 +19,6 @@
 #include "base/synchronization/lock.h"
 #include "base/task/post_task.h"
 #include "chrome/android/chrome_jni_headers/DownloadController_jni.h"
-#include "chrome/browser/android/chrome_feature_list.h"
 #include "chrome/browser/android/profile_key_util.h"
 #include "chrome/browser/android/tab_android.h"
 #include "chrome/browser/download/android/dangerous_download_infobar_delegate.h"
@@ -27,6 +27,7 @@
 #include "chrome/browser/download/download_offline_content_provider.h"
 #include "chrome/browser/download/download_offline_content_provider_factory.h"
 #include "chrome/browser/download/download_stats.h"
+#include "chrome/browser/flags/android/chrome_feature_list.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/offline_pages/android/offline_page_bridge.h"
 #include "chrome/browser/permissions/permission_update_infobar_delegate_android.h"
@@ -230,6 +231,18 @@ void DownloadController::RecordStoragePermission(StoragePermissionType type) {
 }
 
 // static
+void DownloadController::CloseTabIfEmpty(content::WebContents* web_contents) {
+  if (!web_contents)
+    return;
+
+  TabAndroid* tab = TabAndroid::FromWebContents(web_contents);
+  if (tab && !tab->GetJavaObject().is_null()) {
+    JNIEnv* env = base::android::AttachCurrentThread();
+    Java_DownloadController_closeTabIfBlank(env, tab->GetJavaObject());
+  }
+}
+
+// static
 DownloadController* DownloadController::GetInstance() {
   return base::Singleton<DownloadController>::get();
 }
@@ -264,7 +277,7 @@ void DownloadController::AcquireFileAccessPermission(
   RecordStoragePermission(StoragePermissionType::STORAGE_PERMISSION_REQUESTED);
   AcquirePermissionCallback callback(base::BindOnce(
       &OnRequestFileAccessResult, web_contents_getter,
-      base::BindOnce(&OnStoragePermissionDecided, base::Passed(&cb))));
+      base::BindOnce(&OnStoragePermissionDecided, std::move(cb))));
   // Make copy on the heap so we can pass the pointer through JNI.
   intptr_t callback_id = reinterpret_cast<intptr_t>(
       new AcquirePermissionCallback(std::move(callback)));
@@ -341,11 +354,7 @@ void DownloadController::StartAndroidDownloadInternal(
       env, jurl, juser_agent, jfile_name, jmime_type, jcookie, jreferer);
 
   WebContents* web_contents = wc_getter.Run();
-  if (web_contents) {
-    TabAndroid* tab = TabAndroid::FromWebContents(web_contents);
-    if (tab && !tab->GetJavaObject().is_null())
-      Java_DownloadController_closeTabIfBlank(env, tab->GetJavaObject());
-  }
+  CloseTabIfEmpty(web_contents);
 }
 
 bool DownloadController::HasFileAccessPermission() {
@@ -361,15 +370,6 @@ void DownloadController::OnDownloadStarted(DownloadItem* download_item) {
   JNIEnv* env = base::android::AttachCurrentThread();
   if (!download_item->IsDangerous())
     Java_DownloadController_onDownloadStarted(env);
-
-  WebContents* web_contents =
-      content::DownloadItemUtils::GetWebContents(download_item);
-  if (web_contents) {
-    TabAndroid* tab = TabAndroid::FromWebContents(web_contents);
-    if (tab && !tab->GetJavaObject().is_null()) {
-      Java_DownloadController_closeTabIfBlank(env, tab->GetJavaObject());
-    }
-  }
 
   // Register for updates to the DownloadItem.
   download_item->RemoveObserver(this);

@@ -5,7 +5,7 @@
 #include "components/printing/test/mock_printer.h"
 
 #include "base/files/file_util.h"
-#include "base/memory/shared_memory.h"
+#include "base/memory/shared_memory_mapping.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -215,7 +215,7 @@ void MockPrinter::PrintPage(
 #else
   printing::MetafileSkia metafile;
 #endif
-  metafile.InitFromData(mapping.memory(), mapping.size());
+  metafile.InitFromData(mapping.GetMemoryAsSpan<const uint8_t>());
   printing::Image image(metafile);
   pages_.push_back(base::MakeRefCounted<MockPrinterPage>(
       mapping.memory(), mapping.size(), image));

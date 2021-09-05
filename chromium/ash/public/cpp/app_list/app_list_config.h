@@ -22,7 +22,7 @@ namespace ash {
 class ASH_PUBLIC_EXPORT AppListConfig {
  public:
   // Constructor for unscaled configurations of the provided type.
-  explicit AppListConfig(ash::AppListConfigType type);
+  explicit AppListConfig(AppListConfigType type);
 
   // Constructor for scaled app list configuration.
   // Used only if kScalableAppList feature is not enabled, in which case the
@@ -47,7 +47,7 @@ class ASH_PUBLIC_EXPORT AppListConfig {
   // Gets default app list configuration.
   static AppListConfig& instance();
 
-  ash::AppListConfigType type() const { return type_; }
+  AppListConfigType type() const { return type_; }
   float scale_x() const { return scale_x_; }
   float scale_y() const { return scale_y_; }
   int grid_tile_width() const { return grid_tile_width_; }
@@ -66,6 +66,10 @@ class ASH_PUBLIC_EXPORT AppListConfig {
   SkColor grid_title_color() const { return grid_title_color_; }
   int grid_fadeout_zone_height() const { return grid_fadeout_zone_height_; }
   int grid_fadeout_mask_height() const { return grid_fadeout_mask_height_; }
+  int grid_to_page_switcher_margin() const {
+    return grid_to_page_switcher_margin_;
+  }
+  int page_switcher_end_margin() const { return page_switcher_end_margin_; }
   int search_tile_icon_dimension() const { return search_tile_icon_dimension_; }
   int search_tile_badge_icon_dimension() const {
     return search_tile_badge_icon_dimension_;
@@ -222,14 +226,21 @@ class ASH_PUBLIC_EXPORT AppListConfig {
   }
 
   // Returns the dimension at which a result's icon should be displayed.
-  int GetPreferredIconDimension(
-      ash::SearchResultDisplayType display_type) const;
+  int GetPreferredIconDimension(SearchResultDisplayType display_type) const;
 
   // Returns the maximum number of items allowed in specified page in apps grid.
   int GetMaxNumOfItemsPerPage(int page) const;
 
+  // The minimal horizontal padding for the apps grid.
+  int GetMinGridHorizontalPadding() const;
+
+  // Returns the ideal apps container margins for the bounds available for app
+  // list content.
+  int GetIdealHorizontalMargin(const gfx::Rect& abailable_bounds) const;
+  int GetIdealVerticalMargin(const gfx::Rect& abailable_bounds) const;
+
  private:
-  const ash::AppListConfigType type_;
+  const AppListConfigType type_;
 
   // Current config scale values - should be different from 1 for
   // AppListConfigType::kShared only.
@@ -270,6 +281,12 @@ class ASH_PUBLIC_EXPORT AppListConfig {
   // This is different from |grid_fadeout_zone_height_|, which may include
   // additional margin outside the fadeout mask.
   const int grid_fadeout_mask_height_;
+
+  // Horizontal margin between the apps grid and the page switcher UI.
+  const int grid_to_page_switcher_margin_;
+
+  // Minimal horizontal page switcher distance from the app list UI edge.
+  const int page_switcher_end_margin_;
 
   // The icon dimension of tile views in search result page view.
   const int search_tile_icon_dimension_;

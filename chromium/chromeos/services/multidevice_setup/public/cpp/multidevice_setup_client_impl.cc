@@ -8,11 +8,9 @@
 #include "chromeos/services/multidevice_setup/public/cpp/multidevice_setup_client_impl.h"
 
 #include "base/bind.h"
-#include "base/no_destructor.h"
+#include "base/memory/ptr_util.h"
 #include "chromeos/components/multidevice/logging/logging.h"
-#include "chromeos/services/multidevice_setup/public/mojom/constants.mojom.h"
 #include "chromeos/services/multidevice_setup/public/mojom/multidevice_setup.mojom.h"
-#include "services/service_manager/public/cpp/connector.h"
 
 namespace chromeos {
 
@@ -23,37 +21,30 @@ MultiDeviceSetupClientImpl::Factory*
     MultiDeviceSetupClientImpl::Factory::test_factory_ = nullptr;
 
 // static
-MultiDeviceSetupClientImpl::Factory*
-MultiDeviceSetupClientImpl::Factory::Get() {
+std::unique_ptr<MultiDeviceSetupClient>
+MultiDeviceSetupClientImpl::Factory::Create(
+    mojo::PendingRemote<mojom::MultiDeviceSetup> remote_setup) {
   if (test_factory_)
-    return test_factory_;
+    return test_factory_->CreateInstance(std::move(remote_setup));
 
-  static base::NoDestructor<Factory> factory;
-  return factory.get();
+  return base::WrapUnique(
+      new MultiDeviceSetupClientImpl(std::move(remote_setup)));
 }
 
 // static
-void MultiDeviceSetupClientImpl::Factory::SetInstanceForTesting(
+void MultiDeviceSetupClientImpl::Factory::SetFactoryForTesting(
     Factory* test_factory) {
   test_factory_ = test_factory;
 }
 
 MultiDeviceSetupClientImpl::Factory::~Factory() = default;
 
-std::unique_ptr<MultiDeviceSetupClient>
-MultiDeviceSetupClientImpl::Factory::BuildInstance(
-    service_manager::Connector* connector) {
-  return base::WrapUnique(new MultiDeviceSetupClientImpl(connector));
-}
-
 MultiDeviceSetupClientImpl::MultiDeviceSetupClientImpl(
-    service_manager::Connector* connector)
-    : remote_device_cache_(
-          multidevice::RemoteDeviceCache::Factory::Get()->BuildInstance()),
+    mojo::PendingRemote<mojom::MultiDeviceSetup> remote_setup)
+    : multidevice_setup_remote_(std::move(remote_setup)),
+      remote_device_cache_(multidevice::RemoteDeviceCache::Factory::Create()),
       host_status_with_device_(GenerateDefaultHostStatusWithDevice()),
       feature_states_map_(GenerateDefaultFeatureStatesMap()) {
-  connector->Connect(mojom::kServiceName,
-                     multidevice_setup_remote_.BindNewPipeAndPassReceiver());
   multidevice_setup_remote_->AddHostStatusObserver(
       GenerateHostStatusObserverRemote());
   multidevice_setup_remote_->AddFeatureStateObserver(
@@ -76,11 +67,11 @@ void MultiDeviceSetupClientImpl::GetEligibleHostDevices(
 }
 
 void MultiDeviceSetupClientImpl::SetHostDevice(
-    const std::string& host_device_id,
+    const std::string& host_instance_id_or_legacy_device_id,
     const std::string& auth_token,
     mojom::MultiDeviceSetup::SetHostDeviceCallback callback) {
-  multidevice_setup_remote_->SetHostDevice(host_device_id, auth_token,
-                                           std::move(callback));
+  multidevice_setup_remote_->SetHostDevice(host_instance_id_or_legacy_device_id,
+                                           auth_token, std::move(callback));
 }
 
 void MultiDeviceSetupClientImpl::RemoveHostDevice() {
@@ -124,8 +115,8 @@ void MultiDeviceSetupClientImpl::OnHostStatusChanged(
   if (host_device) {
     remote_device_cache_->SetRemoteDevices({*host_device});
     host_status_with_device_ = std::make_pair(
-        host_status,
-        remote_device_cache_->GetRemoteDevice(host_device->GetDeviceId()));
+        host_status, remote_device_cache_->GetRemoteDevice(
+                         host_device->instance_id, host_device->GetDeviceId()));
   } else {
     host_status_with_device_ =
         std::make_pair(host_status, base::nullopt /* host_device */);
@@ -146,12 +137,12 @@ void MultiDeviceSetupClientImpl::OnGetEligibleHostDevicesCompleted(
   remote_device_cache_->SetRemoteDevices(eligible_host_devices);
 
   multidevice::RemoteDeviceRefList eligible_host_device_refs;
-  std::transform(
-      eligible_host_devices.begin(), eligible_host_devices.end(),
-      std::back_inserter(eligible_host_device_refs),
-      [this](const auto& device) {
-        return *remote_device_cache_->GetRemoteDevice(device.GetDeviceId());
-      });
+  std::transform(eligible_host_devices.begin(), eligible_host_devices.end(),
+                 std::back_inserter(eligible_host_device_refs),
+                 [this](const auto& device) {
+                   return *remote_device_cache_->GetRemoteDevice(
+                       device.instance_id, device.GetDeviceId());
+                 });
 
   std::move(callback).Run(eligible_host_device_refs);
 }

@@ -28,6 +28,8 @@ if (enable_vr) {
       "util/sample_queue.h",
       "util/sliding_average.cc",
       "util/sliding_average.h",
+      "util/stage_utils.cc",
+      "util/stage_utils.h",
       "util/transform_utils.cc",
       "util/transform_utils.h",
       "util/xr_standard_gamepad_builder.cc",
@@ -48,7 +50,6 @@ if (enable_vr) {
       "//mojo/public/cpp/bindings",
       "//services/device/public/cpp/generic_sensor",
       "//services/metrics/public/cpp:ukm_builders",
-      "//services/service_manager/public/cpp",
       "//ui/display",
       "//ui/gfx",
       "//ui/gfx/mojom",
@@ -56,9 +57,6 @@ if (enable_vr) {
 
     if (enable_gvr_services) {
       sources += [
-        "android/gvr/cardboard_gamepad_data_fetcher.cc",
-        "android/gvr/cardboard_gamepad_data_fetcher.h",
-        "android/gvr/cardboard_gamepad_data_provider.h",
         "android/gvr/gvr_delegate.cc",
         "android/gvr/gvr_delegate.h",
         "android/gvr/gvr_delegate_provider.h",
@@ -68,9 +66,6 @@ if (enable_vr) {
         "android/gvr/gvr_device.h",
         "android/gvr/gvr_device_provider.cc",
         "android/gvr/gvr_device_provider.h",
-        "android/gvr/gvr_gamepad_data_fetcher.cc",
-        "android/gvr/gvr_gamepad_data_fetcher.h",
-        "android/gvr/gvr_gamepad_data_provider.h",
         "android/gvr/gvr_utils.cc",
         "android/gvr/gvr_utils.h",
       ]
@@ -84,8 +79,6 @@ if (enable_vr) {
 
       deps += [
         ":jni_headers",
-        "//device/gamepad",
-        "//device/gamepad/public/cpp:shared_with_blink",
         "//third_party/blink/public:blink_headers",
         "//third_party/gvr-android-sdk:gvr_shim",
       ]
@@ -93,19 +86,11 @@ if (enable_vr) {
       configs += [ "//third_party/gvr-android-sdk:libgvr_config" ]
     }
 
-    if (!is_android) {
-      sources += [
-        "isolated_gamepad_data_fetcher.cc",
-        "isolated_gamepad_data_fetcher.h",
-      ]
-
-      deps += [
-        "//device/gamepad",
-        "//device/gamepad/public/cpp:shared_with_blink",
-      ]
-    }
-
     if (enable_openvr) {
+      if (!is_component_build) {
+        defines += [ "OPENVR_BUILD_STATIC" ]
+      }
+
       deps += [ "//third_party/openvr:openvr" ]
       sources += [
         "openvr/openvr_api_wrapper.cc",
@@ -232,26 +217,35 @@ if (enable_vr) {
     }
 
     if (enable_openxr) {
-      deps += [ "//third_party/openxr" ]
+      deps += [
+        "//components/version_info",
+        "//third_party/openxr",
+      ]
 
       sources += [
         "openxr/openxr_api_wrapper.cc",
         "openxr/openxr_api_wrapper.h",
         "openxr/openxr_controller.cc",
         "openxr/openxr_controller.h",
+        "openxr/openxr_defs.h",
         "openxr/openxr_device.cc",
         "openxr/openxr_device.h",
         "openxr/openxr_input_helper.cc",
         "openxr/openxr_input_helper.h",
+        "openxr/openxr_interaction_profiles.h",
+        "openxr/openxr_path_helper.cc",
+        "openxr/openxr_path_helper.h",
         "openxr/openxr_render_loop.cc",
         "openxr/openxr_render_loop.h",
+        "openxr/openxr_statics.cc",
+        "openxr/openxr_statics.h",
         "openxr/openxr_util.cc",
         "openxr/openxr_util.h",
       ]
     }
   }
 
-  static_library("fakes") {
+  component("vr_fakes") {
     testonly = true
 
     defines = [ "DEVICE_VR_IMPLEMENTATION" ]
@@ -265,8 +259,6 @@ if (enable_vr) {
       "test/fake_vr_device.h",
       "test/fake_vr_device_provider.cc",
       "test/fake_vr_device_provider.h",
-      "test/fake_vr_display_impl_client.cc",
-      "test/fake_vr_display_impl_client.h",
       "test/fake_vr_service_client.cc",
       "test/fake_vr_service_client.h",
       "vr_export.h",
@@ -294,18 +286,14 @@ if (enable_vr) {
         "DXGI.lib",
       ]
 
-      deps = [
-        "//base",
-      ]
+      deps = [ "//base" ]
     }
   }
 } else {
   source_set("vr") {
     # We need to include an empty .cc file so that mac and windows don't fall over when trying to
     # compile this when webvr is disabled.
-    sources = [
-      "empty.cc",
-    ]
+    sources = [ "empty.cc" ]
   }
 }
 
@@ -347,12 +335,8 @@ if (enable_openxr) {
   # json file instead of the registry key. This json file copied to the output
   # folder points to our mock OpenXR runtime.
   copy("json_mock") {
-    sources = [
-      "openxr/test/openxr.json",
-    ]
-    outputs = [
-      "$root_out_dir/mock_vr_clients/bin/openxr/openxr.json",
-    ]
+    sources = [ "openxr/test/openxr.json" ]
+    outputs = [ "$root_out_dir/mock_vr_clients/bin/openxr/openxr.json" ]
   }
 
   shared_library("openxr_mock") {
@@ -362,6 +346,7 @@ if (enable_openxr) {
     include_dirs = [ "//third_party/openxr/src/include" ]
 
     sources = [
+      "openxr/openxr_defs.h",
       "openxr/openxr_util.cc",
       "openxr/openxr_util.h",
       "openxr/test/fake_openxr_impl_api.cc",
@@ -379,13 +364,12 @@ if (enable_openxr) {
 
     deps = [
       "//base",
+      "//components/version_info",
       "//device/vr/public/mojom:test_mojom",
       "//third_party/openxr:openxr_headers",
     ]
 
-    data_deps = [
-      "//device/vr:json_mock",
-    ]
+    data_deps = [ "//device/vr:json_mock" ]
   }
 }
 
@@ -398,7 +382,7 @@ if (enable_gvr_services) {
   }
 
   android_library("java") {
-    java_files = java_sources_needing_jni
+    sources = java_sources_needing_jni
     deps = [
       "//base:base_java",
       "//base:jni_java",

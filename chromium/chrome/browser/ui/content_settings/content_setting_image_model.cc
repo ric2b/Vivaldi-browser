@@ -18,8 +18,8 @@
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
 #include "chrome/browser/download/download_request_limiter.h"
-#include "chrome/browser/permissions/permission_features.h"
-#include "chrome/browser/permissions/permission_request_manager.h"
+#include "chrome/browser/permissions/quiet_notification_permission_ui_config.h"
+#include "chrome/browser/permissions/quiet_notification_permission_ui_state.h"
 #include "chrome/browser/prerender/prerender_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/blocked_content/framebust_block_tab_helper.h"
@@ -32,12 +32,13 @@
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/content_settings/core/common/features.h"
+#include "components/permissions/permission_request_manager.h"
 #include "components/prefs/pref_service.h"
 #include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/web_contents.h"
 #include "services/device/public/cpp/device_features.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/material_design/material_design_controller.h"
+#include "ui/base/pointer/touch_ui_controller.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/favicon_size.h"
@@ -52,18 +53,18 @@ using content::WebContents;
 
 // The image models hierarchy:
 //
-// ContentSettingImageModel                  - base class
-//   ContentSettingSimpleImageModel            - single content setting
-//     ContentSettingBlockedImageModel           - generic blocked setting
-//     ContentSettingGeolocationImageModel       - geolocation
-//     ContentSettingRPHImageModel               - protocol handlers
-//     ContentSettingMIDISysExImageModel         - midi sysex
-//     ContentSettingDownloadsImageModel         - automatic downloads
-//     ContentSettingClipboardReadImageModel     - clipboard read
-//     ContentSettingSensorsImageModel           - sensors
-//     ContentSettingNotificationsImageModel     - notifications
-//   ContentSettingMediaImageModel             - media
-//   ContentSettingFramebustBlockImageModel    - blocked framebust
+// ContentSettingImageModel                   - base class
+//   ContentSettingSimpleImageModel             - single content setting
+//     ContentSettingBlockedImageModel            - generic blocked setting
+//     ContentSettingGeolocationImageModel        - geolocation
+//     ContentSettingRPHImageModel                - protocol handlers
+//     ContentSettingMIDISysExImageModel          - midi sysex
+//     ContentSettingDownloadsImageModel          - automatic downloads
+//     ContentSettingClipboardReadWriteImageModel - clipboard read and write
+//     ContentSettingSensorsImageModel            - sensors
+//     ContentSettingNotificationsImageModel      - notifications
+//   ContentSettingMediaImageModel              - media
+//   ContentSettingFramebustBlockImageModel     - blocked framebust
 
 class ContentSettingBlockedImageModel : public ContentSettingSimpleImageModel {
  public:
@@ -119,15 +120,15 @@ class ContentSettingDownloadsImageModel
   DISALLOW_COPY_AND_ASSIGN(ContentSettingDownloadsImageModel);
 };
 
-class ContentSettingClipboardReadImageModel
+class ContentSettingClipboardReadWriteImageModel
     : public ContentSettingSimpleImageModel {
  public:
-  ContentSettingClipboardReadImageModel();
+  ContentSettingClipboardReadWriteImageModel();
 
   bool UpdateAndGetVisibility(WebContents* web_contents) override;
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(ContentSettingClipboardReadImageModel);
+  DISALLOW_COPY_AND_ASSIGN(ContentSettingClipboardReadWriteImageModel);
 };
 
 // Image model for displaying media icons in the location bar.
@@ -179,6 +180,7 @@ class ContentSettingNotificationsImageModel
 
   // ContentSettingSimpleImageModel:
   bool UpdateAndGetVisibility(WebContents* web_contents) override;
+  void SetPromoWasShown(content::WebContents* contents) override;
   std::unique_ptr<ContentSettingBubbleModel> CreateBubbleModelImpl(
       ContentSettingBubbleModel::Delegate* delegate,
       WebContents* web_contents) override;
@@ -203,7 +205,7 @@ bool ShouldShowPluginExplanation(content::WebContents* web_contents,
                                  HostContentSettingsMap* map) {
   const GURL& url = web_contents->GetURL();
   ContentSetting setting = map->GetContentSetting(
-      url, url, CONTENT_SETTINGS_TYPE_PLUGINS, std::string());
+      url, url, ContentSettingsType::PLUGINS, std::string());
 
   // For plugins, show the animated explanation in these cases:
   //  - The plugin is blocked despite the user having content setting ALLOW.
@@ -220,21 +222,21 @@ struct ContentSettingsImageDetails {
 };
 
 const ContentSettingsImageDetails kImageDetails[] = {
-    {CONTENT_SETTINGS_TYPE_COOKIES, kCookieIcon, IDS_BLOCKED_COOKIES_MESSAGE, 0,
-     IDS_ACCESSED_COOKIES_MESSAGE},
-    {CONTENT_SETTINGS_TYPE_IMAGES, kPhotoIcon, IDS_BLOCKED_IMAGES_MESSAGE, 0,
-     0},
-    {CONTENT_SETTINGS_TYPE_JAVASCRIPT, kCodeIcon,
+    {ContentSettingsType::COOKIES, vector_icons::kCookieIcon,
+     IDS_BLOCKED_COOKIES_MESSAGE, 0, IDS_ACCESSED_COOKIES_MESSAGE},
+    {ContentSettingsType::IMAGES, vector_icons::kPhotoIcon,
+     IDS_BLOCKED_IMAGES_MESSAGE, 0, 0},
+    {ContentSettingsType::JAVASCRIPT, vector_icons::kCodeIcon,
      IDS_BLOCKED_JAVASCRIPT_MESSAGE, 0, 0},
-    {CONTENT_SETTINGS_TYPE_PLUGINS, kExtensionIcon, IDS_BLOCKED_PLUGINS_MESSAGE,
-     IDS_BLOCKED_PLUGIN_EXPLANATORY_TEXT, 0},
-    {CONTENT_SETTINGS_TYPE_MIXEDSCRIPT, kMixedContentIcon,
+    {ContentSettingsType::PLUGINS, vector_icons::kExtensionIcon,
+     IDS_BLOCKED_PLUGINS_MESSAGE, IDS_BLOCKED_PLUGIN_EXPLANATORY_TEXT, 0},
+    {ContentSettingsType::MIXEDSCRIPT, kMixedContentIcon,
      IDS_BLOCKED_DISPLAYING_INSECURE_CONTENT, 0, 0},
-    {CONTENT_SETTINGS_TYPE_PPAPI_BROKER, kExtensionIcon,
+    {ContentSettingsType::PPAPI_BROKER, vector_icons::kExtensionIcon,
      IDS_BLOCKED_PPAPI_BROKER_MESSAGE, 0, IDS_ALLOWED_PPAPI_BROKER_MESSAGE},
-    {CONTENT_SETTINGS_TYPE_SOUND, kTabAudioIcon, IDS_BLOCKED_SOUND_TITLE, 0, 0},
-    {CONTENT_SETTINGS_TYPE_ADS, kAdsIcon, IDS_BLOCKED_ADS_PROMPT_TOOLTIP,
-     IDS_BLOCKED_ADS_PROMPT_TITLE, 0},
+    {ContentSettingsType::SOUND, kTabAudioIcon, IDS_BLOCKED_SOUND_TITLE, 0, 0},
+    {ContentSettingsType::ADS, vector_icons::kAdsIcon,
+     IDS_BLOCKED_ADS_PROMPT_TOOLTIP, IDS_BLOCKED_ADS_PROMPT_TITLE, 0},
 };
 
 const ContentSettingsImageDetails* GetImageDetails(ContentSettingsType type) {
@@ -271,44 +273,44 @@ ContentSettingImageModel::CreateForContentType(ImageType image_type) {
   switch (image_type) {
     case ImageType::COOKIES:
       return std::make_unique<ContentSettingBlockedImageModel>(
-          ImageType::COOKIES, CONTENT_SETTINGS_TYPE_COOKIES);
+          ImageType::COOKIES, ContentSettingsType::COOKIES);
     case ImageType::IMAGES:
       return std::make_unique<ContentSettingBlockedImageModel>(
-          ImageType::IMAGES, CONTENT_SETTINGS_TYPE_IMAGES);
+          ImageType::IMAGES, ContentSettingsType::IMAGES);
     case ImageType::JAVASCRIPT:
       return std::make_unique<ContentSettingBlockedImageModel>(
-          ImageType::JAVASCRIPT, CONTENT_SETTINGS_TYPE_JAVASCRIPT);
+          ImageType::JAVASCRIPT, ContentSettingsType::JAVASCRIPT);
     case ImageType::PPAPI_BROKER:
       return std::make_unique<ContentSettingBlockedImageModel>(
-          ImageType::PPAPI_BROKER, CONTENT_SETTINGS_TYPE_PPAPI_BROKER);
+          ImageType::PPAPI_BROKER, ContentSettingsType::PPAPI_BROKER);
     case ImageType::PLUGINS:
       return std::make_unique<ContentSettingBlockedImageModel>(
-          ImageType::PLUGINS, CONTENT_SETTINGS_TYPE_PLUGINS);
+          ImageType::PLUGINS, ContentSettingsType::PLUGINS);
     case ImageType::POPUPS:
       return std::make_unique<ContentSettingPopupImageModel>();
     case ImageType::GEOLOCATION:
       return std::make_unique<ContentSettingGeolocationImageModel>();
     case ImageType::MIXEDSCRIPT:
       return std::make_unique<ContentSettingBlockedImageModel>(
-          ImageType::MIXEDSCRIPT, CONTENT_SETTINGS_TYPE_MIXEDSCRIPT);
+          ImageType::MIXEDSCRIPT, ContentSettingsType::MIXEDSCRIPT);
     case ImageType::PROTOCOL_HANDLERS:
       return std::make_unique<ContentSettingRPHImageModel>();
     case ImageType::MEDIASTREAM:
       return std::make_unique<ContentSettingMediaImageModel>();
     case ImageType::ADS:
       return std::make_unique<ContentSettingBlockedImageModel>(
-          ImageType::ADS, CONTENT_SETTINGS_TYPE_ADS);
+          ImageType::ADS, ContentSettingsType::ADS);
     case ImageType::AUTOMATIC_DOWNLOADS:
       return std::make_unique<ContentSettingDownloadsImageModel>();
     case ImageType::MIDI_SYSEX:
       return std::make_unique<ContentSettingMIDISysExImageModel>();
     case ImageType::SOUND:
       return std::make_unique<ContentSettingBlockedImageModel>(
-          ImageType::SOUND, CONTENT_SETTINGS_TYPE_SOUND);
+          ImageType::SOUND, ContentSettingsType::SOUND);
     case ImageType::FRAMEBUST:
       return std::make_unique<ContentSettingFramebustBlockImageModel>();
-    case ImageType::CLIPBOARD_READ:
-      return std::make_unique<ContentSettingClipboardReadImageModel>();
+    case ImageType::CLIPBOARD_READ_WRITE:
+      return std::make_unique<ContentSettingClipboardReadWriteImageModel>();
     case ImageType::SENSORS:
       return std::make_unique<ContentSettingSensorsImageModel>();
     case ImageType::NOTIFICATIONS_QUIET_PROMPT:
@@ -330,6 +332,14 @@ void ContentSettingImageModel::Update(content::WebContents* contents) {
       ContentSettingImageModelStates::Get(contents)->SetAccessibilityNotified(
           image_type(), false);
     }
+    if (should_auto_open_bubble_) {
+      ContentSettingImageModelStates::Get(contents)->SetBubbleWasAutoOpened(
+          image_type(), false);
+    }
+    if (should_show_promo_) {
+      ContentSettingImageModelStates::Get(contents)->SetPromoWasShown(
+          image_type(), false);
+    }
   }
 }
 
@@ -349,7 +359,7 @@ void ContentSettingImageModel::SetAnimationHasRun(
 
 bool ContentSettingImageModel::ShouldNotifyAccessibility(
     content::WebContents* contents) const {
-  return image_type_should_notify_accessibility_ &&
+  return image_type_should_notify_accessibility_ && explanatory_string_id_ &&
          !ContentSettingImageModelStates::Get(contents)
               ->GetAccessibilityNotified(image_type());
 }
@@ -357,6 +367,33 @@ bool ContentSettingImageModel::ShouldNotifyAccessibility(
 void ContentSettingImageModel::AccessibilityWasNotified(
     content::WebContents* contents) {
   ContentSettingImageModelStates::Get(contents)->SetAccessibilityNotified(
+      image_type(), true);
+}
+
+bool ContentSettingImageModel::ShouldShowPromo(content::WebContents* contents) {
+  DCHECK(contents);
+  return should_show_promo_ &&
+         !ContentSettingImageModelStates::Get(contents)->PromoWasShown(
+             image_type());
+}
+
+void ContentSettingImageModel::SetPromoWasShown(
+    content::WebContents* contents) {
+  DCHECK(contents);
+  ContentSettingImageModelStates::Get(contents)->SetPromoWasShown(image_type(),
+                                                                  true);
+}
+
+bool ContentSettingImageModel::ShouldAutoOpenBubble(
+    content::WebContents* contents) {
+  return should_auto_open_bubble_ &&
+         !ContentSettingImageModelStates::Get(contents)->BubbleWasAutoOpened(
+             image_type());
+}
+
+void ContentSettingImageModel::SetBubbleWasAutoOpened(
+    content::WebContents* contents) {
+  ContentSettingImageModelStates::Get(contents)->SetBubbleWasAutoOpened(
       image_type(), true);
 }
 
@@ -371,7 +408,8 @@ bool ContentSettingBlockedImageModel::UpdateAndGetVisibility(
     WebContents* web_contents) {
   const ContentSettingsType type = content_type();
   const ContentSettingsImageDetails* image_details = GetImageDetails(type);
-  DCHECK(image_details) << "No entry for " << type << " in kImageDetails[].";
+  DCHECK(image_details) << "No entry for " << static_cast<int32_t>(type)
+                        << " in kImageDetails[].";
 
   int tooltip_id = image_details->blocked_tooltip_id;
   int explanation_id = image_details->blocked_explanatory_text_id;
@@ -394,12 +432,12 @@ bool ContentSettingBlockedImageModel::UpdateAndGetVisibility(
 
   // For allowed cookies, don't show the cookie page action unless cookies are
   // blocked by default.
-  if (!is_blocked && type == CONTENT_SETTINGS_TYPE_COOKIES &&
+  if (!is_blocked && type == ContentSettingsType::COOKIES &&
       map->GetDefaultContentSetting(type, nullptr) != CONTENT_SETTING_BLOCK) {
     return false;
   }
 
-  if (type == CONTENT_SETTINGS_TYPE_COOKIES &&
+  if (type == ContentSettingsType::COOKIES &&
       CookieSettingsFactory::GetForProfile(profile)
           ->IsCookieControlsEnabled()) {
     return false;
@@ -410,21 +448,21 @@ bool ContentSettingBlockedImageModel::UpdateAndGetVisibility(
     explanation_id = 0;
   }
 
-  if (type == CONTENT_SETTINGS_TYPE_PLUGINS &&
+  if (type == ContentSettingsType::PLUGINS &&
       !ShouldShowPluginExplanation(web_contents, map)) {
     explanation_id = 0;
   }
 
   const gfx::VectorIcon* badge_id = &gfx::kNoneIcon;
-  if (type == CONTENT_SETTINGS_TYPE_PPAPI_BROKER)
+  if (type == ContentSettingsType::PPAPI_BROKER)
     badge_id = &kWarningBadgeIcon;
   else if (content_settings->IsContentBlocked(type))
-    badge_id = &kBlockedBadgeIcon;
+    badge_id = &vector_icons::kBlockedBadgeIcon;
 
   const gfx::VectorIcon* icon = &image_details->icon;
   // Touch mode uses a different tab audio icon.
-  if (image_details->content_type == CONTENT_SETTINGS_TYPE_SOUND &&
-      ui::MaterialDesignController::touch_ui()) {
+  if (image_details->content_type == ContentSettingsType::SOUND &&
+      ui::TouchUiController::Get()->touch_ui()) {
     icon = &kTabAudioRoundedIcon;
   }
   set_icon(*icon, *badge_id);
@@ -438,7 +476,7 @@ bool ContentSettingBlockedImageModel::UpdateAndGetVisibility(
 
 ContentSettingGeolocationImageModel::ContentSettingGeolocationImageModel()
     : ContentSettingSimpleImageModel(ImageType::GEOLOCATION,
-                                     CONTENT_SETTINGS_TYPE_GEOLOCATION) {}
+                                     ContentSettingsType::GEOLOCATION) {}
 
 bool ContentSettingGeolocationImageModel::UpdateAndGetVisibility(
     WebContents* web_contents) {
@@ -457,7 +495,8 @@ bool ContentSettingGeolocationImageModel::UpdateAndGetVisibility(
   usages_state.GetDetailedInfo(nullptr, &state_flags);
   bool allowed =
       !!(state_flags & ContentSettingsUsagesState::TABSTATE_HAS_ANY_ALLOWED);
-  set_icon(kMyLocationIcon, allowed ? gfx::kNoneIcon : kBlockedBadgeIcon);
+  set_icon(kMyLocationIcon,
+           allowed ? gfx::kNoneIcon : vector_icons::kBlockedBadgeIcon);
   set_tooltip(l10n_util::GetStringUTF16(allowed
                                             ? IDS_GEOLOCATION_ALLOWED_TOOLTIP
                                             : IDS_GEOLOCATION_BLOCKED_TOOLTIP));
@@ -468,7 +507,7 @@ bool ContentSettingGeolocationImageModel::UpdateAndGetVisibility(
 
 ContentSettingRPHImageModel::ContentSettingRPHImageModel()
     : ContentSettingSimpleImageModel(ImageType::PROTOCOL_HANDLERS,
-                                     CONTENT_SETTINGS_TYPE_PROTOCOL_HANDLERS) {
+                                     ContentSettingsType::PROTOCOL_HANDLERS) {
   set_icon(vector_icons::kProtocolHandlerIcon, gfx::kNoneIcon);
   set_tooltip(l10n_util::GetStringUTF16(IDS_REGISTER_PROTOCOL_HANDLER_TOOLTIP));
 }
@@ -489,7 +528,7 @@ bool ContentSettingRPHImageModel::UpdateAndGetVisibility(
 
 ContentSettingMIDISysExImageModel::ContentSettingMIDISysExImageModel()
     : ContentSettingSimpleImageModel(ImageType::MIDI_SYSEX,
-                                     CONTENT_SETTINGS_TYPE_MIDI_SYSEX) {}
+                                     ContentSettingsType::MIDI_SYSEX) {}
 
 bool ContentSettingMIDISysExImageModel::UpdateAndGetVisibility(
     WebContents* web_contents) {
@@ -509,7 +548,7 @@ bool ContentSettingMIDISysExImageModel::UpdateAndGetVisibility(
   bool allowed =
       !!(state_flags & ContentSettingsUsagesState::TABSTATE_HAS_ANY_ALLOWED);
   set_icon(vector_icons::kMidiIcon,
-           allowed ? gfx::kNoneIcon : kBlockedBadgeIcon);
+           allowed ? gfx::kNoneIcon : vector_icons::kBlockedBadgeIcon);
   set_tooltip(l10n_util::GetStringUTF16(allowed
                                             ? IDS_MIDI_SYSEX_ALLOWED_TOOLTIP
                                             : IDS_MIDI_SYSEX_BLOCKED_TOOLTIP));
@@ -519,9 +558,9 @@ bool ContentSettingMIDISysExImageModel::UpdateAndGetVisibility(
 // Automatic downloads ---------------------------------------------------------
 
 ContentSettingDownloadsImageModel::ContentSettingDownloadsImageModel()
-    : ContentSettingSimpleImageModel(
-          ImageType::AUTOMATIC_DOWNLOADS,
-          CONTENT_SETTINGS_TYPE_AUTOMATIC_DOWNLOADS) {}
+    : ContentSettingSimpleImageModel(ImageType::AUTOMATIC_DOWNLOADS,
+                                     ContentSettingsType::AUTOMATIC_DOWNLOADS) {
+}
 
 bool ContentSettingDownloadsImageModel::UpdateAndGetVisibility(
     WebContents* web_contents) {
@@ -534,12 +573,13 @@ bool ContentSettingDownloadsImageModel::UpdateAndGetVisibility(
 
   switch (download_request_limiter->GetDownloadUiStatus(web_contents)) {
     case DownloadRequestLimiter::DOWNLOAD_UI_ALLOWED:
-      set_icon(kFileDownloadIcon, gfx::kNoneIcon);
+      set_icon(vector_icons::kFileDownloadIcon, gfx::kNoneIcon);
       set_explanatory_string_id(0);
       set_tooltip(l10n_util::GetStringUTF16(IDS_ALLOWED_DOWNLOAD_TITLE));
       return true;
     case DownloadRequestLimiter::DOWNLOAD_UI_BLOCKED:
-      set_icon(kFileDownloadIcon, kBlockedBadgeIcon);
+      set_icon(vector_icons::kFileDownloadIcon,
+               vector_icons::kBlockedBadgeIcon);
       set_explanatory_string_id(IDS_BLOCKED_DOWNLOADS_EXPLANATION);
       set_tooltip(l10n_util::GetStringUTF16(IDS_BLOCKED_DOWNLOAD_TITLE));
       return true;
@@ -551,23 +591,26 @@ bool ContentSettingDownloadsImageModel::UpdateAndGetVisibility(
 
 // Clipboard -------------------------------------------------------------------
 
-ContentSettingClipboardReadImageModel::ContentSettingClipboardReadImageModel()
-    : ContentSettingSimpleImageModel(ImageType::CLIPBOARD_READ,
-                                     CONTENT_SETTINGS_TYPE_CLIPBOARD_READ) {}
+ContentSettingClipboardReadWriteImageModel::
+    ContentSettingClipboardReadWriteImageModel()
+    : ContentSettingSimpleImageModel(
+          ImageType::CLIPBOARD_READ_WRITE,
+          ContentSettingsType::CLIPBOARD_READ_WRITE) {}
 
-bool ContentSettingClipboardReadImageModel::UpdateAndGetVisibility(
+bool ContentSettingClipboardReadWriteImageModel::UpdateAndGetVisibility(
     WebContents* web_contents) {
   TabSpecificContentSettings* content_settings =
       TabSpecificContentSettings::FromWebContents(web_contents);
   if (!content_settings)
     return false;
-  ContentSettingsType content_type = CONTENT_SETTINGS_TYPE_CLIPBOARD_READ;
+  ContentSettingsType content_type = ContentSettingsType::CLIPBOARD_READ_WRITE;
   bool blocked = content_settings->IsContentBlocked(content_type);
   bool allowed = content_settings->IsContentAllowed(content_type);
   if (!blocked && !allowed)
     return false;
 
-  set_icon(kContentPasteIcon, allowed ? gfx::kNoneIcon : kBlockedBadgeIcon);
+  set_icon(vector_icons::kContentPasteIcon,
+           allowed ? gfx::kNoneIcon : vector_icons::kBlockedBadgeIcon);
   set_tooltip(l10n_util::GetStringUTF16(
       allowed ? IDS_ALLOWED_CLIPBOARD_MESSAGE : IDS_BLOCKED_CLIPBOARD_MESSAGE));
   return true;
@@ -605,19 +648,21 @@ bool ContentSettingMediaImageModel::UpdateAndGetVisibility(
 
     if (IsCamAccessed() && IsMicAccessed()) {
       if (IsCameraBlockedOnSiteLevel() || IsMicBlockedOnSiteLevel()) {
-        set_icon(vector_icons::kVideocamIcon, kBlockedBadgeIcon);
+        set_icon(vector_icons::kVideocamIcon, vector_icons::kBlockedBadgeIcon);
         set_tooltip(l10n_util::GetStringUTF16(IDS_MICROPHONE_CAMERA_BLOCKED));
       } else if (DidCameraAccessFailBecauseOfSystemLevelBlock() ||
                  DidMicAccessFailBecauseOfSystemLevelBlock()) {
-        set_icon(vector_icons::kVideocamIcon, kBlockedBadgeIcon);
+        set_icon(vector_icons::kVideocamIcon, vector_icons::kBlockedBadgeIcon);
         set_tooltip(l10n_util::GetStringUTF16(IDS_MICROPHONE_CAMERA_BLOCKED));
-        if (!content_settings->camera_was_just_granted_on_site_level() ||
-            !content_settings->mic_was_just_granted_on_site_level()) {
+        if (content_settings->camera_was_just_granted_on_site_level() ||
+            content_settings->mic_was_just_granted_on_site_level()) {
+          // Automatically trigger the new bubble, if the camera
+          // and/or mic was just granted on a site level, but blocked on a
+          // system level.
+          set_should_auto_open_bubble(true);
+        } else {
           set_explanatory_string_id(IDS_CAMERA_TURNED_OFF);
         }
-        // TODO(hkamila): Automatically trigger the new bubble, if the camera
-        // and/or mic was just granted on a site level, but blocked on a system
-        // level.
       } else {
         set_icon(vector_icons::kVideocamIcon, gfx::kNoneIcon);
         set_tooltip(l10n_util::GetStringUTF16(IDS_MICROPHONE_CAMERA_ALLOWED));
@@ -627,12 +672,14 @@ bool ContentSettingMediaImageModel::UpdateAndGetVisibility(
 
     if (IsCamAccessed()) {
       if (IsCameraBlockedOnSiteLevel()) {
-        set_icon(vector_icons::kVideocamIcon, kBlockedBadgeIcon);
+        set_icon(vector_icons::kVideocamIcon, vector_icons::kBlockedBadgeIcon);
         set_tooltip(l10n_util::GetStringUTF16(IDS_CAMERA_BLOCKED));
       } else if (DidCameraAccessFailBecauseOfSystemLevelBlock()) {
-        set_icon(vector_icons::kVideocamIcon, kBlockedBadgeIcon);
+        set_icon(vector_icons::kVideocamIcon, vector_icons::kBlockedBadgeIcon);
         set_tooltip(l10n_util::GetStringUTF16(IDS_CAMERA_BLOCKED));
-        if (!content_settings->camera_was_just_granted_on_site_level()) {
+        if (content_settings->camera_was_just_granted_on_site_level()) {
+          set_should_auto_open_bubble(true);
+        } else {
           set_explanatory_string_id(IDS_CAMERA_TURNED_OFF);
         }
       } else {
@@ -644,12 +691,14 @@ bool ContentSettingMediaImageModel::UpdateAndGetVisibility(
 
     if (IsMicAccessed()) {
       if (IsMicBlockedOnSiteLevel()) {
-        set_icon(vector_icons::kMicIcon, kBlockedBadgeIcon);
+        set_icon(vector_icons::kMicIcon, vector_icons::kBlockedBadgeIcon);
         set_tooltip(l10n_util::GetStringUTF16(IDS_MICROPHONE_BLOCKED));
       } else if (DidMicAccessFailBecauseOfSystemLevelBlock()) {
-        set_icon(vector_icons::kMicIcon, kBlockedBadgeIcon);
+        set_icon(vector_icons::kMicIcon, vector_icons::kBlockedBadgeIcon);
         set_tooltip(l10n_util::GetStringUTF16(IDS_MICROPHONE_BLOCKED));
-        if (!content_settings->mic_was_just_granted_on_site_level()) {
+        if (content_settings->mic_was_just_granted_on_site_level()) {
+          set_should_auto_open_bubble(true);
+        } else {
           set_explanatory_string_id(IDS_MIC_TURNED_OFF);
         }
       } else {
@@ -665,7 +714,7 @@ bool ContentSettingMediaImageModel::UpdateAndGetVisibility(
 
   int id = IDS_CAMERA_BLOCKED;
   if (IsMicBlockedOnSiteLevel() || IsCameraBlockedOnSiteLevel()) {
-    set_icon(vector_icons::kVideocamIcon, kBlockedBadgeIcon);
+    set_icon(vector_icons::kVideocamIcon, vector_icons::kBlockedBadgeIcon);
     if (IsMicAccessed())
       id = IsCamAccessed() ? IDS_MICROPHONE_CAMERA_BLOCKED
                            : IDS_MICROPHONE_BLOCKED;
@@ -744,7 +793,7 @@ bool ContentSettingFramebustBlockImageModel::UpdateAndGetVisibility(
   if (!FramebustBlockTabHelper::FromWebContents(web_contents)->HasBlockedUrls())
     return false;
 
-  set_icon(kBlockedRedirectIcon, kBlockedBadgeIcon);
+  set_icon(kBlockedRedirectIcon, vector_icons::kBlockedBadgeIcon);
   set_explanatory_string_id(IDS_REDIRECT_BLOCKED_TITLE);
   set_tooltip(l10n_util::GetStringUTF16(IDS_REDIRECT_BLOCKED_TOOLTIP));
   return true;
@@ -762,7 +811,7 @@ ContentSettingFramebustBlockImageModel::CreateBubbleModelImpl(
 
 ContentSettingSensorsImageModel::ContentSettingSensorsImageModel()
     : ContentSettingSimpleImageModel(ImageType::SENSORS,
-                                     CONTENT_SETTINGS_TYPE_SENSORS) {}
+                                     ContentSettingsType::SENSORS) {}
 
 bool ContentSettingSensorsImageModel::UpdateAndGetVisibility(
     WebContents* web_contents) {
@@ -786,7 +835,8 @@ bool ContentSettingSensorsImageModel::UpdateAndGetVisibility(
     return false;
   }
 
-  set_icon(kSensorsIcon, !blocked ? gfx::kNoneIcon : kBlockedBadgeIcon);
+  set_icon(vector_icons::kSensorsIcon,
+           !blocked ? gfx::kNoneIcon : vector_icons::kBlockedBadgeIcon);
   if (base::FeatureList::IsEnabled(features::kGenericSensorExtraClasses)) {
     set_tooltip(l10n_util::GetStringUTF16(
         !blocked ? IDS_SENSORS_ALLOWED_TOOLTIP : IDS_SENSORS_BLOCKED_TOOLTIP));
@@ -802,7 +852,7 @@ bool ContentSettingSensorsImageModel::UpdateAndGetVisibility(
 
 ContentSettingPopupImageModel::ContentSettingPopupImageModel()
     : ContentSettingSimpleImageModel(ImageType::POPUPS,
-                                     CONTENT_SETTINGS_TYPE_POPUPS) {}
+                                     ContentSettingsType::POPUPS) {}
 
 bool ContentSettingPopupImageModel::UpdateAndGetVisibility(
     WebContents* web_contents) {
@@ -810,7 +860,7 @@ bool ContentSettingPopupImageModel::UpdateAndGetVisibility(
       TabSpecificContentSettings::FromWebContents(web_contents);
   if (!content_settings || !content_settings->IsContentBlocked(content_type()))
     return false;
-  set_icon(kWebIcon, kBlockedBadgeIcon);
+  set_icon(kWebIcon, vector_icons::kBlockedBadgeIcon);
   set_explanatory_string_id(IDS_BLOCKED_POPUPS_EXPLANATORY_TEXT);
   set_tooltip(l10n_util::GetStringUTF16(IDS_BLOCKED_POPUPS_TOOLTIP));
   return true;
@@ -821,22 +871,43 @@ bool ContentSettingPopupImageModel::UpdateAndGetVisibility(
 ContentSettingNotificationsImageModel::ContentSettingNotificationsImageModel()
     : ContentSettingSimpleImageModel(
           ImageType::NOTIFICATIONS_QUIET_PROMPT,
-          CONTENT_SETTINGS_TYPE_NOTIFICATIONS,
+          ContentSettingsType::NOTIFICATIONS,
           true /* image_type_should_notify_accessibility */) {
   set_icon(vector_icons::kNotificationsOffIcon, gfx::kNoneIcon);
   set_tooltip(
       l10n_util::GetStringUTF16(IDS_NOTIFICATIONS_OFF_EXPLANATORY_TEXT));
-  if (QuietNotificationsPromptConfig::UIFlavorToUse() ==
-      QuietNotificationsPromptConfig::UIFlavor::ANIMATED_ICON) {
-    set_explanatory_string_id(IDS_NOTIFICATIONS_OFF_EXPLANATORY_TEXT);
-  }
 }
 
 bool ContentSettingNotificationsImageModel::UpdateAndGetVisibility(
     WebContents* web_contents) {
-  auto* manager = PermissionRequestManager::FromWebContents(web_contents);
+  auto* manager =
+      permissions::PermissionRequestManager::FromWebContents(web_contents);
+  auto* profile =
+      Profile::FromBrowserContext(web_contents->GetBrowserContext());
+
+  if (!manager || !manager->ShouldCurrentRequestUseQuietUI())
+    return false;
   // |manager| may be null in tests.
-  return manager ? manager->ShouldShowQuietPermissionPrompt() : false;
+  // Show promo the first time a quiet prompt is shown to the user.
+  set_should_show_promo(
+      QuietNotificationPermissionUiState::ShouldShowPromo(profile));
+  if (manager->ReasonForUsingQuietUi() ==
+      permissions::PermissionRequestManager::QuietUiReason::
+          kTriggeredByCrowdDeny) {
+    set_explanatory_string_id(0);
+  } else {
+    set_explanatory_string_id(IDS_NOTIFICATIONS_OFF_EXPLANATORY_TEXT);
+  }
+  return true;
+}
+
+void ContentSettingNotificationsImageModel::SetPromoWasShown(
+    content::WebContents* contents) {
+  DCHECK(contents);
+  auto* profile = Profile::FromBrowserContext(contents->GetBrowserContext());
+  QuietNotificationPermissionUiState::PromoWasShown(profile);
+
+  ContentSettingImageModel::SetPromoWasShown(contents);
 }
 
 std::unique_ptr<ContentSettingBubbleModel>
@@ -897,7 +968,7 @@ ContentSettingImageModel::GenerateContentSettingImageModels() {
       ImageType::MIDI_SYSEX,
       ImageType::SOUND,
       ImageType::FRAMEBUST,
-      ImageType::CLIPBOARD_READ,
+      ImageType::CLIPBOARD_READ_WRITE,
       ImageType::NOTIFICATIONS_QUIET_PROMPT,
   };
 

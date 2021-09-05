@@ -7,6 +7,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/optional.h"
 #include "mojo/public/cpp/system/simple_watcher.h"
 #include "third_party/blink/renderer/core/fetch/multipart_parser.h"
 #include "third_party/blink/renderer/core/fileapi/file.h"
@@ -103,7 +104,7 @@ class FetchDataLoaderAsBlobHandle final : public FetchDataLoader,
 
   String DebugName() const override { return "FetchDataLoaderAsBlobHandle"; }
 
-  void Trace(blink::Visitor* visitor) override {
+  void Trace(Visitor* visitor) override {
     visitor->Trace(consumer_);
     visitor->Trace(client_);
     FetchDataLoader::Trace(visitor);
@@ -181,7 +182,7 @@ class FetchDataLoaderAsArrayBuffer final : public FetchDataLoader,
 
   String DebugName() const override { return "FetchDataLoaderAsArrayBuffer"; }
 
-  void Trace(blink::Visitor* visitor) override {
+  void Trace(Visitor* visitor) override {
     visitor->Trace(consumer_);
     visitor->Trace(client_);
     FetchDataLoader::Trace(visitor);
@@ -265,7 +266,7 @@ class FetchDataLoaderAsFailure final : public FetchDataLoader,
 
   void Cancel() override { consumer_->Cancel(); }
 
-  void Trace(blink::Visitor* visitor) override {
+  void Trace(Visitor* visitor) override {
     visitor->Trace(consumer_);
     visitor->Trace(client_);
     FetchDataLoader::Trace(visitor);
@@ -351,7 +352,7 @@ class FetchDataLoaderAsFormData final : public FetchDataLoader,
     multipart_parser_->Cancel();
   }
 
-  void Trace(blink::Visitor* visitor) override {
+  void Trace(Visitor* visitor) override {
     visitor->Trace(consumer_);
     visitor->Trace(client_);
     visitor->Trace(form_data_);
@@ -399,7 +400,7 @@ class FetchDataLoaderAsFormData final : public FetchDataLoader,
       } else {
         if (!string_decoder_) {
           string_decoder_ = std::make_unique<TextResourceDecoder>(
-              TextResourceDecoderOptions::CreateAlwaysUseUTF8ForText());
+              TextResourceDecoderOptions::CreateUTF8DecodeWithoutBOM());
         }
         string_builder_.reset(new StringBuilder);
       }
@@ -421,9 +422,9 @@ class FetchDataLoaderAsFormData final : public FetchDataLoader,
       if (blob_data_) {
         DCHECK(!string_builder_);
         const auto size = blob_data_->length();
-        File* file =
-            File::Create(filename_, InvalidFileTime(),
-                         BlobDataHandle::Create(std::move(blob_data_), size));
+        auto* file = MakeGarbageCollected<File>(
+            filename_, base::nullopt,
+            BlobDataHandle::Create(std::move(blob_data_), size));
         form_data->append(name_, file, filename_);
         return true;
       }
@@ -458,14 +459,16 @@ class FetchDataLoaderAsString final : public FetchDataLoader,
   USING_GARBAGE_COLLECTED_MIXIN(FetchDataLoaderAsString);
 
  public:
+  explicit FetchDataLoaderAsString(const TextResourceDecoderOptions& options)
+      : decoder_options_(options) {}
+
   void Start(BytesConsumer* consumer,
              FetchDataLoader::Client* client) override {
     DCHECK(!client_);
     DCHECK(!decoder_);
     DCHECK(!consumer_);
     client_ = client;
-    decoder_ = std::make_unique<TextResourceDecoder>(
-        TextResourceDecoderOptions::CreateAlwaysUseUTF8ForText());
+    decoder_ = std::make_unique<TextResourceDecoder>(decoder_options_);
     consumer_ = consumer;
     consumer_->SetClient(this);
     OnStateChange();
@@ -504,7 +507,7 @@ class FetchDataLoaderAsString final : public FetchDataLoader,
 
   void Cancel() override { consumer_->Cancel(); }
 
-  void Trace(blink::Visitor* visitor) override {
+  void Trace(Visitor* visitor) override {
     visitor->Trace(consumer_);
     visitor->Trace(client_);
     FetchDataLoader::Trace(visitor);
@@ -516,6 +519,7 @@ class FetchDataLoaderAsString final : public FetchDataLoader,
   Member<FetchDataLoader::Client> client_;
 
   std::unique_ptr<TextResourceDecoder> decoder_;
+  TextResourceDecoderOptions decoder_options_;
   StringBuilder builder_;
 };
 
@@ -640,7 +644,7 @@ class FetchDataLoaderAsDataPipe final : public FetchDataLoader,
 
   void Cancel() override { StopInternal(); }
 
-  void Trace(blink::Visitor* visitor) override {
+  void Trace(Visitor* visitor) override {
     visitor->Trace(consumer_);
     visitor->Trace(client_);
     FetchDataLoader::Trace(visitor);
@@ -683,8 +687,9 @@ FetchDataLoader* FetchDataLoader::CreateLoaderAsFormData(
   return MakeGarbageCollected<FetchDataLoaderAsFormData>(multipartBoundary);
 }
 
-FetchDataLoader* FetchDataLoader::CreateLoaderAsString() {
-  return MakeGarbageCollected<FetchDataLoaderAsString>();
+FetchDataLoader* FetchDataLoader::CreateLoaderAsString(
+    const TextResourceDecoderOptions& options) {
+  return MakeGarbageCollected<FetchDataLoaderAsString>(options);
 }
 
 FetchDataLoader* FetchDataLoader::CreateLoaderAsDataPipe(

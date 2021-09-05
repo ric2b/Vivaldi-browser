@@ -55,7 +55,7 @@ CSSRule* StyleRuleBase::CreateCSSOMWrapper(CSSRule* parent_rule) const {
   return CreateCSSOMWrapper(nullptr, parent_rule);
 }
 
-void StyleRuleBase::Trace(blink::Visitor* visitor) {
+void StyleRuleBase::Trace(Visitor* visitor) {
   switch (GetType()) {
     case kCharset:
       To<StyleRuleCharset>(this)->TraceAfterDispatch(visitor);
@@ -287,7 +287,7 @@ bool StyleRule::HasParsedProperties() const {
   return !lazy_property_parser_;
 }
 
-void StyleRule::TraceAfterDispatch(blink::Visitor* visitor) {
+void StyleRule::TraceAfterDispatch(blink::Visitor* visitor) const {
   visitor->Trace(properties_);
   visitor->Trace(lazy_property_parser_);
   StyleRuleBase::TraceAfterDispatch(visitor);
@@ -312,7 +312,7 @@ MutableCSSPropertyValueSet& StyleRulePage::MutableProperties() {
   return *To<MutableCSSPropertyValueSet>(properties_.Get());
 }
 
-void StyleRulePage::TraceAfterDispatch(blink::Visitor* visitor) {
+void StyleRulePage::TraceAfterDispatch(blink::Visitor* visitor) const {
   visitor->Trace(properties_);
   StyleRuleBase::TraceAfterDispatch(visitor);
 }
@@ -333,7 +333,7 @@ MutableCSSPropertyValueSet& StyleRuleProperty::MutableProperties() {
   return *To<MutableCSSPropertyValueSet>(properties_.Get());
 }
 
-void StyleRuleProperty::TraceAfterDispatch(blink::Visitor* visitor) {
+void StyleRuleProperty::TraceAfterDispatch(blink::Visitor* visitor) const {
   visitor->Trace(properties_);
   StyleRuleBase::TraceAfterDispatch(visitor);
 }
@@ -345,15 +345,13 @@ StyleRuleFontFace::StyleRuleFontFace(const StyleRuleFontFace& font_face_rule)
     : StyleRuleBase(font_face_rule),
       properties_(font_face_rule.properties_->MutableCopy()) {}
 
-StyleRuleFontFace::~StyleRuleFontFace() = default;
-
 MutableCSSPropertyValueSet& StyleRuleFontFace::MutableProperties() {
   if (!properties_->IsMutable())
     properties_ = properties_->MutableCopy();
   return *To<MutableCSSPropertyValueSet>(properties_.Get());
 }
 
-void StyleRuleFontFace::TraceAfterDispatch(blink::Visitor* visitor) {
+void StyleRuleFontFace::TraceAfterDispatch(blink::Visitor* visitor) const {
   visitor->Trace(properties_);
   StyleRuleBase::TraceAfterDispatch(visitor);
 }
@@ -378,7 +376,7 @@ void StyleRuleGroup::WrapperRemoveRule(unsigned index) {
   child_rules_.EraseAt(index);
 }
 
-void StyleRuleGroup::TraceAfterDispatch(blink::Visitor* visitor) {
+void StyleRuleGroup::TraceAfterDispatch(blink::Visitor* visitor) const {
   visitor->Trace(child_rules_);
   StyleRuleBase::TraceAfterDispatch(visitor);
 }
@@ -414,7 +412,7 @@ StyleRuleSupports::StyleRuleSupports(
     : StyleRuleCondition(kSupports, condition_text, adopt_rules),
       condition_is_supported_(condition_is_supported) {}
 
-void StyleRuleMedia::TraceAfterDispatch(blink::Visitor* visitor) {
+void StyleRuleMedia::TraceAfterDispatch(blink::Visitor* visitor) const {
   StyleRuleCondition::TraceAfterDispatch(visitor);
 }
 
@@ -429,15 +427,13 @@ StyleRuleViewport::StyleRuleViewport(const StyleRuleViewport& viewport_rule)
     : StyleRuleBase(viewport_rule),
       properties_(viewport_rule.properties_->MutableCopy()) {}
 
-StyleRuleViewport::~StyleRuleViewport() = default;
-
 MutableCSSPropertyValueSet& StyleRuleViewport::MutableProperties() {
   if (!properties_->IsMutable())
     properties_ = properties_->MutableCopy();
   return *To<MutableCSSPropertyValueSet>(properties_.Get());
 }
 
-void StyleRuleViewport::TraceAfterDispatch(blink::Visitor* visitor) {
+void StyleRuleViewport::TraceAfterDispatch(blink::Visitor* visitor) const {
   visitor->Trace(properties_);
   StyleRuleBase::TraceAfterDispatch(visitor);
 }

@@ -33,7 +33,7 @@
 #include "content/public/test/test_browser_context.h"
 #include "content/test/test_render_view_host.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/public/platform/web_input_event.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/vector2d.h"
@@ -205,7 +205,7 @@ class MockMoveGestureTarget : public MockSyntheticGestureTarget {
  public:
   MockMoveGestureTarget()
       : total_abs_move_distance_length_(0),
-        granularity_(ui::input_types::ScrollGranularity::kScrollByPixel) {}
+        granularity_(ui::ScrollGranularity::kScrollByPixel) {}
   ~MockMoveGestureTarget() override {}
 
   gfx::Vector2dF start_to_end_distance() const {
@@ -215,14 +215,12 @@ class MockMoveGestureTarget : public MockSyntheticGestureTarget {
     return total_abs_move_distance_length_;
   }
 
-  ui::input_types::ScrollGranularity granularity() const {
-    return granularity_;
-  }
+  ui::ScrollGranularity granularity() const { return granularity_; }
 
  protected:
   gfx::Vector2dF start_to_end_distance_;
   float total_abs_move_distance_length_;
-  ui::input_types::ScrollGranularity granularity_;
+  ui::ScrollGranularity granularity_;
 };
 
 class MockScrollMouseTarget : public MockMoveGestureTarget {
@@ -253,28 +251,26 @@ class MockMoveTouchTarget : public MockMoveGestureTarget {
 
     if (!started_) {
       ASSERT_EQ(touch_event.GetType(), WebInputEvent::kTouchStart);
-      start_.SetPoint(touch_event.touches[0].PositionInWidget().x,
-                      touch_event.touches[0].PositionInWidget().y);
-      last_touch_point_ = gfx::PointF(start_);
+      start_ = touch_event.touches[0].PositionInWidget();
+      last_touch_point_ = start_;
       started_ = true;
     } else {
       ASSERT_NE(touch_event.GetType(), WebInputEvent::kTouchStart);
       ASSERT_NE(touch_event.GetType(), WebInputEvent::kTouchCancel);
 
-      gfx::PointF touch_point(touch_event.touches[0].PositionInWidget().x,
-                              touch_event.touches[0].PositionInWidget().y);
+      gfx::PointF touch_point(touch_event.touches[0].PositionInWidget());
       gfx::Vector2dF delta = touch_point - last_touch_point_;
       total_abs_move_distance_length_ += delta.Length();
 
       if (touch_event.GetType() == WebInputEvent::kTouchEnd)
-        start_to_end_distance_ = touch_point - gfx::PointF(start_);
+        start_to_end_distance_ = touch_point - start_;
 
       last_touch_point_ = touch_point;
     }
   }
 
  protected:
-  gfx::Point start_;
+  gfx::PointF start_;
   gfx::PointF last_touch_point_;
   bool started_;
 };
@@ -313,8 +309,7 @@ class MockDragMouseTarget : public MockMoveGestureTarget {
       EXPECT_EQ(mouse_event.button, WebMouseEvent::Button::kLeft);
       EXPECT_EQ(mouse_event.click_count, 1);
       EXPECT_EQ(mouse_event.GetType(), WebInputEvent::kMouseDown);
-      start_.SetPoint(mouse_event.PositionInWidget().x,
-                      mouse_event.PositionInWidget().y);
+      start_ = mouse_event.PositionInWidget();
       last_mouse_point_ = start_;
       started_ = true;
     } else {
@@ -1283,8 +1278,7 @@ TEST_F(SyntheticGestureControllerTest, SingleScrollGestureMousePreciseScroll) {
   params.input_type = SyntheticSmoothMoveGestureParams::MOUSE_WHEEL_INPUT;
   params.start_point.SetPoint(39, 86);
   params.distances.push_back(gfx::Vector2d(0, -132));
-  params.granularity =
-      ui::input_types::ScrollGranularity::kScrollByPrecisePixel;
+  params.granularity = ui::ScrollGranularity::kScrollByPrecisePixel;
 
   std::unique_ptr<SyntheticSmoothMoveGesture> gesture(
       new SyntheticSmoothMoveGesture(params));
@@ -1305,7 +1299,7 @@ TEST_F(SyntheticGestureControllerTest, SingleScrollGestureMouseScrollByPage) {
   params.input_type = SyntheticSmoothMoveGestureParams::MOUSE_WHEEL_INPUT;
   params.start_point.SetPoint(39, 86);
   params.distances.push_back(gfx::Vector2d(0, -132));
-  params.granularity = ui::input_types::ScrollGranularity::kScrollByPage;
+  params.granularity = ui::ScrollGranularity::kScrollByPage;
 
   std::unique_ptr<SyntheticSmoothMoveGesture> gesture(
       new SyntheticSmoothMoveGesture(params));

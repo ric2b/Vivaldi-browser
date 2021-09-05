@@ -25,14 +25,13 @@ TEST(InternalPopupMenuTest, WriteDocumentInStyleDirtyTree) {
   auto dummy_page_holder_ =
       std::make_unique<DummyPageHolder>(IntSize(800, 600));
   Document& document = dummy_page_holder_->GetDocument();
-  document.body()->SetInnerHTMLFromString(R"HTML(
+  document.body()->setInnerHTML(R"HTML(
     <select id="select">
         <option value="foo">Foo</option>
         <option value="bar" style="display:none">Bar</option>
     </select>
   )HTML");
-  document.View()->UpdateAllLifecyclePhases(
-      DocumentLifecycle::LifecycleUpdateReason::kTest);
+  document.View()->UpdateAllLifecyclePhases(DocumentUpdateReason::kTest);
   auto* select = To<HTMLSelectElement>(document.getElementById("select"));
   ASSERT_TRUE(select);
   auto* menu = MakeGarbageCollected<InternalPopupMenu>(
@@ -50,7 +49,7 @@ TEST(InternalPopupMenuTest, ShowSelectDisplayNone) {
   auto dummy_page_holder_ =
       std::make_unique<DummyPageHolder>(IntSize(800, 600));
   Document& document = dummy_page_holder_->GetDocument();
-  document.body()->SetInnerHTMLFromString(R"HTML(
+  document.body()->setInnerHTML(R"HTML(
     <div id="container">
       <select id="select">
         <option>1</option>
@@ -58,8 +57,8 @@ TEST(InternalPopupMenuTest, ShowSelectDisplayNone) {
       </select>
     </div>
   )HTML");
-  document.View()->UpdateAllLifecyclePhases(
-      DocumentLifecycle::LifecycleUpdateReason::kTest);
+  document.View()->UpdateAllLifecyclePhases(DocumentUpdateReason::kTest);
+
   auto* div = document.getElementById("container");
   auto* select = To<HTMLSelectElement>(document.getElementById("select"));
   ASSERT_TRUE(select);

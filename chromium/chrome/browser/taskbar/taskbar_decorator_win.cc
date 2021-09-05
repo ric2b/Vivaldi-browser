@@ -14,6 +14,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/win/scoped_gdi_object.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/avatar_menu.h"
@@ -40,8 +41,6 @@ namespace taskbar {
 namespace {
 
 constexpr int kOverlayIconSize = 16;
-static const SkRRect kOverlayIconClip =
-    SkRRect::MakeOval(SkRect::MakeWH(kOverlayIconSize, kOverlayIconSize));
 
 // Responsible for invoking TaskbarList::SetOverlayIcon(). The call to
 // TaskbarList::SetOverlayIcon() runs a nested run loop that proves
@@ -82,7 +81,10 @@ void SetOverlayIcon(HWND hwnd,
     offscreen_bitmap.allocN32Pixels(kOverlayIconSize, kOverlayIconSize);
     SkCanvas offscreen_canvas(offscreen_bitmap);
     offscreen_canvas.clear(SK_ColorTRANSPARENT);
-    offscreen_canvas.clipRRect(kOverlayIconClip, true);
+
+    static const SkRRect overlay_icon_clip =
+        SkRRect::MakeOval(SkRect::MakeWH(kOverlayIconSize, kOverlayIconSize));
+    offscreen_canvas.clipRRect(overlay_icon_clip, true);
 
     // Note: the original code used kOverlayIconSize - resized_height, but in
     // order to center the icon in the circle clip area, we're going to center
@@ -101,10 +103,10 @@ void SetOverlayIcon(HWND hwnd,
 void PostSetOverlayIcon(HWND hwnd,
                         std::unique_ptr<SkBitmap> bitmap,
                         const std::string& alt_text) {
-  base::CreateCOMSTATaskRunner(
-      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE})
+  base::ThreadPool::CreateCOMSTATaskRunner(
+      {base::MayBlock(), base::TaskPriority::USER_VISIBLE})
       ->PostTask(FROM_HERE, base::BindOnce(&SetOverlayIcon, hwnd,
-                                           base::Passed(&bitmap), alt_text));
+                                           std::move(bitmap), alt_text));
 }
 
 }  // namespace

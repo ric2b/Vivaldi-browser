@@ -29,6 +29,7 @@
 <translation id="1243314992276662751">Yükle</translation>
 <translation id="1249250836236328755">Tür</translation>
 <translation id="1278813325885878377">Macarca QWERTY klavye</translation>
+<translation id="1293556467332435079">Dosyalar</translation>
 <translation id="1297922636971898492">Google Drive şu anda kullanılamıyor. Google Drive tekrar kullanılabilir olduğunda yükleme işlemi otomatik olarak yeniden başlayacak.</translation>
 <translation id="1307931752636661898">Linux dosyaları görüntülenemiyor</translation>
 <translation id="1310751437842832374">Harf çevirisi (mausam → ନମସ୍ତେ)</translation>
@@ -80,6 +81,7 @@
 <translation id="1847880352285315359">Kaydedildi</translation>
 <translation id="1864756863218646478">Dosya bulunamadı.</translation>
 <translation id="1921986354447415460">Türkçe F klavye</translation>
+<translation id="1924372192547904021"><ph name="DRIVE_NAME" /> biçimlendirildi</translation>
 <translation id="1931134289871235022">Slovakça</translation>
 <translation id="1933345018156373194">Taşıma işlemi başarısız, beklenmeyen hata: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="1936717151811561466">Fince</translation>
@@ -163,6 +165,7 @@
 <translation id="2942290791863759244">Almanca NEO 2 klavye</translation>
 <translation id="2943400156390503548">Slaytlar</translation>
 <translation id="2943503720238418293">Daha kısa bir ad kullanın</translation>
+<translation id="2949781154072577687"><ph name="DRIVE_NAME" /> biçimlendiriliyor...</translation>
 <translation id="2951236788251446349">Denizanası</translation>
 <translation id="2963783323012015985">Türkçe klavye</translation>
 <translation id="2966459079597787514">İsveççe klavye</translation>
@@ -275,6 +278,7 @@
 <translation id="4336032328163998280">Kopyalama işlemi başarısız oldu. <ph name="ERROR_MESSAGE" /></translation>
 <translation id="4364327530094270451">Kavun</translation>
 <translation id="4372884569765913867">1x1</translation>
+<translation id="4394214039309501350">Harici bağlantı</translation>
 <translation id="4425149324548788773">Drive'ım</translation>
 <translation id="4465830120256509958">Brezilya dilinde klavye</translation>
 <translation id="4470564870223067757">Hangul 2 Grubu</translation>
@@ -505,6 +509,7 @@
 <translation id="6878261347041253038">Devanagarca klavye (Fonetik)</translation>
 <translation id="6885780034956018177">Salyangoz</translation>
 <translation id="6896758677409633944">Kopyala</translation>
+<translation id="6898028766943174120">Diğer alt klasörler...</translation>
 <translation id="691516599546977041"><ph name="FOLDER_NAME" /> konumuna kaydedilemiyor. Düzenlenen resimler İndirilenler klasörüne kaydedilecek.</translation>
 <translation id="6915678159055240887">Chromebox</translation>
 <translation id="6918340160281024199">ABD Workman</translation>
@@ -517,6 +522,7 @@
 <translation id="696203921837389374">Mobil veriler üzerinden senkronizasyonu etkinleştir</translation>
 <translation id="6965382102122355670">Tamam</translation>
 <translation id="6970230597523682626">Bulgarca</translation>
+<translation id="6973630695168034713">Klasörler</translation>
 <translation id="6978611942794658017">Bu dosya Windows yazılımı kullanan PC'ler için tasarlanmıştır ve Chrome OS çalıştıran cihazınızla uyumlu değildir. Lütfen Chrome Web Mağazası'nda uygun başka bir uygulama arayın.</translation>
 <translation id="6979158407327259162">Google Drive</translation>
 <translation id="6990081529015358884">Boş yeriniz kalmadı</translation>
@@ -564,9 +570,11 @@
 <translation id="7589661784326793847">Bir saniye bekleyin</translation>
 <translation id="7603724359189955920">Izgaralar</translation>
 <translation id="7627790789328695202">Hata! <ph name="FILE_NAME" /> zaten mevcut. Yeniden adlandırın ve tekrar deneyin.</translation>
+<translation id="7628656427739290098">%<ph name="PERCENT" /> tamamlandı.</translation>
 <translation id="7649070708921625228">Yardım</translation>
 <translation id="7654209398114106148"><ph name="NUMBER_OF_ITEMS" /> öğe taşınıyor...</translation>
 <translation id="7658239707568436148">İptal</translation>
+<translation id="7695430100978772476"><ph name="DRIVE_NAME" /> biçimlendirilemedi</translation>
 <translation id="770015031906360009">Yunanca</translation>
 <translation id="7706319470528945664">Portekizce klavye</translation>
 <translation id="7711920809702896782">Resim bilgileri</translation>

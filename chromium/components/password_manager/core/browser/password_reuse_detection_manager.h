@@ -8,7 +8,9 @@
 #include "base/macros.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
+#include "components/password_manager/core/browser/password_reuse_detector.h"
 #include "components/password_manager/core/browser/password_reuse_detector_consumer.h"
 #include "url/gurl.h"
 
@@ -28,19 +30,23 @@ class PasswordReuseDetectionManager : public PasswordReuseDetectorConsumer {
   explicit PasswordReuseDetectionManager(PasswordManagerClient* client);
   ~PasswordReuseDetectionManager() override;
   void DidNavigateMainFrame(const GURL& main_frame_url);
-  void OnKeyPressed(const base::string16& text);
+  void OnKeyPressedCommitted(const base::string16& text);
+#if defined(OS_ANDROID)
+  void OnKeyPressedUncommitted(const base::string16& text);
+#endif
   void OnPaste(const base::string16 text);
 
   // PasswordReuseDetectorConsumer implementation
   void OnReuseFound(
       size_t password_length,
       base::Optional<PasswordHashData> reused_protected_password_hash,
-      const std::vector<std::string>& matching_domains,
+      const std::vector<MatchingReusedCredential>& matching_reused_credentials,
       int saved_passwords) override;
 
   void SetClockForTesting(base::Clock* clock);
 
  private:
+  void OnKeyPressed(const base::string16& text, const bool is_committed);
   // Determines the type of password being reused.
   metrics_util::PasswordType GetReusedPasswordType(
       base::Optional<PasswordHashData> reused_protected_password_hash,

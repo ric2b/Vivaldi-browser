@@ -15,6 +15,7 @@
 #include "base/path_service.h"
 #include "base/stl_util.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/extensions/default_web_app_ids.h"
@@ -43,13 +44,16 @@ const char* const kDefaultAppOrder[] = {
     arc::kPlayStoreAppId,
     extension_misc::kFilesManagerAppId,
     extension_misc::kGmailAppId,
+    arc::kGmailAppId,
     extension_misc::kGoogleDocAppId,
     extension_misc::kGoogleSlidesAppId,
     extension_misc::kGoogleSheetsAppId,
     extension_misc::kDriveHostedAppId,
     extension_misc::kGoogleKeepAppId,
     extension_misc::kCalendarAppId,
+    arc::kGoogleCalendarAppId,
     extension_misc::kYoutubeAppId,
+    arc::kYoutubeAppId,
     arc::kPlayMoviesAppId,                   // Play Movies & TV ARC app
     extension_misc::kGooglePlayMoviesAppId,  // Play Movies & TV Chrome app
     arc::kPlayMusicAppId,                    // Play Music ARC app
@@ -57,18 +61,20 @@ const char* const kDefaultAppOrder[] = {
     arc::kPlayGamesAppId,
     arc::kPlayBooksAppId,                   // Play Books ARC app
     extension_misc::kGooglePlayBooksAppId,  // Play Books Chrome app
-    ash::kInternalAppIdCamera,
     extension_misc::kCameraAppId,
     extension_misc::kGooglePhotosAppId,
-    arc::kGoogleDuo,
+    arc::kGooglePhotosAppId,
+    arc::kGoogleDuoAppId,
     app_list::kDefaultPageBreak1,  // First default page break
     // TODO(crbug.com/976578): Remove after M78.
     extension_misc::kGoogleMapsAppId,
     default_web_apps::kGoogleMapsAppId,
+    arc::kGoogleMapsAppId,
     ash::kInternalAppIdSettings,
     default_web_apps::kSettingsAppId,
     default_web_apps::kOsSettingsAppId,
     ash::kInternalAppIdDiscover,
+    default_web_apps::kHelpAppId,
     extension_misc::kGeniusAppId,
     extension_misc::kCalculatorAppId,
     default_web_apps::kCanvasAppId,
@@ -76,8 +82,8 @@ const char* const kDefaultAppOrder[] = {
     default_web_apps::kYoutubeTVAppId,
     default_web_apps::kGoogleNewsAppId,
     extensions::kWebStoreAppId,
-    arc::kLightRoom,
-    arc::kInfinitePainter,
+    arc::kLightRoomAppId,
+    arc::kInfinitePainterAppId,
     default_web_apps::kShowtimeAppId,
     extension_misc::kGooglePlusAppId,
     extension_misc::kChromeRemoteDesktopAppId,
@@ -152,10 +158,8 @@ ExternalLoader::ExternalLoader(bool async)
   loader_instance = this;
 
   if (async) {
-    base::PostTask(
-        FROM_HERE,
-        {base::ThreadPool(), base::MayBlock(),
-         base::TaskPriority::USER_VISIBLE},
+    base::ThreadPool::PostTask(
+        FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
         base::BindOnce(&ExternalLoader::Load, base::Unretained(this)));
   } else {
     Load();

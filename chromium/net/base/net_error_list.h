@@ -220,8 +220,7 @@ NET_ERROR(SSL_BAD_RECORD_MAC_ALERT, -126)
 // The proxy requested authentication (for tunnel establishment).
 NET_ERROR(PROXY_AUTH_REQUESTED, -127)
 
-// The SSL server attempted to use a weak ephemeral Diffie-Hellman key.
-NET_ERROR(SSL_WEAK_SERVER_EPHEMERAL_DH_KEY, -129)
+// Error -129 was removed (SSL_WEAK_SERVER_EPHEMERAL_DH_KEY).
 
 // Could not create a connection to the proxy server. An error occurred
 // either in resolving its name, or in connecting a socket to it.
@@ -539,13 +538,20 @@ NET_ERROR(CERT_SYMANTEC_LEGACY, -215)
 // -216 was QUIC_CERT_ROOT_NOT_KNOWN which has been renumbered to not be in the
 // certificate error range.
 
+// The certificate is known to be used for interception by an entity other
+// the device owner.
+NET_ERROR(CERT_KNOWN_INTERCEPTION_BLOCKED, -217)
+
+// The connection uses an obsolete version of SSL/TLS.
+NET_ERROR(SSL_OBSOLETE_VERSION, -218)
+
 // Add new certificate error codes here.
 //
 // Update the value of CERT_END whenever you add a new certificate error
 // code.
 
 // The value immediately past the last certificate error code.
-NET_ERROR(CERT_END, -217)
+NET_ERROR(CERT_END, -219)
 
 // The URL is invalid.
 NET_ERROR(INVALID_URL, -300)
@@ -850,8 +856,17 @@ NET_ERROR(ADD_USER_CERT_FAILED, -503)
 // An error occurred while handling a signed exchange.
 NET_ERROR(INVALID_SIGNED_EXCHANGE, -504)
 
-// An error occurred while handling a bundled-exchanges source.
-NET_ERROR(INVALID_BUNDLED_EXCHANGES, -505)
+// An error occurred while handling a Web Bundle source.
+NET_ERROR(INVALID_WEB_BUNDLE, -505)
+
+// A Trust Tokens protocol operation-executing request failed for one of a
+// number of reasons (precondition failure, internal error, bad response).
+NET_ERROR(TRUST_TOKEN_OPERATION_FAILED, -506)
+
+// When handling a Trust Tokens protocol operation-executing request, the system
+// found that the request's desired Trust Tokens results were already present in
+// a local cache; as a result, the main request was cancelled.
+NET_ERROR(TRUST_TOKEN_OPERATION_CACHE_HIT, -507)
 
 // *** Code -600 is reserved (was FTP_PASV_COMMAND_FAILED). ***
 
@@ -965,5 +980,7 @@ NET_ERROR(DNS_SEARCH_EMPTY, -805)
 // Failed to sort addresses according to RFC3484.
 NET_ERROR(DNS_SORT_ERROR, -806)
 
-// Failed to resolve over HTTP, fallback to legacy
-NET_ERROR(DNS_HTTP_FAILED, -807)
+// Error -807 was removed (DNS_HTTP_FAILED)
+
+// Failed to resolve the hostname of a DNS-over-HTTPS server.
+NET_ERROR(DNS_SECURE_RESOLVER_HOSTNAME_RESOLUTION_FAILED, -808)

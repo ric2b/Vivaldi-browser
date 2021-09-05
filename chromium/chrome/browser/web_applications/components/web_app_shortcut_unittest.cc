@@ -11,7 +11,7 @@ namespace web_app {
 TEST(WebAppShortcutTest, AppDirWithId) {
   base::FilePath profile_path(FILE_PATH_LITERAL("profile"));
   base::FilePath result(
-      web_app::GetWebAppDataDirectory(profile_path, "123", GURL()));
+      GetOsIntegrationResourcesDirectoryForApp(profile_path, "123", GURL()));
   base::FilePath expected =
       profile_path.AppendASCII("Web Applications").AppendASCII("_crx_123");
   EXPECT_EQ(expected, result);
@@ -19,7 +19,7 @@ TEST(WebAppShortcutTest, AppDirWithId) {
 
 TEST(WebAppShortcutTest, AppDirWithUrl) {
   base::FilePath profile_path(FILE_PATH_LITERAL("profile"));
-  base::FilePath result(web_app::GetWebAppDataDirectory(
+  base::FilePath result(GetOsIntegrationResourcesDirectoryForApp(
       profile_path, std::string(), GURL("http://example.com")));
   base::FilePath expected = profile_path.AppendASCII("Web Applications")
                                 .AppendASCII("example.com")

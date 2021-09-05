@@ -8,6 +8,7 @@ import static org.chromium.android_webview.test.AwActivityTestRule.WAIT_TIMEOUT_
 
 import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.MediumTest;
+import android.util.Pair;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -24,6 +25,8 @@ import org.chromium.content_public.browser.test.util.TestCallbackHelperContainer
 import org.chromium.content_public.common.ContentUrlConstants;
 import org.chromium.net.test.util.TestWebServer;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 
 /**
@@ -207,6 +210,8 @@ public class ClientOnPageFinishedTest {
     @MediumTest
     @Feature({"AndroidWebView"})
     public void testNotCalledForHistoryApi() throws Throwable {
+        TestCallbackHelperContainer.OnPageStartedHelper onPageStartedHelper =
+                mContentsClient.getOnPageStartedHelper();
         TestCallbackHelperContainer.OnPageFinishedHelper onPageFinishedHelper =
                 mContentsClient.getOnPageFinishedHelper();
         AwActivityTestRule.enableJavaScriptOnUiThread(mAwContents);
@@ -222,6 +227,7 @@ public class ClientOnPageFinishedTest {
             final String historyUrl = webServer.getResponseUrl(historyPath);
             final String syncUrl = webServer.setResponse(syncPath, testHtml, null);
 
+            Assert.assertEquals(0, onPageStartedHelper.getCallCount());
             Assert.assertEquals(0, onPageFinishedHelper.getCallCount());
             mActivityTestRule.loadUrlSync(mAwContents, onPageFinishedHelper, testUrl);
 
@@ -232,10 +238,14 @@ public class ClientOnPageFinishedTest {
             // we load another valid page. Since callbacks arrive sequentially if the next callback
             // we get is for the synchronizationUrl we know that the previous load did not schedule
             // a callback for the iframe.
-            final int synchronizationPageCallCount = onPageFinishedHelper.getCallCount();
+            final int synchronizationPageStartedCallCount = onPageStartedHelper.getCallCount();
+            final int synchronizationPageFinishedCallCount = onPageFinishedHelper.getCallCount();
             mActivityTestRule.loadUrlAsync(mAwContents, syncUrl);
 
-            onPageFinishedHelper.waitForCallback(synchronizationPageCallCount);
+            onPageStartedHelper.waitForCallback(synchronizationPageStartedCallCount);
+            onPageFinishedHelper.waitForCallback(synchronizationPageFinishedCallCount);
+            Assert.assertEquals(syncUrl, onPageStartedHelper.getUrl());
+            Assert.assertEquals(2, onPageStartedHelper.getCallCount());
             Assert.assertEquals(syncUrl, onPageFinishedHelper.getUrl());
             Assert.assertEquals(2, onPageFinishedHelper.getCallCount());
         } finally {
@@ -553,6 +563,55 @@ public class ClientOnPageFinishedTest {
             Assert.assertEquals(1, onPageFinishedHelper.getCallCount());
         } finally {
             testDoneLatch.countDown();
+            webServer.shutdown();
+        }
+    }
+
+    /**
+     * Ensure the case when max number of redirects is reached using an SXG fallback
+     * url does not crash and results in an error page (due to net::ERR_TO_MANY_REDIRECTS).
+     */
+    @Test
+    @MediumTest
+    @Feature({"AndroidWebView"})
+    public void testMaxRedirect_SXG() throws Throwable {
+        TestCallbackHelperContainer.OnPageFinishedHelper onPageFinishedHelper =
+                mContentsClient.getOnPageFinishedHelper();
+
+        TestWebServer webServer = TestWebServer.startSsl();
+        try {
+            List<Pair<String, String>> signedExchangeHeaders =
+                    new ArrayList<Pair<String, String>>();
+            signedExchangeHeaders.add(
+                    Pair.create("Content-Type", "application/signed-exchange;v=b3"));
+            signedExchangeHeaders.add(Pair.create("X-Content-Type-Options", "nosniff"));
+            final String fallbackUrl = webServer.setResponseWithNotFoundStatus("/404.html");
+            final String webpageNotAvailable = "Webpage not available";
+
+            StringBuilder sb = new StringBuilder();
+            sb.append("sxg1-b3");
+            sb.append((char) 0);
+            sb.append((char) 0);
+            sb.append((char) fallbackUrl.length());
+            sb.append(fallbackUrl);
+            final String sxgContents = sb.toString();
+
+            final String emptyResp =
+                    webServer.setResponse("/foo.sxg", sxgContents, signedExchangeHeaders);
+            final String redirectUrl = webServer.setRedirect("/302.html", "/redirect_1");
+            for (int i = 1; i < 18; i++) {
+                String redirectUrlLoop =
+                        webServer.setRedirect("/redirect_" + i, "/redirect_" + (i + 1));
+            }
+
+            String finalRedirect = webServer.setRedirect("/redirect_18", "/foo.sxg");
+
+            // Note the current SXG redirect fallback implementation does not
+            // result in onPageFinished, onReceivedError callbacks, see crbug.com/1052242.
+            mActivityTestRule.loadUrlAsync(mAwContents, redirectUrl);
+            mActivityTestRule.waitForVisualStateCallback(mAwContents);
+            Assert.assertEquals(webpageNotAvailable, mAwContents.getTitle());
+        } finally {
             webServer.shutdown();
         }
     }

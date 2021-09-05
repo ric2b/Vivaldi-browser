@@ -26,6 +26,7 @@
 #include "ui/resources/grit/ui_resources.h"
 
 #include "app/vivaldi_apptools.h"
+#include "components/bookmarks/vivaldi_bookmark_kit.h"
 #include "ui/vivaldi_bookmark_menu_mac.h"
 
 using bookmarks::BookmarkModel;
@@ -115,8 +116,10 @@ void BookmarkMenuBridge::BuildRootMenu() {
       ManagedBookmarkServiceFactory::GetForProfile(profile_);
   const BookmarkNode* barNode = model->bookmark_bar_node();
   const BookmarkNode* managedNode = managed->managed_node();
+  if (!vivaldi::IsVivaldiRunning()) {
   if (!barNode->children().empty() || !managedNode->children().empty())
     [menu_root_ addItem:[NSMenuItem separatorItem]];
+  }
   if (!managedNode->children().empty()) {
     // Most users never see this node, so the image is only loaded if needed.
     ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
@@ -128,7 +131,8 @@ void BookmarkMenuBridge::BuildRootMenu() {
     AddNodeToMenu(barNode, menu_root_);
   else if (vivaldi::IsVivaldiRunning()) {
     // Even an empty menu should have an "add tab" item
-    vivaldi::AddAddTabToBookmarksMenuItem(barNode, menu_root_);
+    unsigned int menu_index = 0;
+    vivaldi::AddExtraBookmarkMenuItems(menu_root_, &menu_index, barNode, false);
   }
 
   // If the "Other Bookmarks" folder has any content, make a submenu for it and
@@ -236,6 +240,15 @@ void BookmarkMenuBridge::ClearBookmarkMenu() {
   for (NSMenuItem* item in items) {
     // If there's a submenu, it may have a reference to |controller_|. Ensure
     // that gets nerfed recursively.
+    if (vivaldi::IsVivaldiRunning() &&
+        ([item hasSubmenu] || [item isSeparatorItem])) {
+      // Make sure any elements added by UI is not deleted. We only have
+      // to test for folders and separators. Regular items are ok to test for
+      // in regular code.
+      if (vivaldi::IsBookmarkMenuId(item.tag)) {
+        continue;
+      }
+    }
     if ([item hasSubmenu])
       ClearDelegatesFromSubmenu([item submenu]);
 
@@ -258,7 +271,9 @@ void BookmarkMenuBridge::ClearBookmarkMenu() {
 
 void BookmarkMenuBridge::AddNodeAsSubmenu(NSMenu* menu,
                                           const BookmarkNode* node,
-                                          NSImage* image) {
+                                          NSImage* image
+                                          , unsigned int* menu_index // Added by vivaldi
+                                          ) {
   NSString* title = MenuTitleForNode(node);
   base::scoped_nsobject<NSMenuItem> items(
       [[NSMenuItem alloc] initWithTitle:title action:nil keyEquivalent:@""]);
@@ -271,22 +286,28 @@ void BookmarkMenuBridge::AddNodeAsSubmenu(NSMenu* menu,
   [submenu setDelegate:controller_];
   [items setTag:node->id()];
 
+  if (vivaldi::IsVivaldiRunning() && menu_index) {
+    [menu insertItem:items atIndex:*menu_index];
+    *menu_index += 1;
+  } else {
   [menu addItem:items];
+  }
 }
 
 // TODO(jrg): limit the number of bookmarks in the menubar?
 void BookmarkMenuBridge::AddNodeToMenu(const BookmarkNode* node, NSMenu* menu) {
   if (vivaldi::IsVivaldiRunning()) {
-    // Call AddAddTabToBookmarksMenuItem here for having it in front
-    [menu addItem:[NSMenuItem separatorItem]];
+    unsigned int menu_index =  menu == menu_root_ ? vivaldi::GetMenuIndex() : 0;
+    vivaldi::AddExtraBookmarkMenuItems(menu, &menu_index, node, true);
     std::vector<bookmarks::BookmarkNode*> nodes;
     vivaldi::GetBookmarkNodes(node, nodes);
     for (size_t i = 0; i < nodes.size(); ++i) {
       const BookmarkNode* child = nodes[i];
-      if (vivaldi::IsBookmarkSeparator(child)) {
-        [menu addItem:[NSMenuItem separatorItem]];
+      if (::vivaldi_bookmark_kit::IsSeparator(child)) {
+        [menu insertItem:[NSMenuItem separatorItem] atIndex:menu_index];
+        menu_index += 1;
       } else if (child->is_folder()) {
-        AddNodeAsSubmenu(menu, child, folder_image_);
+        AddNodeAsSubmenu(menu, child, folder_image_, &menu_index);
       } else {
         base::scoped_nsobject<NSMenuItem> item([[NSMenuItem alloc]
             initWithTitle:MenuTitleForNode(child)
@@ -294,11 +315,11 @@ void BookmarkMenuBridge::AddNodeToMenu(const BookmarkNode* node, NSMenu* menu) {
             keyEquivalent:@""]);
         bookmark_nodes_[child] = item;
         ConfigureMenuItem(child, item, false);
-        [menu addItem:item];
+        [menu insertItem:item atIndex:menu_index];
+        menu_index += 1;
       }
     }
-    [menu addItem:[NSMenuItem separatorItem]];
-    vivaldi::AddAddTabToBookmarksMenuItem(node, menu);
+    vivaldi::AddExtraBookmarkMenuItems(menu, &menu_index, node, false);
     return;
   } // vivaldi specific section
 

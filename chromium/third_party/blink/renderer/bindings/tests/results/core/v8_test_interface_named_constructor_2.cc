@@ -151,8 +151,10 @@ void V8TestInterfaceNamedConstructor2Constructor::NamedConstructorAttributeGette
       per_context_data->ConstructorForType(V8TestInterfaceNamedConstructor2Constructor::GetWrapperTypeInfo());
 
   // Set the prototype of named constructors to the regular constructor.
+  static const V8PrivateProperty::SymbolKey kPrivatePropertyInitialized;
   auto private_property =
-      V8PrivateProperty::GetNamedConstructorInitialized(info.GetIsolate());
+      V8PrivateProperty::GetSymbol(
+          info.GetIsolate(), kPrivatePropertyInitialized);
   v8::Local<v8::Context> current_context = info.GetIsolate()->GetCurrentContext();
   v8::Local<v8::Value> private_value;
 
@@ -238,16 +240,6 @@ v8::Local<v8::Object> V8TestInterfaceNamedConstructor2::FindInstanceInPrototypeC
 TestInterfaceNamedConstructor2* V8TestInterfaceNamedConstructor2::ToImplWithTypeCheck(
     v8::Isolate* isolate, v8::Local<v8::Value> value) {
   return HasInstance(value, isolate) ? ToImpl(v8::Local<v8::Object>::Cast(value)) : nullptr;
-}
-
-TestInterfaceNamedConstructor2* NativeValueTraits<TestInterfaceNamedConstructor2>::NativeValue(
-    v8::Isolate* isolate, v8::Local<v8::Value> value, ExceptionState& exception_state) {
-  TestInterfaceNamedConstructor2* native_value = V8TestInterfaceNamedConstructor2::ToImplWithTypeCheck(isolate, value);
-  if (!native_value) {
-    exception_state.ThrowTypeError(ExceptionMessages::FailedToConvertJSValue(
-        "TestInterfaceNamedConstructor2"));
-  }
-  return native_value;
 }
 
 }  // namespace blink

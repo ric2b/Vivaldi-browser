@@ -3,6 +3,8 @@
 #ifndef VIVALDI_BROWSER_UI_VIVALDI_MAIN_MENU_BUILDER_H
 #define VIVALDI_BROWSER_UI_VIVALDI_MAIN_MENU_BUILDER_H
 
+#include "chrome/browser/app_controller_mac.h"
+
 namespace vivaldi {
 void BuildVivaldiMainMenu(
     NSApplication* nsapp,

@@ -15,7 +15,6 @@ let PasswordUiEntryEvent;
 let ExceptionEntryEntryEvent;
 
 (function() {
-'use strict';
 
 /**
  * Checks if an HTML element is an editable. An editable is either a text
@@ -38,12 +37,18 @@ Polymer({
     I18nBehavior,
     WebUIListenerBehavior,
     ListPropertyUpdateBehavior,
+    PasswordCheckBehavior,
     Polymer.IronA11yKeysBehavior,
     settings.GlobalScrollTargetBehavior,
     PrefsBehavior,
   ],
 
   properties: {
+    // <if expr="not chromeos">
+    /** @private */
+    storedAccounts_: Array,
+    // </if>
+
     /** Preferences state. */
     prefs: {
       type: Object,
@@ -68,15 +73,6 @@ Polymer({
       value: () => [],
     },
 
-    /**
-     * Duration of the undo toast in ms
-     * @private
-     */
-    toastDuration_: {
-      type: Number,
-      value: 5000,
-    },
-
     /** @override */
     subpageRoute: {
       type: Object,
@@ -96,6 +92,46 @@ Polymer({
     },
 
     /** @private */
+    enablePasswordCheck_: {
+      type: Boolean,
+      value() {
+        return loadTimeData.getBoolean('enablePasswordCheck');
+      }
+    },
+
+    /** @private */
+    signedIn_: {
+      type: Boolean,
+      value: true,
+      computed: 'computeSignedIn_(syncStatus_, storedAccounts_)',
+    },
+
+    /** @private */
+    hasNeverCheckedPasswords_: {
+      type: Boolean,
+      computed: 'computeHasNeverCheckedPasswords_(status)',
+    },
+
+    /** @private */
+    hasStoredPasswords_: {
+      type: Boolean,
+      value: false,
+    },
+
+    shouldShowBanner_: {
+      type: Boolean,
+      value: true,
+      computed: 'computeShouldShowBanner_(hasLeakedCredentials_,' +
+          'signedIn_, hasNeverCheckedPasswords_, hasStoredPasswords_)',
+    },
+
+    /** @private */
+    hasLeakedCredentials_: {
+      type: Boolean,
+      computed: 'computeHasLeakedCredentials_(leakedPasswords)',
+    },
+
+    /** @private */
     hidePasswordsLink_: {
       type: Boolean,
       computed: 'computeHidePasswordsLink_(syncPrefs_, syncStatus_)',
@@ -110,14 +146,25 @@ Polymer({
     /** @private */
     showImportPasswords_: {
       type: Boolean,
-      value: function() {
+      value() {
         return loadTimeData.valueExists('showImportPasswords') &&
             loadTimeData.getBoolean('showImportPasswords');
       }
     },
 
     /** @private */
+    enableAccountStorage_: {
+      type: Boolean,
+      value() {
+        return loadTimeData.getBoolean('enableAccountStorage');
+      }
+    },
+
+    /** @private */
     showPasswordEditDialog_: Boolean,
+
+    /** @private */
+    isOptedInForAccountStorage_: Boolean,
 
     /** @private {settings.SyncPrefs} */
     syncPrefs_: Object,
@@ -138,16 +185,6 @@ Polymer({
     listBlurred_: Boolean,
 
     // <if expr="chromeos">
-    /**
-     * Auth token for retrieving passwords if required by OS.
-     * @private
-     */
-    authToken_: {
-      type: String,
-      value: '',
-      observer: 'onAuthTokenChanged_',
-    },
-
     /** @private */
     showPasswordPromptDialog_: Boolean,
 
@@ -179,11 +216,14 @@ Polymer({
    */
   activeDialogAnchorStack_: [],
 
+  /** @private {?PasswordManagerProxy} */
+  passwordManager_: null,
+
   /**
-   * @type {PasswordManagerProxy}
+   * @type {?function(boolean):void}
    * @private
    */
-  passwordManager_: null,
+  setIsOptedInForAccountStorageListener_: null,
 
   /**
    * @type {?function(!Array<PasswordManagerProxy.PasswordUiEntry>):void}
@@ -198,20 +238,27 @@ Polymer({
   setPasswordExceptionsListener_: null,
 
   /** @override */
-  attached: function() {
+  attached() {
     // Create listener functions.
+    const setIsOptedInForAccountStorageListener = optedIn => {
+      this.isOptedInForAccountStorage_ = optedIn;
+    };
+
     const setSavedPasswordsListener = list => {
       const newList = list.map(entry => ({entry: entry, password: ''}));
       // Because the backend guarantees that item.entry.id uniquely identifies a
       // given entry and is stable with regard to mutations to the list, it is
       // sufficient to just use this id to create a item uid.
       this.updateList('savedPasswords', item => item.entry.id, newList);
+      this.hasStoredPasswords_ = list.length > 0;
     };
 
     const setPasswordExceptionsListener = list => {
       this.passwordExceptions = list;
     };
 
+    this.setIsOptedInForAccountStorageListener_ =
+        setIsOptedInForAccountStorageListener;
     this.setSavedPasswordsListener_ = setSavedPasswordsListener;
     this.setPasswordExceptionsListener_ = setPasswordExceptionsListener;
 
@@ -232,10 +279,14 @@ Polymer({
     // </if>
 
     // Request initial data.
+    this.passwordManager_.isOptedInForAccountStorage().then(
+        setIsOptedInForAccountStorageListener);
     this.passwordManager_.getSavedPasswordList(setSavedPasswordsListener);
     this.passwordManager_.getExceptionList(setPasswordExceptionsListener);
 
     // Listen for changes.
+    this.passwordManager_.addAccountStorageOptInStateListener(
+        setIsOptedInForAccountStorageListener);
     this.passwordManager_.addSavedPasswordListChangedListener(
         setSavedPasswordsListener);
     this.passwordManager_.addExceptionListChangedListener(
@@ -253,56 +304,70 @@ Polymer({
     syncBrowserProxy.sendSyncPrefsChanged();
     this.addWebUIListener('sync-prefs-changed', syncPrefsChanged);
 
+    // For non-ChromeOS, also check whether accounts are available.
+    // <if expr="not chromeos">
+    const storedAccountsChanged = accounts => this.storedAccounts_ = accounts;
+    syncBrowserProxy.getStoredAccounts().then(storedAccountsChanged);
+    this.addWebUIListener('stored-accounts-updated', storedAccountsChanged);
+    // </if>
+
     Polymer.RenderStatus.afterNextRender(this, function() {
       Polymer.IronA11yAnnouncer.requestAvailability();
     });
   },
 
   /** @override */
-  detached: function() {
+  detached() {
     this.passwordManager_.removeSavedPasswordListChangedListener(
-        /**
-         * @type {function(!Array<PasswordManagerProxy.PasswordUiEntry>):void}
-         */
-        (this.setSavedPasswordsListener_));
+        assert(this.setSavedPasswordsListener_));
     this.passwordManager_.removeExceptionListChangedListener(
-        /**
-         * @type {function(!Array<PasswordManagerProxy.ExceptionEntry>):void}
-         */
-        (this.setPasswordExceptionsListener_));
-    if (cr.toastManager.getInstance().isToastOpen) {
-      cr.toastManager.getInstance().hide();
+        assert(this.setPasswordExceptionsListener_));
+    this.passwordManager_.removeAccountStorageOptInStateListener(
+        assert(this.setIsOptedInForAccountStorageListener_));
+
+    if (cr.toastManager.getToastManager().isToastOpen) {
+      cr.toastManager.getToastManager().hide();
     }
+  },
+
+  /**
+   * Shows the check passwords sub page.
+   * @private
+   */
+  onCheckPasswordsClick_() {
+    settings.Router.getInstance().navigateTo(
+        settings.routes.CHECK_PASSWORDS, new URLSearchParams('start=true'));
+    this.passwordManager_.recordPasswordCheckReferrer(
+        PasswordManagerProxy.PasswordCheckReferrer.PASSWORD_SETTINGS);
   },
 
   // <if expr="chromeos">
   /**
-   * When |authToken_| changes to a new non-empty value, it means that the
-   * password-prompt-dialog succeeded in creating a fresh token in the
-   * quickUnlockPrivate API. Because new tokens can only ever be created
-   * immediately following a GAIA password check, the passwordsPrivate API can
-   * now safely grant requests for secure data (i.e. saved passwords) for a
-   * limited time. This observer resolves the request, triggering a callback
-   * that requires a fresh auth token to succeed and that was provided to the
-   * BlockingRequestManager by another DOM element seeking secure data.
+   * When this event fired, it means that the password-prompt-dialog succeeded
+   * in creating a fresh token in the quickUnlockPrivate API. Because new tokens
+   * can only ever be created immediately following a GAIA password check, the
+   * passwordsPrivate API can now safely grant requests for secure data (i.e.
+   * saved passwords) for a limited time. This observer resolves the request,
+   * triggering a callback that requires a fresh auth token to succeed and that
+   * was provided to the BlockingRequestManager by another DOM element seeking
+   * secure data.
    *
-   * @param {string} newToken The newly created auth token. Note that its
-   *     precise value is not relevant here, only the facts that it changed and
-   *     that it is non-empty (i.e. not expired).
+   * @param {!CustomEvent<!chrome.quickUnlockPrivate.TokenInfo>} e - Contains
+   *     newly created auth token. Note that its precise value is not relevant
+   *     here, only the facts that it's created.
    * @private
    */
-  onAuthTokenChanged_: function(newToken) {
-    if (newToken) {
-      this.tokenRequestManager_.resolve();
-    }
+  onTokenObtained_(e) {
+    assert(e.detail);
+    this.tokenRequestManager_.resolve();
   },
 
-  onPasswordPromptClosed_: function() {
+  onPasswordPromptClosed_() {
     this.showPasswordPromptDialog_ = false;
     cr.ui.focusWithoutInk(assert(this.activeDialogAnchorStack_.pop()));
   },
 
-  openPasswordPromptDialog_: function() {
+  openPasswordPromptDialog_() {
     this.activeDialogAnchorStack_.push(getDeepActiveElement());
     this.showPasswordPromptDialog_ = true;
   },
@@ -313,14 +378,14 @@ Polymer({
    * @param {!Event} e
    * @private
    */
-  onMenuEditPasswordTap_: function(e) {
+  onMenuEditPasswordTap_(e) {
     e.preventDefault();
     /** @type {CrActionMenuElement} */ (this.$.menu).close();
     this.showPasswordEditDialog_ = true;
   },
 
   /** @private */
-  onPasswordEditDialogClosed_: function() {
+  onPasswordEditDialogClosed_() {
     this.showPasswordEditDialog_ = false;
     cr.ui.focusWithoutInk(assert(this.activeDialogAnchorStack_.pop()));
 
@@ -333,7 +398,26 @@ Polymer({
    * @return {boolean}
    * @private
    */
-  computeHidePasswordsLink_: function() {
+  computeSignedIn_() {
+    return !!this.syncStatus_ && !!this.syncStatus_.signedIn ?
+        !this.syncStatus_.hasError :
+        (!!this.storedAccounts_ && this.storedAccounts_.length > 0);
+  },
+
+  /**
+   * @return {boolean}
+   * @private
+   */
+  computeShouldShowBanner_() {
+    return this.signedIn_ && this.hasStoredPasswords_ &&
+        this.hasNeverCheckedPasswords_ && !this.hasLeakedCredentials_;
+  },
+
+  /**
+   * @return {boolean}
+   * @private
+   */
+  computeHidePasswordsLink_() {
     return !!this.syncStatus_ && !!this.syncStatus_.signedIn &&
         !!this.syncPrefs_ && !!this.syncPrefs_.encryptAllData;
   },
@@ -343,7 +427,7 @@ Polymer({
    * @return {!Array<!PasswordManagerProxy.UiEntryWithPassword>}
    * @private
    */
-  getFilteredPasswords_: function(filter) {
+  getFilteredPasswords_(filter) {
     if (!filter) {
       return this.savedPasswords.slice();
     }
@@ -358,7 +442,7 @@ Polymer({
    * @return {function(!chrome.passwordsPrivate.ExceptionEntry): boolean}
    * @private
    */
-  passwordExceptionFilter_: function(filter) {
+  passwordExceptionFilter_(filter) {
     return exception => exception.urls.shown.toLowerCase().includes(
                filter.toLowerCase());
   },
@@ -367,13 +451,35 @@ Polymer({
    * Fires an event that should delete the saved password.
    * @private
    */
-  onMenuRemovePasswordTap_: function() {
+  onMenuRemovePasswordTap_() {
     this.passwordManager_.removeSavedPassword(
         this.activePassword.item.entry.id);
-    cr.toastManager.getInstance().show(
-        this.i18n('passwordDeleted'),
-        /* showUndo */ true);
+    cr.toastManager.getToastManager().show(this.i18n('passwordDeleted'));
+    this.fire('iron-announce', {
+      text: this.i18n('undoDescription'),
+    });
     /** @type {CrActionMenuElement} */ (this.$.menu).close();
+  },
+
+  /**
+   * Copy selected password to clipboard.
+   * @private
+   */
+  onMenuCopyPasswordButtonTap_() {
+    // Copy to clipboard occurs inside C++ and we don't expect getting
+    // result back to javascript.
+    this.passwordManager_
+        .requestPlaintextPassword(
+            this.activePassword.item.entry.id,
+            chrome.passwordsPrivate.PlaintextReason.COPY)
+        .catch(error => {
+          // <if expr="chromeos">
+          // If no password was found, refresh auth token and retry.
+          this.tokenRequestManager_.request(
+              this.onMenuCopyPasswordButtonTap_.bind(this));
+          // </if>});
+        });
+    (this.$.menu).close();
   },
 
   /**
@@ -381,27 +487,29 @@ Polymer({
    * @param {!Event} event
    * @private
    */
-  onUndoKeyBinding_: function(event) {
+  onUndoKeyBinding_(event) {
     const activeElement = getDeepActiveElement();
     if (!activeElement || !isEditable(activeElement)) {
       this.passwordManager_.undoRemoveSavedPasswordOrException();
-      cr.toastManager.getInstance().hide();
+      cr.toastManager.getToastManager().hide();
       // Preventing the default is necessary to not conflict with a possible
       // search action.
       event.preventDefault();
     }
   },
 
-  onUndoButtonTap_: function() {
+  /** @private */
+  onUndoButtonClick_() {
     this.passwordManager_.undoRemoveSavedPasswordOrException();
-    cr.toastManager.getInstance().hide();
+    cr.toastManager.getToastManager().hide();
   },
+
   /**
    * Fires an event that should delete the password exception.
    * @param {!ExceptionEntryEntryEvent} e The polymer event.
    * @private
    */
-  onRemoveExceptionButtonTap_: function(e) {
+  onRemoveExceptionButtonTap_(e) {
     this.passwordManager_.removeException(e.model.item.id);
   },
 
@@ -410,7 +518,7 @@ Polymer({
    * @param {!Event} event
    * @private
    */
-  onPasswordMenuTap_: function(event) {
+  onPasswordMenuTap_(event) {
     const menu = /** @type {!CrActionMenuElement} */ (this.$.menu);
     const target = /** @type {!HTMLElement} */ (event.detail.target);
 
@@ -424,7 +532,7 @@ Polymer({
    * Opens the export/import action menu.
    * @private
    */
-  onImportExportMenuTap_: function() {
+  onImportExportMenuTap_() {
     const menu = /** @type {!CrActionMenuElement} */ (this.$.exportImportMenu);
     const target =
         /** @type {!HTMLElement} */ (this.$$('#exportImportMenuButton'));
@@ -437,7 +545,7 @@ Polymer({
    * Fires an event that should trigger the password import process.
    * @private
    */
-  onImportTap_: function() {
+  onImportTap_() {
     this.passwordManager_.importPasswords();
     this.$.exportImportMenu.close();
   },
@@ -446,15 +554,25 @@ Polymer({
    * Opens the export passwords dialog.
    * @private
    */
-  onExportTap_: function() {
+  onExportTap_() {
     this.showPasswordsExportDialog_ = true;
     this.$.exportImportMenu.close();
   },
 
   /** @private */
-  onPasswordsExportDialogClosed_: function() {
+  onPasswordsExportDialogClosed_() {
     this.showPasswordsExportDialog_ = false;
     cr.ui.focusWithoutInk(assert(this.activeDialogAnchorStack_.pop()));
+  },
+
+  /** @private */
+  onOptIn_: function() {
+    this.passwordManager_.optInForAccountStorage(true);
+  },
+
+  /** @private */
+  onOptOut_: function() {
+    this.passwordManager_.optInForAccountStorage(false);
   },
 
   /**
@@ -463,21 +581,12 @@ Polymer({
    * @return {boolean}
    * @private
    */
-  hasSome_: function(list) {
+  hasSome_(list) {
     return !!(list && list.length);
   },
 
-  /**
-   * @private
-   * @param {boolean} toggleValue
-   * @return {string}
-   */
-  getOnOffLabel_: function(toggleValue) {
-    return toggleValue ? this.i18n('toggleOn') : this.i18n('toggleOff');
-  },
-
   /** @private */
-  hasPasswords_: function() {
+  hasPasswords_() {
     return this.savedPasswords.length > 0;
   },
 
@@ -487,9 +596,44 @@ Polymer({
    * @param {boolean} showImportPasswords
    * @return {boolean}
    */
-  showImportOrExportPasswords_: function(
-      showExportPasswords, showImportPasswords) {
+  showImportOrExportPasswords_(showExportPasswords, showImportPasswords) {
     return showExportPasswords || showImportPasswords;
+  },
+
+  /**
+   * @private
+   * @param {!PasswordManagerProxy.ExceptionEntry} item This row's item.
+   * @return {string}
+   */
+  getStorageText_(item) {
+    // TODO(crbug.com/1049141): Add proper translated strings once we have them.
+    return item.fromAccountStore ? 'Account' : 'Local';
+  },
+
+  /**
+   * @private
+   * @param {!PasswordManagerProxy.ExceptionEntry} item This row's item.
+   * @return {string}
+   */
+  getStorageIcon_(item) {
+    // TODO(crbug.com/1049141): Add the proper icons once we know them.
+    return item.fromAccountStore ? 'cr:sync' : 'cr:computer';
+  },
+
+  /**
+   * @private
+   * @return {boolean}
+   */
+  computeHasLeakedCredentials_() {
+    return this.leakedPasswords.length > 0;
+  },
+
+  /**
+   * @private
+   * @return {boolean}
+   */
+  computeHasNeverCheckedPasswords_() {
+    return !this.status.elapsedTimeSinceLastCheck;
   },
 });
 })();

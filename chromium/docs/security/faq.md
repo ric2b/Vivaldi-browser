@@ -249,6 +249,14 @@ Similarly, users may create bookmarks pointed at JavaScript URLs that will run
 on the currently-loaded page when the user clicks the bookmark; these are called
 [bookmarklets](https://en.wikipedia.org/wiki/Bookmarklet).
 
+<a name="TOC-Does-executing-JavaScript-in-a-PDF-file-mean-there-s-an-XSS-vulnerability-"></a>
+## Does executing JavaScript in a PDF file mean there's an XSS vulnerability?
+
+No. PDF files have the ability to run JavaScript, usually to facilitate field
+validation during form fill-out. Note that the set of bindings provided to
+the PDF are more limited than those provided by the DOM to HTML documents (e.g.
+no document.cookie).
+
 <a name="TOC-Is-Chrome-s-support-for-userinfo-in-HTTP-URLs-e.g.-http:-user:password-example.com-considered-a-vulnerability-"></a>
 ## Is Chrome's support for userinfo in HTTP URLs (e.g. http://user:password@example.com) considered a vulnerability?
 
@@ -417,7 +425,7 @@ clock is within ten weeks of the embedded build timestamp. Key pinning is a
 useful security measure but it tightly couples client and server configurations
 and completely breaks when those configurations are out of sync. In order to
 manage that risk we need to ensure that we can promptly update pinning clients
-an in emergency and ensure that non-emergency changes can be deployed in a
+in an emergency and ensure that non-emergency changes can be deployed in a
 reasonable timeframe.
 
 Each of the conditions listed above helps ensure those properties:
@@ -649,6 +657,38 @@ for a list of known issues and how we handle them.
 *    [This document](https://www.chromium.org/developers/design-documents/idn-in-google-chrome)
 describes Chrome's IDN policy in detail.
 
-## TODO
+<a name="TOC-Chrome-silently-syncs-extensions-across-devices.-Is-this-a-security-vulnerability-"></a>
+## Chrome silently syncs extensions across devices. Is this a security vulnerability?
 
-*    https://dev.chromium.org/Home/chromium-security/client-identification-mechanisms
+If an attacker has access to one of a victim's devices, the attacker can install
+an extension which will be synced to the victim's other sync-enabled
+devices. Similarly, an attacker who phishes a victim's Google credentials can
+sign in to Chrome as the victim and install an extension, which will be synced
+to the victim's other sync-enabled devices. Sync thereby enables an attacker to
+elevate phished credentials or physical access to persistent access on all of a
+victim's sync-enabled devices.
+
+To mitigate this issue, Chrome only syncs extensions that have been installed
+from the Chrome Web Store. Extensions in the Chrome Web Store are monitored for
+abusive behavior.
+
+In the future, we may pursue further mitigations. However, because an attacker
+must already have the victim's Google credentials and/or [physical access to a
+device](#TOC-Why-aren-t-physically-local-attacks-in-Chrome-s-threat-model), we
+don't consider this attack a security vulnerability.
+
+We **do** consider it a vulnerability if an attacker can get an extension to
+sync to a victim's device without either of the above preconditions. For
+example, we consider it a vulnerability if an attacker could craft a request to
+Google's sync servers that causes an extension to be installed to a user's
+device, or if an attacker could entice a victim to visit a webpage that causes
+an extension to be installed on their device(s). Please report such bugs via
+https://bugs.chromium.org/p/chromium/issues/entry?template=Security+Bug.
+
+<a name="TOC-Are-PDF-files-static-content-in-Chromium-"></a>
+## Are PDF files static content in Chromium?
+
+No. PDF files have some powerful capabilities including invoking printing or
+posting form data. To mitigate abuse of these capabiliies, such as beaconing
+upon document open, we require interaction with the document (a "user gesture")
+before allowing their use.

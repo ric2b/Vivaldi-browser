@@ -13,46 +13,49 @@
 #include <string>
 #include <vector>
 
+#include "base/containers/span.h"
+#include "base/optional.h"
 #include "base/time/time.h"
 #include "base/version.h"
 #include "build/build_config.h"
 #include "gpu/config/dx_diag_node.h"
 #include "gpu/gpu_export.h"
+#include "gpu/vulkan/buildflags.h"
 #include "ui/gfx/geometry/size.h"
 
-#if defined(USE_X11)
-typedef unsigned long VisualID;
+#if BUILDFLAG(ENABLE_VULKAN)
+#include "gpu/config/vulkan_info.h"
 #endif
 
 namespace gpu {
 
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
-enum class GpuSeriesType {
+enum class IntelGpuSeriesType {
   kUnknown = 0,
   // Intel 6th gen
-  kIntelSandybridge = 1,
+  kSandybridge = 1,
   // Intel 7th gen
-  kIntelBaytrail = 2,
-  kIntelIvybridge = 3,
-  kIntelHaswell = 4,
+  kBaytrail = 2,
+  kIvybridge = 3,
+  kHaswell = 4,
   // Intel 8th gen
-  kIntelCherrytrail = 5,
-  kIntelBroadwell = 6,
+  kCherrytrail = 5,
+  kBroadwell = 6,
   // Intel 9th gen
-  kIntelApollolake = 7,
-  kIntelSkylake = 8,
-  kIntelGeminilake = 9,
-  kIntelKabylake = 10,
-  kIntelCoffeelake = 11,
-  kIntelWhiskeylake = 12,
-  kIntelCometlake = 13,
+  kApollolake = 7,
+  kSkylake = 8,
+  kGeminilake = 9,
+  kKabylake = 10,
+  kCoffeelake = 11,
+  kWhiskeylake = 12,
+  kCometlake = 13,
   // Intel 10th gen
-  kIntelCannonlake = 14,
+  kCannonlake = 14,
   // Intel 11th gen
-  kIntelIcelake = 15,
+  kIcelake = 15,
   // Please also update |gpu_series_map| in process_json.py.
-  kMaxValue = kIntelIcelake,
+  kMaxValue = kIcelake,
 };
 
 // Video profile.  This *must* match media::VideoCodecProfile.
@@ -183,7 +186,31 @@ struct GPU_EXPORT Dx12VulkanVersionInfo {
   // The support Vulkan API version in the gpu driver;
   uint32_t vulkan_version = 0;
 };
+
+struct GPU_EXPORT OverlayInfo {
+  OverlayInfo& operator=(const OverlayInfo& other) = default;
+  bool operator==(const OverlayInfo& other) const {
+    return direct_composition == other.direct_composition &&
+           supports_overlays == other.supports_overlays &&
+           yuy2_overlay_support == other.yuy2_overlay_support &&
+           nv12_overlay_support == other.nv12_overlay_support;
+  }
+  bool operator!=(const OverlayInfo& other) const { return !(*this == other); }
+
+  // True if we use direct composition surface on Windows.
+  bool direct_composition = false;
+
+  // True if we use direct composition surface overlays on Windows.
+  bool supports_overlays = false;
+  OverlaySupport yuy2_overlay_support = OverlaySupport::kNone;
+  OverlaySupport nv12_overlay_support = OverlaySupport::kNone;
+};
+
 #endif
+
+#if defined(OS_MACOSX)
+GPU_EXPORT bool ValidateMacOSSpecificTextureTarget(int target);
+#endif  // OS_MACOSX
 
 struct GPU_EXPORT GPUInfo {
   struct GPU_EXPORT GPUDevice {
@@ -325,19 +352,20 @@ struct GPU_EXPORT GPUInfo {
   // is only implemented on Android.
   bool can_support_threaded_texture_mailbox = false;
 
+#if defined(OS_MACOSX)
+  // Enum describing which texture target is used for native GpuMemoryBuffers on
+  // MacOS. Valid values are GL_TEXTURE_2D and GL_TEXTURE_RECTANGLE_ARB.
+  uint32_t macos_specific_texture_target;
+#endif  // OS_MACOSX
+
 #if defined(OS_WIN)
-  // True if we use direct composition surface on Windows.
-  bool direct_composition = false;
-
-  // True if we use direct composition surface overlays on Windows.
-  bool supports_overlays = false;
-  OverlaySupport yuy2_overlay_support = OverlaySupport::kNone;
-  OverlaySupport nv12_overlay_support = OverlaySupport::kNone;
-
   // The information returned by the DirectX Diagnostics Tool.
   DxDiagNode dx_diagnostics;
 
   Dx12VulkanVersionInfo dx12_vulkan_version_info;
+
+  // The GPU hardware overlay info.
+  OverlayInfo overlay_info;
 #endif
 
   VideoDecodeAcceleratorCapabilities video_decode_accelerator_capabilities;
@@ -348,12 +376,13 @@ struct GPU_EXPORT GPUInfo {
   ImageDecodeAcceleratorSupportedProfiles
       image_decode_accelerator_supported_profiles;
 
-#if defined(USE_X11)
-  VisualID system_visual;
-  VisualID rgba_visual;
-#endif
-
   bool oop_rasterization_supported;
+
+  bool subpixel_font_rendering;
+
+#if BUILDFLAG(ENABLE_VULKAN)
+  base::Optional<VulkanInfo> vulkan_info;
+#endif
 
   // Note: when adding new members, please remember to update EnumerateFields
   // in gpu_info.cc.
@@ -374,6 +403,8 @@ struct GPU_EXPORT GPUInfo {
     virtual void AddBool(const char* name, bool value) = 0;
     virtual void AddTimeDeltaInSecondsF(const char* name,
                                         const base::TimeDelta& value) = 0;
+    virtual void AddBinary(const char* name,
+                           const base::span<const uint8_t>& blob) = 0;
 
     // Markers indicating that a GPUDevice is being described.
     virtual void BeginGPUDevice() = 0;
@@ -401,6 +432,9 @@ struct GPU_EXPORT GPUInfo {
 
     virtual void BeginDx12VulkanVersionInfo() = 0;
     virtual void EndDx12VulkanVersionInfo() = 0;
+
+    virtual void BeginOverlayInfo() = 0;
+    virtual void EndOverlayInfo() = 0;
 
    protected:
     virtual ~Enumerator() = default;

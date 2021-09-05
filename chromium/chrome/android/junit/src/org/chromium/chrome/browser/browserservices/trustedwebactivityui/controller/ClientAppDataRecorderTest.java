@@ -30,8 +30,8 @@ import org.robolectric.annotation.Config;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.browserservices.ClientAppDataRegister;
-import org.chromium.chrome.browser.browserservices.Origin;
-import org.chromium.chrome.browser.util.test.ShadowUrlUtilities;
+import org.chromium.components.embedder_support.util.Origin;
+import org.chromium.components.embedder_support.util.ShadowUrlUtilities;
 
 /**
  * Tests for {@link ClientAppDataRecorder}.
@@ -43,8 +43,8 @@ public class ClientAppDataRecorderTest {
     private static final String APP_NAME = "Example App";
     private static final String APP_PACKAGE = "com.example.app";
     private static final String MISSING_PACKAGE = "com.missing.app";
-    private static final Origin ORIGIN = new Origin("https://www.example.com/");
-    private static final Origin OTHER_ORIGIN = new Origin("https://www.other.com/");
+    private static final Origin ORIGIN = Origin.create("https://www.example.com/");
+    private static final Origin OTHER_ORIGIN = Origin.create("https://www.other.com/");
 
     @Mock private ClientAppDataRegister mRegister;
     @Mock private PackageManager mPackageManager;

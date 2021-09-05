@@ -6,61 +6,100 @@
 
 #include <utility>
 
+#include "base/system/sys_info.h"
 #include "build/build_config.h"
 #include "components/viz/common/gpu/vulkan_context_provider.h"
+#include "gpu/command_buffer/service/memory_tracking.h"
 #include "gpu/ipc/common/gpu_surface_lookup.h"
 #include "gpu/vulkan/vulkan_fence_helper.h"
+#include "gpu/vulkan/vulkan_function_pointers.h"
 #include "gpu/vulkan/vulkan_implementation.h"
 #include "gpu/vulkan/vulkan_surface.h"
 #include "third_party/skia/include/core/SkSurface.h"
 #include "third_party/skia/include/gpu/GrBackendSemaphore.h"
 #include "third_party/skia/include/gpu/GrBackendSurface.h"
+#include "third_party/skia/include/gpu/GrContext.h"
 #include "third_party/skia/include/gpu/vk/GrVkTypes.h"
 
 namespace viz {
 
-SkiaOutputDeviceVulkan::SkiaOutputDeviceVulkan(
+// static
+std::unique_ptr<SkiaOutputDeviceVulkan> SkiaOutputDeviceVulkan::Create(
     VulkanContextProvider* context_provider,
     gpu::SurfaceHandle surface_handle,
-    DidSwapBufferCompleteCallback did_swap_buffer_complete_callback)
-    : SkiaOutputDevice(true /*need_swap_semaphore */,
-                       did_swap_buffer_complete_callback),
-      context_provider_(context_provider),
-      surface_handle_(surface_handle) {
-  capabilities_.flipped_output_surface = true;
-  capabilities_.supports_post_sub_buffer = false;
-  capabilities_.supports_pre_transform = true;
+    gpu::MemoryTracker* memory_tracker,
+    DidSwapBufferCompleteCallback did_swap_buffer_complete_callback) {
+  auto output_device = std::make_unique<SkiaOutputDeviceVulkan>(
+      util::PassKey<SkiaOutputDeviceVulkan>(), context_provider, surface_handle,
+      memory_tracker, did_swap_buffer_complete_callback);
+  if (!output_device->Initialize())
+    return nullptr;
+  return output_device;
 }
+
+SkiaOutputDeviceVulkan::SkiaOutputDeviceVulkan(
+    util::PassKey<SkiaOutputDeviceVulkan>,
+    VulkanContextProvider* context_provider,
+    gpu::SurfaceHandle surface_handle,
+    gpu::MemoryTracker* memory_tracker,
+    DidSwapBufferCompleteCallback did_swap_buffer_complete_callback)
+    : SkiaOutputDevice(memory_tracker, did_swap_buffer_complete_callback),
+      context_provider_(context_provider),
+      surface_handle_(surface_handle) {}
 
 SkiaOutputDeviceVulkan::~SkiaOutputDeviceVulkan() {
   DCHECK(!scoped_write_);
-  if (vulkan_surface_) {
-    auto* fence_helper = context_provider_->GetDeviceQueue()->GetFenceHelper();
-    fence_helper->EnqueueVulkanObjectCleanupForSubmittedWork(
-        std::move(vulkan_surface_));
+  for (auto it = sk_surface_size_pairs_.begin();
+       it != sk_surface_size_pairs_.end(); ++it) {
+    memory_type_tracker_->TrackMemFree(it->bytes_allocated);
   }
+  sk_surface_size_pairs_.clear();
+
+  if (!vulkan_surface_)
+    return;
+
+#if defined(OS_ANDROID)
+  if (base::SysInfo::IsLowEndDevice()) {
+    // For low end device, output surface will be destroyed when chrome goes
+    // into background. And a new output surface will be created when chrome
+    // goes to foreground again. The vulkan surface cannot be created
+    // successfully, if the old vulkan surface is not destroyed. To avoid the
+    // problem, we sync the device queue, and destroy the vulkan surface
+    // synchronously.
+    vkQueueWaitIdle(context_provider_->GetDeviceQueue()->GetVulkanQueue());
+    vulkan_surface_->Destroy();
+    return;
+  }
+#endif
+
+  auto* fence_helper = context_provider_->GetDeviceQueue()->GetFenceHelper();
+  fence_helper->EnqueueVulkanObjectCleanupForSubmittedWork(
+      std::move(vulkan_surface_));
 }
 
 bool SkiaOutputDeviceVulkan::Reshape(const gfx::Size& size,
                                      float device_scale_factor,
                                      const gfx::ColorSpace& color_space,
-                                     bool has_alpha,
+                                     gfx::BufferFormat format,
                                      gfx::OverlayTransform transform) {
   DCHECK(!scoped_write_);
 
-  uint32_t generation = 0;
-  if (!vulkan_surface_) {
-    CreateVulkanSurface();
-  } else {
-    generation = vulkan_surface_->swap_chain_generation();
-  }
+  if (!vulkan_surface_)
+    return false;
 
+  auto generation = vulkan_surface_->swap_chain_generation();
   vulkan_surface_->Reshape(size, transform);
-
-  if (vulkan_surface_->swap_chain_generation() != generation) {
+  auto sk_color_space = color_space.ToSkColorSpace();
+  if (vulkan_surface_->swap_chain_generation() != generation ||
+      !SkColorSpace::Equals(sk_color_space.get(), sk_color_space_.get())) {
     // swapchain is changed, we need recreate all cached sk surfaces.
-    sk_surfaces_.clear();
-    sk_surfaces_.resize(vulkan_surface_->swap_chain()->num_images());
+    for (auto it = sk_surface_size_pairs_.begin();
+         it != sk_surface_size_pairs_.end(); ++it) {
+      memory_type_tracker_->TrackMemFree(it->bytes_allocated);
+    }
+    sk_surface_size_pairs_.clear();
+    sk_surface_size_pairs_.resize(vulkan_surface_->swap_chain()->num_images());
+    sk_color_space_ = std::move(sk_color_space);
   }
   return true;
 }
@@ -68,17 +107,32 @@ bool SkiaOutputDeviceVulkan::Reshape(const gfx::Size& size,
 void SkiaOutputDeviceVulkan::SwapBuffers(
     BufferPresentedCallback feedback,
     std::vector<ui::LatencyInfo> latency_info) {
+  PostSubBuffer(gfx::Rect(vulkan_surface_->image_size()), std::move(feedback),
+                std::move(latency_info));
+}
+
+void SkiaOutputDeviceVulkan::PostSubBuffer(
+    const gfx::Rect& rect,
+    BufferPresentedCallback feedback,
+    std::vector<ui::LatencyInfo> latency_info) {
   // Reshape should have been called first.
   DCHECK(vulkan_surface_);
   DCHECK(!scoped_write_);
+#if DCHECK_IS_ON()
+  DCHECK_EQ(!rect.IsEmpty(), image_modified_);
+  image_modified_ = false;
+#endif
 
   StartSwapBuffers(std::move(feedback));
   auto image_size = vulkan_surface_->image_size();
-  FinishSwapBuffers(vulkan_surface_->SwapBuffers(), image_size,
-                    std::move(latency_info));
+  gfx::SwapResult result = gfx::SwapResult::SWAP_ACK;
+  if (!rect.IsEmpty())
+    result = vulkan_surface_->PostSubBuffer(rect);
+  FinishSwapBuffers(result, image_size, std::move(latency_info));
 }
 
-SkSurface* SkiaOutputDeviceVulkan::BeginPaint() {
+SkSurface* SkiaOutputDeviceVulkan::BeginPaint(
+    std::vector<GrBackendSemaphore>* end_semaphores) {
   DCHECK(vulkan_surface_);
   DCHECK(!scoped_write_);
 
@@ -87,7 +141,8 @@ SkSurface* SkiaOutputDeviceVulkan::BeginPaint() {
     scoped_write_.reset();
     return nullptr;
   }
-  auto& sk_surface = sk_surfaces_[scoped_write_->image_index()];
+  auto& sk_surface =
+      sk_surface_size_pairs_[scoped_write_->image_index()].sk_surface;
 
   if (!sk_surface) {
     SkSurfaceProps surface_props =
@@ -106,12 +161,22 @@ SkSurface* SkiaOutputDeviceVulkan::BeginPaint() {
     GrBackendRenderTarget render_target(vk_image_size.width(),
                                         vk_image_size.height(),
                                         0 /* sample_cnt */, vk_image_info);
+
+    // Estimate size of GPU memory needed for the GrBackendRenderTarget.
+    VkMemoryRequirements requirements;
+    vkGetImageMemoryRequirements(
+        context_provider_->GetDeviceQueue()->GetVulkanDevice(),
+        vk_image_info.fImage, &requirements);
+    sk_surface_size_pairs_[scoped_write_->image_index()].bytes_allocated =
+        requirements.size;
+    memory_type_tracker_->TrackMemAlloc(requirements.size);
+
     auto sk_color_type = surface_format == VK_FORMAT_B8G8R8A8_UNORM
                              ? kBGRA_8888_SkColorType
                              : kRGBA_8888_SkColorType;
     sk_surface = SkSurface::MakeFromBackendRenderTarget(
         context_provider_->GetGrContext(), render_target,
-        kTopLeft_GrSurfaceOrigin, sk_color_type, nullptr /* color_space */,
+        kTopLeft_GrSurfaceOrigin, sk_color_type, sk_color_space_,
         &surface_props);
     DCHECK(sk_surface);
   } else {
@@ -126,25 +191,32 @@ SkSurface* SkiaOutputDeviceVulkan::BeginPaint() {
     auto result = sk_surface->wait(1, &semaphore);
     DCHECK(result);
   }
+
+  GrBackendSemaphore end_semaphore;
+  end_semaphore.initVulkan(scoped_write_->GetEndSemaphore());
+  end_semaphores->push_back(std::move(end_semaphore));
+
   return sk_surface.get();
 }
 
-void SkiaOutputDeviceVulkan::EndPaint(const GrBackendSemaphore& semaphore) {
+void SkiaOutputDeviceVulkan::EndPaint() {
   DCHECK(scoped_write_);
 
-  auto& sk_surface = sk_surfaces_[scoped_write_->image_index()];
+  auto& sk_surface =
+      sk_surface_size_pairs_[scoped_write_->image_index()].sk_surface;
   auto backend = sk_surface->getBackendRenderTarget(
       SkSurface::kFlushRead_BackendHandleAccess);
   GrVkImageInfo vk_image_info;
   if (!backend.getVkImageInfo(&vk_image_info))
     NOTREACHED() << "Failed to get the image info.";
   scoped_write_->set_image_layout(vk_image_info.fImageLayout);
-  if (semaphore.isInitialized())
-    scoped_write_->SetEndSemaphore(semaphore.vkSemaphore());
   scoped_write_.reset();
+#if DCHECK_IS_ON()
+  image_modified_ = true;
+#endif
 }
 
-void SkiaOutputDeviceVulkan::CreateVulkanSurface() {
+bool SkiaOutputDeviceVulkan::Initialize() {
   gfx::AcceleratedWidget accelerated_widget = gfx::kNullAcceleratedWidget;
 #if defined(OS_ANDROID)
   bool can_be_used_with_surface_control = false;
@@ -157,13 +229,40 @@ void SkiaOutputDeviceVulkan::CreateVulkanSurface() {
   auto vulkan_surface =
       context_provider_->GetVulkanImplementation()->CreateViewSurface(
           accelerated_widget);
-  if (!vulkan_surface)
-    LOG(FATAL) << "Failed to create vulkan surface.";
+  if (!vulkan_surface) {
+    LOG(ERROR) << "Failed to create vulkan surface.";
+    return false;
+  }
   if (!vulkan_surface->Initialize(context_provider_->GetDeviceQueue(),
                                   gpu::VulkanSurface::FORMAT_RGBA_32)) {
-    LOG(FATAL) << "Failed to initialize vulkan surface.";
+    LOG(ERROR) << "Failed to initialize vulkan surface.";
+    return false;
   }
   vulkan_surface_ = std::move(vulkan_surface);
+
+  capabilities_.uses_default_gl_framebuffer = false;
+  capabilities_.max_frames_pending = vulkan_surface_->image_count() - 1;
+  // Vulkan FIFO swap chain should return vk images in presenting order, so set
+  // preserve_buffer_content & supports_post_sub_buffer to true to let
+  // SkiaOutputBufferImpl to manager damages.
+  capabilities_.preserve_buffer_content = true;
+  capabilities_.output_surface_origin = gfx::SurfaceOrigin::kTopLeft;
+  capabilities_.supports_post_sub_buffer = true;
+  capabilities_.supports_pre_transform = true;
+
+  const auto surface_format = vulkan_surface_->surface_format().format;
+  DCHECK(surface_format == VK_FORMAT_B8G8R8A8_UNORM ||
+         surface_format == VK_FORMAT_R8G8B8A8_UNORM);
+  capabilities_.sk_color_type = surface_format == VK_FORMAT_R8G8B8A8_UNORM
+                                    ? kRGBA_8888_SkColorType
+                                    : kBGRA_8888_SkColorType;
+  capabilities_.gr_backend_format = GrBackendFormat::MakeVk(surface_format);
+  return true;
 }
+
+SkiaOutputDeviceVulkan::SkSurfaceSizePair::SkSurfaceSizePair() = default;
+SkiaOutputDeviceVulkan::SkSurfaceSizePair::SkSurfaceSizePair(
+    const SkSurfaceSizePair& other) = default;
+SkiaOutputDeviceVulkan::SkSurfaceSizePair::~SkSurfaceSizePair() = default;
 
 }  // namespace viz

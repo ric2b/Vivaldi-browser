@@ -13,10 +13,14 @@ const base::Feature kGenericSensorExtraClasses{
 // Enables usage of the Windows.Devices.Sensors WinRT API for the sensor
 // backend instead of the ISensor API on Windows.
 const base::Feature kWinrtSensorsImplementation{
-    "WinrtSensorsImplementation", base::FEATURE_DISABLED_BY_DEFAULT};
+    "WinrtSensorsImplementation", base::FEATURE_ENABLED_BY_DEFAULT};
 // Enables usage of the Windows.Devices.Geolocation WinRT API for the
 // LocationProvider instead of the NetworkLocationProvider on Windows.
 const base::Feature kWinrtGeolocationImplementation{
-    "WinrtGeolocationImplementation", base::FEATURE_DISABLED_BY_DEFAULT};
-
+#if defined(VIVALDI_BUILD)
+  "WinrtGeolocationImplementation", base::FEATURE_ENABLED_BY_DEFAULT};
+#else
+  "WinrtGeolocationImplementation", base::FEATURE_DISABLED_BY_DEFAULT
+};
+#endif  // defined(VIVALDI_BUILD)
 }  // namespace features

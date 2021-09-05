@@ -10,6 +10,8 @@
 #include <stdint.h>
 #include <utility>
 
+#include "app/vivaldi_apptools.h"
+
 namespace content {
 namespace protocol {
 
@@ -52,6 +54,14 @@ Response OverlayHandler::Disable() {
 }
 
 void OverlayHandler::UpdateCaptureInputEvents() {
+  // NOTE(igor@vivaldi.com): In Chromium the method makes sure that subframes
+  // cannot capture the mouse events when the page in the top window shows a
+  // debug overlay. In Vivaldi we should ideally route events from subframes to
+  // WebContents corresponding to <webview> with the page. But this is not
+  // implemented. For now we just ignore the routing  to make sure that the
+  // debug overlay works at least for pages without iframes.
+  if (vivaldi::IsVivaldiRunning())
+    return;
   if (!host_)
     return;
   auto* web_contents =

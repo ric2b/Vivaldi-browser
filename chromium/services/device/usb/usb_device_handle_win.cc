@@ -332,7 +332,8 @@ void UsbDeviceHandleWin::ControlTransfer(
                            base::Owned(node_connection_info), buffer));
         return;
       } else if (((value >> 8) == USB_CONFIGURATION_DESCRIPTOR_TYPE) ||
-                 ((value >> 8) == USB_STRING_DESCRIPTOR_TYPE)) {
+                 ((value >> 8) == USB_STRING_DESCRIPTOR_TYPE) ||
+                 ((value >> 8) == USB_BOS_DESCRIPTOR_TYPE)) {
         size_t size = sizeof(USB_DESCRIPTOR_REQUEST) + buffer->size();
         auto request_buffer = base::MakeRefCounted<base::RefCountedBytes>(size);
         USB_DESCRIPTOR_REQUEST* descriptor_request =
@@ -523,7 +524,7 @@ bool UsbDeviceHandleWin::OpenInterfaceHandle(Interface* interface) {
   WINUSB_INTERFACE_HANDLE handle;
   if (interface->first_interface == interface->interface_number) {
     if (!function_handle_.IsValid()) {
-      function_handle_.Set(CreateFileA(
+      function_handle_.Set(CreateFile(
           device_->device_path().c_str(), GENERIC_READ | GENERIC_WRITE,
           FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING,
           FILE_FLAG_OVERLAPPED, nullptr));

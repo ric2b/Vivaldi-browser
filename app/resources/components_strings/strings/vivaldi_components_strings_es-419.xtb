@@ -36,6 +36,7 @@
 <translation id="2292556288342944218">Se bloqueó tu acceso a Internet</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> requiere un nombre de usuario y su contraseña.</translation>
 <translation id="2337852623177822836">Configuración controlada por tu administrador</translation>
+<translation id="2344028582131185878">Descargas automáticas</translation>
 <translation id="2355395290879513365">Es posible que los atacantes vean las imágenes que observas en este sitio y las modifiquen para engañarte.</translation>
 <translation id="2356070529366658676">Preguntar</translation>
 <translation id="2359808026110333948">Continuar</translation>
@@ -75,6 +76,7 @@
 <translation id="3447661539832366887">El propietario del dispositivo desactivó el juego de dinosaurios.</translation>
 <translation id="3447884698081792621">Mostrar certificado (emitido por <ph name="ISSUER" />)</translation>
 <translation id="3462200631372590220">Sencilla</translation>
+<translation id="3484560055331845446">Podrías perder el acceso a tu cuenta de Google. Chrome te recomienda cambiar la contraseña ahora.Se te pedirá que inicies sesión.</translation>
 <translation id="3566021033012934673">Su conexión no es privada</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Ocultar detalles</translation>
@@ -88,7 +90,6 @@
 <translation id="3973234410852337861">Se bloqueó <ph name="HOST_NAME" /></translation>
 <translation id="3987940399970879459">Menos de 1 MB</translation>
 <translation id="4075732493274867456">El cliente y el servidor no son compatibles con una versión de protocolo o un método de cifrado SSL común.</translation>
-<translation id="410351446219883937">Reproducción automática</translation>
 <translation id="4116663294526079822">Permitir siempre en este sitio</translation>
 <translation id="4130226655945681476">Comprobar los cables de red, el módem y el router</translation>
 <translation id="4151403195736952345">Utilizar opción predeterminada global (Detectar)</translation>
@@ -107,6 +108,7 @@
 <translation id="4552089082226364758">Flash</translation>
 <translation id="4558551763791394412">Prueba deshabilitando tus extensiones.</translation>
 <translation id="4592951414987517459">Tu conexión a <ph name="DOMAIN" /> está encriptada con un conjunto de cifrado moderno.</translation>
+<translation id="4690462567478992370">Dejar de usar un certificado inválido</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Se interrumpió la conexión</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Ejecutando los diagnósticos de Red de Windows<ph name="END_LINK" /></translation>
@@ -114,8 +116,10 @@
 <translation id="4750917950439032686">Tu información (p. ej., contraseñas o números de tarjetas de crédito) es privada cuando se envía a este sitio.</translation>
 <translation id="4764776831041365478">Es posible que la página web en <ph name="URL" /> no funcione temporalmente o se haya trasladado de manera permanente a una nueva dirección web.</translation>
 <translation id="4943872375798546930">Sin resultados</translation>
+<translation id="4974590756084640048">Reactivar las advertencias</translation>
 <translation id="5023310440958281426">Consulte las políticas del administrador</translation>
 <translation id="5039804452771397117">Permitir</translation>
+<translation id="5068778127327928576">{NUM_COOKIES,plural, =1{(1 en uso)} other {(# en uso)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Comprobar la dirección de proxy<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64 bits)</translation>
 <translation id="5287240709317226393">Mostrar cookies</translation>
@@ -163,6 +167,7 @@
 <translation id="6657585470893396449">Contraseña</translation>
 <translation id="6685834062052613830">Salir y completar la configuración</translation>
 <translation id="6711464428925977395">Hay un error en el servidor proxy o la dirección es incorrecta.</translation>
+<translation id="6757797048963528358">El ordenador entró en suspensión.</translation>
 <translation id="6897140037006041989">User agent</translation>
 <translation id="7053983685419859001">Bloquear</translation>
 <translation id="7079718277001814089">Este sitio contiene programas malintencionados</translation>
@@ -197,12 +202,14 @@
 <translation id="8041940743680923270">Usar configuración global predeterminada (Preguntar)</translation>
 <translation id="808894953321890993">Cambiar la contraseña</translation>
 <translation id="8142868475871995937">Visita &lt;strong&gt;vivaldi://policy&lt;/strong&gt; para ver las URL en lista negra y otras políticas que estableció el administrador del sistema.</translation>
+<translation id="8149426793427495338">El ordenador entró en suspensión.</translation>
 <translation id="8150722005171944719">El archivo de <ph name="URL" /> no se puede leer. Es posible que se haya eliminado, movido o que los permisos del archivo impidan acceder a él.</translation>
 <translation id="8184538546369750125">Usar configuración global predeterminada (Permitir)</translation>
 <translation id="8211406090763984747">La conexión es segura</translation>
 <translation id="8225771182978767009">La persona que configuró esta computadora decidió bloquear este sitio.</translation>
 <translation id="8241707690549784388">La página que buscas ha utilizado la información que has especificado. Volver a la página podría hacer que repitas alguna acción. ¿Quieres continuar?</translation>
 <translation id="8241712895048303527">Bloquear en este sitio</translation>
+<translation id="8286036467436129157">Iniciar sesión</translation>
 <translation id="8288807391153049143">Mostrar certificado</translation>
 <translation id="8289355894181816810">Comunícate con el administrador de red si no entiendes bien lo que significa.</translation>
 <translation id="8332188693563227489">Se denegó el acceso a <ph name="HOST_NAME" /></translation>
@@ -210,6 +217,7 @@
 <translation id="8503813439785031346">Nombre de usuario</translation>
 <translation id="8703575177326907206">Tu conexión a <ph name="DOMAIN" /> no está cifrada.</translation>
 <translation id="8740359287975076522">No se encontró <ph name="HOST_NAME" />’s &lt;abbr id="dnsDefinition"&gt;DNS address&lt;/abbr&gt;. Se está diagnosticando el problema.</translation>
+<translation id="8820817407110198400">Marcadores</translation>
 <translation id="9001074447101275817">El proxy <ph name="DOMAIN" /> requiere un nombre de usuario y su contraseña.</translation>
 <translation id="9008201768610948239">Ignorar</translation>
 <translation id="9011424611726486705">Abrir la configuración del sitio</translation>
@@ -219,6 +227,7 @@
 <translation id="9169664750068251925">Bloquear siempre en este sitio</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> utiliza un protocolo no compatible.</translation>
 <translation id="9219103736887031265">Imágenes</translation>
+<translation id="936602727769022409">Podrías perder el acceso a tu cuenta de Google. Chromium te recomienda que cambies la contraseña ya. Se te pedirá que inicies sesión.</translation>
 <translation id="969892804517981540">Build oficial</translation>
 <translation id="988159990683914416">Build para desarrolladores</translation>
 </translationbundle>

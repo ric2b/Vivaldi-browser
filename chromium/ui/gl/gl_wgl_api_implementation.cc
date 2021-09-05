@@ -9,39 +9,31 @@
 #include "base/strings/string_util.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_implementation.h"
+#include "ui/gl/gl_implementation_wrapper.h"
 #include "ui/gl/gl_surface_wgl.h"
 
 namespace gl {
 
 RealWGLApi* g_real_wgl = nullptr;
-DebugWGLApi* g_debug_wgl = nullptr;
+
+GL_IMPL_WRAPPER_TYPE(WGL) * g_wgl_wrapper = nullptr;
 
 void InitializeStaticGLBindingsWGL() {
   g_driver_wgl.InitializeStaticBindings();
-  if (!g_real_wgl) {
-    g_real_wgl = new RealWGLApi();
+  if (!g_wgl_wrapper) {
+    auto real_api = std::make_unique<RealWGLApi>();
+    real_api->Initialize(&g_driver_wgl);
+    g_wgl_wrapper = new GL_IMPL_WRAPPER_TYPE(WGL)(std::move(real_api));
   }
-  g_real_wgl->Initialize(&g_driver_wgl);
-  g_current_wgl_context = g_real_wgl;
-}
 
-void InitializeDebugGLBindingsWGL() {
-  if (!g_debug_wgl) {
-    g_debug_wgl = new DebugWGLApi(g_real_wgl);
-  }
-  g_current_wgl_context = g_debug_wgl;
+  g_current_wgl_context = g_wgl_wrapper->api();
 }
 
 void ClearBindingsWGL() {
-  if (g_debug_wgl) {
-    delete g_debug_wgl;
-    g_debug_wgl = NULL;
-  }
-  if (g_real_wgl) {
-    delete g_real_wgl;
-    g_real_wgl = NULL;
-  }
-  g_current_wgl_context = NULL;
+  delete g_wgl_wrapper;
+  g_wgl_wrapper = nullptr;
+
+  g_current_wgl_context = nullptr;
   g_driver_wgl.ClearBindings();
 }
 
@@ -51,9 +43,7 @@ WGLApi::WGLApi() {
 WGLApi::~WGLApi() {
 }
 
-WGLApiBase::WGLApiBase()
-    : driver_(NULL) {
-}
+WGLApiBase::WGLApiBase() : driver_(nullptr) {}
 
 WGLApiBase::~WGLApiBase() {
 }
@@ -89,11 +79,11 @@ const char* RealWGLApi::wglGetExtensionsStringARBFn(HDC hDC) {
     return filtered_arb_exts_.c_str();
 
   if (!driver_->fn.wglGetExtensionsStringARBFn)
-    return NULL;
+    return nullptr;
 
   const char* str = WGLApiBase::wglGetExtensionsStringARBFn(hDC);
   if (!str)
-    return NULL;
+    return nullptr;
 
   filtered_arb_exts_ = FilterGLExtensionList(str, disabled_exts_);
   return filtered_arb_exts_.c_str();
@@ -104,22 +94,21 @@ const char* RealWGLApi::wglGetExtensionsStringEXTFn() {
     return filtered_ext_exts_.c_str();
 
   if (!driver_->fn.wglGetExtensionsStringEXTFn)
-    return NULL;
+    return nullptr;
 
   const char* str = WGLApiBase::wglGetExtensionsStringEXTFn();
   if (!str)
-    return NULL;
+    return nullptr;
 
   filtered_ext_exts_ = FilterGLExtensionList(str, disabled_exts_);
   return filtered_ext_exts_.c_str();
 }
 
-DebugWGLApi::DebugWGLApi(WGLApi* wgl_api) : wgl_api_(wgl_api) {}
+LogWGLApi::LogWGLApi(WGLApi* wgl_api) : wgl_api_(wgl_api) {}
 
-DebugWGLApi::~DebugWGLApi() {}
+LogWGLApi::~LogWGLApi() {}
 
-void DebugWGLApi::SetDisabledExtensions(
-    const std::string& disabled_extensions) {
+void LogWGLApi::SetDisabledExtensions(const std::string& disabled_extensions) {
   if (wgl_api_) {
     wgl_api_->SetDisabledExtensions(disabled_extensions);
   }

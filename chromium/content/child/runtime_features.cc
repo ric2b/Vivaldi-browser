@@ -11,11 +11,13 @@
 #include "base/metrics/field_trial.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/strings/string_util.h"
-#include "base/task/task_features.h"
 #include "build/build_config.h"
+#include "content/common/content_navigation_policy.h"
 #include "content/common/content_switches_internal.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/referrer.h"
+#include "device/fido/features.h"
 #include "gpu/config/gpu_switches.h"
 #include "media/base/media_switches.h"
 #include "net/base/features.h"
@@ -98,11 +100,6 @@ void SetRuntimeFeatureDefaultsForPlatform(
 #endif
 
 #if defined(OS_ANDROID)
-  WebRuntimeFeatures::EnableWebNfc(
-      base::FeatureList::IsEnabled(features::kWebNfc));
-#endif
-
-#if defined(OS_ANDROID)
   // APIs for Web Authentication are not available prior to N.
   WebRuntimeFeatures::EnableWebAuth(
       base::FeatureList::IsEnabled(features::kWebAuth) &&
@@ -112,6 +109,9 @@ void SetRuntimeFeatureDefaultsForPlatform(
   WebRuntimeFeatures::EnableWebAuth(
       base::FeatureList::IsEnabled(features::kWebAuth));
 #endif
+
+  WebRuntimeFeatures::EnableWebAuthenticationFeaturePolicy(
+      base::FeatureList::IsEnabled(device::kWebAuthFeaturePolicy));
 
 #if defined(OS_ANDROID)
   WebRuntimeFeatures::EnablePictureInPictureAPI(
@@ -140,6 +140,9 @@ enum RuntimeFeatureEnableOptions {
   // Enables the Blink feature when the base::Feature is enabled,
   // otherwise no change.
   kEnableOnly,
+  // Enables the Blink feature when the base::Feature is enabled
+  // via an override on the command-line, otherwise no change.
+  kEnableOnlyIfOverriddenFromCommandLine,
   // Disables the Blink feature when the base::Feature is *disabled*,
   // otherwise no change.
   kDisableOnly,
@@ -157,6 +160,34 @@ struct RuntimeFeatureToChromiumFeatureMap {
   const RuntimeFeatureEnableOptions option;
 };
 
+template <typename Enabler>
+void SetRuntimeFeatureFromChromiumFeature(const base::Feature& chromium_feature,
+                                          RuntimeFeatureEnableOptions option,
+                                          const Enabler& enabler) {
+  using FeatureList = base::FeatureList;
+  const bool feature_enabled = FeatureList::IsEnabled(chromium_feature);
+  switch (option) {
+    case kEnableOnly:
+      if (feature_enabled)
+        enabler(true);
+      break;
+    case kEnableOnlyIfOverriddenFromCommandLine:
+      if (FeatureList::GetInstance()->IsFeatureOverriddenFromCommandLine(
+              chromium_feature.name, FeatureList::OVERRIDE_ENABLE_FEATURE)) {
+        DCHECK(feature_enabled);
+        enabler(true);
+      }
+      break;
+    case kDisableOnly:
+      if (!feature_enabled)
+        enabler(false);
+      break;
+    case kUseFeatureState:
+      enabler(feature_enabled);
+      break;
+  }
+}
+
 // Sets blink runtime features that are either directly
 // controlled by Chromium base::Feature or are overridden
 // by base::Feature states.
@@ -167,211 +198,191 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
   // enabler function defined. Otherwise add the entry with string name
   // in the next list.
   const RuntimeFeatureToChromiumFeatureMap<void (*)(bool)>
-      blinkFeatureToBaseFeatureMapping[] = {
-          // TODO(rodneyding): Sort features in alphabetical order
-          {wf::EnableWebUsb, features::kWebUsb, kDisableOnly},
-          {wf::EnableBlockingFocusWithoutUserActivation,
-           blink::features::kBlockingFocusWithoutUserActivation, kEnableOnly},
-          {wf::EnableNotificationContentImage,
-           features::kNotificationContentImage, kDisableOnly},
-          {wf::EnableReducedReferrerGranularity,
-           features::kReducedReferrerGranularity, kUseFeatureState},
-          {wf::EnablePeriodicBackgroundSync, features::kPeriodicBackgroundSync,
-           kEnableOnly},
-          {wf::EnableWebXR, features::kWebXr, kUseFeatureState},
-          {wf::EnableWebXRARDOMOverlay, features::kWebXrArDOMOverlay,
-           kEnableOnly},
-          {wf::EnableWebXRARModule, features::kWebXrArModule, kEnableOnly},
-          {wf::EnableWebXRHitTest, features::kWebXrHitTest, kEnableOnly},
-          {wf::EnableWebXRAnchors, features::kWebXrAnchors, kEnableOnly},
-          {wf::EnableWebXRPlaneDetection, features::kWebXrPlaneDetection,
-           kEnableOnly},
-          {wf::EnableWebXrGamepadModule, features::kWebXrGamepadModule,
-           kUseFeatureState},
-          {wf::EnableFetchMetadata, network::features::kFetchMetadata,
-           kUseFeatureState},
-          {wf::EnableFetchMetadataDestination,
-           network::features::kFetchMetadataDestination, kUseFeatureState},
-          {wf::EnableUserActivationPostMessageTransfer,
-           features::kUserActivationPostMessageTransfer, kUseFeatureState},
-          {wf::EnableUserActivationSameOriginVisibility,
-           features::kUserActivationSameOriginVisibility, kUseFeatureState},
-          {wf::EnableUserActivationV2, features::kUserActivationV2,
-           kUseFeatureState},
-          {wf::EnablePassiveDocumentEventListeners,
-           features::kPassiveDocumentEventListeners, kUseFeatureState},
-          {wf::EnablePassiveDocumentWheelEventListeners,
-           features::kPassiveDocumentWheelEventListeners, kUseFeatureState},
-          {wf::EnableExpensiveBackgroundTimerThrottling,
-           features::kExpensiveBackgroundTimerThrottling, kUseFeatureState},
-          {wf::EnableTimerThrottlingForHiddenFrames,
-           features::kTimerThrottlingForHiddenFrames, kUseFeatureState},
-          {wf::EnableSendBeaconThrowForBlobWithNonSimpleType,
-           features::kSendBeaconThrowForBlobWithNonSimpleType, kEnableOnly},
-          {wf::EnablePaymentRequest, features::kWebPayments, kUseFeatureState},
-          {wf::EnablePaymentApp, features::kServiceWorkerPaymentApps,
-           kEnableOnly},
-          {wf::EnableCompositorTouchAction, features::kCompositorTouchAction,
-           kEnableOnly},
-          {wf::EnableGenericSensorExtraClasses,
-           features::kGenericSensorExtraClasses, kEnableOnly},
-          {wf::EnableMediaCastOverlayButton, media::kMediaCastOverlayButton,
-           kUseFeatureState},
-          {wf::EnableBuiltInModuleAll, features::kBuiltInModuleAll,
-           kEnableOnly},
-          {wf::EnableBuiltInModuleInfra, features::kBuiltInModuleInfra,
-           kEnableOnly},
-          {wf::EnableBuiltInModuleKvStorage, features::kBuiltInModuleKvStorage,
-           kEnableOnly},
-          {wf::EnableLazyInitializeMediaControls,
-           features::kLazyInitializeMediaControls, kUseFeatureState},
-          {wf::EnableMediaEngagementBypassAutoplayPolicies,
-           media::kMediaEngagementBypassAutoplayPolicies, kUseFeatureState},
-          {wf::EnableOverflowIconsForMediaControls,
-           media::kOverflowIconsForMediaControls, kUseFeatureState},
-          {wf::EnableAllowActivationDelegationAttr,
-           features::kAllowActivationDelegationAttr, kUseFeatureState},
-          {wf::EnableScriptStreamingOnPreload,
-           features::kScriptStreamingOnPreload, kUseFeatureState},
-          {wf::EnableMergeBlockingNonBlockingPools,
-           base::kMergeBlockingNonBlockingPools, kUseFeatureState},
-          {wf::EnableLazyFrameLoading, features::kLazyFrameLoading,
-           kUseFeatureState},
-          {wf::EnableLazyFrameVisibleLoadTimeMetrics,
-           features::kLazyFrameVisibleLoadTimeMetrics, kUseFeatureState},
-          {wf::EnableLazyImageLoading, features::kLazyImageLoading,
-           kUseFeatureState},
-          {wf::EnableLazyImageVisibleLoadTimeMetrics,
-           features::kLazyImageVisibleLoadTimeMetrics, kUseFeatureState},
-          {wf::EnablePictureInPicture, media::kPictureInPicture,
-           kUseFeatureState},
-          {wf::EnableCacheInlineScriptCode, features::kCacheInlineScriptCode,
-           kUseFeatureState},
-          {wf::EnableWasmCodeCache, blink::features::kWasmCodeCache,
-           kUseFeatureState},
-          {wf::EnableExperimentalProductivityFeatures,
-           features::kExperimentalProductivityFeatures, kEnableOnly},
-          {wf::EnableFeaturePolicyForSandbox,
-           features::kFeaturePolicyForSandbox, kEnableOnly},
-          {wf::EnableAccessibilityExposeARIAAnnotations,
-           features::kEnableAccessibilityExposeARIAAnnotations,
-           kUseFeatureState},
-          {wf::EnableAccessibilityExposeDisplayNone,
-           features::kEnableAccessibilityExposeDisplayNone, kUseFeatureState},
-          {wf::EnableAllowSyncXHRInPageDismissal,
-           blink::features::kAllowSyncXHRInPageDismissal, kEnableOnly},
-          {wf::EnableAutoplayIgnoresWebAudio, media::kAutoplayIgnoreWebAudio,
-           kUseFeatureState},
-          {wf::EnablePortals, blink::features::kPortals, kUseFeatureState},
-          {wf::EnableImplicitRootScroller,
-           blink::features::kImplicitRootScroller, kUseFeatureState},
-          {wf::EnableCSSOMViewScrollCoordinates,
-           blink::features::kCSSOMViewScrollCoordinates, kEnableOnly},
-          {wf::EnableTextFragmentAnchor, blink::features::kTextFragmentAnchor,
-           kUseFeatureState},
-          {wf::EnableBackgroundFetch, features::kBackgroundFetch, kDisableOnly},
-          {wf::EnableUpdateHoverAtBeginFrame,
-           features::kUpdateHoverAtBeginFrame, kUseFeatureState},
-          {wf::EnableForcedColors, features::kForcedColors, kUseFeatureState},
-          {wf::EnableFractionalScrollOffsets,
-           features::kFractionalScrollOffsets, kUseFeatureState},
-          {wf::EnableGetDisplayMedia, blink::features::kRTCGetDisplayMedia,
-           kUseFeatureState},
-          {wf::EnableMimeHandlerViewInCrossProcessFrame,
-           features::kMimeHandlerViewInCrossProcessFrame, kUseFeatureState},
-          {wf::EnableFallbackCursorMode, features::kFallbackCursorMode,
-           kUseFeatureState},
-          {wf::EnableSignedExchangePrefetchCacheForNavigations,
-           features::kSignedExchangePrefetchCacheForNavigations,
-           kUseFeatureState},
-          {wf::EnableSignedExchangeSubresourcePrefetch,
-           features::kSignedExchangeSubresourcePrefetch, kUseFeatureState},
-          {wf::EnableIdleDetection, features::kIdleDetection, kDisableOnly},
-          {wf::EnableSkipTouchEventFilter, features::kSkipTouchEventFilter,
-           kUseFeatureState},
-          {wf::EnableSmsReceiver, features::kSmsReceiver, kDisableOnly},
-          {wf::EnableDisplayLocking, blink::features::kDisplayLocking,
-           kUseFeatureState},
-          {wf::EnableConsolidatedMovementXY, features::kConsolidatedMovementXY,
-           kUseFeatureState},
-          {wf::EnableCooperativeScheduling, features::kCooperativeScheduling,
-           kUseFeatureState},
-          {wf::EnableMouseSubframeNoImplicitCapture,
-           features::kMouseSubframeNoImplicitCapture, kUseFeatureState},
-          {wf::EnableBackForwardCache, features::kBackForwardCache,
-           kUseFeatureState},
-          {wf::EnableCookieDeprecationMessages,
-           features::kCookieDeprecationMessages, kEnableOnly},
-          {wf::EnableSameSiteByDefaultCookies,
-           net::features::kSameSiteByDefaultCookies, kEnableOnly},
-          {wf::EnableCookiesWithoutSameSiteMustBeSecure,
-           net::features::kCookiesWithoutSameSiteMustBeSecure, kEnableOnly},
-          {wf::EnablePointerLockOptions, features::kPointerLockOptions,
-           kEnableOnly},
-          {wf::EnableDocumentPolicy, features::kDocumentPolicy,
-           kUseFeatureState},
-      };
+      blinkFeatureToBaseFeatureMapping[] =
+  {
+    // TODO(rodneyding): Sort features in alphabetical order
+    {wf::EnableWebUsb, features::kWebUsb, kDisableOnly},
+    {wf::EnableBlockingFocusWithoutUserActivation,
+     blink::features::kBlockingFocusWithoutUserActivation, kEnableOnly},
+    {wf::EnableNotificationContentImage, features::kNotificationContentImage,
+     kDisableOnly},
+    {wf::EnablePeriodicBackgroundSync, features::kPeriodicBackgroundSync,
+     kEnableOnly},
+    {wf::EnableWebXR, features::kWebXr, kUseFeatureState},
+    {wf::EnableWebXRARModule, features::kWebXrArModule, kUseFeatureState},
+    {wf::EnableWebXRHitTest, features::kWebXrHitTest, kUseFeatureState},
+    {wf::EnableWebXRIncubations, features::kWebXrIncubations, kEnableOnly},
+    {wf::EnableUserActivationPostMessageTransfer,
+     features::kUserActivationPostMessageTransfer, kUseFeatureState},
+    {wf::EnableUserActivationSameOriginVisibility,
+     features::kUserActivationSameOriginVisibility, kUseFeatureState},
+    {wf::EnablePassiveDocumentEventListeners,
+     features::kPassiveDocumentEventListeners, kUseFeatureState},
+    {wf::EnablePassiveDocumentWheelEventListeners,
+     features::kPassiveDocumentWheelEventListeners, kUseFeatureState},
+    {wf::EnableExpensiveBackgroundTimerThrottling,
+     features::kExpensiveBackgroundTimerThrottling, kUseFeatureState},
+    {wf::EnableTimerThrottlingForHiddenFrames,
+     features::kTimerThrottlingForHiddenFrames, kUseFeatureState},
+    {wf::EnableSendBeaconThrowForBlobWithNonSimpleType,
+     features::kSendBeaconThrowForBlobWithNonSimpleType, kEnableOnly},
+    {wf::EnablePaymentRequest, features::kWebPayments, kUseFeatureState},
+    {wf::EnablePaymentHandlerMinimalUI, features::kWebPaymentsMinimalUI,
+     kEnableOnly},
+    {wf::EnablePaymentApp, features::kServiceWorkerPaymentApps, kEnableOnly},
+    {wf::EnableCompositorTouchAction, features::kCompositorTouchAction,
+     kEnableOnly},
+    {wf::EnableGenericSensorExtraClasses, features::kGenericSensorExtraClasses,
+     kEnableOnly},
+    {wf::EnableMediaCastOverlayButton, media::kMediaCastOverlayButton,
+     kUseFeatureState},
+    {wf::EnableLazyInitializeMediaControls,
+     features::kLazyInitializeMediaControls, kUseFeatureState},
+    {wf::EnableMediaEngagementBypassAutoplayPolicies,
+     media::kMediaEngagementBypassAutoplayPolicies, kUseFeatureState},
+    {wf::EnableOverflowIconsForMediaControls,
+     media::kOverflowIconsForMediaControls, kUseFeatureState},
+    {wf::EnableAllowActivationDelegationAttr,
+     features::kAllowActivationDelegationAttr, kUseFeatureState},
+    {wf::EnableScriptStreamingOnPreload, features::kScriptStreamingOnPreload,
+     kUseFeatureState},
+    {wf::EnableLazyFrameLoading, features::kLazyFrameLoading, kUseFeatureState},
+    {wf::EnableLazyFrameVisibleLoadTimeMetrics,
+     features::kLazyFrameVisibleLoadTimeMetrics, kUseFeatureState},
+    {wf::EnableLazyImageLoading, features::kLazyImageLoading, kUseFeatureState},
+    {wf::EnableLazyImageVisibleLoadTimeMetrics,
+     features::kLazyImageVisibleLoadTimeMetrics, kUseFeatureState},
+    {wf::EnablePictureInPicture, media::kPictureInPicture, kUseFeatureState},
+    {wf::EnableCacheInlineScriptCode, features::kCacheInlineScriptCode,
+     kUseFeatureState},
+    {wf::EnableExperimentalProductivityFeatures,
+     features::kExperimentalProductivityFeatures, kEnableOnly},
+    {wf::EnableFeaturePolicyForSandbox, features::kFeaturePolicyForSandbox,
+     kEnableOnly},
+    {wf::EnableAccessibilityExposeARIAAnnotations,
+     features::kEnableAccessibilityExposeARIAAnnotations, kEnableOnly},
+    {wf::EnableAccessibilityExposeDisplayNone,
+     features::kEnableAccessibilityExposeDisplayNone, kEnableOnly},
+    {wf::EnableAccessibilityExposeHTMLElement,
+     features::kEnableAccessibilityExposeHTMLElement, kUseFeatureState},
+    {wf::EnableAllowSyncXHRInPageDismissal,
+     blink::features::kAllowSyncXHRInPageDismissal, kEnableOnly},
+    {wf::EnableAutoplayIgnoresWebAudio, media::kAutoplayIgnoreWebAudio,
+     kUseFeatureState},
+    {wf::EnablePortals, blink::features::kPortals,
+     kEnableOnlyIfOverriddenFromCommandLine},
+    {wf::EnableImplicitRootScroller, blink::features::kImplicitRootScroller,
+     kUseFeatureState},
+    {wf::EnableCSSOMViewScrollCoordinates,
+     blink::features::kCSSOMViewScrollCoordinates, kEnableOnly},
+    {wf::EnableTextFragmentAnchor, blink::features::kTextFragmentAnchor,
+     kUseFeatureState},
+    {wf::EnableBackgroundFetch, features::kBackgroundFetch, kDisableOnly},
+    {wf::EnableForcedColors, features::kForcedColors, kUseFeatureState},
+    {wf::EnableFractionalScrollOffsets, features::kFractionalScrollOffsets,
+     kUseFeatureState},
+    {wf::EnableGetDisplayMedia, blink::features::kRTCGetDisplayMedia,
+     kUseFeatureState},
+    {wf::EnableFallbackCursorMode, features::kFallbackCursorMode,
+     kUseFeatureState},
+    {wf::EnableSignedExchangePrefetchCacheForNavigations,
+     features::kSignedExchangePrefetchCacheForNavigations, kUseFeatureState},
+    {wf::EnableSignedExchangeSubresourcePrefetch,
+     features::kSignedExchangeSubresourcePrefetch, kUseFeatureState},
+    {wf::EnableIdleDetection, features::kIdleDetection, kDisableOnly},
+    {wf::EnableSkipTouchEventFilter, features::kSkipTouchEventFilter,
+     kUseFeatureState},
+    {wf::EnableSmsReceiver, features::kSmsReceiver, kDisableOnly},
+    {wf::EnableConsolidatedMovementXY, features::kConsolidatedMovementXY,
+     kUseFeatureState},
+    {wf::EnableCooperativeScheduling, features::kCooperativeScheduling,
+     kUseFeatureState},
+    {wf::EnableMouseSubframeNoImplicitCapture,
+     features::kMouseSubframeNoImplicitCapture, kUseFeatureState},
+    {wf::EnableCookieDeprecationMessages, features::kCookieDeprecationMessages,
+     kEnableOnly},
+    {wf::EnableSameSiteByDefaultCookies,
+     net::features::kSameSiteByDefaultCookies, kEnableOnly},
+    {wf::EnableCookiesWithoutSameSiteMustBeSecure,
+     net::features::kCookiesWithoutSameSiteMustBeSecure, kEnableOnly},
+    {wf::EnablePointerLockOptions, features::kPointerLockOptions, kEnableOnly},
+    {wf::EnableDocumentPolicy, features::kDocumentPolicy, kUseFeatureState},
+    {wf::EnableNeverSlowMode, features::kNeverSlowMode, kUseFeatureState},
+    {wf::EnableShadowDOMV0, blink::features::kWebComponentsV0Enabled,
+     kEnableOnly},
+    {wf::EnableCustomElementsV0, blink::features::kWebComponentsV0Enabled,
+     kEnableOnly},
+    {wf::EnableHTMLImports, blink::features::kWebComponentsV0Enabled,
+     kEnableOnly},
+    {wf::EnableVideoPlaybackQuality, features::kVideoPlaybackQuality,
+     kUseFeatureState},
+    {wf::EnableBrowserVerifiedUserActivationKeyboard,
+     features::kBrowserVerifiedUserActivationKeyboard, kEnableOnly},
+    {wf::EnableBrowserVerifiedUserActivationMouse,
+     features::kBrowserVerifiedUserActivationMouse, kEnableOnly},
+    {wf::EnablePercentBasedScrolling, features::kPercentBasedScrolling,
+     kUseFeatureState},
+#if defined(OS_ANDROID)
+    {wf::EnableWebNfc, features::kWebNfc, kDisableOnly},
+#endif
+    {wf::EnableTrustTokens, network::features::kTrustTokens, kEnableOnly},
+    {wf::EnableInstalledApp, features::kInstalledApp, kDisableOnly},
+  };
   for (const auto& mapping : blinkFeatureToBaseFeatureMapping) {
-    const bool featureEnabled =
-        base::FeatureList::IsEnabled(mapping.chromium_feature);
-    switch (mapping.option) {
-      case kEnableOnly:
-        if (featureEnabled)
-          mapping.feature_enabler(true);
-        break;
-      case kDisableOnly:
-        if (!featureEnabled)
-          mapping.feature_enabler(false);
-        break;
-      case kUseFeatureState:
-        mapping.feature_enabler(featureEnabled);
-    }
+    SetRuntimeFeatureFromChromiumFeature(
+        mapping.chromium_feature, mapping.option, mapping.feature_enabler);
   }
 
   // TODO(crbug/832393): Cleanup the inconsistency between custom WRF enabler
   // function and using feature string name with EnableFeatureFromString.
   const RuntimeFeatureToChromiumFeatureMap<const char*>
       runtimeFeatureNameToChromiumFeatureMapping[] = {
-          {"CSSBackdropFilter", blink::features::kCSSBackdropFilter,
-           kUseFeatureState},
-          {"FastBorderRadius", blink::features::kFastBorderRadius,
-           kUseFeatureState},
-          {"FontSrcLocalMatching", features::kFontSrcLocalMatching,
-           kUseFeatureState},
-          {"LegacyWindowsDWriteFontFallback",
-           features::kLegacyWindowsDWriteFontFallback, kUseFeatureState},
           {"AddressSpace", network::features::kBlockNonSecureExternalRequests,
            kEnableOnly},
-          {"BlockCredentialedSubresources",
-           features::kBlockCredentialedSubresources, kDisableOnly},
           {"AllowContentInitiatedDataUrlNavigations",
            features::kAllowContentInitiatedDataUrlNavigations,
            kUseFeatureState},
-          {"LayoutNG", blink::features::kLayoutNG, kUseFeatureState},
-          {"UserAgentClientHint", features::kUserAgentClientHint, kEnableOnly},
+          {"AppCache", blink::features::kAppCache, kDisableOnly},
           {"AudioWorkletRealtimeThread",
            blink::features::kAudioWorkletRealtimeThread, kEnableOnly},
-          {"TrustedDOMTypes", features::kTrustedDOMTypes, kEnableOnly},
+          {"BlockCredentialedSubresources",
+           features::kBlockCredentialedSubresources, kDisableOnly},
+          {"BlockHTMLParserOnStyleSheets",
+           blink::features::kBlockHTMLParserOnStyleSheets, kUseFeatureState},
+          {"ConversionMeasurement", features::kConversionMeasurement,
+           kEnableOnly},
+          {"CSSReducedFontLoadingInvalidations",
+           blink::features::kCSSReducedFontLoadingInvalidations,
+           kUseFeatureState},
+          {"CustomElementsV0", blink::features::kWebComponentsV0Enabled,
+           kEnableOnly},
+          {"FeaturePolicyForClientHints",
+           features::kFeaturePolicyForClientHints, kUseFeatureState},
+          {"FlexNG", blink::features::kFlexNG, kEnableOnly},
+          {"FontAccess", blink::features::kFontAccess, kUseFeatureState},
+          {"FontSrcLocalMatching", features::kFontSrcLocalMatching,
+           kUseFeatureState},
+          {"HTMLImports", blink::features::kWebComponentsV0Enabled,
+           kEnableOnly},
           {"IgnoreCrossOriginWindowWhenNamedAccessOnWindow",
            blink::features::kIgnoreCrossOriginWindowWhenNamedAccessOnWindow,
            kEnableOnly},
+          {"LayoutNG", blink::features::kLayoutNG, kUseFeatureState},
+          {"LegacyWindowsDWriteFontFallback",
+           features::kLegacyWindowsDWriteFontFallback, kUseFeatureState},
+          {"OriginPolicy", features::kOriginPolicy, kUseFeatureState},
+          {"ShadowDOMV0", blink::features::kWebComponentsV0Enabled,
+           kEnableOnly},
           {"StorageAccessAPI", blink::features::kStorageAccessAPI, kEnableOnly},
+          {"TrustedDOMTypes", features::kTrustedDOMTypes, kEnableOnly},
+          {"UserAgentClientHint", features::kUserAgentClientHint, kEnableOnly},
+
       };
   for (const auto& mapping : runtimeFeatureNameToChromiumFeatureMapping) {
-    const bool featureEnabled =
-        base::FeatureList::IsEnabled(mapping.chromium_feature);
-    switch (mapping.option) {
-      case kEnableOnly:
-        if (featureEnabled)
-          wf::EnableFeatureFromString(mapping.feature_enabler, true);
-        break;
-      case kDisableOnly:
-        if (!featureEnabled)
-          wf::EnableFeatureFromString(mapping.feature_enabler, false);
-        break;
-      case kUseFeatureState:
-        wf::EnableFeatureFromString(mapping.feature_enabler, featureEnabled);
-    }
+    SetRuntimeFeatureFromChromiumFeature(
+        mapping.chromium_feature, mapping.option, [&mapping](bool enabled) {
+          wf::EnableFeatureFromString(mapping.feature_enabler, enabled);
+        });
   }
 }
 
@@ -424,13 +435,13 @@ void SetRuntimeFeaturesFromCommandLine(const base::CommandLine& command_line) {
       {wrf::ForceOverlayFullscreenVideo, switches::kForceOverlayFullscreenVideo,
        true},
       {wrf::EnablePreciseMemoryInfo, switches::kEnablePreciseMemoryInfo, true},
-      {wrf::EnablePrintBrowser, switches::kEnablePrintBrowser, true},
       {wrf::EnableNetInfoDownlinkMax,
        switches::kEnableNetworkInformationDownlinkMax, true},
       {wrf::EnablePermissionsAPI, switches::kDisablePermissionsAPI, false},
       {wrf::EnableWebGPU, switches::kEnableUnsafeWebGPU, true},
-      {wrf::EnableWebVR, switches::kEnableWebVR, true},
       {wrf::EnablePresentationAPI, switches::kDisablePresentationAPI, false},
+      {wrf::EnableTextFragmentAnchor, switches::kDisableScrollToTextFragment,
+       false},
       {wrf::EnableRemotePlaybackAPI, switches::kDisableRemotePlaybackAPI,
        false},
       {wrf::EnableTimerThrottlingForBackgroundTabs,
@@ -439,6 +450,9 @@ void SetRuntimeFeaturesFromCommandLine(const base::CommandLine& command_line) {
        switches::kEnableAccessibilityObjectModel, true},
       {wrf::EnableAllowSyncXHRInPageDismissal,
        switches::kAllowSyncXHRInPageDismissal, true},
+      {wrf::EnableShadowDOMV0, switches::kWebComponentsV0Enabled, true},
+      {wrf::EnableCustomElementsV0, switches::kWebComponentsV0Enabled, true},
+      {wrf::EnableHTMLImports, switches::kWebComponentsV0Enabled, true},
   };
   for (const auto& mapping : switchToFeatureMapping) {
     if (command_line.HasSwitch(mapping.switch_name))
@@ -510,16 +524,15 @@ void SetCustomizedRuntimeFeaturesFromCombinedArgs(
 
   // These checks are custom wrappers around base::FeatureList::IsEnabled
   // They're moved here to distinguish them from actual base checks
-  if (ui::IsOverlayScrollbarEnabled())
-    WebRuntimeFeatures::EnableOverlayScrollbars(true);
-
-  WebRuntimeFeatures::EnableFormControlsRefresh(
-      features::IsFormControlsRefreshEnabled());
+  WebRuntimeFeatures::EnableOverlayScrollbars(ui::IsOverlayScrollbarEnabled());
 
   if (base::FeatureList::GetInstance()->IsFeatureOverriddenFromCommandLine(
           blink::features::kNativeFileSystemAPI.name,
           base::FeatureList::OVERRIDE_ENABLE_FEATURE)) {
     WebRuntimeFeatures::EnableFeatureFromString("NativeFileSystem", true);
+    WebRuntimeFeatures::EnableFeatureFromString(
+        "CloneableNativeFileSystemHandles", true);
+    WebRuntimeFeatures::EnableFeatureFromString("WritableFileStream", true);
   }
   if (base::FeatureList::IsEnabled(blink::features::kNativeFileSystemAPI) &&
       base::FeatureList::IsEnabled(blink::features::kFileHandlingAPI)) {
@@ -540,12 +553,18 @@ void SetCustomizedRuntimeFeaturesFromCombinedArgs(
   // these features.
   if (enable_experimental_web_platform_features) {
     WebRuntimeFeatures::EnableNetInfoDownlinkMax(true);
-    WebRuntimeFeatures::EnableFetchMetadata(true);
-    WebRuntimeFeatures::EnableFetchMetadataDestination(true);
-    WebRuntimeFeatures::EnableFeatureFromString("CSSBackdropFilter", true);
-    WebRuntimeFeatures::EnableFeatureFromString("FastBorderRadius", true);
-    WebRuntimeFeatures::EnableDisplayLocking(true);
   }
+
+  WebRuntimeFeatures::EnableBackForwardCache(
+      content::IsBackForwardCacheEnabled());
+
+  // Gate the ReducedReferrerGranularity runtime feature depending on whether
+  // content is configured to force a no-referrer-when-downgrade default policy.
+  // TODO(crbug.com/1016541): After M82, remove when the corresponding
+  // enterprise policy has been deleted.
+  WebRuntimeFeatures::EnableReducedReferrerGranularity(
+      base::FeatureList::IsEnabled(features::kReducedReferrerGranularity) &&
+      !content::Referrer::ShouldForceLegacyDefaultReferrerPolicy());
 }
 
 }  // namespace

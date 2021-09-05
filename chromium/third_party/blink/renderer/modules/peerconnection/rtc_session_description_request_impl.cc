@@ -31,11 +31,11 @@
 #include "third_party/blink/renderer/modules/peerconnection/rtc_session_description_request_impl.h"
 
 #include "base/memory/scoped_refptr.h"
-#include "third_party/blink/public/platform/web_rtc_session_description.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/modules/peerconnection/rtc_error_util.h"
 #include "third_party/blink/renderer/modules/peerconnection/rtc_peer_connection.h"
 #include "third_party/blink/renderer/modules/peerconnection/rtc_session_description.h"
+#include "third_party/blink/renderer/platform/peerconnection/rtc_session_description_platform.h"
 
 namespace blink {
 
@@ -55,7 +55,7 @@ RTCSessionDescriptionRequestImpl::RTCSessionDescriptionRequestImpl(
     RTCPeerConnection* requester,
     V8RTCSessionDescriptionCallback* success_callback,
     V8RTCPeerConnectionErrorCallback* error_callback)
-    : ContextLifecycleObserver(context),
+    : ExecutionContextLifecycleObserver(context),
       operation_(operation),
       success_callback_(success_callback),
       error_callback_(error_callback),
@@ -66,12 +66,12 @@ RTCSessionDescriptionRequestImpl::RTCSessionDescriptionRequestImpl(
 RTCSessionDescriptionRequestImpl::~RTCSessionDescriptionRequestImpl() = default;
 
 void RTCSessionDescriptionRequestImpl::RequestSucceeded(
-    const WebRTCSessionDescription& web_session_description) {
+    RTCSessionDescriptionPlatform* description_platform) {
   bool should_fire_callback =
       requester_ ? requester_->ShouldFireDefaultCallbacks() : false;
   if (should_fire_callback && success_callback_) {
     requester_->NoteSessionDescriptionRequestCompleted(operation_, true);
-    auto* description = RTCSessionDescription::Create(web_session_description);
+    auto* description = RTCSessionDescription::Create(description_platform);
     requester_->NoteSdpCreated(*description);
     success_callback_->InvokeAndReportException(nullptr, description);
   }
@@ -90,7 +90,7 @@ void RTCSessionDescriptionRequestImpl::RequestFailed(
   Clear();
 }
 
-void RTCSessionDescriptionRequestImpl::ContextDestroyed(ExecutionContext*) {
+void RTCSessionDescriptionRequestImpl::ContextDestroyed() {
   Clear();
 }
 
@@ -100,12 +100,12 @@ void RTCSessionDescriptionRequestImpl::Clear() {
   requester_.Clear();
 }
 
-void RTCSessionDescriptionRequestImpl::Trace(blink::Visitor* visitor) {
+void RTCSessionDescriptionRequestImpl::Trace(Visitor* visitor) {
   visitor->Trace(success_callback_);
   visitor->Trace(error_callback_);
   visitor->Trace(requester_);
   RTCSessionDescriptionRequest::Trace(visitor);
-  ContextLifecycleObserver::Trace(visitor);
+  ExecutionContextLifecycleObserver::Trace(visitor);
 }
 
 }  // namespace blink

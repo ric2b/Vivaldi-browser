@@ -6,23 +6,25 @@ package org.chromium.chrome.browser.webapps;
 
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.support.annotation.NonNull;
 import android.text.TextUtils;
 import android.text.format.DateUtils;
 import android.util.Pair;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.PackageUtils;
 import org.chromium.base.StrictModeContext;
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.task.AsyncTask;
 import org.chromium.base.task.PostTask;
 import org.chromium.chrome.browser.browserservices.permissiondelegation.TrustedWebActivityPermissionStore;
 import org.chromium.chrome.browser.browsing_data.UrlFilter;
 import org.chromium.chrome.browser.browsing_data.UrlFilterBridge;
-import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
+import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
+import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.webapk.lib.common.WebApkConstants;
 
@@ -194,10 +196,10 @@ public class WebappRegistry {
     }
 
     /**
-     * Returns true if a WebAPK is found whose scope matches the provided URL.
-     * @param url The URL to search a WebAPK for.
+     * Returns true if a WebAPK is found whose scope matches |origin|.
+     * @param origin The origin to search a WebAPK for.
      */
-    public boolean hasWebApkForUrl(String url) {
+    public boolean hasAtLeastOneWebApkForOrigin(String origin) {
         for (HashMap.Entry<String, WebappDataStorage> entry : mStorages.entrySet()) {
             WebappDataStorage storage = entry.getValue();
             if (!storage.getId().startsWith(WebApkConstants.WEBAPK_ID_PREFIX)) continue;
@@ -207,7 +209,7 @@ public class WebappRegistry {
             // Scope shouldn't be empty.
             assert (!scope.isEmpty());
 
-            if (url.startsWith(scope)) return true;
+            if (scope.startsWith(origin)) return true;
         }
         return false;
     }
@@ -298,8 +300,8 @@ public class WebappRegistry {
 
         // Do not delete WebappDataStorage if we still need it for UKM logging.
         Set<String> webApkPackagesWithPendingUkm =
-                ChromePreferenceManager.getInstance().readStringSet(
-                        ChromePreferenceManager.WEBAPK_UNINSTALLED_PACKAGES);
+                SharedPreferencesManager.getInstance().readStringSet(
+                        ChromePreferenceKeys.WEBAPK_UNINSTALLED_PACKAGES);
         if (webApkPackagesWithPendingUkm.contains(webApkPackageName)) return false;
 
         return !PackageUtils.isPackageInstalled(
@@ -388,6 +390,10 @@ public class WebappRegistry {
                 new ArrayList<Pair<String, WebappDataStorage>>();
         if (initAll) {
             for (String id : webapps) {
+                // See crbug.com/1055566 for details on bug which caused this scenario to occur.
+                if (id == null) {
+                    id = "";
+                }
                 if (!mStorages.containsKey(id)) {
                     initedStorages.add(Pair.create(id, WebappDataStorage.open(id)));
                 }

@@ -9,16 +9,17 @@ import multiprocessing
 from multiprocessing.dummy import Pool as ThreadPool
 
 
-def ApplyInParallel(function, work_list):
+TELEMETRY_TEST_PATH_FORMAT = 'telemetry'
+GTEST_TEST_PATH_FORMAT = 'gtest'
+
+
+def ApplyInParallel(function, work_list, on_failure=None):
   """Apply a function to all values in work_list in parallel.
 
   Args:
     function: A function with one argument.
     work_list: Any iterable with arguments for the function.
-
-  Returns:
-    A generator over results. The order of results might not match the
-    order of the arguments in the work_list.
+    on_failure: A function to run in case of a failure.
   """
   if not work_list:
     return
@@ -35,21 +36,44 @@ def ApplyInParallel(function, work_list):
 
   def function_with_try(arg):
     try:
-      return function(arg)
+      function(arg)
     except Exception:  # pylint: disable=broad-except
       # logging exception here is the only way to get a stack trace since
       # multiprocessing's pool implementation does not save that data. See
       # crbug.com/953365.
       logging.exception('Exception while running %s' % function.__name__)
-      raise
+      if on_failure:
+        on_failure(arg)
 
   try:
-    for result in pool.imap_unordered(function_with_try, work_list):
-      yield result
+    pool.imap_unordered(function_with_try, work_list)
     pool.close()
     pool.join()
   finally:
     pool.terminate()
+
+
+def SplitTestPath(test_result, test_path_format):
+  """ Split a test path into test suite name and test case name.
+
+  Telemetry and Gtest have slightly different test path formats.
+  Telemetry uses '{benchmark_name}/{story_name}', e.g.
+  'system_health.common_desktop/load:news:cnn:2018'.
+  Gtest uses '{test_suite_name}.{test_case_name}', e.g.
+  'ZeroToFiveSequence/LuciTestResultParameterizedTest.Variant'
+  """
+  if test_path_format == TELEMETRY_TEST_PATH_FORMAT:
+    separator = '/'
+  elif test_path_format == GTEST_TEST_PATH_FORMAT:
+    separator = '.'
+  else:
+    raise ValueError('Unknown test path format: %s' % test_path_format)
+
+  test_path = test_result['testPath']
+  if separator not in test_path:
+    raise ValueError('Invalid test path: %s' % test_path)
+
+  return test_path.split(separator, 1)
 
 
 def IsoTimestampToEpoch(timestamp):
@@ -59,3 +83,10 @@ def IsoTimestampToEpoch(timestamp):
   except ValueError:
     dt = datetime.datetime.strptime(timestamp, '%Y-%m-%dT%H:%M:%SZ')
   return calendar.timegm(dt.timetuple()) + dt.microsecond / 1e6
+
+
+def SetUnexpectedFailure(test_result):
+  """Update fields of a test result in a case of processing failure."""
+  test_result['status'] = 'FAIL'
+  test_result['expected'] = False
+  logging.error('Processing failed for test %s', test_result['testPath'])

@@ -10,7 +10,7 @@
 #include "base/logging.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/favicon_url.h"
+#include "third_party/blink/public/mojom/favicon/favicon_url.mojom.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/geometry/size.h"
 
@@ -58,35 +58,37 @@ void IconHelper::DownloadFaviconCallback(
 }
 
 void IconHelper::DidUpdateFaviconURL(
-    const std::vector<content::FaviconURL>& candidates) {
+    const std::vector<blink::mojom::FaviconURLPtr>& candidates) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  for (std::vector<content::FaviconURL>::const_iterator i = candidates.begin();
-       i != candidates.end(); ++i) {
-    if (!i->icon_url.is_valid())
+  for (const auto& candidate : candidates) {
+    if (!candidate->icon_url.is_valid())
       continue;
 
-    switch(i->icon_type) {
-      case content::FaviconURL::IconType::kFavicon:
-        if ((listener_ && !listener_->ShouldDownloadFavicon(i->icon_url)) ||
-            WasUnableToDownloadFavicon(i->icon_url)) {
+    switch (candidate->icon_type) {
+      case blink::mojom::FaviconIconType::kFavicon:
+        if ((listener_ &&
+             !listener_->ShouldDownloadFavicon(candidate->icon_url)) ||
+            WasUnableToDownloadFavicon(candidate->icon_url)) {
           break;
         }
-        web_contents()->DownloadImage(i->icon_url,
-            true,  // Is a favicon
-            0,  // No maximum size
+        web_contents()->DownloadImage(
+            candidate->icon_url,
+            true,   // Is a favicon
+            0,      // No preferred size
+            0,      // No maximum size
             false,  // Normal cache policy
-            base::Bind(
-                &IconHelper::DownloadFaviconCallback, base::Unretained(this)));
+            base::BindOnce(&IconHelper::DownloadFaviconCallback,
+                           base::Unretained(this)));
         break;
-      case content::FaviconURL::IconType::kTouchIcon:
+      case blink::mojom::FaviconIconType::kTouchIcon:
         if (listener_)
-          listener_->OnReceivedTouchIconUrl(i->icon_url.spec(), false);
+          listener_->OnReceivedTouchIconUrl(candidate->icon_url.spec(), false);
         break;
-      case content::FaviconURL::IconType::kTouchPrecomposedIcon:
+      case blink::mojom::FaviconIconType::kTouchPrecomposedIcon:
         if (listener_)
-          listener_->OnReceivedTouchIconUrl(i->icon_url.spec(), true);
+          listener_->OnReceivedTouchIconUrl(candidate->icon_url.spec(), true);
         break;
-      case content::FaviconURL::IconType::kInvalid:
+      case blink::mojom::FaviconIconType::kInvalid:
         // Silently ignore it. Only trigger a callback on valid icons.
         break;
       default:
@@ -104,12 +106,12 @@ void IconHelper::DidStartNavigationToPendingEntry(
 }
 
 void IconHelper::MarkUnableToDownloadFavicon(const GURL& icon_url) {
-  MissingFaviconURLHash url_hash = base::Hash(icon_url.spec());
+  MissingFaviconURLHash url_hash = base::FastHash(icon_url.spec());
   missing_favicon_urls_.insert(url_hash);
 }
 
 bool IconHelper::WasUnableToDownloadFavicon(const GURL& icon_url) const {
-  MissingFaviconURLHash url_hash = base::Hash(icon_url.spec());
+  MissingFaviconURLHash url_hash = base::FastHash(icon_url.spec());
   return missing_favicon_urls_.find(url_hash) != missing_favicon_urls_.end();
 }
 

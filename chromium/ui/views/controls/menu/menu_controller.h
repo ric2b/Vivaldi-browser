@@ -51,13 +51,13 @@ class ViewTracker;
 namespace internal {
 class MenuControllerDelegate;
 class MenuRunnerImpl;
-}
+}  // namespace internal
 
 namespace test {
 class MenuControllerTest;
 class MenuControllerTestApi;
 class MenuControllerUITest;
-}
+}  // namespace test
 
 // MenuController -------------------------------------------------------------
 
@@ -311,12 +311,7 @@ class VIEWS_EXPORT MenuController
   // Used by GetMenuPart to indicate the menu part at a particular location.
   struct MenuPart {
     // Type of part.
-    enum Type {
-      NONE,
-      MENU_ITEM,
-      SCROLL_UP,
-      SCROLL_DOWN
-    };
+    enum Type { NONE, MENU_ITEM, SCROLL_UP, SCROLL_DOWN };
 
     // Convenience for testing type == SCROLL_DOWN or type == SCROLL_UP.
     bool is_scroll() const { return type == SCROLL_DOWN || type == SCROLL_UP; }

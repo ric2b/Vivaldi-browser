@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// #import {TestBrowserProxy} from 'chrome://test/test_browser_proxy.m.js';
+
 cr.define('settings_search', function() {
   /**
    * A test version of SearchEnginesBrowserProxy. Provides helper methods
@@ -10,7 +12,7 @@ cr.define('settings_search', function() {
    *
    * @implements {settings.SearchEnginesBrowserProxy}
    */
-  class TestSearchEnginesBrowserProxy extends TestBrowserProxy {
+  /* #export */ class TestSearchEnginesBrowserProxy extends TestBrowserProxy {
     constructor() {
       super([
         'getSearchEnginesList',
@@ -78,7 +80,8 @@ cr.define('settings_search', function() {
    * @param {boolean} canBeRemoved
    * @return {!SearchEngine}
    */
-  function createSampleSearchEngine(canBeDefault, canBeEdited, canBeRemoved) {
+  /* #export */ function createSampleSearchEngine(
+      canBeDefault, canBeEdited, canBeRemoved) {
     return {
       canBeDefault: canBeDefault,
       canBeEdited: canBeEdited,
@@ -95,6 +98,7 @@ cr.define('settings_search', function() {
     };
   }
 
+  // #cr_define_end
   return {
     createSampleSearchEngine: createSampleSearchEngine,
     TestSearchEnginesBrowserProxy: TestSearchEnginesBrowserProxy,

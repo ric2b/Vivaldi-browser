@@ -24,10 +24,15 @@ class PersonalDataManagerAndroid : public PersonalDataManagerObserver {
  public:
   PersonalDataManagerAndroid(JNIEnv* env, jobject obj);
 
+  static base::android::ScopedJavaLocalRef<jobject>
+  CreateJavaCreditCardFromNative(JNIEnv* env, const CreditCard& card);
   static void PopulateNativeCreditCardFromJava(
       const base::android::JavaRef<jobject>& jcard,
       JNIEnv* env,
       CreditCard* card);
+  static base::android::ScopedJavaLocalRef<jobject> CreateJavaProfileFromNative(
+      JNIEnv* env,
+      const AutofillProfile& profile);
   static void PopulateNativeProfileFromJava(
       const base::android::JavaParamRef<jobject>& jprofile,
       JNIEnv* env,
@@ -325,6 +330,9 @@ class PersonalDataManagerAndroid : public PersonalDataManagerObserver {
   // Checks whether the Autofill PersonalDataManager has credit cards.
   jboolean HasCreditCards(JNIEnv* env);
 
+  // Checks whether FIDO authentication is available.
+  jboolean IsFidoAuthenticationAvailable(JNIEnv* env);
+
   // Gets the subkeys for the region with |jregion_code| code, if the
   // |jregion_code| rules have finished loading. Otherwise, sets up a task to
   // get the subkeys, when the rules are loaded.
@@ -339,8 +347,6 @@ class PersonalDataManagerAndroid : public PersonalDataManagerObserver {
   void CancelPendingGetSubKeys(JNIEnv* env);
 
   void SetSyncServiceForTesting(JNIEnv* env);
-
-  static const char* GetPrefNameExposedToJava(int pref_index);
 
  private:
   ~PersonalDataManagerAndroid() override;

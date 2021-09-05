@@ -13,6 +13,8 @@
 #include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_usb_device_filter.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_usb_device_request_options.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/frame/frame.h"
@@ -20,8 +22,7 @@
 #include "third_party/blink/renderer/modules/event_target_modules.h"
 #include "third_party/blink/renderer/modules/webusb/usb_connection_event.h"
 #include "third_party/blink/renderer/modules/webusb/usb_device.h"
-#include "third_party/blink/renderer/modules/webusb/usb_device_filter.h"
-#include "third_party/blink/renderer/modules/webusb/usb_device_request_options.h"
+#include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/mojo/mojo_helper.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
@@ -91,7 +92,8 @@ UsbDeviceFilterPtr ConvertDeviceFilter(const USBDeviceFilter* filter,
 
 }  // namespace
 
-USB::USB(ExecutionContext& context) : ContextLifecycleObserver(&context) {}
+USB::USB(ExecutionContext& context)
+    : ExecutionContextLifecycleObserver(&context) {}
 
 USB::~USB() {
   // |service_| may still be valid but there should be no more outstanding
@@ -106,29 +108,19 @@ void USB::Dispose() {
   client_receiver_.reset();
 }
 
-ScriptPromise USB::getDevices(ScriptState* script_state) {
+ScriptPromise USB::getDevices(ScriptState* script_state,
+                              ExceptionState& exception_state) {
   if (!IsContextSupported()) {
-    return ScriptPromise::RejectWithDOMException(
-        script_state, MakeGarbageCollected<DOMException>(
-                          DOMExceptionCode::kNotSupportedError));
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kNotSupportedError,
+        "The implementation did not support the requested type of object or "
+        "operation.");
+    return ScriptPromise();
   }
 
-  FeatureEnabledState state = GetFeatureEnabledState();
-  if (state != FeatureEnabledState::kEnabled) {
-    ExecutionContext* execution_context = ExecutionContext::From(script_state);
-    if (auto* document = DynamicTo<Document>(execution_context)) {
-      document->ReportFeaturePolicyViolation(
-          mojom::FeaturePolicyFeature::kUsb,
-          (state == FeatureEnabledState::kReportOnly
-               ? mojom::FeaturePolicyDisposition::kReport
-               : mojom::FeaturePolicyDisposition::kEnforce));
-    }
-  }
-  if (state == FeatureEnabledState::kDisabled) {
-    return ScriptPromise::RejectWithDOMException(
-        script_state,
-        MakeGarbageCollected<DOMException>(DOMExceptionCode::kSecurityError,
-                                           kFeaturePolicyBlocked));
+  if (!IsFeatureEnabled(ReportOptions::kReportOnFailure)) {
+    exception_state.ThrowSecurityError(kFeaturePolicyBlocked);
+    return ScriptPromise();
   }
 
   EnsureServiceConnection();
@@ -140,30 +132,28 @@ ScriptPromise USB::getDevices(ScriptState* script_state) {
 }
 
 ScriptPromise USB::requestDevice(ScriptState* script_state,
-                                 const USBDeviceRequestOptions* options) {
+                                 const USBDeviceRequestOptions* options,
+                                 ExceptionState& exception_state) {
   LocalFrame* frame = GetFrame();
   if (!frame || !frame->GetDocument()) {
-    return ScriptPromise::RejectWithDOMException(
-        script_state, MakeGarbageCollected<DOMException>(
-                          DOMExceptionCode::kNotSupportedError));
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kNotSupportedError,
+        "The implementation did not support the requested type of object or "
+        "operation.");
+    return ScriptPromise();
   }
 
-  if (!frame->GetDocument()->IsFeatureEnabled(
-          mojom::FeaturePolicyFeature::kUsb, ReportOptions::kReportOnFailure)) {
-    return ScriptPromise::RejectWithDOMException(
-        script_state,
-        MakeGarbageCollected<DOMException>(DOMExceptionCode::kSecurityError,
-                                           kFeaturePolicyBlocked));
+  if (!IsFeatureEnabled(ReportOptions::kReportOnFailure)) {
+    exception_state.ThrowSecurityError(kFeaturePolicyBlocked);
+    return ScriptPromise();
   }
 
   EnsureServiceConnection();
 
   if (!LocalFrame::HasTransientUserActivation(frame)) {
-    return ScriptPromise::RejectWithDOMException(
-        script_state,
-        MakeGarbageCollected<DOMException>(
-            DOMExceptionCode::kSecurityError,
-            "Must be handling a user gesture to show a permission request."));
+    exception_state.ThrowSecurityError(
+        "Must be handling a user gesture to show a permission request.");
+    return ScriptPromise();
   }
 
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
@@ -189,14 +179,14 @@ ScriptPromise USB::requestDevice(ScriptState* script_state,
 }
 
 ExecutionContext* USB::GetExecutionContext() const {
-  return ContextLifecycleObserver::GetExecutionContext();
+  return ExecutionContextLifecycleObserver::GetExecutionContext();
 }
 
 const AtomicString& USB::InterfaceName() const {
   return event_target_names::kUSB;
 }
 
-void USB::ContextDestroyed(ExecutionContext*) {
+void USB::ContextDestroyed() {
   service_.reset();
   get_devices_requests_.clear();
   get_permission_requests_.clear();
@@ -208,8 +198,8 @@ USBDevice* USB::GetOrCreateDevice(UsbDeviceInfoPtr device_info) {
     String guid = device_info->guid;
     mojo::PendingRemote<UsbDevice> pipe;
     service_->GetDevice(guid, pipe.InitWithNewPipeAndPassReceiver());
-    device = USBDevice::Create(std::move(device_info), std::move(pipe),
-                               GetExecutionContext());
+    device = MakeGarbageCollected<USBDevice>(
+        std::move(device_info), std::move(pipe), GetExecutionContext());
     device_cache_.insert(guid, device);
   }
   return device;
@@ -253,8 +243,8 @@ void USB::OnDeviceRemoved(UsbDeviceInfoPtr device_info) {
   String guid = device_info->guid;
   USBDevice* device = device_cache_.at(guid);
   if (!device) {
-    device = USBDevice::Create(std::move(device_info), mojo::NullRemote(),
-                               GetExecutionContext());
+    device = MakeGarbageCollected<USBDevice>(
+        std::move(device_info), mojo::NullRemote(), GetExecutionContext());
   }
   DispatchEvent(
       *USBConnectionEvent::Create(event_type_names::kDisconnect, device));
@@ -283,8 +273,7 @@ void USB::AddedEventListener(const AtomicString& event_type,
     return;
   }
 
-  if (!IsContextSupported() ||
-      GetFeatureEnabledState() == FeatureEnabledState::kDisabled)
+  if (!IsContextSupported() || !IsFeatureEnabled(ReportOptions::kDoNotReport))
     return;
 
   EnsureServiceConnection();
@@ -295,7 +284,7 @@ void USB::EnsureServiceConnection() {
     return;
 
   DCHECK(IsContextSupported());
-  DCHECK(GetFeatureEnabledState() != FeatureEnabledState::kDisabled);
+  DCHECK(IsFeatureEnabled(ReportOptions::kDoNotReport));
   // See https://bit.ly/2S0zRAS for task types.
   auto task_runner =
       GetExecutionContext()->GetTaskRunner(TaskType::kMiscPlatformAPI);
@@ -326,17 +315,17 @@ bool USB::IsContextSupported() const {
   return true;
 }
 
-FeatureEnabledState USB::GetFeatureEnabledState() const {
-  return GetExecutionContext()->GetSecurityContext().GetFeatureEnabledState(
-      mojom::FeaturePolicyFeature::kUsb);
+bool USB::IsFeatureEnabled(ReportOptions report_options) const {
+  return GetExecutionContext()->IsFeatureEnabled(
+      mojom::blink::FeaturePolicyFeature::kUsb, report_options);
 }
 
-void USB::Trace(blink::Visitor* visitor) {
+void USB::Trace(Visitor* visitor) {
   visitor->Trace(get_devices_requests_);
   visitor->Trace(get_permission_requests_);
   visitor->Trace(device_cache_);
   EventTargetWithInlineData::Trace(visitor);
-  ContextLifecycleObserver::Trace(visitor);
+  ExecutionContextLifecycleObserver::Trace(visitor);
 }
 
 }  // namespace blink

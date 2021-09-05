@@ -20,16 +20,15 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/singleton.h"
 #include "base/observer_list_threadsafe.h"
+#include "base/timer/timer.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "content/browser/gpu/gpu_data_manager_impl.h"
+#include "ui/display/display_observer.h"
+#include "ui/gl/gpu_preference.h"
 
 namespace base {
 class CommandLine;
-}
-
-namespace gpu {
-struct GpuPreferences;
 }
 
 namespace content {
@@ -65,9 +64,14 @@ class CONTENT_EXPORT GpuDataManagerImplPrivate {
   void UpdateDxDiagNode(const gpu::DxDiagNode& dx_diagnostics);
   void UpdateDx12VulkanInfo(
       const gpu::Dx12VulkanVersionInfo& dx12_vulkan_version_info);
+  void UpdateDevicePerfInfo(const gpu::DevicePerfInfo& device_perf_info);
+
+  void UpdateOverlayInfo(const gpu::OverlayInfo& overlay_info);
   void UpdateDx12VulkanRequestStatus(bool request_continues);
   void UpdateDxDiagNodeRequestStatus(bool request_continues);
   bool Dx12VulkanRequested() const;
+  void OnBrowserThreadsStarted();
+  void TerminateInfoCollectionGpuProcess();
 #endif
   void UpdateGpuFeatureInfo(const gpu::GpuFeatureInfo& gpu_feature_info,
                             const base::Optional<gpu::GpuFeatureInfo>&
@@ -120,6 +124,9 @@ class CONTENT_EXPORT GpuDataManagerImplPrivate {
 
   void SetApplicationVisible(bool is_visible);
 
+  void OnDisplayAdded(const display::Display& new_display);
+  void OnDisplayRemoved(const display::Display& old_display);
+
  private:
   friend class GpuDataManagerImplPrivateTest;
 
@@ -163,6 +170,10 @@ class CONTENT_EXPORT GpuDataManagerImplPrivate {
           message(_message) { }
   };
 
+  // Decide the order of GPU process states, and go to the first one. This
+  // should only be called once, during initialization.
+  void InitializeGpuModes();
+
   // Called when GPU access (hardware acceleration and swiftshader) becomes
   // blocked.
   void OnGpuBlocked();
@@ -185,10 +196,13 @@ class CONTENT_EXPORT GpuDataManagerImplPrivate {
   void RequestDxDiagNodeData();
   void RequestGpuSupportedRuntimeVersion(bool delayed);
 
+  void RecordCompositingMode();
+
   GpuDataManagerImpl* const owner_;
 
   gpu::GpuFeatureInfo gpu_feature_info_;
   gpu::GPUInfo gpu_info_;
+  gl::GpuPreference active_gpu_heuristic_ = gl::GpuPreference::kDefault;
 #if defined(OS_WIN)
   bool gpu_info_dx_diag_requested_ = false;
   bool gpu_info_dx_diag_request_failed_ = false;
@@ -206,14 +220,21 @@ class CONTENT_EXPORT GpuDataManagerImplPrivate {
 
   const scoped_refptr<GpuDataManagerObserverList> observer_list_;
 
+  // Periodically calls RecordCompositingMode() for compositing mode UMA.
+  base::RepeatingTimer compositing_mode_timer_;
+
   // Contains the 1000 most recent log messages.
   std::vector<LogMessage> log_messages_;
 
   // What the gpu process is being run for.
-  gpu::GpuMode gpu_mode_ = gpu::GpuMode::HARDWARE_ACCELERATED;
+  gpu::GpuMode gpu_mode_ = gpu::GpuMode::UNKNOWN;
 
-  // Used to tell if the gpu was disabled due to process crashes.
-  bool hardware_disabled_by_fallback_ = false;
+  // Order of gpu process fallback states, used as a stack.
+  std::vector<gpu::GpuMode> fallback_modes_;
+
+  // Used to tell if the gpu was disabled by an explicit call to
+  // DisableHardwareAcceleration(), rather than by fallback.
+  bool hardware_disabled_explicitly_ = false;
 
   // We disable histogram stuff in testing, especially in unit tests because
   // they cause random failures.

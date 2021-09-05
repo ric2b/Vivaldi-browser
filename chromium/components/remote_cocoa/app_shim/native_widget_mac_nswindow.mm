@@ -5,7 +5,6 @@
 #import "components/remote_cocoa/app_shim/native_widget_mac_nswindow.h"
 
 #include "base/mac/foundation_util.h"
-#import "base/mac/sdk_forward_declarations.h"
 #import "components/remote_cocoa/app_shim/native_widget_ns_window_bridge.h"
 #include "components/remote_cocoa/app_shim/native_widget_ns_window_host_helper.h"
 #import "components/remote_cocoa/app_shim/views_nswindow_delegate.h"
@@ -66,6 +65,11 @@
 - (BOOL)usesCustomDrawing {
   return NO;
 }
+// The base implementation just tests [self class] == [NSThemeFrame class].
+- (BOOL)_shouldFlipTrafficLightsForRTL API_AVAILABLE(macos(10.12)) {
+  return [[self window] windowTitlebarLayoutDirection] ==
+         NSUserInterfaceLayoutDirectionRightToLeft;
+}
 @end
 
 @implementation NativeWidgetMacNSWindowBorderlessFrame
@@ -80,15 +84,15 @@
 
 @implementation NativeWidgetMacNSWindow {
  @private
-  base::scoped_nsobject<CommandDispatcher> commandDispatcher_;
-  base::scoped_nsprotocol<id<UserInterfaceItemCommandHandler>> commandHandler_;
-  id<WindowTouchBarDelegate> touchBarDelegate_;  // Weak.
-  uint64_t bridgedNativeWidgetId_;
-  remote_cocoa::NativeWidgetNSWindowBridge* bridge_;
-  BOOL willUpdateRestorableState_;
+  base::scoped_nsobject<CommandDispatcher> _commandDispatcher;
+  base::scoped_nsprotocol<id<UserInterfaceItemCommandHandler>> _commandHandler;
+  id<WindowTouchBarDelegate> _touchBarDelegate;  // Weak.
+  uint64_t _bridgedNativeWidgetId;
+  remote_cocoa::NativeWidgetNSWindowBridge* _bridge;
+  BOOL _willUpdateRestorableState;
 }
-@synthesize bridgedNativeWidgetId = bridgedNativeWidgetId_;
-@synthesize bridge = bridge_;
+@synthesize bridgedNativeWidgetId = _bridgedNativeWidgetId;
+@synthesize bridge = _bridge;
 
 - (instancetype)initWithContentRect:(NSRect)contentRect
                           styleMask:(NSUInteger)windowStyle
@@ -99,7 +103,7 @@
                                styleMask:windowStyle
                                  backing:bufferingType
                                    defer:deferCreation])) {
-    commandDispatcher_.reset([[CommandDispatcher alloc] initWithOwner:self]);
+    _commandDispatcher.reset([[CommandDispatcher alloc] initWithOwner:self]);
   }
   return self;
 }
@@ -108,7 +112,7 @@
 // inserting a symbol on NativeWidgetMacNSWindow and should be kept even if it
 // does nothing.
 - (void)dealloc {
-  willUpdateRestorableState_ = YES;
+  _willUpdateRestorableState = YES;
   [NSObject cancelPreviousPerformRequestsWithTarget:self];
   [super dealloc];
 }
@@ -116,7 +120,7 @@
 // Public methods.
 
 - (void)setCommandDispatcherDelegate:(id<CommandDispatcherDelegate>)delegate {
-  [commandDispatcher_ setDelegate:delegate];
+  [_commandDispatcher setDelegate:delegate];
 }
 
 - (void)sheetDidEnd:(NSWindow*)sheet
@@ -131,7 +135,7 @@
 }
 
 - (void)setWindowTouchBarDelegate:(id<WindowTouchBarDelegate>)delegate {
-  touchBarDelegate_ = delegate;
+  _touchBarDelegate = delegate;
 }
 
 // Private methods.
@@ -142,14 +146,14 @@
 
 - (BOOL)hasViewsMenuActive {
   bool hasMenuController = false;
-  if (bridge_)
-    bridge_->host()->GetHasMenuController(&hasMenuController);
+  if (_bridge)
+    _bridge->host()->GetHasMenuController(&hasMenuController);
   return hasMenuController;
 }
 
 - (id<NSAccessibility>)rootAccessibilityObject {
   id<NSAccessibility> obj =
-      bridge_ ? bridge_->host_helper()->GetNativeViewAccessible() : nil;
+      _bridge ? _bridge->host_helper()->GetNativeViewAccessible() : nil;
   // We should like to DCHECK that the object returned implemements the
   // NSAccessibility protocol, but the NSAccessibilityRemoteUIElement interface
   // does not conform.
@@ -172,8 +176,8 @@
 
 - (BOOL)_isTitleHidden {
   bool shouldShowWindowTitle = YES;
-  if (bridge_)
-    bridge_->host()->GetShouldShowWindowTitle(&shouldShowWindowTitle);
+  if (_bridge)
+    _bridge->host()->GetShouldShowWindowTitle(&shouldShowWindowTitle);
   return !shouldShowWindowTitle;
 }
 
@@ -190,22 +194,22 @@
 // down, so check for a delegate.
 - (BOOL)canBecomeKeyWindow {
   bool canBecomeKey = NO;
-  if (bridge_)
-    bridge_->host()->GetCanWindowBecomeKey(&canBecomeKey);
+  if (_bridge)
+    _bridge->host()->GetCanWindowBecomeKey(&canBecomeKey);
   return canBecomeKey;
 }
 
 - (BOOL)canBecomeMainWindow {
-  if (!bridge_)
+  if (!_bridge)
     return NO;
 
   // Dialogs and bubbles shouldn't take large shadows away from their parent.
-  if (bridge_->parent())
+  if (_bridge->parent())
     return NO;
 
   bool canBecomeKey = NO;
-  if (bridge_)
-    bridge_->host()->GetCanWindowBecomeKey(&canBecomeKey);
+  if (_bridge)
+    _bridge->host()->GetCanWindowBecomeKey(&canBecomeKey);
   return canBecomeKey;
 }
 
@@ -217,9 +221,9 @@
   // https://crbug.com/941506.
   if (![NSThread isMainThread])
     return [super hasKeyAppearance];
-  if (bridge_) {
+  if (_bridge) {
     bool isAlwaysRenderWindowAsKey = NO;
-    bridge_->host()->GetAlwaysRenderWindowAsKey(&isAlwaysRenderWindowAsKey);
+    _bridge->host()->GetAlwaysRenderWindowAsKey(&isAlwaysRenderWindowAsKey);
     if (isAlwaysRenderWindowAsKey)
       return YES;
   }
@@ -231,7 +235,7 @@
 // allowing any native subview to retain firstResponder status.
 - (void)sendEvent:(NSEvent*)event {
   // Let CommandDispatcher check if this is a redispatched event.
-  if ([commandDispatcher_ preSendEvent:event])
+  if ([_commandDispatcher preSendEvent:event])
     return;
 
   NSEventType type = [event type];
@@ -278,7 +282,7 @@
 // NSResponder implementation.
 
 - (BOOL)performKeyEquivalent:(NSEvent*)event {
-  return [commandDispatcher_ performKeyEquivalent:event];
+  return [_commandDispatcher performKeyEquivalent:event];
 }
 
 - (void)cursorUpdate:(NSEvent*)theEvent {
@@ -302,7 +306,7 @@
 }
 
 - (NSTouchBar*)makeTouchBar API_AVAILABLE(macos(10.12.2)) {
-  return touchBarDelegate_ ? [touchBarDelegate_ makeTouchBar] : nil;
+  return _touchBarDelegate ? [_touchBarDelegate makeTouchBar] : nil;
 }
 
 // Called when the window is the delegate of the archiver passed to
@@ -319,7 +323,7 @@
 }
 
 - (void)saveRestorableState {
-  if (!bridge_)
+  if (!_bridge)
     return;
   if (![self _isConsideredOpenForPersistentState])
     return;
@@ -332,9 +336,9 @@
   [encoder finishEncoding];
 
   auto* bytes = static_cast<uint8_t const*>(restorableStateData.get().bytes);
-  bridge_->host()->OnWindowStateRestorationDataChanged(
+  _bridge->host()->OnWindowStateRestorationDataChanged(
       std::vector<uint8_t>(bytes, bytes + restorableStateData.get().length));
-  willUpdateRestorableState_ = NO;
+  _willUpdateRestorableState = NO;
 }
 
 // AppKit calls -invalidateRestorableState when a property of the window which
@@ -342,15 +346,15 @@
 - (void)invalidateRestorableState {
   [super invalidateRestorableState];
   if ([self _isConsideredOpenForPersistentState]) {
-    if (willUpdateRestorableState_)
+    if (_willUpdateRestorableState)
       return;
-    willUpdateRestorableState_ = YES;
+    _willUpdateRestorableState = YES;
     [self performSelectorOnMainThread:@selector(saveRestorableState)
                            withObject:nil
                         waitUntilDone:NO
                                 modes:@[ NSDefaultRunLoopMode ]];
-  } else if (willUpdateRestorableState_) {
-    willUpdateRestorableState_ = NO;
+  } else if (_willUpdateRestorableState) {
+    _willUpdateRestorableState = NO;
     [NSObject cancelPreviousPerformRequestsWithTarget:self];
   }
 }
@@ -365,11 +369,11 @@
 // CommandDispatchingWindow implementation.
 
 - (void)setCommandHandler:(id<UserInterfaceItemCommandHandler>)commandHandler {
-  commandHandler_.reset([commandHandler retain]);
+  _commandHandler.reset([commandHandler retain]);
 }
 
 - (CommandDispatcher*)commandDispatcher {
-  return commandDispatcher_.get();
+  return _commandDispatcher.get();
 }
 
 - (BOOL)defaultPerformKeyEquivalent:(NSEvent*)event {
@@ -382,19 +386,19 @@
 }
 
 - (void)commandDispatch:(id)sender {
-  [commandDispatcher_ dispatch:sender forHandler:commandHandler_];
+  [_commandDispatcher dispatch:sender forHandler:_commandHandler];
 }
 
 - (void)commandDispatchUsingKeyModifiers:(id)sender {
-  [commandDispatcher_ dispatchUsingKeyModifiers:sender
-                                     forHandler:commandHandler_];
+  [_commandDispatcher dispatchUsingKeyModifiers:sender
+                                     forHandler:_commandHandler];
 }
 
 // NSWindow overrides (NSUserInterfaceItemValidations implementation)
 
 - (BOOL)validateUserInterfaceItem:(id<NSValidatedUserInterfaceItem>)item {
-  return [commandDispatcher_ validateUserInterfaceItem:item
-                                            forHandler:commandHandler_];
+  return [_commandDispatcher validateUserInterfaceItem:item
+                                            forHandler:_commandHandler];
 }
 
 // NSWindow overrides (NSAccessibility informal protocol implementation).
@@ -414,10 +418,10 @@
   // properties on the NSWindow and repeats them when focusing an item in the
   // RootView's a11y group. See http://crbug.com/748221.
   id superFocus = [super accessibilityFocusedUIElement];
-  if (!bridge_ || superFocus != self)
+  if (!_bridge || superFocus != self)
     return superFocus;
 
-  return bridge_->host_helper()->GetNativeViewAccessible();
+  return _bridge->host_helper()->GetNativeViewAccessible();
 }
 
 - (NSString*)accessibilityTitle {

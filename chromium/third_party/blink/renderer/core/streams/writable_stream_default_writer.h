@@ -19,7 +19,7 @@ class ScriptValue;
 class StreamPromiseResolver;
 class Visitor;
 class WritableStream;
-class WritableStreamNative;
+class WritableStream;
 
 // https://streams.spec.whatwg.org/#default-writer-class
 class CORE_EXPORT WritableStreamDefaultWriter final : public ScriptWrappable {
@@ -33,7 +33,7 @@ class CORE_EXPORT WritableStreamDefaultWriter final : public ScriptWrappable {
 
   // https://streams.spec.whatwg.org/#default-writer-constructor
   WritableStreamDefaultWriter(ScriptState*,
-                              WritableStreamNative* stream,
+                              WritableStream* stream,
                               ExceptionState&);
   ~WritableStreamDefaultWriter() override;
 
@@ -51,21 +51,21 @@ class CORE_EXPORT WritableStreamDefaultWriter final : public ScriptWrappable {
   // Methods
 
   // https://streams.spec.whatwg.org/#default-writer-abort
-  ScriptPromise abort(ScriptState*);
-  ScriptPromise abort(ScriptState*, ScriptValue reason);
+  ScriptPromise abort(ScriptState*, ExceptionState&);
+  ScriptPromise abort(ScriptState*, ScriptValue reason, ExceptionState&);
 
   // https://streams.spec.whatwg.org/#default-writer-close
-  ScriptPromise close(ScriptState*);
+  ScriptPromise close(ScriptState*, ExceptionState&);
 
   // https://streams.spec.whatwg.org/#default-writer-release-lock
   void releaseLock(ScriptState*);
 
   // https://streams.spec.whatwg.org/#default-writer-write
-  ScriptPromise write(ScriptState*);
-  ScriptPromise write(ScriptState*, ScriptValue chunk);
+  ScriptPromise write(ScriptState*, ExceptionState&);
+  ScriptPromise write(ScriptState*, ScriptValue chunk, ExceptionState&);
 
   //
-  // Methods used by WritableStreamNative
+  // Methods used by WritableStream
   //
 
   // https://streams.spec.whatwg.org/#writable-stream-default-writer-ensure-ready-promise-rejected
@@ -74,7 +74,7 @@ class CORE_EXPORT WritableStreamDefaultWriter final : public ScriptWrappable {
                                          v8::Local<v8::Value> error);
 
   //
-  // Methods used by ReadableStreamNative
+  // Methods used by ReadableStream
   //
 
   // https://streams.spec.whatwg.org/#writable-stream-default-writer-close-with-error-propagation
@@ -91,13 +91,13 @@ class CORE_EXPORT WritableStreamDefaultWriter final : public ScriptWrappable {
                                       v8::Local<v8::Value> chunk);
 
   //
-  // Accessors used by ReadableStreamNative and WritableStreamNative. These do
+  // Accessors used by ReadableStream and WritableStream. These do
   // not appear in the standard.
   //
 
   StreamPromiseResolver* ClosedPromise() { return closed_promise_; }
   StreamPromiseResolver* ReadyPromise() { return ready_promise_; }
-  WritableStreamNative* OwnerWritableStream() { return owner_writable_stream_; }
+  WritableStream* OwnerWritableStream() { return owner_writable_stream_; }
 
   // This is a variant of GetDesiredSize() that doesn't create an intermediate
   // JavaScript object. Instead it returns base::nullopt where the JavaScript
@@ -132,7 +132,7 @@ class CORE_EXPORT WritableStreamDefaultWriter final : public ScriptWrappable {
   // names come from the slots [[closedPromise]] and [[readyPromise]] in the
   // standard.
   Member<StreamPromiseResolver> closed_promise_;
-  Member<WritableStreamNative> owner_writable_stream_;
+  Member<WritableStream> owner_writable_stream_;
   Member<StreamPromiseResolver> ready_promise_;
 };
 

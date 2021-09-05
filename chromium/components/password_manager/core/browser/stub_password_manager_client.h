@@ -12,6 +12,7 @@
 #include "components/password_manager/core/browser/password_manager_client.h"
 #include "components/password_manager/core/browser/password_manager_metrics_recorder.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
+#include "components/password_manager/core/browser/password_reuse_detector.h"
 #include "components/password_manager/core/browser/stub_credentials_filter.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
@@ -59,8 +60,8 @@ class StubPasswordManagerClient : public PasswordManagerClient {
   const GURL& GetLastCommittedEntryURL() const override;
   const CredentialsFilter* GetStoreResultFilter() const override;
   const autofill::LogManager* GetLogManager() const override;
-  const PasswordFeatureManager* GetPasswordFeatureManager() const override;
-  const MockPasswordFeatureManager* GetMockPasswordFeatureManager() const;
+  const MockPasswordFeatureManager* GetPasswordFeatureManager() const override;
+  MockPasswordFeatureManager* GetPasswordFeatureManager();
 
 #if defined(ON_FOCUS_PING_ENABLED) || \
     defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
@@ -77,7 +78,7 @@ class StubPasswordManagerClient : public PasswordManagerClient {
   void CheckProtectedPasswordEntry(
       metrics_util::PasswordType reused_password_type,
       const std::string& username,
-      const std::vector<std::string>& matching_domains,
+      const std::vector<MatchingReusedCredential>& matching_reused_credentials,
       bool password_field_exists) override;
 #endif
 
@@ -91,6 +92,7 @@ class StubPasswordManagerClient : public PasswordManagerClient {
   scoped_refptr<network::SharedURLLoaderFactory> GetURLLoaderFactory() override;
   bool IsIsolationForPasswordSitesEnabled() const override;
   bool IsNewTabPage() const override;
+  FieldInfoManager* GetFieldInfoManager() const override;
 
  private:
   const StubCredentialsFilter credentials_filter_;

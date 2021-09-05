@@ -18,6 +18,7 @@
 #include "chrome/browser/chromeos/first_run/steps/app_list_step.h"
 #include "chrome/browser/chromeos/first_run/steps/tray_step.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/ash/ash_util.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "components/user_manager/user_manager.h"
@@ -46,7 +47,7 @@ std::unique_ptr<views::Widget> CreateFirstRunWidget() {
   params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   params.bounds = display::Screen::GetScreen()->GetPrimaryDisplay().bounds();
   params.show_state = ui::SHOW_STATE_FULLSCREEN;
-  params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
+  params.opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;
   ash_util::SetupWidgetInitParamsForContainer(
       &params, ash::kShellWindowId_OverlayContainer);
   widget->Init(std::move(params));
@@ -207,7 +208,8 @@ void FirstRunController::ShowNextStep() {
     RecordCompletion(first_run::TUTORIAL_COMPLETED_WITH_GOT_IT);
     return;
   }
-  GetCurrentStep()->Show();
+  if (!GetCurrentStep()->Show())
+    ShowNextStep();
 }
 
 void FirstRunController::AdvanceStep() {

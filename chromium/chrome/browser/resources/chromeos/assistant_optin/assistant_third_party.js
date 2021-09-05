@@ -13,7 +13,7 @@
 Polymer({
   is: 'assistant-third-party',
 
-  behaviors: [OobeDialogHostBehavior],
+  behaviors: [OobeI18nBehavior, OobeDialogHostBehavior],
 
   properties: {
     /**
@@ -58,7 +58,7 @@ Polymer({
    *
    * @private
    */
-  onNextTap_: function() {
+  onNextTap_() {
     if (this.buttonsDisabled) {
       return;
     }
@@ -72,37 +72,43 @@ Polymer({
    * Click event handler for information links.
    * @param {MouseEvent} e click event.
    */
-  urlClickHandler: function(e) {
+  urlClickHandler(e) {
     if (e.target.localName !== 'a') {
       return;
     }
     e.preventDefault();
-    this.showThirdPartyOverlay(e.target.href);
+    this.lastFocusedElement = e.target;
+    this.showThirdPartyOverlay(e.target.href, e.target.innerText);
   },
 
   /**
    * Shows third party information links in overlay dialog.
    * @param {string} url URL to show.
+   * @param {string} title Title of the dialog.
    */
-  showThirdPartyOverlay: function(url) {
+  showThirdPartyOverlay(url, title) {
     this.$['webview-container'].classList.add('overlay-loading');
     this.$['overlay-webview'].src = url;
-
-    var overlay = this.$['third-party-overlay'];
-    overlay.hidden = false;
+    this.$['third-party-overlay'].setTitleAriaLabel(title);
+    this.$['third-party-overlay'].showModal();
+    this.$['overlay-close-button'].focus();
   },
 
   /**
    * Hides overlay dialog.
    */
-  hideOverlay: function() {
-    this.$['third-party-overlay'].hidden = true;
+  hideOverlay() {
+    this.$['third-party-overlay'].close();
+    if (this.lastFocusedElement) {
+      this.lastFocusedElement.focus();
+      this.lastFocusedElement = null;
+    }
   },
 
   /**
    * Reloads the page.
    */
-  reloadPage: function() {
+  reloadPage() {
     this.fire('loading');
     this.buttonsDisabled = true;
   },
@@ -110,7 +116,7 @@ Polymer({
   /**
    * Reload the page with the given consent string text data.
    */
-  reloadContent: function(data) {
+  reloadContent(data) {
     this.$['third-party-dialog'].setAttribute(
         'aria-label', data['thirdPartyTitle']);
     this.$['title-text'].textContent = data['thirdPartyTitle'];
@@ -129,7 +135,7 @@ Polymer({
   /**
    * Add a setting zippy with the provided data.
    */
-  addSettingZippy: function(zippy_data) {
+  addSettingZippy(zippy_data) {
     if (this.settingZippyLoaded_) {
       if (this.consentStringLoaded_) {
         this.onPageLoaded();
@@ -143,21 +149,22 @@ Polymer({
       zippy.setAttribute(
           'icon-src',
           'data:text/html;charset=utf-8,' +
-              encodeURIComponent(zippy.getWrappedIcon(data['iconUri'])));
+              encodeURIComponent(
+                  zippy.getWrappedIcon(data['iconUri'], data['title'])));
       zippy.setAttribute('expand-style', true);
 
       var title = document.createElement('div');
-      title.className = 'zippy-title';
+      title.slot = 'title';
       title.innerHTML = this.sanitizer_.sanitizeHtml(data['title']);
       zippy.appendChild(title);
 
       var description = document.createElement('div');
-      description.className = 'zippy-description';
+      description.slot = 'content';
       description.innerHTML = this.sanitizer_.sanitizeHtml(data['description']);
       zippy.appendChild(description);
 
       var additional = document.createElement('div');
-      additional.className = 'zippy-additional';
+      additional.slot = 'additional';
       additional.innerHTML =
           this.sanitizer_.sanitizeHtml(data['additionalInfo']);
       zippy.appendChild(additional);
@@ -176,7 +183,7 @@ Polymer({
   /**
    * Handles event when all the page content has been loaded.
    */
-  onPageLoaded: function() {
+  onPageLoaded() {
     this.fire('loaded');
     this.buttonsDisabled = false;
     this.$['next-button'].focus();
@@ -190,7 +197,7 @@ Polymer({
   /**
    * Signal from host to show the screen.
    */
-  onShow: function() {
+  onShow() {
     this.$['overlay-close-button'].addEventListener(
         'click', this.hideOverlay.bind(this));
     var webviewContainer = this.$['webview-container'];

@@ -77,7 +77,11 @@ class PlatformMediaPipelineIntegrationTest
       public PipelineIntegrationTestBase {
  public:
    void SetUp() override {
-     vivaldi::RegisterVivaldiPaths();
+     static bool registered = false;
+     if (!registered) {
+       vivaldi::RegisterVivaldiPaths();
+       registered = true;
+     }
    }
    static bool IsEnabled() {
 #if defined(OS_MACOSX)

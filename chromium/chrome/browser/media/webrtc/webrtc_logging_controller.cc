@@ -26,7 +26,7 @@
 
 #if defined(OS_LINUX) || defined(OS_CHROMEOS)
 #include "content/public/browser/child_process_security_policy.h"
-#include "storage/browser/fileapi/isolated_context.h"
+#include "storage/browser/file_system/isolated_context.h"
 #endif  // defined(OS_LINUX) || defined(OS_CHROMEOS)
 
 using webrtc_event_logging::WebRtcEventLogManager;
@@ -180,8 +180,11 @@ void WebRtcLoggingController::StoreLog(const std::string& log_id,
   }
 
   if (rtp_dump_handler_) {
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::BindOnce(stop_rtp_dump_callback_, true, true));
+    if (stop_rtp_dump_callback_) {
+      base::SequencedTaskRunnerHandle::Get()->PostTask(
+          FROM_HERE,
+          base::BindOnce(std::move(stop_rtp_dump_callback_), true, true));
+    }
 
     rtp_dump_handler_->StopOngoingDumps(base::Bind(
         &WebRtcLoggingController::StoreLogContinue, this, log_id, callback));
@@ -204,14 +207,14 @@ void WebRtcLoggingController::StoreLogContinue(
       log_uploader_->background_task_runner().get(), FROM_HERE,
       base::BindOnce(log_directory_getter_),
       base::BindOnce(&WebRtcLoggingController::StoreLogInDirectory, this,
-                     log_id, base::Passed(&log_paths), callback));
+                     log_id, std::move(log_paths), callback));
 }
 
 void WebRtcLoggingController::StartRtpDump(
     RtpDumpType type,
     const GenericDoneCallback& callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(stop_rtp_dump_callback_.is_null());
+  DCHECK(!stop_rtp_dump_callback_);
 
   content::RenderProcessHost* host =
       content::RenderProcessHost::FromID(render_process_id_);
@@ -244,10 +247,10 @@ void WebRtcLoggingController::StopRtpDump(RtpDumpType type,
     return;
   }
 
-  if (!stop_rtp_dump_callback_.is_null()) {
+  if (stop_rtp_dump_callback_) {
     base::SequencedTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
-        base::BindOnce(stop_rtp_dump_callback_,
+        base::BindOnce(std::move(stop_rtp_dump_callback_),
                        type == RTP_DUMP_INCOMING || type == RTP_DUMP_BOTH,
                        type == RTP_DUMP_OUTGOING || type == RTP_DUMP_BOTH));
   }
@@ -366,8 +369,6 @@ WebRtcLoggingController::WebRtcLoggingController(
       upload_log_on_render_close_(false),
       text_log_handler_(
           std::make_unique<WebRtcTextLogHandler>(render_process_id)),
-      rtp_dump_handler_(),
-      stop_rtp_dump_callback_(),
       log_uploader_(log_uploader) {
   DCHECK(log_uploader_);
 }
@@ -415,8 +416,11 @@ void WebRtcLoggingController::TriggerUpload(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (rtp_dump_handler_) {
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::BindOnce(stop_rtp_dump_callback_, true, true));
+    if (stop_rtp_dump_callback_) {
+      base::SequencedTaskRunnerHandle::Get()->PostTask(
+          FROM_HERE,
+          base::BindOnce(std::move(stop_rtp_dump_callback_), true, true));
+    }
 
     rtp_dump_handler_->StopOngoingDumps(
         base::Bind(&WebRtcLoggingController::DoUploadLogAndRtpDumps, this,
@@ -552,7 +556,6 @@ bool WebRtcLoggingController::ReleaseRtpDumps(WebRtcLogPaths* log_paths) {
   log_paths->outgoing_rtp_dump = rtp_dumps.outgoing_dump_path;
 
   rtp_dump_handler_.reset();
-  stop_rtp_dump_callback_.Reset();
 
   return true;
 }

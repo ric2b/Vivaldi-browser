@@ -15,10 +15,17 @@ namespace send_tab_to_self {
 // targeted to a specific device. This only affects the receiving side.
 extern const base::Feature kSendTabToSelfBroadcast;
 
+// If this feature is enabled, the Sending... animation will show in the omnibox
+// instead of sending Desktop OS notifications for contextual menu entry points.
+extern const base::Feature kSendTabToSelfOmniboxSendingAnimation;
+
 // If this feature is enabled, we will use signed-in, ephemeral data rather than
 // persistent sync data. Users who are signed in can use the feature regardless
 // of whether they have the sync feature enabled.
 extern const base::Feature kSendTabToSelfWhenSignedIn;
+
+// Feature flag to enable device renaming.
+extern const base::Feature kSharingRenameDevices;
 
 // Returns whether the receiving components of the feature is enabled on this
 // device. This is different from IsReceivingEnabled in SendTabToSelfUtil

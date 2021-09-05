@@ -11,14 +11,16 @@ namespace webgpu {
 enum class PowerPreference : uint32_t {
   kLowPower,
   kHighPerformance,
+  kDefault,
   kNumPowerPreferences
 };
 
-// These numbers must not change
-static_assert(static_cast<int>(PowerPreference::kLowPower) == 0,
-              "kLowPower should equal 0");
-static_assert(static_cast<int>(PowerPreference::kHighPerformance) == 1,
-              "kHighPerformance should equal 1");
+enum class DawnReturnDataType : uint32_t {
+  kDawnCommands,
+  kRequestedDawnAdapterProperties,
+  kRequestedDeviceReturnInfo,
+  kNumDawnReturnDataType
+};
 
 }  // namespace webgpu
 }  // namespace gpu

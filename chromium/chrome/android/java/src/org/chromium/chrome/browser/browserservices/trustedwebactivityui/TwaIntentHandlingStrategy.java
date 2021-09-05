@@ -4,8 +4,8 @@
 
 package org.chromium.chrome.browser.browserservices.trustedwebactivityui;
 
+import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider;
 import org.chromium.chrome.browser.browserservices.trustedwebactivityui.sharing.TwaSharingController;
-import org.chromium.chrome.browser.customtabs.CustomTabIntentDataProvider;
 import org.chromium.chrome.browser.customtabs.content.CustomTabIntentHandlingStrategy;
 import org.chromium.chrome.browser.customtabs.content.DefaultCustomTabIntentHandlingStrategy;
 import org.chromium.chrome.browser.dependency_injection.ActivityScope;
@@ -29,21 +29,26 @@ public class TwaIntentHandlingStrategy implements CustomTabIntentHandlingStrateg
     }
 
     @Override
-    public void handleInitialIntent(CustomTabIntentDataProvider intentDataProvider) {
-        handleIntent(intentDataProvider);
+    public void handleInitialIntent(BrowserServicesIntentDataProvider intentDataProvider) {
+        handleIntent(intentDataProvider, true /* isInitialIntent */);
     }
 
     @Override
-    public void handleNewIntent(CustomTabIntentDataProvider intentDataProvider) {
+    public void handleNewIntent(BrowserServicesIntentDataProvider intentDataProvider) {
         // TODO(pshmakov): we can have a significant delay here in case of POST sharing.
         // Allow showing splash screen, if it's provided in the intent.
-        handleIntent(intentDataProvider);
+        handleIntent(intentDataProvider, false /* isInitialIntent */);
     }
 
-    private void handleIntent(CustomTabIntentDataProvider intentDataProvider) {
+    private void handleIntent(
+            BrowserServicesIntentDataProvider intentDataProvider, boolean isInitialIntent) {
         mSharingController.deliverToShareTarget(intentDataProvider).then((delivered) -> {
-            if (!delivered) {
+            if (delivered) return;
+
+            if (isInitialIntent) {
                 mDefaultStrategy.handleInitialIntent(intentDataProvider);
+            } else {
+                mDefaultStrategy.handleNewIntent(intentDataProvider);
             }
         });
     }

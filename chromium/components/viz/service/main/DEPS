@@ -16,5 +16,13 @@ include_rules = [
   "+services/metrics/public",
   "+services/network/public/mojom",
   "+services/service_manager/public/cpp",
+  "+services/tracing/public/cpp",
   "+services/viz/privileged/mojom",
 ]
+
+specific_include_rules = {
+  "viz_main_impl.h" : [
+    "+chromecast/media/service/mojom/video_geometry_setter.mojom.h",
+  ],
+}
+

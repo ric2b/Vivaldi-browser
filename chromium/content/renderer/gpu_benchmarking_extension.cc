@@ -19,6 +19,7 @@
 #include "base/files/file_util.h"
 #include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_split.h"
 #include "build/build_config.h"
 #include "cc/layers/layer.h"
 #include "cc/paint/skia_paint_canvas.h"
@@ -45,9 +46,11 @@
 #include "gpu/config/gpu_driver_bug_workaround_type.h"
 #include "gpu/ipc/common/gpu_messages.h"
 #include "mojo/public/cpp/bindings/remote.h"
-#include "services/service_manager/public/cpp/interface_provider.h"
-#include "third_party/blink/public/platform/web_mouse_event.h"
+#include "third_party/blink/public/common/browser_interface_broker_proxy.h"
+#include "third_party/blink/public/common/input/web_mouse_event.h"
+#include "third_party/blink/public/common/page/page_visibility_state.h"
 #include "third_party/blink/public/web/blink.h"
+#include "third_party/blink/public/web/web_frame_widget.h"
 #include "third_party/blink/public/web/web_image_cache.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_print_params.h"
@@ -295,8 +298,11 @@ bool BeginSmoothScroll(GpuBenchmarkingContext* context,
                        float fling_velocity,
                        bool precise_scrolling_deltas,
                        bool scroll_by_page,
-                       bool cursor_visible) {
+                       bool cursor_visible,
+                       bool scroll_by_percentage) {
   DCHECK(!(precise_scrolling_deltas && scroll_by_page));
+  DCHECK(!(precise_scrolling_deltas && scroll_by_percentage));
+  DCHECK(!(scroll_by_page && scroll_by_percentage));
   if (ThrowIfPointOutOfBounds(context, args, gfx::Point(start_x, start_y),
                               "Start point not in bounds")) {
     return false;
@@ -334,16 +340,14 @@ bool BeginSmoothScroll(GpuBenchmarkingContext* context,
   gesture_params.speed_in_pixels_s = speed_in_pixels_s;
   gesture_params.prevent_fling = prevent_fling;
 
-  if (scroll_by_page) {
-    gesture_params.granularity =
-        ui::input_types::ScrollGranularity::kScrollByPage;
-  } else if (precise_scrolling_deltas) {
-    gesture_params.granularity =
-        ui::input_types::ScrollGranularity::kScrollByPrecisePixel;
-  } else {
-    gesture_params.granularity =
-        ui::input_types::ScrollGranularity::kScrollByPixel;
-  }
+  if (scroll_by_page)
+    gesture_params.granularity = ui::ScrollGranularity::kScrollByPage;
+  else if (precise_scrolling_deltas)
+    gesture_params.granularity = ui::ScrollGranularity::kScrollByPrecisePixel;
+  else if (scroll_by_percentage)
+    gesture_params.granularity = ui::ScrollGranularity::kScrollByPercentage;
+  else
+    gesture_params.granularity = ui::ScrollGranularity::kScrollByPixel;
 
   gesture_params.anchor.SetPoint(start_x, start_y);
 
@@ -485,7 +489,7 @@ static void PrintDocumentTofile(v8::Isolate* isolate,
 }
 
 void OnSwapCompletedHelper(CallbackAndContext* callback_and_context,
-                           blink::WebWidgetClient::SwapResult,
+                           blink::WebSwapResult,
                            base::TimeTicks) {
   RunCallbackHelper(callback_and_context);
 }
@@ -516,7 +520,7 @@ static sk_sp<SkDocument> MakeXPSDocument(SkWStream* s) {
 gin::WrapperInfo GpuBenchmarking::kWrapperInfo = {gin::kEmbedderNativeGin};
 
 // static
-void GpuBenchmarking::Install(RenderFrameImpl* frame) {
+void GpuBenchmarking::Install(base::WeakPtr<RenderFrameImpl> frame) {
   v8::Isolate* isolate = blink::MainThreadIsolate();
   v8::HandleScope handle_scope(isolate);
   v8::Local<v8::Context> context =
@@ -538,14 +542,14 @@ void GpuBenchmarking::Install(RenderFrameImpl* frame) {
       .Check();
 }
 
-GpuBenchmarking::GpuBenchmarking(RenderFrameImpl* frame)
-    : render_frame_(frame) {}
+GpuBenchmarking::GpuBenchmarking(base::WeakPtr<RenderFrameImpl> frame)
+    : render_frame_(std::move(frame)) {}
 
 GpuBenchmarking::~GpuBenchmarking() {}
 
 void GpuBenchmarking::EnsureRemoteInterface() {
   if (!input_injector_) {
-    render_frame_->GetRemoteInterfaces()->GetInterface(
+    render_frame_->GetBrowserInterfaceBroker()->GetInterface(
         input_injector_.BindNewPipeAndPassReceiver(
             render_frame_->GetTaskRunner(blink::TaskType::kInternalDefault)));
   }
@@ -607,12 +611,12 @@ gin::ObjectTemplateBuilder GpuBenchmarking::GetObjectTemplateBuilder(
 }
 
 void GpuBenchmarking::SetNeedsDisplayOnAllLayers() {
-  GpuBenchmarkingContext context(render_frame_);
+  GpuBenchmarkingContext context(render_frame_.get());
   context.layer_tree_host()->SetNeedsDisplayOnAllLayers();
 }
 
 void GpuBenchmarking::SetRasterizeOnlyVisibleContent() {
-  GpuBenchmarkingContext context(render_frame_);
+  GpuBenchmarkingContext context(render_frame_.get());
   cc::LayerTreeDebugState current = context.layer_tree_host()->GetDebugState();
   current.rasterize_only_visible_content = true;
   context.layer_tree_host()->SetDebugState(current);
@@ -626,13 +630,13 @@ sk_sp<SkDocument> make_multipicturedocument(SkWStream* stream) {
 void GpuBenchmarking::PrintPagesToSkPictures(v8::Isolate* isolate,
                                              const std::string& filename) {
   PrintDocumentTofile(isolate, filename, &make_multipicturedocument,
-                      render_frame_);
+                      render_frame_.get());
 }
 
 void GpuBenchmarking::PrintPagesToXPS(v8::Isolate* isolate,
                                       const std::string& filename) {
 #if defined(OS_WIN) && !defined(NDEBUG)
-  PrintDocumentTofile(isolate, filename, &MakeXPSDocument, render_frame_);
+  PrintDocumentTofile(isolate, filename, &MakeXPSDocument, render_frame_.get());
 #else
   std::string msg("PrintPagesToXPS is unsupported.");
   isolate->ThrowException(v8::Exception::Error(
@@ -644,7 +648,7 @@ void GpuBenchmarking::PrintPagesToXPS(v8::Isolate* isolate,
 
 void GpuBenchmarking::PrintToSkPicture(v8::Isolate* isolate,
                                        const std::string& dirname) {
-  GpuBenchmarkingContext context(render_frame_);
+  GpuBenchmarkingContext context(render_frame_.get());
 
   const cc::Layer* root_layer = context.layer_tree_host()->root_layer();
   if (!root_layer)
@@ -677,7 +681,7 @@ bool GpuBenchmarking::GestureSourceTypeSupported(int gesture_source_type) {
 }
 
 bool GpuBenchmarking::SmoothScrollBy(gin::Arguments* args) {
-  GpuBenchmarkingContext context(render_frame_);
+  GpuBenchmarkingContext context(render_frame_.get());
   blink::WebRect rect = context.render_widget()->ViewRect();
 
   float pixels_to_scroll = 0;
@@ -690,6 +694,7 @@ bool GpuBenchmarking::SmoothScrollBy(gin::Arguments* args) {
   bool precise_scrolling_deltas = true;
   bool scroll_by_page = false;
   bool cursor_visible = true;
+  bool scroll_by_percentage = false;
 
   if (!GetOptionalArg(args, &pixels_to_scroll) ||
       !GetOptionalArg(args, &callback) || !GetOptionalArg(args, &start_x) ||
@@ -699,7 +704,8 @@ bool GpuBenchmarking::SmoothScrollBy(gin::Arguments* args) {
       !GetOptionalArg(args, &speed_in_pixels_s) ||
       !GetOptionalArg(args, &precise_scrolling_deltas) ||
       !GetOptionalArg(args, &scroll_by_page) ||
-      !GetOptionalArg(args, &cursor_visible)) {
+      !GetOptionalArg(args, &cursor_visible) ||
+      !GetOptionalArg(args, &scroll_by_percentage)) {
     return false;
   }
 
@@ -709,16 +715,20 @@ bool GpuBenchmarking::SmoothScrollBy(gin::Arguments* args) {
   // Scroll by page only for mouse inputs.
   DCHECK(!scroll_by_page ||
          gesture_source_type == SyntheticGestureParams::MOUSE_INPUT);
+  // Scroll by percentage only for mouse inputs.
+  DCHECK(!scroll_by_percentage ||
+         gesture_source_type == SyntheticGestureParams::MOUSE_INPUT);
 
   EnsureRemoteInterface();
-  return BeginSmoothScroll(
-      &context, args, input_injector_, pixels_to_scroll, callback,
-      gesture_source_type, direction, speed_in_pixels_s, true, start_x, start_y,
-      0, precise_scrolling_deltas, scroll_by_page, cursor_visible);
+  return BeginSmoothScroll(&context, args, input_injector_, pixels_to_scroll,
+                           callback, gesture_source_type, direction,
+                           speed_in_pixels_s, true, start_x, start_y, 0,
+                           precise_scrolling_deltas, scroll_by_page,
+                           cursor_visible, scroll_by_percentage);
 }
 
 bool GpuBenchmarking::SmoothDrag(gin::Arguments* args) {
-  GpuBenchmarkingContext context(render_frame_);
+  GpuBenchmarkingContext context(render_frame_.get());
   float start_x;
   float start_y;
   float end_x;
@@ -742,7 +752,7 @@ bool GpuBenchmarking::SmoothDrag(gin::Arguments* args) {
 }
 
 bool GpuBenchmarking::Swipe(gin::Arguments* args) {
-  GpuBenchmarkingContext context(render_frame_);
+  GpuBenchmarkingContext context(render_frame_.get());
   blink::WebRect rect = context.render_widget()->ViewRect();
 
   std::string direction = "up";
@@ -776,11 +786,12 @@ bool GpuBenchmarking::Swipe(gin::Arguments* args) {
       &context, args, input_injector_, -pixels_to_scroll, callback,
       gesture_source_type, direction, speed_in_pixels_s, false, start_x,
       start_y, fling_velocity, true /* precise_scrolling_deltas */,
-      false /* scroll_by_page */, true /* cursor_visible */);
+      false /* scroll_by_page */, true /* cursor_visible */,
+      false /* scroll_by_percentage */);
 }
 
 bool GpuBenchmarking::ScrollBounce(gin::Arguments* args) {
-  GpuBenchmarkingContext context(render_frame_);
+  GpuBenchmarkingContext context(render_frame_.get());
   blink::WebRect content_rect = context.render_widget()->ViewRect();
 
   std::string direction = "down";
@@ -848,7 +859,7 @@ bool GpuBenchmarking::ScrollBounce(gin::Arguments* args) {
 }
 
 bool GpuBenchmarking::PinchBy(gin::Arguments* args) {
-  GpuBenchmarkingContext context(render_frame_);
+  GpuBenchmarkingContext context(render_frame_.get());
 
   float scale_factor;
   float anchor_x;
@@ -909,17 +920,17 @@ bool GpuBenchmarking::PinchBy(gin::Arguments* args) {
 }
 
 float GpuBenchmarking::PageScaleFactor() {
-  GpuBenchmarkingContext context(render_frame_);
+  GpuBenchmarkingContext context(render_frame_.get());
   return context.web_view()->PageScaleFactor();
 }
 
 void GpuBenchmarking::SetPageScaleFactor(float scale) {
-  GpuBenchmarkingContext context(render_frame_);
+  GpuBenchmarkingContext context(render_frame_.get());
   context.web_view()->SetPageScaleFactor(scale);
 }
 
 void GpuBenchmarking::SetBrowserControlsShown(bool show) {
-  GpuBenchmarkingContext context(render_frame_);
+  GpuBenchmarkingContext context(render_frame_.get());
   context.layer_tree_host()->UpdateBrowserControlsState(
       cc::BrowserControlsState::kBoth,
       show ? cc::BrowserControlsState::kShown
@@ -928,39 +939,39 @@ void GpuBenchmarking::SetBrowserControlsShown(bool show) {
 }
 
 float GpuBenchmarking::VisualViewportY() {
-  GpuBenchmarkingContext context(render_frame_);
-  float y = context.web_view()->VisualViewportOffset().y;
+  GpuBenchmarkingContext context(render_frame_.get());
+  float y = context.web_view()->VisualViewportOffset().y();
   blink::WebRect rect(0, y, 0, 0);
   context.render_widget()->ConvertViewportToWindow(&rect);
   return rect.y;
 }
 
 float GpuBenchmarking::VisualViewportX() {
-  GpuBenchmarkingContext context(render_frame_);
-  float x = context.web_view()->VisualViewportOffset().x;
+  GpuBenchmarkingContext context(render_frame_.get());
+  float x = context.web_view()->VisualViewportOffset().x();
   blink::WebRect rect(x, 0, 0, 0);
   context.render_widget()->ConvertViewportToWindow(&rect);
   return rect.x;
 }
 
 float GpuBenchmarking::VisualViewportHeight() {
-  GpuBenchmarkingContext context(render_frame_);
-  float height = context.web_view()->VisualViewportSize().height;
+  GpuBenchmarkingContext context(render_frame_.get());
+  float height = context.web_view()->VisualViewportSize().height();
   blink::WebRect rect(0, 0, 0, height);
   context.render_widget()->ConvertViewportToWindow(&rect);
   return rect.height;
 }
 
 float GpuBenchmarking::VisualViewportWidth() {
-  GpuBenchmarkingContext context(render_frame_);
-  float width = context.web_view()->VisualViewportSize().width;
+  GpuBenchmarkingContext context(render_frame_.get());
+  float width = context.web_view()->VisualViewportSize().width();
   blink::WebRect rect(0, 0, width, 0);
   context.render_widget()->ConvertViewportToWindow(&rect);
   return rect.width;
 }
 
 bool GpuBenchmarking::Tap(gin::Arguments* args) {
-  GpuBenchmarkingContext context(render_frame_);
+  GpuBenchmarkingContext context(render_frame_.get());
 
   float position_x;
   float position_y;
@@ -1005,7 +1016,7 @@ bool GpuBenchmarking::Tap(gin::Arguments* args) {
 }
 
 bool GpuBenchmarking::PointerActionSequence(gin::Arguments* args) {
-  GpuBenchmarkingContext context(render_frame_);
+  GpuBenchmarkingContext context(render_frame_.get());
 
   v8::Local<v8::Function> callback;
 
@@ -1059,7 +1070,7 @@ void GpuBenchmarking::ClearImageCache() {
 }
 
 int GpuBenchmarking::RunMicroBenchmark(gin::Arguments* args) {
-  GpuBenchmarkingContext context(render_frame_);
+  GpuBenchmarkingContext context(render_frame_.get());
 
   std::string name;
   v8::Local<v8::Function> callback;
@@ -1087,7 +1098,7 @@ int GpuBenchmarking::RunMicroBenchmark(gin::Arguments* args) {
 bool GpuBenchmarking::SendMessageToMicroBenchmark(
     int id,
     v8::Local<v8::Object> message) {
-  GpuBenchmarkingContext context(render_frame_);
+  GpuBenchmarkingContext context(render_frame_.get());
 
   v8::Local<v8::Context> v8_context =
       context.web_frame()->MainWorldScriptContext();
@@ -1172,11 +1183,11 @@ void GpuBenchmarking::StopProfiling() {
 }
 
 void GpuBenchmarking::Freeze() {
-  GpuBenchmarkingContext context(render_frame_);
+  GpuBenchmarkingContext context(render_frame_.get());
   // TODO(fmeawad): Instead of forcing a visibility change, only allow
   // freezing a page if it was already hidden.
-  context.web_view()->SetIsHidden(/*hidden=*/true,
-                                  /*is_initial_state=*/false);
+  context.web_view()->SetVisibilityState(PageVisibilityState::kHidden,
+                                         /*is_initial_state=*/false);
   context.web_view()->SetPageFrozen(true);
 }
 
@@ -1184,12 +1195,14 @@ bool GpuBenchmarking::AddSwapCompletionEventListener(gin::Arguments* args) {
   v8::Local<v8::Function> callback;
   if (!GetArg(args, &callback))
     return false;
-  GpuBenchmarkingContext context(render_frame_);
+  GpuBenchmarkingContext context(render_frame_.get());
 
   auto callback_and_context = base::MakeRefCounted<CallbackAndContext>(
       args->isolate(), callback, context.web_frame()->MainWorldScriptContext());
-  context.render_widget()->NotifySwapTime(base::BindOnce(
-      &OnSwapCompletedHelper, base::RetainedRef(callback_and_context)));
+  context.web_frame()->FrameWidget()->NotifySwapAndPresentationTime(
+      base::NullCallback(),
+      base::BindOnce(&OnSwapCompletedHelper,
+                     base::RetainedRef(callback_and_context)));
   return true;
 }
 

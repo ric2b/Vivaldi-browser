@@ -13,10 +13,10 @@
 #include "notes/notes_factory.h"
 #include "notes/notes_model.h"
 #include "renderer/vivaldi_render_messages.h"
+#include "ui/base/accelerators/menu_label_accelerator_util.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "vivaldi/app/grit/vivaldi_native_strings.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
-
 #define MAX_NOTES_MENUITEM_LENGTH 40
 
 using content::BrowserThread;
@@ -41,7 +41,7 @@ void NotesSubMenuObserver::InitMenu(const content::ContextMenuParams& params) {
   if (!profile->IsGuestSession()) {
     ui::SimpleMenuModel* menu_model = new ui::SimpleMenuModel(helper_.get());
     models_.push_back(base::WrapUnique(menu_model));
-    vivaldi::Notes_Model* model =
+    vivaldi::NotesModel* model =
         NotesModelFactory::GetForBrowserContext(browser_context);
     menumodel_to_note_map_[menu_model] = model->main_node();
     proxy_->AddSubMenu(root_id_,
@@ -54,7 +54,7 @@ void NotesSubMenuObserver::InitMenu(const content::ContextMenuParams& params) {
 }
 
 void NotesSubMenuObserver::PopulateModel(ui::SimpleMenuModel* menu_model) {
-  vivaldi::Notes_Node* parent = menumodel_to_note_map_[menu_model];
+  vivaldi::NoteNode* parent = menumodel_to_note_map_[menu_model];
 #if defined(OS_MACOSX)
   bool underline_letter = false;
 #else
@@ -82,11 +82,18 @@ void NotesSubMenuObserver::PopulateModel(ui::SimpleMenuModel* menu_model) {
         title = title.substr(0, MAX_NOTES_MENUITEM_LENGTH - 3) +
             base::UTF8ToUTF16("...");
       }
-      // Escape any '&' with a double set to prevent underlining.
-      if (!underline_letter) {
-        base::StringPiece16 s1 = base::StringPiece16(base::UTF8ToUTF16("&"));
-        base::string16 s2 = base::UTF8ToUTF16("&&");
-        base::ReplaceChars(title, s1, s2, &title);
+
+      bool underline = underline_letter;
+      if (underline) {
+        // Prevent underlining a space
+        base::char16 c = ui::GetMnemonic(title);
+        if (c == ' ') {
+          underline = false;
+        }
+      }
+      if (!underline) {
+        // Escape any '&' with a double set to prevent underlining.
+        title = ui::EscapeMenuLabelAmpersands(title);
       }
 
       if (node->is_folder()) {
@@ -123,12 +130,12 @@ bool NotesSubMenuObserver::IsCommandIdEnabled(int command_id) {
   return command_id == root_id_;
 }
 
-vivaldi::Notes_Node* GetNodeFromId(vivaldi::Notes_Node* node, int id) {
+vivaldi::NoteNode* GetNodeFromId(vivaldi::NoteNode* node, int id) {
   if (node->id() == id) {
     return node;
   }
   for (auto& it : node->children()) {
-    vivaldi::Notes_Node* childnode = GetNodeFromId(it.get(), id);
+    vivaldi::NoteNode* childnode = GetNodeFromId(it.get(), id);
     if (childnode) {
       return childnode;
     }
@@ -139,11 +146,11 @@ vivaldi::Notes_Node* GetNodeFromId(vivaldi::Notes_Node* node, int id) {
 void NotesSubMenuObserver::ExecuteCommand(int command_id) {
   DCHECK(IsCommandIdSupported(command_id));
 
-  vivaldi::Notes_Model* model =
+  vivaldi::NotesModel* model =
       NotesModelFactory::GetForBrowserContext(proxy_->GetBrowserContext());
-  vivaldi::Notes_Node* root = model->root_node();
+  vivaldi::NoteNode* root = model->root_node();
 
-  vivaldi::Notes_Node* node = GetNodeFromId(root, command_id);
+  vivaldi::NoteNode* node = GetNodeFromId(root, command_id);
   if (node) {
     content::RenderFrameHost* focused_frame =
         proxy_->GetWebContents()->GetFocusedFrame();

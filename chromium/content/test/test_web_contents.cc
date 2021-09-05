@@ -27,10 +27,10 @@
 #include "content/public/browser/notification_types.h"
 #include "content/public/common/page_state.h"
 #include "content/public/common/url_utils.h"
-#include "content/public/test/browser_side_navigation_test_utils.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/navigation_simulator.h"
 #include "content/test/test_render_view_host.h"
+#include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom.h"
 #include "ui/base/page_transition_types.h"
 
 namespace content {
@@ -50,8 +50,7 @@ TestWebContents::TestWebContents(BrowserContext* browser_context)
       expect_set_history_offset_and_length_(false),
       expect_set_history_offset_and_length_history_length_(0),
       pause_subresource_loading_called_(false),
-      audio_group_id_(base::UnguessableToken::Create()),
-      is_connected_to_bluetooth_device_(false) {
+      audio_group_id_(base::UnguessableToken::Create()) {
   if (!RenderProcessHostImpl::get_render_process_host_factory_for_testing()) {
     // Most unit tests should prefer to create a generic MockRenderProcessHost
     // (instead of a real RenderProcessHostImpl).  Tests that need to use a
@@ -103,6 +102,7 @@ TestRenderFrameHost* TestWebContents::GetPendingMainFrame() {
 
 int TestWebContents::DownloadImage(const GURL& url,
                                    bool is_favicon,
+                                   uint32_t preferred_size,
                                    uint32_t max_bitmap_size,
                                    bool bypass_cache,
                                    ImageDownloadCallback callback) {
@@ -185,7 +185,8 @@ void TestWebContents::TestDidNavigateWithSequenceNumber(
   params.is_overriding_user_agent = false;
   params.history_list_was_cleared = false;
   params.origin = url::Origin::Create(url);
-  params.insecure_request_policy = blink::kLeaveInsecureRequestsAlone;
+  params.insecure_request_policy =
+      blink::mojom::InsecureRequestPolicy::kLeaveInsecureRequestsAlone;
   params.has_potentially_trustworthy_unique_origin = false;
 
   rfh->SendNavigateWithParams(&params, was_within_same_document);
@@ -248,15 +249,12 @@ void TestWebContents::TestDidReceiveInputEvent(
 }
 
 void TestWebContents::TestDidFinishLoad(const GURL& url) {
-  FrameHostMsg_DidFinishLoad msg(0, url);
-  frame_tree_.root()->current_frame_host()->OnMessageReceived(msg);
+  OnDidFinishLoad(frame_tree_.root()->current_frame_host(), url);
 }
 
-void TestWebContents::TestDidFailLoadWithError(
-    const GURL& url,
-    int error_code,
-    const base::string16& error_description) {
-  GetMainFrame()->DidFailLoadWithError(url, error_code, error_description);
+void TestWebContents::TestDidFailLoadWithError(const GURL& url,
+                                               int error_code) {
+  GetMainFrame()->DidFailLoadWithError(url, error_code);
 }
 
 bool TestWebContents::CrossProcessNavigationPending() {
@@ -320,7 +318,7 @@ void TestWebContents::TestSetIsLoading(bool value) {
           node->render_manager()->speculative_frame_host();
       if (speculative_frame_host)
         speculative_frame_host->ResetLoadingState();
-      node->ResetNavigationRequest(false, true);
+      node->ResetNavigationRequest(false);
     }
   }
 }
@@ -387,16 +385,19 @@ RenderFrameHostDelegate* TestWebContents::CreateNewWindow(
   return nullptr;
 }
 
-void TestWebContents::CreateNewWidget(int32_t render_process_id,
-                                      int32_t route_id,
-                                      mojo::PendingRemote<mojom::Widget> widget,
-                                      RenderViewHostImpl* render_view_host) {}
+void TestWebContents::CreateNewWidget(
+    int32_t render_process_id,
+    int32_t route_id,
+    mojo::PendingRemote<mojom::Widget> widget,
+    mojo::PendingAssociatedReceiver<blink::mojom::WidgetHost> blink_widget_host,
+    mojo::PendingAssociatedRemote<blink::mojom::Widget> blink_widget) {}
 
 void TestWebContents::CreateNewFullscreenWidget(
     int32_t render_process_id,
     int32_t route_id,
     mojo::PendingRemote<mojom::Widget> widget,
-    RenderViewHostImpl* render_view_host) {}
+    mojo::PendingAssociatedReceiver<blink::mojom::WidgetHost> blink_widget_host,
+    mojo::PendingAssociatedRemote<blink::mojom::Widget> blink_widget) {}
 
 void TestWebContents::ShowCreatedWindow(int process_id,
                                         int route_id,
@@ -438,22 +439,16 @@ void TestWebContents::ResetPauseSubresourceLoadingCalled() {
   pause_subresource_loading_called_ = false;
 }
 
-void TestWebContents::SetPageImportanceSignals(PageImportanceSignals signals) {
-  page_importance_signals_ = signals;
-}
-
 void TestWebContents::SetLastActiveTime(base::TimeTicks last_active_time) {
   last_active_time_ = last_active_time;
 }
 
-void TestWebContents::SetIsConnectedToBluetoothDevice(
-    bool is_connected_to_bluetooth_device) {
-  is_connected_to_bluetooth_device_ = is_connected_to_bluetooth_device;
+void TestWebContents::TestIncrementBluetoothConnectedDeviceCount() {
+  IncrementBluetoothConnectedDeviceCount();
 }
 
-bool TestWebContents::IsConnectedToBluetoothDevice() {
-  return is_connected_to_bluetooth_device_ ||
-         WebContentsImpl::IsConnectedToBluetoothDevice();
+void TestWebContents::TestDecrementBluetoothConnectedDeviceCount() {
+  DecrementBluetoothConnectedDeviceCount();
 }
 
 base::UnguessableToken TestWebContents::GetAudioGroupId() {

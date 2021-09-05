@@ -13,6 +13,7 @@
 #include "base/timer/timer.h"
 #include "components/gcm_driver/gcm_client.h"
 #include "components/gcm_driver/gcm_stats_recorder_impl.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 
 namespace base {
 class SequencedTaskRunner;
@@ -46,10 +47,11 @@ class FakeGCMClient : public GCMClient {
   void Initialize(
       const ChromeBuildInfo& chrome_build_info,
       const base::FilePath& store_path,
+      bool remove_account_mappings_with_email_key,
       const scoped_refptr<base::SequencedTaskRunner>& blocking_task_runner,
       scoped_refptr<base::SequencedTaskRunner> io_task_runner,
-      base::RepeatingCallback<
-          void(network::mojom::ProxyResolvingSocketFactoryRequest)>
+      base::RepeatingCallback<void(
+          mojo::PendingReceiver<network::mojom::ProxyResolvingSocketFactory>)>
           get_socket_factory_callback,
       const scoped_refptr<network::SharedURLLoaderFactory>& url_loader_factory,
       network::NetworkConnectionTracker* network_connection_tracker,

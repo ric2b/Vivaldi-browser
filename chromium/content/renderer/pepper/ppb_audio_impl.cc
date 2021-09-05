@@ -10,7 +10,6 @@
 #include "content/renderer/pepper/pepper_plugin_instance_impl.h"
 #include "content/renderer/pepper/plugin_instance_throttler_impl.h"
 #include "content/renderer/render_frame_impl.h"
-#include "media/audio/audio_output_controller.h"
 #include "ppapi/c/pp_completion_callback.h"
 #include "ppapi/c/ppb_audio.h"
 #include "ppapi/c/ppb_audio_config.h"
@@ -158,10 +157,10 @@ int32_t PPB_Audio_Impl::GetSharedMemory(base::UnsafeSharedMemoryRegion** shm) {
 
 void PPB_Audio_Impl::OnSetStreamInfo(
     base::UnsafeSharedMemoryRegion shared_memory_region,
-    base::SyncSocket::Handle socket_handle) {
+    base::SyncSocket::ScopedHandle socket_handle) {
   EnterResourceNoLock<PPB_AudioConfig_API> enter(config_, true);
-  SetStreamInfo(pp_instance(), std::move(shared_memory_region), socket_handle,
-                enter.object()->GetSampleRate(),
+  SetStreamInfo(pp_instance(), std::move(shared_memory_region),
+                std::move(socket_handle), enter.object()->GetSampleRate(),
                 enter.object()->GetSampleFrameCount());
 }
 

@@ -2,7 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <string>
+
 #include "base/logging.h"
+#include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "content/browser/accessibility/browser_accessibility.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
@@ -104,10 +107,16 @@ class AccessibilityActionBrowserTest : public ContentBrowserTest {
   BrowserAccessibility* FindNodeInSubtree(BrowserAccessibility& node,
                                           ax::mojom::Role role,
                                           const std::string& name_or_value) {
-    const auto& name =
+    const std::string& name =
         node.GetStringAttribute(ax::mojom::StringAttribute::kName);
-    const auto& value =
-        node.GetStringAttribute(ax::mojom::StringAttribute::kValue);
+    // Note that in the case of a text field, "BrowserAccessibility::GetValue"
+    // has the added functionality of computing the value of an ARIA text box
+    // from its inner text.
+    //
+    // <div contenteditable="true" role="textbox">Hello world.</div>
+    // Will expose no HTML value attribute, but some screen readers, such as
+    // Jaws, VoiceOver and Talkback, require one to be computed.
+    const std::string& value = base::UTF16ToUTF8(node.GetValue());
     if (node.GetRole() == role &&
         (name == name_or_value || value == name_or_value)) {
       return &node;
@@ -135,6 +144,38 @@ class AccessibilityCanvasActionBrowserTest
     ContentBrowserTest::SetUp();
   }
 };
+
+IN_PROC_BROWSER_TEST_F(AccessibilityActionBrowserTest, DoDefaultAction) {
+  LoadInitialAccessibilityTreeFromHtml(R"HTML(
+      <div id="button" role="button" tabIndex=0>Click</div>
+      <p></p>
+      <script>
+        document.getElementById('button').addEventListener('click', () => {
+          document.querySelector('p').setAttribute('aria-label', 'success');
+        });
+      </script>
+      )HTML");
+
+  BrowserAccessibility* target = FindNode(ax::mojom::Role::kButton, "Click");
+  ASSERT_NE(nullptr, target);
+
+  // Call DoDefaultAction.
+  AccessibilityNotificationWaiter waiter2(
+      shell()->web_contents(), ui::kAXModeComplete, ax::mojom::Event::kClicked);
+  GetManager()->DoDefaultAction(*target);
+  waiter2.WaitForNotification();
+
+  // Ensure that the button was clicked - it should change the paragraph
+  // text to "success".
+  WaitForAccessibilityTreeToContainNodeWithName(shell()->web_contents(),
+                                                "success");
+
+  // When calling DoDefault on a focusable element, the element should get
+  // focused, just like what happens when you click it with the mouse.
+  BrowserAccessibility* focus = GetManager()->GetFocus();
+  ASSERT_NE(nullptr, focus);
+  EXPECT_EQ(target->GetId(), focus->GetId());
+}
 
 IN_PROC_BROWSER_TEST_F(AccessibilityActionBrowserTest, FocusAction) {
   LoadInitialAccessibilityTreeFromHtml(R"HTML(
@@ -484,7 +525,8 @@ IN_PROC_BROWSER_TEST_F(AccessibilityActionBrowserTest, ShowContextMenu) {
   target_node->AccessibilityPerformAction(context_menu_action);
   context_menu_filter->Wait();
 
-  ContextMenuParams context_menu_params = context_menu_filter->get_params();
+  UntrustworthyContextMenuParams context_menu_params =
+      context_menu_filter->get_params();
   EXPECT_EQ(base::ASCIIToUTF16("2"), context_menu_params.link_text);
   EXPECT_EQ(ui::MenuSourceType::MENU_SOURCE_NONE,
             context_menu_params.source_type);

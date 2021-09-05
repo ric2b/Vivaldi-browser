@@ -8,7 +8,6 @@
 #include <memory>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/location.h"
@@ -18,25 +17,28 @@
 #include "base/numerics/safe_conversions.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
+#include "base/strings/stringprintf.h"
 #include "base/synchronization/lock.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/thread_annotations.h"
 #include "base/threading/thread_checker.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/bitstream_buffer.h"
-#include "media/base/media_switches.h"
 #include "media/base/video_bitrate_allocation.h"
 #include "media/base/video_frame.h"
 #include "media/base/video_util.h"
+#include "media/capture/capture_switches.h"
 #include "media/video/gpu_video_accelerator_factories.h"
 #include "media/video/h264_parser.h"
 #include "media/video/video_encode_accelerator.h"
-#include "mojo/public/cpp/base/shared_memory_utils.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
 #include "third_party/blink/renderer/platform/webrtc/webrtc_video_frame_adapter.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
 #include "third_party/blink/renderer/platform/wtf/deque.h"
+#include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 #include "third_party/libyuv/include/libyuv.h"
@@ -58,6 +60,38 @@ struct CrossThreadCopier<webrtc::VideoEncoder::RateControlParameters>
 namespace blink {
 
 namespace {
+
+webrtc::VideoEncoder::EncoderInfo CopyToWebrtcEncoderInfo(
+    const media::VideoEncoderInfo& enc_info) {
+  webrtc::VideoEncoder::EncoderInfo info;
+  info.implementation_name = enc_info.implementation_name;
+  info.supports_native_handle = enc_info.supports_native_handle;
+  info.has_trusted_rate_controller = enc_info.has_trusted_rate_controller;
+  info.is_hardware_accelerated = enc_info.is_hardware_accelerated;
+  info.supports_simulcast = enc_info.supports_simulcast;
+  // TODO(crbug.com/1034686): Copy ScalingSettings once getStats() hang issue
+  // is resolved.
+  // info.scaling_settings = webrtc::VideoEncoder::ScalingSettings(
+  // enc_info.scaling_settings.min_qp, enc_info.scaling_settings.max_qp);
+  static_assert(
+      webrtc::kMaxSpatialLayers >= media::VideoEncoderInfo::kMaxSpatialLayers,
+      "webrtc::kMaxSpatiallayers is less than "
+      "media::VideoEncoderInfo::kMaxSpatialLayers");
+  for (size_t i = 0; i < base::size(enc_info.fps_allocation); ++i) {
+    if (enc_info.fps_allocation[i].empty())
+      continue;
+    info.fps_allocation[i] =
+        absl::InlinedVector<uint8_t, webrtc::kMaxTemporalStreams>(
+            enc_info.fps_allocation[i].begin(),
+            enc_info.fps_allocation[i].end());
+  }
+  for (const auto& limit : enc_info.resolution_bitrate_limits) {
+    info.resolution_bitrate_limits.emplace_back(
+        limit.frame_size.GetArea(), limit.min_start_bitrate_bps,
+        limit.min_bitrate_bps, limit.max_bitrate_bps);
+  }
+  return info;
+}
 
 struct RTCTimestamps {
   RTCTimestamps(const base::TimeDelta& media_timestamp,
@@ -154,6 +188,9 @@ class RTCVideoEncoder::Impl
                               media::VideoCodecProfile profile,
                               base::WaitableEvent* async_waiter,
                               int32_t* async_retval);
+
+  webrtc::VideoEncoder::EncoderInfo GetEncoderInfo() const;
+
   // Enqueue a frame from WebRTC for encoding.
   // RTCVideoEncoder expects to be able to call this function synchronously from
   // its own thread, hence the |async_waiter| and |async_retval| arguments.
@@ -194,6 +231,7 @@ class RTCVideoEncoder::Impl
       int32_t bitstream_buffer_id,
       const media::BitstreamBufferMetadata& metadata) override;
   void NotifyError(media::VideoEncodeAccelerator::Error error) override;
+  void NotifyEncoderInfoChange(const media::VideoEncoderInfo& info) override;
 
  private:
   friend class base::RefCountedThreadSafe<Impl>;
@@ -317,15 +355,18 @@ class RTCVideoEncoder::Impl
   // The content type, as reported to WebRTC (screenshare vs realtime video).
   const webrtc::VideoContentType video_content_type_;
 
-  // Protect |status_|. |status_| is read or written on |gpu_task_runner_| in
-  // Impl. It can be read in RTCVideoEncoder on other threads.
-  mutable base::Lock status_lock_;
+  webrtc::VideoEncoder::EncoderInfo encoder_info_ GUARDED_BY(lock_);
+
+  // Protect |status_| and |encoder_info_|. |status_| is read or written on
+  // |gpu_task_runner_| in Impl. It can be read in RTCVideoEncoder on other
+  // threads.
+  mutable base::Lock lock_;
 
   // We cannot immediately return error conditions to the WebRTC user of this
   // class, as there is no error callback in the webrtc::VideoEncoder interface.
   // Instead, we cache an error status here and return it the next time an
-  // interface entry point is called. This is protected by |status_lock_|.
-  int32_t status_;
+  // interface entry point is called. This is protected by |lock_|.
+  int32_t status_ GUARDED_BY(lock_);
 
   DISALLOW_COPY_AND_ASSIGN(Impl);
 };
@@ -346,6 +387,13 @@ RTCVideoEncoder::Impl::Impl(media::GpuVideoAcceleratorFactories* gpu_factories,
       video_content_type_(video_content_type),
       status_(WEBRTC_VIDEO_CODEC_UNINITIALIZED) {
   DETACH_FROM_THREAD(thread_checker_);
+
+  // The default values of EncoderInfo.
+  encoder_info_.implementation_name =
+      RTCVideoEncoder::Impl::ImplementationName();
+  encoder_info_.supports_native_handle = true;
+  encoder_info_.is_hardware_accelerated = true;
+  encoder_info_.has_internal_source = false;
 }
 
 void RTCVideoEncoder::Impl::CreateAndInitializeVEA(
@@ -363,6 +411,32 @@ void RTCVideoEncoder::Impl::CreateAndInitializeVEA(
   // Check for overflow converting bitrate (kilobits/sec) to bits/sec.
   if (IsBitrateTooHigh(bitrate))
     return;
+
+  // Check that |profile| supports |input_visible_size|.
+  if (base::FeatureList::IsEnabled(features::kWebRtcUseMinMaxVEADimensions)) {
+    const auto vea_supported_profiles =
+        gpu_factories_->GetVideoEncodeAcceleratorSupportedProfiles().value_or(
+            media::VideoEncodeAccelerator::SupportedProfiles());
+
+    for (const auto& vea_profile : vea_supported_profiles) {
+      if (vea_profile.profile == profile &&
+          (input_visible_size.width() > vea_profile.max_resolution.width() ||
+           input_visible_size.height() > vea_profile.max_resolution.height() ||
+           input_visible_size.width() < vea_profile.min_resolution.width() ||
+           input_visible_size.height() < vea_profile.min_resolution.height())) {
+        LogAndNotifyError(
+            FROM_HERE,
+            base::StringPrintf(
+                "Requested dimensions (%s) beyond accelerator limits (%s - %s)",
+                input_visible_size.ToString().c_str(),
+                vea_profile.min_resolution.ToString().c_str(),
+                vea_profile.max_resolution.ToString().c_str())
+                .c_str(),
+            media::VideoEncodeAccelerator::kInvalidArgumentError);
+        return;
+      }
+    }
+  }
 
   video_encoder_ = gpu_factories_->CreateVideoEncodeAccelerator();
   if (!video_encoder_) {
@@ -396,6 +470,18 @@ void RTCVideoEncoder::Impl::CreateAndInitializeVEA(
   }
   // RequireBitstreamBuffers or NotifyError will be called and the waiter will
   // be signaled.
+}
+
+webrtc::VideoEncoder::EncoderInfo RTCVideoEncoder::Impl::GetEncoderInfo()
+    const {
+  base::AutoLock lock(lock_);
+  return encoder_info_;
+}
+
+void RTCVideoEncoder::Impl::NotifyEncoderInfoChange(
+    const media::VideoEncoderInfo& info) {
+  base::AutoLock lock(lock_);
+  encoder_info_ = CopyToWebrtcEncoderInfo(info);
 }
 
 void RTCVideoEncoder::Impl::Enqueue(const webrtc::VideoFrame* input_frame,
@@ -516,12 +602,12 @@ void RTCVideoEncoder::Impl::Destroy(base::WaitableEvent* async_waiter) {
 }
 
 int32_t RTCVideoEncoder::Impl::GetStatus() const {
-  base::AutoLock lock(status_lock_);
+  base::AutoLock lock(lock_);
   return status_;
 }
 
 void RTCVideoEncoder::Impl::SetStatus(int32_t status) {
-  base::AutoLock lock(status_lock_);
+  base::AutoLock lock(lock_);
   status_ = status;
 }
 
@@ -545,9 +631,9 @@ void RTCVideoEncoder::Impl::RequireBitstreamBuffers(
   input_frame_coded_size_ = input_coded_size;
 
   for (unsigned int i = 0; i < input_count + kInputBufferExtraCount; ++i) {
-    base::UnsafeSharedMemoryRegion shm =
-        mojo::CreateUnsafeSharedMemoryRegion(media::VideoFrame::AllocationSize(
-            media::PIXEL_FORMAT_I420, input_coded_size));
+    base::UnsafeSharedMemoryRegion shm = base::UnsafeSharedMemoryRegion::Create(
+        media::VideoFrame::AllocationSize(media::PIXEL_FORMAT_I420,
+                                          input_coded_size));
     if (!shm.IsValid()) {
       LogAndNotifyError(FROM_HERE, "failed to create input buffer ",
                         media::VideoEncodeAccelerator::kPlatformFailureError);
@@ -848,8 +934,9 @@ void RTCVideoEncoder::Impl::EncodeOneFrameWithNativeInput() {
   }
 
   constexpr int kDummyIndex = -1;
-  frame->AddDestructionObserver(media::BindToCurrentLoop(base::BindOnce(
-      &RTCVideoEncoder::Impl::EncodeFrameFinished, this, kDummyIndex)));
+  frame->AddDestructionObserver(media::BindToCurrentLoop(
+      WTF::Bind(&RTCVideoEncoder::Impl::EncodeFrameFinished,
+                CrossThreadUnretained(this), kDummyIndex)));
   if (!failed_timestamp_match_) {
     DCHECK(std::find_if(pending_timestamps_.begin(), pending_timestamps_.end(),
                         [&frame](const RTCTimestamps& entry) {
@@ -1196,11 +1283,10 @@ void RTCVideoEncoder::SetRates(
 }
 
 webrtc::VideoEncoder::EncoderInfo RTCVideoEncoder::GetEncoderInfo() const {
-  EncoderInfo info;
-  info.implementation_name = RTCVideoEncoder::Impl::ImplementationName();
-  info.supports_native_handle = true;
-  info.is_hardware_accelerated = true;
-  info.has_internal_source = false;
+  webrtc::VideoEncoder::EncoderInfo info;
+  if (impl_)
+    info = impl_->GetEncoderInfo();
+
   return info;
 }
 

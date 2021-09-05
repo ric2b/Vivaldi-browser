@@ -8,71 +8,62 @@
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/device/public/mojom/nfc.mojom-blink.h"
-#include "third_party/blink/renderer/core/dom/document.h"
-#include "third_party/blink/renderer/core/page/focus_changed_observer.h"
-#include "third_party/blink/renderer/core/page/page_visibility_observer.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
+#include "third_party/blink/renderer/platform/supplementable.h"
 #include "third_party/blink/renderer/platform/wtf/hash_map.h"
 
 namespace blink {
 
-class Document;
-class NFCScanOptions;
-class NFCReader;
-class NFCWriter;
+class LocalDOMWindow;
+class NDEFScanOptions;
+class NDEFReader;
+class NDEFWriter;
 
-// This is a proxy class used by NFCWriter(s) and NFCReader(s) to connect
+// This is a proxy class used by NDEFWriter(s) and NDEFReader(s) to connect
 // to implementation of device::mojom::blink::NFC interface.
 class MODULES_EXPORT NFCProxy final : public GarbageCollected<NFCProxy>,
-                                      public PageVisibilityObserver,
-                                      public FocusChangedObserver,
-                                      public Supplement<Document>,
+                                      public Supplement<LocalDOMWindow>,
                                       public device::mojom::blink::NFCClient {
   USING_GARBAGE_COLLECTED_MIXIN(NFCProxy);
   USING_PRE_FINALIZER(NFCProxy, Dispose);
 
  public:
   static const char kSupplementName[];
-  static NFCProxy* From(Document&);
+  static NFCProxy* From(LocalDOMWindow&);
 
-  explicit NFCProxy(Document&);
+  explicit NFCProxy(LocalDOMWindow&);
   ~NFCProxy() override;
 
   void Dispose();
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
   // There is no matching RemoveWriter() method because writers are
   // automatically removed from the weak hash set when they are garbage
   // collected.
-  void AddWriter(NFCWriter*);
+  void AddWriter(NDEFWriter*);
 
-  void StartReading(NFCReader*, const NFCScanOptions*);
-  void StopReading(NFCReader*);
-  bool IsReading(const NFCReader*);
+  void StartReading(NDEFReader*,
+                    const NDEFScanOptions*,
+                    device::mojom::blink::NFC::WatchCallback);
+  void StopReading(NDEFReader*);
+  bool IsReading(const NDEFReader*);
   void Push(device::mojom::blink::NDEFMessagePtr,
-            device::mojom::blink::NFCPushOptionsPtr,
+            device::mojom::blink::NDEFWriteOptionsPtr,
             device::mojom::blink::NFC::PushCallback);
-  void CancelPush(const String&, device::mojom::blink::NFC::CancelPushCallback);
+  void CancelPush(device::mojom::blink::NFC::CancelPushCallback);
 
  private:
   // Implementation of device::mojom::blink::NFCClient.
   void OnWatch(const Vector<uint32_t>&,
                const String&,
                device::mojom::blink::NDEFMessagePtr) override;
+  void OnError(device::mojom::blink::NDEFErrorPtr) override;
 
-  void OnReaderRegistered(NFCReader*,
+  void OnReaderRegistered(NDEFReader*,
                           uint32_t watch_id,
-                          device::mojom::blink::NFCErrorPtr);
-
-  // Implementation of PageVisibilityObserver.
-  void PageVisibilityChanged() override;
-
-  // Implementation of FocusChangedObserver.
-  void FocusedFrameChanged() override;
-
-  void UpdateSuspendedStatus();
-  bool ShouldSuspendNFC() const;
+                          device::mojom::blink::NFC::WatchCallback,
+                          device::mojom::blink::NDEFErrorPtr);
 
   void EnsureMojoConnection();
 
@@ -83,12 +74,12 @@ class MODULES_EXPORT NFCProxy final : public GarbageCollected<NFCProxy>,
   // i.e. |nfc_|. Incremented each time a watch request is made.
   uint32_t next_watch_id_ = 1;
 
-  // The <NFCReader, WatchId> map keeps all readers that have started reading.
+  // The <NDEFReader, WatchId> map keeps all readers that have started reading.
   // The watch id comes from |next_watch_id_|.
-  using ReaderMap = HeapHashMap<WeakMember<NFCReader>, uint32_t>;
+  using ReaderMap = HeapHashMap<WeakMember<NDEFReader>, uint32_t>;
   ReaderMap readers_;
 
-  using WriterSet = HeapHashSet<WeakMember<NFCWriter>>;
+  using WriterSet = HeapHashSet<WeakMember<NDEFWriter>>;
   WriterSet writers_;
 
   mojo::Remote<device::mojom::blink::NFC> nfc_remote_;

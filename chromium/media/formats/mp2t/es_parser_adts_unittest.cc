@@ -38,10 +38,11 @@ EsParserAdtsTest::EsParserAdtsTest() {
 
 bool EsParserAdtsTest::Process(const std::vector<Packet>& pes_packets,
                                bool sbr_in_mimetype) {
-  EsParserAdts es_parser(
-      base::Bind(&EsParserAdtsTest::NewAudioConfig, base::Unretained(this)),
-      base::Bind(&EsParserAdtsTest::EmitBuffer, base::Unretained(this)),
-      sbr_in_mimetype);
+  EsParserAdts es_parser(base::BindRepeating(&EsParserAdtsTest::NewAudioConfig,
+                                             base::Unretained(this)),
+                         base::BindRepeating(&EsParserAdtsTest::EmitBuffer,
+                                             base::Unretained(this)),
+                         sbr_in_mimetype);
   return ProcessPesPackets(&es_parser, pes_packets, false /* force_timing */);
 }
 
@@ -87,4 +88,3 @@ TEST_F(EsParserAdtsTest, AacSampleRate) {
 }
 }  // namespace mp2t
 }  // namespace media
-

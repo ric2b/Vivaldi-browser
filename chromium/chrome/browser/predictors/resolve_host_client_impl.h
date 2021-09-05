@@ -11,9 +11,13 @@
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "net/base/address_list.h"
 #include "services/network/public/cpp/resolve_host_client_base.h"
-#include "services/network/public/mojom/host_resolver.mojom.h"
+#include "services/network/public/mojom/host_resolver.mojom-forward.h"
 
 class GURL;
+
+namespace net {
+class NetworkIsolationKey;
+}
 
 namespace network {
 namespace mojom {
@@ -32,6 +36,7 @@ class ResolveHostClientImpl : public network::ResolveHostClientBase {
   // Starts the host resolution for |url|. |callback| is called when the host is
   // resolved or when an error occurs.
   ResolveHostClientImpl(const GURL& url,
+                        const net::NetworkIsolationKey& network_isolation_key,
                         ResolveHostCallback callback,
                         network::mojom::NetworkContext* network_context);
   // Cancels the request if it hasn't been completed yet.
@@ -40,6 +45,7 @@ class ResolveHostClientImpl : public network::ResolveHostClientBase {
   // network::mojom::ResolveHostClient:
   void OnComplete(
       int result,
+      const net::ResolveErrorInfo& resolve_error_info,
       const base::Optional<net::AddressList>& resolved_addresses) override;
 
   void OnConnectionError();

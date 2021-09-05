@@ -88,8 +88,7 @@ bool RelaunchRequiredDialogView::ShouldShowCloseButton() const {
 
 gfx::ImageSkia RelaunchRequiredDialogView::GetWindowIcon() {
   return gfx::CreateVectorIcon(gfx::IconDescription(
-      vector_icons::kBusinessIcon, kTitleIconSize, gfx::kChromeIconGrey,
-      base::TimeDelta(), gfx::kNoneIcon));
+      vector_icons::kBusinessIcon, kTitleIconSize, gfx::kChromeIconGrey));
 }
 
 bool RelaunchRequiredDialogView::ShouldShowWindowIcon() const {
@@ -113,11 +112,11 @@ RelaunchRequiredDialogView::RelaunchRequiredDialogView(
           deadline,
           base::BindRepeating(&RelaunchRequiredDialogView::UpdateWindowTitle,
                               base::Unretained(this))) {
-  DialogDelegate::set_default_button(ui::DIALOG_BUTTON_NONE);
-  DialogDelegate::set_button_label(
+  DialogDelegate::SetDefaultButton(ui::DIALOG_BUTTON_NONE);
+  DialogDelegate::SetButtonLabel(
       ui::DIALOG_BUTTON_OK,
       l10n_util::GetStringUTF16(IDS_RELAUNCH_ACCEPT_BUTTON));
-  DialogDelegate::set_button_label(
+  DialogDelegate::SetButtonLabel(
       ui::DIALOG_BUTTON_CANCEL,
       l10n_util::GetStringUTF16(IDS_RELAUNCH_REQUIRED_CANCEL_BUTTON));
   SetLayoutManager(std::make_unique<views::FillLayout>());

@@ -107,6 +107,9 @@
   <message name="IDS_FILE_BROWSER_COLUMN_SORTED_DESC_MESSAGE" desc="Message read by Chromevox/screenreader after sorting a column in the File list in descending order.">
     File list sorted by <ph name="COLUMN_NAME">$1<ex>date modified</ex></ph> in descending order.
   </message>
+  <message name="IDS_FILE_BROWSER_EXTERNAL_LINK_MESSAGE" desc="Message read by Chromevox/screenreader when focusing a link that launches an external application.">
+    External link
+  </message>
 
   <!-- File selection a11y -->
   <message name="IDS_FILE_BROWSER_SELECTION_ADD_SINGLE_ENTRY" desc="Message spoken by Chromevox/screenreader when adding a single entry (file or folder) to the existing selection.">
@@ -245,6 +248,9 @@
   </message>
   <message name="IDS_FILE_BROWSER_QUICK_VIEW_OPEN_IN_NEW_BUTTON_LABEL" desc="Label for button to open a file with external app.">
     Open
+  </message>
+  <message name="IDS_FILE_BROWSER_QUICK_VIEW_DELETE_BUTTON_LABEL" desc="Label for button to delete a file in QuickView.">
+    Delete
   </message>
   <message name="IDS_FILE_BROWSER_QUICK_VIEW_TOGGLE_METADATA_BOX_BUTTON_LABEL" desc="Label for button to toggle show/hide status of metadata box.">
     File info
@@ -817,6 +823,9 @@
   <message name="IDS_FILE_BROWSER_ERROR_PROGRESS_SUMMARY_PLURAL" desc="Summary message for multiple errors above the progress bar. This message may be placed at the next to ohter *_PROGERSS_SUMMARY messages.">
     <ph name="COUNT">$1<ex>10</ex></ph> errors.
   </message>
+  <message name="IDS_FILE_BROWSER_PERCENT_COMPLETE" desc="Percentage of file operation that is complete in a progress message.">
+    <ph name="PERCENT">$1<ex>10</ex></ph>% complete.
+  </message>
 
   <message name="IDS_FILE_BROWSER_CANCEL_ACTIVITY_LABEL" desc="Text spoken by ChromeVox/screen reader describing what will be cancelled.">
     Cancel <ph name="ACTIVITY_DESCRIPTION">$1<ex>Copying file.txt</ex></ph>.
@@ -905,6 +914,16 @@
   </message>
   <message name="IDS_FILE_BROWSER_FORMAT_DIALOG_CONFIRM_LABEL" desc="Label for the confirm button">
     Erase and Format
+  </message>
+
+  <message name="IDS_FILE_BROWSER_FORMAT_PROGRESS_MESSAGE" desc="Notification message displayed while formatting an external drive">
+    Formatting <ph name="DRIVE_NAME">$1<ex>My USB</ex></ph>...
+  </message>
+  <message name="IDS_FILE_BROWSER_FORMAT_SUCCESS_MESSAGE" desc="Notification message displayed when formatting of an external drive has succeeded">
+    Formatted <ph name="DRIVE_NAME">$1<ex>My USB</ex></ph>
+  </message>
+  <message name="IDS_FILE_BROWSER_FORMAT_FAILURE_MESSAGE" desc="Notification message displayed if formatting of an external drive has failed">
+    Could not format <ph name="DRIVE_NAME">$1<ex>My USB</ex></ph>
   </message>
 
   <message name="IDS_FILE_BROWSER_SUGGEST_DIALOG_TITLE" desc="Title of the suggest app dialog, which shows the list of the apps which supports the selected file.">
@@ -1379,6 +1398,15 @@
   </message>
   <message name="IDS_FILE_BROWSER_A11Y_VOLUME_EJECT" desc="Text to be used by screen reader to indicate users that the eject volume action has finished.">
     <ph name="VOLUME_NAME">$1<ex>file_name.rar</ex></ph> has been ejected.
+  </message>
+  <message name="IDS_FILE_BROWSER_GRID_VIEW_FOLDERS_TITLE" desc="Title displayed in Grid View above the folders.">
+    Folders
+  </message>
+  <message name="IDS_FILE_BROWSER_GRID_VIEW_FILES_TITLE" desc="Title dislayed in Grid View above the files.">
+    Files
+  </message>
+  <message name="IDS_FILE_BROWSER_LOCATION_BREADCRUMB_ELIDER_BUTTON_LABEL" desc="Label for the breadcrumb sub-folder elider button in the Files app folder location line.">
+    More sub-folders...
   </message>
 
 <!-- Common for Audio player and Media player -->

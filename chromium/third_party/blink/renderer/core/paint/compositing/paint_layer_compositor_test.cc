@@ -36,7 +36,8 @@ TEST_F(PaintLayerCompositorTest, AdvancingToCompositingInputsClean) {
 
   box_layer->SetNeedsCompositingInputsUpdate();
 
-  GetDocument().View()->UpdateLifecycleToCompositingInputsClean();
+  GetDocument().View()->UpdateLifecycleToCompositingInputsClean(
+      DocumentUpdateReason::kTest);
   EXPECT_EQ(DocumentLifecycle::kCompositingInputsClean,
             GetDocument().Lifecycle().GetState());
   EXPECT_FALSE(box_layer->NeedsCompositingInputsUpdate());
@@ -63,7 +64,8 @@ TEST_F(PaintLayerCompositorTest,
 
   // Update the lifecycle to CompositingInputsClean. This should not start the
   // animation lifecycle.
-  GetDocument().View()->UpdateLifecycleToCompositingInputsClean();
+  GetDocument().View()->UpdateLifecycleToCompositingInputsClean(
+      DocumentUpdateReason::kTest);
   EXPECT_EQ(DocumentLifecycle::kCompositingInputsClean,
             GetDocument().Lifecycle().GetState());
 
@@ -84,28 +86,6 @@ TEST_F(PaintLayerCompositorTest,
   EXPECT_EQ(1ul, otherBoxAnimations.size());
   EXPECT_EQ(boxAnimations.front()->CompositorGroup(),
             otherBoxAnimations.front()->CompositorGroup());
-}
-
-TEST_F(PaintLayerCompositorTest, UpdateDoesNotOrphanMainGraphicsLayer) {
-  SetHtmlInnerHTML(R"HTML(
-    <style> * { margin: 0 } </style>
-    <div id='box'></div>
-  )HTML");
-
-  auto* main_graphics_layer = GetDocument()
-                                  .GetLayoutView()
-                                  ->Layer()
-                                  ->GetCompositedLayerMapping()
-                                  ->MainGraphicsLayer();
-  auto* main_graphics_layer_parent = main_graphics_layer->Parent();
-  EXPECT_NE(nullptr, main_graphics_layer_parent);
-
-  // Force CompositedLayerMapping to update the internal layer hierarchy.
-  auto* box = GetDocument().getElementById("box");
-  box->setAttribute(html_names::kStyleAttr, "height: 1000px;");
-  UpdateAllLifecyclePhasesForTest();
-
-  EXPECT_EQ(main_graphics_layer_parent, main_graphics_layer->Parent());
 }
 
 TEST_F(PaintLayerCompositorTest, CompositingInputsUpdateStopsContainStrict) {
@@ -132,7 +112,8 @@ TEST_F(PaintLayerCompositorTest, CompositingInputsUpdateStopsContainStrict) {
   EXPECT_FALSE(wrapper->NeedsCompositingInputsUpdate());
   EXPECT_TRUE(target->NeedsCompositingInputsUpdate());
 
-  GetDocument().View()->UpdateLifecycleToCompositingInputsClean();
+  GetDocument().View()->UpdateLifecycleToCompositingInputsClean(
+      DocumentUpdateReason::kTest);
   EXPECT_EQ(DocumentLifecycle::kCompositingInputsClean,
             GetDocument().Lifecycle().GetState());
   EXPECT_FALSE(wrapper->NeedsCompositingInputsUpdate());

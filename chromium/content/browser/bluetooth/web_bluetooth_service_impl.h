@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "base/gtest_prod_util.h"
@@ -44,7 +45,7 @@ struct GATTNotifySessionAndCharacteristicClient;
 class RenderFrameHost;
 class RenderProcessHost;
 
-bool HasEmptyOrInvalidFilter(
+bool HasValidFilter(
     const base::Optional<
         std::vector<blink::mojom::WebBluetoothLeScanFilterPtr>>& filters);
 
@@ -93,6 +94,8 @@ class CONTENT_EXPORT WebBluetoothServiceImpl
  private:
   FRIEND_TEST_ALL_PREFIXES(WebBluetoothServiceImplTest,
                            ClearStateDuringRequestDevice);
+  FRIEND_TEST_ALL_PREFIXES(WebBluetoothServiceImplTest,
+                           ClearStateDuringRequestScanningStart);
   FRIEND_TEST_ALL_PREFIXES(WebBluetoothServiceImplTest, PermissionAllowed);
   FRIEND_TEST_ALL_PREFIXES(WebBluetoothServiceImplTest,
                            PermissionPromptCanceled);
@@ -102,6 +105,8 @@ class CONTENT_EXPORT WebBluetoothServiceImpl
                            BluetoothScanningPermissionRevokedWhenTabOccluded);
   FRIEND_TEST_ALL_PREFIXES(WebBluetoothServiceImplTest,
                            BluetoothScanningPermissionRevokedWhenBlocked);
+  FRIEND_TEST_ALL_PREFIXES(WebBluetoothServiceImplTest,
+                           BluetoothScanningPermissionRevokedWhenFocusIsLost);
   friend class FrameConnectedBluetoothDevicesTest;
   friend class WebBluetoothServiceImplTest;
   using PrimaryServicesRequestCallback =
@@ -157,6 +162,7 @@ class CONTENT_EXPORT WebBluetoothServiceImpl
   // is this->render_frame_host_ and not some other frame in the same tab.
   void DidFinishNavigation(NavigationHandle* navigation_handle) override;
   void OnVisibilityChanged(Visibility visibility) override;
+  void OnWebContentsLostFocus(RenderWidgetHost* render_widget_host) override;
 
   // BluetoothAdapter::Observer:
   void AdapterPoweredChanged(device::BluetoothAdapter* adapter,
@@ -194,6 +200,7 @@ class CONTENT_EXPORT WebBluetoothServiceImpl
   void GetAvailability(GetAvailabilityCallback callback) override;
   void RequestDevice(blink::mojom::WebBluetoothRequestDeviceOptionsPtr options,
                      RequestDeviceCallback callback) override;
+  void GetDevices(GetDevicesCallback callback) override;
   void RemoteServerConnect(
       const blink::WebBluetoothDeviceId& device_id,
       mojo::PendingAssociatedRemote<blink::mojom::WebBluetoothServerClient>
@@ -248,6 +255,9 @@ class CONTENT_EXPORT WebBluetoothServiceImpl
       blink::mojom::WebBluetoothRequestDeviceOptionsPtr options,
       RequestDeviceCallback callback,
       scoped_refptr<device::BluetoothAdapter> adapter);
+
+  void GetDevicesImpl(GetDevicesCallback callback,
+                      scoped_refptr<device::BluetoothAdapter> adapter);
 
   void RequestScanningStartImpl(
       mojo::AssociatedRemote<blink::mojom::WebBluetoothScanClient> client,
@@ -377,6 +387,14 @@ class CONTENT_EXPORT WebBluetoothServiceImpl
 
   // Clears all state (maps, sets, etc).
   void ClearState();
+
+  // Clears state associated with Bluetooth LE Scanning.
+  void ClearDeviceAdvertisementClients();
+
+  bool IsAllowedToAccessAtLeastOneService(
+      const blink::WebBluetoothDeviceId& device_id);
+  bool IsAllowedToAccessService(const blink::WebBluetoothDeviceId& device_id,
+                                const device::BluetoothUUID& service);
 
   // Used to open a BluetoothChooser and start a device discovery session.
   std::unique_ptr<BluetoothDeviceChooserController> device_chooser_controller_;

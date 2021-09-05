@@ -44,7 +44,6 @@ class FindBar;
 class GURL;
 class LocationBar;
 class StatusBubble;
-class ToolbarActionsBar;
 
 namespace autofill {
 class AutofillBubbleHandler;
@@ -257,8 +256,8 @@ class BrowserWindow : public ui::BaseWindow {
   virtual void SetContentsSize(const gfx::Size& size) = 0;
 
   // Updates the visual state of the specified page action icon if present on
-  // the window. Returns whether any change occurred.
-  virtual bool UpdatePageActionIcon(PageActionIconType type) = 0;
+  // the window.
+  virtual void UpdatePageActionIcon(PageActionIconType type) = 0;
 
   // Returns the AutofillBubbleHandler responsible for handling all
   // Autofill-related bubbles.
@@ -290,11 +289,6 @@ class BrowserWindow : public ui::BaseWindow {
 
   // Focuses the toolbar (for accessibility).
   virtual void FocusToolbar() = 0;
-
-  // Returns the ToolbarActionsBar associated with the window, if any.
-  // TODO(pbos): Replace usages of |GetToolbarActionsBar| with
-  // |GetExtensionsContainer|.
-  virtual ToolbarActionsBar* GetToolbarActionsBar() = 0;
 
   // Returns the ExtensionsContainer associated with the window, if any.
   virtual ExtensionsContainer* GetExtensionsContainer() = 0;
@@ -429,8 +423,6 @@ class BrowserWindow : public ui::BaseWindow {
   virtual void VivaldiShowWebsiteSettingsAt(Profile* profile,
       content::WebContents* web_contents,
       const GURL& url,
-      security_state::SecurityLevel security_level,
-      const security_state::VisibleSecurityState& visible_security_state,
       gfx::Point pos) {}
 
   // Shows the app menu (for accessibility).
@@ -460,7 +452,8 @@ class BrowserWindow : public ui::BaseWindow {
 
   // Construct a BrowserWindow implementation for the specified |browser|.
   static BrowserWindow* CreateBrowserWindow(std::unique_ptr<Browser> browser,
-                                            bool user_gesture);
+                                            bool user_gesture,
+                                            bool in_tab_dragging);
 
   // Shows the avatar bubble on the window frame off of the avatar button with
   // the given mode. The Service Type specified by GAIA is provided as well.

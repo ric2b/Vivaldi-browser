@@ -14,8 +14,8 @@
 #include "base/barrier_closure.h"
 #include "base/bind.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/test/task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
@@ -51,7 +51,7 @@ ACTION_P2(ExpectGuidAndThen, expected_guid, callback) {
 
 class USBDeviceManagerImplTest : public testing::Test {
  public:
-  USBDeviceManagerImplTest() : message_loop_(new base::MessageLoop) {
+  USBDeviceManagerImplTest() {
     auto mock_usb_service = std::make_unique<MockUsbService>();
     mock_usb_service_ = mock_usb_service.get();
     device_manager_instance_ =
@@ -62,7 +62,7 @@ class USBDeviceManagerImplTest : public testing::Test {
  protected:
   MockUsbService* mock_usb_service_;
   std::unique_ptr<DeviceManagerImpl> device_manager_instance_;
-  std::unique_ptr<base::MessageLoop> message_loop_;
+  base::test::SingleThreadTaskEnvironment task_environment_;
 };
 
 class MockDeviceManagerClient : public mojom::UsbDeviceManagerClient {
@@ -90,14 +90,14 @@ class MockDeviceManagerClient : public mojom::UsbDeviceManagerClient {
 };
 
 void ExpectDevicesAndThen(const std::set<std::string>& expected_guids,
-                          const base::Closure& continuation,
+                          base::OnceClosure continuation,
                           std::vector<UsbDeviceInfoPtr> results) {
   EXPECT_EQ(expected_guids.size(), results.size());
   std::set<std::string> actual_guids;
   for (size_t i = 0; i < results.size(); ++i)
     actual_guids.insert(results[i]->guid);
   EXPECT_EQ(expected_guids, actual_guids);
-  continuation.Run();
+  std::move(continuation).Run();
 }
 
 }  // namespace
@@ -214,7 +214,8 @@ TEST_F(USBDeviceManagerImplTest, Client) {
 
   {
     base::RunLoop loop;
-    base::Closure barrier = base::BarrierClosure(6, loop.QuitClosure());
+    base::RepeatingClosure barrier =
+        base::BarrierClosure(/*num_closures=*/6, loop.QuitClosure());
     testing::InSequence s;
     EXPECT_CALL(mock_client, DoOnDeviceAdded(_))
         .WillOnce(ExpectGuidAndThen(device1->guid(), barrier))

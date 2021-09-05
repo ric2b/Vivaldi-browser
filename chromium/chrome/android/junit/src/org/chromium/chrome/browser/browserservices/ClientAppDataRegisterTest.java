@@ -12,6 +12,7 @@ import org.robolectric.annotation.Config;
 
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Feature;
+import org.chromium.components.embedder_support.util.Origin;
 
 import java.util.Set;
 
@@ -92,6 +93,6 @@ public class ClientAppDataRegisterTest {
 
     private void register(String domain) {
         mRegister.registerPackageForOrigin(UID, APP_NAME, APP_PACKAGE, domain,
-                new Origin("https://www." + domain));
+                Origin.create("https://www." + domain));
     }
 }

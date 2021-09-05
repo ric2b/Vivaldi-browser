@@ -16,9 +16,9 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.chrome.browser.ChromeSwitches;
-import org.chromium.chrome.browser.preferences.website.ContentSettingValues;
-import org.chromium.chrome.browser.preferences.website.PermissionInfo;
+import org.chromium.chrome.browser.flags.ChromeSwitches;
+import org.chromium.chrome.browser.site_settings.ContentSettingValues;
+import org.chromium.chrome.browser.site_settings.PermissionInfo;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ChromeTabUtils;

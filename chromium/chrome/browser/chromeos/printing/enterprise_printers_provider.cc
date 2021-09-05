@@ -40,6 +40,14 @@ std::vector<std::string> ConvertToVector(const base::ListValue* list) {
   return string_list;
 }
 
+void AddPrintersFromMap(
+    const std::unordered_map<std::string, Printer>& printer_map,
+    std::vector<Printer>* printer_list) {
+  for (auto& printer_kv : printer_map) {
+    printer_list->push_back(printer_kv.second);
+  }
+}
+
 class EnterprisePrintersProviderImpl : public EnterprisePrintersProvider,
                                        public BulkPrintersCalculator::Observer {
  public:
@@ -48,25 +56,36 @@ class EnterprisePrintersProviderImpl : public EnterprisePrintersProvider,
     // initialization of pref_change_registrar
     pref_change_registrar_.Init(profile->GetPrefs());
 
-    // Binds instances of BulkPrintersCalculator to policies.
-    policies_binder_ = CalculatorsPoliciesBinder::Create(settings, profile);
+    auto* factory = BulkPrintersCalculatorFactory::Get();
+    if (!factory) {
+      DVLOG(1) << "Factory is null.  Policies are unbound.  This is only "
+                  "expected in unit tests";
+      return;
+    }
+
     // Get instance of BulkPrintersCalculator for device policies.
-    device_printers_ = BulkPrintersCalculatorFactory::Get()->GetForDevice();
+    device_printers_ = factory->GetForDevice();
     if (device_printers_) {
+      devices_binder_ =
+          CalculatorsPoliciesBinder::DeviceBinder(settings, device_printers_);
       device_printers_->AddObserver(this);
       RecalculateCompleteFlagForDevicePrinters();
     }
+
     // Calculate account_id_ and get instance of BulkPrintersCalculator for user
     // policies.
     const user_manager::User* user =
         ProfileHelper::Get()->GetUserByProfile(profile);
     if (user) {
       account_id_ = user->GetAccountId();
-      user_printers_ =
-          BulkPrintersCalculatorFactory::Get()->GetForAccountId(account_id_);
+      user_printers_ = factory->GetForAccountId(account_id_);
+      // Binds instances of BulkPrintersCalculator to policies.
+      profile_binder_ = CalculatorsPoliciesBinder::UserBinder(
+          profile->GetPrefs(), user_printers_);
       user_printers_->AddObserver(this);
       RecalculateCompleteFlagForUserPrinters();
     }
+
     // Binds policy with recommended printers (deprecated). This method calls
     // indirectly RecalculateCurrentPrintersList() that prepares the first
     // version of final list of printers.
@@ -79,7 +98,6 @@ class EnterprisePrintersProviderImpl : public EnterprisePrintersProvider,
       device_printers_->RemoveObserver(this);
     if (user_printers_) {
       user_printers_->RemoveObserver(this);
-      BulkPrintersCalculatorFactory::Get()->RemoveForUserId(account_id_);
     }
   }
 
@@ -96,9 +114,9 @@ class EnterprisePrintersProviderImpl : public EnterprisePrintersProvider,
 
   // BulkPrintersCalculator::Observer implementation
   void OnPrintersChanged(const BulkPrintersCalculator* sender) override {
-    if (sender == device_printers_.get()) {
+    if (device_printers_ && sender == device_printers_.get()) {
       RecalculateCompleteFlagForDevicePrinters();
-    } else {
+    } else if (user_printers_ && sender == user_printers_.get()) {
       RecalculateCompleteFlagForUserPrinters();
     }
     RecalculateCurrentPrintersList();
@@ -112,10 +130,10 @@ class EnterprisePrintersProviderImpl : public EnterprisePrintersProvider,
     std::vector<std::string> data =
         FromPrefs(prefs::kRecommendedNativePrinters);
     for (const auto& printer_json : data) {
-      std::unique_ptr<base::DictionaryValue> printer_dictionary =
-          base::DictionaryValue::From(base::JSONReader::ReadDeprecated(
-              printer_json, base::JSON_ALLOW_TRAILING_COMMAS));
-      if (!printer_dictionary) {
+      base::Optional<base::Value> printer_dictionary = base::JSONReader::Read(
+          printer_json, base::JSON_ALLOW_TRAILING_COMMAS);
+      if (!printer_dictionary.has_value() ||
+          !printer_dictionary.value().is_dict()) {
         LOG(WARNING) << "Ignoring invalid printer.  Invalid JSON object: "
                      << printer_json;
         continue;
@@ -125,15 +143,17 @@ class EnterprisePrintersProviderImpl : public EnterprisePrintersProvider,
       // unique so we'll hash the record.  This will not collide with the
       // UUIDs generated for user entries.
       std::string id = base::MD5String(printer_json);
-      printer_dictionary->SetString(kPrinterId, id);
+      printer_dictionary.value().SetStringKey(kPrinterId, id);
 
-      auto new_printer = RecommendedPrinterToPrinter(*printer_dictionary);
+      auto new_printer = RecommendedPrinterToPrinter(
+          base::Value::AsDictionaryValue(printer_dictionary.value()));
       if (!new_printer) {
         LOG(WARNING) << "Recommended printer is malformed.";
         continue;
       }
 
-      if (!recommended_printers_.insert({id, *new_printer}).second) {
+      bool inserted = recommended_printers_.insert({id, *new_printer}).second;
+      if (!inserted) {
         // Printer is already in the list.
         LOG(WARNING) << "Duplicate printer ignored: " << id;
         continue;
@@ -145,6 +165,11 @@ class EnterprisePrintersProviderImpl : public EnterprisePrintersProvider,
   // These three methods calculate resultant list of printers and complete flag.
 
   void RecalculateCompleteFlagForUserPrinters() {
+    if (!user_printers_) {
+      user_printers_is_complete_ = true;
+      return;
+    }
+
     user_printers_is_complete_ =
         user_printers_->IsComplete() &&
         (user_printers_->IsDataPolicySet() ||
@@ -152,6 +177,11 @@ class EnterprisePrintersProviderImpl : public EnterprisePrintersProvider,
   }
 
   void RecalculateCompleteFlagForDevicePrinters() {
+    if (!device_printers_) {
+      device_printers_is_complete_ = true;
+      return;
+    }
+
     device_printers_is_complete_ =
         device_printers_->IsComplete() &&
         (device_printers_->IsDataPolicySet() ||
@@ -160,17 +190,23 @@ class EnterprisePrintersProviderImpl : public EnterprisePrintersProvider,
 
   void RecalculateCurrentPrintersList() {
     complete_ = true;
-    printers_ = recommended_printers_;
+    std::vector<Printer> current_printers;
+    AddPrintersFromMap(recommended_printers_, &current_printers);
+
     if (device_printers_) {
       complete_ = complete_ && device_printers_is_complete_;
       const auto& printers = device_printers_->GetPrinters();
-      printers_.insert(printers.begin(), printers.end());
+      AddPrintersFromMap(printers, &current_printers);
     }
     if (user_printers_) {
       complete_ = complete_ && user_printers_is_complete_;
       const auto& printers = user_printers_->GetPrinters();
-      printers_.insert(printers.begin(), printers.end());
+      AddPrintersFromMap(printers, &current_printers);
     }
+
+    // Save current_printers.
+    printers_.swap(current_printers);
+
     for (auto& observer : observers_) {
       observer.OnPrintersChanged(complete_, printers_);
     }
@@ -218,14 +254,15 @@ class EnterprisePrintersProviderImpl : public EnterprisePrintersProvider,
 
   // current final results
   bool complete_ = false;
-  std::unordered_map<std::string, Printer> printers_;
+  std::vector<Printer> printers_;
 
   // Calculators for bulk printers from device and user policies. Unowned.
   base::WeakPtr<BulkPrintersCalculator> device_printers_;
   base::WeakPtr<BulkPrintersCalculator> user_printers_;
 
   // Policies binder (bridge between policies and calculators). Owned.
-  std::unique_ptr<CalculatorsPoliciesBinder> policies_binder_;
+  std::unique_ptr<CalculatorsPoliciesBinder> devices_binder_;
+  std::unique_ptr<CalculatorsPoliciesBinder> profile_binder_;
 
   // Profile (user) settings.
   Profile* profile_;

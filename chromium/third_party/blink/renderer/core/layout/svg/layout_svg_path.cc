@@ -36,7 +36,7 @@ namespace blink {
 
 LayoutSVGPath::LayoutSVGPath(SVGGeometryElement* node)
     // <line> elements have no joins and thus needn't care about miters.
-    : LayoutSVGShape(node, IsSVGLineElement(node) ? kNoMiters : kComplex) {}
+    : LayoutSVGShape(node, IsA<SVGLineElement>(node) ? kNoMiters : kComplex) {}
 
 LayoutSVGPath::~LayoutSVGPath() = default;
 
@@ -54,6 +54,12 @@ void LayoutSVGPath::WillBeDestroyed() {
 void LayoutSVGPath::UpdateShapeFromElement() {
   LayoutSVGShape::UpdateShapeFromElement();
   UpdateMarkers();
+}
+
+const StylePath* LayoutSVGPath::GetStylePath() const {
+  if (!IsA<SVGPathElement>(*GetElement()))
+    return nullptr;
+  return StyleRef().SvgStyle().D();
 }
 
 void LayoutSVGPath::UpdateMarkers() {
@@ -74,25 +80,22 @@ void LayoutSVGPath::UpdateMarkers() {
   if (!(marker_start || marker_mid || marker_end))
     return;
 
-  {
-    SVGMarkerData marker_data(
-        marker_positions_,
-        marker_start &&
-            marker_start->OrientType() == kSVGMarkerOrientAutoStartReverse);
-    GetPath().Apply(&marker_data, SVGMarkerData::UpdateFromPathElement);
-    marker_data.PathIsDone();
-  }
+  SVGMarkerDataBuilder builder(marker_positions_);
+  if (const StylePath* style_path = GetStylePath())
+    builder.Build(style_path->ByteStream());
+  else
+    builder.Build(GetPath());
 
   if (marker_positions_.IsEmpty())
     return;
 
-  const float stroke_width = StrokeWidth();
+  const float stroke_width = StrokeWidthForMarkerUnits();
   FloatRect boundaries;
   for (const auto& position : marker_positions_) {
-    if (LayoutSVGResourceMarker* marker = SVGMarkerData::MarkerForType(
-            position.type, marker_start, marker_mid, marker_end)) {
-      boundaries.Unite(marker->MarkerBoundaries(marker->MarkerTransformation(
-          position.origin, position.angle, stroke_width)));
+    if (LayoutSVGResourceMarker* marker =
+            position.SelectMarker(marker_start, marker_mid, marker_end)) {
+      boundaries.Unite(marker->MarkerBoundaries(
+          marker->MarkerTransformation(position, stroke_width)));
     }
   }
 

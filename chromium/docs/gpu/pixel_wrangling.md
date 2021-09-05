@@ -52,8 +52,7 @@ so on. The waterfalls we’re interested in are:
 [Chromium GPU]: https://ci.chromium.org/p/chromium/g/chromium.gpu/console?reload=120
 [Chromium GPU FYI]: https://ci.chromium.org/p/chromium/g/chromium.gpu.fyi/console?reload=120
 [ANGLE tryservers]: https://build.chromium.org/p/tryserver.chromium.angle/waterfall
-<!-- TODO(kainino): update link when the page is migrated -->
-[ANGLE Wrangler]: https://sites.google.com/a/chromium.org/dev/developers/how-tos/angle-wrangling
+[ANGLE Wrangler]: https://chromium.googlesource.com/angle/angle/+/master/infra/ANGLEWrangling.md
 
 ## Test Suites
 
@@ -80,6 +79,8 @@ test the code that is actually shipped. As of this writing, the tests included:
     `src/gpu/gles2_conform_support/BUILD.gn`
 *   `gl_tests`: see `src/gpu/BUILD.gn`
 *   `gl_unittests`: see `src/ui/gl/BUILD.gn`
+*   `rendering_representative_perf_tests` (on the chromium.gpu.fyi waterfall):
+    see `src/chrome/test/BUILD.gn`
 
 And more. See
 [`src/testing/buildbot/README.md`](../../testing/buildbot/README.md)
@@ -110,7 +111,7 @@ shift, and a calendar appointment.
         GPU bots.
     *   In this case you'll upload CLs to Gerrit to perform reverts (optionally
         using the new "Revert" button in the UI), and might consider using
-        `TBR=` to speed through trivial and urgent CLs. In general, try to send
+        `Tbr:` to speed through trivial and urgent CLs. In general, try to send
         all CLs through the commit queue.
     *   Contact bajones, kainino, kbr, vmiura, zmo, or another member of the
         Chrome GPU team who's already a committer for help landing patches or
@@ -253,6 +254,8 @@ shift, and a calendar appointment.
         close the Chromium tree.
     1.  Please read the section on [stamping out flakiness] for motivation on
         how important it is to eliminate flakiness rather than hiding it.
+    1. For failures of rendering_representative_perf_tests please refer to its
+    [instructions on updating expectations][rendering_representative_perf_tests].
 1.  For the remaining Gtest-style tests, use the [`DISABLED_`
     modifier][gtest-DISABLED] to suppress any failures if necessary.
 
@@ -277,6 +280,7 @@ https://ci.chromium.org/p/chromium/builders/luci.chromium.try/win7-rel
 [pixel_expectations.txt]: https://chromium.googlesource.com/chromium/src/+/master/content/test/gpu/gpu_tests/test_expectations/pixel_expectations.txt
 [stamping out flakiness]: gpu_testing.md#Stamping-out-Flakiness
 [gtest-DISABLED]: https://github.com/google/googletest/blob/master/googletest/docs/AdvancedGuide.md#temporarily-disabling-tests
+[rendering_representative_perf_tests]: ../testing/rendering_representative_perf_tests.md#Updating-Expectations
 
 ### When Bots Misbehave (SSHing into a bot)
 
@@ -298,8 +302,16 @@ https://ci.chromium.org/p/chromium/builders/luci.chromium.try/win7-rel
 
 [telemetry documentation]: https://cs.chromium.org/chromium/src/third_party/catapult/telemetry/docs/run_benchmarks_locally.md
 
-## Extending the GPU Pixel Wrangling Rotation
+## Modifying the GPU Pixel Wrangling Rotation
 
-See the [Chrome Internal GPU Pixel Wrangling Instructions] for information on extending the rotation.
+You may find yourself needing to modify the current rotation. Whether to extend
+the rotation, or if scheduling conflicts arise.
+
+For scheduling conflicts you can swap your shift with another wrangler. A good
+approach is to look at the rotation calendar, finding someone with nearby dates
+to yours. Reach out to them, as they will often be willing to swap.
+
+To actually modify the rotation:
+See the [Chrome Internal GPU Pixel Wrangling Instructions] for information.
 
 [Chrome Internal GPU Pixel Wrangling Instructions]: https://sites.google.com/a/google.com/client3d/documents/chrome-internal-gpu-pixel-wrangling-instructions

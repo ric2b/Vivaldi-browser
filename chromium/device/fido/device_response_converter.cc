@@ -20,6 +20,8 @@
 #include "components/device_event_log/device_event_log.h"
 #include "device/fido/authenticator_data.h"
 #include "device/fido/authenticator_supported_options.h"
+#include "device/fido/client_data.h"
+#include "device/fido/features.h"
 #include "device/fido/fido_constants.h"
 #include "device/fido/opaque_attestation_statement.h"
 
@@ -36,6 +38,15 @@ ProtocolVersion ConvertStringToProtocolVersion(base::StringPiece version) {
     return ProtocolVersion::kU2f;
 
   return ProtocolVersion::kUnknown;
+}
+
+// Converts a CBOR unsigned integer value to a uint32_t. The conversion is
+// clamped at uint32_max.
+uint32_t CBORUnsignedToUint32Safe(const cbor::Value& value) {
+  DCHECK(value.is_unsigned());
+  constexpr uint32_t uint32_max = std::numeric_limits<uint32_t>::max();
+  const int64_t n = value.GetUnsigned();
+  return n > uint32_max ? uint32_max : n;
 }
 
 }  // namespace
@@ -79,11 +90,20 @@ ReadCTAPMakeCredentialResponse(FidoTransportProtocol transport_used,
   if (it == decoded_map.end() || !it->second.is_map())
     return base::nullopt;
 
-  return AuthenticatorMakeCredentialResponse(
+  AuthenticatorMakeCredentialResponse response(
       transport_used,
       AttestationObject(std::move(*authenticator_data),
                         std::make_unique<OpaqueAttestationStatement>(
                             format, it->second.Clone())));
+
+  if (base::FeatureList::IsEnabled(kWebAuthPhoneSupport)) {
+    it = decoded_map.find(CBOR(kAndroidClientDataExtOutputKey));
+    if (it != decoded_map.end() && it->second.is_bytestring()) {
+      response.set_android_client_data_ext(it->second.GetBytestring());
+    }
+  }
+
+  return response;
 }
 
 base::Optional<AuthenticatorGetAssertionResponse> ReadCTAPGetAssertionResponse(
@@ -135,7 +155,14 @@ base::Optional<AuthenticatorGetAssertionResponse> ReadCTAPGetAssertionResponse(
     response.SetNumCredentials(it->second.GetUnsigned());
   }
 
-  return base::Optional<AuthenticatorGetAssertionResponse>(std::move(response));
+  if (base::FeatureList::IsEnabled(kWebAuthPhoneSupport)) {
+    it = response_map.find(CBOR(kAndroidClientDataExtOutputKey));
+    if (it != response_map.end() && it->second.is_bytestring()) {
+      response.set_android_client_data_ext(it->second.GetBytestring());
+    }
+  }
+
+  return response;
 }
 
 base::Optional<AuthenticatorGetInfoResponse> ReadCTAPGetInfoResponse(
@@ -220,6 +247,8 @@ base::Optional<AuthenticatorGetInfoResponse> ReadCTAPGetInfoResponse(
       const std::string& extension_str = extension.GetString();
       if (extension_str == kExtensionCredProtect) {
         options.supports_cred_protect = true;
+      } else if (extension_str == kExtensionAndroidClientData) {
+        options.supports_android_client_data_ext = true;
       }
       extensions.push_back(extension_str);
     }
@@ -329,6 +358,14 @@ base::Optional<AuthenticatorGetInfoResponse> ReadCTAPGetInfoResponse(
               : Availability::kSupportedButUnprovisioned;
     }
 
+    option_map_it = option_map.find(CBOR(kUvTokenMapKey));
+    if (option_map_it != option_map.end()) {
+      if (!option_map_it->second.is_bool()) {
+        return base::nullopt;
+      }
+      options.supports_uv_token = option_map_it->second.GetBool();
+    }
+
     response.options = std::move(options);
   }
 
@@ -337,7 +374,7 @@ base::Optional<AuthenticatorGetInfoResponse> ReadCTAPGetInfoResponse(
     if (!it->second.is_unsigned())
       return base::nullopt;
 
-    response.max_msg_size = it->second.GetUnsigned();
+    response.max_msg_size = CBORUnsignedToUint32Safe(it->second);
   }
 
   it = response_map.find(CBOR(6));
@@ -353,6 +390,23 @@ base::Optional<AuthenticatorGetInfoResponse> ReadCTAPGetInfoResponse(
       supported_pin_protocols.push_back(protocol.GetUnsigned());
     }
     response.pin_protocols = std::move(supported_pin_protocols);
+  }
+
+  it = response_map.find(CBOR(7));
+  if (it != response_map.end()) {
+    if (!it->second.is_unsigned())
+      return base::nullopt;
+
+    response.max_credential_count_in_list =
+        CBORUnsignedToUint32Safe(it->second);
+  }
+
+  it = response_map.find(CBOR(8));
+  if (it != response_map.end()) {
+    if (!it->second.is_unsigned())
+      return base::nullopt;
+
+    response.max_credential_id_length = CBORUnsignedToUint32Safe(it->second);
   }
 
   return base::Optional<AuthenticatorGetInfoResponse>(std::move(response));

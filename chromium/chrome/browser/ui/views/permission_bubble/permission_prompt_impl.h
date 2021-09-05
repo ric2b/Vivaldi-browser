@@ -6,40 +6,42 @@
 #define CHROME_BROWSER_UI_VIEWS_PERMISSION_BUBBLE_PERMISSION_PROMPT_IMPL_H_
 
 #include "base/macros.h"
-#include "chrome/browser/ui/permission_bubble/permission_prompt.h"
-#include "content/public/browser/web_contents.h"
+#include "components/permissions/permission_prompt.h"
 
 class Browser;
-class PermissionsBubbleDialogDelegateView;
+class PermissionPromptBubbleView;
+
+namespace content {
+class WebContents;
+}  // namespace content
 
 // This object will create or trigger UI to reflect that a website is requesting
-// a permission. The UI is usually a popup dialog, but may instead be a location
-// bar icon (i.e. "quiet"). The UI lasts for the duration of this object's
-// lifetime.
-class PermissionPromptImpl : public PermissionPrompt {
+// a permission. The UI is usually a popup bubble, but may instead be a location
+// bar icon (the "quiet" prompt).
+class PermissionPromptImpl : public permissions::PermissionPrompt {
  public:
-  PermissionPromptImpl(Browser* browser, Delegate* delegate);
+  PermissionPromptImpl(Browser* browser,
+                       content::WebContents* web_contents,
+                       Delegate* delegate);
   ~PermissionPromptImpl() override;
 
-  // PermissionPrompt:
+  // permissions::PermissionPrompt:
   void UpdateAnchorPosition() override;
-  gfx::NativeWindow GetNativeWindow() override;
   TabSwitchingBehavior GetTabSwitchingBehavior() override;
 
-  void Closing();
-  void Accept();
-  void Deny();
-
-  Browser* browser() { return browser_; }
+  PermissionPromptBubbleView* prompt_bubble_for_testing() {
+    return prompt_bubble_;
+  }
 
  private:
-  void Show();
+  // The popup bubble. Not owned by this class; it will delete itself when a
+  // decision is made.
+  PermissionPromptBubbleView* prompt_bubble_;
 
-  Browser* const browser_;
-  Delegate* const delegate_;
-  PermissionsBubbleDialogDelegateView* bubble_delegate_;
-  content::WebContents* web_contents_ = nullptr;
-  bool show_quiet_permission_prompt_ = false;
+  // The web contents whose location bar should show the quiet prompt.
+  content::WebContents* web_contents_;
+
+  bool showing_quiet_prompt_;
 
   DISALLOW_COPY_AND_ASSIGN(PermissionPromptImpl);
 };

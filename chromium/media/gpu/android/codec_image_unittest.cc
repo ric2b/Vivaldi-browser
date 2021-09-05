@@ -49,8 +49,10 @@ class CodecImageTest : public testing::Test {
     ON_CALL(*codec_, DequeueOutputBuffer(_, _, _, _, _, _, _))
         .WillByDefault(Return(MEDIA_CODEC_OK));
 
-    gl::init::InitializeGLOneOffImplementation(gl::kGLImplementationEGLGLES2,
-                                               false, false, false, false);
+    gl::init::InitializeStaticGLBindingsImplementation(
+        gl::kGLImplementationEGLGLES2, false);
+    gl::init::InitializeGLOneOffPlatformImplementation(false, false, false);
+
     surface_ = new gl::PbufferGLSurfaceEGL(gfx::Size(320, 240));
     surface_->Initialize();
     share_group_ = new gl::GLShareGroup();
@@ -409,6 +411,23 @@ TEST_F(CodecImageTest, GetAHardwareBufferAfterRelease) {
   auto i = NewImage(kTextureOwner);
   i->NotifyUnused();
   EXPECT_FALSE(i->GetAHardwareBuffer());
+}
+
+TEST_F(CodecImageTest, GetCropRect) {
+  auto i = NewImage(kTextureOwner);
+  EXPECT_EQ(
+      codec_buffer_wait_coordinator_->texture_owner()->get_crop_rect_count, 0);
+  i->GetCropRect();
+  EXPECT_EQ(
+      codec_buffer_wait_coordinator_->texture_owner()->get_crop_rect_count, 1);
+}
+
+TEST_F(CodecImageTest, RenderAfterUnusedDoesntCrash) {
+  auto i = NewImage(kTextureOwner);
+  i->NotifyUnused();
+  EXPECT_FALSE(i->RenderToTextureOwnerBackBuffer());
+  EXPECT_FALSE(i->RenderToTextureOwnerFrontBuffer(
+      CodecImage::BindingsMode::kEnsureTexImageBound));
 }
 
 }  // namespace media

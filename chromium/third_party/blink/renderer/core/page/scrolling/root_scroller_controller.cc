@@ -99,7 +99,7 @@ PaintLayerScrollableArea* GetScrollableArea(const Element& element) {
 RootScrollerController::RootScrollerController(Document& document)
     : document_(&document), effective_root_scroller_(&document) {}
 
-void RootScrollerController::Trace(blink::Visitor* visitor) {
+void RootScrollerController::Trace(Visitor* visitor) {
   visitor->Trace(document_);
   visitor->Trace(root_scroller_);
   visitor->Trace(effective_root_scroller_);
@@ -175,7 +175,10 @@ void RootScrollerController::RecomputeEffectiveRootScroller() {
     }
   }
 
-  if (effective_root_scroller_ == new_effective_root_scroller)
+  // Note, the layout object can be replaced during a rebuild. In that case,
+  // re-run process even if the element itself is the same.
+  if (effective_root_scroller_ == new_effective_root_scroller &&
+      effective_root_scroller_->IsEffectiveRootScroller())
     return;
 
   Node* old_effective_root_scroller = effective_root_scroller_;
@@ -244,6 +247,13 @@ bool RootScrollerController::IsValidRootScroller(const Element& element) const {
     // TODO(bokan): Make work with OOPIF. crbug.com/642378.
     if (!frame_owner->OwnedEmbeddedContentView()->IsLocalFrameView())
       return false;
+
+    // It's possible for an iframe to have a LayoutView but not have performed
+    // the lifecycle yet. We shouldn't promote such an iframe until it has
+    // since we won't be able to use the scroller inside yet.
+    Document* doc = frame_owner->contentDocument();
+    if (!doc || !doc->View() || !doc->View()->DidFirstLayout())
+      return false;
   }
 
   if (!FillsViewport(element))
@@ -302,7 +312,7 @@ bool RootScrollerController::IsValidImplicit(const Element& element) const {
     // The LayoutView is allowed to have a clip (since its clip is resized by
     // the URL bar movement). Test it for scrolling so that we only promote if
     // we know we won't block scrolling the main document.
-    if (ancestor->IsLayoutView()) {
+    if (IsA<LayoutView>(ancestor)) {
       const ComputedStyle* ancestor_style = ancestor->Style();
       DCHECK(ancestor_style);
 

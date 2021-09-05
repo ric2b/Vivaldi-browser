@@ -125,27 +125,36 @@ class SubprocessOutputLogger(object):
         self._process.kill()
 
 class _TargetHost(object):
-    def __init__(self, build_path, ports_to_forward, target_device):
+    def __init__(self, build_path, build_ids_path, ports_to_forward,
+                 target_device, results_directory):
         try:
             self._target = None
-            target_args = { 'output_dir':build_path,
-                            'target_cpu':'x64',
-                            'system_log_file':None,
-                            'cpu_cores':CPU_CORES,
-                            'require_kvm':True,
-                            'emu_type':target_device,
-                            'ram_size_mb':8192}
+            target_args = {
+                'output_dir': build_path,
+                'target_cpu': 'x64',
+                'system_log_file': None,
+                'cpu_cores': CPU_CORES,
+                'require_kvm': True,
+                'emu_type': target_device,
+                'ram_size_mb': 8192
+            }
             if target_device == 'qemu':
                 self._target = qemu_target.QemuTarget(**target_args)
             else:
+                target_args.update({
+                    'enable_graphics': False,
+                    'hardware_gpu': False
+                })
                 self._target = aemu_target.AemuTarget(**target_args)
             self._target.Start()
-            self._setup_target(build_path, ports_to_forward)
+            self._setup_target(build_path, build_ids_path, ports_to_forward,
+                               results_directory)
         except:
             self.cleanup()
             raise
 
-    def _setup_target(self, build_path, ports_to_forward):
+    def _setup_target(self, build_path, build_ids_path, ports_to_forward,
+                      results_directory):
         # Tell SSH to forward all server ports from the Fuchsia device to
         # the host.
         forwarding_flags = [
@@ -158,6 +167,16 @@ class _TargetHost(object):
         self._proxy = self._target.RunCommandPiped([],
                                                    ssh_args=forwarding_flags,
                                                    stderr=subprocess.PIPE)
+
+        self._listener = self._target.RunCommandPiped(['log_listener'],
+                                                      stdout=subprocess.PIPE,
+                                                      stderr=subprocess.STDOUT)
+
+        listener_log_path = os.path.join(results_directory, 'system.log')
+        listener_log = open(listener_log_path,'w')
+        self.symbolizer = symbolizer.RunSymbolizer(self._listener.stdout,
+                                                   listener_log,
+                                                   [build_ids_path])
 
         package_path = os.path.join(build_path, CONTENT_SHELL_PACKAGE_PATH)
         self._target.InstallPackage([package_path])
@@ -222,7 +241,9 @@ class FuchsiaPort(base.Port):
         super(FuchsiaPort, self).setup_test_run()
         try:
             self._target_host = _TargetHost(
-                self._build_path(), self.SERVER_PORTS, self._target_device)
+                self._build_path(), self.get_build_ids_path(),
+                self.SERVER_PORTS, self._target_device,
+                self.results_directory())
 
             if self.get_option('zircon_logging'):
                 self._zircon_logger = SubprocessOutputLogger(
@@ -352,10 +373,9 @@ class FuchsiaServerProcess(server_process.ServerProcess):
 
         proc.stdin.close()
         proc.stdin = stdin_pipe
-
         # Run symbolizer to filter the stderr stream.
         self._symbolizer_proc = symbolizer.RunSymbolizer(
-            proc.stderr, [self._port.get_build_ids_path()]);
+            proc.stderr, subprocess.PIPE, [self._port.get_build_ids_path()]);
         proc.stderr = self._symbolizer_proc.stdout
 
         self._set_proc(proc)

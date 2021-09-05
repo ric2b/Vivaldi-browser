@@ -17,6 +17,7 @@
 #include "content/browser/devtools/protocol/memory_handler.h"
 #include "content/browser/devtools/protocol/protocol.h"
 #include "content/browser/devtools/protocol/security_handler.h"
+#include "content/browser/devtools/protocol/storage_handler.h"
 #include "content/browser/devtools/protocol/system_info_handler.h"
 #include "content/browser/devtools/protocol/target_handler.h"
 #include "content/browser/devtools/protocol/tethering_handler.h"
@@ -67,23 +68,25 @@ BrowserDevToolsAgentHost::~BrowserDevToolsAgentHost() {
 }
 
 bool BrowserDevToolsAgentHost::AttachSession(DevToolsSession* session) {
-  if (!session->client()->MayAttachToBrowser())
+  if (!session->GetClient()->MayAttachToBrowser())
     return false;
 
   session->SetBrowserOnly(true);
   session->AddHandler(std::make_unique<protocol::TargetHandler>(
-      protocol::TargetHandler::AccessMode::kBrowser, GetId(),
-      GetRendererChannel(), session->GetRootSession()));
+      protocol::TargetHandler::AccessMode::kBrowser, GetId(), nullptr,
+      session->GetRootSession()));
   if (only_discovery_)
     return true;
 
-  session->AddHandler(std::make_unique<protocol::BrowserHandler>());
+  session->AddHandler(std::make_unique<protocol::BrowserHandler>(
+      session->GetClient()->MayWriteLocalFiles()));
   session->AddHandler(std::make_unique<protocol::IOHandler>(GetIOContext()));
   session->AddHandler(std::make_unique<protocol::FetchHandler>(
       GetIOContext(),
       base::BindRepeating([](base::OnceClosure cb) { std::move(cb).Run(); })));
   session->AddHandler(std::make_unique<protocol::MemoryHandler>());
   session->AddHandler(std::make_unique<protocol::SecurityHandler>());
+  session->AddHandler(std::make_unique<protocol::StorageHandler>());
   session->AddHandler(std::make_unique<protocol::SystemInfoHandler>());
   if (tethering_task_runner_) {
     session->AddHandler(std::make_unique<protocol::TetheringHandler>(

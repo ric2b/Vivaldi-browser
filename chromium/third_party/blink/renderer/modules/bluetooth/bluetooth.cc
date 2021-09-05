@@ -6,15 +6,18 @@
 
 #include <utility>
 
+#include "build/build_config.h"
 #include "mojo/public/cpp/bindings/associated_receiver_set.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/mojom/bluetooth/web_bluetooth.mojom-blink.h"
-#include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_bluetooth_advertising_event_init.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_bluetooth_le_scan_options.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_request_device_options.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
@@ -23,16 +26,14 @@
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/modules/bluetooth/bluetooth_advertising_event.h"
-#include "third_party/blink/renderer/modules/bluetooth/bluetooth_advertising_event_init.h"
 #include "third_party/blink/renderer/modules/bluetooth/bluetooth_device.h"
 #include "third_party/blink/renderer/modules/bluetooth/bluetooth_error.h"
 #include "third_party/blink/renderer/modules/bluetooth/bluetooth_le_scan.h"
-#include "third_party/blink/renderer/modules/bluetooth/bluetooth_le_scan_options.h"
 #include "third_party/blink/renderer/modules/bluetooth/bluetooth_manufacturer_data_map.h"
 #include "third_party/blink/renderer/modules/bluetooth/bluetooth_remote_gatt_characteristic.h"
 #include "third_party/blink/renderer/modules/bluetooth/bluetooth_service_data_map.h"
 #include "third_party/blink/renderer/modules/bluetooth/bluetooth_uuid.h"
-#include "third_party/blink/renderer/modules/bluetooth/request_device_options.h"
+#include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 
@@ -46,7 +47,24 @@ const size_t kMaxDeviceNameLength = 248;
 const char kDeviceNameTooLong[] =
     "A device name can't be longer than 248 bytes.";
 const char kInactiveDocumentError[] = "Document not active";
+const char kHandleGestureForPermissionRequest[] =
+    "Must be handling a user gesture to show a permission request.";
 }  // namespace
+
+// Remind developers when they are using Web Bluetooth on unsupported platforms.
+// TODO(https://crbug.com/570344): Remove this method when all platforms are
+// supported.
+void AddUnsupportedPlatformConsoleMessage(ExecutionContext* context) {
+#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID) && !defined(OS_MACOSX) && \
+    !defined(OS_WIN)
+  context->AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
+      mojom::blink::ConsoleMessageSource::kJavaScript,
+      mojom::blink::ConsoleMessageLevel::kInfo,
+      "Web Bluetooth is experimental on this platform. See "
+      "https://github.com/WebBluetoothCG/web-bluetooth/blob/gh-pages/"
+      "implementation-status.md"));
+#endif
+}
 
 static void CanonicalizeFilter(
     const BluetoothLEScanFilterInit* filter,
@@ -145,12 +163,12 @@ static void ConvertRequestDeviceOptions(
   }
 }
 
-ScriptPromise Bluetooth::getAvailability(ScriptState* script_state) {
+ScriptPromise Bluetooth::getAvailability(ScriptState* script_state,
+                                         ExceptionState& exception_state) {
   ExecutionContext* context = GetExecutionContext();
   if (!context || context->IsContextDestroyed()) {
-    return ScriptPromise::Reject(
-        script_state, V8ThrowException::CreateTypeError(
-                          script_state->GetIsolate(), kInactiveDocumentError));
+    exception_state.ThrowTypeError(kInactiveDocumentError);
+    return ScriptPromise();
   }
 
   CHECK(context->IsSecureContext());
@@ -164,6 +182,23 @@ ScriptPromise Bluetooth::getAvailability(ScriptState* script_state) {
                    bool result) { resolver->Resolve(result); },
                 WrapPersistent(resolver)));
   return promise;
+}
+
+void Bluetooth::GetDevicesCallback(
+    ScriptPromiseResolver* resolver,
+    Vector<mojom::blink::WebBluetoothDevicePtr> devices) {
+  if (!resolver->GetExecutionContext() ||
+      resolver->GetExecutionContext()->IsContextDestroyed()) {
+    return;
+  }
+
+  HeapVector<Member<BluetoothDevice>> bluetooth_devices;
+  for (auto& device : devices) {
+    BluetoothDevice* bluetooth_device = GetBluetoothDeviceRepresentingDevice(
+        std::move(device), resolver->GetExecutionContext());
+    bluetooth_devices.push_back(*bluetooth_device);
+  }
+  resolver->Resolve(bluetooth_devices);
 }
 
 void Bluetooth::RequestDeviceCallback(
@@ -184,46 +219,52 @@ void Bluetooth::RequestDeviceCallback(
   }
 }
 
+ScriptPromise Bluetooth::getDevices(ScriptState* script_state,
+                                    ExceptionState& exception_state) {
+  ExecutionContext* context = GetExecutionContext();
+  if (!context) {
+    exception_state.ThrowTypeError(kInactiveDocumentError);
+    return ScriptPromise();
+  }
+
+  AddUnsupportedPlatformConsoleMessage(context);
+  CHECK(context->IsSecureContext());
+
+  EnsureServiceConnection(context);
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
+  ScriptPromise promise = resolver->Promise();
+
+  service_->GetDevices(WTF::Bind(&Bluetooth::GetDevicesCallback,
+                                 WrapPersistent(this),
+                                 WrapPersistent(resolver)));
+  return promise;
+}
+
 // https://webbluetoothcg.github.io/web-bluetooth/#dom-bluetooth-requestdevice
 ScriptPromise Bluetooth::requestDevice(ScriptState* script_state,
                                        const RequestDeviceOptions* options,
                                        ExceptionState& exception_state) {
   ExecutionContext* context = GetExecutionContext();
   if (!context) {
-    return ScriptPromise::Reject(
-        script_state, V8ThrowException::CreateTypeError(
-                          script_state->GetIsolate(), kInactiveDocumentError));
+    exception_state.ThrowTypeError(kInactiveDocumentError);
+    return ScriptPromise();
   }
 
-// Remind developers when they are using Web Bluetooth on unsupported platforms.
-#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID) && !defined(OS_MACOSX) && \
-    !defined(OS_WIN)
-  context->AddConsoleMessage(ConsoleMessage::Create(
-      mojom::ConsoleMessageSource::kJavaScript,
-      mojom::ConsoleMessageLevel::kInfo,
-      "Web Bluetooth is experimental on this platform. See "
-      "https://github.com/WebBluetoothCG/web-bluetooth/blob/gh-pages/"
-      "implementation-status.md"));
-#endif
-
+  AddUnsupportedPlatformConsoleMessage(context);
   CHECK(context->IsSecureContext());
 
   // If the algorithm is not allowed to show a popup, reject promise with a
   // SecurityError and abort these steps.
-  auto& doc = *To<Document>(context);
+  auto& doc = *Document::From(context);
   auto* frame = doc.GetFrame();
   if (!frame) {
-    return ScriptPromise::Reject(
-        script_state, V8ThrowException::CreateTypeError(
-                          script_state->GetIsolate(), kInactiveDocumentError));
+    exception_state.ThrowTypeError(kInactiveDocumentError);
+    return ScriptPromise();
   }
 
   if (!LocalFrame::HasTransientUserActivation(frame)) {
-    return ScriptPromise::RejectWithDOMException(
-        script_state,
-        MakeGarbageCollected<DOMException>(
-            DOMExceptionCode::kSecurityError,
-            "Must be handling a user gesture to show a permission request."));
+    exception_state.ThrowSecurityError(kHandleGestureForPermissionRequest);
+    return ScriptPromise();
   }
 
   EnsureServiceConnection(context);
@@ -235,9 +276,6 @@ ScriptPromise Bluetooth::requestDevice(ScriptState* script_state,
 
   if (exception_state.HadException())
     return ScriptPromise();
-
-  // Record the eTLD+1 of the frame using the API.
-  Platform::Current()->RecordRapporURL("Bluetooth.APIUsage.Origin", doc.Url());
 
   // Subsequent steps are handled in the browser process.
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
@@ -312,14 +350,13 @@ ScriptPromise Bluetooth::requestLEScan(ScriptState* script_state,
                                        ExceptionState& exception_state) {
   ExecutionContext* context = GetExecutionContext();
   if (!context) {
-    return ScriptPromise::Reject(
-        script_state, V8ThrowException::CreateTypeError(
-                          script_state->GetIsolate(), kInactiveDocumentError));
+    exception_state.ThrowTypeError(kInactiveDocumentError);
+    return ScriptPromise();
   }
 
   // Remind developers when they are using Web Bluetooth on unsupported
   // platforms.
-  context->AddConsoleMessage(ConsoleMessage::Create(
+  context->AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
       mojom::ConsoleMessageSource::kJavaScript,
       mojom::ConsoleMessageLevel::kInfo,
       "Web Bluetooth Scanning is experimental on this platform. See "
@@ -330,20 +367,16 @@ ScriptPromise Bluetooth::requestLEScan(ScriptState* script_state,
 
   // If the algorithm is not allowed to show a popup, reject promise with a
   // SecurityError and abort these steps.
-  auto& doc = *To<Document>(context);
+  auto& doc = *Document::From(context);
   auto* frame = doc.GetFrame();
   if (!frame) {
-    return ScriptPromise::Reject(
-        script_state, V8ThrowException::CreateTypeError(
-                          script_state->GetIsolate(), kInactiveDocumentError));
+    exception_state.ThrowTypeError(kInactiveDocumentError);
+    return ScriptPromise();
   }
 
   if (!LocalFrame::HasTransientUserActivation(frame)) {
-    return ScriptPromise::RejectWithDOMException(
-        script_state,
-        MakeGarbageCollected<DOMException>(
-            DOMExceptionCode::kSecurityError,
-            "Must be handling a user gesture to show a permission request."));
+    exception_state.ThrowSecurityError(kHandleGestureForPermissionRequest);
+    return ScriptPromise();
   }
 
   EnsureServiceConnection(context);
@@ -353,9 +386,6 @@ ScriptPromise Bluetooth::requestLEScan(ScriptState* script_state,
 
   if (exception_state.HadException())
     return ScriptPromise();
-
-  // Record the eTLD+1 of the frame using the API.
-  Platform::Current()->RecordRapporURL("Bluetooth.APIUsage.Origin", doc.Url());
 
   // Subsequent steps are handled in the browser process.
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
@@ -376,7 +406,8 @@ ScriptPromise Bluetooth::requestLEScan(ScriptState* script_state,
 }
 
 void Bluetooth::ScanEvent(mojom::blink::WebBluetoothScanResultPtr result) {
-  ExecutionContext* context = ContextLifecycleObserver::GetExecutionContext();
+  ExecutionContext* context =
+      ExecutionContextLifecycleObserver::GetExecutionContext();
   DCHECK(context);
 
   BluetoothDevice* bluetooth_device =
@@ -429,23 +460,23 @@ const WTF::AtomicString& Bluetooth::InterfaceName() const {
 }
 
 ExecutionContext* Bluetooth::GetExecutionContext() const {
-  return ContextLifecycleObserver::GetExecutionContext();
+  return ExecutionContextLifecycleObserver::GetExecutionContext();
 }
 
-void Bluetooth::ContextDestroyed(ExecutionContext*) {
+void Bluetooth::ContextDestroyed() {
   client_receivers_.Clear();
 }
 
-void Bluetooth::Trace(blink::Visitor* visitor) {
+void Bluetooth::Trace(Visitor* visitor) {
   visitor->Trace(device_instance_map_);
   EventTargetWithInlineData::Trace(visitor);
-  ContextLifecycleObserver::Trace(visitor);
+  ExecutionContextLifecycleObserver::Trace(visitor);
   PageVisibilityObserver::Trace(visitor);
 }
 
 Bluetooth::Bluetooth(ExecutionContext* context)
-    : ContextLifecycleObserver(context),
-      PageVisibilityObserver(To<Document>(context)->GetPage()) {}
+    : ExecutionContextLifecycleObserver(context),
+      PageVisibilityObserver(Document::From(context)->GetPage()) {}
 
 Bluetooth::~Bluetooth() {
   DCHECK(client_receivers_.empty());

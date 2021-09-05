@@ -6,12 +6,14 @@
 #define CHROMECAST_RENDERER_CAST_CONTENT_RENDERER_CLIENT_H_
 
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "base/macros.h"
 #include "build/build_config.h"
 #include "chromecast/chromecast_buildflags.h"
 #include "chromecast/common/mojom/application_media_capabilities.mojom.h"
+#include "chromecast/renderer/cast_activity_url_filter_manager.h"
 #include "content/public/renderer/content_renderer_client.h"
 #include "media/base/audio_codecs.h"
 #include "media/base/audio_parameters.h"
@@ -22,10 +24,6 @@ class ExtensionsClient;
 class ExtensionsGuestViewContainerDispatcher;
 class CastExtensionsRendererClient;
 }  // namespace extensions
-
-namespace network_hints {
-class PrescientNetworkingDispatcher;
-}  // namespace network_hints
 
 namespace chromecast {
 class MemoryPressureObserverImpl;
@@ -67,12 +65,15 @@ class CastContentRendererClient
   bool IsSupportedAudioType(const ::media::AudioType& type) override;
   bool IsSupportedVideoType(const ::media::VideoType& type) override;
   bool IsSupportedBitstreamAudioCodec(::media::AudioCodec codec) override;
-  blink::WebPrescientNetworking* GetPrescientNetworking() override;
+  std::unique_ptr<blink::WebPrescientNetworking> CreatePrescientNetworking(
+      content::RenderFrame* render_frame) override;
   bool DeferMediaLoad(content::RenderFrame* render_frame,
                       bool render_frame_has_played_media_before,
                       base::OnceClosure closure) override;
   bool IsIdleMediaSuspendEnabled() override;
   void SetRuntimeFeaturesDefaultsBeforeBlinkInitialization() override;
+  std::unique_ptr<content::WebSocketHandshakeThrottleProvider>
+  CreateWebSocketHandshakeThrottleProvider() override;
   std::unique_ptr<content::URLLoaderThrottleProvider>
   CreateURLLoaderThrottleProvider(
       content::URLLoaderThrottleProviderType type) override;
@@ -88,12 +89,18 @@ class CastContentRendererClient
   virtual bool RunWhenInForeground(content::RenderFrame* render_frame,
                                    base::OnceClosure closure);
 
+  CastActivityUrlFilterManager* activity_url_filter_manager() {
+    return activity_url_filter_manager_.get();
+  }
+
  private:
   // mojom::ApplicationMediaCapabilitiesObserver implementation:
-  void OnSupportedBitstreamAudioCodecsChanged(int codecs) override;
+  void OnSupportedBitstreamAudioCodecsChanged(
+      const BitstreamAudioCodecsInfo& info) override;
 
-  std::unique_ptr<network_hints::PrescientNetworkingDispatcher>
-      prescient_networking_dispatcher_;
+  bool CheckSupportedBitstreamAudioCodec(::media::AudioCodec codec,
+                                         bool check_spatial_rendering);
+
   std::unique_ptr<media::MediaCapsObserverImpl> media_caps_observer_;
   std::unique_ptr<media::SupportedCodecProfileLevelsMemo> supported_profiles_;
   mojo::Receiver<mojom::ApplicationMediaCapabilitiesObserver>
@@ -114,7 +121,9 @@ class CastContentRendererClient
   std::unique_ptr<media::CastAudioDeviceFactory> cast_audio_device_factory_;
 #endif
 
-  int supported_bitstream_audio_codecs_;
+  BitstreamAudioCodecsInfo supported_bitstream_audio_codecs_info_;
+
+  std::unique_ptr<CastActivityUrlFilterManager> activity_url_filter_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(CastContentRendererClient);
 };

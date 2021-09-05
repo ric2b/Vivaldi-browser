@@ -9,7 +9,7 @@
 #include "third_party/blink/renderer/core/html/html_collection.h"
 #include "third_party/blink/renderer/core/html/html_image_element.h"
 #include "third_party/blink/renderer/platform/graphics/bitmap_image.h"
-#include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
+#include "third_party/blink/renderer/platform/graphics/unaccelerated_static_bitmap_image.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
 #include "third_party/blink/renderer/core/page/plugin_data.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -43,18 +43,19 @@ void WebViewImpl::SetImagesEnabled(const bool images_enabled) {
     for (size_t i = 0; i < sourceLength; ++i) {
       Element* element = images->item(i);
       if (element) {
-        HTMLImageElement& imageElement = ToHTMLImageElement(*element);
+        auto* imageElement = DynamicTo<HTMLImageElement>(*element);
 
         if (images_enabled) {
-          imageElement.setAttribute(html_names::kSrcAttr,
+          imageElement->setAttribute(html_names::kSrcAttr,
                                     element->ImageSourceURL());
         } else {
           int width = 10, height = 10;
           SkBitmap bitmap;
           bitmap.allocN32Pixels(width, height, true);
           bitmap.eraseColor(0xFFFFFFFF);
-          imageElement.SetImageForTest(ImageResourceContent::CreateLoaded(
-              StaticBitmapImage::Create(SkImage::MakeFromBitmap(bitmap))));
+          imageElement->SetImageForTest(ImageResourceContent::CreateLoaded(
+              blink::UnacceleratedStaticBitmapImage::Create(
+                  SkImage::MakeFromBitmap(bitmap))));
         }
       }
     }
@@ -80,11 +81,12 @@ void WebViewImpl::LoadImageAt(const gfx::Point& point) {
       HitTestResultForRootFramePos(PhysicalOffset(IntPoint(point.x(), point.y())));
   Node* node = result.InnerNode();
   DCHECK(node);
-  if (!node || !IsHTMLImageElement(*node))
+  if (!node || !IsA<HTMLImageElement>(*node))
     return;
 
-  HTMLImageElement& imageElement = ToHTMLImageElement(ToElement(*node));
-  imageElement.ForceReload();
+  auto* imageElement =
+      DynamicTo<HTMLImageElement>(blink::To<Element>(*node));
+  imageElement->ForceReload();
 }
 
 }  // namespace blink

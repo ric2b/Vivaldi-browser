@@ -8,7 +8,6 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "base/strings/string_piece.h"
@@ -43,7 +42,7 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
-#include "third_party/blink/public/platform/web_input_event.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/display/display.h"
@@ -241,7 +240,7 @@ class PluginPowerSaverBrowserTest : public InProcessBrowserTest {
     HostContentSettingsMap* content_settings_map =
         HostContentSettingsMapFactory::GetForProfile(browser()->profile());
     content_settings_map->SetContentSettingDefaultScope(
-        server_root, server_root, CONTENT_SETTINGS_TYPE_PLUGINS, std::string(),
+        server_root, server_root, ContentSettingsType::PLUGINS, std::string(),
         CONTENT_SETTING_ALLOW);
   }
 
@@ -288,7 +287,7 @@ class PluginPowerSaverBrowserTest : public InProcessBrowserTest {
     ui_test_utils::NavigateToURLWithDisposition(
         browser(), embedded_test_server()->GetURL(file),
         WindowOpenDisposition::NEW_BACKGROUND_TAB,
-        ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+        ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
 
     int index = browser()->tab_strip_model()->GetIndexOfLastWebContentsOpenedBy(
         GetActiveWebContents(), 0 /* start_index */);

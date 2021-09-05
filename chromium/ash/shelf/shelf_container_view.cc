@@ -14,11 +14,11 @@ ShelfContainerView::ShelfContainerView(ShelfView* shelf_view)
 ShelfContainerView::~ShelfContainerView() = default;
 
 void ShelfContainerView::Initialize() {
-  SetPaintToLayer();
+  SetPaintToLayer(ui::LAYER_NOT_DRAWN);
   layer()->SetFillsBoundsOpaquely(false);
   layer()->SetMasksToBounds(true);
 
-  shelf_view_->SetPaintToLayer();
+  shelf_view_->SetPaintToLayer(ui::LAYER_NOT_DRAWN);
   shelf_view_->layer()->SetFillsBoundsOpaquely(false);
   AddChildView(shelf_view_);
 }
@@ -28,6 +28,15 @@ gfx::Size ShelfContainerView::CalculatePreferredSize() const {
 }
 
 void ShelfContainerView::ChildPreferredSizeChanged(views::View* child) {
+  // The CL (https://crrev.com/c/1876128) modifies View::PreferredSizeChanged
+  // by moving InvalidateLayout() after ChildPreferredSizeChanged(). Meanwhile,
+  // the parent view of ShelfContainerView overrides ChildPreferredSizeChanged
+  // with calling Layout(). Due to the CL above, ShelfContainerView is not
+  // labeled as |needs_layout_| when the parent view updates the layout. As a
+  // result, Calling Layout() in the parent view may not trigger the update in
+  // child view. So we have to invalidate the layout here explicitly.
+  InvalidateLayout();
+
   PreferredSizeChanged();
 }
 
@@ -39,13 +48,14 @@ void ShelfContainerView::TranslateShelfView(const gfx::Vector2dF& offset) {
   gfx::Transform transform_matrix;
   transform_matrix.Translate(-offset);
   shelf_view_->SetTransform(transform_matrix);
+  shelf_view_->NotifyAccessibilityEvent(ax::mojom::Event::kLocationChanged,
+                                        true);
 }
 
 gfx::Size ShelfContainerView::CalculateIdealSize() const {
   const int width =
       ShelfView::GetSizeOfAppIcons(shelf_view_->last_visible_index() -
-                                       shelf_view_->first_visible_index() + 1,
-                                   false);
+                                   shelf_view_->first_visible_index() + 1);
   const int height = ShelfConfig::Get()->button_size();
   return shelf_view_->shelf()->IsHorizontalAlignment()
              ? gfx::Size(width, height)

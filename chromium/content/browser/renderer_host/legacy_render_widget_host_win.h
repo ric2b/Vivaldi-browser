@@ -128,7 +128,8 @@ class CONTENT_EXPORT LegacyRenderWidgetHostHWND
   }
 
   // Return the root accessible object for either MSAA or UI Automation.
-  gfx::NativeViewAccessible GetOrCreateWindowRootAccessible();
+  gfx::NativeViewAccessible GetOrCreateWindowRootAccessible(
+      bool is_uia_request);
 
  protected:
   void OnFinalMessage(HWND hwnd) override;
@@ -140,7 +141,7 @@ class CONTENT_EXPORT LegacyRenderWidgetHostHWND
   explicit LegacyRenderWidgetHostHWND(HWND parent);
   ~LegacyRenderWidgetHostHWND() override;
 
-  bool Init();
+  void Init();
 
   // Returns the target to which the windows input events are forwarded.
   static ui::WindowEventTarget* GetWindowEventTarget(HWND parent);

@@ -13,7 +13,7 @@
 #include "chrome/browser/sync/test/integration/updated_progress_marker_checker.h"
 #include "components/sync/test/fake_server/entity_builder_factory.h"
 #include "notes/notes_model.h"
-#include "notes/notesnode.h"
+#include "notes/note_node.h"
 #include "sync/test/fake_server/notes_entity_builder.h"
 #include "sync/test/integration/notes_helper.h"
 #include "sync/test/integration/notes_sync_test.h"
@@ -53,22 +53,22 @@ IN_PROC_BROWSER_TEST_F(SingleClientNotesSyncTest, Sanity) {
   //        -> http://www.vg.no "tier1_b_url1"
   //    -> trash
   //      -> http://www.microsoft.com "trash_1_url0"
-  const Notes_Node* top = AddFolder(0, GetNotesTopNode(0), 0, "top");
-  const Notes_Node* tier1_a = AddFolder(0, top, 0, "tier1_a");
-  const Notes_Node* tier1_b = AddFolder(0, top, 1, "tier1_b");
-  const Notes_Node* tier1_a_url0 =
+  const NoteNode* top = AddFolder(0, GetNotesTopNode(0), 0, "top");
+  const NoteNode* tier1_a = AddFolder(0, top, 0, "tier1_a");
+  const NoteNode* tier1_b = AddFolder(0, top, 1, "tier1_b");
+  const NoteNode* tier1_a_url0 =
       AddNote(0, tier1_a, 0, "tier1_a_url0", GURL("http://mail.google.com"));
-  const Notes_Node* tier1_a_url1 =
+  const NoteNode* tier1_a_url1 =
       AddNote(0, tier1_a, 1, "tier1_a_url1", GURL("http://www.pandora.com"));
-  const Notes_Node* tier1_a_url2 =
+  const NoteNode* tier1_a_url2 =
       AddNote(0, tier1_a, 2, "tier1_a_url2", GURL("http://www.facebook.com"));
-  const Notes_Node* tier1_b_url0 =
+  const NoteNode* tier1_b_url0 =
       AddNote(0, tier1_b, 0, "tier1_b_url0", GURL("http://www.nhl.com"));
-  const Notes_Node* tier1_b_url1 =
+  const NoteNode* tier1_b_url1 =
       AddNote(0, tier1_b, 0, "tier1_b_url1", GURL("http://www.vg.no"));
 
-  Notes_Node* trash_node = GetNotesModel(0)->trash_node();
-  const Notes_Node* trash_1_url0 = AddNote(0, trash_node, 0, "trash_1_url0",
+  NoteNode* trash_node = GetNotesModel(0)->trash_node();
+  const NoteNode* trash_1_url0 = AddNote(0, trash_node, 0, "trash_1_url0",
                                            GURL("http://www.microsoft.com"));
 
   // Setup sync, wait for its completion, and make sure changes were synced.
@@ -98,7 +98,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientNotesSyncTest, Sanity) {
   //  -> trash
   //    -> http://www.microsoft.com "trash_1_url0"
   //    -> http://www.vg.no "tier1_b_url1"
-  const Notes_Node* cnn = AddNote(0, top, 0, "CNN", GURL("http://www.cnn.com"));
+  const NoteNode* cnn = AddNote(0, top, 0, "CNN", GURL("http://www.cnn.com"));
   ASSERT_TRUE(cnn != NULL);
   Move(0, tier1_a, top, 1);
 
@@ -106,7 +106,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientNotesSyncTest, Sanity) {
   ASSERT_TRUE(UpdatedProgressMarkerChecker(GetSyncService(0)).Wait());
   ASSERT_TRUE(ModelMatchesVerifier(0));
 
-  const Notes_Node* porsche =
+  const NoteNode* porsche =
       AddNote(0, top, 2, "Porsche", GURL("http://www.porsche.com"));
   // Rearrange stuff in tier1_a.
   ASSERT_EQ(tier1_a, tier1_a_url2->parent());
@@ -120,18 +120,18 @@ IN_PROC_BROWSER_TEST_F(SingleClientNotesSyncTest, Sanity) {
 
   ASSERT_EQ(1, tier1_a_url0->parent()->GetIndexOf(tier1_a_url0));
   Move(0, tier1_a_url0, top, top->children().size());
-  const Notes_Node* boa =
+  const NoteNode* boa =
       AddNote(0, top, top->children().size(), "Bank of America",
               GURL("https://www.bankofamerica.com"));
   ASSERT_TRUE(boa != NULL);
-  const Notes_Node* bubble =
+  const NoteNode* bubble =
       AddNote(0, top, top->children().size(), "Seattle Bubble",
               GURL("http://seattlebubble.com"));
   Move(0, tier1_a_url0, top, top->children().size());
   ASSERT_TRUE(bubble != NULL);
-  const Notes_Node* wired =
+  const NoteNode* wired =
       AddNote(0, top, 2, "Wired News", GURL("http://www.wired.com"));
-  const Notes_Node* tier2_b = AddFolder(0, tier1_b, 0, "tier2_b");
+  const NoteNode* tier2_b = AddFolder(0, tier1_b, 0, "tier2_b");
   Move(0, tier1_b_url0, tier2_b, 0);
   Move(0, porsche, top, 0);
   SetContent(0, wired, "News Wired");
@@ -146,10 +146,10 @@ IN_PROC_BROWSER_TEST_F(SingleClientNotesSyncTest, Sanity) {
   Remove(0, top, top->children().size() - 1);
   Move(0, wired, tier1_b, 0);
   Move(0, porsche, top, 3);
-  const Notes_Node* tier3_b = AddFolder(0, tier2_b, 1, "tier3_b");
-  const Notes_Node* leafs = AddNote(0, tier1_a, 0, "Toronto Maple Leafs",
+  const NoteNode* tier3_b = AddFolder(0, tier2_b, 1, "tier3_b");
+  const NoteNode* leafs = AddNote(0, tier1_a, 0, "Toronto Maple Leafs",
                                     GURL("http://mapleleafs.nhl.com"));
-  const Notes_Node* wynn =
+  const NoteNode* wynn =
       AddNote(0, top, 1, "Wynn", GURL("http://www.wynnlasvegas.com"));
 
   Move(0, wynn, tier3_b, 0);
@@ -209,8 +209,8 @@ IN_PROC_BROWSER_TEST_F(SingleClientNotesSyncTest, NotesAllNodesRemovedEvent) {
   //      -> http://yahoo.com
   //    -> http://www.cnn.com
 
-  const Notes_Node* folder0 = AddFolder(0, GetNotesTopNode(0), 0, "folder0");
-  const Notes_Node* tier1_a = AddFolder(0, folder0, 0, "tier1_a");
+  const NoteNode* folder0 = AddFolder(0, GetNotesTopNode(0), 0, "folder0");
+  const NoteNode* tier1_a = AddFolder(0, folder0, 0, "tier1_a");
   ASSERT_TRUE(AddNote(0, folder0, 1, "News", GURL("http://news.google.com")));
   ASSERT_TRUE(AddNote(0, folder0, 2, "Yahoo", GURL("http://www.yahoo.com")));
   ASSERT_TRUE(AddNote(0, tier1_a, 0, "Gmai", GURL("http://mail.google.com")));

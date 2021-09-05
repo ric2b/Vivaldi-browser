@@ -77,17 +77,22 @@ constexpr EncryptionScheme kSupportedEncryptionScheme = EncryptionScheme::kCenc;
 constexpr EncryptionScheme kDisallowHwSecureCodecEncryptionScheme =
     EncryptionScheme::kCbcs;
 
-EncryptionMode ConvertEncryptionScheme(EncryptionScheme encryption_scheme) {
+media::EncryptionScheme ConvertEncryptionScheme(
+    EncryptionScheme encryption_scheme) {
   switch (encryption_scheme) {
     case EncryptionScheme::kNotSpecified:
     case EncryptionScheme::kCenc:
-      return EncryptionMode::kCenc;
+      return media::EncryptionScheme::kCenc;
     case EncryptionScheme::kCbcs:
-      return EncryptionMode::kCbcs;
+    case EncryptionScheme::kCbcs_1_9:
+      return media::EncryptionScheme::kCbcs;
+    case EncryptionScheme::kUnrecognized:
+      // Not used in these tests.
+      break;
   }
 
   NOTREACHED();
-  return EncryptionMode::kUnencrypted;
+  return media::EncryptionScheme::kUnencrypted;
 }
 
 WebString MakeCodecs(const std::string& a, const std::string& b) {
@@ -186,6 +191,8 @@ class FakeKeySystems : public KeySystems {
  public:
   ~FakeKeySystems() override = default;
 
+  void UpdateIfNeeded() override { ++update_count; }
+
   bool IsSupportedKeySystem(const std::string& key_system) const override {
     // Based on EME spec, Clear Key key system is always supported.
     return key_system == kSupportedKeySystem ||
@@ -215,7 +222,7 @@ class FakeKeySystems : public KeySystems {
 
   EmeConfigRule GetEncryptionSchemeConfigRule(
       const std::string& key_system,
-      EncryptionMode encryption_scheme) const override {
+      media::EncryptionScheme encryption_scheme) const override {
     if (encryption_scheme ==
         ConvertEncryptionScheme(kSupportedEncryptionScheme)) {
       return EmeConfigRule::SUPPORTED;
@@ -328,6 +335,8 @@ class FakeKeySystems : public KeySystems {
   // the default values may be changed.
   EmeFeatureSupport persistent_state = EmeFeatureSupport::NOT_SUPPORTED;
   EmeFeatureSupport distinctive_identifier = EmeFeatureSupport::REQUESTABLE;
+
+  int update_count = 0;
 };
 
 class FakeMediaPermission : public MediaPermission {
@@ -371,10 +380,10 @@ class KeySystemConfigSelectorTest : public testing::Test {
 
     key_system_config_selector.SelectConfig(
         key_system_, configs_,
-        base::BindRepeating(&KeySystemConfigSelectorTest::OnSucceeded,
-                            base::Unretained(this)),
-        base::BindRepeating(&KeySystemConfigSelectorTest::OnNotSupported,
-                            base::Unretained(this)));
+        base::BindOnce(&KeySystemConfigSelectorTest::OnSucceeded,
+                       base::Unretained(this)),
+        base::BindOnce(&KeySystemConfigSelectorTest::OnNotSupported,
+                       base::Unretained(this)));
   }
 
   void SelectConfigReturnsConfig() {
@@ -497,6 +506,17 @@ TEST_F(KeySystemConfigSelectorTest, UsableConfig) {
   EXPECT_FALSE(cdm_config_.allow_distinctive_identifier);
   EXPECT_FALSE(cdm_config_.allow_persistent_state);
   EXPECT_FALSE(cdm_config_.use_hw_secure_codecs);
+}
+
+// KeySystemConfigSelector should make sure it uses up-to-date KeySystems.
+TEST_F(KeySystemConfigSelectorTest, UpdateKeySystems) {
+  configs_.push_back(UsableConfiguration());
+
+  ASSERT_EQ(key_systems_->update_count, 0);
+  SelectConfig();
+  EXPECT_EQ(key_systems_->update_count, 1);
+  SelectConfig();
+  EXPECT_EQ(key_systems_->update_count, 2);
 }
 
 TEST_F(KeySystemConfigSelectorTest, Label) {

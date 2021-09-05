@@ -4,10 +4,12 @@
 
 #include "content/browser/cache_storage/cross_sequence/cross_sequence_cache_storage_manager.h"
 
+#include "base/bind_helpers.h"
 #include "content/browser/cache_storage/cache_storage.h"
 #include "content/browser/cache_storage/cache_storage_context_impl.h"
 #include "content/browser/cache_storage/cross_sequence/cross_sequence_cache_storage.h"
 #include "content/browser/cache_storage/cross_sequence/cross_sequence_utils.h"
+#include "third_party/blink/public/mojom/quota/quota_types.mojom.h"
 
 namespace content {
 
@@ -19,7 +21,9 @@ namespace content {
 class CrossSequenceCacheStorageManager::Inner {
  public:
   explicit Inner(scoped_refptr<CacheStorageContextWithManager> context)
-      : target_manager_(context->CacheManager()) {}
+      : target_manager_(context->CacheManager()) {
+    DCHECK(target_manager_);
+  }
 
   void GetAllOriginsUsage(CacheStorageOwner owner,
                           CacheStorageContext::GetUsageInfoCallback callback) {
@@ -130,7 +134,7 @@ void CrossSequenceCacheStorageManager::DeleteOriginData(
 }
 
 void CrossSequenceCacheStorageManager::SetBlobParametersForCache(
-    base::WeakPtr<storage::BlobStorageContext> blob_storage_context) {
+    scoped_refptr<BlobStorageContextWrapper> blob_storage_context) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // This method is used for initialization of a real manager and should not
   // be invoked for the cross-sequence wrapper.

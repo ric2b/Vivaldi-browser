@@ -7,10 +7,8 @@ package org.chromium.chrome.browser.omnibox;
 import android.content.Context;
 import android.content.res.ColorStateList;
 import android.content.res.Configuration;
+import android.graphics.drawable.Drawable;
 import android.os.Parcelable;
-import android.support.v4.view.MarginLayoutParamsCompat;
-import android.support.v4.view.ViewCompat;
-import android.support.v7.content.res.AppCompatResources;
 import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.util.SparseArray;
@@ -19,30 +17,33 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.view.ViewGroup;
+import android.view.WindowManager;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
 
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
+import androidx.core.view.MarginLayoutParamsCompat;
+import androidx.core.view.ViewCompat;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.CommandLine;
 import org.chromium.base.ObserverList;
-import org.chromium.base.VisibleForTesting;
-import org.chromium.base.metrics.CachedMetrics.EnumeratedHistogramSample;
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityTabProvider;
-import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.WindowDelegate;
+import org.chromium.chrome.browser.externalauth.ExternalAuthUtils;
+import org.chromium.chrome.browser.flags.ChromeSwitches;
+import org.chromium.chrome.browser.gsa.GSAState;
 import org.chromium.chrome.browser.locale.LocaleManager;
-import org.chromium.chrome.browser.native_page.NativePage;
 import org.chromium.chrome.browser.native_page.NativePageFactory;
 import org.chromium.chrome.browser.ntp.FakeboxDelegate;
 import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.ntp.NewTabPageUma;
-import org.chromium.chrome.browser.omnibox.LocationBar.OmniboxFocusReason;
 import org.chromium.chrome.browser.omnibox.UrlBar.ScrollType;
 import org.chromium.chrome.browser.omnibox.UrlBarCoordinator.SelectionState;
 import org.chromium.chrome.browser.omnibox.geo.GeolocationHeader;
@@ -52,21 +53,25 @@ import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteCoordinator;
 import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteCoordinatorFactory;
 import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteDelegate;
 import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestionListEmbedder;
-import org.chromium.chrome.browser.preferences.privacy.PrivacyPreferencesManager;
+import org.chromium.chrome.browser.omnibox.voice.AssistantVoiceSearchService;
+import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionHandler;
+import org.chromium.chrome.browser.privacy.settings.PrivacyPreferencesManager;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tasks.ReturnToChromeExperimentsUtil;
 import org.chromium.chrome.browser.toolbar.ToolbarDataProvider;
 import org.chromium.chrome.browser.toolbar.top.ToolbarActionModeCallback;
-import org.chromium.chrome.browser.ui.widget.CompositeTouchDelegate;
+import org.chromium.chrome.browser.ui.native_page.NativePage;
 import org.chromium.chrome.browser.util.AccessibilityUtil;
-import org.chromium.chrome.browser.util.ColorUtils;
+import org.chromium.components.browser_ui.styles.ChromeColors;
+import org.chromium.components.browser_ui.widget.CompositeTouchDelegate;
 import org.chromium.components.search_engines.TemplateUrlService;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.base.WindowAndroid;
+import org.chromium.ui.util.ColorUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -80,13 +85,13 @@ import org.vivaldi.browser.omnibox.status.SearchEngineIconHandler;
  */
 public class LocationBarLayout extends FrameLayout
         implements OnClickListener, LocationBar, AutocompleteDelegate, FakeboxDelegate,
-                   LocationBarVoiceRecognitionHandler.Delegate {
-    private static final EnumeratedHistogramSample ENUMERATED_FOCUS_REASON =
-            new EnumeratedHistogramSample(
-                    "Android.OmniboxFocusReason", OmniboxFocusReason.NUM_ENTRIES);
+                   VoiceRecognitionHandler.Delegate, AssistantVoiceSearchService.Observer {
+    private static final int KEYBOARD_HIDE_DELAY_MS = 150;
+    private static final int KEYBOARD_MODE_CHANGE_DELAY_MS = 300;
 
     protected ImageButton mDeleteButton;
     protected ImageButton mMicButton;
+    private boolean mShouldShowMicButtonWhenUnfocused;
     protected UrlBar mUrlBar;
     private final boolean mIsTablet;
 
@@ -103,26 +108,28 @@ public class LocationBarLayout extends FrameLayout
     private WindowAndroid mWindowAndroid;
     private WindowDelegate mWindowDelegate;
 
-    protected String mSearchEngineUrl = "";
     private String mOriginalUrl = "";
 
-    protected boolean mUrlFocusChangeInProgress;
+    private boolean mUrlFocusChangeInProgress;
     protected boolean mNativeInitialized;
-    protected boolean mShouldShowSearchEngineLogo;
-    protected boolean mIsSearchEngineGoogle;
     private boolean mUrlHasFocus;
     private boolean mUrlFocusedFromFakebox;
     private boolean mUrlFocusedWithoutAnimations;
-    private boolean mVoiceSearchEnabled;
+    protected boolean mVoiceSearchEnabled;
 
     private OmniboxPrerender mOmniboxPrerender;
 
     protected float mUrlFocusChangePercent;
     protected LinearLayout mUrlActionContainer;
 
-    protected LocationBarVoiceRecognitionHandler mVoiceRecognitionHandler;
+    private VoiceRecognitionHandler mVoiceRecognitionHandler;
 
     protected CompositeTouchDelegate mCompositeTouchDelegate;
+
+    private AssistantVoiceSearchService mAssistantVoiceSearchService;
+    private Runnable mKeyboardResizeModeTask;
+    private Runnable mKeyboardHideTask;
+    private boolean mKeyboardShouldShow;
 
     /**
      * Class to handle input from a hardware keyboard when the focus is on the URL bar. In
@@ -181,28 +188,27 @@ public class LocationBarLayout extends FrameLayout
         mUrlCoordinator = new UrlBarCoordinator((UrlBar) mUrlBar);
         mUrlCoordinator.setDelegate(this);
 
-        OmniboxSuggestionListEmbedder embedder =
-                new OmniboxSuggestionListEmbedder() {
-                    @Override
-                    public boolean isTablet() {
-                        return mIsTablet;
-                    }
+        OmniboxSuggestionListEmbedder embedder = new OmniboxSuggestionListEmbedder() {
+            @Override
+            public boolean isTablet() {
+                return mIsTablet;
+            }
 
-                    @Override
-                    public WindowDelegate getWindowDelegate() {
-                        return mWindowDelegate;
-                    }
+            @Override
+            public WindowDelegate getWindowDelegate() {
+                return mWindowDelegate;
+            }
 
-                    @Override
-                    public View getAnchorView() {
-                        return getRootView().findViewById(R.id.toolbar);
-                    }
+            @Override
+            public View getAnchorView() {
+                return getRootView().findViewById(R.id.toolbar);
+            }
 
-                    @Override
-                    public View getAlignmentView() {
-                        return mIsTablet ? LocationBarLayout.this : null;
-                    }
-                };
+            @Override
+            public View getAlignmentView() {
+                return mIsTablet ? LocationBarLayout.this : null;
+            }
+        };
         mAutocompleteCoordinator = AutocompleteCoordinatorFactory.createAutocompleteCoordinator(
                 this, this, embedder, mUrlCoordinator);
         addUrlFocusChangeListener(mAutocompleteCoordinator);
@@ -212,7 +218,7 @@ public class LocationBarLayout extends FrameLayout
 
         mUrlActionContainer = (LinearLayout) findViewById(R.id.url_action_container);
 
-        mVoiceRecognitionHandler = new LocationBarVoiceRecognitionHandler(this);
+        mVoiceRecognitionHandler = new VoiceRecognitionHandler(this);
     }
 
     @Override
@@ -220,6 +226,11 @@ public class LocationBarLayout extends FrameLayout
         removeUrlFocusChangeListener(mAutocompleteCoordinator);
         mAutocompleteCoordinator.destroy();
         mAutocompleteCoordinator = null;
+
+        if (mAssistantVoiceSearchService != null) {
+            mAssistantVoiceSearchService.destroy();
+            mAssistantVoiceSearchService = null;
+        }
     }
 
     @Override
@@ -231,7 +242,7 @@ public class LocationBarLayout extends FrameLayout
         StatusView statusView = findViewById(R.id.location_bar_status);
         statusView.setCompositeTouchDelegate(mCompositeTouchDelegate);
         mStatusViewCoordinator = new StatusViewCoordinator(mIsTablet, statusView, mUrlCoordinator);
-        mUrlCoordinator.addTextChangedListener(mStatusViewCoordinator);
+        mUrlCoordinator.addUrlTextChangeListener(mStatusViewCoordinator);
 
         updateShouldAnimateIconChanges();
         mUrlBar.setOnKeyListener(new UrlBarKeyListener());
@@ -295,14 +306,6 @@ public class LocationBarLayout extends FrameLayout
         mUrlCoordinator.setAllowFocus(focusable);
     }
 
-    /**
-     * @return The WindowDelegate for the LocationBar. This should be used for all Window related
-     * state queries.
-     */
-    protected WindowDelegate getWindowDelegate() {
-        return mWindowDelegate;
-    }
-
     @Override
     public AutocompleteCoordinator getAutocompleteCoordinator() {
         return mAutocompleteCoordinator;
@@ -335,7 +338,13 @@ public class LocationBarLayout extends FrameLayout
 
         updateVisualsForState();
 
-        updateMicButtonVisibility(mUrlFocusChangePercent);
+        updateMicButtonVisibility();
+
+        mAssistantVoiceSearchService =
+                new AssistantVoiceSearchService(getContext(), ExternalAuthUtils.getInstance(),
+                        TemplateUrlServiceFactory.get(), GSAState.getInstance(getContext()), this);
+        mVoiceRecognitionHandler.setAssistantVoiceSearchService(mAssistantVoiceSearchService);
+        onAssistantVoiceSearchServiceChanged();
     }
 
     /**
@@ -375,7 +384,10 @@ public class LocationBarLayout extends FrameLayout
 
     /** Focuses the current page. */
     private void focusCurrentTab() {
-        if (mToolbarDataProvider.hasTab()) getCurrentTab().requestFocus();
+        if (mToolbarDataProvider.hasTab()) {
+            View view = getCurrentTab().getView();
+            if (view != null) view.requestFocus();
+        }
     }
 
     @Override
@@ -400,7 +412,7 @@ public class LocationBarLayout extends FrameLayout
                 setUrlBarText(mToolbarDataProvider.getUrlBarData(), UrlBar.ScrollType.NO_SCROLL,
                         SelectionState.SELECT_ALL);
             }
-            hideKeyboard();
+            setKeyboardVisibility(false);
         }
     }
 
@@ -423,7 +435,7 @@ public class LocationBarLayout extends FrameLayout
             // The accessibility bounding box is not properly updated when focusing the Omnibox
             // from the NTP fakebox.  Clearing/re-requesting focus triggers the bounding box to
             // be recalculated.
-            if (didFocusUrlFromFakebox() && !inProgress && mUrlHasFocus
+            if (didFocusUrlFromFakebox() && mUrlHasFocus
                     && AccessibilityUtil.isAccessibilityEnabled()) {
                 String existingText = mUrlCoordinator.getTextWithoutAutocomplete();
                 mUrlBar.clearFocus();
@@ -448,12 +460,13 @@ public class LocationBarLayout extends FrameLayout
      * Triggered when the URL input field has gained or lost focus.
      * @param hasFocus Whether the URL field has gained focus.
      */
-    public void onUrlFocusChange(boolean hasFocus) {
+    protected void onUrlFocusChange(boolean hasFocus) {
         mUrlHasFocus = hasFocus;
         updateButtonVisibility();
         updateShouldAnimateIconChanges();
 
-        if (hasFocus) {
+        if (mUrlHasFocus) {
+            mKeyboardShouldShow = false;
             if (mNativeInitialized) RecordUserAction.record("FocusLocation");
             UrlBarData urlBarData = mToolbarDataProvider.getUrlBarData();
             if (urlBarData.editingText != null) {
@@ -491,13 +504,15 @@ public class LocationBarLayout extends FrameLayout
                 SearchEngineIconHandler.get().restoreDSE();
         }
 
+        // Note(david@vivaldi.com): In Vivaldi we always need to update.
+        if (ChromeApplication.isVivaldi()) updateVisualsForState();
         if (mToolbarDataProvider.isUsingBrandColor()) updateVisualsForState();
 
         mStatusViewCoordinator.onUrlFocusChange(mUrlHasFocus);
 
-        if (!mUrlFocusedWithoutAnimations) handleUrlFocusAnimation(hasFocus);
+        if (!mUrlFocusedWithoutAnimations) handleUrlFocusAnimation(mUrlHasFocus);
 
-        if (hasFocus && mToolbarDataProvider.hasTab() && !mToolbarDataProvider.isIncognito()) {
+        if (mUrlHasFocus && mToolbarDataProvider.hasTab() && !mToolbarDataProvider.isIncognito()) {
             if (mNativeInitialized
                     && TemplateUrlServiceFactory.get().isDefaultSearchEngineGoogle()) {
                 GeolocationHeader.primeLocationForGeoHeader();
@@ -519,6 +534,7 @@ public class LocationBarLayout extends FrameLayout
      * @param hasFocus Whether focus was gained.
      */
     protected void handleUrlFocusAnimation(boolean hasFocus) {
+        removeCallbacks(mKeyboardResizeModeTask);
         if (hasFocus) mUrlFocusedWithoutAnimations = false;
         for (UrlFocusChangeListener listener : mUrlFocusChangeListeners) {
             listener.onUrlFocusChange(hasFocus);
@@ -593,8 +609,7 @@ public class LocationBarLayout extends FrameLayout
      * @return The margin to be applied to the URL bar based on the buttons currently visible next
      *         to it, used to avoid text overlapping the buttons and vice versa.
      */
-    @Override
-    public int getUrlContainerMarginEnd() {
+    private int getUrlContainerMarginEnd() {
         int urlContainerMarginEnd = 0;
         for (View childView : getUrlContainerViewsForMargin()) {
             ViewGroup.MarginLayoutParams childLayoutParams =
@@ -698,8 +713,9 @@ public class LocationBarLayout extends FrameLayout
     }
 
     @Override
-    public void hideKeyboard() {
-        getWindowAndroid().getKeyboardDelegate().hideKeyboard(mUrlBar);
+    public void setKeyboardVisibility(boolean shouldShow) {
+        mKeyboardShouldShow = shouldShow;
+        setKeyboardVisibilityInternal(false);
     }
 
     @Override
@@ -795,10 +811,10 @@ public class LocationBarLayout extends FrameLayout
 
             RecordUserAction.record("MobileOmniboxDeleteUrl");
             return;
-        } else if (v == mMicButton && mVoiceRecognitionHandler != null) {
+        } else if (v == mMicButton) {
             RecordUserAction.record("MobileOmniboxVoiceSearch");
             mVoiceRecognitionHandler.startVoiceRecognition(
-                    LocationBarVoiceRecognitionHandler.VoiceInteractionSource.OMNIBOX);
+                    VoiceRecognitionHandler.VoiceInteractionSource.OMNIBOX);
         }
     }
 
@@ -870,7 +886,7 @@ public class LocationBarLayout extends FrameLayout
 
         // Profile may be null if switching to a tab that has not yet been initialized.
         Profile profile = mToolbarDataProvider.getProfile();
-        if (profile != null) mOmniboxPrerender.clear(profile);
+        if (profile != null && mOmniboxPrerender != null) mOmniboxPrerender.clear(profile);
     }
 
     /**
@@ -927,12 +943,12 @@ public class LocationBarLayout extends FrameLayout
         }
 
         if (currentTab != null
-                && (currentTab.isNativePage() || NewTabPage.isNTPUrl(currentTab.getUrl()))) {
+                && (currentTab.isNativePage() || NewTabPage.isNTPUrl(currentTab.getUrlString()))) {
             NewTabPageUma.recordOmniboxNavigation(url, transition);
             // Passing in an empty string should not do anything unless the user is at the NTP.
             // Since the NTP has no url, pressing enter while clicking on the URL bar should refresh
             // the page as it does when you click and press enter on any other site.
-            if (url.isEmpty()) url = currentTab.getUrl();
+            if (url.isEmpty()) url = currentTab.getUrlString();
         }
 
         // Loads the |url| in a new tab or the current ContentView and gives focus to the
@@ -991,12 +1007,8 @@ public class LocationBarLayout extends FrameLayout
     @Override
     public void updateSearchEngineStatusIcon(boolean shouldShowSearchEngineLogo,
             boolean isSearchEngineGoogle, String searchEngineUrl) {
-        mSearchEngineUrl = searchEngineUrl;
-        mIsSearchEngineGoogle = isSearchEngineGoogle;
-        mShouldShowSearchEngineLogo = shouldShowSearchEngineLogo;
-
         mStatusViewCoordinator.updateSearchEngineStatusIcon(
-                mShouldShowSearchEngineLogo, mIsSearchEngineGoogle, mSearchEngineUrl);
+                shouldShowSearchEngineLogo, isSearchEngineGoogle, searchEngineUrl);
     }
 
     @Override
@@ -1019,7 +1031,7 @@ public class LocationBarLayout extends FrameLayout
             }
         } else {
             assert pastedText == null;
-            hideKeyboard();
+            setKeyboardVisibility(false);
             mUrlBar.clearFocus();
         }
 
@@ -1043,7 +1055,7 @@ public class LocationBarLayout extends FrameLayout
     }
 
     @Override
-    public LocationBarVoiceRecognitionHandler getLocationBarVoiceRecognitionHandler() {
+    public VoiceRecognitionHandler getVoiceRecognitionHandler() {
         return mVoiceRecognitionHandler;
     }
 
@@ -1082,14 +1094,21 @@ public class LocationBarLayout extends FrameLayout
 
     /**
      * Updates the display of the mic button.
-     *
-     * @param urlFocusChangePercent The completion percentage of the URL focus change animation.
      */
-    protected void updateMicButtonVisibility(float urlFocusChangePercent) {
+    protected void updateMicButtonVisibility() {
         boolean visible = !shouldShowDeleteButton();
         boolean showMicButton = mVoiceSearchEnabled && visible
-                && (mUrlBar.hasFocus() || mUrlFocusChangeInProgress || urlFocusChangePercent > 0f);
+                && (mUrlBar.hasFocus() || mUrlFocusChangeInProgress || mUrlFocusChangePercent > 0f
+                        || mShouldShowMicButtonWhenUnfocused);
         mMicButton.setVisibility(showMicButton ? VISIBLE : GONE);
+    }
+
+    /**
+     * Value determines if mic button should be shown when location bar is not focused. By default
+     * mic button is not shown. It is only shown for SearchActivityLocationBarLayout.
+     */
+    protected void setShouldShowMicButtonWhenUnfocused(boolean shouldShowMicButtonWhenUnfocused) {
+        mShouldShowMicButtonWhenUnfocused = shouldShowMicButtonWhenUnfocused;
     }
 
     /**
@@ -1100,15 +1119,23 @@ public class LocationBarLayout extends FrameLayout
     public void updateVisualsForState() {
         // If the location bar is focused, the toolbar background color would be the default color
         // regardless of whether it is branded or not.
-        final int defaultPrimaryColor =
-                ColorUtils.getDefaultThemeColor(getResources(), mToolbarDataProvider.isIncognito());
+        final int defaultPrimaryColor = ChromeColors.getDefaultThemeColor(
+                getResources(), mToolbarDataProvider.isIncognito());
         final int primaryColor =
                 mUrlHasFocus ? defaultPrimaryColor : mToolbarDataProvider.getPrimaryColor();
-        final boolean useDarkColors = !ColorUtils.shouldUseLightForegroundOnBackground(primaryColor);
 
-        int id = ColorUtils.getIconTintRes(!useDarkColors);
-        ColorStateList colorStateList = AppCompatResources.getColorStateList(getContext(), id);
-        ApiCompatibilityUtils.setImageTintList(mMicButton, colorStateList);
+        // This will be called between inflation and initialization. For those calls, using a null
+        // ColorStateList should have no visible impact to the user.
+        ColorStateList micColorStateList = mAssistantVoiceSearchService == null
+                ? null
+                : mAssistantVoiceSearchService.getMicButtonColorStateList(
+                        primaryColor, getContext());
+        ApiCompatibilityUtils.setImageTintList(mMicButton, micColorStateList);
+
+        final boolean useDarkColors =
+                !ColorUtils.shouldUseLightForegroundOnBackground(primaryColor);
+        ColorStateList colorStateList =
+                ChromeColors.getPrimaryIconTint(getContext(), !useDarkColors);
         ApiCompatibilityUtils.setImageTintList(mDeleteButton, colorStateList);
 
         // If the URL changed colors and is not focused, update the URL to account for the new
@@ -1118,6 +1145,7 @@ public class LocationBarLayout extends FrameLayout
         }
 
         mStatusViewCoordinator.setUseDarkColors(useDarkColors);
+        if (!ChromeApplication.isVivaldi())  // Vivaldi: Do not display incognito badge.
         mStatusViewCoordinator.setIncognitoBadgeVisibility(
                 mToolbarDataProvider.isIncognito() && !mIsTablet);
         mAutocompleteCoordinator.updateVisualsForState(
@@ -1162,6 +1190,99 @@ public class LocationBarLayout extends FrameLayout
     }
 
     private void recordOmniboxFocusReason(@OmniboxFocusReason int reason) {
-        ENUMERATED_FOCUS_REASON.record(reason);
+        RecordHistogram.recordEnumeratedHistogram(
+                "Android.OmniboxFocusReason", reason, OmniboxFocusReason.NUM_ENTRIES);
+    }
+
+    @Override
+    public void onAssistantVoiceSearchServiceChanged() {
+        Drawable drawable = mAssistantVoiceSearchService.getCurrentMicDrawable();
+        mMicButton.setImageDrawable(drawable);
+
+        final int defaultPrimaryColor = ChromeColors.getDefaultThemeColor(
+                getResources(), mToolbarDataProvider.isIncognito());
+        final int primaryColor =
+                mUrlHasFocus ? defaultPrimaryColor : mToolbarDataProvider.getPrimaryColor();
+        ColorStateList colorStateList =
+                mAssistantVoiceSearchService.getMicButtonColorStateList(primaryColor, getContext());
+        ApiCompatibilityUtils.setImageTintList(mMicButton, colorStateList);
+    }
+
+    /**
+     * Handles any actions to be performed after all other actions triggered by the URL focus
+     * change.  This will be called after any animations are performed to transition from one
+     * focus state to the other.
+     * @param hasFocus Whether the URL field has gained focus.
+     */
+    protected void finishUrlFocusChange(boolean hasFocus) {
+        setKeyboardVisibilityInternal(true);
+        setUrlFocusChangeInProgress(false);
+        updateShouldAnimateIconChanges();
+    }
+
+    /**
+     * Controls keyboard visibility.
+     * TODO(https://crbug.com/1060729): This should be relocated to UrlBar component.
+     *
+     * @param shouldDelayHiding When true, keyboard hide operation will be delayed slightly to
+     *         improve the animation smoothness.
+     */
+    private void setKeyboardVisibilityInternal(boolean shouldDelayHiding) {
+        boolean showKeyboard = mUrlHasFocus && mKeyboardShouldShow;
+        // Cancel pending jobs to prevent any possibility of keyboard flicker.
+        if (mKeyboardHideTask != null) {
+            removeCallbacks(mKeyboardHideTask);
+        }
+
+        // Note: due to nature of this mechanism, we may occasionally experience subsequent requests
+        // to show or hide keyboard anyway. This may happen when we schedule keyboard hide, and
+        // receive a second request to hide the keyboard instantly.
+        if (showKeyboard) {
+            setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN, /* delay */ false);
+            getWindowAndroid().getKeyboardDelegate().showKeyboard(mUrlBar);
+        } else {
+            // The animation rendering may not yet be 100% complete and hiding the keyboard makes
+            // the animation quite choppy.
+            // clang-format off
+            mKeyboardHideTask = () -> {
+                getWindowAndroid().getKeyboardDelegate().hideKeyboard(mUrlBar);
+                mKeyboardHideTask = null;
+            };
+            // clang-format on
+            postDelayed(mKeyboardHideTask, shouldDelayHiding ? KEYBOARD_HIDE_DELAY_MS : 0);
+            // Convert the keyboard back to resize mode (delay the change for an arbitrary amount
+            // of time in hopes the keyboard will be completely hidden before making this change).
+            setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE, /* delay */ true);
+        }
+    }
+
+    /**
+     * @param softInputMode The software input resize mode.
+     * @param delay Delay the change in input mode.
+     */
+    private void setSoftInputMode(final int softInputMode, boolean delay) {
+        if (mKeyboardResizeModeTask != null) {
+            removeCallbacks(mKeyboardResizeModeTask);
+            mKeyboardResizeModeTask = null;
+        }
+
+        if (mWindowDelegate == null || mWindowDelegate.getWindowSoftInputMode() == softInputMode) {
+            return;
+        }
+
+        if (delay) {
+            mKeyboardResizeModeTask = () -> {
+                mWindowDelegate.setWindowSoftInputMode(softInputMode);
+                mKeyboardResizeModeTask = null;
+            };
+            postDelayed(mKeyboardResizeModeTask, KEYBOARD_MODE_CHANGE_DELAY_MS);
+        } else {
+            mWindowDelegate.setWindowSoftInputMode(softInputMode);
+        }
+    }
+
+    public void setVoiceRecognitionHandlerForTesting(
+            VoiceRecognitionHandler voiceRecognitionHandler) {
+        mVoiceRecognitionHandler = voiceRecognitionHandler;
     }
 }

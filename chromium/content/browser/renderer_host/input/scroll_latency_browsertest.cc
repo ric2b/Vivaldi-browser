@@ -5,7 +5,6 @@
 #include <memory>
 
 #include "base/bind.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
@@ -31,6 +30,10 @@
 #include "ui/base/ui_base_features.h"
 #include "ui/native_theme/native_theme_features.h"
 
+#if defined(OS_MACOSX)
+#include "ui/base/test/scoped_preferred_scroller_style_mac.h"
+#endif
+
 namespace {
 
 const char kDataURL[] =
@@ -41,7 +44,7 @@ const char kDataURL[] =
     "<title>Scroll latency histograms browsertests.</title>"
     "<style>"
     "body {"
-    "  height:3000px;"
+    "  height:9000px;"
     "}"
     "</style>"
     "</head>"
@@ -104,11 +107,6 @@ class ScrollLatencyBrowserTest : public ContentBrowserTest {
   }
 
   void LoadURL() {
-    WebContents* contents = shell()->web_contents();
-    WebPreferences prefs =
-        contents->GetRenderViewHost()->GetWebkitPreferences();
-    prefs.mock_scrollbars_enabled = true;
-    contents->GetRenderViewHost()->UpdateWebkitPreferences(prefs);
     const GURL data_url(kDataURL);
     EXPECT_TRUE(NavigateToURL(shell(), data_url));
 
@@ -128,7 +126,7 @@ class ScrollLatencyBrowserTest : public ContentBrowserTest {
         SyntheticWebGestureEventBuilder::BuildScrollBegin(
             distance.x(), -distance.y(), blink::WebGestureDevice::kTouchpad, 1);
     event.data.scroll_begin.delta_hint_units =
-        ui::input_types::ScrollGranularity::kScrollByPixel;
+        ui::ScrollGranularity::kScrollByPixel;
     GetWidgetHost()->ForwardGestureEvent(event);
 
     const uint32_t kNumWheelScrolls = 2;
@@ -148,7 +146,7 @@ class ScrollLatencyBrowserTest : public ContentBrowserTest {
               distance.x(), -distance.y(), 0,
               blink::WebGestureDevice::kTouchpad);
       event2.data.scroll_update.delta_units =
-          ui::input_types::ScrollGranularity::kScrollByPixel;
+          ui::ScrollGranularity::kScrollByPixel;
       GetWidgetHost()->ForwardGestureEvent(event2);
 
       while (visual_state_callback_count_ <= i) {
@@ -267,19 +265,79 @@ IN_PROC_BROWSER_TEST_F(ScrollLatencyBrowserTest,
       0, "Event.Latency.ScrollBegin.Touch.TimeToScrollUpdateSwapBegin4"));
 }
 
+using ScrollThroughputBrowserTest = ScrollLatencyBrowserTest;
+
+// The test does a fling during the test, and it times out in slower builds
+// (e.g. when sanitizers are turned on).
+#if defined(ADDRESS_SANITIZER) || defined(THREAD_SANITIZER)
+#define MAYBE_ScrollThroughputMetrics DISABLED_ScrollThroughputMetrics
+#else
+#define MAYBE_ScrollThroughputMetrics ScrollThroughputMetrics
+#endif
+IN_PROC_BROWSER_TEST_F(ScrollThroughputBrowserTest,
+                       MAYBE_ScrollThroughputMetrics) {
+  LoadURL();
+  auto scroll_update_watcher = std::make_unique<InputMsgWatcher>(
+      GetWidgetHost(), blink::WebInputEvent::kGestureScrollEnd);
+
+  SyntheticSmoothScrollGestureParams params;
+  params.gesture_source_type = SyntheticGestureParams::TOUCH_INPUT;
+  params.anchor = gfx::PointF(10, 10);
+  params.distances.push_back(gfx::Vector2d(0, -6000));
+  params.fling_velocity_x = 0;
+  params.fling_velocity_y = -2000;
+  params.prevent_fling = false;
+
+  run_loop_ = std::make_unique<base::RunLoop>();
+
+  auto gesture = std::make_unique<SyntheticSmoothScrollGesture>(params);
+  GetWidgetHost()->QueueSyntheticGesture(
+      std::move(gesture),
+      base::BindOnce(&ScrollLatencyBrowserTest::OnSyntheticGestureCompleted,
+                     base::Unretained(this)));
+  run_loop_->Run();
+
+  while (!GetSampleCountForHistogram(
+      "Graphics.Smoothness.PercentDroppedFrames.CompositorThread."
+      "TouchScroll")) {
+    GiveItSomeTime();
+    FetchHistogramsFromChildProcesses();
+  }
+  EXPECT_TRUE(VerifyRecordedSamplesForHistogram(
+      1,
+      "Graphics.Smoothness.PercentDroppedFrames.ScrollingThread.TouchScroll"));
+  EXPECT_TRUE(VerifyRecordedSamplesForHistogram(
+      1, "Event.Latency.ScrollBegin.Touch.BrowserNotifiedToBeforeGpuSwap2"));
+}
+
 class ScrollLatencyScrollbarBrowserTest : public ScrollLatencyBrowserTest {
  public:
-  ScrollLatencyScrollbarBrowserTest() {}
+  ScrollLatencyScrollbarBrowserTest() = default;
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     ScrollLatencyBrowserTest::SetUpCommandLine(command_line);
     command_line->AppendSwitch(::switches::kDisableSmoothScrolling);
-    // Disable kOverlayScrollbar since overlay scrollbars are not
-    // hit-testable (thus input is not routed to scrollbars).
-    scoped_feature_list_.InitAndDisableFeature({features::kOverlayScrollbar});
+
+    // The following features need to be disabled:
+    // - kOverlayScrollbar since overlay scrollbars are not hit-testable (thus
+    // input is not routed to scrollbars).
+    // - kCompositorThreadedScrollbarScrolling since this feature is already
+    // tested by ScrollLatencyCompositedScrollbarBrowserTest. Hence, this
+    // current test can be used exclusively to test the main thread scrollbar
+    // path.
+    scoped_feature_list_.InitWithFeaturesAndParameters(
+        {}, {features::kOverlayScrollbar,
+             features::kCompositorThreadedScrollbarScrolling});
   }
 
-  ~ScrollLatencyScrollbarBrowserTest() override {}
+  ~ScrollLatencyScrollbarBrowserTest() override = default;
+
+ private:
+#if defined(OS_MACOSX)
+  // Native scrollbars on Mac are overlay scrollbars. Hence they need to be
+  // disabled.
+  ui::test::ScopedPreferredScrollerStyle scroller_style_override{false};
+#endif
 
  protected:
   void RunScrollbarButtonLatencyTest() {
@@ -290,17 +348,16 @@ class ScrollLatencyScrollbarBrowserTest : public ScrollLatencyBrowserTest {
     //    coordinates to manipulate the scrollbar is different from other
     //    platforms.
     // We could overcome the first limitation, by toggling various features
-    // and WebPreferences (e.g. kOverlayScrollbar feature, and
-    // viewport_enabled and use_solid_color_scrollbars WebPreferences) but at
-    // that point, we're not really testing a shipping configuration.
+    // and WebPreferences (e.g. kOverlayScrollbar feature, and viewport_enabled
+    // WebPreferences) but at that point, we're not really testing a shipping
+    // configuration.
 #if !defined(OS_ANDROID)
-
     // Click on the forward scrollbar button to induce a compositor thread
     // scrollbar scroll.
-    blink::WebFloatPoint scrollbar_forward_button(795, 595);
+    gfx::PointF scrollbar_forward_button(795, 595);
     blink::WebMouseEvent mouse_event = SyntheticWebMouseEventBuilder::Build(
-        blink::WebInputEvent::kMouseDown, scrollbar_forward_button.x,
-        scrollbar_forward_button.y, 0);
+        blink::WebInputEvent::kMouseDown, scrollbar_forward_button.x(),
+        scrollbar_forward_button.y(), 0);
     mouse_event.button = blink::WebMouseEvent::Button::kLeft;
     mouse_event.SetTimeStamp(base::TimeTicks::Now());
     GetWidgetHost()->ForwardMouseEvent(mouse_event);
@@ -338,10 +395,10 @@ class ScrollLatencyScrollbarBrowserTest : public ScrollLatencyBrowserTest {
 #if !defined(OS_ANDROID)
     // Click on the scrollbar thumb and drag it twice to induce a compositor
     // thread scrollbar ScrollBegin and ScrollUpdate.
-    blink::WebFloatPoint scrollbar_thumb(795, 30);
+    gfx::PointF scrollbar_thumb(795, 30);
     blink::WebMouseEvent mouse_down = SyntheticWebMouseEventBuilder::Build(
-        blink::WebInputEvent::kMouseDown, scrollbar_thumb.x, scrollbar_thumb.y,
-        0);
+        blink::WebInputEvent::kMouseDown, scrollbar_thumb.x(),
+        scrollbar_thumb.y(), 0);
     mouse_down.button = blink::WebMouseEvent::Button::kLeft;
     mouse_down.SetTimeStamp(base::TimeTicks::Now());
     GetWidgetHost()->ForwardMouseEvent(mouse_down);
@@ -356,21 +413,23 @@ class ScrollLatencyScrollbarBrowserTest : public ScrollLatencyBrowserTest {
     RunUntilInputProcessed(GetWidgetHost());
 
     blink::WebMouseEvent mouse_move = SyntheticWebMouseEventBuilder::Build(
-        blink::WebInputEvent::kMouseMove, scrollbar_thumb.x,
-        scrollbar_thumb.y + 10, 0);
+        blink::WebInputEvent::kMouseMove, scrollbar_thumb.x(),
+        scrollbar_thumb.y() + 10, 0);
     mouse_move.button = blink::WebMouseEvent::Button::kLeft;
     mouse_move.SetTimeStamp(base::TimeTicks::Now());
     GetWidgetHost()->ForwardMouseEvent(mouse_move);
     RunUntilInputProcessed(GetWidgetHost());
 
-    mouse_move.SetPositionInWidget(scrollbar_thumb.x, scrollbar_thumb.y + 20);
-    mouse_move.SetPositionInScreen(scrollbar_thumb.x, scrollbar_thumb.y + 20);
+    mouse_move.SetPositionInWidget(scrollbar_thumb.x(),
+                                   scrollbar_thumb.y() + 20);
+    mouse_move.SetPositionInScreen(scrollbar_thumb.x(),
+                                   scrollbar_thumb.y() + 20);
     GetWidgetHost()->ForwardMouseEvent(mouse_move);
     RunUntilInputProcessed(GetWidgetHost());
 
     blink::WebMouseEvent mouse_up = SyntheticWebMouseEventBuilder::Build(
-        blink::WebInputEvent::kMouseUp, scrollbar_thumb.x,
-        scrollbar_thumb.y + 20, 0);
+        blink::WebInputEvent::kMouseUp, scrollbar_thumb.x(),
+        scrollbar_thumb.y() + 20, 0);
     mouse_up.button = blink::WebMouseEvent::Button::kLeft;
     mouse_up.SetTimeStamp(base::TimeTicks::Now());
     GetWidgetHost()->ForwardMouseEvent(mouse_up);
@@ -465,7 +524,7 @@ class ScrollLatencyCompositedScrollbarBrowserTest
 };
 
 IN_PROC_BROWSER_TEST_F(ScrollLatencyCompositedScrollbarBrowserTest,
-                       DISABLED_ScrollbarButtonLatency) {
+                       ScrollbarButtonLatency) {
   LoadURL();
 
   RunScrollbarButtonLatencyTest();

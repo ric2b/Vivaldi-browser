@@ -81,6 +81,16 @@ void LocalSVGResource::NotifyContentChanged(
     client->ResourceContentChanged(invalidation_mask);
 }
 
+void LocalSVGResource::NotifyFilterPrimitiveChanged(
+    SVGFilterPrimitiveStandardAttributes& primitive,
+    const QualifiedName& attribute) {
+  HeapVector<Member<SVGResourceClient>> clients;
+  CopyToVector(clients_, clients);
+
+  for (SVGResourceClient* client : clients)
+    client->FilterPrimitiveChanged(primitive, attribute);
+}
+
 void LocalSVGResource::NotifyResourceAttached(
     LayoutSVGResourceContainer& attached_resource) {
   // Checking the element here because
@@ -129,9 +139,24 @@ void ExternalSVGResource::Load(const Document& document) {
   options.initiator_info.name = fetch_initiator_type_names::kCSS;
   FetchParameters params(ResourceRequest(url_), options);
   params.MutableResourceRequest().SetMode(
-      network::mojom::RequestMode::kSameOrigin);
+      network::mojom::blink::RequestMode::kSameOrigin);
   resource_document_ =
-      DocumentResource::FetchSVGDocument(params, document.Fetcher(), this);
+      DocumentResource::FetchSVGDocument(params, document, this);
+  target_ = ResolveTarget();
+}
+
+void ExternalSVGResource::LoadWithoutCSP(const Document& document) {
+  if (resource_document_)
+    return;
+  ResourceLoaderOptions options;
+  options.initiator_info.name = fetch_initiator_type_names::kCSS;
+  FetchParameters params(ResourceRequest(url_), options);
+  params.SetContentSecurityCheck(
+      network::mojom::blink::CSPDisposition::DO_NOT_CHECK);
+  params.MutableResourceRequest().SetMode(
+      network::mojom::blink::RequestMode::kSameOrigin);
+  resource_document_ =
+      DocumentResource::FetchSVGDocument(params, document, this);
   target_ = ResolveTarget();
 }
 

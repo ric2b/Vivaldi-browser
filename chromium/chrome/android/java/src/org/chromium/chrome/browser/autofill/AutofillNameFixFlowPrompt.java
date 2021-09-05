@@ -5,8 +5,6 @@
 package org.chromium.chrome.browser.autofill;
 
 import android.content.Context;
-import android.support.v4.text.TextUtilsCompat;
-import android.support.v4.view.ViewCompat;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.LayoutInflater;
@@ -17,6 +15,9 @@ import android.widget.ImageView;
 import android.widget.PopupWindow;
 import android.widget.TextView;
 import android.widget.TextView.BufferType;
+
+import androidx.core.text.TextUtilsCompat;
+import androidx.core.view.ViewCompat;
 
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
@@ -89,10 +90,13 @@ public class AutofillNameFixFlowPrompt implements TextWatcher, ModalDialogProper
         }
         mDialogModel = builder.build();
 
-        // Hitting the "submit" button on the software keyboard should submit.
+        // Hitting the "submit" button on the software keyboard should submit, unless the name field
+        // is empty.
         mUserNameInput.setOnEditorActionListener((view, actionId, event) -> {
             if (actionId == EditorInfo.IME_ACTION_DONE) {
-                onClick(mDialogModel, ModalDialogProperties.ButtonType.POSITIVE);
+                if (mUserNameInput.getText().toString().trim().length() != 0) {
+                    onClick(mDialogModel, ModalDialogProperties.ButtonType.POSITIVE);
+                }
                 return true;
             }
             return false;

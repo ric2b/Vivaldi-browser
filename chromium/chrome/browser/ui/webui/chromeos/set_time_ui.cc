@@ -21,7 +21,7 @@
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/chromeos/system/timezone_util.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/webui/localized_string.h"
+#include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/browser_resources.h"
 #include "chrome/grit/generated_resources.h"
@@ -33,6 +33,7 @@
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/browser/web_ui_message_handler.h"
+#include "ui/base/webui/web_ui_util.h"
 #include "ui/resources/grit/webui_resources.h"
 
 namespace chromeos {
@@ -143,8 +144,8 @@ class SetTimeMessageHandler : public content::WebUIMessageHandler,
     }
     ash::LoginScreen::Get()->ShowParentAccessWidget(
         account_id,
-        base::BindRepeating(&SetTimeMessageHandler::OnParentAccessValidation,
-                            weak_factory_.GetWeakPtr()),
+        base::BindOnce(&SetTimeMessageHandler::OnParentAccessValidation,
+                       weak_factory_.GetWeakPtr()),
         ash::ParentAccessRequestReason::kChangeTime,
         !is_user_logged_in /* extra_dimmer */,
         base::Time::FromDoubleT(seconds));
@@ -175,7 +176,7 @@ SetTimeUI::SetTimeUI(content::WebUI* web_ui) : WebDialogUI(web_ui) {
   source->OverrideContentSecurityPolicyScriptSrc(
       "script-src chrome://resources chrome://test 'self';");
 
-  static constexpr LocalizedString kStrings[] = {
+  static constexpr webui::LocalizedString kStrings[] = {
       {"setTimeTitle", IDS_SET_TIME_TITLE},
       {"prompt", IDS_SET_TIME_PROMPT},
       {"timezoneLabel", IDS_SET_TIME_TIMEZONE_LABEL},
@@ -183,17 +184,16 @@ SetTimeUI::SetTimeUI(content::WebUI* web_ui) : WebDialogUI(web_ui) {
       {"timeLabel", IDS_SET_TIME_TIME_LABEL},
       {"doneButton", IDS_DONE},
   };
-  AddLocalizedStringsBulk(source, kStrings, base::size(kStrings));
+  AddLocalizedStringsBulk(source, kStrings);
 
   base::DictionaryValue values;
   // List of list of strings: [[ID, name], [ID, name], ...]
   values.Set("timezoneList", chromeos::system::GetTimezoneList());
 
   // If we are not logged in, we need to show the time zone dropdown.
-  // Otherwise, we can leave |currentTimezoneId| blank.
+  values.SetBoolean("showTimezone", SetTimeDialog::ShouldShowTimezone());
   std::string current_timezone_id;
-  if (SetTimeDialog::ShouldShowTimezone())
-    CrosSettings::Get()->GetString(kSystemTimezone, &current_timezone_id);
+  CrosSettings::Get()->GetString(kSystemTimezone, &current_timezone_id);
   values.SetString("currentTimezoneId", current_timezone_id);
   values.SetDouble("buildTime", base::GetBuildTime().ToJsTime());
 

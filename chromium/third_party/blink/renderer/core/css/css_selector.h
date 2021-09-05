@@ -193,6 +193,7 @@ class CORE_EXPORT CSSSelector {
     kPseudoTarget,
     kPseudoBefore,
     kPseudoAfter,
+    kPseudoMarker,
     kPseudoBackdrop,
     kPseudoLang,
     kPseudoNot,
@@ -230,9 +231,10 @@ class CORE_EXPORT CSSSelector {
     kPseudoPictureInPicture,
     kPseudoInRange,
     kPseudoOutOfRange,
+    kPseudoXrOverlay,
     // Pseudo elements in UA ShadowRoots. Available in any stylesheets.
     kPseudoWebKitCustomElement,
-    // Pseudo elements in UA ShadowRoots. Availble only in UA stylesheets.
+    // Pseudo elements in UA ShadowRoots. Available only in UA stylesheets.
     kPseudoBlinkInternalElement,
     kPseudoCue,
     kPseudoFutureCue,
@@ -247,11 +249,11 @@ class CORE_EXPORT CSSSelector {
     kPseudoSpatialNavigationInterest,
     kPseudoIsHtml,
     kPseudoListBox,
+    kPseudoMultiSelectFocus,
     kPseudoHostHasAppearance,
     kPseudoSlotted,
     kPseudoVideoPersistent,
     kPseudoVideoPersistentAncestor,
-    kPseudoXrImmersiveDomOverlay,
   };
 
   enum AttributeMatchType {
@@ -301,6 +303,9 @@ class CORE_EXPORT CSSSelector {
   const CSSSelectorList* SelectorList() const {
     return has_rare_data_ ? data_.rare_data_->selector_list_.get() : nullptr;
   }
+  const Vector<AtomicString>* PartNames() const {
+    return has_rare_data_ ? data_.rare_data_->part_names_.get() : nullptr;
+  }
 
 #ifndef NDEBUG
   void Show() const;
@@ -312,6 +317,7 @@ class CORE_EXPORT CSSSelector {
   void SetAttribute(const QualifiedName&, AttributeMatchType);
   void SetArgument(const AtomicString&);
   void SetSelectorList(std::unique_ptr<CSSSelectorList>);
+  void SetPartNames(std::unique_ptr<Vector<AtomicString>>);
 
   void SetNth(int a, int b);
   bool MatchNth(unsigned count) const;
@@ -446,6 +452,8 @@ class CORE_EXPORT CSSSelector {
     AtomicString argument_;    // Used for :contains, :lang, :nth-*
     std::unique_ptr<CSSSelectorList>
         selector_list_;  // Used for :-webkit-any and :not
+    std::unique_ptr<Vector<AtomicString>>
+        part_names_;  // Used for ::part() selectors.
 
    private:
     RareData(const AtomicString& value);

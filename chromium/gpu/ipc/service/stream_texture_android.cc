@@ -51,14 +51,8 @@ TextureOwner::Mode GetTextureOwnerMode() {
   const bool a_image_reader_supported =
       base::android::AndroidImageReader::GetInstance().IsSupported();
 
-  // TODO(vikassoni) : Currently we have 2 different flags to enable/disable
-  // AImageReader - one for MCVD and other for MediaPlayer here. Merge those 2
-  // flags into a single flag. Keeping the 2 flags separate for now since finch
-  // experiment using this flag is in progress.
-  return a_image_reader_supported && base::FeatureList::IsEnabled(
-                                         features::kAImageReaderMediaPlayer)
-             ? TextureOwner::Mode::kAImageReaderInsecure
-             : TextureOwner::Mode::kSurfaceTextureInsecure;
+  return a_image_reader_supported ? TextureOwner::Mode::kAImageReaderInsecure
+                                  : TextureOwner::Mode::kSurfaceTextureInsecure;
 }
 
 }  // namespace
@@ -165,9 +159,8 @@ bool StreamTexture::HasTextureOwner() const {
   return !!texture_owner_;
 }
 
-gles2::Texture* StreamTexture::GetTexture() const {
-  DCHECK(texture_owner_);
-  return gles2::Texture::CheckedCast(texture_owner_->GetTextureBase());
+TextureBase* StreamTexture::GetTextureBase() const {
+  return texture_owner_->GetTextureBase();
 }
 
 void StreamTexture::NotifyOverlayPromotion(bool promotion,

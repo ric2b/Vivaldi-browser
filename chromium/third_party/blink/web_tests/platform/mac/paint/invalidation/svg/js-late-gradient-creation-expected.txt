@@ -5,12 +5,8 @@
       "bounds": [800, 600],
       "contentsOpaque": true,
       "backgroundColor": "#FFFFFF",
-      "paintInvalidations": [
-        {
-          "object": "InlineTextBox 'Gradient on fill'",
-          "rect": [33, 20, 694, 198],
-          "reason": "appeared"
-        }
+      "invalidations": [
+        [33, 20, 694, 198]
       ]
     }
   ]

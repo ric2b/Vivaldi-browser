@@ -5,7 +5,6 @@
 #include <memory>
 #include <string>
 
-#include "base/memory/shared_memory.h"
 #include "content/child/child_thread_impl.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/renderer/content_renderer_client.h"
@@ -15,17 +14,20 @@
 #include "ipc/ipc_channel_proxy.h"
 #include "mojo/public/cpp/base/shared_memory_utils.h"
 #include "renderer/vivaldi_snapshot_page.h"
-#include "third_party/blink/public/platform/web_scroll_types.h"
+#include "renderer/vivaldi_spatial_navigation.h"
+#include "third_party/blink/public/mojom/input/scroll_direction.mojom-blink.h"
 #include "third_party/blink/public/web/web_document.h"
 #include "third_party/blink/public/web/web_element.h"
 #include "third_party/blink/public/web/web_element_collection.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_view.h"
 #include "third_party/blink/renderer/core/dom/document.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
 #include "third_party/blink/renderer/core/input/event_handler.h"
 #include "third_party/skia/include/core/SkBitmap.h"
+#include "ui/events/types/scroll_types.h"
 #include "ui/vivaldi_skia_utils.h"
 
 using blink::WebDocument;
@@ -55,6 +57,12 @@ bool VivaldiRenderViewObserver::OnMessageReceived(const IPC::Message& message) {
                         OnGetAccessKeysForPage)
     IPC_MESSAGE_HANDLER(VivaldiViewMsg_AccessKeyAction, OnAccessKeyAction)
     IPC_MESSAGE_HANDLER(VivaldiViewMsg_ScrollPage, OnScrollPage)
+    IPC_MESSAGE_HANDLER(VivaldiViewMsg_GetSpatialNavigationRects,
+                        OnGetSpatialNavigationRects)
+    IPC_MESSAGE_HANDLER(VivaldiViewMsg_GetScrollPosition,
+                        OnGetScrollPosition)
+    IPC_MESSAGE_HANDLER(VivaldiViewMsg_ActivateElementFromPoint,
+                        OnActivateElementFromPoint);
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   return handled;
@@ -63,10 +71,94 @@ bool VivaldiRenderViewObserver::OnMessageReceived(const IPC::Message& message) {
 // Inserts text into input fields.
 void VivaldiRenderViewObserver::OnInsertText(const base::string16& text) {
   WebLocalFrame* frame = render_view()->GetWebView()->FocusedFrame();
-  unsigned length = text.length();
-  // We do not want any selection.
-  frame->SetMarkedText(blink::WebString::FromUTF16(text), length, length);
-  frame->UnmarkText();                         // Or marked text.
+  const blink::WebVector<blink::WebImeTextSpan> ime_text_spans;
+  frame->GetInputMethodController()->CommitText(
+      blink::WebString::FromUTF16(text), ime_text_spans,
+       blink::WebRange(), 0);
+}
+
+void VivaldiRenderViewObserver::OnGetSpatialNavigationRects() {
+  WebLocalFrame* frame = render_view()->GetWebView()->FocusedFrame();
+  if (!frame) {
+    return;
+  }
+
+  float scale = render_view()->GetWebView()->ZoomFactorForDeviceScaleFactor();
+  if (scale == 0) {
+    scale = 1.0;
+  }
+
+  blink::Document* document =
+    static_cast<blink::WebLocalFrameImpl*>(frame)->GetFrame()->GetDocument();
+  blink::LocalDOMWindow* window = document->domWindow();
+
+  std::vector<blink::WebElement> spatnav_elements;
+  blink::WebElementCollection all_elements = frame->GetDocument().All();
+  for (blink::WebElement element = all_elements.FirstItem(); !element.IsNull();
+       element = all_elements.NextItem()) {
+    blink::WebRect rect =
+        RevertDeviceScaling(element.BoundsInViewport(), scale);
+    if (IsInViewport(document, rect, window->innerHeight()) &&
+        HasNavigableTag(element) && IsVisible(element) &&
+        !IsTooSmall(rect) && !IsCovered(document, rect)) {
+      spatnav_elements.push_back(element);
+    }
+  }
+
+  std::vector<VivaldiViewMsg_NavigationRect> navigation_rects;
+  for (auto& element: spatnav_elements) {
+    blink::WebRect rect = element.BoundsInViewport();
+    if (element.IsLink()) {
+      blink::IntRect r = FindImageElementRect(element);
+      if (!r.IsEmpty()) {
+        rect.x = r.X();
+        rect.y = r.Y();
+        rect.width = r.Width();
+        rect.height = r.Height();
+      }
+    }
+    rect = RevertDeviceScaling(rect, scale);
+    std::string href = "";
+    if (element.IsLink()) {
+      href = element.GetAttribute("href").Utf8();
+    }
+    VivaldiViewMsg_NavigationRect navigation_rect;
+    navigation_rect.x = rect.x;
+    navigation_rect.y = rect.y;
+    navigation_rect.width = rect.width;
+    navigation_rect.height = rect.height;
+    navigation_rect.href = href;
+    navigation_rect.path = ElementPath(element);
+    navigation_rects.push_back(navigation_rect);
+  }
+  Send(new VivaldiViewHostMsg_GetSpatialNavigationRects_ACK(routing_id(),
+                                                            navigation_rects));
+}
+
+void VivaldiRenderViewObserver::OnGetScrollPosition() {
+  WebLocalFrame* frame = render_view()->GetWebView()->FocusedFrame();
+  if (!frame) {
+    return;
+  }
+  blink::Document* document =
+    static_cast<blink::WebLocalFrameImpl*>(frame)->GetFrame()->GetDocument();
+  blink::LocalDOMWindow* window = document->domWindow();
+  int x = window->scrollX();
+  int y = window->scrollY();
+  Send(new VivaldiViewHostMsg_GetScrollPosition_ACK(routing_id(), x, y));
+}
+
+void VivaldiRenderViewObserver::OnActivateElementFromPoint(int x, int y) {
+  WebLocalFrame* frame = render_view()->GetWebView()->FocusedFrame();
+  if (!frame) {
+    return;
+  }
+  blink::Document* document =
+    static_cast<blink::WebLocalFrameImpl*>(frame)->GetFrame()->GetDocument();
+  blink::Element *elm = document->ElementFromPoint(x, y);
+  if (elm) {
+    elm->AccessKeyAction(true);
+  }
 }
 
 void VivaldiRenderViewObserver::OnGetAccessKeysForPage() {
@@ -112,11 +204,18 @@ void VivaldiRenderViewObserver::OnAccessKeyAction(std::string access_key) {
   }
 }
 
-void VivaldiRenderViewObserver::OnScrollPage(std::string scroll_type) {
+void VivaldiRenderViewObserver::OnScrollPage(std::string scroll_type,
+                                             int scroll_amount) {
   WebLocalFrame* web_local_frame = render_view()->GetWebView()->FocusedFrame();
   if (!web_local_frame) {
     return;
   }
+
+  blink::Document* document =
+      static_cast<blink::WebLocalFrameImpl*>(web_local_frame)
+          ->GetFrame()
+          ->GetDocument();
+  blink::LocalDOMWindow* window = document->domWindow();
 
   // WebLocalFrame doesn't have what we need.
   blink::LocalFrame* local_frame =
@@ -124,24 +223,44 @@ void VivaldiRenderViewObserver::OnScrollPage(std::string scroll_type) {
           ->GetFrame();
 
   if (scroll_type == "up") {
-    local_frame->GetEventHandler().BubblingScroll(
-        blink::kScrollBlockDirectionBackward, blink::ScrollGranularity::kScrollByPage);
+    window->scrollBy(0.0, -scroll_amount);
   } else if (scroll_type == "down") {
+    window->scrollBy(0.0, scroll_amount);
+  } else if (scroll_type == "left") {
+    window->scrollBy(-scroll_amount, 0.0);
+  } else if (scroll_type == "right") {
+    window->scrollBy(scroll_amount, 0.0);
+
+  } else if (scroll_type == "pageup") {
     local_frame->GetEventHandler().BubblingScroll(
-        blink::kScrollBlockDirectionForward, blink::ScrollGranularity::kScrollByPage);
+        blink::mojom::blink::ScrollDirection::kScrollBlockDirectionBackward,
+        blink::ScrollGranularity::kScrollByPage);
+  } else if (scroll_type == "pagedown") {
+    local_frame->GetEventHandler().BubblingScroll(
+        blink::mojom::blink::ScrollDirection::kScrollBlockDirectionForward,
+        blink::ScrollGranularity::kScrollByPage);
+  } else if (scroll_type == "pageleft") {
+    local_frame->GetEventHandler().BubblingScroll(
+        blink::mojom::blink::ScrollDirection::kScrollLeftIgnoringWritingMode,
+        blink::ScrollGranularity::kFirstScrollGranularity);
+  } else if (scroll_type == "pageright") {
+    local_frame->GetEventHandler().BubblingScroll(
+        blink::mojom::blink::ScrollDirection::kScrollRightIgnoringWritingMode,
+        blink::ScrollGranularity::kFirstScrollGranularity);
   } else if (scroll_type == "top") {
     local_frame->GetEventHandler().BubblingScroll(
-        blink::kScrollBlockDirectionBackward, blink::ScrollGranularity::kScrollByDocument);
+        blink::mojom::blink::ScrollDirection::kScrollBlockDirectionBackward,
+        blink::ScrollGranularity::kScrollByDocument);
   } else if (scroll_type == "bottom") {
     local_frame->GetEventHandler().BubblingScroll(
-        blink::kScrollBlockDirectionForward, blink::ScrollGranularity::kScrollByDocument);
+        blink::mojom::blink::ScrollDirection::kScrollBlockDirectionForward,
+        blink::ScrollGranularity::kScrollByDocument);
   } else {
     NOTREACHED();
   }
 }
 
 namespace {
-
 bool CopyBitmapToSharedRegionAsN32(
     const SkBitmap& bitmap,
     base::ReadOnlySharedMemoryRegion* shared_region) {
@@ -153,7 +272,7 @@ bool CopyBitmapToSharedRegionAsN32(
     return false;
 
   base::MappedReadOnlyRegion region_and_mapping =
-      mojo::CreateReadOnlySharedMemoryRegion(buf_size);
+      base::ReadOnlySharedMemoryRegion::Create(buf_size);
   if (!region_and_mapping.IsValid())
     return false;
 

@@ -218,10 +218,6 @@ std::string GetNetworkName(const std::string& service_path) {
 
 }  // namespace
 
-// LoginScreenContext implementation ------------------------------------------
-
-LoginScreenContext::LoginScreenContext() = default;
-
 // SigninScreenHandler implementation ------------------------------------------
 
 SigninScreenHandler::SigninScreenHandler(
@@ -298,13 +294,6 @@ SigninScreenHandler::~SigninScreenHandler() {
   network_state_informer_->RemoveObserver(this);
   proximity_auth::ScreenlockBridge::Get()->SetLockHandler(nullptr);
   proximity_auth::ScreenlockBridge::Get()->SetFocusedUser(EmptyAccountId());
-  // TODO(https://crbug.com/1033572) Quick fix to close feedback form when login
-  // was performed.
-  login_feedback_.reset();
-  extensions::FeedbackPrivateDelegate* feedback_private_delegate =
-      extensions::ExtensionsAPIClient::Get()->GetFeedbackPrivateDelegate();
-  feedback_private_delegate->UnloadFeedbackExtension(
-      Profile::FromWebUI(web_ui()));
 }
 
 void SigninScreenHandler::DeclareLocalizedValues(
@@ -492,16 +481,12 @@ void SigninScreenHandler::RegisterMessages() {
   AddCallback("sendFeedback", &SigninScreenHandler::HandleSendFeedback);
 }
 
-void SigninScreenHandler::Show(const LoginScreenContext& context,
-                               bool oobe_ui) {
+void SigninScreenHandler::Show(bool oobe_ui) {
   CHECK(delegate_);
 
   // Just initialize internal fields from context and call ShowImpl().
   oobe_ui_ = oobe_ui;
 
-  std::string email;
-  email = context.email();
-  gaia_screen_handler_->set_populated_email(email);
   ShowImpl();
   histogram_helper_->OnScreenShow();
 }
@@ -527,11 +512,6 @@ void SigninScreenHandler::UpdateState(NetworkError::ErrorReason reason) {
   // force network error UI update.
   bool force_update = reason == NetworkError::ERROR_REASON_FRAME_ERROR;
   UpdateStateInternal(reason, force_update);
-}
-
-void SigninScreenHandler::SetFocusPODCallbackForTesting(
-    base::Closure callback) {
-  test_focus_pod_callback_ = callback;
 }
 
 void SigninScreenHandler::SetOfflineTimeoutForTesting(
@@ -1267,8 +1247,8 @@ void SigninScreenHandler::HandleLoginVisible(const std::string& source) {
         chrome::NOTIFICATION_LOGIN_OR_LOCK_WEBUI_VISIBLE,
         content::NotificationService::AllSources(),
         content::NotificationService::NoDetails());
-    TRACE_EVENT_ASYNC_END0("ui", "ShowLoginWebUI",
-                           LoginDisplayHostWebUI::kShowLoginWebUIid);
+    TRACE_EVENT_NESTABLE_ASYNC_END0("ui", "ShowLoginWebUI",
+                                    LoginDisplayHostWebUI::kShowLoginWebUIid);
   }
   webui_visible_ = true;
   if (preferences_changed_delayed_)
@@ -1340,8 +1320,6 @@ void SigninScreenHandler::HandleFocusPod(const AccountId& account_id,
 
   if (delegate_ && !is_same_pod_focused)
     delegate_->CheckUserStatus(account_id);
-  if (!test_focus_pod_callback_.is_null())
-    test_focus_pod_callback_.Run();
 
   focused_pod_account_id_ = std::make_unique<AccountId>(account_id);
 

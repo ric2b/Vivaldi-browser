@@ -49,11 +49,14 @@ class CORE_EXPORT LayoutHTMLCanvas final : public LayoutReplaced {
 
   const char* GetName() const override { return "LayoutHTMLCanvas"; }
 
+  void WillBeDestroyed() override;
+
  private:
   void PaintReplaced(const PaintInfo&,
                      const PhysicalOffset& paint_offset) const override;
   void IntrinsicSizeChanged() override { CanvasSizeChanged(); }
 
+  bool CanHaveAdditionalCompositingReasons() const override { return true; }
   CompositingReasons AdditionalCompositingReasons() const override;
 };
 

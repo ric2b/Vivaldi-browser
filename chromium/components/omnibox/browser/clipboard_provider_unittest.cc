@@ -13,6 +13,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_provider_listener.h"
 #include "components/omnibox/browser/mock_autocomplete_provider_client.h"
@@ -68,7 +69,7 @@ class ClipboardProviderTest : public testing::Test,
   bool IsClipboardEmpty() {
     return clipboard_content_.GetRecentURLFromClipboard() == base::nullopt &&
            clipboard_content_.GetRecentTextFromClipboard() == base::nullopt &&
-           clipboard_content_.GetRecentImageFromClipboard() == base::nullopt;
+           !clipboard_content_.HasRecentImageFromClipboard();
   }
 
   AutocompleteInput CreateAutocompleteInput(bool from_omnibox_focus) {
@@ -111,15 +112,14 @@ TEST_F(ClipboardProviderTest, ClipboardIsCurrentURL) {
 }
 
 TEST_F(ClipboardProviderTest, HasMultipleMatches) {
+  EXPECT_CALL(*client_.get(), GetSchemeClassifier())
+      .WillOnce(testing::ReturnRef(classifier_));
   provider_->Start(CreateAutocompleteInput(true), false);
   ASSERT_GE(provider_->matches().size(), 1U);
   EXPECT_EQ(GURL(kClipboardURL), provider_->matches().back().destination_url);
 }
 
 TEST_F(ClipboardProviderTest, MatchesText) {
-  base::test::ScopedFeatureList feature_list;
-  base::Feature textFeature = omnibox::kEnableClipboardProviderTextSuggestions;
-  feature_list.InitAndEnableFeature(textFeature);
   auto template_url_service = std::make_unique<TemplateURLService>(
       /*initializers=*/nullptr, /*count=*/0);
   client_->set_template_url_service(std::move(template_url_service));
@@ -128,6 +128,8 @@ TEST_F(ClipboardProviderTest, MatchesText) {
   ASSERT_GE(provider_->matches().size(), 1U);
   EXPECT_EQ(base::UTF8ToUTF16(kClipboardTitleText),
             provider_->matches().back().contents);
+  EXPECT_EQ(base::UTF8ToUTF16(kClipboardText),
+            provider_->matches().back().fill_into_edit);
 }
 
 TEST_F(ClipboardProviderTest, MatchesImage) {
@@ -150,9 +152,6 @@ TEST_F(ClipboardProviderTest, MatchesImage) {
 }
 
 TEST_F(ClipboardProviderTest, DeleteMatch) {
-  base::test::ScopedFeatureList feature_list;
-  base::Feature textFeature = omnibox::kEnableClipboardProviderTextSuggestions;
-  feature_list.InitAndEnableFeature(textFeature);
   auto template_url_service = std::make_unique<TemplateURLService>(
       /*initializers=*/nullptr, /*count=*/0);
   client_->set_template_url_service(std::move(template_url_service));

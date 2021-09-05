@@ -1,7 +1,7 @@
 Name: R8
 URL: https://r8.googlesource.com/r8
-Revision: d11d42306845f15f383c1867f0f26c6f36e3adc4
-Version: 1.6.28-dev
+Revision: cc4b64009b85ce83b072e62e30bd4c2accaec5be
+Version: 2.1.8-dev
 License: BSD 3-Clause
 License File: NOT_SHIPPED
 Security Critical: no
@@ -18,4 +18,29 @@ Turning off outlining because it caused issues when synchronized proguarding
 Trichrome due to illegal dex references (crbug.com/956839). Will only be used
 for android_apk() targets that set `disable_r8_outlining = true`):
 
-Patch is located at //third_party/r8/local_modifications.diff.
+Added --feature-jar flag for doing dex splitting.
+
+local_modifications.diff created via:
+git diff >local_modifications.diff
+
+Update Instructions:
+# Download R8:
+git clone https://r8.googlesource.com/r8
+cd r8
+# Apply the patch:
+git apply $CHROMIUM_SRC/third_party/r8/local_modifications.diff
+# Build:
+tools/gradle.py r8
+# Shrink (improves r8/d8 launch time):
+java -jar build/libs/r8.jar --debug --classfile --output r8.jar \
+    --lib $CHROMIUM_SRC/third_party/jdk/current --pg-conf src/main/keep.txt \
+    --no-minification --no-desugaring build/libs/r8.jar
+rm $CHROMIUM_SRC/third_party/r8/libs/r8.jar
+cp r8.jar $CHROMIUM_SRC/third_party/r8/libs/r8.jar
+
+# Upload to CIPD:
+cipd create --pkg-def cipd.yaml # Make note of the instance ID
+
+# Manually update:
+* README.chromium (version number via "java -jar lib/r8.jar --version")
+* //DEPS (instance ID output by cipd create)

@@ -31,7 +31,6 @@ import static org.chromium.chrome.test.util.ViewUtils.waitForView;
 
 import android.content.pm.ActivityInfo;
 import android.graphics.Rect;
-import android.support.design.widget.TabLayout;
 import android.support.test.espresso.matcher.RootMatchers;
 import android.support.test.filters.MediumTest;
 import android.view.View;
@@ -39,6 +38,8 @@ import android.view.ViewGroup;
 import android.view.ViewStub;
 
 import androidx.annotation.Nullable;
+
+import com.google.android.material.tabs.TabLayout;
 
 import org.hamcrest.Matcher;
 import org.junit.Before;
@@ -48,9 +49,9 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.Callback;
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.chrome.browser.ChromeFeatureList;
-import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.keyboard_accessory.R;
 import org.chromium.chrome.browser.keyboard_accessory.bar_component.KeyboardAccessoryProperties.AutofillBarItem;
 import org.chromium.chrome.browser.keyboard_accessory.bar_component.KeyboardAccessoryProperties.BarItem;
@@ -231,6 +232,10 @@ public class KeyboardAccessoryModernViewTest {
 
         CriteriaHelper.pollUiThread(view.mBarItemsView::isShown);
         CriteriaHelper.pollUiThread(viewsAreRightAligned(view, view.mBarItemsView.getChildAt(1)));
+
+        // Reset device orientation.
+        mActivityTestRule.getActivity().setRequestedOrientation(
+                ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
     }
 
     @Test

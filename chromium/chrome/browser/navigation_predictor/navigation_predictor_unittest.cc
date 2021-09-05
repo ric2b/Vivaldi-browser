@@ -5,7 +5,9 @@
 #include "chrome/browser/navigation_predictor/navigation_predictor.h"
 
 #include <map>
+#include <memory>
 #include <string>
+#include <utility>
 
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
@@ -31,9 +33,9 @@ class TestNavigationPredictor : public NavigationPredictor {
  public:
   TestNavigationPredictor(
       mojo::PendingReceiver<AnchorElementMetricsHost> receiver,
-      content::RenderFrameHost* render_frame_host,
+      content::WebContents* web_contents,
       bool init_feature_list)
-      : NavigationPredictor(render_frame_host),
+      : NavigationPredictor(web_contents),
         receiver_(this, std::move(receiver)) {
     if (init_feature_list) {
       const std::vector<base::Feature> features = {
@@ -44,27 +46,24 @@ class TestNavigationPredictor : public NavigationPredictor {
 
   ~TestNavigationPredictor() override {}
 
-  base::Optional<GURL> prefetch_url() const { return prefetch_url_; }
-
-  base::Optional<url::Origin> preconnect_origin() const {
-    return preconnect_origin_;
-  }
-
   const std::map<GURL, int>& GetAreaRankMap() const { return area_rank_map_; }
 
-  bool prefetch_url_prefetched() const { return prefetch_url_prefetched_; }
-
   int calls_to_prefetch() const { return calls_to_prefetch_; }
+
+  base::Optional<GURL> prefetched_url() const { return prefetched_url_; }
 
  private:
   double CalculateAnchorNavigationScore(
       const blink::mojom::AnchorElementMetrics& metrics,
       int area_rank) const override {
-    area_rank_map_.emplace(std::make_pair(metrics.target_url, area_rank));
+    area_rank_map_.emplace(metrics.target_url, area_rank);
     return 100 * metrics.ratio_area;
   }
 
-  void Prefetch(prerender::PrerenderManager* prerender_manager) override {
+  // Blackholes the first prerender.
+  void Prefetch(prerender::PrerenderManager* prerender_manager,
+                const GURL& url_to_prefetch) override {
+    prefetched_url_ = url_to_prefetch;
     calls_to_prefetch_ += 1;
   }
 
@@ -77,16 +76,17 @@ class TestNavigationPredictor : public NavigationPredictor {
   mojo::Receiver<AnchorElementMetricsHost> receiver_;
 
   int calls_to_prefetch_ = 0;
+  base::Optional<GURL> prefetched_url_;
 };
 
 class TestNavigationPredictorBasedOnScroll : public TestNavigationPredictor {
  public:
   TestNavigationPredictorBasedOnScroll(
       mojo::PendingReceiver<AnchorElementMetricsHost> receiver,
-      content::RenderFrameHost* render_frame_host,
+      content::WebContents* web_contents,
       bool init_feature_list)
       : TestNavigationPredictor(std::move(receiver),
-                                render_frame_host,
+                                web_contents,
                                 init_feature_list) {}
 
   ~TestNavigationPredictorBasedOnScroll() override {}
@@ -128,27 +128,22 @@ class NavigationPredictorTest : public ChromeRenderViewHostTestHarness {
   }
 
   base::Optional<GURL> prefetch_url() const {
-    return predictor_service_helper_->prefetch_url();
-  }
-
-  base::Optional<url::Origin> preconnect_origin() const {
-    return predictor_service_helper_->preconnect_origin();
+    return predictor_service_helper_->prefetched_url();
   }
 
   bool prefetch_url_prefetched() {
-    return predictor_service_helper_->prefetch_url_prefetched();
+    return predictor_service_helper_->prefetched_url().has_value();
   }
 
  protected:
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();
     predictor_service_helper_ = std::make_unique<TestNavigationPredictor>(
-        predictor_service_.BindNewPipeAndPassReceiver(), main_rfh(),
+        predictor_service_.BindNewPipeAndPassReceiver(), web_contents(),
         !field_trial_initiated_);
   }
 
-  void SetupFieldTrial(base::Optional<int> preconnect_origin_score_threshold,
-                       base::Optional<int> prefetch_url_score_threshold,
+  void SetupFieldTrial(base::Optional<int> prefetch_url_score_threshold,
                        base::Optional<bool> prefetch_after_preconnect) {
     if (field_trial_initiated_)
       return;
@@ -158,10 +153,6 @@ class NavigationPredictorTest : public ChromeRenderViewHostTestHarness {
     const std::string kGroupName = "GroupFoo2";  // Value not used
 
     std::map<std::string, std::string> params;
-    if (preconnect_origin_score_threshold.has_value()) {
-      params["preconnect_origin_score_threshold"] =
-          base::NumberToString(preconnect_origin_score_threshold.value());
-    }
     if (prefetch_url_score_threshold.has_value()) {
       params["prefetch_url_score_threshold"] =
           base::NumberToString(prefetch_url_score_threshold.value());
@@ -196,8 +187,8 @@ TEST_F(NavigationPredictorTest, ReportAnchorElementMetricsOnClick) {
   base::RunLoop().RunUntilIdle();
 
   histogram_tester.ExpectUniqueSample(
-      "NavigationPredictor.OnNonDSE.AccuracyActionTaken",
-      NavigationPredictor::ActionAccuracy::kNoActionTakenClickHappened, 1);
+      "NavigationPredictor.LinkClickedPrerenderResult",
+      NavigationPredictor::PrerenderResult::kCrossOriginNotSeen, 1);
 }
 
 // Test that ReportAnchorElementMetricsOnLoad method can be called.
@@ -446,16 +437,16 @@ TEST_F(NavigationPredictorTest, ActionTaken_SameOrigin_Prefetch) {
   histogram_tester.ExpectUniqueSample(
       "NavigationPredictor.OnNonDSE.ActionTaken",
       NavigationPredictor::Action::kPrefetch, 1);
-  EXPECT_EQ(GURL(same_origin_href_large), prefetch_url());
 
   auto metrics_clicked = CreateMetricsPtr(source, same_origin_href_small, 0.01);
   predictor_service()->ReportAnchorElementMetricsOnClick(
       std::move(metrics_clicked));
   base::RunLoop().RunUntilIdle();
 
+  // Override Prefetch blackholes the request, so expect is reported as skipped.
   histogram_tester.ExpectUniqueSample(
-      "NavigationPredictor.OnNonDSE.AccuracyActionTaken",
-      NavigationPredictor::ActionAccuracy::kPrefetchActionClickToSameOrigin, 1);
+      "NavigationPredictor.LinkClickedPrerenderResult",
+      NavigationPredictor::PrerenderResult::kSameOriginPrefetchSkipped, 1);
 }
 
 // URL with highest prefetch score is from a different origin. So, prefetch is
@@ -478,18 +469,13 @@ TEST_F(NavigationPredictorTest, ActionTaken_SameOrigin_Prefetch_NotSameOrigin) {
 
   histogram_tester.ExpectUniqueSample(
       "NavigationPredictor.OnNonDSE.ActionTaken",
-      NavigationPredictor::Action::kPreconnect, 1);
+      NavigationPredictor::Action::kNone, 1);
   EXPECT_FALSE(prefetch_url().has_value());
 
   auto metrics_clicked = CreateMetricsPtr(source, same_origin_href_small, 0.01);
   predictor_service()->ReportAnchorElementMetricsOnClick(
       std::move(metrics_clicked));
   base::RunLoop().RunUntilIdle();
-
-  histogram_tester.ExpectUniqueSample(
-      "NavigationPredictor.OnNonDSE.AccuracyActionTaken",
-      NavigationPredictor::ActionAccuracy::kPreconnectActionClickToSameOrigin,
-      1);
 }
 
 TEST_F(NavigationPredictorTest,
@@ -509,7 +495,7 @@ TEST_F(NavigationPredictorTest,
 
   histogram_tester.ExpectUniqueSample(
       "NavigationPredictor.OnNonDSE.ActionTaken",
-      NavigationPredictor::Action::kPreconnect, 1);
+      NavigationPredictor::Action::kNone, 1);
   EXPECT_FALSE(prefetch_url().has_value());
 }
 
@@ -517,13 +503,13 @@ class NavigationPredictorSendUkmMetricsEnabledTest
     : public NavigationPredictorTest {
  public:
   NavigationPredictorSendUkmMetricsEnabledTest() {
-    SetupFieldTrial(base::nullopt, base::nullopt, base::nullopt);
+    SetupFieldTrial(base::nullopt, base::nullopt);
   }
 
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();
     predictor_service_helper_ = std::make_unique<TestNavigationPredictor>(
-        predictor_service_.BindNewPipeAndPassReceiver(), main_rfh(), false);
+        predictor_service_.BindNewPipeAndPassReceiver(), web_contents(), false);
   }
 
   struct TestMetrics {
@@ -751,14 +737,15 @@ class NavigationPredictorPrefetchAfterPreconnectEnabledTest
     : public NavigationPredictorTest {
  public:
   NavigationPredictorPrefetchAfterPreconnectEnabledTest() {
-    SetupFieldTrial(base::nullopt, base::nullopt, true);
+    SetupFieldTrial(base::nullopt, true);
   }
 
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();
     predictor_service_helper_ =
         std::make_unique<TestNavigationPredictorBasedOnScroll>(
-            predictor_service_.BindNewPipeAndPassReceiver(), main_rfh(), false);
+            predictor_service_.BindNewPipeAndPassReceiver(), web_contents(),
+            false);
   }
 
   blink::mojom::AnchorElementMetricsPtr CreateMetricsPtrWithRatioDistance(
@@ -811,14 +798,13 @@ TEST_F(NavigationPredictorPrefetchAfterPreconnectEnabledTest,
 class NavigationPredictorPrefetchDisabledTest : public NavigationPredictorTest {
  public:
   NavigationPredictorPrefetchDisabledTest() {
-    SetupFieldTrial(0 /* preconnect_origin_score_threshold */,
-                    101 /* prefetch_url_score_threshold */, base::nullopt);
+    SetupFieldTrial(101 /* prefetch_url_score_threshold */, base::nullopt);
   }
 
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();
     predictor_service_helper_ = std::make_unique<TestNavigationPredictor>(
-        predictor_service_.BindNewPipeAndPassReceiver(), main_rfh(), false);
+        predictor_service_.BindNewPipeAndPassReceiver(), web_contents(), false);
   }
 };
 
@@ -847,19 +833,13 @@ TEST_F(NavigationPredictorPrefetchDisabledTest,
 
   histogram_tester.ExpectUniqueSample(
       "NavigationPredictor.OnNonDSE.ActionTaken",
-      NavigationPredictor::Action::kPreconnect, 1);
+      NavigationPredictor::Action::kNone, 1);
   EXPECT_FALSE(prefetch_url().has_value());
-  EXPECT_EQ(url::Origin::Create(GURL(source)), preconnect_origin());
 
   auto metrics_clicked = CreateMetricsPtr(source, same_origin_href_small, 0.01);
   predictor_service()->ReportAnchorElementMetricsOnClick(
       std::move(metrics_clicked));
   base::RunLoop().RunUntilIdle();
-
-  histogram_tester.ExpectUniqueSample(
-      "NavigationPredictor.OnNonDSE.AccuracyActionTaken",
-      NavigationPredictor::ActionAccuracy::kPreconnectActionClickToSameOrigin,
-      1);
 }
 
 // Disables prefetch and loads a page where the preconnect score of a cross
@@ -886,19 +866,13 @@ TEST_F(NavigationPredictorPrefetchDisabledTest,
 
   histogram_tester.ExpectUniqueSample(
       "NavigationPredictor.OnNonDSE.ActionTaken",
-      NavigationPredictor::Action::kPreconnect, 1);
+      NavigationPredictor::Action::kNone, 1);
   EXPECT_FALSE(prefetch_url().has_value());
-  EXPECT_TRUE(preconnect_origin().has_value());
 
   auto metrics_clicked = CreateMetricsPtr(source, same_origin_href_small, 0.01);
   predictor_service()->ReportAnchorElementMetricsOnClick(
       std::move(metrics_clicked));
   base::RunLoop().RunUntilIdle();
-
-  histogram_tester.ExpectUniqueSample(
-      "NavigationPredictor.OnNonDSE.AccuracyActionTaken",
-      NavigationPredictor::ActionAccuracy::kPreconnectActionClickToSameOrigin,
-      1);
 }
 
 // Framework for testing cases where preconnect and prefetch are effectively
@@ -907,14 +881,13 @@ class NavigationPredictorPreconnectPrefetchDisabledTest
     : public NavigationPredictorTest {
  public:
   NavigationPredictorPreconnectPrefetchDisabledTest() {
-    SetupFieldTrial(101 /* preconnect_origin_score_threshold */,
-                    101 /* prefetch_url_score_threshold */, base::nullopt);
+    SetupFieldTrial(101 /* prefetch_url_score_threshold */, base::nullopt);
   }
 
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();
     predictor_service_helper_ = std::make_unique<TestNavigationPredictor>(
-        predictor_service_.BindNewPipeAndPassReceiver(), main_rfh(), false);
+        predictor_service_.BindNewPipeAndPassReceiver(), web_contents(), false);
   }
 };
 
@@ -938,16 +911,11 @@ TEST_F(NavigationPredictorPreconnectPrefetchDisabledTest,
 
   histogram_tester.ExpectUniqueSample(
       "NavigationPredictor.OnNonDSE.ActionTaken",
-      NavigationPredictor::Action::kPreconnect, 1);
+      NavigationPredictor::Action::kNone, 1);
   EXPECT_FALSE(prefetch_url().has_value());
 
   auto metrics_clicked = CreateMetricsPtr(source, same_origin_href_small, 0.01);
   predictor_service()->ReportAnchorElementMetricsOnClick(
       std::move(metrics_clicked));
   base::RunLoop().RunUntilIdle();
-
-  histogram_tester.ExpectUniqueSample(
-      "NavigationPredictor.OnNonDSE.AccuracyActionTaken",
-      NavigationPredictor::ActionAccuracy::kPreconnectActionClickToSameOrigin,
-      1);
 }

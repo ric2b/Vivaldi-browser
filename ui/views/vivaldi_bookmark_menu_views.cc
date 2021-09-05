@@ -5,6 +5,7 @@
 #include "ui/views/vivaldi_bookmark_menu_views.h"
 
 #include "browser/menus/vivaldi_bookmark_context_menu.h"
+#include "browser/vivaldi_browser_finder.h"
 #include "chrome/browser/ui/views/bookmarks/bookmark_menu_controller_views.h"
 #include "components/renderer_context_menu/views/toolkit_delegate_views.h"
 #include "content/public/browser/web_contents.h"
@@ -51,7 +52,7 @@ VivaldiBookmarkMenuViews::VivaldiBookmarkMenuViews(
     button_rect_(button_rect),
     controller_(nullptr),
     observer_(nullptr) {
-  Browser* browser = GetBrowserFromWebContents(web_contents_);
+  Browser* browser = vivaldi::FindBrowserForEmbedderWebContents(web_contents_);
   if (browser) {
     int index = 0;
     for (BookmarkMenuContainerEntry e: container->siblings) {

@@ -24,7 +24,6 @@ var VIVALDI_WEB_VIEW_API_METHODS = [
   'getPageHistory',
   'getThumbnail',
   'setIsFullscreen',
-  'setVisible',
   'showPageInfo',
   'sendRequest',
 ];

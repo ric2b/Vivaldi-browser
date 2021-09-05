@@ -7,4 +7,4 @@ declare_args() {
   webview_includes_weblayer = true
 }
 
-weblayer_locale_config_java_package = "org.chromium.weblayer_private"
+weblayer_product_config_java_package = "org.chromium.weblayer_private"

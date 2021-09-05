@@ -43,8 +43,6 @@
 
 namespace blink {
 
-using namespace html_names;
-
 static const int kDateTimeLocalDefaultStep = 60;
 static const int kDateTimeLocalDefaultStepBase = 0;
 static const int kDateTimeLocalStepScaleFactor = 1000;
@@ -64,7 +62,7 @@ double DateTimeLocalInputType::ValueAsDate() const {
 }
 
 void DateTimeLocalInputType::SetValueAsDate(
-    double value,
+    const base::Optional<base::Time>& value,
     ExceptionState& exception_state) const {
   // valueAsDate doesn't work for the datetime-local type according to the
   // standard.
@@ -166,11 +164,13 @@ void DateTimeLocalInputType::SetupLayoutParameters(
         layout_parameters.locale.DateTimeFormatWithoutSeconds();
     layout_parameters.fallback_date_time_format = "yyyy-MM-dd'T'HH:mm";
   }
-  if (!ParseToDateComponents(GetElement().FastGetAttribute(kMinAttr),
-                             &layout_parameters.minimum))
+  if (!ParseToDateComponents(
+          GetElement().FastGetAttribute(html_names::kMinAttr),
+          &layout_parameters.minimum))
     layout_parameters.minimum = DateComponents();
-  if (!ParseToDateComponents(GetElement().FastGetAttribute(kMaxAttr),
-                             &layout_parameters.maximum))
+  if (!ParseToDateComponents(
+          GetElement().FastGetAttribute(html_names::kMaxAttr),
+          &layout_parameters.maximum))
     layout_parameters.maximum = DateComponents();
   layout_parameters.placeholder_for_day =
       GetLocale().QueryString(IDS_FORM_PLACEHOLDER_FOR_DAY_OF_MONTH_FIELD);
@@ -189,6 +189,10 @@ bool DateTimeLocalInputType::IsValidFormat(bool has_year,
                                            bool has_minute,
                                            bool has_second) const {
   return has_year && has_month && has_day && has_ampm && has_hour && has_minute;
+}
+
+String DateTimeLocalInputType::AriaRoleForPickerIndicator() const {
+  return GetLocale().QueryString(IDS_AX_CALENDAR_SHOW_DATE_TIME_LOCAL_PICKER);
 }
 
 }  // namespace blink

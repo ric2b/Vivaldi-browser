@@ -26,6 +26,7 @@
 #include "third_party/blink/renderer/core/svg/svg_element.h"
 #include "third_party/blink/renderer/core/svg/svg_uri_reference.h"
 #include "third_party/blink/renderer/core/svg_names.h"
+#include "third_party/blink/renderer/platform/bindings/parkable_string.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 
 namespace blink {
@@ -51,7 +52,7 @@ class SVGScriptElement final : public SVGElement,
 
   const AttrNameToTrustedType& GetCheckedAttributeTypes() const override;
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  private:
   void ParseAttribute(const AttributeModificationParams&) override;
@@ -81,7 +82,8 @@ class SVGScriptElement final : public SVGElement,
   bool NomoduleAttributeValue() const override { return false; }
   String SourceAttributeValue() const override;
   String TypeAttributeValue() const override;
-  String TextFromChildren() override;
+  String ChildTextContent() override;
+  String ScriptTextInternalSlot() const override;
   bool HasSourceAttribute() const override;
   bool IsConnected() const override;
   bool HasChildren() const override;
@@ -98,12 +100,16 @@ class SVGScriptElement final : public SVGElement,
   void SetScriptElementForBinding(
       HTMLScriptElementOrSVGScriptElement&) override;
 
+  Type GetScriptElementType() override;
+
   Element& CloneWithoutAttributesAndChildren(Document&) const override;
   bool LayoutObjectIsNeeded(const ComputedStyle&) const override {
     return false;
   }
 
   bool have_fired_load_ = false;
+
+  ParkableString script_text_internal_slot_;
 
   Member<ScriptLoader> loader_;
 };

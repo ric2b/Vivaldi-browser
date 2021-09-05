@@ -336,11 +336,15 @@ bool AXTreeSerializer<AXSourceNode, AXNodeData, AXTreeData>::
         // and return true (reparenting was found).
         *out_lca = LeastCommonAncestor(*out_lca, client_child);
         result = true;
+        continue;
       } else if (!client_child->invalid) {
         // This child is already in the client tree and valid, we won't
         // recursively serialize it so we don't need to check this
         // subtree recursively for reparenting.
-        continue;
+        // However, if the child is ignored, the children may now be
+        // considered as reparented, so continue recursion in that case.
+        if (!client_child->ignored)
+          continue;
       }
     }
 
@@ -546,7 +550,12 @@ bool AXTreeSerializer<AXSourceNode, AXNodeData, AXTreeData>::
 
     ClientTreeNode* client_child = ClientTreeNodeById(new_child_id);
     if (client_child && client_child->parent != client_node) {
-      DVLOG(1) << "Reparenting detected";
+      DVLOG(1) << "Illegal reparenting detected";
+#if defined(ADDRESS_SANITIZER)
+      // Wrapping this in ADDRESS_SANITIZER will cause it to run on
+      // clusterfuzz, which should help us narrow down the issue.
+      NOTREACHED() << "Illegal reparenting detected";
+#endif
       Reset();
       return false;
     }

@@ -1,5 +1,5 @@
-CONSOLE WARNING: line 124: 'window.webkitStorageInfo' is deprecated. Please use 'navigator.webkitTemporaryStorage' or 'navigator.webkitPersistentStorage' instead.
-CONSOLE WARNING: line 124: Application Cache API use is deprecated and will be removed in M82, around April 2020. See https://www.chromestatus.com/features/6192449487634432 for more details.
+CONSOLE WARNING: line 138: 'window.webkitStorageInfo' is deprecated. Please use 'navigator.webkitTemporaryStorage' or 'navigator.webkitPersistentStorage' instead.
+CONSOLE WARNING: line 138: Application Cache API use is deprecated and will be removed in M82, around May 2020. See https://www.chromestatus.com/features/6192449487634432 for more details.
 Tests property access on a cached DOMWindow after the associated frame is removed from a web page and garbage collected. Test should not crash and properties should be set to sane defaults.
 
 On success, you will see a series of "PASS" messages, followed by "TEST COMPLETE".
@@ -42,7 +42,6 @@ PASS childWindow.onanimationiteration is null
 PASS childWindow.onanimationstart is null
 PASS childWindow.onappinstalled is null
 PASS childWindow.onauxclick is null
-PASS childWindow.onbeforeactivate is null
 PASS childWindow.onbeforeinstallprompt is null
 PASS childWindow.onbeforeprint is null
 PASS childWindow.onbeforeunload is null
@@ -117,6 +116,7 @@ PASS childWindow.onportalactivate is null
 PASS childWindow.onprogress is null
 PASS childWindow.onratechange is null
 PASS childWindow.onrejectionhandled is null
+PASS childWindow.onrendersubtreeactivation is null
 PASS childWindow.onreset is null
 PASS childWindow.onresize is null
 PASS childWindow.onscroll is null
@@ -132,6 +132,7 @@ PASS childWindow.onstorage is null
 PASS childWindow.onsubmit is null
 PASS childWindow.onsuspend is null
 PASS childWindow.ontimeupdate is null
+PASS childWindow.ontimezonechange is null
 PASS childWindow.ontoggle is null
 PASS childWindow.ontouchcancel is null
 PASS childWindow.ontouchend is null
@@ -156,13 +157,23 @@ PASS childWindow.pageYOffset is 0
 PASS childWindow.performance.onresourcetimingbufferfull is null
 PASS childWindow.personalbar.visible is false
 PASS childWindow.portalHost is null
+PASS childWindow.scheduler.currentTaskSignal.aborted is false
+PASS childWindow.scheduler.currentTaskSignal.onabort is null
+PASS childWindow.scheduler.currentTaskSignal.onprioritychange is null
+PASS childWindow.scheduler.currentTaskSignal.priority is 'user-visible'
 PASS childWindow.screen.availHeight is 0
 PASS childWindow.screen.availLeft is 0
 PASS childWindow.screen.availTop is 0
 PASS childWindow.screen.availWidth is 0
 PASS childWindow.screen.colorDepth is 0
 PASS childWindow.screen.height is 0
+PASS childWindow.screen.internal is false
+PASS childWindow.screen.left is 0
+PASS childWindow.screen.name is ''
 PASS childWindow.screen.pixelDepth is 0
+PASS childWindow.screen.primary is false
+PASS childWindow.screen.scaleFactor is 0
+PASS childWindow.screen.top is 0
 PASS childWindow.screen.width is 0
 PASS childWindow.screenLeft is 0
 PASS childWindow.screenTop is 0
@@ -179,7 +190,6 @@ PASS childWindow.status is ''
 PASS childWindow.statusbar.visible is false
 PASS childWindow.styleMedia.type is ''
 PASS childWindow.toolbar.visible is false
-PASS childWindow.trustedTypes.defaultPolicy is null
 PASS childWindow.visualViewport.height is 0
 PASS childWindow.visualViewport.offsetLeft is 0
 PASS childWindow.visualViewport.offsetTop is 0

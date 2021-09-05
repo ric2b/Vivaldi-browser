@@ -30,7 +30,7 @@
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/editing/frame_selection.h"
-#include "third_party/blink/renderer/core/fileapi/file_list.h"
+#include "third_party/blink/renderer/core/fileapi/file.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/html/forms/html_data_list_element.h"
@@ -55,12 +55,11 @@
 #include "third_party/blink/renderer/core/style/computed_style_initial_values.h"
 #include "third_party/blink/renderer/platform/file_metadata.h"
 #include "third_party/blink/renderer/platform/fonts/font_selector.h"
-#include "third_party/blink/renderer/platform/fonts/string_truncator.h"
 #include "third_party/blink/renderer/platform/graphics/touch_action.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
-#include "third_party/blink/renderer/platform/text/platform_locale.h"
 #include "third_party/blink/renderer/platform/web_test_support.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/native_theme/native_theme.h"
 
 // The methods in this file are shared by all themes on every platform.
@@ -164,9 +163,6 @@ ControlPart LayoutTheme::AdjustAppearanceWithElementType(
     const ComputedStyle& style,
     const Element* element) {
   ControlPart part = style.EffectiveAppearance();
-  if (!RuntimeEnabledFeatures::RestrictedWebkitAppearanceEnabled())
-    return part;
-
   if (!element)
     return kNoControlPart;
 
@@ -186,6 +182,7 @@ ControlPart LayoutTheme::AdjustAppearanceWithElementType(
 
     // Aliases of 'auto'.
     // https://drafts.csswg.org/css-ui-4/#typedef-appearance-compat-auto
+    case kAutoPart:
     case kCheckboxPart:
     case kRadioPart:
     case kPushButtonPart:
@@ -206,9 +203,10 @@ ControlPart LayoutTheme::AdjustAppearanceWithElementType(
       // even if their default appearances are different from the keywords.
 
     case kButtonPart:
-      if (IsA<HTMLSelectElement>(*element) || IsA<HTMLAnchorElement>(*element))
-        return auto_appearance;
-      return part;
+      return (auto_appearance == kPushButtonPart ||
+              auto_appearance == kSquareButtonPart)
+                 ? part
+                 : auto_appearance;
 
     case kMenulistButtonPart:
       return auto_appearance == kMenulistPart ? part : auto_appearance;
@@ -261,6 +259,7 @@ void LayoutTheme::AdjustStyle(ComputedStyle& style, Element* e) {
   ControlPart part = AdjustAppearanceWithAuthorStyle(
       AdjustAppearanceWithElementType(style, e), style);
   style.SetEffectiveAppearance(part);
+  DCHECK_NE(part, kAutoPart);
   if (part == kNoControlPart)
     return;
 
@@ -296,6 +295,19 @@ void LayoutTheme::AdjustStyle(ComputedStyle& style, Element* e) {
 }
 
 String LayoutTheme::ExtraDefaultStyleSheet() {
+  if (RuntimeEnabledFeatures::LayoutNGForControlsEnabled()) {
+    return String(R"CSS(
+input[type="file" i] {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: pre;
+}
+
+input[type="file" i]::-webkit-file-upload-button {
+    margin-inline-end: 4px;
+}
+)CSS");
+  }
   return g_empty_string;
 }
 
@@ -510,13 +522,13 @@ bool LayoutTheme::IsActive(const Node* node) {
 }
 
 bool LayoutTheme::IsChecked(const Node* node) {
-  if (auto* input = ToHTMLInputElementOrNull(node))
+  if (auto* input = DynamicTo<HTMLInputElement>(node))
     return input->ShouldAppearChecked();
   return false;
 }
 
 bool LayoutTheme::IsIndeterminate(const Node* node) {
-  if (auto* input = ToHTMLInputElementOrNull(node))
+  if (auto* input = DynamicTo<HTMLInputElement>(node))
     return input->ShouldAppearIndeterminate();
   return false;
 }
@@ -611,7 +623,12 @@ void LayoutTheme::AdjustButtonStyle(ComputedStyle& style) const {}
 
 void LayoutTheme::AdjustInnerSpinButtonStyle(ComputedStyle&) const {}
 
-void LayoutTheme::AdjustMenuListStyle(ComputedStyle&, Element*) const {}
+void LayoutTheme::AdjustMenuListStyle(ComputedStyle& style, Element*) const {
+  // Menulists should have visible overflow
+  // https://bugs.webkit.org/show_bug.cgi?id=21287
+  style.SetOverflowX(EOverflow::kVisible);
+  style.SetOverflowY(EOverflow::kVisible);
+}
 
 base::TimeDelta LayoutTheme::AnimationRepeatIntervalForProgressBar() const {
   return base::TimeDelta();
@@ -633,11 +650,15 @@ void LayoutTheme::AdjustSliderContainerStyle(ComputedStyle& style,
   if (e && (e->ShadowPseudoId() == "-webkit-media-slider-container" ||
             e->ShadowPseudoId() == "-webkit-slider-container")) {
     if (style.EffectiveAppearance() == kSliderVerticalPart) {
-      style.SetTouchAction(TouchAction::kTouchActionPanX);
+      style.SetTouchAction(TouchAction::kPanX);
       style.SetEffectiveAppearance(kNoControlPart);
+      style.SetWritingMode(WritingMode::kVerticalRl);
+      // It's always in RTL because the slider value increases up even in LTR.
+      style.SetDirection(TextDirection::kRtl);
     } else {
-      style.SetTouchAction(TouchAction::kTouchActionPanY);
+      style.SetTouchAction(TouchAction::kPanY);
       style.SetEffectiveAppearance(kNoControlPart);
+      style.SetWritingMode(WritingMode::kHorizontalTb);
     }
   }
 }
@@ -654,6 +675,10 @@ void LayoutTheme::AdjustSearchFieldCancelButtonStyle(ComputedStyle&) const {}
 
 void LayoutTheme::PlatformColorsDidChange() {
   Page::PlatformColorsChanged();
+}
+
+void LayoutTheme::ColorSchemeDidChange() {
+  Page::ColorSchemeChanged();
 }
 
 void LayoutTheme::SetCaretBlinkInterval(base::TimeDelta interval) {
@@ -731,6 +756,8 @@ Color LayoutTheme::SystemColor(CSSValueID css_value_id,
       return 0xFFFFFFFF;
     case CSSValueID::kActivecaption:
       return 0xFFCCCCCC;
+    case CSSValueID::kActivetext:
+      return 0xFFFF0000;
     case CSSValueID::kAppworkspace:
       return color_scheme == WebColorScheme::kDark ? 0xFF000000 : 0xFFFFFFFF;
     case CSSValueID::kBackground:
@@ -742,8 +769,12 @@ Color LayoutTheme::SystemColor(CSSValueID css_value_id,
     case CSSValueID::kButtonshadow:
       return 0xFF888888;
     case CSSValueID::kButtontext:
-      return color_scheme == WebColorScheme::kDark ? 0xFFFFFFFF : 0xFF000000;
+      return color_scheme == WebColorScheme::kDark ? 0xFFAAAAAA : 0xFF000000;
     case CSSValueID::kCaptiontext:
+      return color_scheme == WebColorScheme::kDark ? 0xFFFFFFFF : 0xFF000000;
+    case CSSValueID::kField:
+      return color_scheme == WebColorScheme::kDark ? 0xFF000000 : 0xFFFFFFFF;
+    case CSSValueID::kFieldtext:
       return color_scheme == WebColorScheme::kDark ? 0xFFFFFFFF : 0xFF000000;
     case CSSValueID::kGraytext:
       return 0xFF808080;
@@ -784,10 +815,12 @@ Color LayoutTheme::SystemColor(CSSValueID css_value_id,
     case CSSValueID::kVisitedtext:
       return 0xFF551A8B;
     case CSSValueID::kWindow:
+    case CSSValueID::kCanvas:
       return color_scheme == WebColorScheme::kDark ? 0xFF000000 : 0xFFFFFFFF;
     case CSSValueID::kWindowframe:
       return 0xFFCCCCCC;
     case CSSValueID::kWindowtext:
+    case CSSValueID::kCanvastext:
       return color_scheme == WebColorScheme::kDark ? 0xFFFFFFFF : 0xFF000000;
     case CSSValueID::kInternalActiveListBoxSelection:
       return ActiveListBoxSelectionBackgroundColor(color_scheme);
@@ -842,27 +875,16 @@ Color LayoutTheme::FocusRingColor() const {
                                       : GetTheme().PlatformFocusRingColor();
 }
 
-String LayoutTheme::FileListNameForWidth(Locale& locale,
-                                         const FileList* file_list,
-                                         const Font& font,
-                                         int width) const {
-  if (width <= 0)
-    return String();
+bool LayoutTheme::DelegatesMenuListRendering() const {
+  return delegates_menu_list_rendering_;
+}
 
-  String string;
-  if (file_list->IsEmpty()) {
-    string = locale.QueryString(IDS_FORM_FILE_NO_FILE_LABEL);
-  } else if (file_list->length() == 1) {
-    string = file_list->item(0)->name();
-  } else {
-    return StringTruncator::RightTruncate(
-        locale.QueryString(IDS_FORM_FILE_MULTIPLE_UPLOAD,
-                           locale.ConvertToLocalizedNumber(
-                               String::Number(file_list->length()))),
-        width, font);
-  }
+void LayoutTheme::SetDelegatesMenuListRenderingForTesting(bool flag) {
+  delegates_menu_list_rendering_ = flag;
+}
 
-  return StringTruncator::CenterTruncate(string, width, font);
+String LayoutTheme::DisplayNameForFile(const File& file) const {
+  return file.name();
 }
 
 bool LayoutTheme::ShouldOpenPickerWithF4Key() const {
@@ -871,7 +893,7 @@ bool LayoutTheme::ShouldOpenPickerWithF4Key() const {
 
 bool LayoutTheme::SupportsCalendarPicker(const AtomicString& type) const {
   DCHECK(RuntimeEnabledFeatures::InputMultipleFieldsUIEnabled());
-  if (RuntimeEnabledFeatures::FormControlsRefreshEnabled() &&
+  if (features::IsFormControlsRefreshEnabled() &&
       type == input_type_names::kTime)
     return true;
 
@@ -980,12 +1002,6 @@ void LayoutTheme::AdjustRadioStyleUsingFallbackTheme(
   style.ResetBorder();
 }
 
-Color LayoutTheme::RootElementColor(WebColorScheme color_scheme) const {
-  if (color_scheme == WebColorScheme::kDark)
-    return Color::kWhite;
-  return ComputedStyleInitialValues::InitialColor();
-}
-
 LengthBox LayoutTheme::ControlPadding(ControlPart part,
                                       const FontDescription&,
                                       const Length& zoomed_box_top,
@@ -1038,6 +1054,14 @@ void LayoutTheme::AdjustControlPartStyle(ComputedStyle& style) {
     default:
       break;
   }
+}
+
+bool LayoutTheme::HasCustomFocusRingColor() const {
+  return has_custom_focus_ring_color_;
+}
+
+Color LayoutTheme::GetCustomFocusRingColor() const {
+  return custom_focus_ring_color_;
 }
 
 }  // namespace blink

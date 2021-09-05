@@ -16,16 +16,19 @@
 #include "fuchsia/engine/browser/context_impl.h"
 #include "fuchsia/engine/browser/web_engine_browser_context.h"
 #include "fuchsia/engine/browser/web_engine_devtools_controller.h"
-#include "fuchsia/engine/browser/web_engine_screen.h"
 #include "fuchsia/engine/switches.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "ui/aura/screen_ozone.h"
+#include "ui/gfx/switches.h"
 #include "ui/ozone/public/ozone_platform.h"
+#include "ui/ozone/public/ozone_switches.h"
 
 WebEngineBrowserMainParts::WebEngineBrowserMainParts(
     const content::MainFunctionParams& parameters,
     fidl::InterfaceRequest<fuchsia::web::Context> request)
-    : parameters_(parameters), request_(std::move(request)) {}
+    : parameters_(parameters), request_(std::move(request)) {
+  DCHECK(request_);
+}
 
 WebEngineBrowserMainParts::~WebEngineBrowserMainParts() {
   display::Screen::SetScreenInstance(nullptr);
@@ -52,7 +55,6 @@ void WebEngineBrowserMainParts::PreMainMessageLoopRun() {
   browser_context_ = std::make_unique<WebEngineBrowserContext>(
       base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kIncognito));
 
-  DCHECK(request_);
   devtools_controller_ = WebEngineDevToolsController::CreateFromCommandLine(
       *base::CommandLine::ForCurrentProcess());
   context_service_ = std::make_unique<ContextImpl>(browser_context_.get(),
@@ -78,7 +80,7 @@ void WebEngineBrowserMainParts::PreMainMessageLoopRun() {
     // |context_binding_| error handler.
     quit_closure_ = base::DoNothing::Once();
 
-    parameters_.ui_task->Run();
+    std::move(*parameters_.ui_task).Run();
     delete parameters_.ui_task;
     run_message_loop_ = false;
   }

@@ -2,12 +2,14 @@
 
 #include "sync/vivaldi_hash_util.h"
 
+#include "base/base64.h"
+#include "base/hash/sha1.h"
 #include "base/logging.h"
-#include "components/sync/base/client_tag_hash.h"
 #include "components/sync/base/hash_util.h"
-#include "components/sync/driver/sync_client.h"
+#include "components/sync/base/model_type.h"
 #include "components/sync/engine_impl/syncer_util.h"
 #include "components/sync/protocol/proto_enum_conversions.h"
+#include "components/sync/protocol/sync.pb.h"
 #include "components/sync/syncable/base_transaction.h"
 #include "components/sync/syncable/directory.h"
 #include "components/sync/syncable/model_neutral_mutable_entry.h"
@@ -18,8 +20,17 @@ namespace syncer {
 std::string GenerateSyncableNotesHash(
     const std::string& originator_cache_guid,
     const std::string& originator_client_item_id) {
-  return ClientTagHash::FromUnhashed(
-      NOTES, originator_cache_guid + originator_client_item_id).value();
+  // Blank PB with just the field in it has termination symbol,
+  // handy for delimiter.
+  sync_pb::EntitySpecifics serialized_type;
+  AddDefaultFieldValue(NOTES, &serialized_type);
+  std::string hash_input;
+  serialized_type.AppendToString(&hash_input);
+  hash_input.append(originator_cache_guid + originator_client_item_id);
+
+  std::string encode_output;
+  base::Base64Encode(base::SHA1HashString(hash_input), &encode_output);
+  return encode_output;
 }
 
 std::string GetUniqueNotesTagFromUpdate(const sync_pb::SyncEntity& update) {
@@ -54,12 +65,6 @@ void UpdateNotesPositioning(const sync_pb::SyncEntity& update,
   if (update_pos.IsValid()) {
     local_entry->PutServerUniquePosition(update_pos);
   }
-}
-
-// SyncClient
-
-vivaldi::Notes_Model* SyncClient::GetNotesModel() {
-  return nullptr;
 }
 
 // ProtoEnumToString

@@ -415,11 +415,12 @@ sync_pb::SessionTab LocalSessionEventHandlerImpl::GetTabSpecificsFromDelegate(
   }
 
   if (is_supervised) {
-    const std::vector<std::unique_ptr<const SerializedNavigationEntry>>&
-        blocked_navigations = *tab_delegate.GetBlockedNavigations();
-    for (size_t i = 0; i < blocked_navigations.size(); ++i) {
+    const std::vector<std::unique_ptr<const SerializedNavigationEntry>>*
+        blocked_navigations = tab_delegate.GetBlockedNavigations();
+    DCHECK(blocked_navigations);
+    for (const auto& entry_unique_ptr : *blocked_navigations) {
       sync_pb::TabNavigation* navigation = specifics.add_navigation();
-      SessionNavigationToSyncData(*blocked_navigations[i]).Swap(navigation);
+      SessionNavigationToSyncData(*entry_unique_ptr).Swap(navigation);
       navigation->set_blocked_state(
           sync_pb::TabNavigation_BlockedState_STATE_BLOCKED);
       // TODO(bauerb): Add categories

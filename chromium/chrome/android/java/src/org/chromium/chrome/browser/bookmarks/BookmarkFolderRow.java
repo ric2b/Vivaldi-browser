@@ -6,8 +6,9 @@ package org.chromium.chrome.browser.bookmarks;
 
 import android.content.Context;
 import android.content.res.ColorStateList;
-import android.support.v7.content.res.AppCompatResources;
 import android.util.AttributeSet;
+
+import androidx.appcompat.content.res.AppCompatResources;
 
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkItem;
@@ -32,7 +33,7 @@ public class BookmarkFolderRow extends BookmarkRow {
     protected void onFinishInflate() {
         super.onFinishInflate();
         if (!ChromeApplication.isVivaldi())
-            setIconDrawable(BookmarkUtils.getFolderIcon(getContext()));
+        setStartIconDrawable(BookmarkUtils.getFolderIcon(getContext()));
     }
 
     // BookmarkRow implementation.
@@ -51,18 +52,20 @@ public class BookmarkFolderRow extends BookmarkRow {
                         ? getResources().getQuantityString(
                                   R.plurals.bookmarks_count, childCount, childCount)
                         : getResources().getString(R.string.no_bookmarks));
+
         if (ChromeApplication.isVivaldi()) {
             if (bookmarkId.equals(mDelegate.getModel().getTrashFolderId())) {
-                setIconDrawable(VivaldiBookmarkUtils.getTrashFolderIcon(getContext()));
+                setStartIconDrawable(VivaldiBookmarkUtils.getTrashFolderIcon(getContext()));
             } else {
-                setIconDrawable(VivaldiBookmarkUtils.getFolderIcon(getContext()));
+                setStartIconDrawable(VivaldiBookmarkUtils.getFolderIcon(getContext()));
             }
         }
+
         return item;
     }
 
     @Override
-    protected ColorStateList getDefaultIconTint() {
+    protected ColorStateList getDefaultStartIconTint() {
         if (ChromeApplication.isVivaldi())
             return null;
         else

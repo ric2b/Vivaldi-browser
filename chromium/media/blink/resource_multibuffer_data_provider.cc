@@ -85,6 +85,9 @@ void ResourceMultiBufferDataProvider::Start() {
   request.SetRequestContext(is_client_audio_element_
                                 ? blink::mojom::RequestContextType::AUDIO
                                 : blink::mojom::RequestContextType::VIDEO);
+  request.SetRequestDestination(
+      is_client_audio_element_ ? network::mojom::RequestDestination::kAudio
+                               : network::mojom::RequestDestination::kVideo);
   request.SetHttpHeaderField(
       WebString::FromUTF8(net::HttpRequestHeaders::kRange),
       WebString::FromUTF8(
@@ -149,7 +152,7 @@ bool ResourceMultiBufferDataProvider::Available() const {
 
 int64_t ResourceMultiBufferDataProvider::AvailableBytes() const {
   int64_t bytes = 0;
-  for (const auto i : fifo_) {
+  for (const auto& i : fifo_) {
     if (i->end_of_stream())
       break;
     bytes += i->data_size();
@@ -387,8 +390,6 @@ void ResourceMultiBufferDataProvider::DidReceiveData(const char* data,
   DCHECK(!Available());
   DCHECK(active_loader_);
   DCHECK_GT(data_length, 0);
-
-  url_data_->AddBytesReadFromNetwork(data_length);
 
   if (bytes_to_discard_) {
     uint64_t tmp = std::min<uint64_t>(bytes_to_discard_, data_length);

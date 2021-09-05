@@ -9,6 +9,7 @@
 
 #include "base/message_loop/message_pump.h"
 #include "base/message_loop/work_id_provider.h"
+#include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/task/common/checked_lock.h"
 #include "base/task/common/task_annotator.h"
@@ -18,6 +19,7 @@
 #include "base/task/sequence_manager/thread_controller.h"
 #include "base/task/sequence_manager/work_deduplicator.h"
 #include "base/thread_annotations.h"
+#include "base/threading/hang_watcher.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/sequence_local_storage_map.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -68,6 +70,9 @@ class BASE_EXPORT ThreadControllerWithMessagePumpImpl
 #if defined(OS_IOS) || defined(OS_ANDROID)
   void AttachToMessagePump() override;
 #endif
+#if defined(OS_IOS)
+  void DetachFromMessagePump() override;
+#endif
   bool ShouldQuitRunLoopWhenIdle() override;
 
   // RunLoop::NestingObserver:
@@ -80,9 +85,8 @@ class BASE_EXPORT ThreadControllerWithMessagePumpImpl
 
   // MessagePump::Delegate implementation.
   void BeforeDoInternalWork() override;
-  MessagePump::Delegate::NextWorkInfo DoSomeWork() override;
-  bool DoWork() override;
-  bool DoDelayedWork(TimeTicks* next_run_time) override;
+  void BeforeWait() override;
+  MessagePump::Delegate::NextWorkInfo DoWork() override;
   bool DoIdleWork() override;
 
   // RunLoop::Delegate implementation.
@@ -174,6 +178,10 @@ class BASE_EXPORT ThreadControllerWithMessagePumpImpl
   std::unique_ptr<
       base::internal::ScopedSetSequenceLocalStorageMapForCurrentThread>
       scoped_set_sequence_local_storage_map_for_current_thread_;
+
+  // Reset at the start of each unit of work to cover the work itself and then
+  // transition to the next one.
+  base::Optional<HangWatchScope> hang_watch_scope_;
 
   DISALLOW_COPY_AND_ASSIGN(ThreadControllerWithMessagePumpImpl);
 };

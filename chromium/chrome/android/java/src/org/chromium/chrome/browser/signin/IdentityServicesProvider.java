@@ -4,20 +4,37 @@
 
 package org.chromium.chrome.browser.signin;
 
+import androidx.annotation.VisibleForTesting;
+
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.components.signin.AccountTrackerService;
-import org.chromium.components.signin.OAuth2TokenService;
 import org.chromium.components.signin.identitymanager.IdentityManager;
 
 /**
  * Provides access to sign-in related services that are profile-keyed on the native side. Java
  * equivalent of AccountTrackerServiceFactory and similar classes.
  */
-public final class IdentityServicesProvider {
+public class IdentityServicesProvider {
+    private static IdentityServicesProvider sIdentityServicesProvider;
+
+    private IdentityServicesProvider() {}
+
+    public static IdentityServicesProvider get() {
+        if (sIdentityServicesProvider == null) {
+            sIdentityServicesProvider = new IdentityServicesProvider();
+        }
+        return sIdentityServicesProvider;
+    }
+
+    @VisibleForTesting
+    public static void setInstanceForTests(IdentityServicesProvider provider) {
+        sIdentityServicesProvider = provider;
+    }
+
     /** Getter for {@link IdentityManager} instance. */
-    public static IdentityManager getIdentityManager() {
+    public IdentityManager getIdentityManager() {
         ThreadUtils.assertOnUiThread();
         IdentityManager result =
                 IdentityServicesProviderJni.get().getIdentityManager(Profile.getLastUsedProfile());
@@ -26,7 +43,7 @@ public final class IdentityServicesProvider {
     }
 
     /** Getter for {@link AccountTrackerService} instance. */
-    public static AccountTrackerService getAccountTrackerService() {
+    public AccountTrackerService getAccountTrackerService() {
         ThreadUtils.assertOnUiThread();
         AccountTrackerService result = IdentityServicesProviderJni.get().getAccountTrackerService(
                 Profile.getLastUsedProfile());
@@ -34,15 +51,8 @@ public final class IdentityServicesProvider {
         return result;
     }
 
-    public static OAuth2TokenService getOAuth2TokenService() {
-        ThreadUtils.assertOnUiThread();
-        OAuth2TokenService result = IdentityServicesProviderJni.get().getOAuth2TokenService(
-                Profile.getLastUsedProfile());
-        assert result != null;
-        return result;
-    }
-
-    public static SigninManager getSigninManager() {
+    /** Getter for {@link SigninManager} instance. */
+    public SigninManager getSigninManager() {
         ThreadUtils.assertOnUiThread();
         SigninManager result =
                 IdentityServicesProviderJni.get().getSigninManager(Profile.getLastUsedProfile());
@@ -52,9 +62,8 @@ public final class IdentityServicesProvider {
 
     @NativeMethods
     interface Natives {
-        public IdentityManager getIdentityManager(Profile profile);
-        public AccountTrackerService getAccountTrackerService(Profile profile);
-        public OAuth2TokenService getOAuth2TokenService(Profile profile);
-        public SigninManager getSigninManager(Profile profile);
+        IdentityManager getIdentityManager(Profile profile);
+        AccountTrackerService getAccountTrackerService(Profile profile);
+        SigninManager getSigninManager(Profile profile);
     }
 }

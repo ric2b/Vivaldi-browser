@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "base/stl_util.h"
+#include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_button.h"
@@ -17,11 +18,17 @@
 #include "ui/views/layout/flex_layout.h"
 #include "ui/views/view_class_properties.h"
 
+// static
+const char ToolbarIconContainerView::kToolbarIconContainerViewClassName[] =
+    "ToolbarIconContainerView";
+
 ToolbarIconContainerView::ToolbarIconContainerView(bool uses_highlight)
     : uses_highlight_(uses_highlight) {
   views::AnimatingLayoutManager* animating_layout =
       SetLayoutManager(std::make_unique<views::AnimatingLayoutManager>());
   animating_layout->SetShouldAnimateBounds(true);
+  animating_layout->SetDefaultFadeMode(
+      views::AnimatingLayoutManager::FadeInOutMode::kSlideFromTrailingEdge);
   auto* flex_layout = animating_layout->SetTargetLayoutManager(
       std::make_unique<views::FlexLayout>());
   flex_layout->SetCollapseMargins(true)
@@ -35,8 +42,6 @@ ToolbarIconContainerView::~ToolbarIconContainerView() {
   // destroying |observers_|.
   RemoveAllChildViews(true);
 }
-
-void ToolbarIconContainerView::UpdateAllIcons() {}
 
 void ToolbarIconContainerView::AddMainButton(views::Button* main_button) {
   DCHECK(!main_button_);
@@ -85,10 +90,6 @@ void ToolbarIconContainerView::OnViewBlurred(views::View* observed_view) {
   UpdateHighlight();
 }
 
-const views::View::Views& ToolbarIconContainerView::GetChildren() const {
-  return children();
-}
-
 void ToolbarIconContainerView::OnMouseEntered(const ui::MouseEvent& event) {
   UpdateHighlight();
 }
@@ -97,15 +98,15 @@ void ToolbarIconContainerView::OnMouseExited(const ui::MouseEvent& event) {
   UpdateHighlight();
 }
 
-void ToolbarIconContainerView::ChildPreferredSizeChanged(views::View* child) {
-  PreferredSizeChanged();
-}
-
 gfx::Insets ToolbarIconContainerView::GetInsets() const {
   // Use empty insets to have the border paint into the view instead of around
   // it. This prevents inadvertently increasing its size while the stroke is
   // drawn.
   return gfx::Insets();
+}
+
+const char* ToolbarIconContainerView::GetClassName() const {
+  return kToolbarIconContainerViewClassName;
 }
 
 bool ToolbarIconContainerView::ShouldDisplayHighlight() {
@@ -116,7 +117,7 @@ bool ToolbarIconContainerView::ShouldDisplayHighlight() {
     return true;
 
   // Focused, pressed or hovered children should trigger the highlight.
-  for (views::View* child : GetChildren()) {
+  for (views::View* child : children()) {
     if (child == main_button_)
       continue;
     if (child->HasFocus())
@@ -149,6 +150,18 @@ void ToolbarIconContainerView::UpdateHighlight() {
     return;
   for (Observer& observer : observers_)
     observer.OnHighlightChanged();
+}
+
+void ToolbarIconContainerView::OverrideIconColor(SkColor color) {
+  icon_color_ = color;
+  UpdateAllIcons();
+}
+
+SkColor ToolbarIconContainerView::GetIconColor() const {
+  if (icon_color_)
+    return icon_color_.value();
+  return GetThemeProvider()->GetColor(
+      ThemeProperties::COLOR_TOOLBAR_BUTTON_ICON);
 }
 
 bool ToolbarIconContainerView::IsHighlighted() {

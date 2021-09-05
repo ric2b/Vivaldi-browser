@@ -17,12 +17,12 @@ import android.os.Parcelable;
 import android.view.Surface;
 
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.UserData;
 import org.chromium.base.UserDataHost;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
@@ -46,6 +46,7 @@ import org.chromium.content_public.browser.MessagePort;
 import org.chromium.content_public.browser.NavigationController;
 import org.chromium.content_public.browser.RenderFrameHost;
 import org.chromium.content_public.browser.ViewEventSink.InternalAccessDelegate;
+import org.chromium.content_public.browser.Visibility;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsInternals;
 import org.chromium.content_public.browser.WebContentsObserver;
@@ -53,8 +54,11 @@ import org.chromium.ui.OverscrollRefreshHandler;
 import org.chromium.ui.base.EventForwarder;
 import org.chromium.ui.base.ViewAndroidDelegate;
 import org.chromium.ui.base.WindowAndroid;
+import org.chromium.url.GURL;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
@@ -64,7 +68,7 @@ import java.util.UUID;
  */
 @JNINamespace("content")
 public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, WindowEventObserver {
-    private static final String TAG = "cr_WebContentsImpl";
+    private static final String TAG = "WebContentsImpl";
 
     private static final String PARCEL_VERSION_KEY = "version";
     private static final String PARCEL_WEBCONTENTS_KEY = "webcontents";
@@ -164,7 +168,7 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
                     (int) (coordinateSpace.getContentOffsetYPix()
                             / coordinateSpace.getDeviceScaleFactor()));
             Bundle bundle = new Bundle();
-            bundle.putString("url", getVisibleUrl());
+            bundle.putString("url", getVisibleUrlString());
             bundle.putString("title", getTitle());
             bundle.putString("text", text);
             bundle.putString("html", html);
@@ -390,16 +394,35 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
     }
 
     @Override
+    public List<WebContentsImpl> getInnerWebContents() {
+        checkNotDestroyed();
+        WebContentsImpl[] innerWebContents = WebContentsImplJni.get().getInnerWebContents(
+                mNativeWebContentsAndroid, WebContentsImpl.this);
+        return Collections.unmodifiableList(Arrays.asList(innerWebContents));
+    }
+
+    @Override
+    public @Visibility int getVisibility() {
+        checkNotDestroyed();
+        return WebContentsImplJni.get().getVisibility(mNativeWebContentsAndroid);
+    }
+
+    @Override
     public String getTitle() {
         checkNotDestroyed();
         return WebContentsImplJni.get().getTitle(mNativeWebContentsAndroid, WebContentsImpl.this);
     }
 
     @Override
-    public String getVisibleUrl() {
+    public GURL getVisibleUrl() {
         checkNotDestroyed();
         return WebContentsImplJni.get().getVisibleURL(
                 mNativeWebContentsAndroid, WebContentsImpl.this);
+    }
+
+    @Override
+    public String getVisibleUrlString() {
+        return getVisibleUrl().getSpec();
     }
 
     @Override
@@ -420,6 +443,13 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
         checkNotDestroyed();
         return WebContentsImplJni.get().isLoadingToDifferentDocument(
                 mNativeWebContentsAndroid, WebContentsImpl.this);
+    }
+
+    @Override
+    public void dispatchBeforeUnload(boolean autoCancel) {
+        if (mNativeWebContentsAndroid == 0) return;
+        WebContentsImplJni.get().dispatchBeforeUnload(
+                mNativeWebContentsAndroid, WebContentsImpl.this, autoCancel);
     }
 
     @Override
@@ -544,6 +574,12 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
                 mNativeWebContentsAndroid, WebContentsImpl.this);
     }
 
+    @Override
+    public boolean isFullscreenForCurrentTab() {
+        checkNotDestroyed();
+        return WebContentsImplJni.get().isFullscreenForCurrentTab(
+                mNativeWebContentsAndroid, WebContentsImpl.this);
+    }
 
     @Override
     public void exitFullscreen() {
@@ -669,7 +705,7 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
     }
 
     @Override
-    public int getLoadProgress() {
+    public float getLoadProgress() {
         checkNotDestroyed();
         return WebContentsImplJni.get().getLoadProgress(
                 mNativeWebContentsAndroid, WebContentsImpl.this);
@@ -904,7 +940,7 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
 
         // Map can be null after WebView gets gc'ed on its way to destruction.
         if (userDataHost == null) {
-            Log.e(TAG, "UserDataHost can't be found");
+            Log.d(TAG, "UserDataHost can't be found");
             return null;
         }
 
@@ -920,6 +956,12 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
             data = userDataHost.setUserData(key, object);
         }
         return key.cast(data);
+    }
+
+    public <T extends UserData> void removeUserData(Class<T> key) {
+        UserDataHost userDataHost = getUserDataHost();
+        if (userDataHost == null) return;
+        userDataHost.removeUserData(key);
     }
 
     /**
@@ -968,6 +1010,7 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
                 mNativeWebContentsAndroid, WebContentsImpl.this);
     }
 
+    @Override
     public void setFocus(boolean hasFocus) {
         if (mNativeWebContentsAndroid == 0) return;
         WebContentsImplJni.get().setFocus(
@@ -985,6 +1028,13 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
     public void notifyRendererPreferenceUpdate() {
         if (mNativeWebContentsAndroid == 0) return;
         WebContentsImplJni.get().notifyRendererPreferenceUpdate(
+                mNativeWebContentsAndroid, WebContentsImpl.this);
+    }
+
+    @Override
+    public void notifyBrowserControlsHeightChanged() {
+        if (mNativeWebContentsAndroid == 0) return;
+        WebContentsImplJni.get().notifyBrowserControlsHeightChanged(
                 mNativeWebContentsAndroid, WebContentsImpl.this);
     }
 
@@ -1010,11 +1060,17 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
         RenderFrameHost getFocusedFrame(long nativeWebContentsAndroid, WebContentsImpl caller);
         RenderWidgetHostViewImpl getRenderWidgetHostView(
                 long nativeWebContentsAndroid, WebContentsImpl caller);
+        WebContentsImpl[] getInnerWebContents(
+                long nativeWebContentsAndroid, WebContentsImpl caller);
+        @Visibility
+        int getVisibility(long nativeWebContentsAndroid);
         String getTitle(long nativeWebContentsAndroid, WebContentsImpl caller);
-        String getVisibleURL(long nativeWebContentsAndroid, WebContentsImpl caller);
+        GURL getVisibleURL(long nativeWebContentsAndroid, WebContentsImpl caller);
         String getEncoding(long nativeWebContentsAndroid, WebContentsImpl caller);
         boolean isLoading(long nativeWebContentsAndroid, WebContentsImpl caller);
         boolean isLoadingToDifferentDocument(long nativeWebContentsAndroid, WebContentsImpl caller);
+        void dispatchBeforeUnload(
+                long nativeWebContentsAndroid, WebContentsImpl caller, boolean autoCancel);
         void stop(long nativeWebContentsAndroid, WebContentsImpl caller);
         void cut(long nativeWebContentsAndroid, WebContentsImpl caller);
         void copy(long nativeWebContentsAndroid, WebContentsImpl caller);
@@ -1030,6 +1086,7 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
         void setAudioMuted(long nativeWebContentsAndroid, WebContentsImpl caller, boolean mute);
         boolean isShowingInterstitialPage(long nativeWebContentsAndroid, WebContentsImpl caller);
         boolean focusLocationBarByDefault(long nativeWebContentsAndroid, WebContentsImpl caller);
+        boolean isFullscreenForCurrentTab(long nativeWebContentsAndroid, WebContentsImpl caller);
         void exitFullscreen(long nativeWebContentsAndroid, WebContentsImpl caller);
         void scrollFocusedEditableNodeIntoView(
                 long nativeWebContentsAndroid, WebContentsImpl caller);
@@ -1049,7 +1106,7 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
                 String message, String sourceOrigin, String targetOrigin, MessagePort[] ports);
         boolean hasAccessedInitialDocument(long nativeWebContentsAndroid, WebContentsImpl caller);
         int getThemeColor(long nativeWebContentsAndroid, WebContentsImpl caller);
-        int getLoadProgress(long nativeWebContentsAndroid, WebContentsImpl caller);
+        float getLoadProgress(long nativeWebContentsAndroid, WebContentsImpl caller);
         void requestSmartClipExtract(long nativeWebContentsAndroid, WebContentsImpl caller,
                 SmartClipCallback callback, int x, int y, int width, int height);
         void requestAccessibilitySnapshot(long nativeWebContentsAndroid, WebContentsImpl caller,
@@ -1082,6 +1139,8 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
         void setDisplayCutoutSafeArea(long nativeWebContentsAndroid, WebContentsImpl caller,
                 int top, int left, int bottom, int right);
         void notifyRendererPreferenceUpdate(long nativeWebContentsAndroid, WebContentsImpl caller);
+        void notifyBrowserControlsHeightChanged(
+                long nativeWebContentsAndroid, WebContentsImpl caller);
         boolean isBeingDestroyed(long nativeWebContentsAndroid, WebContentsImpl caller);
     }
 }

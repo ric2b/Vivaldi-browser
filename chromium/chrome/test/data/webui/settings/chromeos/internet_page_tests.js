@@ -25,21 +25,6 @@ suite('InternetPage', function() {
       internetKnownNetworksPageTitle: 'internetKnownNetworksPageTitle',
     });
 
-    CrOncStrings = {
-      OncTypeCellular: 'OncTypeCellular',
-      OncTypeEthernet: 'OncTypeEthernet',
-      OncTypeMobile: 'OncTypeMobile',
-      OncTypeTether: 'OncTypeTether',
-      OncTypeVPN: 'OncTypeVPN',
-      OncTypeWiFi: 'OncTypeWiFi',
-      networkListItemConnected: 'networkListItemConnected',
-      networkListItemConnecting: 'networkListItemConnecting',
-      networkListItemConnectingTo: 'networkListItemConnectingTo',
-      networkListItemNotConnected: 'networkListItemNotConnected',
-      networkListItemNoNetwork: 'networkListItemNoNetwork',
-      vpnNameTemplate: 'vpnNameTemplate',
-    };
-
     mojoApi_ = new FakeNetworkConfig();
     network_config.MojoInterfaceProviderImpl.getInstance().remote_ = mojoApi_;
 
@@ -85,7 +70,7 @@ suite('InternetPage', function() {
     }
     internetPage.remove();
     internetPage = null;
-    settings.resetRouteForTesting();
+    settings.Router.getInstance().resetRouteForTesting();
   });
 
   suite('MainPage', function() {
@@ -123,7 +108,7 @@ suite('InternetPage', function() {
 
         // Ensure that the initial state is disabled and the toggle is
         // enabled but unchecked.
-        let wifiDevice =
+        const wifiDevice =
             mojoApi_.getDeviceStateForTest(mojom.NetworkType.kWiFi);
         assertTrue(!!wifiDevice);
         assertEquals(mojom.DeviceStateType.kDisabled, wifiDevice.deviceState);
@@ -136,7 +121,7 @@ suite('InternetPage', function() {
         toggle.click();
         return flushAsync().then(() => {
           assertTrue(toggle.checked);
-          let wifiDevice =
+          const wifiDevice =
               mojoApi_.getDeviceStateForTest(mojom.NetworkType.kWiFi);
           assertTrue(!!wifiDevice);
           assertEquals(mojom.DeviceStateType.kEnabled, wifiDevice.deviceState);

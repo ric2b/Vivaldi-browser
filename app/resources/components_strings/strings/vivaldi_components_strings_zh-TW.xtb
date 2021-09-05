@@ -36,6 +36,7 @@
 <translation id="2292556288342944218">您的網際網路存取權限遭到封鎖</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> 要求提供使用者名稱和密碼。</translation>
 <translation id="2337852623177822836">管理員所控制的設定</translation>
+<translation id="2344028582131185878">自動下載</translation>
 <translation id="2355395290879513365">攻擊者可能會看到你正在這個網站上瀏覽的圖片，並以修改圖片內容的方式讓你受騙。</translation>
 <translation id="2356070529366658676">詢問</translation>
 <translation id="2359808026110333948">繼續</translation>
@@ -62,7 +63,9 @@
 <translation id="3109728660330352905">您未獲得授權，無法瀏覽這個網頁。</translation>
 <translation id="31207688938192855"><ph name="BEGIN_LINK" />正在嘗試執行連線診斷<ph name="END_LINK" />。</translation>
 <translation id="3154506275960390542">這個網頁中的表單可能不會經由安全途徑提交。其他人可能會在傳輸期間檢視你的資料，攻擊者也可能會修改這些資料，導致伺服器接收不同內容。</translation>
-<translation id="3176929007561373547">檢查您的代理設定，或是與您的網路管理員聯絡確認您的代理伺服器運作正常。如果您認為自己不需要使用代理伺服器：<ph name="PLATFORM_TEXT" /></translation>
+<translation id="3176929007561373547">檢查您的代理設定，或是與您的網路管理員聯絡確認您的代理伺服器
+運作正常。如果您認為自己不需要使用代理伺服器：
+<ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">按下重新載入按鈕，重新提交載入網頁所需的資料。</translation>
 <translation id="3227137524299004712">麥克風</translation>
 <translation id="3234666976984236645">一律偵測這個網站的重要內容</translation>
@@ -75,16 +78,16 @@
 <translation id="3566021033012934673">你的連線不是私人連線</translation>
 <translation id="3574305903863751447"><ph name="COUNTRY" />，<ph name="STATE" />，<ph name="CITY" /></translation>
 <translation id="3586931643579894722">隱藏詳細資訊</translation>
-<translation id="3630155396527302611">如果程式已列在允許存取網路的清單中，建議您從清單中將其移除，然後再重新加入。</translation>
+<translation id="3630155396527302611">如果程式已列在允許存取網路的清單中，
+建議您從清單中將其移除，然後再重新加入。</translation>
 <translation id="3658742229777143148">修訂版本</translation>
 <translation id="3681007416295224113">憑證資訊</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />檢查代理、防火牆和 DNS 設定<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">如果您使用代理伺服器...</translation>
 <translation id="3950820424414687140">登入</translation>
-<translation id="3973234410852337861"><ph name="HOST_NAME" /> 遭到封鎖</translation>
-<translation id="3987940399970879459">不到 1 MB</translation>
+<translation id="3973234410852337861"><ph name="HOST_NAME" /> 已遭封鎖</translation>
+<translation id="3987940399970879459">小於 1 MB</translation>
 <translation id="4075732493274867456">用戶端和伺服器不支援一般 SSL 通訊協定版本或加密套件。</translation>
-<translation id="410351446219883937">自動播放</translation>
 <translation id="4116663294526079822">永遠允許在這個網站執行</translation>
 <translation id="4130226655945681476">檢查網路線、數據機和路由器</translation>
 <translation id="4151403195736952345">使用全域預設設定 (偵測)</translation>
@@ -142,7 +145,8 @@
 <translation id="5932224571077948991">網站顯示干擾性或誤導性廣告</translation>
 <translation id="5990559369517809815">延伸套件已封鎖要傳送至伺服器的要求。</translation>
 <translation id="6051221802930200923">目前無法造訪 <ph name="SITE" />，因為這個網站使用憑證鎖定功能。網路錯誤和攻擊行為通常是暫時性的，因此這個網頁可能稍後就會恢復正常狀態。</translation>
-<translation id="6146055958333702838">檢查您的網路線是否穩固連接。重新啟動您可能正在使用的任何路由器、數據機或其他網路裝置。</translation>
+<translation id="6146055958333702838">檢查您的網路線是否穩固連接。重新啟動您可能正在使用的任何
+路由器、數據機或其他網路裝置。</translation>
 <translation id="614940544461990577">請嘗試：</translation>
 <translation id="6165508094623778733">瞭解詳情</translation>
 <translation id="6177128806592000436">你與這個網站的連線不安全</translation>
@@ -206,7 +210,7 @@
 <translation id="8286036467436129157">登入</translation>
 <translation id="8288807391153049143">顯示憑證</translation>
 <translation id="8289355894181816810">如果您不確定這代表什麼意思，請與網路管理員聯絡。</translation>
-<translation id="8332188693563227489">存取 <ph name="HOST_NAME" /> 的要求遭到拒絕</translation>
+<translation id="8332188693563227489">存取 <ph name="HOST_NAME" /> 的請求遭拒</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> 的回應時間過長。</translation>
 <translation id="8503813439785031346">使用者名稱</translation>
 <translation id="8703575177326907206">你到 <ph name="DOMAIN" /> 的連線未加密。</translation>

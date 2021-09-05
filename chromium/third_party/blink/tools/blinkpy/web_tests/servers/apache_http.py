@@ -71,6 +71,15 @@ class ApacheHTTP(server_base.ServerBase):
 
         self._is_win = self._port_obj.host.platform.is_win()
 
+        assert self._filesystem.exists(test_dir), \
+            "'%s' does not exist." % test_dir
+        assert self._filesystem.exists(output_dir), \
+            "'%s' does not exist." % output_dir
+        assert self._filesystem.exists(inspector_sources_dir), \
+            "'%s' does not exist." % inspector_sources_dir
+        assert self._filesystem.exists(generated_sources_dir), \
+            "'%s' does not exist." % generated_sources_dir
+
         start_cmd = [
             executable,
             '-f', '%s' % self._port_obj.path_to_apache_config_file(),
@@ -82,6 +91,8 @@ class ApacheHTTP(server_base.ServerBase):
             '-c', 'Alias /resources/chromium "%s/external/wpt/resources/chromium"' % test_dir,
             '-c', 'Alias /resources/testharness.js "%s/resources/testharness.js"' % test_dir,
             '-c', 'Alias /resources/testharnessreport.js "%s/resources/testharnessreport.js"' % test_dir,
+            '-c', 'Alias /resources/testdriver.js "%s/resources/testdriver.js"' % test_dir,
+            '-c', 'Alias /resources/testdriver-vendor.js "%s/resources/testdriver-vendor.js"' % test_dir,
             '-c', 'Alias /w3c/resources "%s/resources"' % test_dir,
             # TODO(509038): To be removed after bluetooth tests are ported to WPT.
             '-c', 'Alias /bluetooth-resources "%s/external/wpt/bluetooth/resources"' % test_dir,

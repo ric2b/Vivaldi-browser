@@ -9,6 +9,7 @@
 
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/unsafe_shared_memory_region.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/unguessable_token.h"
 #include "build/build_config.h"
@@ -30,9 +31,8 @@
 #include "media/mojo/clients/mojo_video_decoder.h"
 #include "media/mojo/clients/mojo_video_encode_accelerator.h"
 #include "media/video/video_encode_accelerator.h"
-#include "mojo/public/cpp/base/shared_memory_utils.h"
 #include "services/viz/public/cpp/gpu/context_provider_command_buffer.h"
-#include "third_party/skia/include/core/SkPostConfig.h"
+#include "third_party/skia/include/core/SkTypes.h"
 
 namespace content {
 
@@ -62,15 +62,17 @@ GpuVideoAcceleratorFactoriesImpl::Create(
     bool enable_video_gpu_memory_buffers,
     bool enable_media_stream_gpu_memory_buffers,
     bool enable_video_accelerator,
-    media::mojom::InterfaceFactoryPtrInfo interface_factory_info,
-    media::mojom::VideoEncodeAcceleratorProviderPtrInfo vea_provider_info) {
+    mojo::PendingRemote<media::mojom::InterfaceFactory>
+        interface_factory_remote,
+    mojo::PendingRemote<media::mojom::VideoEncodeAcceleratorProvider>
+        vea_provider_remote) {
   RecordContextProviderPhaseUmaEnum(
       ContextProviderPhase::CONTEXT_PROVIDER_ACQUIRED);
   return base::WrapUnique(new GpuVideoAcceleratorFactoriesImpl(
       std::move(gpu_channel_host), main_thread_task_runner, task_runner,
       context_provider, enable_video_gpu_memory_buffers,
       enable_media_stream_gpu_memory_buffers, enable_video_accelerator,
-      std::move(interface_factory_info), std::move(vea_provider_info)));
+      std::move(interface_factory_remote), std::move(vea_provider_remote)));
 }
 
 GpuVideoAcceleratorFactoriesImpl::GpuVideoAcceleratorFactoriesImpl(
@@ -81,8 +83,10 @@ GpuVideoAcceleratorFactoriesImpl::GpuVideoAcceleratorFactoriesImpl(
     bool enable_video_gpu_memory_buffers,
     bool enable_media_stream_gpu_memory_buffers,
     bool enable_video_accelerator,
-    media::mojom::InterfaceFactoryPtrInfo interface_factory_info,
-    media::mojom::VideoEncodeAcceleratorProviderPtrInfo vea_provider_info)
+    mojo::PendingRemote<media::mojom::InterfaceFactory>
+        interface_factory_remote,
+    mojo::PendingRemote<media::mojom::VideoEncodeAcceleratorProvider>
+        vea_provider_remote)
     : main_thread_task_runner_(main_thread_task_runner),
       task_runner_(task_runner),
       gpu_channel_host_(std::move(gpu_channel_host)),
@@ -100,20 +104,23 @@ GpuVideoAcceleratorFactoriesImpl::GpuVideoAcceleratorFactoriesImpl(
   task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(&GpuVideoAcceleratorFactoriesImpl::BindOnTaskRunner,
-                     base::Unretained(this), std::move(interface_factory_info),
-                     std::move(vea_provider_info)));
+                     base::Unretained(this),
+                     std::move(interface_factory_remote),
+                     std::move(vea_provider_remote)));
 }
 
 GpuVideoAcceleratorFactoriesImpl::~GpuVideoAcceleratorFactoriesImpl() {}
 
 void GpuVideoAcceleratorFactoriesImpl::BindOnTaskRunner(
-    media::mojom::InterfaceFactoryPtrInfo interface_factory_info,
-    media::mojom::VideoEncodeAcceleratorProviderPtrInfo vea_provider_info) {
+    mojo::PendingRemote<media::mojom::InterfaceFactory>
+        interface_factory_remote,
+    mojo::PendingRemote<media::mojom::VideoEncodeAcceleratorProvider>
+        vea_provider_remote) {
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK(context_provider_);
 
-  interface_factory_.Bind(std::move(interface_factory_info));
-  vea_provider_.Bind(std::move(vea_provider_info));
+  interface_factory_.Bind(std::move(interface_factory_remote));
+  vea_provider_.Bind(std::move(vea_provider_remote));
 
   if (context_provider_->BindToCurrentThread() !=
       gpu::ContextResult::kSuccess) {
@@ -123,13 +130,30 @@ void GpuVideoAcceleratorFactoriesImpl::BindOnTaskRunner(
 
   context_provider_->AddObserver(this);
 
+  if (video_accelerator_enabled_) {
+    {
+      // TODO(crbug.com/709631): This should be removed.
+      base::AutoLock lock(supported_profiles_lock_);
+      supported_vea_profiles_ =
+          media::GpuVideoAcceleratorUtil::ConvertGpuToMediaEncodeProfiles(
+              gpu_channel_host_->gpu_info()
+                  .video_encode_accelerator_supported_profiles);
+    }
+
+    vea_provider_->GetVideoEncodeAcceleratorSupportedProfiles(
+        base::BindOnce(&GpuVideoAcceleratorFactoriesImpl::
+                           OnGetVideoEncodeAcceleratorSupportedProfiles,
+                       base::Unretained(this)));
+  }
+
 #if BUILDFLAG(ENABLE_MOJO_VIDEO_DECODER)
   // Note: This is a bit of a hack, since we don't specify the implementation
   // before asking for the map of supported configs.  We do this because it
   // (a) saves an ipc call, and (b) makes the return of those configs atomic.
   // Otherwise, we might have received configs for kDefault but not yet
   // kAlternate, for example.
-  interface_factory_->CreateVideoDecoder(mojo::MakeRequest(&video_decoder_));
+  interface_factory_->CreateVideoDecoder(
+      video_decoder_.BindNewPipeAndPassReceiver());
   video_decoder_->GetSupportedConfigs(base::BindOnce(
       &GpuVideoAcceleratorFactoriesImpl::OnSupportedDecoderConfigs,
       base::Unretained(this)));
@@ -138,9 +162,17 @@ void GpuVideoAcceleratorFactoriesImpl::BindOnTaskRunner(
 
 void GpuVideoAcceleratorFactoriesImpl::OnSupportedDecoderConfigs(
     const media::SupportedVideoDecoderConfigMap& supported_configs) {
-  base::AutoLock lock(supported_decoder_configs_lock_);
+  base::AutoLock lock(supported_profiles_lock_);
   supported_decoder_configs_ = supported_configs;
   video_decoder_.reset();
+}
+
+void GpuVideoAcceleratorFactoriesImpl::
+    OnGetVideoEncodeAcceleratorSupportedProfiles(
+        const media::VideoEncodeAccelerator::SupportedProfiles&
+            supported_profiles) {
+  base::AutoLock lock(supported_profiles_lock_);
+  supported_vea_profiles_ = supported_profiles;
 }
 
 bool GpuVideoAcceleratorFactoriesImpl::CheckContextLost() {
@@ -192,42 +224,43 @@ int32_t GpuVideoAcceleratorFactoriesImpl::GetCommandBufferRouteId() {
   return context_provider_->GetCommandBufferProxy()->route_id();
 }
 
-bool GpuVideoAcceleratorFactoriesImpl::IsDecoderConfigSupported(
+media::GpuVideoAcceleratorFactories::Supported
+GpuVideoAcceleratorFactoriesImpl::IsDecoderConfigSupported(
     media::VideoDecoderImplementation implementation,
     const media::VideoDecoderConfig& config) {
   // There is no support for alpha channel hardware decoding yet.
   if (config.alpha_mode() == media::VideoDecoderConfig::AlphaMode::kHasAlpha) {
     DVLOG(1) << "Alpha transparency formats are not supported.";
-    return false;
+    return Supported::kFalse;
   }
 
-  base::AutoLock lock(supported_decoder_configs_lock_);
+  base::AutoLock lock(supported_profiles_lock_);
 
   // If GetSupportedConfigs() has not completed (or was never started), report
   // that all configs are supported. Clients will find out that configs are not
   // supported when VideoDecoder::Initialize() fails.
   if (!supported_decoder_configs_)
-    return true;
+    return Supported::kUnknown;
 
   auto iter = supported_decoder_configs_->find(implementation);
   // If the decoder implementation wasn't listed, then fail.  This means that
   // there is no such decoder implementation.
   if (iter == supported_decoder_configs_->end())
-    return false;
+    return Supported::kFalse;
 
   // Iterate over the supported configs for |impl|.
   for (const auto& supported : iter->second) {
     if (supported.Matches(config))
-      return true;
+      return Supported::kTrue;
   }
-  return false;
+  return Supported::kFalse;
 }
 
 std::unique_ptr<media::VideoDecoder>
 GpuVideoAcceleratorFactoriesImpl::CreateVideoDecoder(
     media::MediaLog* media_log,
     media::VideoDecoderImplementation implementation,
-    const media::RequestOverlayInfoCB& request_overlay_info_cb) {
+    media::RequestOverlayInfoCB request_overlay_info_cb) {
   DCHECK(video_accelerator_enabled_);
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK(interface_factory_.is_bound());
@@ -236,11 +269,12 @@ GpuVideoAcceleratorFactoriesImpl::CreateVideoDecoder(
   if (CheckContextLost())
     return nullptr;
 
-  media::mojom::VideoDecoderPtr video_decoder;
-  interface_factory_->CreateVideoDecoder(mojo::MakeRequest(&video_decoder));
+  mojo::PendingRemote<media::mojom::VideoDecoder> video_decoder;
+  interface_factory_->CreateVideoDecoder(
+      video_decoder.InitWithNewPipeAndPassReceiver());
   return std::make_unique<media::MojoVideoDecoder>(
       task_runner_, this, media_log, std::move(video_decoder), implementation,
-      request_overlay_info_cb, rendering_color_space_);
+      std::move(request_overlay_info_cb), rendering_color_space_);
 #else
   return nullptr;
 #endif  // BUILDFLAG(ENABLE_MOJO_VIDEO_DECODER)
@@ -254,18 +288,28 @@ GpuVideoAcceleratorFactoriesImpl::CreateVideoEncodeAccelerator() {
   if (CheckContextLost())
     return nullptr;
 
-  media::mojom::VideoEncodeAcceleratorPtr vea;
-  vea_provider_->CreateVideoEncodeAccelerator(mojo::MakeRequest(&vea));
+  base::AutoLock lock(supported_profiles_lock_);
+  // When |supported_vea_profiles_| is empty, no hw encoder is available or
+  // we have not yet gotten the supported profiles.
+  if (!supported_vea_profiles_) {
+    DVLOG(2) << "VEA's profiles have not yet been gotten";
+  } else if (supported_vea_profiles_->empty()) {
+    // There is no profile supported by VEA.
+    return nullptr;
+  }
+
+  mojo::PendingRemote<media::mojom::VideoEncodeAccelerator> vea;
+  vea_provider_->CreateVideoEncodeAccelerator(
+      vea.InitWithNewPipeAndPassReceiver());
 
   if (!vea)
     return nullptr;
 
   return std::unique_ptr<media::VideoEncodeAccelerator>(
       new media::MojoVideoEncodeAccelerator(
-          std::move(vea), context_provider_->GetCommandBufferProxy()
-                              ->channel()
-                              ->gpu_info()
-                              .video_encode_accelerator_supported_profiles));
+          std::move(vea),
+          supported_vea_profiles_.value_or(
+              media::VideoEncodeAccelerator::SupportedProfiles())));
 }
 
 std::unique_ptr<gfx::GpuMemoryBuffer>
@@ -309,6 +353,7 @@ GpuVideoAcceleratorFactoriesImpl::VideoFrameOutputFormat(
   auto capabilities = context_provider_->ContextCapabilities();
   const size_t bit_depth = media::BitDepth(pixel_format);
   if (bit_depth > 8) {
+#if !defined(OS_MACOSX)
     // If high bit depth rendering is enabled, bail here, otherwise try and use
     // XR30 storage, and if not and we support RG textures, use those, albeit at
     // a reduced bit depth of 8 bits per component.
@@ -316,15 +361,16 @@ GpuVideoAcceleratorFactoriesImpl::VideoFrameOutputFormat(
     // long as the hardware may support it https://crbug.com/798485.
     if (rendering_color_space_.IsHDR())
       return media::GpuVideoAcceleratorFactories::OutputFormat::UNDEFINED;
+#endif
 
 #if !defined(OS_WIN)
     // TODO(mcasas): enable Win https://crbug.com/803451.
     // TODO(mcasas): remove the |bit_depth| check when libyuv supports more than
     // just x010ToAR30 conversions, https://crbug.com/libyuv/751.
     if (bit_depth == 10) {
-      if (capabilities.image_xr30)
+      if (capabilities.image_ar30)
         return media::GpuVideoAcceleratorFactories::OutputFormat::XR30;
-      else if (capabilities.image_xb30)
+      else if (capabilities.image_ab30)
         return media::GpuVideoAcceleratorFactories::OutputFormat::XB30;
     }
 #endif
@@ -361,20 +407,11 @@ GpuVideoAcceleratorFactoriesImpl::GpuMemoryBufferManager() {
   return gpu_memory_buffer_manager_;
 }
 
-std::unique_ptr<base::SharedMemory>
-GpuVideoAcceleratorFactoriesImpl::CreateSharedMemory(size_t size) {
-  std::unique_ptr<base::SharedMemory> mem(
-      ChildThreadImpl::AllocateSharedMemory(size));
-  if (mem && !mem->Map(size))
-    return nullptr;
-  return mem;
-}
-
 base::UnsafeSharedMemoryRegion
 GpuVideoAcceleratorFactoriesImpl::CreateSharedMemoryRegion(size_t size) {
   // If necessary, this call will make a synchronous request to a privileged
   // process to create the shared region.
-  return mojo::CreateUnsafeSharedMemoryRegion(size);
+  return base::UnsafeSharedMemoryRegion::Create(size);
 }
 
 scoped_refptr<base::SingleThreadTaskRunner>
@@ -382,16 +419,15 @@ GpuVideoAcceleratorFactoriesImpl::GetTaskRunner() {
   return task_runner_;
 }
 
-media::VideoEncodeAccelerator::SupportedProfiles
+base::Optional<media::VideoEncodeAccelerator::SupportedProfiles>
 GpuVideoAcceleratorFactoriesImpl::GetVideoEncodeAcceleratorSupportedProfiles() {
-  return media::GpuVideoAcceleratorUtil::ConvertGpuToMediaEncodeProfiles(
-      gpu_channel_host_->gpu_info()
-          .video_encode_accelerator_supported_profiles);
+  base::AutoLock lock(supported_profiles_lock_);
+  return supported_vea_profiles_;
 }
 
-scoped_refptr<viz::ContextProvider>
+viz::RasterContextProvider*
 GpuVideoAcceleratorFactoriesImpl::GetMediaContextProvider() {
-  return CheckContextLost() ? nullptr : context_provider_;
+  return CheckContextLost() ? nullptr : context_provider_.get();
 }
 
 void GpuVideoAcceleratorFactoriesImpl::SetRenderingColorSpace(

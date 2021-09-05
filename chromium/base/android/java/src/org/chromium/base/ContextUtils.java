@@ -14,6 +14,7 @@ import android.os.Process;
 import android.preference.PreferenceManager;
 
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.MainDex;
@@ -72,6 +73,7 @@ public class ContextUtils {
      *
      * @return The application-wide shared preferences.
      */
+    @SuppressWarnings("DefaultSharedPreferencesCheck")
     private static SharedPreferences fetchAppSharedPreferences() {
         return PreferenceManager.getDefaultSharedPreferences(sApplicationContext);
     }

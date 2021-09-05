@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "gpu/ipc/service/gpu_channel.h"
+#include "base/memory/ptr_util.h"
 
 #include <utility>
 
@@ -739,7 +740,8 @@ void GpuChannel::OnCreateCommandBuffer(
     stub = std::make_unique<WebGPUCommandBufferStub>(
         this, init_params, command_buffer_id, sequence_id, stream_id, route_id);
   } else if (init_params.attribs.enable_raster_interface &&
-             !init_params.attribs.enable_gles2_interface) {
+             !init_params.attribs.enable_gles2_interface &&
+             !init_params.attribs.enable_grcontext) {
     stub = std::make_unique<RasterCommandBufferStub>(
         this, init_params, command_buffer_id, sequence_id, stream_id, route_id);
   } else {

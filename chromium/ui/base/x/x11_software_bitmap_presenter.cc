@@ -12,21 +12,17 @@
 #include <memory>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/macros.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
 #include "third_party/skia/include/core/SkSurface.h"
+#include "ui/base/x/x11_shm_image_pool.h"
 #include "ui/base/x/x11_util.h"
 #include "ui/base/x/x11_util_internal.h"
 #include "ui/gfx/x/x11.h"
 #include "ui/gfx/x/x11_error_tracker.h"
 #include "ui/gfx/x/x11_types.h"
-
-#if defined(USE_OZONE)
-#include "ui/base/x/x11_shm_image_pool_ozone.h"
-#else
-#include "ui/base/x/x11_shm_image_pool.h"
-#endif
 
 namespace ui {
 
@@ -117,15 +113,18 @@ bool X11SoftwareBitmapPresenter::CompositeBitmap(XDisplay* display,
 
   XPutImage(display, widget, gc, bg.get(), x, y, x, y, width, height);
 
-  XFlush(display);
   return true;
 }
 
 X11SoftwareBitmapPresenter::X11SoftwareBitmapPresenter(
     gfx::AcceleratedWidget widget,
-    base::TaskRunner* host_task_runner,
-    base::TaskRunner* event_task_runner)
-    : widget_(widget), display_(gfx::GetXDisplay()), gc_(nullptr) {
+    scoped_refptr<base::SequencedTaskRunner> host_task_runner,
+    scoped_refptr<base::SequencedTaskRunner> event_task_runner)
+    : widget_(widget),
+      display_(gfx::GetXDisplay()),
+      gc_(nullptr),
+      host_task_runner_(host_task_runner),
+      event_task_runner_(event_task_runner) {
   DCHECK_NE(widget_, gfx::kNullAcceleratedWidget);
   gc_ = XCreateGC(display_, widget_, 0, nullptr);
   memset(&attributes_, 0, sizeof(attributes_));
@@ -134,15 +133,9 @@ X11SoftwareBitmapPresenter::X11SoftwareBitmapPresenter(
     return;
   }
 
-#if defined(USE_OZONE)
-  shm_pool_ = base::MakeRefCounted<ui::X11ShmImagePoolOzone>(
+  shm_pool_ = base::MakeRefCounted<ui::XShmImagePool>(
       host_task_runner, event_task_runner, display_, widget_,
       attributes_.visual, attributes_.depth, kMaxFramesPending);
-#else
-  shm_pool_ = base::MakeRefCounted<ui::X11ShmImagePool>(
-      host_task_runner, event_task_runner, display_, widget_,
-      attributes_.visual, attributes_.depth, kMaxFramesPending);
-#endif
   shm_pool_->Initialize();
 
   // TODO(thomasanderson): Avoid going through the X11 server to plumb this
@@ -162,7 +155,32 @@ bool X11SoftwareBitmapPresenter::ShmPoolReady() const {
   return shm_pool_ && shm_pool_->Ready();
 }
 
-bool X11SoftwareBitmapPresenter::Resize(const gfx::Size& pixel_size) {
+void X11SoftwareBitmapPresenter::FlushAfterPutImage() {
+  // Ensure the new window content appears immediately. On a TYPE_UI thread we
+  // can rely on the message loop to flush for us so XFlush() isn't necessary.
+  // However, this code can run on a different thread and would have to wait for
+  // the TYPE_UI thread to no longer be idle before a flush happens.
+  XFlush(display_);
+
+  // Work around a race condition caused by XFlush above.  Explanation: XFlush()
+  // flushes all requests and *also* reads events.  It's unclear why it does
+  // this, but there's no alternative Xlib function that flushes the requests
+  // and *doesn't* read any events, so this workaround is necessary. In
+  // |event_task_runner_|'s message loop, poll() is called on the underlying
+  // XDisplay's fd to dispatch toplevel events.  When the fd is readable, poll()
+  // exits and we (via Xlib) check for new events by read()ing from the fd.  But
+  // if the event dispatcher is currently dispatching an event, then our call to
+  // XFlush() may read events into the event queue which will make the fd
+  // blocking since there's no more data to read, so poll() won't wake up until
+  // a new event comes, which may take a long time.  Forcing the event loop to
+  // wake up with a dummy event fixes the race condition.
+  if (event_task_runner_)
+    event_task_runner_->PostTask(FROM_HERE, base::BindOnce([] {}));
+}
+
+void X11SoftwareBitmapPresenter::Resize(const gfx::Size& pixel_size) {
+  if (pixel_size == viewport_pixel_size_)
+    return;
   viewport_pixel_size_ = pixel_size;
   // Fallback to the non-shm codepath when |composite_| is true, which only
   // happens for status icon windows that are typically 16x16px.  It's possible
@@ -170,19 +188,27 @@ bool X11SoftwareBitmapPresenter::Resize(const gfx::Size& pixel_size) {
   // affect windows that are tiny and infrequently updated.
   if (!composite_ && shm_pool_ && shm_pool_->Resize(pixel_size)) {
     needs_swap_ = false;
-    return true;
+    surface_ = nullptr;
+  } else {
+    SkColorType color_type = ColorTypeForVisual(attributes_.visual);
+    if (color_type == kUnknown_SkColorType)
+      return;
+    SkImageInfo info = SkImageInfo::Make(viewport_pixel_size_.width(),
+                                         viewport_pixel_size_.height(),
+                                         color_type, kOpaque_SkAlphaType);
+    surface_ = SkSurface::MakeRaster(info);
   }
-  return false;
 }
 
 SkCanvas* X11SoftwareBitmapPresenter::GetSkCanvas() {
   if (ShmPoolReady())
     return shm_pool_->CurrentCanvas();
+  else if (surface_)
+    return surface_->getCanvas();
   return nullptr;
 }
 
-void X11SoftwareBitmapPresenter::EndPaint(sk_sp<SkSurface> sk_surface,
-                                          const gfx::Rect& damage_rect) {
+void X11SoftwareBitmapPresenter::EndPaint(const gfx::Rect& damage_rect) {
   gfx::Rect rect = damage_rect;
   rect.Intersect(gfx::Rect(viewport_pixel_size_));
   if (rect.IsEmpty())
@@ -191,104 +217,65 @@ void X11SoftwareBitmapPresenter::EndPaint(sk_sp<SkSurface> sk_surface,
   SkPixmap skia_pixmap;
 
   if (ShmPoolReady()) {
-    DCHECK(!sk_surface);
     // TODO(thomasanderson): Investigate direct rendering with DRI3 to avoid any
     // unnecessary X11 IPC or buffer copying.
     if (XShmPutImage(display_, widget_, gc_, shm_pool_->CurrentImage(),
                      rect.x(), rect.y(), rect.x(), rect.y(), rect.width(),
                      rect.height(), x11::True)) {
       needs_swap_ = true;
-      XFlush(display_);
+      FlushAfterPutImage();
       return;
     }
     skia_pixmap = shm_pool_->CurrentBitmap().pixmap();
-  } else {
-    DCHECK(sk_surface);
-    sk_surface->peekPixels(&skia_pixmap);
+  } else if (surface_) {
+    surface_->peekPixels(&skia_pixmap);
   }
 
   if (composite_ &&
       CompositeBitmap(display_, widget_, rect.x(), rect.y(), rect.width(),
                       rect.height(), attributes_.depth, gc_,
                       skia_pixmap.addr())) {
+    FlushAfterPutImage();
     return;
   }
 
-  int bpp = gfx::BitsPerPixelForPixmapDepth(display_, attributes_.depth);
+  XImage image = {};
+  image.width = viewport_pixel_size_.width();
+  image.height = viewport_pixel_size_.height();
+  image.format = ZPixmap;
+  image.byte_order = LSBFirst;
+  image.bitmap_unit = 8;
+  image.bitmap_bit_order = LSBFirst;
+  image.depth = attributes_.depth;
 
-  if (bpp != 32 && bpp != 16 && ui::QueryRenderSupport(display_)) {
-    // gfx::PutARGBImage only supports 16 and 32 bpp, but Xrender can do other
-    // conversions.
-    Pixmap pixmap =
-        XCreatePixmap(display_, widget_, rect.width(), rect.height(), 32);
-    GC gc = XCreateGC(display_, pixmap, 0, nullptr);
-    XImage image;
-    memset(&image, 0, sizeof(image));
+  image.bits_per_pixel = attributes_.visual->bits_per_rgb;
+  image.bits_per_pixel = skia_pixmap.info().bytesPerPixel() * 8;
 
-    image.width = viewport_pixel_size_.width();
-    image.height = viewport_pixel_size_.height();
-    image.depth = 32;
-    image.bits_per_pixel = 32;
-    image.format = ZPixmap;
-    image.byte_order = LSBFirst;
-    image.bitmap_unit = 8;
-    image.bitmap_bit_order = LSBFirst;
-    image.bytes_per_line = skia_pixmap.rowBytes();
-    image.red_mask = 0xff;
-    image.green_mask = 0xff00;
-    image.blue_mask = 0xff0000;
-    image.data =
-        const_cast<char*>(static_cast<const char*>(skia_pixmap.addr()));
+  image.bytes_per_line = skia_pixmap.rowBytes();
+  image.red_mask = attributes_.visual->red_mask;
+  image.green_mask = attributes_.visual->green_mask;
+  image.blue_mask = attributes_.visual->blue_mask;
 
-    XPutImage(display_, pixmap, gc, &image, rect.x(),
-              rect.y() /* source x, y */, 0, 0 /* dest x, y */, rect.width(),
-              rect.height());
-    XFreeGC(display_, gc);
-    Picture picture = XRenderCreatePicture(
-        display_, pixmap, ui::GetRenderARGB32Format(display_), 0, nullptr);
-    XRenderPictFormat* pictformat =
-        XRenderFindVisualFormat(display_, attributes_.visual);
-    Picture dest_picture =
-        XRenderCreatePicture(display_, widget_, pictformat, 0, nullptr);
-    XRenderComposite(display_,
-                     PictOpSrc,       // op
-                     picture,         // src
-                     0,               // mask
-                     dest_picture,    // dest
-                     0,               // src_x
-                     0,               // src_y
-                     0,               // mask_x
-                     0,               // mask_y
-                     rect.x(),        // dest_x
-                     rect.y(),        // dest_y
-                     rect.width(),    // width
-                     rect.height());  // height
-    XRenderFreePicture(display_, picture);
-    XRenderFreePicture(display_, dest_picture);
-    XFreePixmap(display_, pixmap);
-  } else {
-    gfx::PutARGBImage(display_, attributes_.visual, attributes_.depth, widget_,
-                      gc_, static_cast<const uint8_t*>(skia_pixmap.addr()),
-                      viewport_pixel_size_.width(),
-                      viewport_pixel_size_.height(), rect.x(), rect.y(),
-                      rect.x(), rect.y(), rect.width(), rect.height());
-  }
+  image.data = reinterpret_cast<char*>(const_cast<void*>(skia_pixmap.addr()));
+  XPutImage(display_, widget_, gc_, &image, rect.x(), rect.y(), rect.x(),
+            rect.y(), rect.width(), rect.height());
 
-  // Ensure the new window content appears immediately. On a TYPE_UI thread we
-  // can rely on the message loop to flush for us so XFlush() isn't necessary.
-  // However, this code can run on a different thread and would have to wait for
-  // the TYPE_UI thread to no longer be idle before a flush happens.
-  XFlush(display_);
+  FlushAfterPutImage();
 }
 
 void X11SoftwareBitmapPresenter::OnSwapBuffers(
     SwapBuffersCallback swap_ack_callback) {
-  DCHECK(ShmPoolReady());
-  if (needs_swap_)
-    shm_pool_->SwapBuffers(std::move(swap_ack_callback));
-  else
-    std::move(swap_ack_callback).Run(viewport_pixel_size_);
-  needs_swap_ = false;
+  if (ShmPoolReady()) {
+    if (needs_swap_)
+      shm_pool_->SwapBuffers(std::move(swap_ack_callback));
+    else
+      std::move(swap_ack_callback).Run(viewport_pixel_size_);
+    needs_swap_ = false;
+  } else {
+    host_task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(std::move(swap_ack_callback), viewport_pixel_size_));
+  }
 }
 
 int X11SoftwareBitmapPresenter::MaxFramesPending() const {

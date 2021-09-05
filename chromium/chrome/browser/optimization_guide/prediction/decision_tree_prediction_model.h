@@ -21,16 +21,16 @@ namespace optimization_guide {
 // supported by the optimization guide.
 class DecisionTreePredictionModel : public PredictionModel {
  public:
-  DecisionTreePredictionModel(
+  explicit DecisionTreePredictionModel(
       std::unique_ptr<optimization_guide::proto::PredictionModel>
-          prediction_model,
-      const base::flat_set<std::string>& host_model_features);
+          prediction_model);
 
   ~DecisionTreePredictionModel() override;
 
   // PredictionModel implementation:
   optimization_guide::OptimizationTargetDecision Predict(
-      const base::flat_map<std::string, float>& model_features) override;
+      const base::flat_map<std::string, float>& model_features,
+      double* prediction_score) override;
 
  private:
   // Evaluates the provided model, either an ensemble or decision tree model,

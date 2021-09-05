@@ -15,7 +15,10 @@
 #include "base/callback.h"
 #include "base/callback_helpers.h"
 #include "base/files/file_path.h"
+#include "base/logging.h"
 #include "base/macros.h"
+#include "base/process/launch.h"
+#include "base/process/process.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "base/synchronization/lock.h"
@@ -41,7 +44,7 @@
 #include "components/policy/core/common/mock_configuration_policy_provider.h"
 #include "components/policy/policy_constants.h"
 #include "components/prefs/pref_service.h"
-#include "components/safe_browsing/common/safe_browsing_prefs.h"
+#include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -184,7 +187,7 @@ using ReporterRunnerTestParams =
 
 class ReporterRunnerTest
     : public InProcessBrowserTest,
-      public SwReporterTestingDelegate,
+      public internal::SwReporterTestingDelegate,
       public ::testing::WithParamInterface<ReporterRunnerTestParams> {
  public:
   ReporterRunnerTest() {
@@ -193,7 +196,7 @@ class ReporterRunnerTest
   }
 
   void SetUpInProcessBrowserTestFixture() override {
-    SetSwReporterTestingDelegate(this);
+    internal::SetSwReporterTestingDelegate(this);
     EXPECT_CALL(policy_provider_, IsInitializationComplete(_))
         .WillRepeatedly(Return(true));
     policy::BrowserPolicyConnector::SetPolicyProviderForTesting(
@@ -236,16 +239,25 @@ class ReporterRunnerTest
   }
 
   void TearDownInProcessBrowserTestFixture() override {
-    SetSwReporterTestingDelegate(nullptr);
+    internal::SetSwReporterTestingDelegate(nullptr);
   }
 
   // Records that the reporter was launched with the parameters given in
   // |invocation|.
-  int LaunchReporter(const SwReporterInvocation& invocation) override {
+  base::Process LaunchReporterProcess(
+      const SwReporterInvocation& invocation,
+      const base::LaunchOptions& options) override {
+    ANALYZER_ALLOW_UNUSED(options);
     ++reporter_launch_count_;
     reporter_launch_parameters_.push_back(invocation);
     if (first_launch_callback_)
       std::move(first_launch_callback_).Run();
+    // Need to return a valid process so the launch continues.
+    return base::Process::Current();
+  }
+
+  int WaitForReporterExit(const base::Process& reporter_process) const {
+    ANALYZER_ALLOW_UNUSED(reporter_process);
     return exit_code_to_report_;
   }
 
@@ -817,13 +829,13 @@ IN_PROC_BROWSER_TEST_P(ReporterRunnerTest, ReporterLogging_MultipleLaunches) {
     first_launch_callback_ = base::BindOnce(
         &ReporterRunnerTest::
             FutureExpectNoReporterLoggingWithLastTimeSentReportSet,
-        base::Unretained(this), base::Passed(&get_first_invocation),
+        base::Unretained(this), std::move(get_first_invocation),
         last_time_sent_logs);
   } else {
     bool expect_logging = ExpectLogging(true);
     first_launch_callback_ = base::BindOnce(
         &ReporterRunnerTest::FutureExpectReporterLoggingHappenedInTheLastHour,
-        base::Unretained(this), base::Passed(&get_first_invocation),
+        base::Unretained(this), std::move(get_first_invocation),
         expect_logging);
   }
 

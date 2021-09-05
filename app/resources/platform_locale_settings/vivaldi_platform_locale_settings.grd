@@ -2,27 +2,29 @@
 <grit base_dir="." latest_public_release="0" current_release="1"
       source_lang_id="en" enc_check="möl">
   <outputs>
-    <output filename="platform_locale_settings_af.pak" type="data_package" lang="af" />
-    <output filename="platform_locale_settings_be.pak" type="data_package" lang="be" />
     <output filename="platform_locale_settings_de-CH.pak" type="data_package" lang="de-CH" />
     <output filename="platform_locale_settings_eo.pak" type="data_package" lang="eo" />
     <output filename="platform_locale_settings_es-PE.pak" type="data_package" lang="es-PE" />
-    <output filename="platform_locale_settings_eu.pak" type="data_package" lang="eu" />
     <output filename="platform_locale_settings_fy.pak" type="data_package" lang="fy" />
     <output filename="platform_locale_settings_gd.pak" type="data_package" lang="gd" />
-    <output filename="platform_locale_settings_gl.pak" type="data_package" lang="gl" />
-    <output filename="platform_locale_settings_hy.pak" type="data_package" lang="hy" />
     <output filename="platform_locale_settings_io.pak" type="data_package" lang="io" />
-    <output filename="platform_locale_settings_is.pak" type="data_package" lang="is" />
     <output filename="platform_locale_settings_ja-KS.pak" type="data_package" lang="ja-KS" />
     <output filename="platform_locale_settings_jbo.pak" type="data_package" lang="jbo" />
-    <output filename="platform_locale_settings_ka.pak" type="data_package" lang="ka" />
     <output filename="platform_locale_settings_ku.pak" type="data_package" lang="ku" />
-    <output filename="platform_locale_settings_mk.pak" type="data_package" lang="mk" />
     <output filename="platform_locale_settings_sc.pak" type="data_package" lang="sc" />
-    <output filename="platform_locale_settings_sq.pak" type="data_package" lang="sq" />
     <output filename="platform_locale_settings_nn.pak" type="data_package" lang="nn" />
-  </outputs>
+    <if expr="not is_android">
+      <output filename="platform_locale_settings_af.pak" type="data_package" lang="af" />
+      <output filename="platform_locale_settings_be.pak" type="data_package" lang="be" />
+      <output filename="platform_locale_settings_eu.pak" type="data_package" lang="eu" />
+      <output filename="platform_locale_settings_gl.pak" type="data_package" lang="gl" />
+      <output filename="platform_locale_settings_hy.pak" type="data_package" lang="hy" />
+      <output filename="platform_locale_settings_is.pak" type="data_package" lang="is" />
+      <output filename="platform_locale_settings_ka.pak" type="data_package" lang="ka" />
+      <output filename="platform_locale_settings_mk.pak" type="data_package" lang="mk" />
+      <output filename="platform_locale_settings_sq.pak" type="data_package" lang="sq" />
+    </if>
+</outputs>
   <translations>
     <file path="strings/vivaldi_platform_locale_settings_am.xtb" lang="am" />
     <file path="strings/vivaldi_platform_locale_settings_ar.xtb" lang="ar" />
@@ -96,6 +98,24 @@
     <file path="strings/vivaldi_platform_locale_settings_sc.xtb" lang="sc" />
     <file path="strings/vivaldi_platform_locale_settings_sq.xtb" lang="sq" />
     <file path="strings/vivaldi_platform_locale_settings_nn.xtb" lang="nn" />
+    <file path="strings/vivaldi_platform_locale_settings_as.xtb" lang="as" />
+    <file path="strings/vivaldi_platform_locale_settings_az.xtb" lang="az" />
+    <file path="strings/vivaldi_platform_locale_settings_bs.xtb" lang="bs" />
+    <file path="strings/vivaldi_platform_locale_settings_fr-CA.xtb" lang="fr-CA" />
+    <file path="strings/vivaldi_platform_locale_settings_kk.xtb" lang="kk" />
+    <file path="strings/vivaldi_platform_locale_settings_km.xtb" lang="km" />
+    <file path="strings/vivaldi_platform_locale_settings_ky.xtb" lang="ky" />
+    <file path="strings/vivaldi_platform_locale_settings_lo.xtb" lang="lo" />
+    <file path="strings/vivaldi_platform_locale_settings_mn.xtb" lang="mn" />
+    <file path="strings/vivaldi_platform_locale_settings_my.xtb" lang="my" />
+    <file path="strings/vivaldi_platform_locale_settings_ne.xtb" lang="ne" />
+    <file path="strings/vivaldi_platform_locale_settings_or.xtb" lang="or" />
+    <file path="strings/vivaldi_platform_locale_settings_pa.xtb" lang="pa" />
+    <file path="strings/vivaldi_platform_locale_settings_si.xtb" lang="si" />
+    <file path="strings/vivaldi_platform_locale_settings_ur.xtb" lang="ur" />
+    <file path="strings/vivaldi_platform_locale_settings_uz.xtb" lang="uz" />
+    <file path="strings/vivaldi_platform_locale_settings_zh-HK.xtb" lang="zh-HK" />
+    <file path="strings/vivaldi_platform_locale_settings_zu.xtb" lang="zu" />
   </translations>
   <release seq="1" allow_pseudo="false">
     <messages fallback_to_english="true">

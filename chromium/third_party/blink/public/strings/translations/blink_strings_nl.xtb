@@ -4,6 +4,7 @@
 <translation id="1018939186200882850">menu-item</translation>
 <translation id="10623998915015855">schakelknop</translation>
 <translation id="1088086359088493902">Seconden</translation>
+<translation id="1142001580032786438">Weekkiezer weergeven</translation>
 <translation id="1171774979989969504">Geef een e-mailadres op.</translation>
 <translation id="1178581264944972037">Onderbreken</translation>
 <translation id="1188858454923323853">aanvullend</translation>
@@ -11,6 +12,7 @@
 <translation id="1206693055195146388">schuifregelaar</translation>
 <translation id="1211441953136645838">eindnoot</translation>
 <translation id="1281252709823657822">dialoogvenster</translation>
+<translation id="1306460908038601864">Uit</translation>
 <translation id="1335095011850992622">bronvermelding</translation>
 <translation id="1342835525016946179">artikel</translation>
 <translation id="1359897965706325498">banner</translation>
@@ -21,6 +23,7 @@
 <translation id="1727886345390570319">ondertitelingsmenu verbergen</translation>
 <translation id="1729654308190250600">Geef een e-mailadres op.</translation>
 <translation id="1758486001363313524">Anders...</translation>
+<translation id="1787192514241997742">totale tijd: <ph name="REMAINING_TIME" /></translation>
 <translation id="1806710327868736751">dialoogvenster voor meldingen</translation>
 <translation id="1821985195704844674">boomstructuur</translation>
 <translation id="1822429046913737220">a.m./p.m.</translation>
@@ -54,7 +57,6 @@
 <translation id="2674318244760992338">voettekst</translation>
 <translation id="2709516037105925701">Automatisch aanvullen</translation>
 <translation id="2723001399770238859">audio</translation>
-<translation id="2725963129578236554">reacties</translation>
 <translation id="2746543609216772311">Waarde moet <ph name="MINIMUM_DATE_OR_TIME" /> of later zijn.</translation>
 <translation id="2759744352195237655">pop-upknop</translation>
 <translation id="2761667185364618470">Vink dit selectievakje aan als je wilt doorgaan.</translation>
@@ -83,7 +85,6 @@
 <translation id="3822383571486410024">Breid deze tekst uit tot <ph name="MIN_CHARACTERS" /> tekens of meer (je gebruikt momenteel <ph name="CURRENT_LENGTH" /> tekens).</translation>
 <translation id="383465348367842624">Het naamgedeelte vóór '<ph name="ATSIGN" />' mag niet het teken '<ph name="INVALIDCHARACTER" />' bevatten.</translation>
 <translation id="3846214748874656680">Volledig scherm sluiten</translation>
-<translation id="3889183436948184105">revisie</translation>
 <translation id="3920932319529768807">conclusie</translation>
 <translation id="3924558731517983934">app</translation>
 <translation id="3944740393230681990">proloog</translation>
@@ -101,11 +102,11 @@
 <translation id="4444765639179266822">Lijkt het volgende te zeggen: <ph name="OCR_TEXT" /></translation>
 <translation id="4446524499724042288">woordenlijstreferentie</translation>
 <translation id="4522570452068850558">Details</translation>
-<translation id="4542388879936266156">resterende tijd: <ph name="REMAINING_TIME" /></translation>
 <translation id="4597532268155981612">formulier</translation>
 <translation id="4661075872484491155">structuur</translation>
 <translation id="4664250907885839816">Het adresgedeelte na '<ph name="ATSIGN" />' mag niet het teken '<ph name="INVALIDCHARACTER" />' bevatten.</translation>
 <translation id="4668956016107839909">bijlage</translation>
+<translation id="4698212723196775569">code</translation>
 <translation id="4718048029184481307">Beeld-in-beeld afspelen</translation>
 <translation id="4742539557769756338">omslag</translation>
 <translation id="4748357248530471599">volledig scherm met display-cutout schakelen</translation>
@@ -114,9 +115,14 @@
 <translation id="479989351350248267">zoeken</translation>
 <translation id="4812940957355064477">Voer een getal in.</translation>
 <translation id="4912536737030637138">bibliografievermelding</translation>
+<translation id="4915360478455618802">Tijdkiezer weergeven</translation>
+<translation id="492244087561876220">reactie</translation>
+<translation id="4950364064308314478">Kiezer voor lokale datum en tijd weergeven</translation>
+<translation id="4971739861736909480"><ph name="ACCNAME" /> geselecteerd</translation>
 <translation id="4975562563186953947"><ph name="SELECTED_COUNT" /> geselecteerd</translation>
 <translation id="4992066212339426712">Dempen opheffen</translation>
 <translation id="49969490063480558">Geef een adresgedeelte op na '<ph name="ATSIGN" />'. '<ph name="INVALIDADDRESS" />' is onvolledig.</translation>
+<translation id="5022314756875057021">rijgroep</translation>
 <translation id="5034860022980953847">voortgangsindicator</translation>
 <translation id="5090250355906949916">scrollbar met tijd van de video</translation>
 <translation id="5093189678851173835">epigraaf</translation>
@@ -127,6 +133,7 @@
 <translation id="520299402983819650"><ph name="QUANTITY" /> PB</translation>
 <translation id="5307600278924710095">Geef een naamgedeelte op, gevolgd door '<ph name="ATSIGN" />'. '<ph name="INVALIDADDRESS" />' is onvolledig.</translation>
 <translation id="5334352251556557839">Kan media niet afspelen.</translation>
+<translation id="537648784377940524">De minimum datum (<ph name="MIN_DATE_OR_TIME" />) moet voor de maximum datum (<ph name="MAX_DATE_OR_TIME" />) liggen.</translation>
 <translation id="5406322316791861025">figuur</translation>
 <translation id="5453733299334684579">item in boomstructuur</translation>
 <translation id="5466621249238537318">Selecteer een of meer bestanden.</translation>
@@ -142,7 +149,6 @@
 <translation id="5677946354068040947">meer opties</translation>
 <translation id="576709008726043716">inleiding</translation>
 <translation id="57838592816432529">Dempen</translation>
-<translation id="5860033963881614850">Uit</translation>
 <translation id="588258955323874662">Volledig scherm</translation>
 <translation id="5888666972993069672">Wordt nu gecast naar <ph name="DEVICE_FRIENDLY_NAME" /></translation>
 <translation id="591047860372322273">zoekvak</translation>
@@ -163,7 +169,6 @@
 <translation id="6404546809543547843">scrollbar met audiotijd</translation>
 <translation id="6443871981718447451">ondertitelingsmenu weergeven</translation>
 <translation id="6453774872122745852">dankwoord</translation>
-<translation id="6475115390776617481">live aanwezigheid</translation>
 <translation id="648732519525291180">tijdkiezer</translation>
 <translation id="6550675742724504774">Opties</translation>
 <translation id="6572309429103589720">Ongeldige grammatica</translation>
@@ -191,6 +196,7 @@
 <translation id="7118469954320184356">Geen beschrijving beschikbaar.</translation>
 <translation id="7139483182332611405">voorwoord</translation>
 <translation id="7214187073215825913">Gegevens over de content</translation>
+<translation id="7238347055216017155">nadruk</translation>
 <translation id="7263440858009898357">Selecteer een item in de lijst.</translation>
 <translation id="727747134524199931">kolomkop</translation>
 <translation id="7320576522385648310">bufferen</translation>
@@ -217,6 +223,8 @@
 <translation id="7888071071722539607">Gebruik een '<ph name="ATSIGN" />' in het e-mailadres. In '<ph name="INVALIDADDRESS" />' ontbreekt een '<ph name="ATSIGN" />'.</translation>
 <translation id="7891486169920085145">splitser</translation>
 <translation id="795667975304826397">Geen bestand gekozen</translation>
+<translation id="7962328325860248200"><ph name="ACCNAME" /> niet geselecteerd</translation>
+<translation id="8034303206267677282">sterk</translation>
 <translation id="8053789581856978548">zoektekstveld</translation>
 <translation id="8057695513531652401">kennisgeving</translation>
 <translation id="8105797009065549151">opmerkingsreferentie</translation>
@@ -228,6 +236,7 @@
 <translation id="8284326494547611709">Ondertiteling</translation>
 <translation id="8346634859695247203">sectie</translation>
 <translation id="835897206747267392">Ongeldige waarde.</translation>
+<translation id="839593075537728968">Waarde moet tussen <ph name="MINIMUM_TIME" /> en <ph name="MAXIMUM_TIME" /> liggen.</translation>
 <translation id="8403857369060869934">verstreken tijd: <ph name="ELAPSED_TIME" /></translation>
 <translation id="8415319359811155763">deel</translation>
 <translation id="8433900881053900389">werkbalk</translation>
@@ -244,10 +253,10 @@
 <translation id="860475260694818407">inhoudsopgave</translation>
 <translation id="8613126697340063924">afspelen bedienen op afstand</translation>
 <translation id="862370744433916922">ondertitel</translation>
+<translation id="8634971699417195529">Maandkiezer weergeven</translation>
 <translation id="8711688047404765493">uitvoer</translation>
 <translation id="8750798805984357768">Selecteer een van deze opties.</translation>
 <translation id="8808573423886751634">hoofdstuk</translation>
-<translation id="8822203815165896261">informatie over auteur</translation>
 <translation id="8845239796550121995">Wordt nu gecast naar je tv</translation>
 <translation id="8851136666856101339">hoofd</translation>
 <translation id="8875657656876809964">Fout bij afspelen video</translation>

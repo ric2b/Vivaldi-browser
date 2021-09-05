@@ -39,12 +39,6 @@ namespace content {
 class WebUI;
 }
 
-namespace identity {
-namespace mojom {
-class IdentityService;
-}  // namespace mojom
-}  // namespace identity
-
 namespace policy {
 class SchemaRegistryService;
 class ProfilePolicyConnector;
@@ -64,7 +58,6 @@ namespace user_prefs {
 class PrefRegistrySyncable;
 }
 
-class OffTheRecordProfileIOData;
 class ProfileObserver;
 
 // Instead of adding more members to Profile, consider creating a
@@ -157,6 +150,8 @@ class Profile : public content::BrowserContext {
   // Note that for Chrome this covers BOTH Incognito mode and Guest sessions.
   bool IsOffTheRecord() override = 0;
   virtual bool IsOffTheRecord() const = 0;
+
+  variations::VariationsClient* GetVariationsClient() override;
 
   // Returns the creation time of this profile. This will either be the creation
   // time of the profile directory or, for ephemeral off-the-record profiles,
@@ -352,6 +347,8 @@ class Profile : public content::BrowserContext {
   // Returns whether it is a system profile.
   virtual bool IsSystemProfile() const;
 
+  bool CanUseDiskWhenOffTheRecord() override;
+
   // Did the user restore the last session? This is set by SessionRestore.
   void set_restored_last_session(bool restored_last_session) {
     restored_last_session_ = restored_last_session;
@@ -384,10 +381,6 @@ class Profile : public content::BrowserContext {
       bool in_memory,
       const base::FilePath& relative_partition_path);
 
-  // Exposes access to the profile's Identity Service instance. This may return
-  // null if the profile does not have a corresponding service instance.
-  virtual identity::mojom::IdentityService* GetIdentityService();
-
   // Stop sending accessibility events until ResumeAccessibilityEvents().
   // Calls to Pause nest; no events will be sent until the number of
   // Resume calls matches the number of Pause calls received.
@@ -408,10 +401,6 @@ class Profile : public content::BrowserContext {
   // not been shut down since the profile was created.
   // This method is virtual in order to be overridden for tests.
   virtual bool IsNewProfile();
-
-  // Checks whether sync is configurable by the user. Returns false if sync is
-  // disallowed by the command line or controlled by configuration management.
-  bool IsSyncAllowed();
 
   // Send NOTIFICATION_PROFILE_DESTROYED for this Profile, if it has not
   // already been sent. It is necessary because most Profiles are destroyed by
@@ -435,8 +424,6 @@ class Profile : public content::BrowserContext {
   virtual void SetCreationTimeForTesting(base::Time creation_time) = 0;
 
  protected:
-  friend class OffTheRecordProfileIOData;
-
   // Returns the profile type.
   virtual ProfileType GetProfileType() const = 0;
 
@@ -453,9 +440,9 @@ class Profile : public content::BrowserContext {
   static PrefStore* CreateExtensionPrefStore(Profile*,
                                              bool incognito_pref_store);
 
- private:
   void NotifyOffTheRecordProfileCreated(Profile* off_the_record);
 
+ private:
   bool restored_last_session_;
 
   // Used to prevent the notification that this Profile is destroyed from
@@ -474,6 +461,8 @@ class Profile : public content::BrowserContext {
   bool is_system_profile_;
 
   base::ObserverList<ProfileObserver> observers_;
+
+  std::unique_ptr<variations::VariationsClient> chrome_variations_client_;
 
   DISALLOW_COPY_AND_ASSIGN(Profile);
 };

@@ -10,7 +10,6 @@
 
 #include "chromeos/services/multidevice_setup/privileged_host_device_setter_base.h"
 #include "chromeos/services/multidevice_setup/public/mojom/multidevice_setup.mojom.h"
-#include "mojo/public/cpp/bindings/binding_set.h"
 
 namespace chromeos {
 
@@ -28,12 +27,10 @@ class FakePrivilegedHostDeviceSetter : public PrivilegedHostDeviceSetterBase {
 
  private:
   // mojom::PrivilegedHostDeviceSetter:
-  void SetHostDevice(const std::string& host_device_id,
+  void SetHostDevice(const std::string& host_instance_id_or_legacy_device_id,
                      SetHostDeviceCallback callback) override;
 
   std::vector<std::pair<std::string, SetHostDeviceCallback>> set_host_args_;
-
-  mojo::BindingSet<mojom::PrivilegedHostDeviceSetter> bindings_;
 
   DISALLOW_COPY_AND_ASSIGN(FakePrivilegedHostDeviceSetter);
 };

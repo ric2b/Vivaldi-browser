@@ -260,9 +260,9 @@ class HostContentSettingsMap : public content_settings::Observer,
       const ContentSettingsPattern& secondary_pattern,
       ContentSettingsType content_type) const;
 
-  using PatternSourcePredicate =
-      base::Callback<bool(const ContentSettingsPattern& primary_pattern,
-                          const ContentSettingsPattern& secondary_pattern)>;
+  using PatternSourcePredicate = base::RepeatingCallback<bool(
+      const ContentSettingsPattern& primary_pattern,
+      const ContentSettingsPattern& secondary_pattern)>;
 
   // If |pattern_predicate| is null, this method is equivalent to the above.
   // Otherwise, it only deletes exceptions matched by |pattern_predicate| that
@@ -271,7 +271,7 @@ class HostContentSettingsMap : public content_settings::Observer,
       ContentSettingsType content_type,
       base::Time begin_time,
       base::Time end_time,
-      const PatternSourcePredicate& pattern_predicate);
+      PatternSourcePredicate pattern_predicate);
 
   // RefcountedKeyedService implementation.
   void ShutdownOnUIThread() override;
@@ -287,6 +287,10 @@ class HostContentSettingsMap : public content_settings::Observer,
   // uses. We should stick to ProviderType rather than string so we don't have
   // to convert backwards.
   static ProviderType GetProviderTypeFromSource(const std::string& source);
+
+  // Returns the SettingSource associated with the given |provider_name| string.
+  static content_settings::SettingSource GetSettingSourceFromProviderName(
+      const std::string& provider_name);
 
   // Whether this settings map is for an incognito or guest session.
   bool IsOffTheRecord() const { return is_off_the_record_; }
@@ -337,7 +341,7 @@ class HostContentSettingsMap : public content_settings::Observer,
   // provided by |provider|, into |settings|. If |incognito| is true, adds only
   // the content settings which are applicable to the incognito mode and differ
   // from the normal mode. Otherwise, adds the content settings for the normal
-  // mode.
+  // mode (applying inheritance rules if |is_off_the_record_|).
   void AddSettingsForOneType(
       const content_settings::ProviderInterface* provider,
       ProviderType provider_type,

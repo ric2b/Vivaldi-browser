@@ -26,6 +26,12 @@
         "enum": [ "title", "url", "nickname", "description", "dateadded" ]
       },
       {
+        "id": "Edge",
+        "type": "string",
+        "description": "Defines position of menu items added in chrome code wrt container items.",
+        "enum": [ "above", "below", "off" ]
+      },
+      {
         "id": "ItemType",
         "type": "string",
         "description": "What kind of item.",
@@ -87,6 +93,7 @@
           "type": {"$ref": "ContainerType", "description": "What kind of data to expand in this container."},
           "offset": {"type": "integer", "description": "Offset into folder/parent data."},
           "groupFolders": {"type": "boolean", "optional": true, "description": "If sorted, this flag will group any subfolders together."},
+          "edge": {"$ref": "Edge", "optional": true, "description": "Where to place extra menu items"},
           "sortField": {"$ref": "SortField", "optional": true, "description": "Sort key for elements."},
           "sortOrder": {"$ref": "SortOrder", "optional": true, "description": "Sort order for elements."}
         }

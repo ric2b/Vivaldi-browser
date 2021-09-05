@@ -48,12 +48,13 @@ const char* ProtoEnumToString(sync_pb::AppSpecifics::LaunchType launch_type) {
 const char* ProtoEnumToString(
     sync_pb::AutofillWalletSpecifics::WalletInfoType wallet_info_type) {
   ASSERT_ENUM_BOUNDS(sync_pb::AutofillWalletSpecifics, WalletInfoType, UNKNOWN,
-                     CUSTOMER_DATA);
+                     CREDIT_CARD_CLOUD_TOKEN_DATA);
   switch (wallet_info_type) {
     ENUM_CASE(sync_pb::AutofillWalletSpecifics, UNKNOWN);
     ENUM_CASE(sync_pb::AutofillWalletSpecifics, MASKED_CREDIT_CARD);
     ENUM_CASE(sync_pb::AutofillWalletSpecifics, POSTAL_ADDRESS);
     ENUM_CASE(sync_pb::AutofillWalletSpecifics, CUSTOMER_DATA);
+    ENUM_CASE(sync_pb::AutofillWalletSpecifics, CREDIT_CARD_CLOUD_TOKEN_DATA);
   }
   NOTREACHED();
   return "";
@@ -300,22 +301,6 @@ const char* ProtoEnumToString(sync_pb::TabNavigation::PasswordState state) {
   return "";
 }
 
-const char* ProtoEnumToString(sync_pb::UserConsentSpecifics::Feature feature) {
-  ASSERT_ENUM_BOUNDS(sync_pb::UserConsentSpecifics, Feature,
-                     FEATURE_UNSPECIFIED, ASSISTANT_ACTIVITY_CONTROL);
-  switch (feature) {
-    ENUM_CASE(sync_pb::UserConsentSpecifics, FEATURE_UNSPECIFIED);
-    ENUM_CASE(sync_pb::UserConsentSpecifics, CHROME_SYNC);
-    ENUM_CASE(sync_pb::UserConsentSpecifics, PLAY_STORE);
-    ENUM_CASE(sync_pb::UserConsentSpecifics, BACKUP_AND_RESTORE);
-    ENUM_CASE(sync_pb::UserConsentSpecifics, GOOGLE_LOCATION_SERVICE);
-    ENUM_CASE(sync_pb::UserConsentSpecifics, CHROME_UNIFIED_CONSENT);
-    ENUM_CASE(sync_pb::UserConsentSpecifics, ASSISTANT_ACTIVITY_CONTROL);
-  }
-  NOTREACHED();
-  return "";
-}
-
 const char* ProtoEnumToString(sync_pb::UserConsentTypes::ConsentStatus status) {
   ASSERT_ENUM_BOUNDS(sync_pb::UserConsentTypes, ConsentStatus,
                      CONSENT_STATUS_UNSPECIFIED, GIVEN);
@@ -323,47 +308,6 @@ const char* ProtoEnumToString(sync_pb::UserConsentTypes::ConsentStatus status) {
     ENUM_CASE(sync_pb::UserConsentTypes, CONSENT_STATUS_UNSPECIFIED);
     ENUM_CASE(sync_pb::UserConsentTypes, NOT_GIVEN);
     ENUM_CASE(sync_pb::UserConsentTypes, GIVEN);
-  }
-  NOTREACHED();
-  return "";
-}
-
-const char* ProtoEnumToString(
-    sync_pb::UserEventSpecifics::Translation::Interaction interaction) {
-  ASSERT_ENUM_BOUNDS(sync_pb::UserEventSpecifics::Translation, Interaction,
-                     UNKNOWN, INITIALIZATION_ERROR);
-  switch (interaction) {
-    ENUM_CASE(sync_pb::UserEventSpecifics::Translation, UNKNOWN);
-    ENUM_CASE(sync_pb::UserEventSpecifics::Translation, ACCEPT);
-    ENUM_CASE(sync_pb::UserEventSpecifics::Translation, DECLINE);
-    ENUM_CASE(sync_pb::UserEventSpecifics::Translation, IGNORED);
-    ENUM_CASE(sync_pb::UserEventSpecifics::Translation, DISMISSED);
-    ENUM_CASE(sync_pb::UserEventSpecifics::Translation, MANUAL);
-    ENUM_CASE(sync_pb::UserEventSpecifics::Translation, TRANSLATION_REVERTED);
-    ENUM_CASE(sync_pb::UserEventSpecifics::Translation,
-              AUTO_TRANSLATION_BY_PREF);
-    ENUM_CASE(sync_pb::UserEventSpecifics::Translation,
-              AUTO_TRANSLATION_BY_LINK);
-    ENUM_CASE(sync_pb::UserEventSpecifics::Translation, INITIALIZATION_ERROR);
-  }
-  NOTREACHED();
-  return "";
-}
-
-const char* ProtoEnumToString(
-    sync_pb::UserEventSpecifics::UserConsent::Feature feature) {
-  ASSERT_ENUM_BOUNDS(sync_pb::UserEventSpecifics::UserConsent, Feature,
-                     FEATURE_UNSPECIFIED, ASSISTANT_ACTIVITY_CONTROL);
-  switch (feature) {
-    ENUM_CASE(sync_pb::UserEventSpecifics::UserConsent, FEATURE_UNSPECIFIED);
-    ENUM_CASE(sync_pb::UserEventSpecifics::UserConsent, CHROME_SYNC);
-    ENUM_CASE(sync_pb::UserEventSpecifics::UserConsent, PLAY_STORE);
-    ENUM_CASE(sync_pb::UserEventSpecifics::UserConsent, BACKUP_AND_RESTORE);
-    ENUM_CASE(sync_pb::UserEventSpecifics::UserConsent,
-              GOOGLE_LOCATION_SERVICE);
-    ENUM_CASE(sync_pb::UserEventSpecifics::UserConsent, CHROME_UNIFIED_CONSENT);
-    ENUM_CASE(sync_pb::UserEventSpecifics::UserConsent,
-              ASSISTANT_ACTIVITY_CONTROL);
   }
   NOTREACHED();
   return "";
@@ -482,20 +426,6 @@ const char* ProtoEnumToString(
 }
 
 const char* ProtoEnumToString(
-    sync_pb::WalletMaskedCreditCard::WalletCardClass wallet_card_class) {
-  ASSERT_ENUM_BOUNDS(sync_pb::WalletMaskedCreditCard, WalletCardClass,
-                     UNKNOWN_CARD_CLASS, PREPAID);
-  switch (wallet_card_class) {
-    ENUM_CASE(sync_pb::WalletMaskedCreditCard, UNKNOWN_CARD_CLASS);
-    ENUM_CASE(sync_pb::WalletMaskedCreditCard, CREDIT);
-    ENUM_CASE(sync_pb::WalletMaskedCreditCard, DEBIT);
-    ENUM_CASE(sync_pb::WalletMaskedCreditCard, PREPAID);
-  }
-  NOTREACHED();
-  return "";
-}
-
-const char* ProtoEnumToString(
     sync_pb::WalletMaskedCreditCard::WalletCardStatus wallet_card_status) {
   ASSERT_ENUM_BOUNDS(sync_pb::WalletMaskedCreditCard, WalletCardStatus, VALID,
                      EXPIRED);
@@ -527,6 +457,15 @@ const char* ProtoEnumToString(
   return "";
 }
 
+const char* ProtoEnumToString(sync_pb::CardIssuer::Issuer issuer) {
+  switch (issuer) {
+    ENUM_CASE(sync_pb::CardIssuer, ISSUER_UNKNOWN);
+    ENUM_CASE(sync_pb::CardIssuer, GOOGLE);
+  }
+  NOTREACHED();
+  return "";
+}
+
 const char* ProtoEnumToString(
     sync_pb::WalletMetadataSpecifics::Type wallet_metadata_type) {
   ASSERT_ENUM_BOUNDS(sync_pb::WalletMetadataSpecifics, Type, UNKNOWN, ADDRESS);
@@ -540,45 +479,43 @@ const char* ProtoEnumToString(
 }
 
 const char* ProtoEnumToString(
-    sync_pb::WebAppSpecifics::DisplayMode display_mode) {
-  ASSERT_ENUM_BOUNDS(sync_pb::WebAppSpecifics, DisplayMode, kBrowser,
-                     kStandalone);
-  switch (display_mode) {
-    ENUM_CASE(sync_pb::WebAppSpecifics, kBrowser);
-    ENUM_CASE(sync_pb::WebAppSpecifics, kMinimalUi);
-    ENUM_CASE(sync_pb::WebAppSpecifics, kStandalone);
+    sync_pb::WebAppSpecifics::UserDisplayMode user_display_mode) {
+  ASSERT_ENUM_BOUNDS(sync_pb::WebAppSpecifics, UserDisplayMode, BROWSER,
+                     STANDALONE);
+  switch (user_display_mode) {
+    ENUM_CASE(sync_pb::WebAppSpecifics, BROWSER);
+    ENUM_CASE(sync_pb::WebAppSpecifics, STANDALONE);
   }
   NOTREACHED();
   return "";
 }
 
 const char* ProtoEnumToString(
-    sync_pb::WifiConfigurationSpecificsData::SecurityType security_type) {
-  ASSERT_ENUM_BOUNDS(sync_pb::WifiConfigurationSpecificsData, SecurityType,
+    sync_pb::WifiConfigurationSpecifics::SecurityType security_type) {
+  ASSERT_ENUM_BOUNDS(sync_pb::WifiConfigurationSpecifics, SecurityType,
                      SECURITY_TYPE_UNSPECIFIED, SECURITY_TYPE_PSK);
   switch (security_type) {
-    ENUM_CASE(sync_pb::WifiConfigurationSpecificsData,
-              SECURITY_TYPE_UNSPECIFIED);
-    ENUM_CASE(sync_pb::WifiConfigurationSpecificsData, SECURITY_TYPE_NONE);
-    ENUM_CASE(sync_pb::WifiConfigurationSpecificsData, SECURITY_TYPE_WEP);
-    ENUM_CASE(sync_pb::WifiConfigurationSpecificsData, SECURITY_TYPE_PSK);
+    ENUM_CASE(sync_pb::WifiConfigurationSpecifics, SECURITY_TYPE_UNSPECIFIED);
+    ENUM_CASE(sync_pb::WifiConfigurationSpecifics, SECURITY_TYPE_NONE);
+    ENUM_CASE(sync_pb::WifiConfigurationSpecifics, SECURITY_TYPE_WEP);
+    ENUM_CASE(sync_pb::WifiConfigurationSpecifics, SECURITY_TYPE_PSK);
   }
   NOTREACHED();
   return "";
 }
 
 const char* ProtoEnumToString(
-    sync_pb::WifiConfigurationSpecificsData::AutomaticallyConnectOption
+    sync_pb::WifiConfigurationSpecifics::AutomaticallyConnectOption
         automatically_connect_option) {
   ASSERT_ENUM_BOUNDS(
-      sync_pb::WifiConfigurationSpecificsData, AutomaticallyConnectOption,
+      sync_pb::WifiConfigurationSpecifics, AutomaticallyConnectOption,
       AUTOMATICALLY_CONNECT_UNSPECIFIED, AUTOMATICALLY_CONNECT_ENABLED);
   switch (automatically_connect_option) {
-    ENUM_CASE(sync_pb::WifiConfigurationSpecificsData,
+    ENUM_CASE(sync_pb::WifiConfigurationSpecifics,
               AUTOMATICALLY_CONNECT_UNSPECIFIED);
-    ENUM_CASE(sync_pb::WifiConfigurationSpecificsData,
+    ENUM_CASE(sync_pb::WifiConfigurationSpecifics,
               AUTOMATICALLY_CONNECT_DISABLED);
-    ENUM_CASE(sync_pb::WifiConfigurationSpecificsData,
+    ENUM_CASE(sync_pb::WifiConfigurationSpecifics,
               AUTOMATICALLY_CONNECT_ENABLED);
   }
   NOTREACHED();
@@ -586,51 +523,49 @@ const char* ProtoEnumToString(
 }
 
 const char* ProtoEnumToString(
-    sync_pb::WifiConfigurationSpecificsData::IsPreferredOption
+    sync_pb::WifiConfigurationSpecifics::IsPreferredOption
         is_preferred_option) {
-  ASSERT_ENUM_BOUNDS(sync_pb::WifiConfigurationSpecificsData, IsPreferredOption,
+  ASSERT_ENUM_BOUNDS(sync_pb::WifiConfigurationSpecifics, IsPreferredOption,
                      IS_PREFERRED_UNSPECIFIED, IS_PREFERRED_ENABLED);
   switch (is_preferred_option) {
-    ENUM_CASE(sync_pb::WifiConfigurationSpecificsData,
-              IS_PREFERRED_UNSPECIFIED);
-    ENUM_CASE(sync_pb::WifiConfigurationSpecificsData, IS_PREFERRED_DISABLED);
-    ENUM_CASE(sync_pb::WifiConfigurationSpecificsData, IS_PREFERRED_ENABLED);
+    ENUM_CASE(sync_pb::WifiConfigurationSpecifics, IS_PREFERRED_UNSPECIFIED);
+    ENUM_CASE(sync_pb::WifiConfigurationSpecifics, IS_PREFERRED_DISABLED);
+    ENUM_CASE(sync_pb::WifiConfigurationSpecifics, IS_PREFERRED_ENABLED);
   }
   NOTREACHED();
   return "";
 }
 
 const char* ProtoEnumToString(
-    sync_pb::WifiConfigurationSpecificsData::MeteredOption metered_option) {
-  ASSERT_ENUM_BOUNDS(sync_pb::WifiConfigurationSpecificsData, MeteredOption,
+    sync_pb::WifiConfigurationSpecifics::MeteredOption metered_option) {
+  ASSERT_ENUM_BOUNDS(sync_pb::WifiConfigurationSpecifics, MeteredOption,
                      METERED_OPTION_UNSPECIFIED, METERED_OPTION_AUTO);
   switch (metered_option) {
-    ENUM_CASE(sync_pb::WifiConfigurationSpecificsData,
-              METERED_OPTION_UNSPECIFIED);
-    ENUM_CASE(sync_pb::WifiConfigurationSpecificsData, METERED_OPTION_NO);
-    ENUM_CASE(sync_pb::WifiConfigurationSpecificsData, METERED_OPTION_YES);
-    ENUM_CASE(sync_pb::WifiConfigurationSpecificsData, METERED_OPTION_AUTO);
+    ENUM_CASE(sync_pb::WifiConfigurationSpecifics, METERED_OPTION_UNSPECIFIED);
+    ENUM_CASE(sync_pb::WifiConfigurationSpecifics, METERED_OPTION_NO);
+    ENUM_CASE(sync_pb::WifiConfigurationSpecifics, METERED_OPTION_YES);
+    ENUM_CASE(sync_pb::WifiConfigurationSpecifics, METERED_OPTION_AUTO);
   }
   NOTREACHED();
   return "";
 }
 
 const char* ProtoEnumToString(
-    sync_pb::WifiConfigurationSpecificsData::ProxyConfiguration::ProxyOption
+    sync_pb::WifiConfigurationSpecifics::ProxyConfiguration::ProxyOption
         proxy_option) {
-  ASSERT_ENUM_BOUNDS(
-      sync_pb::WifiConfigurationSpecificsData::ProxyConfiguration, ProxyOption,
-      PROXY_OPTION_UNSPECIFIED, PROXY_OPTION_MANUAL);
+  ASSERT_ENUM_BOUNDS(sync_pb::WifiConfigurationSpecifics::ProxyConfiguration,
+                     ProxyOption, PROXY_OPTION_UNSPECIFIED,
+                     PROXY_OPTION_MANUAL);
   switch (proxy_option) {
-    ENUM_CASE(sync_pb::WifiConfigurationSpecificsData::ProxyConfiguration,
+    ENUM_CASE(sync_pb::WifiConfigurationSpecifics::ProxyConfiguration,
               PROXY_OPTION_UNSPECIFIED);
-    ENUM_CASE(sync_pb::WifiConfigurationSpecificsData::ProxyConfiguration,
+    ENUM_CASE(sync_pb::WifiConfigurationSpecifics::ProxyConfiguration,
               PROXY_OPTION_DISABLED);
-    ENUM_CASE(sync_pb::WifiConfigurationSpecificsData::ProxyConfiguration,
+    ENUM_CASE(sync_pb::WifiConfigurationSpecifics::ProxyConfiguration,
               PROXY_OPTION_AUTOMATIC);
-    ENUM_CASE(sync_pb::WifiConfigurationSpecificsData::ProxyConfiguration,
+    ENUM_CASE(sync_pb::WifiConfigurationSpecifics::ProxyConfiguration,
               PROXY_OPTION_AUTODISCOVERY);
-    ENUM_CASE(sync_pb::WifiConfigurationSpecificsData::ProxyConfiguration,
+    ENUM_CASE(sync_pb::WifiConfigurationSpecifics::ProxyConfiguration,
               PROXY_OPTION_MANUAL);
   }
   NOTREACHED();

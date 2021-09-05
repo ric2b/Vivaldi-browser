@@ -56,7 +56,7 @@ class ReleaseNotesStorageTest : public testing::Test,
   DISALLOW_COPY_AND_ASSIGN(ReleaseNotesStorageTest);
 };
 
-INSTANTIATE_TEST_SUITE_P(, ReleaseNotesStorageTest, testing::Bool());
+INSTANTIATE_TEST_SUITE_P(All, ReleaseNotesStorageTest, testing::Bool());
 
 TEST_P(ReleaseNotesStorageTest, ModifyLastRelease) {
   const bool should_show_notification = GetParam();
@@ -74,6 +74,21 @@ TEST_P(ReleaseNotesStorageTest, ModifyLastRelease) {
   release_notes_storage->MarkNotificationShown();
   EXPECT_NE(-1, profile.get()->GetPrefs()->GetInteger(
                     prefs::kReleaseNotesLastShownMilestone));
+  EXPECT_EQ(false, release_notes_storage->ShouldNotify());
+}
+
+// Release notes sets current milestone to "last shown" after OOBE and should
+// not be shown.
+TEST_P(ReleaseNotesStorageTest, ShouldNotShowReleaseNotesOOBE) {
+  const bool should_show_notification = GetParam();
+  SetupFeatureFlag(should_show_notification);
+
+  std::unique_ptr<Profile> profile = CreateProfile("test@gmail.com");
+
+  profile->GetProfilePolicyConnector()->OverrideIsManagedForTesting(false);
+  std::unique_ptr<ReleaseNotesStorage> release_notes_storage =
+      std::make_unique<ReleaseNotesStorage>(profile.get());
+
   EXPECT_EQ(false, release_notes_storage->ShouldNotify());
 }
 

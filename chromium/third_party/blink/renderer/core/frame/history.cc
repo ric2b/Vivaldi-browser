@@ -38,6 +38,7 @@
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
@@ -62,7 +63,7 @@ bool EqualIgnoringQueryAndFragment(const KURL& a, const KURL& b) {
 History::History(LocalFrame* frame)
     : DOMWindowClient(frame), last_state_object_requested_(nullptr) {}
 
-void History::Trace(blink::Visitor* visitor) {
+void History::Trace(Visitor* visitor) {
   ScriptWrappable::Trace(visitor);
   DOMWindowClient::Trace(visitor);
 }
@@ -77,15 +78,19 @@ unsigned History::length(ExceptionState& exception_state) const {
   return GetFrame()->Client()->BackForwardLength();
 }
 
-SerializedScriptValue* History::state(ExceptionState& exception_state) {
+ScriptValue History::state(v8::Isolate* isolate,
+                           ExceptionState& exception_state) {
   if (!GetFrame()) {
     exception_state.ThrowSecurityError(
         "May not use a History object associated with a Document that is not "
         "fully active");
-    return nullptr;
+    return ScriptValue::CreateNull(isolate);
   }
   last_state_object_requested_ = StateInternal();
-  return last_state_object_requested_.get();
+  if (!last_state_object_requested_)
+    return ScriptValue::CreateNull(isolate);
+  return ScriptValue(isolate,
+                     last_state_object_requested_->Deserialize(isolate));
 }
 
 SerializedScriptValue* History::StateInternal() const {
@@ -180,7 +185,7 @@ void History::go(ScriptState* script_state,
 
   DCHECK(IsMainThread());
   Document* active_document =
-      To<Document>(ExecutionContext::From(script_state));
+      Document::From(ExecutionContext::From(script_state));
   if (!active_document)
     return;
 
@@ -195,7 +200,10 @@ void History::go(ScriptState* script_state,
     return;
 
   if (delta) {
-    GetFrame()->Client()->NavigateBackForward(delta);
+    if (GetFrame()->Client()->NavigateBackForward(delta)) {
+      if (Page* page = GetFrame()->GetPage())
+        page->HistoryNavigationVirtualTimePauser().PauseVirtualTime();
+    }
   } else {
     // We intentionally call reload() for the current frame if delta is zero.
     // Otherwise, navigation happens on the root frame.
@@ -205,19 +213,52 @@ void History::go(ScriptState* script_state,
   }
 }
 
-void History::pushState(scoped_refptr<SerializedScriptValue> data,
+void History::pushState(v8::Isolate* isolate,
+                        const ScriptValue& data,
                         const String& title,
                         const String& url,
                         ExceptionState& exception_state) {
-  StateObjectAdded(std::move(data), title, url, ScrollRestorationInternal(),
-                   WebFrameLoadType::kStandard, exception_state);
+  WebFrameLoadType load_type = WebFrameLoadType::kStandard;
+  // Navigations in portal contexts do not create back/forward entries.
+  if (GetFrame() && GetFrame()->GetPage() &&
+      GetFrame()->GetPage()->InsidePortal()) {
+    GetFrame()->GetDocument()->AddConsoleMessage(
+        MakeGarbageCollected<ConsoleMessage>(
+            mojom::ConsoleMessageSource::kJavaScript,
+            mojom::ConsoleMessageLevel::kWarning,
+            "Use of history.pushState in a portal context "
+            "is treated as history.replaceState."),
+        /* discard_duplicates */ true);
+    load_type = WebFrameLoadType::kReplaceCurrentItem;
+  }
+
+  scoped_refptr<SerializedScriptValue> serialized_data =
+      SerializedScriptValue::Serialize(isolate, data.V8Value(),
+                                       SerializedScriptValue::SerializeOptions(
+                                           SerializedScriptValue::kForStorage),
+                                       exception_state);
+  if (exception_state.HadException())
+    return;
+
+  StateObjectAdded(std::move(serialized_data), title, url,
+                   ScrollRestorationInternal(), load_type, exception_state);
 }
 
-void History::replaceState(scoped_refptr<SerializedScriptValue> data,
+void History::replaceState(v8::Isolate* isolate,
+                           const ScriptValue& data,
                            const String& title,
                            const String& url,
                            ExceptionState& exception_state) {
-  StateObjectAdded(std::move(data), title, url, ScrollRestorationInternal(),
+  scoped_refptr<SerializedScriptValue> serialized_data =
+      SerializedScriptValue::Serialize(isolate, data.V8Value(),
+                                       SerializedScriptValue::SerializeOptions(
+                                           SerializedScriptValue::kForStorage),
+                                       exception_state);
+  if (exception_state.HadException())
+    return;
+
+  StateObjectAdded(std::move(serialized_data), title, url,
+                   ScrollRestorationInternal(),
                    WebFrameLoadType::kReplaceCurrentItem, exception_state);
 }
 
@@ -253,7 +294,7 @@ bool History::CanChangeToUrl(const KURL& url,
   scoped_refptr<const SecurityOrigin> requested_origin =
       SecurityOrigin::Create(url);
   if (requested_origin->IsOpaque() ||
-      !requested_origin->IsSameSchemeHostPort(document_origin)) {
+      !requested_origin->IsSameOriginWith(document_origin)) {
     return false;
   }
 

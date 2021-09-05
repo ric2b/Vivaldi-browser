@@ -15,10 +15,12 @@
 #include "components/autofill/core/browser/autofill_manager.h"
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/browser/payments/payments_service_url.h"
+#include "content/public/browser/back_forward_cache.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
@@ -83,6 +85,14 @@ bool ContentAutofillDriver::IsInMainFrame() const {
   return render_frame_host_->GetParent() == nullptr;
 }
 
+bool ContentAutofillDriver::CanShowAutofillUi() const {
+  // TODO(crbug.com/1041021): Use RenderFrameHost::IsActive here when available.
+  return !content::BackForwardCache::EvictIfCached(
+      {render_frame_host_->GetProcess()->GetID(),
+       render_frame_host_->GetRoutingID()},
+      "ContentAutofillDriver::CanShowAutofillUi");
+}
+
 ui::AXTreeID ContentAutofillDriver::GetAxTreeId() const {
   return render_frame_host_->GetAXTreeID();
 }
@@ -98,15 +108,14 @@ bool ContentAutofillDriver::RendererIsAvailable() {
   return render_frame_host_->GetRenderViewHost() != nullptr;
 }
 
-void ContentAutofillDriver::ConnectToAuthenticator(
-    mojo::PendingReceiver<blink::mojom::InternalAuthenticator> receiver) {
-#if defined(OS_ANDROID)
-  render_frame_host_->GetJavaInterfaces()->GetInterface(std::move(receiver));
-#else
-  authenticator_impl_ = std::make_unique<content::InternalAuthenticatorImpl>(
-      render_frame_host_, url::Origin::Create(payments::GetBaseSecureUrl()));
-  authenticator_impl_->Bind(std::move(receiver));
-#endif
+InternalAuthenticator*
+ContentAutofillDriver::GetOrCreateCreditCardInternalAuthenticator() {
+  if (!authenticator_impl_) {
+    authenticator_impl_ =
+        autofill_manager_->client()->CreateCreditCardInternalAuthenticator(
+            render_frame_host_);
+  }
+  return authenticator_impl_.get();
 }
 
 void ContentAutofillDriver::SendFormDataToRenderer(
@@ -130,6 +139,11 @@ void ContentAutofillDriver::PropagateAutofillPredictions(
     const std::vector<FormStructure*>& forms) {
   autofill_manager_->client()->PropagateAutofillPredictions(render_frame_host_,
                                                             forms);
+}
+
+void ContentAutofillDriver::HandleParsedForms(
+    const std::vector<FormStructure*>& forms) {
+  // No op.
 }
 
 void ContentAutofillDriver::SendAutofillTypePredictionsToRenderer(
@@ -200,6 +214,10 @@ gfx::RectF ContentAutofillDriver::TransformBoundingBoxToViewportCoordinates(
       view->TransformPointToRootCoordSpaceF(orig_point);
   return gfx::RectF(transformed_point.x(), transformed_point.y(),
                     bounding_box.width(), bounding_box.height());
+}
+
+net::NetworkIsolationKey ContentAutofillDriver::NetworkIsolationKey() {
+  return render_frame_host_->GetNetworkIsolationKey();
 }
 
 void ContentAutofillDriver::FormsSeen(const std::vector<FormData>& forms,

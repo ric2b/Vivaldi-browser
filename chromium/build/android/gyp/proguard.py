@@ -25,6 +25,8 @@ _API_LEVEL_VERSION_CODE = [
     (28, 'P'),
     (29, 'Q'),
 ]
+_CHECKDISCARD_RE = re.compile(r'-checkdiscard[\s\S]*?}')
+_DIRECTIVE_RE = re.compile(r'^-', re.MULTILINE)
 
 
 class _ProguardOutputFilter(object):
@@ -61,6 +63,45 @@ class _ProguardOutputFilter(object):
     return ''.join(ret)
 
 
+class ProguardProcessError(build_utils.CalledProcessError):
+  """Wraps CalledProcessError and enables adding extra output to failures."""
+
+  def __init__(self, cpe, output):
+    super(ProguardProcessError, self).__init__(cpe.cwd, cpe.args,
+                                               cpe.output + output)
+
+
+def _ValidateAndFilterCheckDiscards(configs):
+  """Check for invalid -checkdiscard rules and filter out -checkdiscards.
+
+  -checkdiscard assertions often don't work for test APKs and are not actually
+  helpful. Additionally, test APKs may pull in dependency proguard configs which
+  makes filtering out these rules difficult in GN. Instead, we enforce that
+  configs that use -checkdiscard do not contain any other rules so that we can
+  filter out the undesired -checkdiscard rule files here.
+
+  Args:
+    configs: List of paths to proguard configuration files.
+
+  Returns:
+    A list of configs with -checkdiscard-containing-configs removed.
+  """
+  valid_configs = []
+  for config_path in configs:
+    with open(config_path) as f:
+      contents = f.read()
+      if _CHECKDISCARD_RE.search(contents):
+        contents = _CHECKDISCARD_RE.sub('', contents)
+        if _DIRECTIVE_RE.search(contents):
+          raise Exception('Proguard configs containing -checkdiscards cannot '
+                          'contain other directives so that they can be '
+                          'disabled in test APKs ({}).'.format(config_path))
+      else:
+        valid_configs.append(config_path)
+
+  return valid_configs
+
+
 def _ParseOptions():
   args = build_utils.ExpandFileArgs(sys.argv[1:])
   parser = argparse.ArgumentParser()
@@ -93,10 +134,9 @@ def _ParseOptions():
       '--expected-configs-file',
       help='Path to a file containing the expected merged ProGuard configs')
   parser.add_argument(
-      '--verify-expected-configs',
-      action='store_true',
-      help='Fail if the expected merged ProGuard configs differ from the '
-      'generated merged ProGuard configs.')
+      '--proguard-expectations-failure-file',
+      help='Path to file written to if the expected merged ProGuard configs '
+      'differ from the generated merged ProGuard configs.')
   parser.add_argument(
       '--classpath',
       action='append',
@@ -116,6 +156,18 @@ def _ParseOptions():
       '--disable-outlining',
       action='store_true',
       help='Disable the outlining optimization provided by R8.')
+  parser.add_argument(
+      '--disable-checkdiscard',
+      action='store_true',
+      help='Disable -checkdiscard directives')
+  parser.add_argument('--sourcefile', help='Value for source file attribute')
+  parser.add_argument(
+      '--force-enable-assertions',
+      action='store_true',
+      help='Forcefully enable javac generated assertion code.')
+  parser.add_argument(
+      '--desugar', action='store_true', help='Enable R8 Desugaring')
+
 
   options = parser.parse_args(args)
 
@@ -137,18 +189,22 @@ def _ParseOptions():
   return options
 
 
-def _VerifyExpectedConfigs(expected_path, actual_path, fail_on_exit):
+def _VerifyExpectedConfigs(expected_path, actual_path, failure_file_path):
   msg = diff_utils.DiffFileContents(expected_path, actual_path)
   if not msg:
     return
 
-  sys.stderr.write("""\
+  msg_header = """\
 ProGuard flag expectations file needs updating. For details see:
 https://chromium.googlesource.com/chromium/src/+/HEAD/chrome/android/java/README.md
-""")
+"""
+  sys.stderr.write(msg_header)
   sys.stderr.write(msg)
-  if fail_on_exit:
-    sys.exit(1)
+  if failure_file_path:
+    build_utils.MakeDirectory(os.path.dirname(failure_file_path))
+    with open(failure_file_path, 'w') as f:
+      f.write(msg_header)
+      f.write(msg)
 
 
 def _OptimizeWithR8(options,
@@ -168,24 +224,22 @@ def _OptimizeWithR8(options,
     # from failing.
     build_utils.Touch(tmp_mapping_path)
 
-    output_is_zipped = not options.output_path.endswith('.dex')
     tmp_output = os.path.join(tmp_dir, 'r8out')
-    if output_is_zipped:
-      tmp_output += '.jar'
-    else:
-      os.mkdir(tmp_output)
+    os.mkdir(tmp_output)
 
     cmd = [
         build_utils.JAVA_PATH,
         '-jar',
         options.r8_path,
-        '--no-desugaring',
         '--no-data-resources',
         '--output',
         tmp_output,
         '--pg-map-output',
         tmp_mapping_path,
     ]
+
+    if not options.desugar:
+      cmd += ['--no-desugaring']
 
     for lib in libraries:
       cmd += ['--lib', lib]
@@ -196,29 +250,41 @@ def _OptimizeWithR8(options,
     if options.min_api:
       cmd += ['--min-api', options.min_api]
 
+    if options.force_enable_assertions:
+      cmd += ['--force-enable-assertions']
+
     if options.main_dex_rules_path:
       for main_dex_rule in options.main_dex_rules_path:
         cmd += ['--main-dex-rules', main_dex_rule]
 
     cmd += options.input_paths
 
-    stderr_filter = None
     env = os.environ.copy()
+    stderr_filter = lambda l: re.sub(r'.*_JAVA_OPTIONS.*\n?', '', l)
+    env['_JAVA_OPTIONS'] = '-Dcom.android.tools.r8.allowTestProguardOptions=1'
     if options.disable_outlining:
-      stderr_filter = lambda l: re.sub(r'.*_JAVA_OPTIONS.*\n?', '', l)
-      env['_JAVA_OPTIONS'] = '-Dcom.android.tools.r8.disableOutlining=1'
+      env['_JAVA_OPTIONS'] += ' -Dcom.android.tools.r8.disableOutlining=1'
 
-    build_utils.CheckOutput(
-        cmd, env=env, print_stdout=print_stdout, stderr_filter=stderr_filter)
+    try:
+      build_utils.CheckOutput(
+          cmd, env=env, print_stdout=print_stdout, stderr_filter=stderr_filter)
+    except build_utils.CalledProcessError as err:
+      debugging_link = ('R8 failed. Please see {}.'.format(
+          'https://chromium.googlesource.com/chromium/src/+/HEAD/build/'
+          'android/docs/java_optimization.md#Debugging-common-failures\n'))
+      raise ProguardProcessError(err, debugging_link)
 
-    if not output_is_zipped:
-      found_files = os.listdir(tmp_output)
+    found_files = build_utils.FindInDirectory(tmp_output)
+    if not options.output_path.endswith('.dex'):
+      # Add to .jar using Python rather than having R8 output to a .zip directly
+      # in order to disable compression of the .jar, saving ~500ms.
+      tmp_jar_output = tmp_output + '.jar'
+      build_utils.DoZip(found_files, tmp_jar_output, base_dir=tmp_output)
+      shutil.move(tmp_jar_output, options.output_path)
+    else:
       if len(found_files) > 1:
         raise Exception('Too many files created: {}'.format(found_files))
-      tmp_output = os.path.join(tmp_output, found_files[0])
-
-    # Copy output files to correct locations.
-    shutil.move(tmp_output, options.output_path)
+      shutil.move(found_files[0], options.output_path)
 
     with open(options.mapping_output, 'w') as out_file, \
         open(tmp_mapping_path) as in_file:
@@ -301,6 +367,7 @@ def _CombineConfigs(configs, dynamic_config_data, exclude_generated=False):
     add_header(config)
     with open(config) as config_file:
       contents = config_file.read().rstrip()
+
     # Fix up line endings (third_party configs can have windows endings).
     contents = contents.replace('\r', '')
     # Remove numbers from generated rule comments to make file more
@@ -325,6 +392,10 @@ def _CreateDynamicConfig(options):
 -assumevalues class android.os.Build$VERSION {
   public static final int SDK_INT return %s..9999;
 }""" % options.min_api)
+
+  if options.sourcefile:
+    ret.append("-renamesourcefileattribute '%s' # OMIT FROM EXPECTATIONS" %
+               options.sourcefile)
 
   if options.apply_mapping:
     ret.append("-applymapping '%s'" % os.path.abspath(options.apply_mapping))
@@ -363,24 +434,37 @@ Embedded configs are not permitted (https://crbug.com/989505)
     sys.exit(1)
 
 
+def _ContainsDebuggingConfig(config_str):
+  debugging_configs = ('-whyareyoukeeping', '-whyareyounotinlining')
+  return any(config in config_str for config in debugging_configs)
+
+
 def main():
   options = _ParseOptions()
 
   libraries = []
   for p in options.classpath:
+    # TODO(bjoyce): Remove filter once old android support libraries are gone.
+    # Fix for having Library class extend program class dependency problem.
+    if 'com_android_support' in p or 'android_support_test' in p:
+      continue
     # If a jar is part of input no need to include it as library jar.
     if p not in libraries and p not in options.input_paths:
       libraries.append(p)
 
   _VerifyNoEmbeddedConfigs(options.input_paths + libraries)
 
+  proguard_configs = options.proguard_configs
+  if options.disable_checkdiscard:
+    proguard_configs = _ValidateAndFilterCheckDiscards(proguard_configs)
+
   # ProGuard configs that are derived from flags.
   dynamic_config_data = _CreateDynamicConfig(options)
 
   # ProGuard configs that are derived from flags.
   merged_configs = _CombineConfigs(
-      options.proguard_configs, dynamic_config_data, exclude_generated=True)
-  print_stdout = '-whyareyoukeeping' in merged_configs or options.verbose
+      proguard_configs, dynamic_config_data, exclude_generated=True)
+  print_stdout = _ContainsDebuggingConfig(merged_configs) or options.verbose
 
   # Writing the config output before we know ProGuard is going to succeed isn't
   # great, since then a failure will result in one of the outputs being updated.
@@ -394,13 +478,13 @@ def main():
     if options.expected_configs_file:
       _VerifyExpectedConfigs(options.expected_configs_file,
                              options.output_config,
-                             options.verify_expected_configs)
+                             options.proguard_expectations_failure_file)
 
   if options.r8_path:
-    _OptimizeWithR8(options, options.proguard_configs, libraries,
-                    dynamic_config_data, print_stdout)
+    _OptimizeWithR8(options, proguard_configs, libraries, dynamic_config_data,
+                    print_stdout)
   else:
-    _OptimizeWithProguard(options, options.proguard_configs, libraries,
+    _OptimizeWithProguard(options, proguard_configs, libraries,
                           dynamic_config_data, print_stdout)
 
   # After ProGuard / R8 has run:

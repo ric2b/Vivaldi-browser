@@ -338,7 +338,7 @@ static WTF::TextStream& operator<<(WTF::TextStream& ts,
   const ComputedStyle& style = shape.StyleRef();
   const SVGComputedStyle& svg_style = style.SvgStyle();
 
-  if (IsSVGRectElement(*svg_element)) {
+  if (IsA<SVGRectElement>(*svg_element)) {
     WriteNameValuePair(ts, "x",
                        length_context.ValueForLength(svg_style.X(), style,
                                                      SVGLengthMode::kWidth));
@@ -351,17 +351,16 @@ static WTF::TextStream& operator<<(WTF::TextStream& ts,
     WriteNameValuePair(ts, "height",
                        length_context.ValueForLength(style.Height(), style,
                                                      SVGLengthMode::kHeight));
-  } else if (IsSVGLineElement(*svg_element)) {
-    SVGLineElement& element = ToSVGLineElement(*svg_element);
+  } else if (auto* element = DynamicTo<SVGLineElement>(*svg_element)) {
     WriteNameValuePair(ts, "x1",
-                       element.x1()->CurrentValue()->Value(length_context));
+                       element->x1()->CurrentValue()->Value(length_context));
     WriteNameValuePair(ts, "y1",
-                       element.y1()->CurrentValue()->Value(length_context));
+                       element->y1()->CurrentValue()->Value(length_context));
     WriteNameValuePair(ts, "x2",
-                       element.x2()->CurrentValue()->Value(length_context));
+                       element->x2()->CurrentValue()->Value(length_context));
     WriteNameValuePair(ts, "y2",
-                       element.y2()->CurrentValue()->Value(length_context));
-  } else if (IsSVGEllipseElement(*svg_element)) {
+                       element->y2()->CurrentValue()->Value(length_context));
+  } else if (IsA<SVGEllipseElement>(*svg_element)) {
     WriteNameValuePair(ts, "cx",
                        length_context.ValueForLength(svg_style.Cx(), style,
                                                      SVGLengthMode::kWidth));
@@ -374,7 +373,7 @@ static WTF::TextStream& operator<<(WTF::TextStream& ts,
     WriteNameValuePair(ts, "ry",
                        length_context.ValueForLength(svg_style.Ry(), style,
                                                      SVGLengthMode::kHeight));
-  } else if (IsSVGCircleElement(*svg_element)) {
+  } else if (IsA<SVGCircleElement>(*svg_element)) {
     WriteNameValuePair(ts, "cx",
                        length_context.ValueForLength(svg_style.Cx(), style,
                                                      SVGLengthMode::kWidth));
@@ -384,13 +383,11 @@ static WTF::TextStream& operator<<(WTF::TextStream& ts,
     WriteNameValuePair(ts, "r",
                        length_context.ValueForLength(svg_style.R(), style,
                                                      SVGLengthMode::kOther));
-  } else if (IsSVGPolyElement(*svg_element)) {
-    WriteNameAndQuotedValue(ts, "points",
-                            ToSVGPolyElement(*svg_element)
-                                .Points()
-                                ->CurrentValue()
-                                ->ValueAsString());
-  } else if (IsSVGPathElement(*svg_element)) {
+  } else if (auto* svg_poly_element = DynamicTo<SVGPolyElement>(svg_element)) {
+    WriteNameAndQuotedValue(
+        ts, "points",
+        svg_poly_element->Points()->CurrentValue()->ValueAsString());
+  } else if (IsA<SVGPathElement>(*svg_element)) {
     const StylePath& path =
         svg_style.D() ? *svg_style.D() : *StylePath::EmptyPath();
     WriteNameAndQuotedValue(
@@ -411,7 +408,7 @@ static WTF::TextStream& operator<<(WTF::TextStream& ts,
 
 static void WriteLayoutSVGTextBox(WTF::TextStream& ts,
                                   const LayoutSVGText& text) {
-  SVGRootInlineBox* box = ToSVGRootInlineBox(text.FirstRootBox());
+  auto* box = To<SVGRootInlineBox>(text.FirstRootBox());
   if (!box)
     return;
 
@@ -496,10 +493,11 @@ static inline void WriteSVGInlineTextBoxes(WTF::TextStream& ts,
                                            const LayoutText& text,
                                            int indent) {
   for (InlineTextBox* box : text.TextBoxes()) {
-    if (!box->IsSVGInlineTextBox())
+    auto* svg_inline_text_box = DynamicTo<SVGInlineTextBox>(box);
+    if (!svg_inline_text_box)
       continue;
 
-    WriteSVGInlineTextBox(ts, ToSVGInlineTextBox(box), indent);
+    WriteSVGInlineTextBox(ts, svg_inline_text_box, indent);
   }
 }
 
@@ -568,8 +566,8 @@ void WriteSVGResourceContainer(WTF::TextStream& ts,
     auto* dummy_filter = MakeGarbageCollected<Filter>(dummy_rect, dummy_rect, 1,
                                                       Filter::kBoundingBox);
     SVGFilterBuilder builder(dummy_filter->GetSourceGraphic());
-    builder.BuildGraph(dummy_filter, ToSVGFilterElement(*filter->GetElement()),
-                       dummy_rect);
+    builder.BuildGraph(dummy_filter,
+                       To<SVGFilterElement>(*filter->GetElement()), dummy_rect);
     if (FilterEffect* last_effect = builder.LastEffect())
       last_effect->ExternalRepresentation(ts, indent + 1);
   } else if (resource->ResourceType() == kClipperResourceType) {
@@ -594,7 +592,7 @@ void WriteSVGResourceContainer(WTF::TextStream& ts,
     // patterns using xlink:href, we need to build the full inheritance chain,
     // aka. collectPatternProperties()
     PatternAttributes attributes;
-    ToSVGPatternElement(pattern->GetElement())
+    To<SVGPatternElement>(pattern->GetElement())
         ->CollectPatternAttributes(attributes);
 
     WriteNameValuePair(ts, "patternUnits", attributes.PatternUnits());
@@ -614,7 +612,7 @@ void WriteSVGResourceContainer(WTF::TextStream& ts,
     // gradients using xlink:href, we need to build the full inheritance chain,
     // aka. collectGradientProperties()
     LinearGradientAttributes attributes;
-    ToSVGLinearGradientElement(gradient->GetElement())
+    To<SVGLinearGradientElement>(gradient->GetElement())
         ->CollectGradientAttributes(attributes);
     WriteCommonGradientProperties(ts, attributes);
 
@@ -629,7 +627,7 @@ void WriteSVGResourceContainer(WTF::TextStream& ts,
     // gradients using xlink:href, we need to build the full inheritance chain,
     // aka. collectGradientProperties()
     RadialGradientAttributes attributes;
-    ToSVGRadialGradientElement(gradient->GetElement())
+    To<SVGRadialGradientElement>(gradient->GetElement())
         ->CollectGradientAttributes(attributes);
     WriteCommonGradientProperties(ts, attributes);
 
@@ -649,9 +647,6 @@ void WriteSVGResourceContainer(WTF::TextStream& ts,
 void WriteSVGContainer(WTF::TextStream& ts,
                        const LayoutObject& container,
                        int indent) {
-  // Currently LayoutSVGResourceFilterPrimitive has no meaningful output.
-  if (container.IsSVGResourceFilterPrimitive())
-    return;
   WriteStandardPrefix(ts, container, indent);
   WritePositionAndStyle(ts, container);
   ts << "\n";
@@ -742,7 +737,7 @@ void WriteResources(WTF::TextStream& ts,
     WriteStandardPrefix(ts, *clipper, 0);
     ts << " " << clipper->ResourceBoundingBox(reference_box) << "\n";
   }
-  if (LayoutSVGResourceFilter* filter = resources->Filter()) {
+  if (LayoutSVGResourceFilter* filter = GetFilterResourceForSVG(style)) {
     DCHECK(style.HasFilter());
     DCHECK_EQ(style.Filter().size(), 1u);
     const FilterOperation& filter_operation = *style.Filter().at(0);

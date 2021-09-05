@@ -39,7 +39,7 @@ class TabModel {
  public:
   // Various ways tabs can be launched.
   // Values must be numbered from 0 and can't have gaps.
-  // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chrome.browser.tabmodel
+  // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chrome.browser.tab
   enum class TabLaunchType {
     // Opened from a link. Sets up a relationship between the newly created tab
     // and its parent.
@@ -82,13 +82,15 @@ class TabModel {
     FROM_LAUNCH_NEW_INCOGNITO_TAB,
     // Opened a non-restored tab during the startup process
     FROM_STARTUP,
+    // Opened from the start surface.
+    FROM_START_SURFACE,
     // Must be last.
     SIZE
   };
 
   // Various ways tabs can be selected.
   // Values must be numbered from 0 and can't have gaps.
-  // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chrome.browser.tabmodel
+  // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chrome.browser.tab
   enum class TabSelectionType {
     // Selection of adjacent tab when the active tab is closed in foreground.
     FROM_CLOSE,

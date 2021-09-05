@@ -40,18 +40,18 @@
     break;                                                                 \
   }
 
-void VivaldiTabScheduleExtCommand(BaseSessionService* base_session_service_,
+void VivaldiTabScheduleExtCommand(SnapshottingCommandStorageManager* command_storage_manager,
                                   const TabRestoreService::Tab& tab) {
   if (!tab.ext_data.empty()) {
-    base_session_service_->ScheduleCommand(vivaldi::CreateSetTabExtDataCommand(
+    command_storage_manager->ScheduleCommand(vivaldi::CreateSetTabExtDataCommand(
         kCommandSetExtData, tab.id, tab.ext_data));
   }
 }
 
-void VivaldiWindowsScheduleExtCommand(BaseSessionService* base_session_service_,
+void VivaldiWindowsScheduleExtCommand(SnapshottingCommandStorageManager* command_storage_manager,
                                       const TabRestoreService::Window& window) {
   if (!window.ext_data.empty()) {
-    base_session_service_->ScheduleCommand(
+    command_storage_manager->ScheduleCommand(
         vivaldi::CreateSetWindowExtDataCommand(kCommandSetWindowExtData,
                                                window.id, window.ext_data));
   }

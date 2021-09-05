@@ -28,14 +28,11 @@ TestWebClient::~TestWebClient() = default;
 
 void TestWebClient::AddAdditionalSchemes(Schemes* schemes) const {
   schemes->standard_schemes.push_back(kTestWebUIScheme);
-  schemes->standard_schemes.push_back(kTestNativeContentScheme);
   schemes->standard_schemes.push_back(kTestAppSpecificScheme);
 }
 
 bool TestWebClient::IsAppSpecificURL(const GURL& url) const {
-  return url.SchemeIs(kTestWebUIScheme) ||
-         url.SchemeIs(kTestNativeContentScheme) ||
-         url.SchemeIs(kTestAppSpecificScheme);
+  return url.SchemeIs(kTestWebUIScheme) || url.SchemeIs(kTestAppSpecificScheme);
 }
 
 bool TestWebClient::ShouldBlockUrlDuringRestore(const GURL& url,
@@ -52,7 +49,9 @@ base::string16 TestWebClient::GetPluginNotSupportedText() const {
 }
 
 std::string TestWebClient::GetUserAgent(UserAgentType type) const {
-  return "Chromium/66.0.3333.0 CFNetwork/893.14 Darwin/16.7.0";
+  if (type == UserAgentType::DESKTOP)
+    return "Chromium/66.0.3333.0 CFNetwork/893.14 Darwin/16.7.0 Desktop";
+  return "Chromium/66.0.3333.0 CFNetwork/893.14 Darwin/16.7.0 Mobile";
 }
 
 base::RefCountedMemory* TestWebClient::GetDataResourceBytes(
@@ -104,14 +103,22 @@ void TestWebClient::PrepareErrorPage(
     NSError* error,
     bool is_post,
     bool is_off_the_record,
+    const base::Optional<net::SSLInfo>& info,
+    int64_t navigation_id,
     base::OnceCallback<void(NSString*)> callback) {
+  net::CertStatus cert_status = info.has_value() ? info.value().cert_status : 0;
   std::move(callback).Run(base::SysUTF8ToNSString(testing::GetErrorText(
       web_state, url, base::SysNSStringToUTF8(error.domain), error.code,
-      is_post, is_off_the_record)));
+      is_post, is_off_the_record, cert_status)));
 }
 
 UIView* TestWebClient::GetWindowedContainer() {
   return UIApplication.sharedApplication.keyWindow.rootViewController.view;
+}
+
+UserAgentType TestWebClient::GetDefaultUserAgent(UIView* web_view,
+                                                 const GURL& url) {
+  return default_user_agent_;
 }
 
 }  // namespace web

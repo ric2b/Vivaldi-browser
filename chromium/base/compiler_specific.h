@@ -7,57 +7,9 @@
 
 #include "build/build_config.h"
 
-#if defined(COMPILER_MSVC)
-
-#if !defined(__clang__)
+#if defined(COMPILER_MSVC) && !defined(__clang__)
 #error "Only clang-cl is supported on Windows, see https://crbug.com/988071"
 #endif
-
-// Macros for suppressing and disabling warnings on MSVC.
-//
-// Warning numbers are enumerated at:
-// http://msdn.microsoft.com/en-us/library/8x5x43k7(VS.80).aspx
-//
-// The warning pragma:
-// http://msdn.microsoft.com/en-us/library/2c8f766e(VS.80).aspx
-//
-// Using __pragma instead of #pragma inside macros:
-// http://msdn.microsoft.com/en-us/library/d9x1s805.aspx
-
-// MSVC_PUSH_DISABLE_WARNING pushes |n| onto a stack of warnings to be disabled.
-// The warning remains disabled until popped by MSVC_POP_WARNING.
-#define MSVC_PUSH_DISABLE_WARNING(n) __pragma(warning(push)) \
-                                     __pragma(warning(disable:n))
-
-// Pop effects of innermost MSVC_PUSH_* macro.
-#define MSVC_POP_WARNING() __pragma(warning(pop))
-
-#else  // Not MSVC
-
-#define MSVC_PUSH_DISABLE_WARNING(n)
-#define MSVC_POP_WARNING()
-#define MSVC_DISABLE_OPTIMIZE()
-#define MSVC_ENABLE_OPTIMIZE()
-
-#endif  // COMPILER_MSVC
-
-// These macros can be helpful when investigating compiler bugs or when
-// investigating issues in local optimized builds, by temporarily disabling
-// optimizations for a single function or file. These macros should never be
-// used to permanently work around compiler bugs or other mysteries, and should
-// not be used in landed changes.
-#if !defined(OFFICIAL_BUILD)
-#if defined(__clang__)
-#define DISABLE_OPTIMIZE() __pragma(clang optimize off)
-#define ENABLE_OPTIMIZE() __pragma(clang optimize on)
-#elif defined(COMPILER_MSVC)
-#define DISABLE_OPTIMIZE() __pragma(optimize("", off))
-#define ENABLE_OPTIMIZE() __pragma(optimize("", on))
-#else
-// These macros are not currently available for other compiler options.
-#endif
-// These macros are not available in official builds.
-#endif  // !defined(OFFICIAL_BUILD)
 
 // Annotate a variable indicating it's ok if the variable is not used.
 // (Typically used to silence a compiler warning when the assignment
@@ -141,7 +93,7 @@
 // For member functions, the implicit this parameter counts as index 1.
 #if defined(COMPILER_GCC) || defined(__clang__)
 #define PRINTF_FORMAT(format_param, dots_param) \
-    __attribute__((format(printf, format_param, dots_param)))
+  __attribute__((format(printf, format_param, dots_param)))
 #else
 #define PRINTF_FORMAT(format_param, dots_param)
 #endif
@@ -170,14 +122,14 @@
 // Mark a memory region fully initialized.
 // Use this to annotate code that deliberately reads uninitialized data, for
 // example a GC scavenging root set pointers from the stack.
-#define MSAN_UNPOISON(p, size)  __msan_unpoison(p, size)
+#define MSAN_UNPOISON(p, size) __msan_unpoison(p, size)
 
 // Check a memory region for initializedness, as if it was being used here.
 // If any bits are uninitialized, crash with an MSan report.
 // Use this to sanitize data which MSan won't be able to track, e.g. before
 // passing data to another process via shared memory.
 #define MSAN_CHECK_MEM_IS_INITIALIZED(p, size) \
-    __msan_check_mem_is_initialized(p, size)
+  __msan_check_mem_is_initialized(p, size)
 #else  // MEMORY_SANITIZER
 #define MSAN_UNPOISON(p, size)
 #define MSAN_CHECK_MEM_IS_INITIALIZED(p, size)
@@ -258,6 +210,41 @@
 #if defined(__mips_msa) && defined(__mips_isa_rev) && (__mips_isa_rev >= 5)
 #define HAVE_MIPS_MSA_INTRINSICS 1
 #endif
+#endif
+
+#if defined(__clang__) && __has_attribute(uninitialized)
+// Attribute "uninitialized" disables -ftrivial-auto-var-init=pattern for
+// the specified variable.
+// Library-wide alternative is
+// 'configs -= [ "//build/config/compiler:default_init_stack_vars" ]' in .gn
+// file.
+//
+// See "init_stack_vars" in build/config/compiler/BUILD.gn and
+// http://crbug.com/977230
+// "init_stack_vars" is enabled for non-official builds and we hope to enable it
+// in official build in 2020 as well. The flag writes fixed pattern into
+// uninitialized parts of all local variables. In rare cases such initialization
+// is undesirable and attribute can be used:
+//   1. Degraded performance
+// In most cases compiler is able to remove additional stores. E.g. if memory is
+// never accessed or properly initialized later. Preserved stores mostly will
+// not affect program performance. However if compiler failed on some
+// performance critical code we can get a visible regression in a benchmark.
+//   2. memset, memcpy calls
+// Compiler may replaces some memory writes with memset or memcpy calls. This is
+// not -ftrivial-auto-var-init specific, but it can happen more likely with the
+// flag. It can be a problem if code is not linked with C run-time library.
+//
+// Note: The flag is security risk mitigation feature. So in future the
+// attribute uses should be avoided when possible. However to enable this
+// mitigation on the most of the code we need to be less strict now and minimize
+// number of exceptions later. So if in doubt feel free to use attribute, but
+// please document the problem for someone who is going to cleanup it later.
+// E.g. platform, bot, benchmark or test name in patch description or next to
+// the attribute.
+#define STACK_UNINITIALIZED __attribute__((uninitialized))
+#else
+#define STACK_UNINITIALIZED
 #endif
 
 #endif  // BASE_COMPILER_SPECIFIC_H_

@@ -34,7 +34,8 @@ struct PP_PrivateFindResult {
 };
 
 struct PP_PrivateAccessibilityViewportInfo {
-  double zoom_device_scale_factor;
+  double zoom;
+  double scale;
   struct PP_Point scroll;
   struct PP_Point offset;
   uint32_t selection_start_page_index;
@@ -63,15 +64,48 @@ struct PP_PrivateAccessibilityPageInfo {
   struct PP_Rect bounds;
   uint32_t text_run_count;
   uint32_t char_count;
-  uint32_t link_count;
-  uint32_t image_count;
 };
 
+// See PDF Reference 1.7, page 402, table 5.3.
+typedef enum {
+  PP_TEXTRENDERINGMODE_UNKNOWN = -1,
+  PP_TEXTRENDERINGMODE_FILL = 0,
+  PP_TEXTRENDERINGMODE_STROKE = 1,
+  PP_TEXTRENDERINGMODE_FILLSTROKE = 2,
+  PP_TEXTRENDERINGMODE_INVISIBLE = 3,
+  PP_TEXTRENDERINGMODE_FILLCLIP = 4,
+  PP_TEXTRENDERINGMODE_STROKECLIP = 5,
+  PP_TEXTRENDERINGMODE_FILLSTROKECLIP = 6,
+  PP_TEXTRENDERINGMODE_CLIP = 7,
+  PP_TEXTRENDERINGMODE_LAST = PP_TEXTRENDERINGMODE_CLIP
+} PP_TextRenderingMode;
+
+// This holds the text style information provided by the PDF and will be used
+// in accessibility to provide the text style information. Needs to stay in
+// sync with C++ version. (PrivateAccessibilityTextStyleInfo and
+// PdfAccessibilityTextStyleInfo)
+struct PP_PrivateAccessibilityTextStyleInfo {
+  const char* font_name;
+  uint32_t font_name_length;
+  int font_weight;
+  PP_TextRenderingMode render_mode;
+  float font_size;
+  // Colors are ARGB.
+  uint32_t fill_color;
+  uint32_t stroke_color;
+  bool is_italic;
+  bool is_bold;
+};
+
+// This holds the text run information provided by the PDF and will be used in
+// accessibility to provide the text run information.
+// Needs to stay in sync with C++ version. (PrivateAccessibilityTextRunInfo and
+// PdfAccessibilityTextRunInfo)
 struct PP_PrivateAccessibilityTextRunInfo {
   uint32_t len;
-  double font_size;
   struct PP_FloatRect bounds;
   PP_PrivateDirection direction;
+  struct PP_PrivateAccessibilityTextStyleInfo style;
 };
 
 struct PP_PrivateAccessibilityCharInfo {
@@ -116,7 +150,59 @@ struct PP_PrivateAccessibilityImageInfo {
   struct PP_FloatRect bounds;
 };
 
-// Holds links and images within a PDF page so that IPC messages
+// This holds text highlight information provided by the PDF and will be
+// used in accessibility to expose it. Text highlights can have an associated
+// popup note, the data of which is also captured here.
+// Needs to stay in sync with C++ versions (PdfAccessibilityHighlightInfo and
+// PrivateAccessibilityHighlightInfo).
+struct PP_PrivateAccessibilityHighlightInfo {
+  // Represents the text of the associated popup note, if present.
+  const char* note_text;
+  uint32_t note_text_length;
+  // Index of the highlight in the page annotation list. Used to identify the
+  // annotation on which action needs to be performed.
+  uint32_t index_in_page;
+  // Highlights are annotations over existing page text.  |text_run_index|
+  // denotes the index of the text run where the highlight starts and
+  // |text_run_count| denotes the number of text runs which the highlight spans
+  // across.
+  uint32_t text_run_index;
+  uint32_t text_run_count;
+  // Bounding box of the highlight.
+  struct PP_FloatRect bounds;
+  // Color of the highlight in ARGB. Alpha is stored in the first 8 MSBs. RGB
+  // follows after it with each using 8 bytes.
+  uint32_t color;
+};
+
+// This holds text form field information provided by the PDF and will be used
+// in accessibility to expose it. Needs to stay in sync with C++ versions
+// (PdfAccessibilityTextFieldInfo and PrivateAccessibilityTextFieldInfo).
+struct PP_PrivateAccessibilityTextFieldInfo {
+  // Represents the name property of text field, if present.
+  const char* name;
+  uint32_t name_length;
+  // Represents the value property of text field, if present.
+  const char* value;
+  uint32_t value_length;
+  // Represents if the text field is non-editable.
+  bool is_read_only;
+  // Represents if the field should have value at the time it is exported by a
+  // submit form action.
+  bool is_required;
+  // Represents if the text field is a password text field type.
+  bool is_password;
+  // Index of the text field in the collection of text fields in the page. Used
+  // to identify the annotation on which action needs to be performed.
+  uint32_t index_in_page;
+  // We anchor the text field to a text run index, this denotes the text run
+  // before which the text field should be inserted in the accessibility tree.
+  uint32_t text_run_index;
+  // Bounding box of the text field.
+  struct PP_FloatRect bounds;
+};
+
+// Holds links, images and highlights within a PDF page so that IPC messages
 // passing accessibility objects do not have too many parameters.
 // Needs to stay in sync with C++ versions (PdfAccessibilityPageObjects and
 // PrivateAccessibilityPageObjects).
@@ -125,6 +211,10 @@ struct PP_PrivateAccessibilityPageObjects {
   uint32_t link_count;
   struct PP_PrivateAccessibilityImageInfo* images;
   uint32_t image_count;
+  struct PP_PrivateAccessibilityHighlightInfo* highlights;
+  uint32_t highlight_count;
+  struct PP_PrivateAccessibilityTextFieldInfo* text_fields;
+  uint32_t text_field_count;
 };
 
 struct PPB_PDF {
@@ -183,11 +273,9 @@ struct PPB_PDF {
   // Sets the link currently under the cursor.
   void (*SetLinkUnderCursor)(PP_Instance instance, const char* url);
 
-  // Gets pointers to both the mmap'd V8 snapshot files and their sizes.
-  // This is needed when loading V8's initial snapshot from external files.
+  // Gets pointers to the mmap'd V8 snapshot file and its size.
+  // This is needed when loading V8's initial snapshot from an external file.
   void (*GetV8ExternalSnapshotData)(PP_Instance instance,
-                                    const char** natives_data_out,
-                                    int* natives_size_out,
                                     const char** snapshot_data_out,
                                     int* snapshot_size_out);
 

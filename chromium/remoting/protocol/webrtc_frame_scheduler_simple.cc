@@ -110,7 +110,7 @@ void WebrtcFrameSchedulerSimple::OnTargetBitrateChanged(int bandwidth_kbps) {
 
 void WebrtcFrameSchedulerSimple::Start(
     WebrtcDummyVideoEncoderFactory* video_encoder_factory,
-    const base::Closure& capture_callback) {
+    const base::RepeatingClosure& capture_callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
   capture_callback_ = capture_callback;
   video_encoder_factory->SetVideoChannelStateObserver(
@@ -290,9 +290,10 @@ void WebrtcFrameSchedulerSimple::ScheduleNextFrame() {
 
   target_capture_time = std::max(target_capture_time, now);
 
-  capture_timer_.Start(FROM_HERE, target_capture_time - now,
-                       base::Bind(&WebrtcFrameSchedulerSimple::CaptureNextFrame,
-                                  base::Unretained(this)));
+  capture_timer_.Start(
+      FROM_HERE, target_capture_time - now,
+      base::BindOnce(&WebrtcFrameSchedulerSimple::CaptureNextFrame,
+                     base::Unretained(this)));
 }
 
 void WebrtcFrameSchedulerSimple::CaptureNextFrame() {

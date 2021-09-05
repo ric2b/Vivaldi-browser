@@ -12,7 +12,8 @@
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "third_party/libxml/chromium/libxml_utils.h"
+#include "third_party/libxml/chromium/xml_reader.h"
+#include "third_party/libxml/chromium/xml_writer.h"
 #include "third_party/protobuf/src/google/protobuf/text_format.h"
 #include "tools/traffic_annotation/auditor/traffic_annotation_auditor.h"
 
@@ -479,7 +480,8 @@ bool TrafficAnnotationExporter::GetOtherPlatformsAnnotationIDs(
     return false;
 
   ids->clear();
-  for (const std::pair<std::string, ArchivedAnnotation>& item : archive_) {
+  for (const std::pair<const std::string, ArchivedAnnotation>& item :
+       archive_) {
     if (item.second.deprecation_date.empty() &&
         !MatchesCurrentPlatform(item.second))
       ids->push_back(item.first);

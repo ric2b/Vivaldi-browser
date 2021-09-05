@@ -13,6 +13,7 @@
 #include "third_party/blink/renderer/platform/graphics/dark_mode_generic_classifier.h"
 #include "third_party/blink/renderer/platform/graphics/dark_mode_icon_classifier.h"
 #include "third_party/blink/renderer/platform/graphics/dark_mode_image_classifier.h"
+#include "third_party/blink/renderer/platform/graphics/graphics_context.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_types.h"
 #include "third_party/skia/include/core/SkColorFilter.h"
 #include "third_party/skia/include/effects/SkColorMatrix.h"
@@ -129,7 +130,13 @@ void DarkModeFilter::UpdateSettings(const DarkModeSettings& new_settings) {
 
 Color DarkModeFilter::InvertColorIfNeeded(const Color& color,
                                           ElementRole role) {
-  if (IsDarkModeActive() && ShouldApplyToColor(color, role))
+  if (!IsDarkModeActive())
+    return color;
+
+  if (role_override_.has_value())
+    role = role_override_.value();
+
+  if (ShouldApplyToColor(color, role))
     return color_filter_->InvertColor(color);
   return color;
 }
@@ -149,6 +156,9 @@ base::Optional<cc::PaintFlags> DarkModeFilter::ApplyToFlagsIfNeeded(
     ElementRole role) {
   if (!IsDarkModeActive())
     return base::nullopt;
+
+  if (role_override_.has_value())
+    role = role_override_.value();
 
   cc::PaintFlags dark_mode_flags = flags;
   if (flags.HasShader()) {
@@ -172,22 +182,48 @@ bool DarkModeFilter::IsDarkModeActive() const {
 // perform some other logic in between confirming dark mode is active and
 // checking the color classifiers.
 bool DarkModeFilter::ShouldApplyToColor(const Color& color, ElementRole role) {
-  if (role == ElementRole::kBackground) {
-    // Calling get() is necessary below because operator<< in std::unique_ptr is
-    // a C++20 feature.
-    // TODO(https://crbug.com/980914): Drop .get() once we move to C++20.
-    DCHECK_NE(background_classifier_.get(), nullptr);
-    return background_classifier_->ShouldInvertColor(color) ==
-           DarkModeClassification::kApplyFilter;
-  }
+  switch (role) {
+    case ElementRole::kText:
+      DCHECK(text_classifier_);
+      return text_classifier_->ShouldInvertColor(color) ==
+             DarkModeClassification::kApplyFilter;
+    case ElementRole::kListSymbol:
+      // TODO(prashant.n): Rename text_classifier_ to foreground_classifier_,
+      // so that same classifier can be used for all roles which are supposed
+      // to be at foreground.
+      DCHECK(text_classifier_);
+      return text_classifier_->ShouldInvertColor(color) ==
+             DarkModeClassification::kApplyFilter;
+    case ElementRole::kBackground:
+      DCHECK(background_classifier_);
+      return background_classifier_->ShouldInvertColor(color) ==
+             DarkModeClassification::kApplyFilter;
+    case ElementRole::kSVG:
+      // 1) Inline SVG images are considered as individual shapes and do not
+      // have an Image object associated with them. So they do not go through
+      // the regular image classification pipeline. Do not apply any filter to
+      // the SVG shapes until there is a way to get the classification for the
+      // entire image to which these shapes belong.
 
-  DCHECK_EQ(role, ElementRole::kText);
-  // Calling get() is necessary below because operator<< in std::unique_ptr is
-  // a C++20 feature.
-  // TODO(https://crbug.com/980914): Drop .get() once we move to C++20.
-  DCHECK_NE(text_classifier_.get(), nullptr);
-  return text_classifier_->ShouldInvertColor(color) ==
-         DarkModeClassification::kApplyFilter;
+      // 2) Non-inline SVG images are already classified at this point and have
+      // a filter applied if necessary.
+      return false;
+  }
+  NOTREACHED();
+}
+
+ScopedDarkModeElementRoleOverride::ScopedDarkModeElementRoleOverride(
+    GraphicsContext* graphics_context,
+    DarkModeFilter::ElementRole role)
+    : graphics_context_(graphics_context) {
+  DarkModeFilter& dark_mode_filter = graphics_context->dark_mode_filter_;
+  previous_role_override_ = dark_mode_filter.role_override_;
+  dark_mode_filter.role_override_ = role;
+}
+
+ScopedDarkModeElementRoleOverride::~ScopedDarkModeElementRoleOverride() {
+  DarkModeFilter& dark_mode_filter = graphics_context_->dark_mode_filter_;
+  dark_mode_filter.role_override_ = previous_role_override_;
 }
 
 }  // namespace blink

@@ -15,7 +15,7 @@
 #include "content/common/content_export.h"
 #include "content/common/input/synthetic_smooth_drag_gesture_params.h"
 #include "content/common/input/synthetic_smooth_scroll_gesture_params.h"
-#include "third_party/blink/public/platform/web_input_event.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
 #include "ui/events/types/scroll_types.h"
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/gfx/geometry/vector2d_f.h"
@@ -39,7 +39,7 @@ class CONTENT_EXPORT SyntheticSmoothMoveGestureParams {
   int fling_velocity_y;
   bool prevent_fling;
   bool add_slop;
-  ui::input_types::ScrollGranularity granularity;
+  ui::ScrollGranularity granularity;
 };
 
 // This class is used as helper class for simulation of scroll and drag.

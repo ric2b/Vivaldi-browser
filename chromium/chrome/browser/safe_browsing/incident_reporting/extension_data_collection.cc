@@ -12,7 +12,7 @@
 #include "chrome/browser/extensions/install_signer.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/safe_browsing/incident_reporting/incident_reporting_service.h"
-#include "components/safe_browsing/proto/csd.pb.h"
+#include "components/safe_browsing/core/proto/csd.pb.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_prefs_factory.h"
 #include "extensions/browser/extension_registry.h"
@@ -57,9 +57,6 @@ void PopulateExtensionInfo(
     extension_info->set_update_url(update_url);
   }
 
-  extension_info->set_installed_by_custodian(
-      extensions::util::WasInstalledByCustodian(
-          extension.id(), extension_registry.browser_context()));
   extension_info->set_installed_by_default(
       extension.was_installed_by_default());
   extension_info->set_installed_by_oem(extension.was_installed_by_oem());

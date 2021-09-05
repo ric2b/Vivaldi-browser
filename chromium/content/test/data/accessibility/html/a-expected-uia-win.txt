@@ -1,3 +1,4 @@
-document
-++group
-++++link Name='normal link'
+Document
+++Group IsControlElement=false
+++++Hyperlink Name='normal link'
+++++++Text Name='normal link' IsControlElement=false

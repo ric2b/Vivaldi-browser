@@ -15,6 +15,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/platform_util.h"
@@ -107,6 +108,11 @@ bool IsDownloadAllowedBySafeBrowsing(
     case Result::ASYNC_SCANNING:
     case Result::BLOCKED_PASSWORD_PROTECTED:
     case Result::BLOCKED_TOO_LARGE:
+    case Result::SENSITIVE_CONTENT_BLOCK:
+    case Result::SENSITIVE_CONTENT_WARNING:
+    case Result::DEEP_SCANNED_SAFE:
+    case Result::PROMPT_FOR_SCANNING:
+    case Result::BLOCKED_UNSUPPORTED_FILE_TYPE:
       NOTREACHED();
       return true;
   }
@@ -179,10 +185,9 @@ void FileSelectHelper::FileSelectedWithExtraInfo(
   files.push_back(file);
 
 #if defined(OS_MACOSX)
-  base::PostTask(
+  base::ThreadPool::PostTask(
       FROM_HERE,
-      {base::ThreadPool(), base::MayBlock(),
-       base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
+      {base::MayBlock(), base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
       base::BindOnce(&FileSelectHelper::ProcessSelectedFilesMac, this, files));
 #else
   ConvertToFileChooserFileInfoList(files);
@@ -208,10 +213,9 @@ void FileSelectHelper::MultiFilesSelectedWithExtraInfo(
     profile_->set_last_selected_directory(path);
   }
 #if defined(OS_MACOSX)
-  base::PostTask(
+  base::ThreadPool::PostTask(
       FROM_HERE,
-      {base::ThreadPool(), base::MayBlock(),
-       base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
+      {base::MayBlock(), base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
       base::BindOnce(&FileSelectHelper::ProcessSelectedFilesMac, this, files));
 #else
   ConvertToFileChooserFileInfoList(files);
@@ -338,7 +342,8 @@ void FileSelectHelper::PerformSafeBrowsingDeepScanIfNeeded(
     safe_browsing::DeepScanningDialogDelegate::ShowForWebContents(
         web_contents_, std::move(data),
         base::BindOnce(&FileSelectHelper::DeepScanCompletionCallback, this,
-                       std::move(list)));
+                       std::move(list)),
+        safe_browsing::DeepScanAccessPoint::UPLOAD);
   } else {
     NotifyListenerAndEnd(std::move(list));
   }
@@ -383,9 +388,9 @@ void FileSelectHelper::NotifyListenerAndEnd(
 }
 
 void FileSelectHelper::DeleteTemporaryFiles() {
-  base::PostTask(
+  base::ThreadPool::PostTask(
       FROM_HERE,
-      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::BEST_EFFORT,
+      {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
        base::TaskShutdownBehavior::BLOCK_SHUTDOWN},
       base::BindOnce(&DeleteFiles, std::move(temporary_files_)));
 }
@@ -552,9 +557,10 @@ void FileSelectHelper::RunFileChooser(
   content::WebContentsObserver::Observe(web_contents_);
   observer_.Add(render_frame_host_->GetRenderViewHost()->GetWidget());
 
-  base::PostTask(FROM_HERE, {base::ThreadPool(), base::MayBlock()},
-                 base::BindOnce(&FileSelectHelper::GetFileTypesInThreadPool,
-                                this, std::move(params)));
+  base::ThreadPool::PostTask(
+      FROM_HERE, {base::MayBlock()},
+      base::BindOnce(&FileSelectHelper::GetFileTypesInThreadPool, this,
+                     std::move(params)));
 
   // Because this class returns notifications to the RenderViewHost, it is
   // difficult for callers to know how long to keep a reference to this
@@ -596,6 +602,8 @@ void FileSelectHelper::GetSanitizedFilenameOnUIThread(
 void FileSelectHelper::CheckDownloadRequestWithSafeBrowsing(
     const base::FilePath& default_file_path,
     FileChooserParamsPtr params) {
+// Download Protection is not supported on Android.
+#if BUILDFLAG(FULL_SAFE_BROWSING)
   safe_browsing::SafeBrowsingService* sb_service =
       g_browser_process->safe_browsing_service();
 
@@ -620,12 +628,14 @@ void FileSelectHelper::CheckDownloadRequestWithSafeBrowsing(
   GURL requestor_url = params->requestor;
   sb_service->download_protection_service()->CheckPPAPIDownloadRequest(
       requestor_url,
-      render_frame_host_? render_frame_host_->GetLastCommittedURL() : GURL(),
-      WebContents::FromRenderFrameHost(render_frame_host_),
-      default_file_path, alternate_extensions, profile_,
-      base::Bind(&InterpretSafeBrowsingVerdict,
-                 base::Bind(&FileSelectHelper::ProceedWithSafeBrowsingVerdict,
-                            this, default_file_path, base::Passed(&params))));
+      render_frame_host_ ? render_frame_host_->GetLastCommittedURL() : GURL(),
+      WebContents::FromRenderFrameHost(render_frame_host_), default_file_path,
+      alternate_extensions, profile_,
+      base::BindOnce(
+          &InterpretSafeBrowsingVerdict,
+          base::Bind(&FileSelectHelper::ProceedWithSafeBrowsingVerdict, this,
+                     default_file_path, base::Passed(&params))));
+#endif
 }
 
 void FileSelectHelper::ProceedWithSafeBrowsingVerdict(

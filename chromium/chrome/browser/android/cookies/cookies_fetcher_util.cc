@@ -7,7 +7,7 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/time/time.h"
-#include "chrome/android/public/profiles/jni_headers/CookiesFetcher_jni.h"
+#include "chrome/browser/profiles/android/jni_headers/CookiesFetcher_jni.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -50,7 +50,7 @@ void OnCookiesFetchFinished(const net::CookieList& cookies) {
         i->ExpiryDate().ToDeltaSinceWindowsEpoch().InMicroseconds(),
         i->LastAccessDate().ToDeltaSinceWindowsEpoch().InMicroseconds(),
         i->IsSecure(), i->IsHttpOnly(), static_cast<int>(i->SameSite()),
-        i->Priority());
+        i->Priority(), static_cast<int>(i->SourceScheme()));
     env->SetObjectArrayElement(joa.obj(), index++, java_cookie.obj());
   }
 
@@ -88,7 +88,8 @@ static void JNI_CookiesFetcher_RestoreCookies(
     jboolean secure,
     jboolean httponly,
     jint same_site,
-    jint priority) {
+    jint priority,
+    jint source_scheme) {
   if (!ProfileManager::GetPrimaryUserProfile()->HasOffTheRecordProfile()) {
     return;  // Don't create it. There is nothing to do.
   }
@@ -106,7 +107,8 @@ static void JNI_CookiesFetcher_RestoreCookies(
           base::Time::FromDeltaSinceWindowsEpoch(
               base::TimeDelta::FromMicroseconds(last_access)),
           secure, httponly, static_cast<net::CookieSameSite>(same_site),
-          static_cast<net::CookiePriority>(priority)));
+          static_cast<net::CookiePriority>(priority),
+          static_cast<net::CookieSourceScheme>(source_scheme)));
 
   // Assume HTTPS - since the cookies are being restored from another store,
   // they have already gone through the strict secure check.
@@ -115,7 +117,7 @@ static void JNI_CookiesFetcher_RestoreCookies(
   net::CookieOptions options;
   options.set_include_httponly();
   options.set_same_site_cookie_context(
-      net::CookieOptions::SameSiteCookieContext::SAME_SITE_STRICT);
+      net::CookieOptions::SameSiteCookieContext::MakeInclusive());
   GetCookieServiceClient()->SetCanonicalCookie(
       *cookie, "https", options,
       network::mojom::CookieManager::SetCanonicalCookieCallback());

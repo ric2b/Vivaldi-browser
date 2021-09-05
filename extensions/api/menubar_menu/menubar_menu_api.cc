@@ -3,14 +3,19 @@
 //
 #include "extensions/api/menubar_menu/menubar_menu_api.h"
 
+#include "base/base64.h"
 #include "base/lazy_instance.h"
 #include "base/strings/utf_string_conversions.h"
+#include "browser/menus/vivaldi_menu_enums.h"
+#include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/profiles/profile.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/context_menu_params.h"
+#include "content/public/browser/context_menu_params.h"
 #include "extensions/browser/extension_function_dispatcher.h"
 #include "extensions/tools/vivaldi_tools.h"
 #include "ui/base/accelerators/accelerator.h"
+#include "ui/base/models/simple_menu_model.h"
 
 namespace extensions {
 
@@ -80,7 +85,7 @@ static base::LazyInstance<BrowserContextKeyedAPIFactory<
     MenubarMenuAPI>>::DestructorAtExit g_menubar_menu =
         LAZY_INSTANCE_INITIALIZER;
 
-MenubarMenuAPI::MenubarMenuAPI(BrowserContext* context) {}
+MenubarMenuAPI::MenubarMenuAPI(content::BrowserContext* context) {}
 
 MenubarMenuAPI::~MenubarMenuAPI() {}
 
@@ -332,7 +337,20 @@ std::string MenubarMenuShowFunction::PopulateModel(
         }
       }
     } else if (child.separator) {
-      menu_model->AddSeparator(ui::NORMAL_SEPARATOR);
+      if (bookmark_menu_id_ == menu_id) {
+        // We do not populate the bookmark menu container here so the menu model
+        // does not know about it. Adding a separator under the bookmarks may
+        // then fail in some case (double sepatators and a separator at the
+        // start of the menu) so we let the bookmark code add one.
+        if (static_cast<unsigned int>(menu_model->GetItemCount()) ==
+            bookmark_menu_container_->siblings[0].menu_index) {
+          bookmark_menu_container_->siblings[0].tweak_separator = true;
+        } else {
+          menu_model->AddSeparator(ui::NORMAL_SEPARATOR);
+        }
+      } else {
+        menu_model->AddSeparator(ui::NORMAL_SEPARATOR);
+      }
     } else if (child.container) {
       if (child.container->type ==
           vivaldi::menubar_menu::CONTAINER_TYPE_BOOKMARKS) {
@@ -342,6 +360,20 @@ std::string MenubarMenuShowFunction::PopulateModel(
         bookmark_menu_id_ = menu_id;
         bookmark_menu_container_.reset(
             new ::vivaldi::BookmarkMenuContainer(this));
+        switch (child.container->edge) {
+          case vivaldi::menubar_menu::EDGE_ABOVE:
+            bookmark_menu_container_->edge =
+              ::vivaldi::BookmarkMenuContainer::Above;
+            break;
+          case vivaldi::menubar_menu::EDGE_BELOW:
+            bookmark_menu_container_->edge =
+              ::vivaldi::BookmarkMenuContainer::Below;
+            break;
+          default:
+            bookmark_menu_container_->edge =
+              ::vivaldi::BookmarkMenuContainer::Off;
+            break;
+        };
         bookmark_menu_container_->siblings.reserve(1);
         bookmark_menu_container_->siblings.emplace_back();
         ::vivaldi::BookmarkMenuContainerEntry* sibling =
@@ -351,6 +383,8 @@ std::string MenubarMenuShowFunction::PopulateModel(
           return "Illegal bookmark id";
         }
         sibling->offset = child.container->offset;
+        sibling->menu_index = menu_model->GetItemCount();
+        sibling->tweak_separator = false;
         sibling->folder_group =
             child.container->group_folders && *child.container->group_folders;
         bookmark_menu_container_->support.initIcons(params->properties.icons);
@@ -400,8 +434,7 @@ std::string MenubarMenuShowFunction::PopulateModel(
     } else {
       return "Unknown menu element";
     }
-	}
-  SanitizeModel(menu_model);
+  }
   return "";
 }
 
@@ -469,7 +502,7 @@ void MenubarMenuShowFunction::OnMenuOpened(int menu_id) {
 void MenubarMenuShowFunction::OnMenuClosed() {
   namespace Results = vivaldi::menubar_menu::Show::Results;
   MenubarMenuAPI::SendClose(browser_context());
-  Respond(ArgumentList(Show::Results::Create()));
+  Respond(ArgumentList(vivaldi::menubar_menu::Show::Results::Create()));
   Release();
 }
 

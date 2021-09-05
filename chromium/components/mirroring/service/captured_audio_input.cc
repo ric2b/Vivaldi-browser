@@ -11,8 +11,7 @@
 namespace mirroring {
 
 CapturedAudioInput::CapturedAudioInput(StreamCreatorCallback callback)
-    : stream_creator_callback_(std::move(callback)),
-      stream_client_binding_(this) {
+    : stream_creator_callback_(std::move(callback)) {
   DETACH_FROM_SEQUENCE(sequence_checker_);
   DCHECK(!stream_creator_callback_.is_null());
 }
@@ -48,8 +47,7 @@ void CapturedAudioInput::SetVolume(double volume) {
 void CapturedAudioInput::CloseStream() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   delegate_ = nullptr;
-  if (stream_client_binding_.is_bound())
-    stream_client_binding_.Unbind();
+  stream_client_receiver_.reset();
   stream_.reset();
 }
 
@@ -59,29 +57,27 @@ void CapturedAudioInput::SetOutputDeviceForAec(
 }
 
 void CapturedAudioInput::StreamCreated(
-    media::mojom::AudioInputStreamPtr stream,
-    media::mojom::AudioInputStreamClientRequest client_request,
+    mojo::PendingRemote<media::mojom::AudioInputStream> stream,
+    mojo::PendingReceiver<media::mojom::AudioInputStreamClient> client_receiver,
     media::mojom::ReadOnlyAudioDataPipePtr data_pipe,
     bool initially_muted) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(delegate_);
   DCHECK(!stream_);
-  DCHECK(!stream_client_binding_.is_bound());
+  DCHECK(!stream_client_receiver_.is_bound());
 
-  stream_ = std::move(stream);
-  stream_client_binding_.Bind(std::move(client_request));
+  stream_.Bind(std::move(stream));
+  stream_client_receiver_.Bind(std::move(client_receiver));
 
-  base::PlatformFile socket_handle;
-  auto result =
-      mojo::UnwrapPlatformFile(std::move(data_pipe->socket), &socket_handle);
-  DCHECK_EQ(result, MOJO_RESULT_OK);
+  DCHECK(data_pipe->socket.is_valid_platform_file());
+  base::ScopedPlatformFile socket_handle = data_pipe->socket.TakePlatformFile();
 
   base::ReadOnlySharedMemoryRegion& shared_memory_region =
       data_pipe->shared_memory;
   DCHECK(shared_memory_region.IsValid());
 
-  delegate_->OnStreamCreated(std::move(shared_memory_region), socket_handle,
-                             initially_muted);
+  delegate_->OnStreamCreated(std::move(shared_memory_region),
+                             std::move(socket_handle), initially_muted);
 }
 
 void CapturedAudioInput::OnError() {

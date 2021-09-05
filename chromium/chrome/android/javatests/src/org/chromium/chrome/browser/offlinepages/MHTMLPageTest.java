@@ -15,14 +15,15 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.base.test.util.UrlUtils;
-import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.download.DownloadController;
 import org.chromium.chrome.browser.download.DownloadInfo;
 import org.chromium.chrome.browser.download.DownloadTestRule;
 import org.chromium.chrome.browser.download.DownloadTestRule.CustomMainActivityStart;
 import org.chromium.chrome.browser.download.items.OfflineContentAggregatorFactory;
+import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.components.offline_items_collection.ContentId;
@@ -50,8 +51,7 @@ public class MHTMLPageTest implements CustomMainActivityStart {
 
     private EmbeddedTestServer mTestServer;
 
-    private static class TestDownloadNotificationService
-            implements DownloadController.DownloadNotificationService {
+    private static class TestDownloadNotificationService implements DownloadController.Observer {
         private Semaphore mSemaphore;
 
         TestDownloadNotificationService(Semaphore semaphore) {
@@ -118,6 +118,7 @@ public class MHTMLPageTest implements CustomMainActivityStart {
     @Test
     @SmallTest
     @RetryOnFailure
+    @DisabledTest(message = "Flaky. crbug.com/1030558")
     public void testDownloadMultipartRelatedPageFromServer() throws Exception {
         // .mhtml file is mapped to "multipart/related" by the test server.
         final String url = mTestServer.getURL("/chrome/test/data/android/hello.mhtml");

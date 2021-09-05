@@ -49,7 +49,8 @@ void MockMediaSessionMojoObserver::MediaSessionInfoChanged(
     run_loop_->Quit();
     expected_controllable_.reset();
   } else if (wanted_state_ == session_info_->state ||
-             session_info_->playback_state == wanted_playback_state_) {
+             session_info_->playback_state == wanted_playback_state_ ||
+             session_info_->audio_video_state == wanted_audio_video_state_) {
     run_loop_->Quit();
   }
 }
@@ -125,6 +126,15 @@ void MockMediaSessionMojoObserver::WaitForPlaybackState(
     return;
 
   wanted_playback_state_ = wanted_state;
+  StartWaiting();
+}
+
+void MockMediaSessionMojoObserver::WaitForAudioVideoState(
+    mojom::MediaAudioVideoState wanted_state) {
+  if (session_info_ && session_info_->audio_video_state == wanted_state)
+    return;
+
+  wanted_audio_video_state_ = wanted_state;
   StartWaiting();
 }
 
@@ -301,6 +311,14 @@ void MockMediaSession::SeekTo(base::TimeDelta seek_time) {
 
 void MockMediaSession::ScrubTo(base::TimeDelta seek_time) {
   is_scrubbing_ = true;
+}
+
+void MockMediaSession::EnterPictureInPicture() {
+  // TODO(crbug.com/1040263): Implement EnterPictureinpicture.
+}
+
+void MockMediaSession::ExitPictureInPicture() {
+  // TODO(crbug.com/1040263): Implement ExitPictureinpicture.
 }
 
 void MockMediaSession::SetIsControllable(bool value) {

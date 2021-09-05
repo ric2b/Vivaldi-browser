@@ -6,6 +6,7 @@
 
 #include "base/logging.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
+#import "ios/chrome/browser/ui/commands/omnibox_commands.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_animator.h"
 #import "ios/chrome/browser/ui/toolbar/adaptive_toolbar_view_controller+subclassing.h"
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_button.h"
@@ -14,7 +15,6 @@
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_tools_menu_button.h"
 #import "ios/chrome/browser/ui/toolbar/primary_toolbar_view.h"
 #import "ios/chrome/browser/ui/toolbar/primary_toolbar_view_controller_delegate.h"
-#import "ios/chrome/browser/ui/toolbar/public/omnibox_focuser.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_constants.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_utils.h"
 #import "ios/chrome/browser/ui/util/dynamic_type_util.h"
@@ -129,13 +129,6 @@
   [self.view.collapsedToolbarButton addTarget:self
                                        action:@selector(exitFullscreen)
                              forControlEvents:UIControlEventTouchUpInside];
-
-  if (IsCompactHeight(self)) {
-    self.view.locationBarExtraBottomPadding.constant =
-        kAdaptiveLocationBarExtraVerticalMargin;
-  } else {
-    self.view.locationBarExtraBottomPadding.constant = 0;
-  }
 }
 
 - (void)viewDidLoad {
@@ -264,12 +257,6 @@
     (UITraitCollection*)previousTraitCollection {
   [self.delegate
       viewControllerTraitCollectionDidChange:previousTraitCollection];
-  if (IsCompactHeight(self)) {
-    self.view.locationBarExtraBottomPadding.constant =
-        kAdaptiveLocationBarExtraVerticalMargin;
-  } else {
-    self.view.locationBarExtraBottomPadding.constant = 0;
-  }
   self.view.locationBarBottomConstraint.constant =
       [self verticalMarginForLocationBarForFullscreenProgress:
                 self.previousFullscreenProgress];
@@ -304,8 +291,8 @@
 - (CGFloat)verticalMarginForLocationBarForFullscreenProgress:(CGFloat)progress {
   // The vertical bottom margin for the location bar is such that the location
   // bar looks visually centered. However, the constraints are not geometrically
-  // centering the location bar. It is moved by 0pt (+ 1pt from extra padding)
-  // in iPhone landscape and by 3pt in all other configurations.
+  // centering the location bar. It is moved by 0pt in iPhone landscape and by
+  // 3pt in all other configurations.
   CGFloat fullscreenVerticalMargin =
       IsCompactHeight(self) ? 0 : kAdaptiveLocationBarVerticalMarginFullscreen;
   return -AlignValueToPixel((kAdaptiveLocationBarVerticalMargin * progress +

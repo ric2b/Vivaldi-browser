@@ -54,7 +54,7 @@ public class MultiThumbnailCardProvider implements TabListMediator.ThumbnailProv
     private final List<Rect> mFaviconRects = new ArrayList<>(4);
     private final List<RectF> mThumbnailRects = new ArrayList<>(4);
     private final List<RectF> mFaviconBackgroundRects = new ArrayList<>(4);
-    private final TabListFaviconProvider mTabListFaviconProvider;
+    private TabListFaviconProvider mTabListFaviconProvider;
 
     private class MultiThumbnailFetcher {
         private final Tab mInitialTab;
@@ -117,25 +117,26 @@ public class MultiThumbnailCardProvider implements TabListMediator.ThumbnailProv
             for (int i = 0; i < 4; i++) {
                 if (mTabs.get(i) != null) {
                     final int index = i;
-                    final String url = mTabs.get(i).getUrl();
+                    final String url = mTabs.get(i).getUrlString();
                     final boolean isIncognito = mTabs.get(i).isIncognito();
                     // getTabThumbnailWithCallback() might call the callback up to twice,
                     // so use |lastFavicon| to avoid fetching the favicon the second time.
                     // Fetching the favicon after getting the live thumbnail would lead to
                     // visible flicker.
                     final AtomicReference<Drawable> lastFavicon = new AtomicReference<>();
-                    mTabContentManager.getTabThumbnailWithCallback(mTabs.get(i), thumbnail -> {
-                        drawThumbnailBitmapOnCanvasWithFrame(thumbnail, index);
-                        if (lastFavicon.get() != null) {
-                            drawFaviconThenMaybeSendBack(lastFavicon.get(), index);
-                        } else {
-                            mTabListFaviconProvider.getFaviconForUrlAsync(
-                                    url, isIncognito, (Drawable favicon) -> {
-                                        lastFavicon.set(favicon);
-                                        drawFaviconThenMaybeSendBack(favicon, index);
-                                    });
-                        }
-                    }, mForceUpdate && i == 0, mWriteToCache && i == 0);
+                    mTabContentManager.getTabThumbnailWithCallback(
+                            mTabs.get(i).getId(), thumbnail -> {
+                                drawThumbnailBitmapOnCanvasWithFrame(thumbnail, index);
+                                if (lastFavicon.get() != null) {
+                                    drawFaviconThenMaybeSendBack(lastFavicon.get(), index);
+                                } else {
+                                    mTabListFaviconProvider.getFaviconForUrlAsync(
+                                            url, isIncognito, (Drawable favicon) -> {
+                                                lastFavicon.set(favicon);
+                                                drawFaviconThenMaybeSendBack(favicon, index);
+                                            });
+                                }
+                            }, mForceUpdate && i == 0, mWriteToCache && i == 0);
                 } else {
                     drawThumbnailBitmapOnCanvasWithFrame(null, i);
                     if (mText != null && i == 3) {
@@ -204,7 +205,10 @@ public class MultiThumbnailCardProvider implements TabListMediator.ThumbnailProv
         mSize = (int) resource.getDimension(R.dimen.tab_grid_thumbnail_card_default_size);
         mFaviconCirclePadding =
                 resource.getDimension(R.dimen.tab_grid_thumbnail_favicon_background_padding);
-        mTabListFaviconProvider = new TabListFaviconProvider(context, Profile.getLastUsedProfile());
+        // TODO (https://crbug.com/1048632): Use the current profile (i.e., regular profile or
+        // incognito profile) instead of always using regular profile. It works correctly now, but
+        // it is not safe.
+        mTabListFaviconProvider = new TabListFaviconProvider(context);
 
         // Initialize Paints to use.
         mEmptyThumbnailPaint = new Paint();
@@ -218,7 +222,7 @@ public class MultiThumbnailCardProvider implements TabListMediator.ThumbnailProv
         mThumbnailFramePaint.setStrokeWidth(
                 resource.getDimension(R.dimen.tab_list_mini_card_frame_size));
         mThumbnailFramePaint.setColor(
-                ApiCompatibilityUtils.getColor(resource, R.color.divider_bg_color));
+                ApiCompatibilityUtils.getColor(resource, R.color.divider_line_bg_color));
         mThumbnailFramePaint.setAntiAlias(true);
 
         // TODO(996048): Use pre-defined styles to avoid style out of sync if any text/color styles
@@ -289,6 +293,10 @@ public class MultiThumbnailCardProvider implements TabListMediator.ThumbnailProv
         mTabModelSelector.addObserver(mTabModelSelectorObserver);
     }
 
+    public void initWithNative() {
+        mTabListFaviconProvider.initWithNative(Profile.getLastUsedRegularProfile());
+    }
+
     /**
      * Destroy any member that needs clean up.
      */
@@ -298,16 +306,19 @@ public class MultiThumbnailCardProvider implements TabListMediator.ThumbnailProv
 
     @Override
     public void getTabThumbnailWithCallback(
-            Tab tab, Callback<Bitmap> finalCallback, boolean forceUpdate, boolean writeToCache) {
+            int tabId, Callback<Bitmap> finalCallback, boolean forceUpdate, boolean writeToCache) {
         if (mTabModelSelector.getTabModelFilterProvider()
                         .getCurrentTabModelFilter()
-                        .getRelatedTabList(tab.getId())
+                        .getRelatedTabList(tabId)
                         .size()
                 == 1) {
             mTabContentManager.getTabThumbnailWithCallback(
-                    tab, finalCallback, forceUpdate, writeToCache);
+                    tabId, finalCallback, forceUpdate, writeToCache);
             return;
         }
+
+        Tab tab = mTabModelSelector.getTabById(tabId);
+        if (tab == null) return;
 
         new MultiThumbnailFetcher(tab, finalCallback, forceUpdate, writeToCache).fetch();
     }

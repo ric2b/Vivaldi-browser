@@ -19,6 +19,8 @@
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "components/bookmarks/managed/managed_bookmark_service.h"
 
+#include "components/bookmarks/vivaldi_bookmark_kit.h"
+
 using bookmarks::BookmarkModel;
 using bookmarks::BookmarkNode;
 
@@ -86,30 +88,16 @@ void PopulateBookmarkTreeNode(
         new double(floor(node->date_added().ToDoubleT() * 1000)));
   }
 
-  std::string temp;
-  if (node->GetMetaInfo("Nickname", &temp)) {
-    out_bookmark_tree_node->nickname = temp;
-  }
-  if (node->GetMetaInfo("Description", &temp)) {
-    out_bookmark_tree_node->description = temp;
-  }
-  if (node->GetMetaInfo("Thumbnail", &temp)) {
-    out_bookmark_tree_node->thumbnail = temp;
-  }
-  if (node->GetMetaInfo("Speeddial", &temp)) {
-    bool speeddial = (temp == "true") ? true : false;
-    out_bookmark_tree_node->speeddial = speeddial;
-  }
-  if (node->GetMetaInfo("Bookmarkbar", &temp)) {
-    bool bookmarkbar = (temp == "true") ? true : false;
-    out_bookmark_tree_node->bookmarkbar = bookmarkbar;
-  }
-  if (node->GetMetaInfo("Partner", &temp)) {
-    out_bookmark_tree_node->partner = temp;
-  }
-
-  out_bookmark_tree_node->trash = (node->type() ==
-                               bookmarks::BookmarkNode::TRASH);
+  out_bookmark_tree_node->nickname = vivaldi_bookmark_kit::GetNickname(node);
+  out_bookmark_tree_node->description =
+      vivaldi_bookmark_kit::GetDescription(node);
+  out_bookmark_tree_node->thumbnail = vivaldi_bookmark_kit::GetThumbnail(node);
+  out_bookmark_tree_node->speeddial = vivaldi_bookmark_kit::GetSpeeddial(node);
+  out_bookmark_tree_node->bookmarkbar =
+      vivaldi_bookmark_kit::GetBookmarkbar(node);
+  out_bookmark_tree_node->partner = vivaldi_bookmark_kit::GetPartner(node);
+  out_bookmark_tree_node->trash =
+      (node->type() == bookmarks::BookmarkNode::TRASH);
 
   if (bookmarks::IsDescendantOf(node, managed->managed_node())) {
     out_bookmark_tree_node->unmodifiable =

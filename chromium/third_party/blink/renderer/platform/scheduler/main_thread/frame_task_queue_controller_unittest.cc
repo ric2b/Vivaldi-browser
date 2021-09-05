@@ -90,12 +90,13 @@ class FrameTaskQueueControllerTest : public testing::Test,
   }
 
   scoped_refptr<MainThreadTaskQueue> ThrottleableTaskQueue() const {
-    return frame_task_queue_controller_->GetTaskQueue(QueueTraits()
-      .SetCanBeThrottled(true)
-      .SetCanBeFrozen(true)
-      .SetCanBeDeferred(true)
-      .SetCanBePaused(true)
-      .SetCanRunWhenVirtualTimePaused(true));
+    return frame_task_queue_controller_->GetTaskQueue(
+        QueueTraits()
+            .SetCanBeThrottled(true)
+            .SetCanBeFrozen(true)
+            .SetCanBeDeferred(true)
+            .SetCanBePaused(true)
+            .SetCanRunWhenVirtualTimePaused(false));
   }
 
   scoped_refptr<MainThreadTaskQueue> GetTaskQueue(
@@ -140,32 +141,31 @@ TEST_F(FrameTaskQueueControllerTest, CreateAllTaskQueues) {
 
   // Create the 4 default task queues used by FrameSchedulerImpl.
   task_queue = GetTaskQueue(QueueTraits()
-                                       .SetCanBeThrottled(true)
-                                       .SetCanBeDeferred(true)
-                                       .SetCanBeFrozen(true)
-                                       .SetCanBePaused(true)
-                                       .SetCanRunWhenVirtualTimePaused(true));
+                                .SetCanBeThrottled(true)
+                                .SetCanBeDeferred(true)
+                                .SetCanBeFrozen(true)
+                                .SetCanBePaused(true)
+                                .SetCanRunWhenVirtualTimePaused(false));
   EXPECT_FALSE(all_task_queues.Contains(task_queue));
   all_task_queues.insert(task_queue.get(), QueueCheckResult::kDidNotSeeQueue);
   EXPECT_EQ(all_task_queues.size(), task_queue_created_count());
 
   task_queue = GetTaskQueue(QueueTraits()
-                                        .SetCanBeDeferred(true)
-                                        .SetCanBePaused(true)
-                                        .SetCanRunWhenVirtualTimePaused(true));
+                                .SetCanBeDeferred(true)
+                                .SetCanBePaused(true)
+                                .SetCanRunWhenVirtualTimePaused(false));
   EXPECT_FALSE(all_task_queues.Contains(task_queue));
   all_task_queues.insert(task_queue.get(), QueueCheckResult::kDidNotSeeQueue);
   EXPECT_EQ(all_task_queues.size(), task_queue_created_count());
 
-  task_queue = GetTaskQueue(QueueTraits()
-                                        .SetCanBePaused(true)
-                                        .SetCanRunWhenVirtualTimePaused(true));
+  task_queue = GetTaskQueue(
+      QueueTraits().SetCanBePaused(true).SetCanRunWhenVirtualTimePaused(false));
   EXPECT_FALSE(all_task_queues.Contains(task_queue));
   all_task_queues.insert(task_queue.get(), QueueCheckResult::kDidNotSeeQueue);
   EXPECT_EQ(all_task_queues.size(), task_queue_created_count());
 
-  task_queue = GetTaskQueue(QueueTraits()
-                                        .SetCanRunWhenVirtualTimePaused(true));
+  task_queue =
+      GetTaskQueue(QueueTraits().SetCanRunWhenVirtualTimePaused(false));
   EXPECT_FALSE(all_task_queues.Contains(task_queue));
   all_task_queues.insert(task_queue.get(), QueueCheckResult::kDidNotSeeQueue);
   EXPECT_EQ(all_task_queues.size(), task_queue_created_count());
@@ -260,38 +260,24 @@ TEST_F(FrameTaskQueueControllerTest,
 TEST_F(FrameTaskQueueControllerTest, AddWebSchedulingTaskQueues) {
   scoped_refptr<MainThreadTaskQueue> task_queue =
       frame_task_queue_controller_->NewWebSchedulingTaskQueue(
-          QueueTraits(), WebSchedulingPriority::kImmediatePriority);
+          QueueTraits(), WebSchedulingPriority::kUserBlockingPriority);
   EXPECT_EQ(1u,
             frame_task_queue_controller_->GetAllTaskQueuesAndVoters().size());
-  EXPECT_EQ(WebSchedulingPriority::kImmediatePriority,
+  EXPECT_EQ(WebSchedulingPriority::kUserBlockingPriority,
             task_queue->web_scheduling_priority().value());
 
   task_queue = frame_task_queue_controller_->NewWebSchedulingTaskQueue(
-      QueueTraits(), WebSchedulingPriority::kHighPriority);
+      QueueTraits(), WebSchedulingPriority::kUserVisiblePriority);
   EXPECT_EQ(2u,
             frame_task_queue_controller_->GetAllTaskQueuesAndVoters().size());
-  EXPECT_EQ(WebSchedulingPriority::kHighPriority,
+  EXPECT_EQ(WebSchedulingPriority::kUserVisiblePriority,
             task_queue->web_scheduling_priority().value());
 
   task_queue = frame_task_queue_controller_->NewWebSchedulingTaskQueue(
-      QueueTraits(), WebSchedulingPriority::kDefaultPriority);
+      QueueTraits(), WebSchedulingPriority::kBackgroundPriority);
   EXPECT_EQ(3u,
             frame_task_queue_controller_->GetAllTaskQueuesAndVoters().size());
-  EXPECT_EQ(WebSchedulingPriority::kDefaultPriority,
-            task_queue->web_scheduling_priority().value());
-
-  task_queue = frame_task_queue_controller_->NewWebSchedulingTaskQueue(
-      QueueTraits(), WebSchedulingPriority::kLowPriority);
-  EXPECT_EQ(4u,
-            frame_task_queue_controller_->GetAllTaskQueuesAndVoters().size());
-  EXPECT_EQ(WebSchedulingPriority::kLowPriority,
-            task_queue->web_scheduling_priority().value());
-
-  task_queue = frame_task_queue_controller_->NewWebSchedulingTaskQueue(
-      QueueTraits(), WebSchedulingPriority::kIdlePriority);
-  EXPECT_EQ(5u,
-            frame_task_queue_controller_->GetAllTaskQueuesAndVoters().size());
-  EXPECT_EQ(WebSchedulingPriority::kIdlePriority,
+  EXPECT_EQ(WebSchedulingPriority::kBackgroundPriority,
             task_queue->web_scheduling_priority().value());
 }
 
@@ -299,18 +285,18 @@ TEST_F(FrameTaskQueueControllerTest,
        AddMultipleSamePriorityWebSchedulingTaskQueues) {
   scoped_refptr<MainThreadTaskQueue> task_queue1 =
       frame_task_queue_controller_->NewWebSchedulingTaskQueue(
-          QueueTraits(), WebSchedulingPriority::kImmediatePriority);
+          QueueTraits(), WebSchedulingPriority::kUserBlockingPriority);
   EXPECT_EQ(1u,
             frame_task_queue_controller_->GetAllTaskQueuesAndVoters().size());
-  EXPECT_EQ(WebSchedulingPriority::kImmediatePriority,
+  EXPECT_EQ(WebSchedulingPriority::kUserBlockingPriority,
             task_queue1->web_scheduling_priority().value());
 
   scoped_refptr<MainThreadTaskQueue> task_queue2 =
       frame_task_queue_controller_->NewWebSchedulingTaskQueue(
-          QueueTraits(), WebSchedulingPriority::kImmediatePriority);
+          QueueTraits(), WebSchedulingPriority::kUserBlockingPriority);
   EXPECT_EQ(2u,
             frame_task_queue_controller_->GetAllTaskQueuesAndVoters().size());
-  EXPECT_EQ(WebSchedulingPriority::kImmediatePriority,
+  EXPECT_EQ(WebSchedulingPriority::kUserBlockingPriority,
             task_queue2->web_scheduling_priority().value());
 
   EXPECT_NE(task_queue1.get(), task_queue2.get());
@@ -334,15 +320,16 @@ class TaskQueueCreationFromQueueTraitsTest :
     public FrameTaskQueueControllerTest,
     public testing::WithParamInterface<QueueTraits::PrioritisationType> {};
 
-INSTANTIATE_TEST_SUITE_P(,
-                         TaskQueueCreationFromQueueTraitsTest,
-                         ::testing::Values(
-                            QueueTraits::PrioritisationType::kVeryHigh,
-                            QueueTraits::PrioritisationType::kHigh,
-                            QueueTraits::PrioritisationType::kBestEffort,
-                            QueueTraits::PrioritisationType::kRegular,
-                            QueueTraits::PrioritisationType::kLoading,
-                            QueueTraits::PrioritisationType::kLoadingControl));
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    TaskQueueCreationFromQueueTraitsTest,
+    ::testing::Values(QueueTraits::PrioritisationType::kVeryHigh,
+                      QueueTraits::PrioritisationType::kBestEffort,
+                      QueueTraits::PrioritisationType::kRegular,
+                      QueueTraits::PrioritisationType::kLoading,
+                      QueueTraits::PrioritisationType::kLoadingControl,
+                      QueueTraits::PrioritisationType::kFindInPage,
+                      QueueTraits::PrioritisationType::kExperimentalDatabase));
 
 TEST_P(TaskQueueCreationFromQueueTraitsTest,
         AddAndRetrieveAllTaskQueues) {

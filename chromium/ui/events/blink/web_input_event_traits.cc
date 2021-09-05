@@ -6,11 +6,11 @@
 
 #include "base/logging.h"
 #include "base/strings/stringprintf.h"
-#include "third_party/blink/public/platform/web_gesture_event.h"
-#include "third_party/blink/public/platform/web_keyboard_event.h"
-#include "third_party/blink/public/platform/web_mouse_wheel_event.h"
-#include "third_party/blink/public/platform/web_pointer_event.h"
-#include "third_party/blink/public/platform/web_touch_event.h"
+#include "third_party/blink/public/common/input/web_gesture_event.h"
+#include "third_party/blink/public/common/input/web_keyboard_event.h"
+#include "third_party/blink/public/common/input/web_mouse_wheel_event.h"
+#include "third_party/blink/public/common/input/web_pointer_event.h"
+#include "third_party/blink/public/common/input/web_touch_event.h"
 
 using base::StringAppendF;
 using base::SStringPrintf;
@@ -39,10 +39,10 @@ void ApppendEventDetails(const WebMouseEvent& event, std::string* result) {
   StringAppendF(result,
                 "{\n Button: %d\n Pos: (%f, %f)\n"
                 " GlobalPos: (%f, %f)\n Movement: (%d, %d)\n Clicks: %d\n}",
-                static_cast<int>(event.button), event.PositionInWidget().x,
-                event.PositionInWidget().y, event.PositionInScreen().x,
-                event.PositionInScreen().y, event.movement_x, event.movement_y,
-                event.click_count);
+                static_cast<int>(event.button), event.PositionInWidget().x(),
+                event.PositionInWidget().y(), event.PositionInScreen().x(),
+                event.PositionInScreen().y(), event.movement_x,
+                event.movement_y, event.click_count);
 }
 
 void ApppendEventDetails(const WebMouseWheelEvent& event, std::string* result) {
@@ -59,8 +59,8 @@ void ApppendEventDetails(const WebGestureEvent& event, std::string* result) {
   StringAppendF(result,
                 "{\n Pos: (%f, %f)\n GlobalPos: (%f, %f)\n SourceDevice: %d\n"
                 " RawData: (%f, %f, %f, %f)\n}",
-                event.PositionInWidget().x, event.PositionInWidget().y,
-                event.PositionInScreen().x, event.PositionInScreen().y,
+                event.PositionInWidget().x(), event.PositionInWidget().y(),
+                event.PositionInScreen().x(), event.PositionInScreen().y(),
                 event.SourceDevice(), event.data.scroll_update.delta_x,
                 event.data.scroll_update.delta_y,
                 event.data.scroll_update.velocity_x,
@@ -72,9 +72,9 @@ void ApppendTouchPointDetails(const WebTouchPoint& point, std::string* result) {
                 "  (ID: %d, State: %d, ScreenPos: (%f, %f), Pos: (%f, %f),"
                 " Radius: (%f, %f), Rot: %f, Force: %f,"
                 " Tilt: (%d, %d), Twist: %d, TangentialPressure: %f),\n",
-                point.id, point.state, point.PositionInScreen().x,
-                point.PositionInScreen().y, point.PositionInWidget().x,
-                point.PositionInWidget().y, point.radius_x, point.radius_y,
+                point.id, point.state, point.PositionInScreen().x(),
+                point.PositionInScreen().y(), point.PositionInWidget().x(),
+                point.PositionInWidget().y(), point.radius_x, point.radius_y,
                 point.rotation_angle, point.force, point.tilt_x, point.tilt_y,
                 point.twist, point.tangential_pressure);
 }
@@ -98,23 +98,12 @@ void ApppendEventDetails(const WebPointerEvent& event, std::string* result) {
       " GlobalPos: (%f, %f)\n Movement: (%d, %d)\n width: %f\n height: "
       "%f\n Pressure: %f\n TangentialPressure: %f\n Rotation: %f\n Tilt: "
       "(%d, %d)\n}",
-      event.id, static_cast<int>(event.button), event.PositionInWidget().x,
-      event.PositionInWidget().y, event.PositionInScreen().x,
-      event.PositionInScreen().y, event.movement_x, event.movement_y,
+      event.id, static_cast<int>(event.button), event.PositionInWidget().x(),
+      event.PositionInWidget().y(), event.PositionInScreen().x(),
+      event.PositionInScreen().y(), event.movement_x, event.movement_y,
       event.width, event.height, event.force, event.tangential_pressure,
       event.rotation_angle, event.tilt_x, event.tilt_y);
 }
-
-struct WebInputEventDelete {
-  template <class EventType>
-  bool Execute(WebInputEvent* event, void*) const {
-    if (!event)
-      return false;
-    DCHECK_EQ(sizeof(EventType), event->size());
-    delete static_cast<EventType*>(event);
-    return true;
-  }
-};
 
 struct WebInputEventToString {
   template <class EventType>
@@ -125,25 +114,6 @@ struct WebInputEventToString {
                   event.GetModifiers());
     const EventType& typed_event = static_cast<const EventType&>(event);
     ApppendEventDetails(typed_event, result);
-    return true;
-  }
-};
-
-struct WebInputEventSize {
-  template <class EventType>
-  bool Execute(WebInputEvent::Type /* type */, size_t* type_size) const {
-    *type_size = sizeof(EventType);
-    return true;
-  }
-};
-
-struct WebInputEventClone {
-  template <class EventType>
-  bool Execute(const WebInputEvent& event,
-               WebScopedInputEvent* scoped_event) const {
-    DCHECK_EQ(sizeof(EventType), event.size());
-    *scoped_event = WebScopedInputEvent(
-        new EventType(static_cast<const EventType&>(event)));
     return true;
   }
 };
@@ -172,29 +142,10 @@ bool Apply(Operator op,
 
 }  // namespace
 
-void WebInputEventDeleter::operator()(WebInputEvent* event) const {
-  if (!event)
-    return;
-  void* temp = nullptr;
-  Apply(WebInputEventDelete(), event->GetType(), event, temp);
-}
-
 std::string WebInputEventTraits::ToString(const WebInputEvent& event) {
   std::string result;
   Apply(WebInputEventToString(), event.GetType(), event, &result);
   return result;
-}
-
-size_t WebInputEventTraits::GetSize(WebInputEvent::Type type) {
-  size_t size = 0;
-  Apply(WebInputEventSize(), type, type, &size);
-  return size;
-}
-
-WebScopedInputEvent WebInputEventTraits::Clone(const WebInputEvent& event) {
-  WebScopedInputEvent scoped_event;
-  Apply(WebInputEventClone(), event.GetType(), event, &scoped_event);
-  return scoped_event;
 }
 
 bool WebInputEventTraits::ShouldBlockEventStream(const WebInputEvent& event) {

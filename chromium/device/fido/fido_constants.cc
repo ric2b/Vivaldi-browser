@@ -31,6 +31,7 @@ const char kCredentialManagementMapKey[] = "credMgmt";
 const char kCredentialManagementPreviewMapKey[] = "credentialMgmtPreview";
 const char kBioEnrollmentMapKey[] = "bioEnroll";
 const char kBioEnrollmentPreviewMapKey[] = "userVerificationMgmtPreview";
+const char kUvTokenMapKey[] = "uvToken";
 
 const base::TimeDelta kDeviceTimeout = base::TimeDelta::FromSeconds(20);
 const base::TimeDelta kU2fRetryDelay = base::TimeDelta::FromMilliseconds(200);
@@ -64,6 +65,7 @@ const char kU2fVersion[] = "U2F_V2";
 
 const char kExtensionHmacSecret[] = "hmac-secret";
 const char kExtensionCredProtect[] = "credProtect";
+const char kExtensionAndroidClientData[] = "googleAndroidClientData";
 
 const base::TimeDelta kBleDevicePairingModeWaitingInterval =
     base::TimeDelta::FromSeconds(2);

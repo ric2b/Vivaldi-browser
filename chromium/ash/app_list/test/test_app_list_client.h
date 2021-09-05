@@ -27,9 +27,10 @@ class TestAppListClient : public AppListClient {
   void StartSearch(const base::string16& trimmed_query) override {}
   void OpenSearchResult(const std::string& result_id,
                         int event_flags,
-                        ash::AppListLaunchedFrom launched_from,
-                        ash::AppListLaunchType launch_type,
-                        int suggestion_index) override {}
+                        AppListLaunchedFrom launched_from,
+                        AppListLaunchType launch_type,
+                        int suggestion_index,
+                        bool launch_as_default) override {}
   void InvokeSearchResultAction(const std::string& result_id,
                                 int action_index,
                                 int event_flags) override {}
@@ -61,9 +62,12 @@ class TestAppListClient : public AppListClient {
       override {}
   void OnSearchResultVisibilityChanged(const std::string& id,
                                        bool visibility) override {}
+  void OnQuickSettingsChanged(
+      const std::string& setting_name,
+      const std::vector<std::pair<std::string, int>>& values) override {}
   void NotifySearchResultsForLogging(
       const base::string16& trimmed_query,
-      const ash::SearchResultIdWithPositionIndices& results,
+      const SearchResultIdWithPositionIndices& results,
       int position_index) override {}
 
  private:

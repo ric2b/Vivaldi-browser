@@ -2,6 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// clang-format off
+// #import {ChromeCleanupProxyImpl, ChromeCleanupIdleReason, CHROME_CLEANUP_DEFAULT_ITEMS_TO_SHOW} from 'chrome://settings/lazy_load.js';
+// #import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+// #import {TestBrowserProxy} from 'chrome://test/test_browser_proxy.m.js';
+// #import {webUIListenerCallback} from 'chrome://resources/js/cr.m.js';
+// clang-format on
+
 /** @implements {settings.ChromeCleanupProxy} */
 class TestChromeCleanupProxy extends TestBrowserProxy {
   constructor() {
@@ -132,11 +139,11 @@ function validateVisibleItemsList(originalItems, visibleItems) {
  * @param {boolean} expectSuffix Whether a highlight suffix should exist.
  */
 function validateHighlightSuffix(originalItems, container, expectSuffix) {
-  let itemList =
+  const itemList =
       container.shadowRoot.querySelectorAll('li:not(#more-items-link)');
   assertEquals(originalItems.length, itemList.length);
-  for (let item of itemList) {
-    let suffixes = item.querySelectorAll('.highlight-suffix');
+  for (const item of itemList) {
+    const suffixes = item.querySelectorAll('.highlight-suffix');
     assertEquals(suffixes.length, 1);
     assertEquals(expectSuffix, !suffixes[0].hidden);
   }

@@ -28,10 +28,6 @@
 #include "ui/events/event_utils.h"
 #include "ui/events/platform/platform_event_source.h"
 
-namespace service_manager {
-class Connector;
-}  // namespace service_manager
-
 namespace exo {
 namespace {
 
@@ -97,12 +93,9 @@ void Seat::AbortPendingDragOperation() {
 }
 
 void Seat::SetSelection(DataSource* source) {
-  if (!source) {
-    ui::Clipboard::GetForCurrentThread()->Clear(
-        ui::ClipboardBuffer::kCopyPaste);
-    // selection_source_ is Cancelled() and reset() in OnClipboardDataChanged().
+  Surface* focused_surface = GetFocusedSurface();
+  if (!source || !source->CanBeDataSourceForCopy(focused_surface))
     return;
-  }
 
   if (selection_source_) {
     if (selection_source_->get() == source)
@@ -161,9 +154,8 @@ void Seat::OnImageRead(scoped_refptr<RefCountedScopedClipboardWriter> writer,
                        const std::string& mime_type,
                        const std::vector<uint8_t>& data) {
 #if defined(OS_CHROMEOS)
-  data_decoder::DecodeImage(
-      ash::Shell::Get()->connector(), data,
-      data_decoder::mojom::ImageCodec::DEFAULT, false,
+  data_decoder::DecodeImageIsolated(
+      data, data_decoder::mojom::ImageCodec::DEFAULT, false,
       std::numeric_limits<int64_t>::max(), gfx::Size(),
       base::BindOnce(&Seat::OnImageDecoded, weak_ptr_factory_.GetWeakPtr(),
                      std::move(callback), writer));

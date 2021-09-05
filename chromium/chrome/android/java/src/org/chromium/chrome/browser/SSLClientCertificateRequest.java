@@ -12,11 +12,12 @@ import android.content.DialogInterface.OnClickListener;
 import android.security.KeyChain;
 import android.security.KeyChainAliasCallback;
 import android.security.KeyChainException;
-import android.support.v7.app.AlertDialog;
 import android.util.Log;
 
+import androidx.annotation.VisibleForTesting;
+import androidx.appcompat.app.AlertDialog;
+
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;

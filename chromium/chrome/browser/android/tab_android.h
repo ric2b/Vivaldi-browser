@@ -101,10 +101,10 @@ class TabAndroid {
   void SetWindowSessionID(SessionID window_id);
   void SetSyncId(int sync_id);
 
-  // Returns true if this tab is currently presented in the context of custom
-  // tabs. Tabs can be moved between different activities so the returned value
-  // might change over the lifetime of the tab.
-  bool IsCurrentlyACustomTab();
+  std::unique_ptr<content::WebContents> SwapWebContents(
+      std::unique_ptr<content::WebContents> new_contents,
+      bool did_start_load,
+      bool did_finish_load);
 
   // Methods called from Java via JNI -----------------------------------------
 
@@ -173,8 +173,6 @@ class TabAndroid {
 
   void SetDevToolsAgentHost(scoped_refptr<content::DevToolsAgentHost> host);
 
-  void AttachDetachedTab(JNIEnv* env,
-                         const base::android::JavaParamRef<jobject>& obj);
  private:
   JavaObjectWeakGlobalRef weak_java_tab_;
 

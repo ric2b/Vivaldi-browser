@@ -4,6 +4,9 @@
 
 /** @fileoverview Define accessibility tests for the PASSWORDS route. */
 
+// TODO(crbug/1064966) Flaky on Linux CFI.
+GEN('#if !(defined(OS_LINUX) && defined(IS_CFI))');
+
 // SettingsAccessibilityTest fixture.
 GEN_INCLUDE([
   'settings_accessibility_test.js',
@@ -34,20 +37,7 @@ AccessibilityTest.define('SettingsA11yPasswords', {
   passwordManager: null,
   /** @type {PasswordsSectionElement}*/
   passwordsSection: null,
-  // TODO(hcarmona): Create function that overrides defaults to simplify this.
-  axeOptions: Object.assign({}, SettingsAccessibilityTest.axeOptions, {
-    'rules': Object.assign({}, SettingsAccessibilityTest.axeOptions.rules, {
-      // TODO(hcarmona): Investigate flakyness and enable these tests.
-      // Disable rules flaky for CFI build.
-      'meta-viewport': {enabled: false},
-      'list': {enabled: false},
-      'frame-title': {enabled: false},
-      'label': {enabled: false},
-      'hidden-content': {enabled: false},
-      'aria-valid-attr-value': {enabled: false},
-      'button-name': {enabled: false},
-    }),
-  }),
+
   /** @override */
   setup: function() {
     return new Promise((resolve) => {
@@ -55,13 +45,14 @@ AccessibilityTest.define('SettingsA11yPasswords', {
       PolymerTest.clearBody();
 
       // Set the URL to be that of specific route to load upon injecting
-      // settings-ui. Simply calling settings.navigateTo(route) prevents
-      // use of mock APIs for fake data.
+      // settings-ui. Simply calling
+      // settings.Router.getInstance().navigateTo(route) prevents use of mock
+      // APIs for fake data.
       window.history.pushState(
           'object or string', 'Test', settings.routes.PASSWORDS.path);
 
       PasswordManagerImpl.instance_ = new TestPasswordManagerProxy();
-      this.passwordManager = PasswordManagerImpl.instance_;
+      this.passwordManager = PasswordManagerImpl.getInstance();
 
       const settingsUi = document.createElement('settings-ui');
 
@@ -93,7 +84,7 @@ AccessibilityTest.define('SettingsA11yPasswords', {
     'Accessible with 10 passwords': function() {
       const fakePasswords = [];
       for (let i = 0; i < 10; i++) {
-        fakePasswords.push(FakeDataMaker.passwordEntry());
+        fakePasswords.push(autofill_test_util.createPasswordEntry());
       }
       // Set list of passwords.
       this.passwordManager.lastCallback.addSavedPasswordListChangedListener(
@@ -107,3 +98,5 @@ AccessibilityTest.define('SettingsA11yPasswords', {
   /** @override */
   violationFilter: SettingsAccessibilityTest.violationFilter,
 });
+
+GEN('#endif  // !(defined(OS_LINUX) && defined(IS_CFI))');

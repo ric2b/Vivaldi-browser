@@ -11,22 +11,19 @@ cr.define('cr.ArcGraphicsTracing', function() {
     /**
      * Initializes internal structures.
      */
-    initialize: function() {
+    initialize() {
       var stopOnJank = $('arc-graphics-tracing-stop-on-jank');
       stopOnJank.addEventListener('click', function(event) {
         chrome.send('setStopOnJank', [stopOnJank.checked]);
       }, false);
       chrome.send('ready');
       chrome.send('setStopOnJank', [stopOnJank.checked]);
-      initializeUi();
+      initializeGraphicsUi();
     },
 
-    setStatus: function(statusText) {
-      var status = $('arc-graphics-tracing-status');
-      status.textContent = statusText;
-    },
+    setStatus: setStatus,
 
-    setModel: function(model) {
+    setModel(model) {
       setGraphicBuffersModel(model);
     }
   };

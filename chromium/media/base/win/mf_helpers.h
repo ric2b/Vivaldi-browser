@@ -15,37 +15,34 @@
 
 namespace media {
 
-namespace mf {
+// Macros that contain return statements can make code harder to read. Only use
+// these when necessary, e.g. in places where we deal with a lot of Windows API
+// calls, for each of which we have to check the returned HRESULT.
+// See discussion thread at:
+// https://groups.google.com/a/chromium.org/d/msg/cxx/zw5Xmcs--S4/r7Fwb-TsCAAJ
 
-#define RETURN_ON_FAILURE(result, log, ret) \
-  do {                                      \
-    if (!(result)) {                        \
-      DLOG(ERROR) << log;                   \
-      mf::LogDXVAError(__LINE__);           \
-      return ret;                           \
-    }                                       \
+#define RETURN_IF_FAILED(expr)                                          \
+  do {                                                                  \
+    HRESULT hresult = (expr);                                           \
+    if (FAILED(hresult)) {                                              \
+      DLOG(ERROR) << __func__ << ": failed with \""                     \
+                  << logging::SystemErrorCodeToString(hresult) << "\""; \
+      return hresult;                                                   \
+    }                                                                   \
   } while (0)
 
-#define RETURN_ON_HR_FAILURE(result, log, ret) \
-  RETURN_ON_FAILURE(SUCCEEDED(result),         \
-                    log << ", HRESULT: 0x" << std::hex << result, ret);
-
-#define RETURN_AND_NOTIFY_ON_FAILURE(result, log, error_code, ret) \
-  do {                                                             \
-    if (!(result)) {                                               \
-      DVLOG(1) << log;                                             \
-      mf::LogDXVAError(__LINE__);                                  \
-      StopOnError(error_code);                                     \
-      return ret;                                                  \
-    }                                                              \
+#define RETURN_ON_FAILURE(success, log, ret) \
+  do {                                       \
+    if (!(success)) {                        \
+      DLOG(ERROR) << log;                    \
+      return ret;                            \
+    }                                        \
   } while (0)
 
-#define RETURN_AND_NOTIFY_ON_HR_FAILURE(result, log, error_code, ret)        \
-  RETURN_AND_NOTIFY_ON_FAILURE(SUCCEEDED(result),                            \
-                               log << ", HRESULT: 0x" << std::hex << result, \
-                               error_code, ret);
-
-MF_INITIALIZER_EXPORT void LogDXVAError(int line);
+#define RETURN_ON_HR_FAILURE(hresult, log, ret)                               \
+  RETURN_ON_FAILURE(SUCCEEDED(hresult),                                       \
+                    log << ", " << logging::SystemErrorCodeToString(hresult), \
+                    ret);
 
 // Creates a Media Foundation sample with one buffer of length |buffer_length|
 // on a |align|-byte boundary. Alignment must be a perfect power of 2 or 0.
@@ -71,7 +68,20 @@ class MF_INITIALIZER_EXPORT MediaBufferScopedPointer {
   DISALLOW_COPY_AND_ASSIGN(MediaBufferScopedPointer);
 };
 
-}  // namespace mf
+// Wrap around the usage of device handle from |device_manager|.
+class MF_INITIALIZER_EXPORT DXGIDeviceScopedHandle {
+ public:
+  explicit DXGIDeviceScopedHandle(IMFDXGIDeviceManager* device_manager);
+
+  ~DXGIDeviceScopedHandle();
+
+  HRESULT LockDevice(REFIID riid, void** device_out);
+
+ private:
+  Microsoft::WRL::ComPtr<IMFDXGIDeviceManager> device_manager_;
+
+  HANDLE device_handle_ = INVALID_HANDLE_VALUE;
+};
 
 }  // namespace media
 

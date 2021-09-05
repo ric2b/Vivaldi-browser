@@ -27,6 +27,7 @@ H264Decoder::H264Accelerator::Status H264Decoder::H264Accelerator::SetStream(
 }
 
 H264Decoder::H264Decoder(std::unique_ptr<H264Accelerator> accelerator,
+                         VideoCodecProfile profile,
                          const VideoColorSpace& container_color_space)
     : state_(kNeedStreamMetadata),
       container_color_space_(container_color_space),
@@ -34,6 +35,8 @@ H264Decoder::H264Decoder(std::unique_ptr<H264Accelerator> accelerator,
       max_pic_num_(0),
       max_long_term_frame_idx_(0),
       max_num_reorder_frames_(0),
+      // TODO(hiroh): Set profile to UNKNOWN.
+      profile_(profile),
       accelerator_(std::move(accelerator)) {
   DCHECK(accelerator_);
   Reset();
@@ -623,7 +626,7 @@ bool H264Decoder::ModifyReferencePicList(const H264SliceHeader* slice_hdr,
   return true;
 }
 
-void H264Decoder::OutputPic(scoped_refptr<H264Picture> pic) {
+bool H264Decoder::OutputPic(scoped_refptr<H264Picture> pic) {
   DCHECK(!pic->outputted);
   pic->outputted = true;
 
@@ -635,7 +638,7 @@ void H264Decoder::OutputPic(scoped_refptr<H264Picture> pic) {
 
   if (pic->nonexisting) {
     DVLOG(4) << "Skipping output, non-existing frame_num: " << pic->frame_num;
-    return;
+    return true;
   }
 
   DVLOG_IF(1, pic->pic_order_cnt < last_output_poc_)
@@ -644,7 +647,7 @@ void H264Decoder::OutputPic(scoped_refptr<H264Picture> pic) {
   last_output_poc_ = pic->pic_order_cnt;
 
   DVLOG(4) << "Posting output task for POC: " << pic->pic_order_cnt;
-  accelerator_->OutputPicture(pic);
+  return accelerator_->OutputPicture(pic);
 }
 
 void H264Decoder::ClearDPB() {
@@ -655,15 +658,17 @@ void H264Decoder::ClearDPB() {
 
 bool H264Decoder::OutputAllRemainingPics() {
   // Output all pictures that are waiting to be outputted.
-  FinishPrevFrameIfPresent();
+  if (FinishPrevFrameIfPresent() != H264Accelerator::Status::kOk)
+    return false;
   H264Picture::Vector to_output;
   dpb_.GetNotOutputtedPicsAppending(&to_output);
   // Sort them by ascending POC to output in order.
   std::sort(to_output.begin(), to_output.end(), POCAscCompare());
 
-  for (auto& pic : to_output)
-    OutputPic(pic);
-
+  for (auto& pic : to_output) {
+    if (!OutputPic(pic))
+      return false;
+  }
   return true;
 }
 
@@ -939,7 +944,8 @@ bool H264Decoder::FinishPicture(scoped_refptr<H264Picture> pic) {
     DVLOG_IF(1, num_remaining <= max_num_reorder_frames_)
         << "Invalid stream: max_num_reorder_frames not preserved";
 
-    OutputPic(*output_candidate);
+    if (!OutputPic(*output_candidate))
+      return false;
 
     if (!(*output_candidate)->ref) {
       // Current picture hasn't been inserted into DPB yet, so don't remove it
@@ -963,7 +969,7 @@ bool H264Decoder::FinishPicture(scoped_refptr<H264Picture> pic) {
       return false;
     }
 
-    dpb_.StorePic(pic);
+    dpb_.StorePic(std::move(pic));
   }
 
   return true;
@@ -1070,12 +1076,17 @@ bool H264Decoder::ProcessSPS(int sps_id, bool* need_new_buffers) {
     return false;
   }
 
-  if ((pic_size_ != new_pic_size) || (dpb_.max_num_pics() != max_dpb_size)) {
+  VideoCodecProfile new_profile =
+      H264Parser::ProfileIDCToVideoCodecProfile(sps->profile_idc);
+  if (pic_size_ != new_pic_size || dpb_.max_num_pics() != max_dpb_size ||
+      profile_ != new_profile) {
     if (!Flush())
       return false;
-    DVLOG(1) << "Codec level: " << level << ", DPB size: " << max_dpb_size
+    DVLOG(1) << "Codec profile: " << GetProfileName(new_profile)
+             << ", level: " << level << ", DPB size: " << max_dpb_size
              << ", Picture size: " << new_pic_size.ToString();
     *need_new_buffers = true;
+    profile_ = new_profile;
     pic_size_ = new_pic_size;
     dpb_.set_max_num_pics(max_dpb_size);
   }
@@ -1116,7 +1127,12 @@ bool H264Decoder::HandleFrameNumGap(int frame_num) {
 
   if (!sps->gaps_in_frame_num_value_allowed_flag) {
     DVLOG(1) << "Invalid frame_num: " << frame_num;
-    return false;
+    // TODO(b:129119729, b:146914440): Youtube android app sometimes sends an
+    // invalid frame number after a seek. The sequence goes like:
+    // Seek, SPS, PPS, IDR-frame, non-IDR, ... non-IDR with invalid number.
+    // The only way to work around this reliably is to ignore this error.
+    // Video playback is not affected, no artefacts are visible.
+    // return false;
   }
 
   DVLOG(2) << "Handling frame_num gap: " << prev_ref_frame_num_ << "->"
@@ -1377,7 +1393,7 @@ H264Decoder::DecodeResult H264Decoder::Decode() {
           ref_pic_list_b0_.clear();
           ref_pic_list_b1_.clear();
 
-          return kAllocateNewSurfaces;
+          return kConfigChange;
         }
         break;
       }
@@ -1418,6 +1434,10 @@ gfx::Size H264Decoder::GetPicSize() const {
 
 gfx::Rect H264Decoder::GetVisibleRect() const {
   return visible_rect_;
+}
+
+VideoCodecProfile H264Decoder::GetProfile() const {
+  return profile_;
 }
 
 size_t H264Decoder::GetRequiredNumOfPictures() const {

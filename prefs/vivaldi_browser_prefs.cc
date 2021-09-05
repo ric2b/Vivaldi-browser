@@ -13,15 +13,18 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
+#include "base/no_destructor.h"
 #include "base/path_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_restrictions.h"
+#include "chrome/browser/prefs/browser_prefs.h"
 #include "chrome/common/chrome_paths.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/version_info/version_info.h"
 #include "prefs/vivaldi_pref_names.h"
+#include "prefs/vivaldi_browser_prefs_util.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 #if defined(OS_ANDROID)
 #include "base/android/apk_assets.h"
@@ -31,9 +34,10 @@ namespace vivaldi {
 
 void RegisterOldPlatformPrefs(user_prefs::PrefRegistrySyncable* registry);
 void MigrateOldPlatformPrefs(PrefService* prefs);
-std::string GetPlatformDefaultKey();
-std::unique_ptr<base::Value> GetPlatformComputedDefault(
-    const std::string& path);
+base::Value GetPlatformComputedDefault(const std::string& path);
+
+namespace {
+
 #if !defined(OS_ANDROID)
 const base::FilePath::CharType kVivaldiResourcesFolder[] =
     FILE_PATH_LITERAL("vivaldi");
@@ -42,8 +46,10 @@ const base::FilePath::CharType kPrefsDefinitionFileName[] =
     FILE_PATH_LITERAL("prefs_definitions.json");
 
 const char kVivaldiKeyName[] = "vivaldi";
+#if !defined(OS_ANDROID)
 const char kChromiumKeyName[] = "chromium";
 const char kChromiumLocalKeyName[] = "chromium_local";
+#endif  // !defined(OS_ANDROID)
 
 const char kTypeKeyName[] = "type";
 const char kDefaultKeyName[] = "default";
@@ -59,23 +65,83 @@ const char kTypeDoubleName[] = "double";
 const char kTypeListName[] = "list";
 const char kTypeDictionaryName[] = "dictionary";
 
-PrefProperties::PrefProperties(
-    bool local_pref,
-    std::unordered_map<std::string, int> string_to_value,
-    std::unordered_map<int, std::string> value_to_string)
-    : local_pref(local_pref) {
-  enum_properties.reset(new EnumProperties);
-  enum_properties->value_to_string = std::move(value_to_string);
-  enum_properties->string_to_value = std::move(string_to_value);
+}  // namespace
+
+#if defined(OS_ANDROID)
+
+namespace {
+// Declare empty structs to minimize the amount of ifdefs
+struct PrefProperties {
+  void SetEnumProperties(EnumPrefProperties enum_properties) {}
+};
+
+struct PrefsProperties {
+  void emplace(std::string path, PrefProperties properties) {}
+};
+
+}  // namespace
+
+#else
+
+namespace {
+
+PrefsProperties& GetRegisteredPrefPropertiesStorage() {
+  static base::NoDestructor<PrefsProperties> storage;
+  return *storage;
 }
 
-PrefProperties::PrefProperties(bool local_pref) : local_pref(local_pref) {}
+}  // namespace
+
+PrefProperties::PrefProperties() = default;
 PrefProperties::PrefProperties(PrefProperties&&) = default;
 PrefProperties::~PrefProperties() = default;
 
-PrefProperties::EnumProperties::EnumProperties() = default;
-PrefProperties::EnumProperties::EnumProperties(EnumProperties&&) = default;
-PrefProperties::EnumProperties::~EnumProperties() = default;
+void PrefProperties::SetLocal(bool local_pref) {
+  local_pref_ = local_pref;
+}
+
+void PrefProperties::SetEnumProperties(EnumPrefProperties enum_properties) {
+  enum_properties_ =
+      std::make_unique<EnumPrefProperties>(std::move(enum_properties));
+}
+
+PrefsProperties ExtractLastRegisteredPrefsPropertes() {
+  // Should be called exactly once per profile after a call to
+  // RegisterProfilePrefs.
+  DCHECK(!GetRegisteredPrefPropertiesStorage().empty());
+  return std::move(GetRegisteredPrefPropertiesStorage());
+}
+
+#endif  // !defined(OS_ANDROID)
+
+EnumPrefProperties::EnumPrefProperties() = default;
+EnumPrefProperties::EnumPrefProperties(EnumPrefProperties&&) = default;
+EnumPrefProperties::~EnumPrefProperties() = default;
+
+base::Optional<int> EnumPrefProperties::FindValue(
+    base::StringPiece name) const {
+  for (const auto& i : name_value_pairs) {
+    if (i.first == name)
+      return i.second;
+  }
+  return base::nullopt;
+}
+
+const std::string* EnumPrefProperties::FindName(int value) const {
+  for (const auto& i : name_value_pairs) {
+    if (i.second == value)
+      return &i.first;
+  }
+  return nullptr;
+}
+
+bool IsMergeableListPreference(base::StringPiece name) {
+  for (base::StringPiece list_name : vivaldiprefs::g_mergeable_lists) {
+    if (list_name == name)
+      return true;
+  }
+  return false;
+}
 
 void RegisterLocalState(PrefRegistrySimple* registry) {
   registry->RegisterStringPref(vivaldiprefs::kVivaldiUniqueUserId, "");
@@ -90,349 +156,233 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
                              base::Time());
 }
 
-std::unique_ptr<base::Value> GetComputedDefault(const std::string& path) {
+namespace {
+
+enum class PrefKind {
+  kNone,
+  kEnum,
+  kString,
+  kFilePath,
+  kBoolean,
+  kInteger,
+  kDouble,
+  kList,
+  kDictionary,
+};
+
+base::Value GetComputedDefault(const std::string& path) {
   if (path == vivaldiprefs::kWebpagesCaptureDirectory) {
     base::FilePath path;
     base::PathService::Get(chrome::DIR_USER_PICTURES, &path);
     path = path.AppendASCII("Vivaldi Captures");
-    return std::make_unique<base::Value>(path.value());
+    return base::Value(path.value());
   }
   return GetPlatformComputedDefault(path);
 }
 
-void RegisterPrefsFromDefinition(const base::DictionaryValue* definition,
-                                 const std::string& current_path,
+void RegisterPrefsFromDefinition(base::Value definition,
+                                 std::string current_path,
                                  user_prefs::PrefRegistrySyncable* registry,
                                  PrefsProperties* prefs_properties) {
-  if (!definition->HasKey(kTypeKeyName)) {
-    for (const auto& child : *definition) {
-      base::DictionaryValue* child_dict;
-      if (!child.second->GetAsDictionary(&child_dict)) {
-        LOG(DFATAL) << "Expected a dictionary at '" << current_path << "'";
-        break;
+  const base::Value* type_value = definition.FindKey(kTypeKeyName);
+  if (!type_value) {
+    for (auto child : definition.DictItems()) {
+      std::string child_path = current_path;
+      child_path += ".";
+      child_path += child.first;
+      if (!child.second.is_dict()) {
+        LOG(FATAL) << "Expected a dictionary at '" << child_path << "'";
       }
-      RegisterPrefsFromDefinition(child_dict, current_path + "." + child.first,
-                                  registry, prefs_properties);
+      RegisterPrefsFromDefinition(std::move(child.second),
+                                  std::move(child_path), registry,
+                                  prefs_properties);
     }
-
     return;
   }
 
-  const base::Value* syncable =
-      definition->FindKeyOfType(kSyncableKeyName, base::Value::Type::BOOLEAN);
+  if (!type_value->is_string()) {
+    LOG(FATAL) << "Expected a string or a list at '" << current_path << "."
+               << kTypeKeyName << "'";
+  }
+
+  PrefKind pref_kind = PrefKind::kNone;
+  base::Value::Type value_type = base::Value::Type::NONE;
+  const std::string& type_str = type_value->GetString();
+  if (type_str == kTypeEnumName) {
+    pref_kind = PrefKind::kEnum;
+    value_type = base::Value::Type::INTEGER;
+  } else if (type_str == kTypeStringName) {
+    pref_kind = PrefKind::kString;
+    value_type = base::Value::Type::STRING;
+  } else if (type_str == kTypeFilePathName) {
+    pref_kind = PrefKind::kFilePath;
+    value_type = base::Value::Type::STRING;
+  } else if (type_str == kTypeBooleanName) {
+    pref_kind = PrefKind::kBoolean;
+    value_type = base::Value::Type::BOOLEAN;
+  } else if (type_str == kTypeIntegerName) {
+    pref_kind = PrefKind::kInteger;
+    value_type = base::Value::Type::INTEGER;
+  } else if (type_str == kTypeDoubleName) {
+    pref_kind = PrefKind::kDouble;
+    value_type = base::Value::Type::DOUBLE;
+  } else if (type_str == kTypeListName) {
+    pref_kind = PrefKind::kList;
+    value_type = base::Value::Type::LIST;
+  } else if (type_str == kTypeDictionaryName) {
+    pref_kind = PrefKind::kDictionary;
+    value_type = base::Value::Type::DICTIONARY;
+  }
+  if (pref_kind == PrefKind::kNone) {
+    LOG(FATAL) << "Invalid type value at '" << current_path << "'";
+  }
+
+  base::Optional<bool> syncable = definition.FindBoolKey(kSyncableKeyName);
   if (!syncable) {
-    LOG(DFATAL) << "Expected a boolean at '" << current_path << "."
-                << kSyncableKeyName << "'";
+    LOG(FATAL) << "Expected a boolean at '" << current_path << "."
+               << kSyncableKeyName << "'";
   }
+  int flags = *syncable ? user_prefs::PrefRegistrySyncable::SYNCABLE_PREF : 0;
 
-  int flags =
-      syncable->GetBool() ? user_prefs::PrefRegistrySyncable::SYNCABLE_PREF : 0;
-
-  const base::Value* type_value =
-      definition->FindKeyOfType(kTypeKeyName, base::Value::Type::STRING);
-  if (!type_value) {
-    LOG(DFATAL) << "Expected a string or a list at '" << current_path << "."
-                << kTypeKeyName << "'";
+  const char* default_key_name = vivaldiprefs::kPlatformDefaultKeyName;
+  base::Value* default_value_ptr = definition.FindKey(default_key_name);
+  if (!default_value_ptr) {
+    default_key_name = kDefaultKeyName;
+    default_value_ptr = definition.FindKey(default_key_name);
   }
-  std::string type = type_value->GetString();
-
-  const base::Value* default_value;
-  std::unique_ptr<base::Value> computed_default;
-  default_value = definition->FindKey(GetPlatformDefaultKey());
-  if (!default_value)
-    default_value = definition->FindKey(kDefaultKeyName);
-  if (!default_value || default_value->is_none()) {
-    computed_default = GetComputedDefault(current_path);
-    if (computed_default->is_none())
+  base::Value default_value;
+  if (default_value_ptr && !default_value_ptr->is_none()) {
+    default_value = std::move(*default_value_ptr);
+    base::Value::Type default_type =
+        pref_kind == PrefKind::kEnum ? base::Value::Type::STRING : value_type;
+    if (default_value.type() != default_type) {
+      LOG(FATAL) << "Unexpected type for '" << current_path << "."
+                 << default_key_name << "' - " << default_value.type();
+    }
+  } else {
+    default_value = GetComputedDefault(current_path);
+    if (default_value.is_none()) {
+      // The preference is not defined for the current platform.
       return;
-    default_value = const_cast<const base::Value*>(computed_default.get());
+    }
+
+    // For enums the computed default should be int.
+    if (default_value.type() != value_type) {
+      LOG(FATAL) << "Unexpected type of computed default value for '"
+                 << current_path << "' - " << default_value.type();
+    }
   }
 
-  if (type.compare(kTypeEnumName) == 0) {
-    if (!computed_default || computed_default->is_none()) {
-      const base::DictionaryValue* enum_values;
-      if (!definition->GetDictionary(kEnumValuesKey, &enum_values)) {
-        LOG(DFATAL) << "Expected a dictionary at '" << current_path << "."
-                    << kEnumValuesKey << "'";
+  PrefProperties properties;
+  switch (pref_kind) {
+    case PrefKind::kEnum: {
+      const base::Value* enum_values = definition.FindDictKey(kEnumValuesKey);
+      if (!enum_values) {
+        LOG(FATAL) << "Expected a dictionary at '" << current_path << "."
+                   << kEnumValuesKey << "'";
+        return;
       }
 
-      if (!default_value->is_string()) {
-        LOG(DFATAL) << "Expected a string at '" << current_path << "."
-                    << kDefaultKeyName << "'";
-      }
-      std::string default_string = default_value->GetString();
-
-      std::unordered_map<std::string, int> string_to_value;
-      std::unordered_map<int, std::string> value_to_string;
-      bool found_default = false;
-      int default_index = 0;
-      for (const auto& enum_value : *enum_values) {
-        if (!enum_value.second->is_int()) {
-          LOG(DFATAL) << "Expected an integer at '" << current_path << "."
-                      << kEnumValuesKey << "." << enum_value.first << "'";
+      EnumPrefProperties enum_properties;
+      enum_properties.name_value_pairs.reserve(enum_values->DictSize());
+      for (auto enum_name_value : enum_values->DictItems()) {
+        const std::string& name = enum_name_value.first;
+        if (!enum_name_value.second.is_int()) {
+          LOG(FATAL) << "Expected an integer at '" << current_path << "."
+                     << kEnumValuesKey << "." << enum_name_value.first << "'";
         }
-        string_to_value.insert(
-            std::make_pair(enum_value.first, enum_value.second->GetInt()));
-        value_to_string.insert(
-            std::make_pair(enum_value.second->GetInt(), enum_value.first));
-
-        if (default_string == enum_value.first) {
-          default_index = enum_value.second->GetInt();
-          found_default = true;
+        int value = enum_name_value.second.GetInt();
+        if (enum_properties.FindValue(name)) {
+          LOG(FATAL) << "Duplicated enum case at '" << current_path << "."
+                     << kEnumValuesKey << "." << name << "'";
         }
+        if (enum_properties.FindName(value)) {
+          LOG(FATAL) << "Duplicated enum value at '" << current_path << "."
+                     << kEnumValuesKey << "." << name << "'";
+        }
+        enum_properties.name_value_pairs.emplace_back(name, value);
       }
 
-      if (!found_default) {
-        LOG(DFATAL)
+      base::Optional<int> enum_default;
+      if (default_value.is_string()) {
+        enum_default = enum_properties.FindValue(default_value.GetString());
+      } else {
+        // Computed value
+        if (enum_properties.FindName(default_value.GetInt())) {
+          enum_default = default_value.GetInt();
+        }
+      }
+      if (!enum_default) {
+        LOG(FATAL)
             << "Default value for enum isn't part of possible values at '"
             << current_path << "'";
       }
-
-      prefs_properties->insert(std::make_pair(
-          current_path, PrefProperties(false, std::move(string_to_value),
-                                       std::move(value_to_string))));
-      registry->RegisterIntegerPref(current_path, default_index, flags);
-    } else if (computed_default->is_int()) {
-      registry->RegisterIntegerPref(current_path, computed_default->GetInt(),
+      registry->RegisterIntegerPref(current_path, *enum_default, flags);
+      properties.SetEnumProperties(std::move(enum_properties));
+      break;
+    }
+    case PrefKind::kString:
+      registry->RegisterStringPref(current_path, default_value.GetString(),
+                                   flags);
+      break;
+    case PrefKind::kFilePath:
+      registry->RegisterFilePathPref(
+          current_path,
+          base::FilePath::FromUTF8Unsafe(default_value.GetString()), flags);
+      break;
+    case PrefKind::kBoolean:
+      registry->RegisterBooleanPref(current_path, default_value.GetBool(),
                                     flags);
-    } else {
-      LOG(DFATAL) << "Expected a integer at '" << current_path << "."
-                  << kDefaultKeyName << "'";
-    }
-    return;
+      break;
+    case PrefKind::kInteger:
+      registry->RegisterIntegerPref(current_path, default_value.GetInt(),
+                                    flags);
+      break;
+    case PrefKind::kDouble:
+      registry->RegisterDoublePref(current_path, default_value.GetDouble(),
+                                   flags);
+      break;
+    case PrefKind::kList:
+      registry->RegisterListPref(current_path, std::move(default_value), flags);
+
+      break;
+    case PrefKind::kDictionary:
+      registry->RegisterDictionaryPref(current_path, std::move(default_value),
+                                       flags);
+      break;
+    default:
+      NOTREACHED();
   }
 
-  if (type.compare(kTypeStringName) == 0) {
-    if (!default_value->is_string()) {
-      LOG(DFATAL) << "Expected a string at '" << current_path << "."
-                  << kDefaultKeyName << "'";
-    }
-
-    prefs_properties->insert(
-        std::make_pair(current_path, PrefProperties(false)));
-    registry->RegisterStringPref(current_path, default_value->GetString(),
-                                 flags);
-
-  } else if (type.compare(kTypeFilePathName) == 0) {
-    if (!default_value->is_string()) {
-      LOG(DFATAL) << "Expected a string at '" << current_path << "."
-                  << kDefaultKeyName << "'";
-    }
-
-    prefs_properties->insert(
-        std::make_pair(current_path, PrefProperties(false)));
-    registry->RegisterFilePathPref(
-        current_path,
-        base::FilePath::FromUTF8Unsafe(default_value->GetString()), flags);
-
-  } else if (type.compare(kTypeBooleanName) == 0) {
-    if (!default_value->is_bool()) {
-      LOG(DFATAL) << "Expected a boolean at '" << current_path << "."
-                  << kDefaultKeyName << "'";
-    }
-
-    prefs_properties->insert(
-        std::make_pair(current_path, PrefProperties(false)));
-    registry->RegisterBooleanPref(current_path, default_value->GetBool(),
-                                  flags);
-
-  } else if (type.compare(kTypeIntegerName) == 0) {
-    if (!default_value->is_int()) {
-      LOG(DFATAL) << "Expected an integer at '" << current_path << "."
-                  << kDefaultKeyName << "'";
-    }
-
-    prefs_properties->insert(
-        std::make_pair(current_path, PrefProperties(false)));
-    registry->RegisterIntegerPref(current_path, default_value->GetInt(), flags);
-
-  } else if (type.compare(kTypeDoubleName) == 0) {
-    if (!default_value->is_double()) {
-      LOG(DFATAL) << "Expected a double at '" << current_path << "."
-                  << kDefaultKeyName << "'";
-    }
-
-    prefs_properties->insert(
-        std::make_pair(current_path, PrefProperties(false)));
-    registry->RegisterDoublePref(current_path, default_value->GetDouble(),
-                                 flags);
-
-  } else if (type.compare(kTypeListName) == 0) {
-    if (!default_value->is_list()) {
-      LOG(DFATAL) << "Expected a list at '" << current_path << "."
-                  << kDefaultKeyName << "'";
-    }
-
-    prefs_properties->insert(
-        std::make_pair(current_path, PrefProperties(false)));
-    registry->RegisterListPref(current_path, default_value->Clone(), flags);
-
-  } else if (type.compare(kTypeDictionaryName) == 0) {
-    if (!default_value->is_dict()) {
-      LOG(DFATAL) << "Expected a dictionary at '" << current_path << "."
-                  << kDefaultKeyName << "'";
-    }
-
-    prefs_properties->insert(
-        std::make_pair(current_path, PrefProperties(false)));
-    registry->RegisterDictionaryPref(current_path, default_value->Clone(),
-                                     flags);
-
-  } else {
-    LOG(DFATAL) << "Invalid type value at '" << current_path << "'";
-  }
+  prefs_properties->emplace(std::move(current_path), std::move(properties));
 }
 
-std::unordered_map<std::string, PrefProperties> RegisterBrowserPrefs(
-    user_prefs::PrefRegistrySyncable* registry) {
-  // This might be called outside the startup, eg. during creation of a guest
-  // window, so need to allow IO.
-  base::ThreadRestrictions::ScopedAllowIO allow_io;
-  base::FilePath prefs_definition_file;
 #if !defined(OS_ANDROID)
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (command_line->HasSwitch(apps::kLoadAndLaunchApp) &&
-      !version_info::IsOfficialBuild()) {
-    base::FilePath prefs_definition_file_from_switch =
-        command_line->GetSwitchValuePath(apps::kLoadAndLaunchApp);
-    if (!prefs_definition_file_from_switch.IsAbsolute()) {
-      base::PathService::Get(base::DIR_EXE, &prefs_definition_file);
-      prefs_definition_file =
-          prefs_definition_file
-              .Append(
-                  prefs_definition_file_from_switch.NormalizePathSeparators())
-              .Append(kPrefsDefinitionFileName);
 
-      // ReadFileToString called below will refuse any path containing a
-      // reference to parent (..) componwnt, for security reasons. Since the
-      // path to vivapp used in development commonly contains those, we have to
-      // strip them. It's probably a bad idea to circumvent that check in this
-      // way, but:
-      // 1. This code path is forbidden in official builds anyway.
-      // 2. The consequences of being able to refer to any file here are
-      // unlikely to be very severe.
-      if (prefs_definition_file.ReferencesParent()) {
-        std::vector<base::FilePath::StringType> components;
-        prefs_definition_file.GetComponents(&components);
-        prefs_definition_file.clear();
-
-        for (const auto& component : components) {
-          if (component.compare(FILE_PATH_LITERAL("..")) == 0)
-            prefs_definition_file = prefs_definition_file.DirName();
-          else
-            prefs_definition_file = prefs_definition_file.Append(component);
-        }
-      }
-    } else {
-      prefs_definition_file =
-          prefs_definition_file_from_switch.Append(kPrefsDefinitionFileName);
-    }
-  }
-#endif  // !OS_ANDROID
-
-std::string prefs_definitions_content;
-
-#if defined(OS_ANDROID)
-  // For Android, get the prefs definitions from assets.
-  prefs_definition_file = base::FilePath(FILE_PATH_LITERAL("assets"));
-  prefs_definition_file =
-      prefs_definition_file.Append(kPrefsDefinitionFileName);
-
-  base::MemoryMappedFile::Region prefs_region;
-  int prefs_fd =
-      base::android::OpenApkAsset(prefs_definition_file.value(),
-                                  &prefs_region);
-  LOG_IF(DFATAL, prefs_fd < 0)
-      << "No preference definitions file in APK assets: "
-      << prefs_definition_file.value();
-  std::unique_ptr<base::MemoryMappedFile>
-      mapped_file(new base::MemoryMappedFile());
-  if (mapped_file->Initialize(base::File(prefs_fd), prefs_region)) {
-    prefs_definitions_content.assign(
-        reinterpret_cast<char*>(mapped_file->data()),
-        mapped_file->length());
-  }
-#else  // defined(OS_ANDROID)
-  if (prefs_definition_file.empty() ||
-      !base::PathExists(prefs_definition_file)) {
-    base::PathService::Get(chrome::DIR_RESOURCES, &prefs_definition_file);
-    prefs_definition_file =
-        prefs_definition_file.Append(kVivaldiResourcesFolder)
-            .Append(kPrefsDefinitionFileName);
+void AddChromiumProperties(base::Value* value,
+                           base::StringPiece current_path,
+                           bool local_pref,
+                           PrefsProperties* prefs_properties) {
+  base::Value* chromium_prefs = value->FindDictKey(current_path);
+  if (!chromium_prefs) {
+    LOG(FATAL) << "Expected a dictionary at '" << current_path << "'";
   }
 
-  LOG_IF(DFATAL, !base::PathExists(prefs_definition_file))
-      << "Could not find the preference definitions file";
-
-  base::ReadFileToString(prefs_definition_file, &prefs_definitions_content);
-#endif  // OS_ANDROID
-
-  auto prefs_definitions_json =
-      base::JSONReader::Read(prefs_definitions_content);
-  base::DictionaryValue* prefs_definitions = nullptr;
-  if (!prefs_definitions_json ||
-      !prefs_definitions_json->GetAsDictionary(&prefs_definitions)) {
-    LOG(DFATAL) << "Expected a dictionary at the root of the pref definitions";
-  }
-
-  base::DictionaryValue* vivaldi_pref_definition = nullptr;
-  if (!prefs_definitions->GetDictionary(kVivaldiKeyName,
-                                        &vivaldi_pref_definition)) {
-    LOG(DFATAL) << "Expected a dictionary at '" << kVivaldiKeyName << "'";
-  }
-
-  base::DictionaryValue* chromium_prefs_list = nullptr;
-  if (!prefs_definitions->GetDictionary(kChromiumKeyName,
-                                        &chromium_prefs_list)) {
-    LOG(DFATAL) << "Expected a dictionary at '" << kChromiumKeyName << "'";
-  }
-
-  base::DictionaryValue* chromium_local_prefs_list = nullptr;
-  if (!prefs_definitions->GetDictionary(kChromiumLocalKeyName,
-                                        &chromium_local_prefs_list)) {
-    LOG(DFATAL) << "Expected a dictionary at '" << kChromiumLocalKeyName << "'";
-  }
-
-  PrefsProperties prefs_properties;
-
-  RegisterPrefsFromDefinition(vivaldi_pref_definition, kVivaldiKeyName,
-                              registry, &prefs_properties);
-
-  for (const auto& pref : *chromium_prefs_list) {
-    base::DictionaryValue* pref_definition = nullptr;
-    if (!pref.second->GetAsDictionary(&pref_definition)) {
-      LOG(DFATAL) << "Expected a dictionary at '" << kChromiumKeyName << "."
+  for (const auto& pref : chromium_prefs->DictItems()) {
+    if (!pref.second.is_dict()) {
+      LOG(FATAL) << "Expected a dictionary at '" << current_path << "."
                   << pref.first << "'";
     }
-
-    base::Value* pref_path =
-        pref_definition->FindKeyOfType("path", base::Value::Type::STRING);
+    std::string* pref_path = pref.second.FindStringKey("path");
     if (!pref_path) {
-      LOG(DFATAL) << "Expected a string at '" << kChromiumKeyName << "."
+      LOG(FATAL) << "Expected a string at '" << current_path << "."
                   << pref.first << ".path'";
     }
-    prefs_properties.insert(
-        std::make_pair(pref_path->GetString(), PrefProperties(false)));
+
+    PrefProperties properties;
+    properties.SetLocal(local_pref);
+    prefs_properties->emplace(std::move(*pref_path), std::move(properties));
   }
-
-  for (const auto& pref : *chromium_local_prefs_list) {
-    base::DictionaryValue* pref_definition = nullptr;
-    if (!pref.second->GetAsDictionary(&pref_definition)) {
-      LOG(DFATAL) << "Expected a dictionary at '" << kChromiumLocalKeyName
-                  << "." << pref.first << "'";
-    }
-
-    base::Value* pref_path =
-        pref_definition->FindKeyOfType("path", base::Value::Type::STRING);
-    if (!pref_path) {
-      LOG(DFATAL) << "Expected a string at '" << kChromiumLocalKeyName << "."
-                  << pref.first << ".path'";
-    }
-    prefs_properties.insert(
-        std::make_pair(pref_path->GetString(), PrefProperties(true)));
-  }
-
-  return prefs_properties;
 }
 
 void RegisterOldPrefs(user_prefs::PrefRegistrySyncable* registry) {
@@ -486,12 +436,99 @@ void RegisterOldPrefs(user_prefs::PrefRegistrySyncable* registry) {
   RegisterOldPlatformPrefs(registry);
 }
 
+#endif  // !defined(OS_ANDROID)
+
+base::Value ReadPrefsJson() {
+  // This might be called outside the startup, eg. during creation of a guest
+  // window, so need to allow IO.
+  base::ThreadRestrictions::ScopedAllowIO allow_io;
+  base::FilePath prefs_definition_file;
+#if !defined(OS_ANDROID)
+  GetDeveloperFilePath(kPrefsDefinitionFileName, &prefs_definition_file);
+#endif  // !OS_ANDROID
+
+std::string prefs_definitions_content;
+
+#if defined(OS_ANDROID)
+  // For Android, get the prefs definitions from assets.
+  prefs_definition_file = base::FilePath(FILE_PATH_LITERAL("assets"));
+  prefs_definition_file =
+      prefs_definition_file.Append(kPrefsDefinitionFileName);
+
+  base::MemoryMappedFile::Region prefs_region;
+  int prefs_fd =
+      base::android::OpenApkAsset(prefs_definition_file.value(),
+                                  &prefs_region);
+  LOG_IF(FATAL, prefs_fd < 0)
+      << "No preference definitions file in APK assets: "
+      << prefs_definition_file.value();
+  std::unique_ptr<base::MemoryMappedFile>
+      mapped_file(new base::MemoryMappedFile());
+  if (mapped_file->Initialize(base::File(prefs_fd), prefs_region)) {
+    prefs_definitions_content.assign(
+        reinterpret_cast<char*>(mapped_file->data()),
+        mapped_file->length());
+  }
+#else  // defined(OS_ANDROID)
+  if (prefs_definition_file.empty() ||
+      !base::PathExists(prefs_definition_file)) {
+    base::PathService::Get(chrome::DIR_RESOURCES, &prefs_definition_file);
+    prefs_definition_file =
+        prefs_definition_file.Append(kVivaldiResourcesFolder)
+            .Append(kPrefsDefinitionFileName);
+  }
+
+  LOG_IF(FATAL, !base::PathExists(prefs_definition_file))
+      << "Could not find the preference definitions file";
+
+  base::ReadFileToString(prefs_definition_file, &prefs_definitions_content);
+#endif  // OS_ANDROID
+
+  base::Optional<base::Value> prefs_definitions =
+      base::JSONReader::Read(prefs_definitions_content);
+  if (!prefs_definitions || !prefs_definitions->is_dict()) {
+    LOG(FATAL) << "Expected a dictionary at the root of the pref definitions";
+  }
+  return std::move(*prefs_definitions);
+}
+
+}  //namespace
+
 void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
+
   // This pref is obsolete.
   registry->RegisterBooleanPref(vivaldiprefs::kAutoUpdateEnabled, true);
 
   registry->RegisterListPref(vivaldiprefs::kVivaldiExperiments);
   registry->RegisterInt64Pref(vivaldiprefs::kVivaldiLastTopSitesVacuumDate, 0);
+
+  base::Value prefs_definitions = ReadPrefsJson();
+  if (!prefs_definitions.is_dict()) {
+    LOG(FATAL) << "Expected a dictionary at the root of the pref definitions";
+  }
+
+  base::Value* vivaldi_pref_definition =
+      prefs_definitions.FindDictKey(kVivaldiKeyName);
+  if (!vivaldi_pref_definition) {
+    LOG(FATAL) << "Expected a dictionary at '" << kVivaldiKeyName << "'";
+  }
+
+  PrefsProperties prefs_properties;
+
+  RegisterPrefsFromDefinition(std::move(*vivaldi_pref_definition),
+                              kVivaldiKeyName, registry, &prefs_properties);
+
+#if !defined(OS_ANDROID)
+  AddChromiumProperties(&prefs_definitions, kChromiumKeyName, false,
+                        &prefs_properties);
+  AddChromiumProperties(&prefs_definitions, kChromiumLocalKeyName, true,
+                        &prefs_properties);
+
+  DCHECK(GetRegisteredPrefPropertiesStorage().empty());
+  GetRegisteredPrefPropertiesStorage() = std::move(prefs_properties);
+
+  RegisterOldPrefs(registry);
+#endif  // !defined(OS_ANDROID)
 }
 
 void MigrateOldPrefs(PrefService* prefs) {

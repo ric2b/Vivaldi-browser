@@ -58,10 +58,6 @@ class TabHoverCardBubbleViewInteractiveUiTest : public InProcessBrowserTest {
     return tabstrip->hover_card_;
   }
 
-  static Widget* GetHoverCardWidget(const TabHoverCardBubbleView* hover_card) {
-    return hover_card->widget_;
-  }
-
  private:
   DISALLOW_COPY_AND_ASSIGN(TabHoverCardBubbleViewInteractiveUiTest);
 
@@ -70,26 +66,18 @@ class TabHoverCardBubbleViewInteractiveUiTest : public InProcessBrowserTest {
 
 #if defined(USE_AURA)
 // Verify that the hover card is not visible when any key is pressed.
-// TODO(crbug.com/947668): The test is flaky on Win10.
-#if defined(OS_WIN)
-#define MAYBE_HoverCardHidesOnAnyKeyPressInSameWindow DISABLED_HoverCardHidesOnAnyKeyPressInSameWindow
-#else
-#define MAYBE_HoverCardHidesOnAnyKeyPressInSameWindow HoverCardHidesOnAnyKeyPressInSameWindow
-#endif
 IN_PROC_BROWSER_TEST_F(TabHoverCardBubbleViewInteractiveUiTest,
-                       MAYBE_HoverCardHidesOnAnyKeyPressInSameWindow) {
+                       HoverCardHidesOnAnyKeyPressInSameWindow) {
   TabStrip* tab_strip =
       BrowserView::GetBrowserViewForBrowser(browser())->tabstrip();
   Tab* tab = tab_strip->tab_at(0);
-  ui::MouseEvent hover_event(ui::ET_MOUSE_ENTERED, gfx::Point(), gfx::Point(),
-                             base::TimeTicks(), ui::EF_NONE, 0);
-  tab->OnMouseEntered(hover_event);
+  tab_strip->UpdateHoverCard(tab);
   TabHoverCardBubbleView* hover_card = GetHoverCard(tab_strip);
-  Widget* widget = GetHoverCardWidget(hover_card);
+  Widget* widget = hover_card->GetWidget();
   HoverCardVisibleWaiter waiter(widget);
   waiter.Wait();
 
-  EXPECT_TRUE(widget != nullptr);
+  EXPECT_NE(nullptr, widget);
   EXPECT_TRUE(widget->IsVisible());
 
   EXPECT_TRUE(ui_test_utils::SendKeyPressSync(browser(), ui::VKEY_DOWN, false,

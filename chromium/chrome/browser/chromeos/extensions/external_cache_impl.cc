@@ -24,7 +24,6 @@
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_source.h"
-#include "content/public/browser/system_connector.h"
 #include "extensions/browser/notification_types.h"
 #include "extensions/browser/updater/extension_downloader.h"
 #include "extensions/common/extension.h"
@@ -196,10 +195,11 @@ void ExternalCacheImpl::Observe(int type,
 
 void ExternalCacheImpl::OnExtensionDownloadFailed(
     const std::string& id,
-    extensions::ExtensionDownloaderDelegate::Error error,
-    const extensions::ExtensionDownloaderDelegate::PingResult& ping_result,
-    const std::set<int>& request_ids) {
-  if (error == NO_UPDATE_AVAILABLE) {
+    Error error,
+    const PingResult& ping_result,
+    const std::set<int>& request_ids,
+    const FailureData& data) {
+  if (error == Error::NO_UPDATE_AVAILABLE) {
     if (!cached_extensions_->HasKey(id)) {
       LOG(ERROR) << "ExternalCacheImpl extension " << id
                  << " not found on update server";
@@ -210,7 +210,7 @@ void ExternalCacheImpl::OnExtensionDownloadFailed(
     }
   } else {
     LOG(ERROR) << "ExternalCacheImpl failed to download extension " << id
-               << ", error " << error;
+               << ", error " << static_cast<int>(error);
     delegate_->OnExtensionDownloadFailed(id);
   }
 }
@@ -250,12 +250,6 @@ bool ExternalCacheImpl::GetExtensionExistingVersion(const std::string& id,
   return false;
 }
 
-service_manager::Connector* ExternalCacheImpl::GetConnector() {
-  if (use_null_connector_)
-    return nullptr;
-  return content::GetSystemConnector();
-}
-
 void ExternalCacheImpl::UpdateExtensionLoader() {
   VLOG(1) << "Notify ExternalCacheImpl delegate about cache update";
   if (delegate_)
@@ -269,8 +263,7 @@ void ExternalCacheImpl::CheckCache() {
   // If url_loader_factory_ is missing we can't download anything.
   if (url_loader_factory_) {
     downloader_ = ChromeExtensionDownloaderFactory::CreateForURLLoaderFactory(
-        url_loader_factory_, this, GetConnector(),
-        extensions::GetExternalVerifierFormat());
+        url_loader_factory_, this, extensions::GetExternalVerifierFormat());
   }
 
   cached_extensions_->Clear();
@@ -325,7 +318,8 @@ void ExternalCacheImpl::OnPutExtension(const std::string& id,
   if (local_cache_.is_shutdown() || file_ownership_passed) {
     backend_task_runner_->PostTask(
         FROM_HERE,
-        base::BindOnce(base::IgnoreResult(&base::DeleteFile), file_path, true));
+        base::BindOnce(base::IgnoreResult(&base::DeleteFileRecursively),
+                       file_path));
     return;
   }
 

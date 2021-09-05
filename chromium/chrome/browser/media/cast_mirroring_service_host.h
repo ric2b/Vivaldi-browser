@@ -18,15 +18,14 @@
 #include "content/public/browser/media_stream_request.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "extensions/buildflags/buildflags.h"
-#include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "ui/gfx/geometry/size.h"
 
-// TODO(https://crbug.com/879012): Remove the build flag. OffscreenTab should
-// not only be defined when extension is enabled.
+// TODO(crbug.com/879012): Remove the build flag. OffscreenTab should not only
+// be defined when extension is enabled.
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/media/offscreen_tab.h"
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
@@ -34,6 +33,7 @@
 namespace content {
 class AudioLoopbackStreamCreator;
 class BrowserContext;
+struct DesktopMediaID;
 class WebContents;
 }  // namespace content
 
@@ -56,9 +56,15 @@ class CastMirroringServiceHost final : public mojom::MirroringServiceHost,
       content::WebContents* target_contents,
       mojo::PendingReceiver<mojom::MirroringServiceHost> receiver);
 
+  // TODO(crbug.com/809249): Remove when the extension-based implementation of
+  // the Cast MRP is removed.
   static void GetForDesktop(
       content::WebContents* initiator_contents,
       const std::string& desktop_stream_id,
+      mojo::PendingReceiver<mojom::MirroringServiceHost> receiver);
+
+  static void GetForDesktop(
+      const content::DesktopMediaID& media_id,
       mojo::PendingReceiver<mojom::MirroringServiceHost> receiver);
 
   static void GetForOffscreenTab(

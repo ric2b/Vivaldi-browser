@@ -7,12 +7,13 @@
 #include "base/path_service.h"
 #include "base/system/sys_info.h"
 #include "chrome/browser/chromeos/settings/device_settings_service.h"
+#include "chrome/browser/chromeos/wilco_dtc_supportd/wilco_dtc_supportd_client.h"
 #include "chrome/common/chrome_paths.h"
 #include "chromeos/constants/chromeos_paths.h"
 #include "chromeos/cryptohome/system_salt_getter.h"
 #include "chromeos/dbus/arc_camera_client.h"
 #include "chromeos/dbus/audio/cras_audio_client.h"
-#include "chromeos/dbus/auth_policy/auth_policy_client.h"
+#include "chromeos/dbus/authpolicy/authpolicy_client.h"
 #include "chromeos/dbus/biod/biod_client.h"
 #include "chromeos/dbus/cros_healthd/cros_healthd_client.h"
 #include "chromeos/dbus/cups_proxy/cups_proxy_client.h"
@@ -26,6 +27,7 @@
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "chromeos/dbus/session_manager/session_manager_client.h"
 #include "chromeos/dbus/system_clock/system_clock_client.h"
+#include "chromeos/dbus/system_proxy/system_proxy_client.h"
 #include "chromeos/dbus/upstart/upstart_client.h"
 #include "chromeos/tpm/install_attributes.h"
 #include "device/bluetooth/dbus/bluez_dbus_manager.h"
@@ -72,6 +74,7 @@ void InitializeDBus() {
   InitializeDBusClient<PowerManagerClient>(bus);
   InitializeDBusClient<SessionManagerClient>(bus);
   InitializeDBusClient<SystemClockClient>(bus);
+  InitializeDBusClient<SystemProxyClient>(bus);
   InitializeDBusClient<UpstartClient>(bus);
 
   // Initialize the device settings service so that we'll take actions per
@@ -84,15 +87,18 @@ void InitializeDBus() {
 void InitializeFeatureListDependentDBus() {
   dbus::Bus* bus = DBusThreadManager::Get()->GetSystemBus();
   InitializeDBusClient<bluez::BluezDBusManager>(bus);
+  InitializeDBusClient<WilcoDtcSupportdClient>(bus);
 }
 
 void ShutdownDBus() {
-  // Feature list-dependent D-Bus clients are shut down first because we try to.
+  // Feature list-dependent D-Bus clients are shut down first because we try to
   // shut down in reverse order of initialization (in case of dependencies).
+  WilcoDtcSupportdClient::Shutdown();
   bluez::BluezDBusManager::Shutdown();
 
   // Other D-Bus clients are shut down, also in reverse order of initialization.
   UpstartClient::Shutdown();
+  SystemProxyClient::Shutdown();
   SystemClockClient::Shutdown();
   SessionManagerClient::Shutdown();
   PowerManagerClient::Shutdown();

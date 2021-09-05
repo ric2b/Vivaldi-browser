@@ -30,6 +30,7 @@
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "third_party/blink/public/common/frame/sandbox_flags.h"
+#include "third_party/blink/public/mojom/frame/user_activation_update_types.mojom.h"
 #include "url/url_constants.h"
 
 namespace content {
@@ -566,10 +567,11 @@ IN_PROC_BROWSER_TEST_F(FrameTreeBrowserTest, SandboxFlagsSetForMainFrame) {
 
   // Verify that sandbox flags are set properly for the root FrameTreeNode and
   // RenderFrameHost. Root frame is sandboxed with "allow-scripts".
-  EXPECT_EQ(blink::WebSandboxFlags::kNone,
+  EXPECT_EQ(blink::mojom::WebSandboxFlags::kNone,
             root->effective_frame_policy().sandbox_flags);
-  EXPECT_EQ(blink::WebSandboxFlags::kAll & ~blink::WebSandboxFlags::kScripts &
-                ~blink::WebSandboxFlags::kAutomaticFeatures,
+  EXPECT_EQ(blink::mojom::WebSandboxFlags::kAll &
+                ~blink::mojom::WebSandboxFlags::kScripts &
+                ~blink::mojom::WebSandboxFlags::kAutomaticFeatures,
             root->active_sandbox_flags());
   EXPECT_EQ(root->active_sandbox_flags(),
             root->current_frame_host()->active_sandbox_flags());
@@ -577,17 +579,19 @@ IN_PROC_BROWSER_TEST_F(FrameTreeBrowserTest, SandboxFlagsSetForMainFrame) {
   // Verify that child frames inherit sandbox flags from the root. First frame
   // has no explicitly set flags of its own, and should inherit those from the
   // root. Second frame is completely sandboxed.
-  EXPECT_EQ(blink::WebSandboxFlags::kAll & ~blink::WebSandboxFlags::kScripts &
-                ~blink::WebSandboxFlags::kAutomaticFeatures,
+  EXPECT_EQ(blink::mojom::WebSandboxFlags::kAll &
+                ~blink::mojom::WebSandboxFlags::kScripts &
+                ~blink::mojom::WebSandboxFlags::kAutomaticFeatures,
             root->child_at(0)->effective_frame_policy().sandbox_flags);
-  EXPECT_EQ(blink::WebSandboxFlags::kAll & ~blink::WebSandboxFlags::kScripts &
-                ~blink::WebSandboxFlags::kAutomaticFeatures,
+  EXPECT_EQ(blink::mojom::WebSandboxFlags::kAll &
+                ~blink::mojom::WebSandboxFlags::kScripts &
+                ~blink::mojom::WebSandboxFlags::kAutomaticFeatures,
             root->child_at(0)->active_sandbox_flags());
   EXPECT_EQ(root->child_at(0)->active_sandbox_flags(),
             root->child_at(0)->current_frame_host()->active_sandbox_flags());
-  EXPECT_EQ(blink::WebSandboxFlags::kAll,
+  EXPECT_EQ(blink::mojom::WebSandboxFlags::kAll,
             root->child_at(1)->effective_frame_policy().sandbox_flags);
-  EXPECT_EQ(blink::WebSandboxFlags::kAll,
+  EXPECT_EQ(blink::mojom::WebSandboxFlags::kAll,
             root->child_at(1)->active_sandbox_flags());
   EXPECT_EQ(root->child_at(1)->active_sandbox_flags(),
             root->child_at(1)->current_frame_host()->active_sandbox_flags());
@@ -598,10 +602,10 @@ IN_PROC_BROWSER_TEST_F(FrameTreeBrowserTest, SandboxFlagsSetForMainFrame) {
 
   // Verify that sandbox flags are cleared properly for the root FrameTreeNode
   // and RenderFrameHost.
-  EXPECT_EQ(blink::WebSandboxFlags::kNone,
+  EXPECT_EQ(blink::mojom::WebSandboxFlags::kNone,
             root->effective_frame_policy().sandbox_flags);
-  EXPECT_EQ(blink::WebSandboxFlags::kNone, root->active_sandbox_flags());
-  EXPECT_EQ(blink::WebSandboxFlags::kNone,
+  EXPECT_EQ(blink::mojom::WebSandboxFlags::kNone, root->active_sandbox_flags());
+  EXPECT_EQ(blink::mojom::WebSandboxFlags::kNone,
             root->current_frame_host()->active_sandbox_flags());
 }
 
@@ -620,16 +624,18 @@ IN_PROC_BROWSER_TEST_F(FrameTreeBrowserTest, SandboxFlagsSetForChildFrames) {
   // which resets both SandboxFlags::Scripts and
   // SandboxFlags::AutomaticFeatures bits per blink::parseSandboxPolicy(), and
   // third frame has "allow-scripts allow-same-origin".
-  EXPECT_EQ(blink::WebSandboxFlags::kNone,
+  EXPECT_EQ(blink::mojom::WebSandboxFlags::kNone,
             root->effective_frame_policy().sandbox_flags);
-  EXPECT_EQ(blink::WebSandboxFlags::kAll,
+  EXPECT_EQ(blink::mojom::WebSandboxFlags::kAll,
             root->child_at(0)->effective_frame_policy().sandbox_flags);
-  EXPECT_EQ(blink::WebSandboxFlags::kAll & ~blink::WebSandboxFlags::kScripts &
-                ~blink::WebSandboxFlags::kAutomaticFeatures,
+  EXPECT_EQ(blink::mojom::WebSandboxFlags::kAll &
+                ~blink::mojom::WebSandboxFlags::kScripts &
+                ~blink::mojom::WebSandboxFlags::kAutomaticFeatures,
             root->child_at(1)->effective_frame_policy().sandbox_flags);
-  EXPECT_EQ(blink::WebSandboxFlags::kAll & ~blink::WebSandboxFlags::kScripts &
-                ~blink::WebSandboxFlags::kAutomaticFeatures &
-                ~blink::WebSandboxFlags::kOrigin,
+  EXPECT_EQ(blink::mojom::WebSandboxFlags::kAll &
+                ~blink::mojom::WebSandboxFlags::kScripts &
+                ~blink::mojom::WebSandboxFlags::kAutomaticFeatures &
+                ~blink::mojom::WebSandboxFlags::kOrigin,
             root->child_at(2)->effective_frame_policy().sandbox_flags);
 
   // Sandboxed frames should set a unique origin unless they have the
@@ -642,7 +648,7 @@ IN_PROC_BROWSER_TEST_F(FrameTreeBrowserTest, SandboxFlagsSetForChildFrames) {
   // Navigating to a different URL should not clear sandbox flags.
   GURL frame_url(embedded_test_server()->GetURL("/title1.html"));
   NavigateFrameToURL(root->child_at(0), frame_url);
-  EXPECT_EQ(blink::WebSandboxFlags::kAll,
+  EXPECT_EQ(blink::mojom::WebSandboxFlags::kAll,
             root->child_at(0)->effective_frame_policy().sandbox_flags);
 }
 
@@ -667,28 +673,31 @@ IN_PROC_BROWSER_TEST_F(FrameTreeBrowserTest,
   // "allow-orientation-lock", and the framed document is also served with a CSP
   // header which uses "allow-popups" and "allow-pointer-lock". The resulting
   // sandbox for the frame should only have "allow-pointer-lock".
-  EXPECT_EQ(blink::WebSandboxFlags::kNone,
+  EXPECT_EQ(blink::mojom::WebSandboxFlags::kNone,
             root->effective_frame_policy().sandbox_flags);
-  EXPECT_EQ(blink::WebSandboxFlags::kNone, root->active_sandbox_flags());
+  EXPECT_EQ(blink::mojom::WebSandboxFlags::kNone, root->active_sandbox_flags());
   EXPECT_EQ(root->active_sandbox_flags(),
             root->current_frame_host()->active_sandbox_flags());
-  EXPECT_EQ(blink::WebSandboxFlags::kNone,
+  EXPECT_EQ(blink::mojom::WebSandboxFlags::kNone,
             root->child_at(0)->effective_frame_policy().sandbox_flags);
-  EXPECT_EQ(blink::WebSandboxFlags::kAll & ~blink::WebSandboxFlags::kScripts &
-                ~blink::WebSandboxFlags::kAutomaticFeatures &
-                ~blink::WebSandboxFlags::kPopups &
-                ~blink::WebSandboxFlags::kPointerLock,
+  EXPECT_EQ(blink::mojom::WebSandboxFlags::kAll &
+                ~blink::mojom::WebSandboxFlags::kScripts &
+                ~blink::mojom::WebSandboxFlags::kAutomaticFeatures &
+                ~blink::mojom::WebSandboxFlags::kPopups &
+                ~blink::mojom::WebSandboxFlags::kPointerLock,
             root->child_at(0)->active_sandbox_flags());
   EXPECT_EQ(root->child_at(0)->active_sandbox_flags(),
             root->child_at(0)->current_frame_host()->active_sandbox_flags());
-  EXPECT_EQ(blink::WebSandboxFlags::kAll & ~blink::WebSandboxFlags::kScripts &
-                ~blink::WebSandboxFlags::kAutomaticFeatures &
-                ~blink::WebSandboxFlags::kPointerLock &
-                ~blink::WebSandboxFlags::kOrientationLock,
+  EXPECT_EQ(blink::mojom::WebSandboxFlags::kAll &
+                ~blink::mojom::WebSandboxFlags::kScripts &
+                ~blink::mojom::WebSandboxFlags::kAutomaticFeatures &
+                ~blink::mojom::WebSandboxFlags::kPointerLock &
+                ~blink::mojom::WebSandboxFlags::kOrientationLock,
             root->child_at(1)->effective_frame_policy().sandbox_flags);
-  EXPECT_EQ(blink::WebSandboxFlags::kAll & ~blink::WebSandboxFlags::kScripts &
-                ~blink::WebSandboxFlags::kAutomaticFeatures &
-                ~blink::WebSandboxFlags::kPointerLock,
+  EXPECT_EQ(blink::mojom::WebSandboxFlags::kAll &
+                ~blink::mojom::WebSandboxFlags::kScripts &
+                ~blink::mojom::WebSandboxFlags::kAutomaticFeatures &
+                ~blink::mojom::WebSandboxFlags::kPointerLock,
             root->child_at(1)->active_sandbox_flags());
   EXPECT_EQ(root->child_at(1)->active_sandbox_flags(),
             root->child_at(1)->current_frame_host()->active_sandbox_flags());
@@ -698,23 +707,25 @@ IN_PROC_BROWSER_TEST_F(FrameTreeBrowserTest,
   GURL frame_url(embedded_test_server()->GetURL("/title1.html"));
 
   NavigateFrameToURL(root->child_at(0), frame_url);
-  EXPECT_EQ(blink::WebSandboxFlags::kNone,
+  EXPECT_EQ(blink::mojom::WebSandboxFlags::kNone,
             root->child_at(0)->effective_frame_policy().sandbox_flags);
-  EXPECT_EQ(blink::WebSandboxFlags::kNone,
+  EXPECT_EQ(blink::mojom::WebSandboxFlags::kNone,
             root->child_at(0)->active_sandbox_flags());
   EXPECT_EQ(root->child_at(0)->active_sandbox_flags(),
             root->child_at(0)->current_frame_host()->active_sandbox_flags());
 
   NavigateFrameToURL(root->child_at(1), frame_url);
-  EXPECT_EQ(blink::WebSandboxFlags::kAll & ~blink::WebSandboxFlags::kScripts &
-                ~blink::WebSandboxFlags::kAutomaticFeatures &
-                ~blink::WebSandboxFlags::kPointerLock &
-                ~blink::WebSandboxFlags::kOrientationLock,
+  EXPECT_EQ(blink::mojom::WebSandboxFlags::kAll &
+                ~blink::mojom::WebSandboxFlags::kScripts &
+                ~blink::mojom::WebSandboxFlags::kAutomaticFeatures &
+                ~blink::mojom::WebSandboxFlags::kPointerLock &
+                ~blink::mojom::WebSandboxFlags::kOrientationLock,
             root->child_at(1)->effective_frame_policy().sandbox_flags);
-  EXPECT_EQ(blink::WebSandboxFlags::kAll & ~blink::WebSandboxFlags::kScripts &
-                ~blink::WebSandboxFlags::kAutomaticFeatures &
-                ~blink::WebSandboxFlags::kPointerLock &
-                ~blink::WebSandboxFlags::kOrientationLock,
+  EXPECT_EQ(blink::mojom::WebSandboxFlags::kAll &
+                ~blink::mojom::WebSandboxFlags::kScripts &
+                ~blink::mojom::WebSandboxFlags::kAutomaticFeatures &
+                ~blink::mojom::WebSandboxFlags::kPointerLock &
+                ~blink::mojom::WebSandboxFlags::kOrientationLock,
             root->child_at(1)->active_sandbox_flags());
   EXPECT_EQ(root->child_at(1)->active_sandbox_flags(),
             root->child_at(1)->current_frame_host()->active_sandbox_flags());
@@ -763,13 +774,13 @@ IN_PROC_BROWSER_TEST_F(FrameTreeBrowserTest,
                             ->GetFrameTree()
                             ->root();
 
-  EXPECT_FALSE(root->HasBeenActivated());
+  EXPECT_FALSE(root->HasStickyUserActivation());
   EXPECT_FALSE(root->HasTransientUserActivation());
 
   // Set the user activation bits.
   root->UpdateUserActivationState(
-      blink::UserActivationUpdateType::kNotifyActivation);
-  EXPECT_TRUE(root->HasBeenActivated());
+      blink::mojom::UserActivationUpdateType::kNotifyActivation);
+  EXPECT_TRUE(root->HasStickyUserActivation());
   EXPECT_TRUE(root->HasTransientUserActivation());
 
   // Install a new same-site document to check the clearing of user activation
@@ -777,7 +788,7 @@ IN_PROC_BROWSER_TEST_F(FrameTreeBrowserTest,
   GURL url(embedded_test_server()->GetURL("/title1.html"));
   EXPECT_TRUE(NavigateToURL(shell(), url));
 
-  EXPECT_FALSE(root->HasBeenActivated());
+  EXPECT_FALSE(root->HasStickyUserActivation());
   EXPECT_FALSE(root->HasTransientUserActivation());
 }
 
@@ -1028,8 +1039,8 @@ IN_PROC_BROWSER_TEST_F(CrossProcessFrameTreeBrowserTest,
                             ->GetFrameTree()
                             ->root();
   EXPECT_TRUE(root->current_origin().opaque());
-  EXPECT_TRUE(
-      root->current_origin().GetTupleOrPrecursorTupleIfOpaque().IsInvalid());
+  EXPECT_FALSE(
+      root->current_origin().GetTupleOrPrecursorTupleIfOpaque().IsValid());
   EXPECT_EQ(1UL, root->child_count());
   FrameTreeNode* child = root->child_at(0);
 
@@ -1167,12 +1178,13 @@ IN_PROC_BROWSER_TEST_F(CrossProcessFrameTreeBrowserTest,
   // flags. Main frame sets allow-popups, allow-pointer-lock and allow-scripts.
   FrameTreeNode* popup_root =
       static_cast<WebContentsImpl*>(new_contents)->GetFrameTree()->root();
-  blink::WebSandboxFlags main_frame_sandbox_flags =
+  blink::mojom::WebSandboxFlags main_frame_sandbox_flags =
       root->current_frame_host()->active_sandbox_flags();
-  EXPECT_EQ(blink::WebSandboxFlags::kAll & ~blink::WebSandboxFlags::kPopups &
-                ~blink::WebSandboxFlags::kPointerLock &
-                ~blink::WebSandboxFlags::kScripts &
-                ~blink::WebSandboxFlags::kAutomaticFeatures,
+  EXPECT_EQ(blink::mojom::WebSandboxFlags::kAll &
+                ~blink::mojom::WebSandboxFlags::kPopups &
+                ~blink::mojom::WebSandboxFlags::kPointerLock &
+                ~blink::mojom::WebSandboxFlags::kScripts &
+                ~blink::mojom::WebSandboxFlags::kAutomaticFeatures,
             main_frame_sandbox_flags);
 
   EXPECT_EQ(main_frame_sandbox_flags,
@@ -1194,13 +1206,13 @@ IN_PROC_BROWSER_TEST_F(CrossProcessFrameTreeBrowserTest,
                             ->GetFrameTree()
                             ->root();
 
-  EXPECT_FALSE(root->HasBeenActivated());
+  EXPECT_FALSE(root->HasStickyUserActivation());
   EXPECT_FALSE(root->HasTransientUserActivation());
 
   // Set the user activation bits.
   root->UpdateUserActivationState(
-      blink::UserActivationUpdateType::kNotifyActivation);
-  EXPECT_TRUE(root->HasBeenActivated());
+      blink::mojom::UserActivationUpdateType::kNotifyActivation);
+  EXPECT_TRUE(root->HasStickyUserActivation());
   EXPECT_TRUE(root->HasTransientUserActivation());
 
   // Install a new cross-site document to check the clearing of user activation
@@ -1209,7 +1221,7 @@ IN_PROC_BROWSER_TEST_F(CrossProcessFrameTreeBrowserTest,
       embedded_test_server()->GetURL("foo.com", "/title2.html"));
   EXPECT_TRUE(NavigateToURL(shell(), cross_site_url));
 
-  EXPECT_FALSE(root->HasBeenActivated());
+  EXPECT_FALSE(root->HasStickyUserActivation());
   EXPECT_FALSE(root->HasTransientUserActivation());
 }
 
@@ -1290,8 +1302,7 @@ class TransferUserActivationFrameTreeBrowserTest : public ContentBrowserTest {
   void SetUpCommandLine(base::CommandLine* command_line) override {
     feature_list_.InitWithFeatures(
         {features::kUserActivationPostMessageTransfer,
-         features::kUserActivationSameOriginVisibility,
-         features::kUserActivationV2},
+         features::kUserActivationSameOriginVisibility},
         {});
   }
 
@@ -1318,20 +1329,20 @@ IN_PROC_BROWSER_TEST_F(TransferUserActivationFrameTreeBrowserTest,
   FrameTreeNode* root = contents->GetFrameTree()->root();
   FrameTreeNode* child1 = root->child_at(0);
   FrameTreeNode* child2 = root->child_at(1);
-  EXPECT_FALSE(root->HasBeenActivated());
+  EXPECT_FALSE(root->HasStickyUserActivation());
   EXPECT_FALSE(root->HasTransientUserActivation());
-  EXPECT_FALSE(child1->HasBeenActivated());
+  EXPECT_FALSE(child1->HasStickyUserActivation());
   EXPECT_FALSE(child1->HasTransientUserActivation());
-  EXPECT_FALSE(child2->HasBeenActivated());
+  EXPECT_FALSE(child2->HasStickyUserActivation());
   EXPECT_FALSE(child2->HasTransientUserActivation());
 
   // Activate the root frame.
   EXPECT_TRUE(ExecuteScript(shell(), ""));
-  EXPECT_TRUE(root->HasBeenActivated());
+  EXPECT_TRUE(root->HasStickyUserActivation());
   EXPECT_TRUE(root->HasTransientUserActivation());
-  EXPECT_FALSE(child1->HasBeenActivated());
+  EXPECT_FALSE(child1->HasStickyUserActivation());
   EXPECT_FALSE(child1->HasTransientUserActivation());
-  EXPECT_FALSE(child2->HasBeenActivated());
+  EXPECT_FALSE(child2->HasStickyUserActivation());
   EXPECT_FALSE(child2->HasTransientUserActivation());
 
   // Post a message from the root frame to the child frame with
@@ -1353,11 +1364,11 @@ IN_PROC_BROWSER_TEST_F(TransferUserActivationFrameTreeBrowserTest,
     if (actual_test_reply == "\"done-Hello\"")
       break;
   }
-  EXPECT_FALSE(root->HasBeenActivated());
+  EXPECT_FALSE(root->HasStickyUserActivation());
   EXPECT_FALSE(root->HasTransientUserActivation());
-  EXPECT_TRUE(child1->HasBeenActivated());
+  EXPECT_TRUE(child1->HasStickyUserActivation());
   EXPECT_TRUE(child1->HasTransientUserActivation());
-  EXPECT_FALSE(child2->HasBeenActivated());
+  EXPECT_FALSE(child2->HasStickyUserActivation());
   EXPECT_FALSE(child2->HasTransientUserActivation());
 
   // Post a message from one child to another child in a different origin with
@@ -1377,11 +1388,11 @@ IN_PROC_BROWSER_TEST_F(TransferUserActivationFrameTreeBrowserTest,
     if (actual_test_reply == "\"done-Hey\"")
       break;
   }
-  EXPECT_FALSE(root->HasBeenActivated());
+  EXPECT_FALSE(root->HasStickyUserActivation());
   EXPECT_FALSE(root->HasTransientUserActivation());
-  EXPECT_FALSE(child1->HasBeenActivated());
+  EXPECT_FALSE(child1->HasStickyUserActivation());
   EXPECT_FALSE(child1->HasTransientUserActivation());
-  EXPECT_TRUE(child2->HasBeenActivated());
+  EXPECT_TRUE(child2->HasStickyUserActivation());
   EXPECT_TRUE(child2->HasTransientUserActivation());
 }
 
@@ -1396,11 +1407,11 @@ IN_PROC_BROWSER_TEST_F(TransferUserActivationFrameTreeBrowserTest,
   FrameTreeNode* root = contents->GetFrameTree()->root();
   FrameTreeNode* child1 = root->child_at(0);
   FrameTreeNode* child2 = child1->child_at(0);
-  EXPECT_FALSE(root->HasBeenActivated());
+  EXPECT_FALSE(root->HasStickyUserActivation());
   EXPECT_FALSE(root->HasTransientUserActivation());
-  EXPECT_FALSE(child1->HasBeenActivated());
+  EXPECT_FALSE(child1->HasStickyUserActivation());
   EXPECT_FALSE(child1->HasTransientUserActivation());
-  EXPECT_FALSE(child2->HasBeenActivated());
+  EXPECT_FALSE(child2->HasStickyUserActivation());
   EXPECT_FALSE(child2->HasTransientUserActivation());
 
   // Activate the root frame and transfer the user activation state from root
@@ -1422,11 +1433,11 @@ IN_PROC_BROWSER_TEST_F(TransferUserActivationFrameTreeBrowserTest,
     if (actual_test_reply == "\"done-Hello\"")
       break;
   }
-  EXPECT_FALSE(root->HasBeenActivated());
+  EXPECT_FALSE(root->HasStickyUserActivation());
   EXPECT_FALSE(root->HasTransientUserActivation());
-  EXPECT_TRUE(child1->HasBeenActivated());
+  EXPECT_TRUE(child1->HasStickyUserActivation());
   EXPECT_TRUE(child1->HasTransientUserActivation());
-  EXPECT_FALSE(child2->HasBeenActivated());
+  EXPECT_FALSE(child2->HasStickyUserActivation());
   EXPECT_FALSE(child2->HasTransientUserActivation());
 
   // Post a message from child1 to its child child2 in the same origin with
@@ -1442,11 +1453,11 @@ IN_PROC_BROWSER_TEST_F(TransferUserActivationFrameTreeBrowserTest,
     if (actual_test_reply == "\"done-Hey\"")
       break;
   }
-  EXPECT_FALSE(root->HasBeenActivated());
+  EXPECT_FALSE(root->HasStickyUserActivation());
   EXPECT_FALSE(root->HasTransientUserActivation());
-  EXPECT_FALSE(child1->HasBeenActivated());
+  EXPECT_FALSE(child1->HasStickyUserActivation());
   EXPECT_FALSE(child1->HasTransientUserActivation());
-  EXPECT_TRUE(child2->HasBeenActivated());
+  EXPECT_TRUE(child2->HasStickyUserActivation());
   EXPECT_TRUE(child2->HasTransientUserActivation());
 }
 #endif

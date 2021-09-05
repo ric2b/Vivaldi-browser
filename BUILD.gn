@@ -27,34 +27,19 @@ if (is_android) {
 group("All") {
   testonly = true
 
+  # don't build tests for android and x86 (386) Linux since these are not used.
+  # x86 is disabled due to compile issues, in addition to not running tests.
+  # Don't build tests for ARM, either
+  build_tests = !is_android && !(is_linux && (target_cpu == "x86" || target_cpu == "arm" || target_cpu == "arm64"))
+
   deps = [
     ":vivaldi",
     ":generate_files_cfg",
-    "//base:base_unittests",
-    "//cc:cc_unittests",
-    "//chrome/test:unit_tests",
-    "//components:components_unittests",
-    "//content/test:content_browsertests",
-    "//content/test:content_unittests",
-    "//crypto:crypto_unittests",
-    "//device:device_unittests",
-    "//google_apis:google_apis_unittests",
-    "//gpu:gpu_unittests",
-    "//ipc:ipc_tests",
-    "//jingle:jingle_unittests",
-    "//media:media_unittests",
-    "//media/cast:cast_unittests",
-    "//net:net_unittests",
-    "//printing:printing_unittests",
-    "//sql:sql_unittests",
-    "//third_party/cacheinvalidation:cacheinvalidation_unittests",
-    "//ui/gfx:gfx_unittests",
-    "//url:url_unittests",
     "//vivaldi/app:write_translation_xml_generation_script",
     "//vivaldi/app:write_pakfile_xml_generation_script",
     "//vivaldi/app:write_full_pakfile_xml_generation_script",
   ]
-  if (is_linux) {
+  if (is_linux && build_tests) {
     deps += [
       #"//breakpad:breakpad_unittests",
       #"//breakpad:generate_test_dump",
@@ -62,13 +47,34 @@ group("All") {
   }
   if (is_android) {
     deps += [
-        "//vivaldi/notes"
+        "//vivaldi/notes",
+        "//build/android:prepare_android_lint_cache", # Needed to generate build_vars.txt, used by merge_manifest
     ]
   }
-  if (!is_android) {
+  if (build_tests) {
     deps += [
+      "//base:base_unittests",
+      "//cc:cc_unittests",
       "//chrome/test:browser_tests",
+      "//chrome/test:unit_tests",
       "//chrome/test/chromedriver:chromedriver_unittests",
+      "//components:components_unittests",
+      "//content/test:content_browsertests",
+      "//content/test:content_unittests",
+      "//crypto:crypto_unittests",
+      "//device:device_unittests",
+      "//google_apis:google_apis_unittests",
+      "//gpu:gpu_unittests",
+      "//ipc:ipc_tests",
+      "//jingle:jingle_unittests",
+      "//media:media_unittests",
+      "//media/cast:cast_unittests",
+      "//net:net_unittests",
+      "//printing:printing_unittests",
+      "//sql:sql_unittests",
+      "//third_party/cacheinvalidation:cacheinvalidation_unittests",
+      "//ui/gfx:gfx_unittests",
+      "//url:url_unittests",
     ]
   }
   if (is_win) {
@@ -94,15 +100,19 @@ group("All") {
   }
   if (is_linux) {
     deps += [
-      "//courgette:courgette_unittests",
       "//sandbox/linux:chrome_sandbox",
-      "//sandbox/linux:sandbox_linux_unittests",
     ]
-    if (use_dbus) {
+    if (build_tests) {
       deps += [
-        "//dbus:dbus_test_server",
-        "//dbus:dbus_unittests",
+        "//courgette:courgette_unittests",
+        "//sandbox/linux:sandbox_linux_unittests",
       ]
+      if (use_dbus) {
+        deps += [
+          "//dbus:dbus_test_server",
+          "//dbus:dbus_unittests",
+        ]
+      }
     }
     if (!is_component_build) {
       deps += [
@@ -115,14 +125,14 @@ group("All") {
       deps += [ "//dbus" ]
     }
   }
-  if (!is_android) {
+  if (build_tests) {
     deps += [
       "//chrome/test:interactive_ui_tests",
       "//chrome/test:sync_integration_tests",
       "//ppapi:ppapi_unittests",
     ]
   }
-  if (use_aura) {
+  if (use_aura && build_tests) {
     deps += [
       "//ui/aura:aura_unittests",
       "//ui/compositor:compositor_unittests",
@@ -184,7 +194,7 @@ if (is_linux && !is_component_build) {
   }
 }
 
-if (is_win) {
+if (is_win && getenv("CHROME_HEADLESS") == "1") {
   import("//build/toolchain/cc_wrapper.gni")
 
   if (cc_wrapper != "") {

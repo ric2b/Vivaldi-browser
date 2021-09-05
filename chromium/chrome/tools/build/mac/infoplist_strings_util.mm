@@ -61,7 +61,7 @@ NSString* ApplicationVersionString(const char* version_file_path, const char* vi
                   [[error description] UTF8String]);
               return nil;
           }
-		  scanner = [NSScanner scannerWithString:version_file];
+          scanner = [NSScanner scannerWithString:version_file];
           if ([scanner scanString:@"VIVALDI_MAJOR=" intoString:nil] &&
               [scanner scanInt:&major] &&
               [scanner scanString:@"VIVALDI_MINOR=" intoString:nil] &&
@@ -72,7 +72,7 @@ NSString* ApplicationVersionString(const char* version_file_path, const char* vi
                   major, minor, build, vivaldi_build_num];
           }
       }
-      return [NSString stringWithFormat:@"%d.%d.%d.%d",
+    return [NSString stringWithFormat:@"%d.%d.%d.%d",
             major, minor, build, patch];
   }
   fprintf(stderr, "Failed to parse version file\n");
@@ -203,7 +203,7 @@ int main(int argc, char* const argv[]) {
         case 'o':
           output_dir = optarg;
           break;
-	      case 'B':
+        case 'B':
           vivaldi_build_num = optarg;
           break;
         case 'V':

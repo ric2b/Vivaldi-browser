@@ -17,7 +17,7 @@
 #include "ppapi/c/private/ppb_isolated_file_system_private.h"
 #include "ppapi/host/resource_host.h"
 #include "ppapi/host/resource_message_filter.h"
-#include "storage/browser/fileapi/isolated_context.h"
+#include "storage/browser/file_system/isolated_context.h"
 #include "url/gurl.h"
 
 class Profile;
@@ -40,7 +40,7 @@ class PepperIsolatedFileSystemMessageFilter
       content::BrowserPpapiHost* host);
 
   // ppapi::host::ResourceMessageFilter implementation.
-  scoped_refptr<base::TaskRunner> OverrideTaskRunnerForMessage(
+  scoped_refptr<base::SequencedTaskRunner> OverrideTaskRunnerForMessage(
       const IPC::Message& msg) override;
   int32_t OnResourceMessageReceived(
       const IPC::Message& msg,

@@ -47,6 +47,7 @@ class TestCardUnmaskDelegate : public CardUnmaskDelegate {
     details_ = details;
   }
   void OnUnmaskPromptClosed() override {}
+  bool ShouldOfferFidoAuth() const override { return false; }
 
   base::WeakPtr<TestCardUnmaskDelegate> GetWeakPtr() {
     return weak_factory_.GetWeakPtr();
@@ -158,14 +159,14 @@ class CardUnmaskPromptViewBrowserTest : public DialogBrowserTest {
   }
 
   void ShowUi(const std::string& name) override {
-    CardUnmaskPromptView* dialog =
-        CreateCardUnmaskPromptView(controller(), contents());
     CreditCard card = test::GetMaskedServerCard();
     if (name == kExpiryExpired)
       card.SetExpirationYear(2016);
 
-    controller()->ShowPrompt(dialog, card, AutofillClient::UNMASK_FOR_AUTOFILL,
-                             delegate()->GetWeakPtr());
+    controller()->ShowPrompt(
+        base::Bind(&CreateCardUnmaskPromptView, base::Unretained(controller()),
+                   base::Unretained(contents())),
+        card, AutofillClient::UNMASK_FOR_AUTOFILL, delegate()->GetWeakPtr());
     // Setting error expectations and confirming the dialogs for some test
     // cases.
     if (name == kExpiryValidPermanentError ||

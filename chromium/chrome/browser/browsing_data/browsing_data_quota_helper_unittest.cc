@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "testing/gtest/include/gtest/gtest.h"
-
 #include <stddef.h>
 #include <stdint.h>
 
@@ -15,16 +13,16 @@
 #include "chrome/browser/browsing_data/browsing_data_quota_helper_impl.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/test/browser_task_environment.h"
-#include "content/public/test/test_browser_thread.h"
 #include "content/public/test/test_utils.h"
 #include "storage/browser/quota/quota_manager.h"
 #include "storage/browser/quota/quota_manager_proxy.h"
 #include "storage/browser/test/mock_storage_client.h"
+#include "testing/gtest/include/gtest/gtest.h"
 
 using blink::mojom::StorageType;
 using content::BrowserThread;
-using content::MockOriginData;
-using content::MockStorageClient;
+using storage::MockOriginData;
+using storage::MockStorageClient;
 
 class BrowsingDataQuotaHelperTest : public testing::Test {
  public:
@@ -37,7 +35,7 @@ class BrowsingDataQuotaHelperTest : public testing::Test {
 
   void SetUp() override {
     EXPECT_TRUE(dir_.CreateUniqueTempDir());
-    quota_manager_ = new storage::QuotaManager(
+    quota_manager_ = base::MakeRefCounted<storage::QuotaManager>(
         false, dir_.GetPath(),
         base::CreateSingleThreadTaskRunner({BrowserThread::IO}).get(), nullptr,
         storage::GetQuotaSettingsFunc());

@@ -249,6 +249,17 @@ class PLATFORM_EXPORT EffectPaintPropertyNode
     //        CompositingReason::kActiveBackdropFilterAnimation;
   }
 
+  // Whether the effect node uses the backdrop as an input. This includes
+  // exotic blending modes and backdrop filters.
+  bool HasBackdropEffect() const {
+    return BlendMode() != SkBlendMode::kSrcOver ||
+           !BackdropFilter().IsEmpty() || HasActiveBackdropFilterAnimation();
+  }
+
+  CompositingReasons DirectCompositingReasonsForDebugging() const {
+    return DirectCompositingReasons();
+  }
+
   const CompositorElementId& GetCompositorElementId() const {
     DCHECK(!Parent() || !IsParentAlias());
     return state_.compositor_element_id;

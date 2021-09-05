@@ -93,8 +93,10 @@ TEST_F(ShelfTooltipManagerTest, DoNotShowForInvalidView) {
   const int index = model->Add(item);
   ShelfViewTestAPI(GetPrimaryShelf()->GetShelfViewForTesting())
       .RunMessageLoopUntilAnimationsDone();
-  // Note: There's no easy way to correlate shelf a model index/id to its view.
-  tooltip_manager_->ShowTooltipWithDelay(shelf_view_->children().back());
+
+  // The index of a ShelfItem in the model should be the same as its index
+  // within the |shelf_view_|'s list of children.
+  tooltip_manager_->ShowTooltipWithDelay(shelf_view_->children().at(index));
   EXPECT_TRUE(IsTimerRunning());
 
   // Removing the view won't stop the timer, but the tooltip shouldn't be shown.
@@ -133,9 +135,9 @@ TEST_F(ShelfTooltipManagerTest, HideWhenShelfIsAutoHideHidden) {
   ShowTooltipForFirstAppIcon();
   ASSERT_TRUE(tooltip_manager_->IsVisible());
 
-  GetPrimaryShelf()->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
+  GetPrimaryShelf()->SetAutoHideBehavior(ShelfAutoHideBehavior::kAlways);
   GetPrimaryShelf()->UpdateAutoHideState();
-  ASSERT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS,
+  ASSERT_EQ(ShelfAutoHideBehavior::kAlways,
             GetPrimaryShelf()->auto_hide_behavior());
   ASSERT_EQ(SHELF_AUTO_HIDE_HIDDEN, GetPrimaryShelf()->GetAutoHideState());
   EXPECT_FALSE(tooltip_manager_->IsVisible());
@@ -152,7 +154,7 @@ TEST_F(ShelfTooltipManagerTest, HideWhenShelfIsAutoHideHidden) {
   // Close the window to show the auto-hide shelf; tooltips should now show.
   widget.reset();
   GetPrimaryShelf()->UpdateAutoHideState();
-  ASSERT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS,
+  ASSERT_EQ(ShelfAutoHideBehavior::kAlways,
             GetPrimaryShelf()->auto_hide_behavior());
   ASSERT_EQ(SHELF_AUTO_HIDE_SHOWN, GetPrimaryShelf()->GetAutoHideState());
 

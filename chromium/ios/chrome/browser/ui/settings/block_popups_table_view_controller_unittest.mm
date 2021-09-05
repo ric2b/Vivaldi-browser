@@ -48,14 +48,14 @@ class BlockPopupsTableViewControllerTest
   void SetDisallowPopups() {
     ios::HostContentSettingsMapFactory::GetForBrowserState(
         chrome_browser_state_.get())
-        ->SetDefaultContentSetting(CONTENT_SETTINGS_TYPE_POPUPS,
+        ->SetDefaultContentSetting(ContentSettingsType::POPUPS,
                                    CONTENT_SETTING_BLOCK);
   }
 
   void SetAllowPopups() {
     ios::HostContentSettingsMapFactory::GetForBrowserState(
         chrome_browser_state_.get())
-        ->SetDefaultContentSetting(CONTENT_SETTINGS_TYPE_POPUPS,
+        ->SetDefaultContentSetting(ContentSettingsType::POPUPS,
                                    CONTENT_SETTING_ALLOW);
   }
 
@@ -67,11 +67,11 @@ class BlockPopupsTableViewControllerTest
         chrome_browser_state_.get())
         ->SetContentSettingCustomScope(
             allowed_pattern, ContentSettingsPattern::Wildcard(),
-            CONTENT_SETTINGS_TYPE_POPUPS, std::string(), CONTENT_SETTING_ALLOW);
+            ContentSettingsType::POPUPS, std::string(), CONTENT_SETTING_ALLOW);
     EXPECT_EQ(CONTENT_SETTING_ALLOW,
               ios::HostContentSettingsMapFactory::GetForBrowserState(
                   chrome_browser_state_.get())
-                  ->GetContentSetting(url, url, CONTENT_SETTINGS_TYPE_POPUPS,
+                  ->GetContentSetting(url, url, ContentSettingsType::POPUPS,
                                       std::string()));
   }
 
@@ -115,7 +115,8 @@ TEST_F(BlockPopupsTableViewControllerTest, TestOneAllowedItem) {
   EXPECT_EQ(2, NumberOfSections());
   EXPECT_EQ(1, NumberOfItemsInSection(1));
   CheckSectionHeaderWithId(IDS_IOS_POPUPS_ALLOWED, 1);
-  CheckTextCellText(base::SysUTF8ToNSString(kAllowedPattern), 1, 0);
+  CheckTextCellTextAndDetailText(base::SysUTF8ToNSString(kAllowedPattern), nil,
+                                 1, 0);
   EXPECT_TRUE([controller() navigationItem].rightBarButtonItem);
 }
 
@@ -125,7 +126,7 @@ TEST_F(BlockPopupsTableViewControllerTest, TestOneAllowedItemDeleted) {
   ContentSettingsForOneType initial_entries;
   ios::HostContentSettingsMapFactory::GetForBrowserState(
       chrome_browser_state_.get())
-      ->GetSettingsForOneType(CONTENT_SETTINGS_TYPE_POPUPS, std::string(),
+      ->GetSettingsForOneType(ContentSettingsType::POPUPS, std::string(),
                               &initial_entries);
 
   // Add the pattern to be deleted.
@@ -135,7 +136,7 @@ TEST_F(BlockPopupsTableViewControllerTest, TestOneAllowedItemDeleted) {
   ContentSettingsForOneType added_entries;
   ios::HostContentSettingsMapFactory::GetForBrowserState(
       chrome_browser_state_.get())
-      ->GetSettingsForOneType(CONTENT_SETTINGS_TYPE_POPUPS, std::string(),
+      ->GetSettingsForOneType(ContentSettingsType::POPUPS, std::string(),
                               &added_entries);
   EXPECT_NE(initial_entries.size(), added_entries.size());
 
@@ -158,7 +159,7 @@ TEST_F(BlockPopupsTableViewControllerTest, TestOneAllowedItemDeleted) {
   ContentSettingsForOneType final_entries;
   ios::HostContentSettingsMapFactory::GetForBrowserState(
       chrome_browser_state_.get())
-      ->GetSettingsForOneType(CONTENT_SETTINGS_TYPE_POPUPS, std::string(),
+      ->GetSettingsForOneType(ContentSettingsType::POPUPS, std::string(),
                               &final_entries);
   EXPECT_EQ(initial_entries.size(), final_entries.size());
 }

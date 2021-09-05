@@ -271,7 +271,15 @@ void SystemTrayClient::ShowAccessibilityHelp() {
 
 void SystemTrayClient::ShowAccessibilitySettings() {
   base::RecordAction(base::UserMetricsAction("ShowAccessibilitySettings"));
-  ShowSettingsSubPageForActiveUser(chrome::kAccessibilitySubPage);
+  ShowSettingsSubPageForActiveUser(chrome::kOsAccessibilitySubPage);
+}
+
+void SystemTrayClient::ShowGestureEducationHelp() {
+  chrome::ScopedTabbedBrowserDisplayer displayer(
+      ProfileManager::GetActiveUserProfile());
+  base::RecordAction(base::UserMetricsAction("ShowGestureEducationHelp"));
+  ShowSingletonTab(displayer.browser(),
+                   GURL(chrome::kChromeOSGestureEducationHelpURL));
 }
 
 void SystemTrayClient::ShowPaletteHelp() {

@@ -26,8 +26,8 @@
 #include "extensions/schema/history_private.h"
 #include "extensions/tools/vivaldi_tools.h"
 
-using vivaldi::MilliSecondsFromTime;
 using vivaldi::GetTime;
+using vivaldi::MilliSecondsFromTime;
 
 namespace extensions {
 
@@ -225,7 +225,7 @@ ExtensionFunction::ResponseAction HistoryPrivateDbSearchFunction::Run() {
   hs->QueryHistoryWStatement(
       sql_statement, search_text, max_hits,
       base::BindOnce(&HistoryPrivateDbSearchFunction::SearchComplete,
-                 base::Unretained(this)),
+                     base::Unretained(this)),
       &task_tracker_);
 
   AddRef();  // Balanced in SearchComplete().
@@ -283,7 +283,7 @@ ExtensionFunction::ResponseAction HistoryPrivateSearchFunction::Run() {
 
   hs->QueryHistory(search_text, options,
                    base::BindOnce(&HistoryPrivateSearchFunction::SearchComplete,
-                              base::Unretained(this)),
+                                  base::Unretained(this)),
                    &task_tracker_);
 
   AddRef();  // Balanced in SearchComplete().
@@ -321,7 +321,7 @@ void HistoryPrivateSearchFunction::SearchComplete(
   BookmarkModel* model =
       BookmarkModelFactory::GetForBrowserContext(GetProfile());
   if (!results.empty()) {
-    for (const auto item : results)
+    for (const auto& item : results)
       history_item_vec.push_back(GetHistoryAndVisitItem(item, model));
   }
   Respond(ArgumentList(DBSearch::Results::Create(history_item_vec)));
@@ -376,7 +376,8 @@ HistoryPrivateGetTopUrlsPerDayFunction::Run() {
   hs->TopUrlsPerDay(
       number_of_days,
       base::Bind(&HistoryPrivateGetTopUrlsPerDayFunction::TopUrlsComplete,
-                 base::Unretained(this)));
+                 base::Unretained(this)),
+      &task_tracker_);
   AddRef();  // Balanced in TopUrlsComplete().
   return RespondLater();
 }
@@ -447,7 +448,8 @@ ExtensionFunction::ResponseAction HistoryPrivateVisitSearchFunction::Run() {
 
   hs->VisitSearch(options,
                   base::Bind(&HistoryPrivateVisitSearchFunction::VisitsComplete,
-                             base::Unretained(this)));
+                             base::Unretained(this)),
+                  &task_tracker_);
   AddRef();  // Balanced in VisitsComplete().
   return RespondLater();
 }

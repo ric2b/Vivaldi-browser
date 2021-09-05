@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_ARC_INTENT_HELPER_ARC_INTENT_HELPER_BRIDGE_H_
 #define COMPONENTS_ARC_INTENT_HELPER_ARC_INTENT_HELPER_BRIDGE_H_
 
+#include <map>
 #include <memory>
 #include <set>
 #include <string>
@@ -29,6 +30,7 @@ class BrowserContext;
 namespace arc {
 
 class ArcBridgeService;
+class ControlCameraAppDelegate;
 class FactoryResetDelegate;
 class IntentFilter;
 class OpenUrlDelegate;
@@ -51,6 +53,8 @@ class ArcIntentHelperBridge : public KeyedService,
 
   static void SetOpenUrlDelegate(OpenUrlDelegate* delegate);
 
+  static void SetControlCameraAppDelegate(ControlCameraAppDelegate* delegate);
+
   static void SetFactoryResetDelegate(FactoryResetDelegate* delegate);
 
   ArcIntentHelperBridge(content::BrowserContext* context,
@@ -60,6 +64,11 @@ class ArcIntentHelperBridge : public KeyedService,
   void AddObserver(ArcIntentHelperObserver* observer);
   void RemoveObserver(ArcIntentHelperObserver* observer);
   bool HasObserver(ArcIntentHelperObserver* observer) const;
+  void HandleCameraResult(
+      uint32_t intent_id,
+      arc::mojom::CameraIntentAction action,
+      const std::vector<uint8_t>& data,
+      arc::mojom::IntentHelperInstance::HandleCameraResultCallback callback);
 
   // mojom::IntentHelperHost
   void OnIconInvalidated(const std::string& package_name) override;
@@ -84,14 +93,14 @@ class ArcIntentHelperBridge : public KeyedService,
                        bool should_handle_result,
                        bool should_down_scale,
                        bool is_secure) override;
-  void HandleCameraResult(
-      uint32_t intent_id,
-      arc::mojom::CameraIntentAction action,
-      const std::vector<uint8_t>& data,
-      arc::mojom::IntentHelperInstance::HandleCameraResultCallback callback);
   void OnIntentFiltersUpdatedForPackage(
       const std::string& package_name,
       std::vector<IntentFilter> intent_filters) override;
+  void CloseCameraApp() override;
+  void IsChromeAppEnabled(arc::mojom::ChromeApp app,
+                          IsChromeAppEnabledCallback callback) override;
+  void OnPreferredAppsChanged(std::vector<IntentFilter> added,
+                              std::vector<IntentFilter> deleted) override;
 
   // Retrieves icons for the |activities| and calls |callback|.
   // See ActivityIconLoader::GetActivityIcons() for more details.
@@ -125,6 +134,10 @@ class ArcIntentHelperBridge : public KeyedService,
   const std::vector<IntentFilter>& GetIntentFilterForPackage(
       const std::string& package_name);
 
+  const std::vector<IntentFilter>& GetAddedPreferredApps();
+
+  const std::vector<IntentFilter>& GetDeletedPreferredApps();
+
  private:
   THREAD_CHECKER(thread_checker_);
 
@@ -145,6 +158,12 @@ class ArcIntentHelperBridge : public KeyedService,
 
   // Schemes that ARC is known to send via OnOpenUrl.
   const std::set<std::string> allowed_arc_schemes_;
+
+  // The preferred app added in ARC.
+  std::vector<IntentFilter> added_preferred_apps_;
+
+  // The preferred app deleted in ARC.
+  std::vector<IntentFilter> deleted_preferred_apps_;
 
   DISALLOW_COPY_AND_ASSIGN(ArcIntentHelperBridge);
 };

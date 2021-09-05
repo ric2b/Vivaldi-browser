@@ -47,6 +47,7 @@
 #include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/html/forms/radio_node_list.h"
 #include "third_party/blink/renderer/core/html/html_collection.h"
+#include "third_party/blink/renderer/core/html/html_document.h"
 #include "third_party/blink/renderer/core/html/html_frame_owner_element.h"
 #include "third_party/blink/renderer/core/html/html_tag_collection.h"
 #include "third_party/blink/renderer/core/layout/layout_block_flow.h"
@@ -84,9 +85,9 @@ class DOMTreeMutationDetector {
  public:
   DOMTreeMutationDetector(const Node& node, const Node& parent)
       : node_(&node),
-        node_document_(node.GetDocument()),
-        parent_document_(parent.GetDocument()),
-        parent_(parent),
+        node_document_(&node.GetDocument()),
+        parent_document_(&parent.GetDocument()),
+        parent_(&parent),
         original_node_document_version_(node_document_->DomTreeVersion()),
         original_parent_document_version_(parent_document_->DomTreeVersion()) {}
 
@@ -105,10 +106,10 @@ class DOMTreeMutationDetector {
   }
 
  private:
-  const Member<const Node> node_;
-  const Member<Document> node_document_;
-  const Member<Document> parent_document_;
-  const Member<const Node> parent_;
+  const Node* const node_;
+  Document* const node_document_;
+  Document* const parent_document_;
+  const Node* const parent_;
   const uint64_t original_node_document_version_;
   const uint64_t original_parent_document_version_;
 };
@@ -341,7 +342,7 @@ void ContainerNode::DidInsertNodeVector(
       targets.size() > 0 ? targets[0]->previousSibling() : nullptr;
   for (const auto& target_node : targets) {
     ChildrenChanged(ChildrenChange::ForInsertion(
-        *target_node, unchanged_previous, next, kChildrenChangeSourceAPI));
+        *target_node, unchanged_previous, next, ChildrenChangeSource::kAPI));
   }
   for (const auto& descendant : post_insertion_notification_targets) {
     if (descendant->isConnected())
@@ -486,7 +487,7 @@ void ContainerNode::ParserInsertBefore(Node* new_child, Node& next_child) {
   DCHECK(new_child);
   DCHECK_EQ(next_child.parentNode(), this);
   DCHECK(!new_child->IsDocumentFragment());
-  DCHECK(!IsHTMLTemplateElement(this));
+  DCHECK(!IsA<HTMLTemplateElement>(this));
 
   if (next_child.previousSibling() == new_child ||
       &next_child == new_child)  // nothing to do
@@ -516,7 +517,7 @@ void ContainerNode::ParserInsertBefore(Node* new_child, Node& next_child) {
     ChildListMutationScope(*this).ChildAdded(*new_child);
   }
 
-  NotifyNodeInserted(*new_child, kChildrenChangeSourceParser);
+  NotifyNodeInserted(*new_child, ChildrenChangeSource::kParser);
 }
 
 Node* ContainerNode::ReplaceChild(Node* new_child,
@@ -720,7 +721,7 @@ Node* ContainerNode::RemoveChild(Node* old_child,
       NotifyNodeRemoved(*child);
     }
     ChildrenChanged(ChildrenChange::ForRemoval(*child, prev, next,
-                                               kChildrenChangeSourceAPI));
+                                               ChildrenChangeSource::kAPI));
   }
   DispatchSubtreeModifiedEvent();
   return child;
@@ -781,7 +782,7 @@ void ContainerNode::ParserRemoveChild(Node& old_child) {
     NotifyNodeRemoved(old_child);
   }
   ChildrenChanged(ChildrenChange::ForRemoval(old_child, prev, next,
-                                             kChildrenChangeSourceParser));
+                                             ChildrenChangeSource::kParser));
 }
 
 // This differs from other remove functions because it forcibly removes all the
@@ -809,6 +810,11 @@ void ContainerNode::RemoveChildren(SubtreeModificationAction action) {
     GetDocument().NodeChildrenWillBeRemoved(*this);
   }
 
+  HeapVector<Member<Node>>* removed_nodes = nullptr;
+  if (ChildrenChangedAllChildrenRemovedNeedsList()) {
+    removed_nodes =
+        MakeGarbageCollected<HeapVector<Member<Node>>>(CountChildren());
+  }
   {
     HTMLFrameOwnerElement::PluginDisposeSuspendScope suspend_plugin_dispose;
     TreeOrderedMap::RemoveScope tree_remove_scope;
@@ -821,11 +827,17 @@ void ContainerNode::RemoveChildren(SubtreeModificationAction action) {
       while (Node* child = first_child_) {
         RemoveBetween(nullptr, child->nextSibling(), *child);
         NotifyNodeRemoved(*child);
+        if (removed_nodes)
+          removed_nodes->push_back(child);
       }
     }
 
-    ChildrenChange change = {kAllChildrenRemoved, nullptr, nullptr, nullptr,
-                             kChildrenChangeSourceAPI};
+    ChildrenChange change = {ChildrenChangeType::kAllChildrenRemoved,
+                             ChildrenChangeSource::kAPI,
+                             nullptr,
+                             nullptr,
+                             nullptr,
+                             removed_nodes};
     ChildrenChanged(change);
   }
 
@@ -870,7 +882,7 @@ Node* ContainerNode::AppendChild(Node* new_child) {
 void ContainerNode::ParserAppendChild(Node* new_child) {
   DCHECK(new_child);
   DCHECK(!new_child->IsDocumentFragment());
-  DCHECK(!IsHTMLTemplateElement(this));
+  DCHECK(!IsA<HTMLTemplateElement>(this));
 
   RUNTIME_CALL_TIMER_SCOPE(V8PerIsolateData::MainThreadIsolate(),
                            RuntimeCallStats::CounterId::kParserAppendChild);
@@ -896,7 +908,7 @@ void ContainerNode::ParserAppendChild(Node* new_child) {
     ChildListMutationScope(*this).ChildAdded(*new_child);
   }
 
-  NotifyNodeInserted(*new_child, kChildrenChangeSourceParser);
+  NotifyNodeInserted(*new_child, ChildrenChangeSource::kParser);
 }
 
 DISABLE_CFI_PERF
@@ -1007,13 +1019,16 @@ void ContainerNode::ChildrenChanged(const ChildrenChange& change) {
   GetDocument().IncDOMTreeVersion();
   GetDocument().NotifyChangeChildren(*this);
   InvalidateNodeListCachesInAncestors(nullptr, nullptr, &change);
-
-  if (change.IsChildRemoval() || change.type == kAllChildrenRemoved) {
+  if (change.IsChildRemoval() ||
+      change.type == ChildrenChangeType::kAllChildrenRemoved) {
     GetDocument().GetStyleEngine().ChildrenRemoved(*this);
     return;
   }
   if (!change.IsChildInsertion())
     return;
+  Node* inserted_node = change.sibling_changed;
+  if (inserted_node->IsContainerNode() || inserted_node->IsTextNode())
+    inserted_node->ClearFlatTreeNodeDataIfHostChanged(*this);
   if (!InActiveDocument())
     return;
   if (IsElementNode() && !GetComputedStyle()) {
@@ -1024,9 +1039,12 @@ void ContainerNode::ChildrenChanged(const ChildrenChange& change) {
     // the ComputedStyle goes from null to non-null.
     return;
   }
-  Node* inserted_node = change.sibling_changed;
   if (inserted_node->IsContainerNode() || inserted_node->IsTextNode())
     inserted_node->SetStyleChangeOnInsertion();
+}
+
+bool ContainerNode::ChildrenChangedAllChildrenRemovedNeedsList() const {
+  return false;
 }
 
 void ContainerNode::CloneChildNodesFrom(const ContainerNode& node) {
@@ -1099,7 +1117,8 @@ void ContainerNode::FocusWithinStateChanged() {
     this_element->PseudoStateChanged(CSSSelector::kPseudoFocusWithin);
 }
 
-void ContainerNode::SetFocused(bool received, WebFocusType focus_type) {
+void ContainerNode::SetFocused(bool received,
+                               mojom::blink::FocusType focus_type) {
   // Recurse up author shadow trees to mark shadow hosts if it matches :focus.
   // TODO(kochi): Handle UA shadows which marks multiple nodes as focused such
   // as <input type="date"> the same way as author shadow.
@@ -1225,12 +1244,7 @@ Element* ContainerNode::QuerySelector(const AtomicString& selectors,
       selectors, GetDocument(), exception_state);
   if (!selector_query)
     return nullptr;
-  Element* element = selector_query->QueryFirst(*this);
-  if (element && element->GetDocument().InDOMNodeRemovedHandler()) {
-    if (NodeChildRemovalTracker::IsBeingRemoved(*element))
-      GetDocument().CountDetachingNodeAccessInDOMNodeRemovedHandler();
-  }
-  return element;
+  return selector_query->QueryFirst(*this);
 }
 
 Element* ContainerNode::QuerySelector(const AtomicString& selectors) {
@@ -1298,43 +1312,20 @@ static void DispatchChildRemovalEvents(Node& child) {
   // Dispatch pre-removal mutation events.
   if (c->parentNode() &&
       document.HasListenerType(Document::kDOMNodeRemovedListener)) {
-    bool original_node_flag = c->InDOMNodeRemovedHandler();
-    auto original_document_state = document.GetInDOMNodeRemovedHandlerState();
-    if (ScopedEventQueue::Instance()->ShouldQueueEvents()) {
-      UseCounter::Count(document, WebFeature::kDOMNodeRemovedEventDelayed);
-    } else {
-      c->SetInDOMNodeRemovedHandler(true);
-      document.SetInDOMNodeRemovedHandlerState(
-          Document::InDOMNodeRemovedHandlerState::kDOMNodeRemoved);
-    }
     NodeChildRemovalTracker scope(child);
     c->DispatchScopedEvent(
         *MutationEvent::Create(event_type_names::kDOMNodeRemoved,
                                Event::Bubbles::kYes, c->parentNode()));
-    document.SetInDOMNodeRemovedHandlerState(original_document_state);
-    c->SetInDOMNodeRemovedHandler(original_node_flag);
   }
 
   // Dispatch the DOMNodeRemovedFromDocument event to all descendants.
   if (c->isConnected() &&
       document.HasListenerType(Document::kDOMNodeRemovedFromDocumentListener)) {
-    bool original_node_flag = c->InDOMNodeRemovedHandler();
-    auto original_document_state = document.GetInDOMNodeRemovedHandlerState();
-    if (ScopedEventQueue::Instance()->ShouldQueueEvents()) {
-      UseCounter::Count(document,
-                        WebFeature::kDOMNodeRemovedFromDocumentEventDelayed);
-    } else {
-      c->SetInDOMNodeRemovedHandler(true);
-      document.SetInDOMNodeRemovedHandlerState(
-          Document::InDOMNodeRemovedHandlerState::kDOMNodeRemovedFromDocument);
-    }
     NodeChildRemovalTracker scope(child);
     for (; c; c = NodeTraversal::Next(*c, &child)) {
       c->DispatchScopedEvent(*MutationEvent::Create(
           event_type_names::kDOMNodeRemovedFromDocument, Event::Bubbles::kNo));
     }
-    document.SetInDOMNodeRemovedHandlerState(original_document_state);
-    child.SetInDOMNodeRemovedHandler(original_node_flag);
   }
 }
 
@@ -1484,7 +1475,7 @@ void ContainerNode::InvalidateNodeListCachesInAncestors(
     const ChildrenChange* change) {
   // This is a performance optimization, NodeList cache invalidation is
   // not necessary for a text change.
-  if (change && change->type == kTextChanged)
+  if (change && change->type == ChildrenChangeType::kTextChanged)
     return;
 
   if (HasRareData() && (!attr_name || IsAttributeNode())) {
@@ -1519,7 +1510,7 @@ HTMLCollection* ContainerNode::getElementsByTagName(
     const AtomicString& qualified_name) {
   DCHECK(!qualified_name.IsNull());
 
-  if (GetDocument().IsHTMLDocument()) {
+  if (IsA<HTMLDocument>(GetDocument())) {
     return EnsureCachedCollection<HTMLTagCollection>(kHTMLTagCollectionType,
                                                      qualified_name);
   }
@@ -1538,15 +1529,14 @@ HTMLCollection* ContainerNode::getElementsByTagNameNS(
 // Takes an AtomicString in argument because it is common for elements to share
 // the same name attribute.  Therefore, the NameNodeList factory function
 // expects an AtomicString type.
-NameNodeList* ContainerNode::getElementsByName(
-    const AtomicString& element_name) {
+NodeList* ContainerNode::getElementsByName(const AtomicString& element_name) {
   return EnsureCachedCollection<NameNodeList>(kNameNodeListType, element_name);
 }
 
 // Takes an AtomicString in argument because it is common for elements to share
 // the same set of class names.  Therefore, the ClassNodeList factory function
 // expects an AtomicString type.
-ClassCollection* ContainerNode::getElementsByClassName(
+HTMLCollection* ContainerNode::getElementsByClassName(
     const AtomicString& class_names) {
   return EnsureCachedCollection<ClassCollection>(kClassCollectionType,
                                                  class_names);

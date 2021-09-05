@@ -14,7 +14,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
 #include "content/browser/background_sync/background_sync_manager.h"
-#include "content/browser/service_worker/service_worker_storage.h"
+#include "content/browser/service_worker/service_worker_registry.h"
 
 namespace url {
 class Origin;
@@ -79,8 +79,8 @@ class TestBackgroundSyncManager : public BackgroundSyncManager {
   }
 
   // Sets the response to checks for a main frame for register attempts.
-  void set_has_main_frame_provider_host(bool value) {
-    has_main_frame_provider_host_ = value;
+  void set_has_main_frame_window_client(bool value) {
+    has_main_frame_window_client_ = value;
   }
 
   // Accessors to internal state
@@ -117,12 +117,12 @@ class TestBackgroundSyncManager : public BackgroundSyncManager {
       const url::Origin& origin,
       const std::string& key,
       const std::string& data,
-      ServiceWorkerStorage::StatusCallback callback) override;
+      ServiceWorkerRegistry::StatusCallback callback) override;
 
   // Override to allow delays to be injected by tests.
   void GetDataFromBackend(
       const std::string& key,
-      ServiceWorkerStorage::GetUserDataForAllRegistrationsCallback callback)
+      ServiceWorkerRegistry::GetUserDataForAllRegistrationsCallback callback)
       override;
 
   // Override to avoid actual dispatching of the event, just call the provided
@@ -135,7 +135,7 @@ class TestBackgroundSyncManager : public BackgroundSyncManager {
 
   // Override to avoid actual check for main frame, instead return the value set
   // by tests.
-  void HasMainFrameProviderHost(const url::Origin& origin,
+  void HasMainFrameWindowClient(const url::Origin& origin,
                                 BoolCallback callback) override;
 
  private:
@@ -146,17 +146,17 @@ class TestBackgroundSyncManager : public BackgroundSyncManager {
       const url::Origin& origin,
       const std::string& key,
       const std::string& data,
-      ServiceWorkerStorage::StatusCallback callback);
+      ServiceWorkerRegistry::StatusCallback callback);
 
   // Callback to resume the GetDataFromBackend operation, after explicit delays
   // injected by tests.
   void GetDataFromBackendContinue(
       const std::string& key,
-      ServiceWorkerStorage::GetUserDataForAllRegistrationsCallback callback);
+      ServiceWorkerRegistry::GetUserDataForAllRegistrationsCallback callback);
 
   bool corrupt_backend_ = false;
   bool delay_backend_ = false;
-  bool has_main_frame_provider_host_ = true;
+  bool has_main_frame_window_client_ = true;
   bool last_chance_ = false;
   bool dont_fire_sync_events_ = false;
   base::OnceClosure continuation_;

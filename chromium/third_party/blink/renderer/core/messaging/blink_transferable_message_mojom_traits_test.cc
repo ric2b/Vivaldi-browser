@@ -19,6 +19,8 @@
 #include "third_party/blink/renderer/core/messaging/message_port.h"
 #include "third_party/blink/renderer/core/typed_arrays/dom_array_buffer.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
+#include "third_party/blink/renderer/platform/graphics/unaccelerated_static_bitmap_image.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 
 namespace blink {
@@ -57,6 +59,7 @@ TEST(BlinkTransferableMessageStructTraitsTest,
     Transferables transferables;
     transferables.array_buffers.push_back(array_buffer);
     BlinkTransferableMessage msg;
+    msg.sender_origin = SecurityOrigin::CreateUniqueOpaque();
     msg.message = BuildSerializedScriptValue(scope.GetIsolate(), v8_buffer,
                                              transferables);
     mojo_message = mojom::blink::TransferableMessage::SerializeAsMessage(&msg);
@@ -66,7 +69,7 @@ TEST(BlinkTransferableMessageStructTraitsTest,
   ASSERT_TRUE(mojom::blink::TransferableMessage::DeserializeFromMessage(
       std::move(mojo_message), &out));
   ASSERT_EQ(out.message->GetArrayBufferContentsArray().size(), 1U);
-  WTF::ArrayBufferContents& deserialized_contents =
+  ArrayBufferContents& deserialized_contents =
       out.message->GetArrayBufferContentsArray()[0];
   Vector<uint8_t> deserialized_data;
   deserialized_data.Append(static_cast<uint8_t*>(deserialized_contents.Data()),
@@ -95,6 +98,7 @@ TEST(BlinkTransferableMessageStructTraitsTest,
   Transferables transferables;
   transferables.array_buffers.push_back(original_array_buffer);
   BlinkTransferableMessage msg;
+  msg.sender_origin = SecurityOrigin::CreateUniqueOpaque();
   msg.message =
       BuildSerializedScriptValue(scope.GetIsolate(), v8_buffer, transferables);
   mojo::Message mojo_message =
@@ -107,7 +111,7 @@ TEST(BlinkTransferableMessageStructTraitsTest,
 
   // When using WrapAsMessage, the deserialized ArrayBufferContents should own
   // the original ArrayBufferContents' data (as opposed to a copy of the data).
-  WTF::ArrayBufferContents& deserialized_contents =
+  ArrayBufferContents& deserialized_contents =
       out.message->GetArrayBufferContentsArray()[0];
   ASSERT_EQ(originalContentsData, deserialized_contents.Data());
 
@@ -119,8 +123,8 @@ TEST(BlinkTransferableMessageStructTraitsTest,
 ImageBitmap* CreateBitmap() {
   sk_sp<SkSurface> surface = SkSurface::MakeRasterN32Premul(8, 4);
   surface->getCanvas()->clear(SK_ColorRED);
-  return ImageBitmap::Create(
-      StaticBitmapImage::Create(surface->makeImageSnapshot()));
+  return MakeGarbageCollected<ImageBitmap>(
+      UnacceleratedStaticBitmapImage::Create(surface->makeImageSnapshot()));
 }
 
 TEST(BlinkTransferableMessageStructTraitsTest,
@@ -136,6 +140,7 @@ TEST(BlinkTransferableMessageStructTraitsTest,
     Transferables transferables;
     transferables.image_bitmaps.push_back(image_bitmap);
     BlinkTransferableMessage msg;
+    msg.sender_origin = SecurityOrigin::CreateUniqueOpaque();
     msg.message =
         BuildSerializedScriptValue(scope.GetIsolate(), wrapper, transferables);
     mojo_message = mojom::blink::TransferableMessage::SerializeAsMessage(&msg);
@@ -161,6 +166,7 @@ TEST(BlinkTransferableMessageStructTraitsTest,
   Transferables transferables;
   transferables.image_bitmaps.push_back(std::move(original_bitmap));
   BlinkTransferableMessage msg;
+  msg.sender_origin = SecurityOrigin::CreateUniqueOpaque();
   msg.message =
       BuildSerializedScriptValue(scope.GetIsolate(), wrapper, transferables);
   mojo::Message mojo_message =
@@ -173,8 +179,8 @@ TEST(BlinkTransferableMessageStructTraitsTest,
   ASSERT_EQ(out.message->GetImageBitmapContentsArray().size(), 1U);
   scoped_refptr<blink::StaticBitmapImage> deserialized_bitmap_contents =
       out.message->GetImageBitmapContentsArray()[0];
-  ImageBitmap* deserialized_bitmap =
-      ImageBitmap::Create(std::move(deserialized_bitmap_contents));
+  auto* deserialized_bitmap = MakeGarbageCollected<ImageBitmap>(
+      std::move(deserialized_bitmap_contents));
   ASSERT_EQ(deserialized_bitmap->height(), original_bitmap_height);
   ASSERT_EQ(deserialized_bitmap->width(), original_bitmap_width);
   // When using WrapAsMessage, the deserialized bitmap should own

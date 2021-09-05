@@ -15,11 +15,13 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/completion_once_callback.h"
 #include "net/dns/host_resolver.h"
+#include "net/dns/public/resolve_error_info.h"
 #include "services/network/public/mojom/host_resolver.mojom.h"
 
 namespace net {
 class HostPortPair;
 class NetLog;
+class NetworkIsolationKey;
 }  // namespace net
 
 namespace network {
@@ -32,6 +34,7 @@ class ResolveHostRequest : public mojom::ResolveHostHandle {
   ResolveHostRequest(
       net::HostResolver* resolver,
       const net::HostPortPair& host,
+      const net::NetworkIsolationKey& network_isolation_key,
       const base::Optional<net::HostResolver::ResolveHostParameters>&
           optional_parameters,
       net::NetLog* net_log);
@@ -47,6 +50,7 @@ class ResolveHostRequest : public mojom::ResolveHostHandle {
 
  private:
   void OnComplete(int error);
+  net::ResolveErrorInfo GetResolveErrorInfo() const;
   const base::Optional<net::AddressList>& GetAddressResults() const;
   void SignalNonAddressResults();
 
@@ -56,6 +60,8 @@ class ResolveHostRequest : public mojom::ResolveHostHandle {
   mojo::Remote<mojom::ResolveHostClient> response_client_;
   net::CompletionOnceCallback callback_;
   bool cancelled_ = false;
+  // Error info for a cancelled request.
+  net::ResolveErrorInfo resolve_error_info_;
 
   DISALLOW_COPY_AND_ASSIGN(ResolveHostRequest);
 };

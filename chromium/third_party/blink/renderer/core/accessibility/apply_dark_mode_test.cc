@@ -8,6 +8,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/renderer/core/html/html_head_element.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
+#include "third_party/blink/renderer/core/testing/color_scheme_helper.h"
 #include "third_party/blink/renderer/core/testing/core_unit_test_helper.h"
 #include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
 
@@ -64,9 +65,9 @@ TEST_F(ApplyDarkModeCheckTest, MetaColorSchemeDark) {
   ScopedCSSColorSchemeForTest css_feature_scope(true);
   ScopedMetaColorSchemeForTest meta_feature_scope(true);
   GetDocument().GetSettings()->SetForceDarkModeEnabled(true);
-  GetDocument().GetSettings()->SetPreferredColorScheme(
-      PreferredColorScheme::kDark);
-  GetDocument().head()->SetInnerHTMLFromString(R"HTML(
+  ColorSchemeHelper color_scheme_helper(GetDocument());
+  color_scheme_helper.SetPreferredColorScheme(PreferredColorScheme::kDark);
+  GetDocument().head()->setInnerHTML(R"HTML(
     <meta name="color-scheme" content="dark">
   )HTML");
   UpdateAllLifecyclePhasesForTest();

@@ -12,6 +12,7 @@ from .composition_parts import DebugInfo
 from .composition_parts import Identifier
 from .composition_parts import Location
 from .constant import Constant
+from .constructor import Constructor
 from .dictionary import Dictionary
 from .dictionary import DictionaryMember
 from .enumeration import Enumeration
@@ -19,6 +20,7 @@ from .extended_attribute import ExtendedAttribute
 from .extended_attribute import ExtendedAttributes
 from .idl_type import IdlTypeFactory
 from .includes import Includes
+from .interface import IndexedAndNamedProperties
 from .interface import Interface
 from .interface import Iterable
 from .interface import Maplike
@@ -30,9 +32,8 @@ from .operation import Operation
 from .typedef import Typedef
 
 
-def load_and_register_idl_definitions(
-        filepaths, register_ir, create_ref_to_idl_def, create_ref_to_idl_type,
-        idl_type_factory):
+def load_and_register_idl_definitions(filepaths, register_ir,
+                                      create_ref_to_idl_def, idl_type_factory):
     """
     Reads ASTs from |filepaths| and builds IRs from ASTs.
 
@@ -42,8 +43,6 @@ def load_and_register_idl_definitions(
             IR.
         create_ref_to_idl_def: A callback function that creates a reference
             to an IDL definition from the given identifier.
-        create_ref_to_idl_type: A callback function that creates a reference
-            to an IdlType from the given identifier.
         idl_type_factory: All IdlType instances will be created through this
             factory.
     """
@@ -55,7 +54,6 @@ def load_and_register_idl_definitions(
         builder = _IRBuilder(
             component=component,
             create_ref_to_idl_def=create_ref_to_idl_def,
-            create_ref_to_idl_type=create_ref_to_idl_type,
             idl_type_factory=idl_type_factory)
 
         for file_node in asts_per_component:
@@ -65,25 +63,20 @@ def load_and_register_idl_definitions(
 
 
 class _IRBuilder(object):
-    def __init__(self, component, create_ref_to_idl_def,
-                 create_ref_to_idl_type, idl_type_factory):
+    def __init__(self, component, create_ref_to_idl_def, idl_type_factory):
         """
         Args:
             component: A Component to which the built IRs are associated.
             create_ref_to_idl_def: A callback function that creates a reference
                 to an IDL definition from the given identifier.
-            create_ref_to_idl_type: A callback function that creates a reference
-                to an IdlType from the given identifier.
             idl_type_factory: All IdlType instances will be created through this
                 factory.
         """
         assert callable(create_ref_to_idl_def)
-        assert callable(create_ref_to_idl_type)
         assert isinstance(idl_type_factory, IdlTypeFactory)
 
         self._component = component
         self._create_ref_to_idl_def = create_ref_to_idl_def
-        self._create_ref_to_idl_type = create_ref_to_idl_type
         self._idl_type_factory = idl_type_factory
 
     def build_top_level_def(self, node):
@@ -112,35 +105,55 @@ class _IRBuilder(object):
         setlike = self._take_setlike(child_nodes)
         extended_attributes = self._take_extended_attributes(child_nodes)
 
-        members = map(self._build_interface_or_namespace_member, child_nodes)
+        identifier = Identifier(node.GetName())
+        members = [
+            self._build_interface_member(
+                child, interface_identifier=identifier)
+            for child in child_nodes
+        ]
         attributes = []
         constants = []
+        constructors = []
         operations = []
+        indexed_and_named_property_operations = []
         for member in members:
             if isinstance(member, Attribute.IR):
                 attributes.append(member)
-            elif isinstance(member, Operation.IR):
-                if member.identifier:
-                    operations.append(member)
             elif isinstance(member, Constant.IR):
                 constants.append(member)
+            elif isinstance(member, Constructor.IR):
+                constructors.append(member)
+            elif isinstance(member, Operation.IR):
+                operations.append(member)
+                if member.is_getter or member.is_setter or member.is_deleter:
+                    indexed_and_named_property_operations.append(member)
             else:
                 assert False
+
+        named_constructors = self._build_named_constructors(node)
+
+        indexed_and_named_properties = None
+        if indexed_and_named_property_operations:
+            indexed_and_named_properties = IndexedAndNamedProperties.IR(
+                indexed_and_named_property_operations,
+                self._build_debug_info(node))
 
         if stringifier:
             operations.append(stringifier.operation)
             if stringifier.attribute:
                 attributes.append(stringifier.attribute)
-        # TODO(peria): Create indexed/named property handlers from |operations|.
 
         return Interface.IR(
-            identifier=Identifier(node.GetName()),
+            identifier=identifier,
             is_partial=bool(node.GetProperty('PARTIAL')),
             is_mixin=bool(node.GetProperty('MIXIN')),
             inherited=inherited,
             attributes=attributes,
             constants=constants,
+            constructors=constructors,
+            named_constructors=named_constructors,
             operations=operations,
+            indexed_and_named_properties=indexed_and_named_properties,
             stringifier=stringifier,
             iterable=iterable,
             maplike=maplike,
@@ -153,7 +166,7 @@ class _IRBuilder(object):
         child_nodes = list(node.GetChildren())
         extended_attributes = self._take_extended_attributes(child_nodes)
 
-        members = map(self._build_interface_or_namespace_member, child_nodes)
+        members = map(self._build_interface_member, child_nodes)
         attributes = []
         constants = []
         operations = []
@@ -179,14 +192,16 @@ class _IRBuilder(object):
             component=self._component,
             debug_info=self._build_debug_info(node))
 
-    def _build_interface_or_namespace_member(
-            self, node, fallback_extended_attributes=None):
+    def _build_interface_member(self,
+                                node,
+                                fallback_extended_attributes=None,
+                                interface_identifier=None):
         def build_attribute(node):
             child_nodes = list(node.GetChildren())
             idl_type = self._take_type(child_nodes)
             extended_attributes = self._take_extended_attributes(
                 child_nodes) or fallback_extended_attributes
-            assert len(child_nodes) == 0
+            assert not child_nodes
             return Attribute.IR(
                 identifier=Identifier(node.GetName()),
                 idl_type=idl_type,
@@ -214,18 +229,38 @@ class _IRBuilder(object):
                 component=self._component,
                 debug_info=self._build_debug_info(node))
 
+        def build_constructor(node):
+            assert interface_identifier is not None
+            child_nodes = list(node.GetChildren())
+            arguments = self._take_arguments(child_nodes)
+            extended_attributes = self._take_extended_attributes(
+                child_nodes) or fallback_extended_attributes
+            assert not child_nodes
+            return_type = self._idl_type_factory.reference_type(
+                interface_identifier)
+            return Constructor.IR(
+                identifier=None,
+                arguments=arguments,
+                return_type=return_type,
+                extended_attributes=extended_attributes,
+                component=self._component,
+                debug_info=self._build_debug_info(node))
+
         def build_operation(node):
             child_nodes = list(node.GetChildren())
             arguments = self._take_arguments(child_nodes)
             return_type = self._take_type(child_nodes)
             extended_attributes = self._take_extended_attributes(
                 child_nodes) or fallback_extended_attributes
-            assert len(child_nodes) == 0
+            assert not child_nodes
             return Operation.IR(
                 identifier=Identifier(node.GetName()),
                 arguments=arguments,
                 return_type=return_type,
                 is_static=bool(node.GetProperty('STATIC')),
+                is_getter=bool(node.GetProperty('GETTER')),
+                is_setter=bool(node.GetProperty('SETTER')),
+                is_deleter=bool(node.GetProperty('DELETER')),
                 extended_attributes=extended_attributes,
                 component=self._component,
                 debug_info=self._build_debug_info(node))
@@ -233,9 +268,41 @@ class _IRBuilder(object):
         build_functions = {
             'Attribute': build_attribute,
             'Const': build_constant,
+            'Constructor': build_constructor,
             'Operation': build_operation,
         }
         return build_functions[node.GetClass()](node)
+
+    def _build_named_constructors(self, node):
+        assert node.GetClass() == 'Interface'
+        named_constructors = []
+
+        for child in node.GetChildren():
+            if child.GetClass() == 'ExtAttributes':
+                interface_ext_attrs = child.GetChildren()
+                break
+        else:
+            return named_constructors
+
+        for ext_attr in interface_ext_attrs:
+            if ext_attr.GetName() != 'NamedConstructor':
+                continue
+            call_node = ext_attr.GetChildren()[0]
+            assert call_node.GetClass() == 'Call'
+            child_nodes = list(call_node.GetChildren())
+            arguments = self._take_arguments(child_nodes)
+            return_type = self._idl_type_factory.reference_type(
+                Identifier(node.GetName()))
+            assert not child_nodes
+            named_constructors.append(
+                Constructor.IR(
+                    identifier=Identifier(call_node.GetName()),
+                    arguments=arguments,
+                    return_type=return_type,
+                    component=self._component,
+                    debug_info=self._build_debug_info(node)))
+
+        return named_constructors
 
     def _build_dictionary(self, node):
         child_nodes = list(node.GetChildren())
@@ -260,7 +327,7 @@ class _IRBuilder(object):
         idl_type = self._take_type(child_nodes, is_optional=(not is_required))
         default_value = self._take_default_value(child_nodes)
         extended_attributes = self._take_extended_attributes(child_nodes)
-        assert len(child_nodes) == 0
+        assert not child_nodes
 
         return DictionaryMember.IR(
             identifier=Identifier(node.GetName()),
@@ -272,9 +339,25 @@ class _IRBuilder(object):
 
     def _build_callback_interface(self, node):
         assert node.GetProperty('CALLBACK')
-        # TODO(peria): Build members and register them in |callback_interface|
+
+        child_nodes = list(node.GetChildren())
+        extended_attributes = self._take_extended_attributes(child_nodes)
+        members = map(self._build_interface_member, child_nodes)
+        constants = []
+        operations = []
+        for member in members:
+            if isinstance(member, Constant.IR):
+                constants.append(member)
+            elif isinstance(member, Operation.IR):
+                operations.append(member)
+            else:
+                assert False
+
         return CallbackInterface.IR(
             identifier=Identifier(node.GetName()),
+            constants=constants,
+            operations=operations,
+            extended_attributes=extended_attributes,
             component=self._component,
             debug_info=self._build_debug_info(node))
 
@@ -283,7 +366,7 @@ class _IRBuilder(object):
         arguments = self._take_arguments(child_nodes)
         return_type = self._take_type(child_nodes)
         extended_attributes = self._take_extended_attributes(child_nodes)
-        assert len(child_nodes) == 0
+        assert not child_nodes
         return CallbackFunction.IR(
             identifier=Identifier(node.GetName()),
             arguments=arguments,
@@ -307,7 +390,7 @@ class _IRBuilder(object):
     def _build_typedef(self, node):
         child_nodes = list(node.GetChildren())
         idl_type = self._take_type(child_nodes)
-        assert len(child_nodes) == 0
+        assert not child_nodes
 
         return Typedef.IR(
             identifier=Identifier(node.GetName()),
@@ -339,7 +422,7 @@ class _IRBuilder(object):
                 is_variadic=is_variadic,
                 extended_attributes=extended_attributes)
             default_value = self._take_default_value(child_nodes)
-            assert len(child_nodes) == 0
+            assert not child_nodes
             return Argument.IR(
                 identifier=Identifier(node.GetName()),
                 index=index,
@@ -372,21 +455,27 @@ class _IRBuilder(object):
             key = node.GetName()
             values = node.GetProperty('VALUE', default=None)
             arguments = None
-
-            # Drop constructors as they do not fit in ExtendedAttribute which
-            # doesn't support IdlType.
-            if key in ('Constructor', 'CustomConstructor', 'NamedConstructor'):
-                return None
+            name = None
 
             child_nodes = node.GetChildren()
             if child_nodes:
                 assert len(child_nodes) == 1
-                assert child_nodes[0].GetClass() == 'Arguments'
-                arguments = map(build_extattr_argument,
-                                child_nodes[0].GetChildren())
+                child = child_nodes[0]
+                if child.GetClass() == 'Arguments':
+                    arguments = map(build_extattr_argument,
+                                    child.GetChildren())
+                elif child.GetClass() == 'Call':
+                    assert len(child.GetChildren()) == 1
+                    grand_child = child.GetChildren()[0]
+                    assert grand_child.GetClass() == 'Arguments'
+                    # ExtendedAttribute is not designed to represent an
+                    # operation, especially a complicated argument list.
+                    # Discard the arguments.
+                    arguments = ()
+                    name = child.GetName()
 
             return ExtendedAttribute(
-                key=key, values=values, arguments=arguments)
+                key=key, values=values, arguments=arguments, name=name)
 
         def build_extattr_argument(node):
             assert node.GetClass() == 'Argument'
@@ -433,7 +522,7 @@ class _IRBuilder(object):
             debug_info=self._build_debug_info(node))
 
     def _build_literal_constant(self, node):
-        assert len(node.GetChildren()) == 0
+        assert not node.GetChildren()
 
         type_token = node.GetProperty('TYPE')
         value_token = node.GetProperty('VALUE')
@@ -487,7 +576,7 @@ class _IRBuilder(object):
             value = dict()
             literal = '{}'
         else:
-            assert False, 'Unknown literal type: {}'.format(type_token)
+            assert False, "Unknown literal type: {}".format(type_token)
 
         return LiteralConstant(idl_type=idl_type, value=value, literal=literal)
 
@@ -524,8 +613,9 @@ class _IRBuilder(object):
 
         member = None
         if len(child_nodes) == 1:
-            member = self._build_interface_or_namespace_member(
-                child_nodes[0], extended_attributes)
+            member = self._build_interface_member(
+                child_nodes[0],
+                fallback_extended_attributes=extended_attributes)
             extended_attributes = None
         operation = member if isinstance(member, Operation.IR) else None
         attribute = member if isinstance(member, Attribute.IR) else None
@@ -613,8 +703,7 @@ class _IRBuilder(object):
 
         def build_reference_type(node, extended_attributes):
             return self._idl_type_factory.reference_type(
-                ref_to_idl_type=self._create_ref_to_idl_type(
-                    Identifier(node.GetName()), self._build_debug_info(node)),
+                Identifier(node.GetName()),
                 is_optional=is_optional,
                 extended_attributes=extended_attributes,
                 debug_info=self._build_debug_info(node))
@@ -649,6 +738,24 @@ class _IRBuilder(object):
             extended_attributes = ext_attrs1 or ext_attrs2
         assert len(type_nodes) == 1
         body_node = type_nodes[0]
+
+        buffer_source_types = set([
+            'ArrayBuffer',
+            'ArrayBufferView',  # Blink-specific ArrayBufferView definition
+            'DataView',
+            'Int8Array',
+            'Int16Array',
+            'Int32Array',
+            'Uint8Array',
+            'Uint16Array',
+            'Uint32Array',
+            'Uint8ClampedArray',
+            'Float32Array',
+            'Float64Array',
+        ])
+        if body_node.GetName() in buffer_source_types:
+            return build_simple_type(
+                body_node, extended_attributes=extended_attributes)
 
         build_functions = {
             'Any': build_simple_type,

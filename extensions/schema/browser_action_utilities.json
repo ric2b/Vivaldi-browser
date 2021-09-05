@@ -8,101 +8,143 @@
       {
         "id": "ActionType",
         "type": "string",
-        "enum": ["browser", "page"],
+        "enum": [ "browser", "page" ],
         "description": "browser- or pageAction."
       },
       {
         "id": "ExtensionType",
         "type": "string",
-        "enum": ["extensionAction", "componentAction"],
+        "enum": [ "extensionAction", "componentAction" ],
         "description": "Regular extension- or componentAction. Component actions will go through ToolbarActionViewController"
       },
       {
-        "id": "ExtensionInfo",
+        "id":  "MenuType",
+        "type": "string",
+        "enum": ["normal", "checkbox", "radio", "separator"],
+        "description": "What type of menu item."
+      },
+      {
+        "id": "MenuItem",
         "type": "object",
-        "description": "Extension action per tab id.",
+        "description": "Menu item representing a single menu item.",
         "properties": {
+          "name": {
+            "type": "string",
+            "description": "The name of the item as shown in the menu."
+          },
           "id": {
             "type": "string",
-            "description": "The unique extension identifier."
+            "description": "The id for the item."
           },
-          "badgeTooltip": {
-            "type": "string",
-            "optional": true,
-            "description": "Tooltip for the button."
-          },
-          "badgeText": {
-            "type": "string",
-            "optional": true,
-            "description": "Badgetext, typically room for four chars."
-          },
-          "badgeIcon": {
-            "type": "string",
-            "optional": true,
-            "description": "data-url for the current icon."
-          },
-          "badgeTextColor": {
-            "type": "string",
-            "optional": true,
-            "description": "Text color for the badge text, currently unused."
-          },
-          "badgeBackgroundColor": {
-            "type": "string",
-            "optional": true,
-            "description": "Background color for the badge text."
-          },
-          "actionType": {
-            "$ref": "ActionType",
-            "optional": true,
-            "description": "The type of the extensionAction, either pageaction or browseraction."
+          "enabled": {
+            "type": "boolean",
+            "description": "Is the item enabled."
           },
           "visible": {
             "type": "boolean",
-            "optional": true,
-            "description": "Visibility of the action button, defaults to true."
+            "description": "Is the item visible."
           },
-          "actionIsHidden": {
+          "checked": {
             "type": "boolean",
-            "optional": true,
-            "description": "Set to true if the action is user-set to hidden. Defaults to false."
+            "description": "Is the item checked."
           },
-          "allowInIncognito": {
-            "type": "boolean",
-            "optional": true,
-            "description": "Whether the action is available in incognito windows or not."
+          "menuType": {
+            "$ref": "MenuType"
           },
-          "extensionType": {
-            "$ref": "ExtensionType",
+          "submenu": {
+            "type": "array",
+            "items": { "$ref": "MenuItem" },
             "optional": true,
-            "description": "The type of the extensionAction, either pageaction or browseraction. Defaults to |extensionAction|."
-          },
-          "name": {
-            "type": "string",
-            "optional": true,
-            "description": "Name of extension."
-          },
-          "homepage": {
-            "type": "string",
-            "optional": true,
-            "description": "Homepage of extension."
-          },
-          "optionspage": {
-            "type": "string",
-            "optional": true,
-            "description": "Address of extension options page."
-          },
-          "optionsInNewTab": {
-            "type": "boolean",
-            "optional": true,
-            "description": "false if the options page should be opened embedded, true if it opens in a new tab."
-          },
-          "keyboardShortcut": {
-            "type": "string",
-            "optional": true,
-            "description": "Keyboard shortcut to toggle this extension."
+            "description": "Sub menu items if the extension supplies a custom menu."
           }
         }
-      }
+      },
+      {
+          "id": "ExtensionInfo",
+          "type": "object",
+          "description": "Extension action per tab id.",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "The unique extension identifier."
+            },
+            "badgeTooltip": {
+              "type": "string",
+              "optional": true,
+              "description": "Tooltip for the button."
+            },
+            "badgeText": {
+              "type": "string",
+              "optional": true,
+              "description": "Badgetext, typically room for four chars."
+            },
+            "badgeIcon": {
+              "type": "string",
+              "optional": true,
+              "description": "data-url for the current icon."
+            },
+            "badgeTextColor": {
+              "type": "string",
+              "optional": true,
+              "description": "Text color for the badge text, currently unused."
+            },
+            "badgeBackgroundColor": {
+              "type": "string",
+              "optional": true,
+              "description": "Background color for the badge text."
+            },
+            "actionType": {
+              "$ref": "ActionType",
+              "optional": true,
+              "description": "The type of the extensionAction, either pageaction or browseraction."
+            },
+            "visible": {
+              "type": "boolean",
+              "optional": true,
+              "description": "Visibility of the action button, defaults to true."
+            },
+            "actionIsHidden": {
+              "type": "boolean",
+              "optional": true,
+              "description": "Set to true if the action is user-set to hidden. Defaults to false."
+            },
+            "allowInIncognito": {
+              "type": "boolean",
+              "optional": true,
+              "description": "Whether the action is available in incognito windows or not."
+            },
+            "extensionType": {
+              "$ref": "ExtensionType",
+              "optional": true,
+              "description": "The type of the extensionAction, either pageaction or browseraction. Defaults to |extensionAction|."
+            },
+            "name": {
+              "type": "string",
+              "optional": true,
+              "description": "Name of extension."
+            },
+            "homepage": {
+              "type": "string",
+              "optional": true,
+              "description": "Homepage of extension."
+            },
+            "optionspage": {
+              "type": "string",
+              "optional": true,
+              "description": "Address of extension options page."
+            },
+            "optionsInNewTab": {
+              "type": "boolean",
+              "optional": true,
+              "description": "false if the options page should be opened embedded, true if it opens in a new tab."
+            },
+            "keyboardShortcut": {
+              "type": "string",
+              "optional": true,
+              "description": "Keyboard shortcut to toggle this extension."
+            }
+          }
+        }
     ],
     "functions": [
       {
@@ -192,11 +234,69 @@
             "description": "The id for the extension we want to remove."
           },
           {
-            "type": "integer",
             "name": "windowId",
+            "type": "integer",
             "description": "id of the application window. Used to find the Browser object."
           }
         ]
+      },
+      {
+        "name": "getExtensionMenu",
+        "type": "function",
+        "description": "Gets the context menu for the given extension",
+        "parameters": [
+          {
+            "name": "extensionId",
+            "type": "string",
+            "description": "The id for the extension we want to get the menu for."
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "items",
+                "type": "array",
+                "items": { "$ref": "MenuItem" },
+                "description": "Menu items if the extension supplies a custom menu."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "executeMenuAction",
+        "type": "function",
+        "description": "Execute menu action for extension.",
+          "parameters": [
+            {
+              "name": "extensionId",
+              "type": "string",
+              "description": ""
+            },
+            {
+              "type": "integer",
+              "name": "windowId",
+              "description": "id of the application window."
+            },
+            {
+              "type": "string",
+              "name": "menuId",
+              "description": "id of the menu item."
+            },
+            {
+              "name": "result",
+              "type": "function",
+              "description": "Callback for action.",
+              "parameters": [
+                {
+                  "name": "success",
+                  "type": "boolean",
+                  "description": "true on success."
+                }
+              ]
+            }
+          ]
       }
     ],
     "events": [

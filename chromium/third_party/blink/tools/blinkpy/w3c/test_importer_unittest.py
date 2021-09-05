@@ -7,11 +7,11 @@ import json
 
 from blinkpy.common.checkout.git_mock import MockGit
 from blinkpy.common.host_mock import MockHost
-from blinkpy.common.net.buildbot import Build
 from blinkpy.common.net.git_cl import CLStatus
 from blinkpy.common.net.git_cl import TryJobStatus
 from blinkpy.common.net.git_cl_mock import MockGitCL
 from blinkpy.common.net.network_transaction import NetworkTimeout
+from blinkpy.common.net.results_fetcher import Build
 from blinkpy.common.path_finder import RELATIVE_WEB_TESTS
 from blinkpy.common.system.executive_mock import MockCall
 from blinkpy.common.system.executive_mock import MockExecutive
@@ -278,14 +278,21 @@ class TestImporterTest(LoggingTestCase):
     def test_update_all_test_expectations_files(self):
         host = MockHost()
         host.filesystem.files[MOCK_WEB_TESTS + 'TestExpectations'] = (
-            'Bug(test) some/test/a.html [ Failure ]\n'
-            'Bug(test) some/test/b.html [ Failure ]\n'
-            'Bug(test) some/test/c.html [ Failure ]\n')
+            '# results: [ Failure ]\n'
+            'some/test/a.html [ Failure ]\n'
+            'some/test/b.html [ Failure ]\n'
+            'ignore/globs/* [ Failure ]\n'
+            'some/test/c\*.html [ Failure ]\n'
+            # default test case, line below should exist in new file
+            'some/test/d.html [ Failure ]\n')
         host.filesystem.files[MOCK_WEB_TESTS + 'WebDriverExpectations'] = (
-            'Bug(test) external/wpt/webdriver/some/test/a.html>>foo [ Failure ]\n'
-            'Bug(test) external/wpt/webdriver/some/test/a.html>>bar [ Failure ]\n'
-            'Bug(test) external/wpt/webdriver/some/test/b.html>>foo [ Failure ]\n'
-            'Bug(test) external/wpt/webdriver/some/test/c.html>>a [ Failure ]\n')
+            '# results: [ Failure ]\n'
+            'external/wpt/webdriver/some/test/a\*.html>>foo\* [ Failure ]\n'
+            'external/wpt/webdriver/some/test/a\*.html>>bar [ Failure ]\n'
+            'external/wpt/webdriver/some/test/b.html>>foo [ Failure ]\n'
+            'external/wpt/webdriver/some/test/c.html>>a [ Failure ]\n'
+            # default test case, line below should exist in new file
+            'external/wpt/webdriver/some/test/d.html>>foo [ Failure ]\n')
         host.filesystem.files[MOCK_WEB_TESTS + 'VirtualTestSuites'] = '[]'
         host.filesystem.files[MOCK_WEB_TESTS + 'new/a.html'] = ''
         host.filesystem.files[MOCK_WEB_TESTS + 'new/b.html'] = ''
@@ -293,20 +300,25 @@ class TestImporterTest(LoggingTestCase):
         deleted_tests = ['some/test/b.html', 'external/wpt/webdriver/some/test/b.html']
         renamed_test_pairs = {
             'some/test/a.html': 'new/a.html',
-            'some/test/c.html': 'new/c.html',
-            'external/wpt/webdriver/some/test/a.html': 'old/a.html',
+            'some/test/c*.html': 'new/c*.html',
+            'external/wpt/webdriver/some/test/a*.html': 'old/a*.html',
             'external/wpt/webdriver/some/test/c.html': 'old/c.html',
         }
         importer.update_all_test_expectations_files(deleted_tests, renamed_test_pairs)
         self.assertMultiLineEqual(
             host.filesystem.read_text_file(MOCK_WEB_TESTS + 'TestExpectations'),
-            ('Bug(test) new/a.html [ Failure ]\n'
-             'Bug(test) new/c.html [ Failure ]\n'))
+            ('# results: [ Failure ]\n'
+             'new/a.html [ Failure ]\n'
+             'ignore/globs/* [ Failure ]\n'
+             'new/c\*.html [ Failure ]\n'
+             'some/test/d.html [ Failure ]\n'))
         self.assertMultiLineEqual(
             host.filesystem.read_text_file(MOCK_WEB_TESTS + 'WebDriverExpectations'),
-            ('Bug(test) old/a.html>>foo [ Failure ]\n'
-             'Bug(test) old/a.html>>bar [ Failure ]\n'
-             'Bug(test) old/c.html>>a [ Failure ]\n'))
+            ('# results: [ Failure ]\n'
+             'old/a\*.html>>foo\* [ Failure ]\n'
+             'old/a\*.html>>bar [ Failure ]\n'
+             'old/c.html>>a [ Failure ]\n'
+             'external/wpt/webdriver/some/test/d.html>>foo [ Failure ]\n'))
 
     def test_get_directory_owners(self):
         host = MockHost()
@@ -357,19 +369,6 @@ class TestImporterTest(LoggingTestCase):
             '/chromium/src/+/master/docs/testing/web_platform_tests.md\n\n'
             'NOAUTOREVERT=true\n'
             'No-Export: true')
-        self.assertEqual(host.executive.calls, [['git', 'log', '-1', '--format=%B']])
-
-    def test_cl_description_with_environ_variables(self):
-        host = MockHost()
-        host.executive = MockExecutive(output='Last commit message\n')
-        importer = TestImporter(host)
-        importer.host.environ['BUILDBOT_MASTERNAME'] = 'my.master'
-        importer.host.environ['BUILDBOT_BUILDERNAME'] = 'b'
-        importer.host.environ['BUILDBOT_BUILDNUMBER'] = '123'
-        description = importer._cl_description(directory_owners={})
-        self.assertIn(
-            'Build: https://ci.chromium.org/buildbot/my.master/b/123\n\n',
-            description)
         self.assertEqual(host.executive.calls, [['git', 'log', '-1', '--format=%B']])
 
     def test_cl_description_moves_noexport_tag(self):

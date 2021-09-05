@@ -32,19 +32,17 @@ class BrowserDMTokenStorageLinux : public BrowserDMTokenStorage {
   std::string InitEnrollmentToken() override;
   std::string InitDMToken() override;
   bool InitEnrollmentErrorOption() override;
-  void SaveDMToken(const std::string& token) override;
+  StoreTask SaveDMTokenTask(const std::string& token,
+                            const std::string& client_id) override;
+  scoped_refptr<base::TaskRunner> SaveDMTokenTaskRunner() override;
 
   // Returns the content of "/etc/machine-id". Virtual for tests.
   virtual std::string ReadMachineIdFile();
 
-  // This should always be the last member of the class.
-  base::WeakPtrFactory<BrowserDMTokenStorageLinux> weak_factory_{this};
+  scoped_refptr<base::TaskRunner> task_runner_;
 
   FRIEND_TEST_ALL_PREFIXES(BrowserDMTokenStorageLinuxTest, InitClientId);
   FRIEND_TEST_ALL_PREFIXES(BrowserDMTokenStorageLinuxTest, InitEnrollmentToken);
-  // TODO(crbug.com/907589): Remove once no longer in use.
-  FRIEND_TEST_ALL_PREFIXES(BrowserDMTokenStorageLinuxTest,
-                           InitOldEnrollmentToken);
   FRIEND_TEST_ALL_PREFIXES(BrowserDMTokenStorageLinuxTest, InitDMToken);
   FRIEND_TEST_ALL_PREFIXES(BrowserDMTokenStorageLinuxTest,
                            InitDMTokenWithoutDirectory);

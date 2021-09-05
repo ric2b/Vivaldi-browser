@@ -37,29 +37,15 @@ class HTMLTableRowElement;
 
 class CORE_EXPORT DeleteSelectionCommand final : public CompositeEditCommand {
  public:
-  static DeleteSelectionCommand* Create(
-      Document& document,
-      const DeleteSelectionOptions& options,
+  DeleteSelectionCommand(
+      Document&,
+      const DeleteSelectionOptions&,
       InputEvent::InputType input_type = InputEvent::InputType::kNone,
-      const Position& reference_move_position = Position()) {
-    return MakeGarbageCollected<DeleteSelectionCommand>(
-        document, options, input_type, reference_move_position);
-  }
-  static DeleteSelectionCommand* Create(
-      const VisibleSelection& selection,
-      const DeleteSelectionOptions& options,
-      InputEvent::InputType input_type = InputEvent::InputType::kNone) {
-    return MakeGarbageCollected<DeleteSelectionCommand>(selection, options,
-                                                        input_type);
-  }
-
-  DeleteSelectionCommand(Document&,
-                         const DeleteSelectionOptions&,
-                         InputEvent::InputType,
-                         const Position& reference_move_position);
-  DeleteSelectionCommand(const VisibleSelection&,
-                         const DeleteSelectionOptions&,
-                         InputEvent::InputType);
+      const Position& reference_move_position = Position());
+  DeleteSelectionCommand(
+      const SelectionForUndoStep&,
+      const DeleteSelectionOptions&,
+      InputEvent::InputType input_type = InputEvent::InputType::kNone);
 
   void Trace(Visitor*) override;
 
@@ -99,7 +85,7 @@ class CORE_EXPORT DeleteSelectionCommand final : public CompositeEditCommand {
 
   // This data is transient and should be cleared at the end of the doApply
   // function.
-  VisibleSelection selection_to_delete_;
+  SelectionForUndoStep selection_to_delete_;
   Position upstream_start_;
   Position downstream_start_;
   Position upstream_end_;

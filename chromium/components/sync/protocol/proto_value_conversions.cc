@@ -217,6 +217,10 @@ class ToValueVisitor {
     if (proto.type() != sync_pb::AutofillWalletSpecifics::CUSTOMER_DATA) {
       value->Remove("customer_data", nullptr);
     }
+    if (proto.type() !=
+        sync_pb::AutofillWalletSpecifics::CREDIT_CARD_CLOUD_TOKEN_DATA) {
+      value->Remove("cloud_token_data", nullptr);
+    }
     return value;
   }
 
@@ -327,7 +331,6 @@ IMPLEMENT_PROTO_TO_VALUE(HistoryDeleteDirectiveSpecifics)
 IMPLEMENT_PROTO_TO_VALUE(LinkedAppIconInfo)
 IMPLEMENT_PROTO_TO_VALUE(ManagedUserSettingSpecifics)
 IMPLEMENT_PROTO_TO_VALUE(ManagedUserWhitelistSpecifics)
-IMPLEMENT_PROTO_TO_VALUE(MountainShareSpecifics)
 IMPLEMENT_PROTO_TO_VALUE(NavigationRedirect)
 IMPLEMENT_PROTO_TO_VALUE(NigoriSpecifics)
 IMPLEMENT_PROTO_TO_VALUE(OsPreferenceSpecifics)
@@ -347,6 +350,7 @@ IMPLEMENT_PROTO_TO_VALUE(SessionHeader)
 IMPLEMENT_PROTO_TO_VALUE(SessionSpecifics)
 IMPLEMENT_PROTO_TO_VALUE(SessionTab)
 IMPLEMENT_PROTO_TO_VALUE(SessionWindow)
+IMPLEMENT_PROTO_TO_VALUE(SharingMessageSpecifics)
 IMPLEMENT_PROTO_TO_VALUE(SyncCycleCompletedEventInfo)
 IMPLEMENT_PROTO_TO_VALUE(TabNavigation)
 IMPLEMENT_PROTO_TO_VALUE(ThemeSpecifics)
@@ -355,6 +359,7 @@ IMPLEMENT_PROTO_TO_VALUE(TypedUrlSpecifics)
 IMPLEMENT_PROTO_TO_VALUE(UrlDirective)
 IMPLEMENT_PROTO_TO_VALUE(UserConsentSpecifics)
 IMPLEMENT_PROTO_TO_VALUE(UserEventSpecifics)
+IMPLEMENT_PROTO_TO_VALUE(WalletCreditCardCloudTokenData)
 IMPLEMENT_PROTO_TO_VALUE(WalletMaskedCreditCard)
 IMPLEMENT_PROTO_TO_VALUE(WalletMetadataSpecifics)
 IMPLEMENT_PROTO_TO_VALUE(WalletPostalAddress)

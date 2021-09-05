@@ -7,12 +7,12 @@
 
 #include "base/gtest_prod_util.h"
 #include "base/optional.h"
+#include "base/scoped_observer.h"
 #include "base/strings/string16.h"
+#include "ui/views/controls/button/button.h"
 #include "ui/views/controls/button/menu_button.h"
-#include "ui/views/controls/button/menu_button_listener.h"
 
 namespace gfx {
-enum ElideBehavior;
 class ImageSkia;
 }  // namespace gfx
 
@@ -32,9 +32,7 @@ class PageInfoBubbleViewBrowserTest;
 
 // A button taking the full width of its parent that shows a background color
 // when hovered over.
-// TODO (cyan): HoverButton should extend ButtonListener.
-class HoverButton : public views::LabelButton,
-                    public views::MenuButtonListener {
+class HoverButton : public views::LabelButton {
  public:
   enum Style { STYLE_PROMINENT, STYLE_ERROR };
 
@@ -57,7 +55,7 @@ class HoverButton : public views::LabelButton,
   HoverButton(views::ButtonListener* button_listener,
               std::unique_ptr<views::View> icon_view,
               const base::string16& title,
-              const base::string16& subtitle,
+              const base::string16& subtitle = base::string16(),
               std::unique_ptr<views::View> secondary_view = nullptr,
               bool resize_row_for_secondary_view = true,
               bool secondary_view_can_process_events = false);
@@ -69,21 +67,7 @@ class HoverButton : public views::LabelButton,
   // views::LabelButton:
   void SetBorder(std::unique_ptr<views::Border> b) override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
-  gfx::Insets GetInsets() const override;
-
-  // Updates the title text, and applies the secondary style to the text
-  // specified by |range|. If |range| is invalid, no style is applied. This
-  // method is only supported for |HoverButton|s created with a title and
-  // subtitle.
-  void SetTitleTextWithHintRange(const base::string16& title_text,
-                                 const gfx::Range& range);
-
-  // This method is only supported for |HoverButton|s created with a title and
-  // non-empty subtitle.
-  void SetSubtitleElideBehavior(gfx::ElideBehavior elide_behavior);
-
-  // Adjusts the background and the text color according to |style|.
-  void SetStyle(Style style);
+  void OnViewBoundsChanged(View* observed_view) override;
 
   // Sets the text style of the title considering the color of the background.
   // Passing |background_color| makes sure that the text color will not be
@@ -91,26 +75,17 @@ class HoverButton : public views::LabelButton,
   void SetTitleTextStyle(views::style::TextStyle text_style,
                          SkColor background_color);
 
-  void SetSubtitleColor(SkColor color);
-
-  void set_auto_compute_tooltip(bool auto_compute_tooltip) {
-    auto_compute_tooltip_ = auto_compute_tooltip;
-  }
+  // Updates the accessible name and tooltip of the button if necessary based on
+  // |title_| and |subtitle_| labels.
+  void SetTooltipAndAccessibleName();
 
  protected:
-  // views::MenuButtonListener:
-  void OnMenuButtonClicked(Button* source,
-                           const gfx::Point& point,
-                           const ui::Event* event) override;
-
   // views::MenuButton:
   KeyClickAction GetKeyClickActionForEvent(const ui::KeyEvent& event) override;
   void StateChanged(ButtonState old_state) override;
   SkColor GetInkDropBaseColor() const override;
   std::unique_ptr<views::InkDrop> CreateInkDrop() override;
-  void Layout() override;
   views::View* GetTooltipHandlerForPoint(const gfx::Point& point) override;
-  void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
 
   views::StyledLabel* title() const { return title_; }
   views::Label* subtitle() const { return subtitle_; }
@@ -129,23 +104,12 @@ class HoverButton : public views::LabelButton,
   friend class PageInfoBubbleViewBrowserTest;
 
   views::StyledLabel* title_ = nullptr;
+  views::View* label_wrapper_ = nullptr;
   views::Label* subtitle_ = nullptr;
   views::View* icon_view_ = nullptr;
   views::View* secondary_view_ = nullptr;
 
-  // The horizontal space the padding and icon take up. Used for calculating the
-  // available space for |title_|, if it exists.
-  int taken_width_ = 0;
-
-  // Custom insets, when secondary_view_ is larger than the rest of the row.
-  base::Optional<gfx::Insets> insets_;
-
-  // Whether this |HoverButton|'s accessible name and tooltip should be computed
-  // from the |title_| and |subtitle_| text.
-  bool auto_compute_tooltip_ = true;
-
-  // Listener to be called when button is clicked.
-  views::ButtonListener* listener_;
+  ScopedObserver<views::View, views::ViewObserver> observed_label_{this};
 
   DISALLOW_COPY_AND_ASSIGN(HoverButton);
 };

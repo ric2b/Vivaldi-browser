@@ -82,7 +82,7 @@ function newError(message, code) {
  * @constructor
  */
 function CacheWithUUID() {
-  this.cache_ = {};
+  this.cache_ = Object.create(null);
 }
 
 CacheWithUUID.prototype = {
@@ -146,7 +146,7 @@ CacheWithUUID.prototype = {
  * @constructor
  */
 function Cache() {
-  this.cache_ = {};
+  this.cache_ = Object.create(null);
   this.nextId_ = 1;
   this.idPrefix_ = Math.random().toString();
 }
@@ -281,6 +281,7 @@ function isElement(value) {
  * @return {boolean} True if value is an iterable collection.
  */
 function isCollection(value) {
+  const Symbol = window.cdc_adoQpoasnfa76pfcZLmcfl_Symbol || window.Symbol;
   return (typeof value[Symbol.iterator] === 'function');
 }
 
@@ -307,6 +308,7 @@ function cloneWithAlgorithm(item, seen, algo, opt_cache) {
   }
 
   if (isCollection(item)) {
+    const Array = window.cdc_adoQpoasnfa76pfcZLmcfl_Array || window.Array;
     tmp = new Array(item.length);
     for (let i = 0; i < item.length; ++i)
       tmp[i] = maybeCopyProperty(i);
@@ -442,6 +444,7 @@ function callFunction(func, args, w3c, opt_unwrappedReturn) {
 
   let status = 0;
   let returnValue;
+  const Promise = window.cdc_adoQpoasnfa76pfcZLmcfl_Promise || window.Promise;
   try {
     const unwrappedArgs = jsonDeserialize(args, [], cache);
     const tmp = func.apply(null, unwrappedArgs);

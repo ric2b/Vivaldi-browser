@@ -101,7 +101,7 @@ void FakeHidManager::Bind(mojo::PendingReceiver<mojom::HidManager> receiver) {
 
 // mojom::HidManager implementation:
 void FakeHidManager::GetDevicesAndSetClient(
-    mojom::HidManagerClientAssociatedPtrInfo client,
+    mojo::PendingAssociatedRemote<mojom::HidManagerClient> client,
     GetDevicesCallback callback) {
   GetDevices(std::move(callback));
 
@@ -119,6 +119,7 @@ void FakeHidManager::GetDevices(GetDevicesCallback callback) {
 void FakeHidManager::Connect(
     const std::string& device_guid,
     mojo::PendingRemote<mojom::HidConnectionClient> connection_client,
+    mojo::PendingRemote<mojom::HidConnectionWatcher> watcher,
     ConnectCallback callback) {
   if (!base::Contains(devices_, device_guid)) {
     std::move(callback).Run(mojo::NullRemote());
@@ -133,6 +134,7 @@ void FakeHidManager::Connect(
 }
 
 mojom::HidDeviceInfoPtr FakeHidManager::CreateAndAddDevice(
+    const std::string& physical_device_id,
     uint16_t vendor_id,
     uint16_t product_id,
     const std::string& product_name,
@@ -140,6 +142,7 @@ mojom::HidDeviceInfoPtr FakeHidManager::CreateAndAddDevice(
     mojom::HidBusType bus_type) {
   mojom::HidDeviceInfoPtr device = mojom::HidDeviceInfo::New();
   device->guid = base::GenerateGUID();
+  device->physical_device_id = physical_device_id;
   device->vendor_id = vendor_id;
   device->product_id = product_id;
   device->product_name = product_name;
@@ -150,6 +153,7 @@ mojom::HidDeviceInfoPtr FakeHidManager::CreateAndAddDevice(
 }
 
 mojom::HidDeviceInfoPtr FakeHidManager::CreateAndAddDeviceWithTopLevelUsage(
+    const std::string& physical_device_id,
     uint16_t vendor_id,
     uint16_t product_id,
     const std::string& product_name,
@@ -159,6 +163,7 @@ mojom::HidDeviceInfoPtr FakeHidManager::CreateAndAddDeviceWithTopLevelUsage(
     uint16_t usage) {
   mojom::HidDeviceInfoPtr device = mojom::HidDeviceInfo::New();
   device->guid = base::GenerateGUID();
+  device->physical_device_id = physical_device_id;
   device->vendor_id = vendor_id;
   device->product_id = product_id;
   device->product_name = product_name;

@@ -4,23 +4,15 @@
 
 #include "ash/wm/toplevel_window_event_handler.h"
 
-#include "ash/home_screen/home_screen_controller.h"
 #include "ash/public/cpp/app_types.h"
-#include "ash/public/cpp/ash_features.h"
-#include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
-#include "ash/wm/back_gesture_affordance.h"
-#include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/resize_shadow_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ash/wm/window_resizer.h"
-#include "ash/wm/window_state.h"
 #include "ash/wm/window_state_observer.h"
 #include "ash/wm/window_util.h"
-#include "ash/wm/wm_event.h"
 #include "base/run_loop.h"
 #include "ui/aura/client/aura_constants.h"
-#include "ui/aura/client/window_types.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_delegate.h"
@@ -29,8 +21,8 @@
 #include "ui/aura/window_tracker.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/hit_test.h"
+#include "ui/base/mojom/cursor_type.mojom-shared.h"
 #include "ui/events/event.h"
-#include "ui/events/gestures/gesture_recognizer.h"
 #include "ui/views/widget/widget.h"
 #include "ui/wm/core/coordinate_conversion.h"
 
@@ -41,10 +33,6 @@ namespace {
 // How many pixels are reserved for gesture events to start dragging the app
 // window from the top of the screen in tablet mode.
 constexpr int kDragStartTopEdgeInset = 8;
-
-// How many dips are reserved for gesture events to start swiping to previous
-// page from the left edge of the screen in tablet mode.
-constexpr int kStartGoingBackLeftEdgeInset = 16;
 
 // Returns whether |window| can be moved via a two finger drag given
 // the hittest results of the two fingers.
@@ -103,58 +91,10 @@ void OnDragCompleted(
   run_loop->Quit();
 }
 
-// True if we can start swiping from left edge to go to previous page.
-bool CanStartGoingBack() {
-  if (!features::IsSwipingFromLeftEdgeToGoBackEnabled())
-    return false;
-
-  Shell* shell = Shell::Get();
-  if (!shell->tablet_mode_controller()->InTabletMode())
-    return false;
-
-  // Do not enable back gesture if it is not in an ACTIVE session. e.g, login
-  // screen, lock screen.
-  if (shell->session_controller()->GetSessionState() !=
-      session_manager::SessionState::ACTIVE) {
-    return false;
-  }
-
-  // Do not enable back gesture while overview mode is active but splitview is
-  // not active.
-  if (shell->overview_controller()->InOverviewSession() &&
-      !SplitViewController::Get(Shell::GetPrimaryRootWindow())
-           ->InSplitViewMode()) {
-    return false;
-  }
-
-  // Do not enable back gesture if home screen is visible.
-  if (shell->home_screen_controller()->IsHomeScreenVisible())
-    return false;
-
-  return true;
-}
-
-// True if |event| is scrolling away from the restricted left area of the
-// display.
-bool StartedAwayFromLeftArea(ui::GestureEvent* event) {
-  if (event->details().scroll_x_hint() < 0)
-    return false;
-
-  const gfx::Point location_in_screen =
-      event->target()->GetScreenLocation(*event);
-  const gfx::Rect work_area_bounds =
-      display::Screen::GetScreen()
-          ->GetDisplayNearestWindow(static_cast<aura::Window*>(event->target()))
-          .work_area();
-
-  gfx::Rect hit_bounds_in_screen(work_area_bounds);
-  hit_bounds_in_screen.set_width(kStartGoingBackLeftEdgeInset);
-  return hit_bounds_in_screen.Contains(location_in_screen);
-}
-
 }  // namespace
 
-// ScopedWindowResizer ---------------------------------------------------------
+// -----------------------------------------------------------------------------
+// ToplevelWindowEventHandler::ScopedWindowResizer:
 
 // Wraps a WindowResizer and installs an observer on its target window.  When
 // the window is destroyed ResizerWindowDestroyed() is invoked back on the
@@ -244,8 +184,8 @@ void ToplevelWindowEventHandler::ScopedWindowResizer::OnWindowDestroying(
   handler_->ResizerWindowDestroyed();
 }
 
-// ToplevelWindowEventHandler
-// --------------------------------------------------
+// -----------------------------------------------------------------------------
+// ToplevelWindowEventHandler:
 
 ToplevelWindowEventHandler::ToplevelWindowEventHandler()
     : first_finger_hittest_(HTNOWHERE) {
@@ -322,14 +262,9 @@ void ToplevelWindowEventHandler::OnMouseEvent(ui::MouseEvent* event) {
 }
 
 void ToplevelWindowEventHandler::OnGestureEvent(ui::GestureEvent* event) {
-  if (HandleGoingBackFromLeftEdge(event)) {
-    event->StopPropagation();
-    return;
-  }
-
   aura::Window* target = static_cast<aura::Window*>(event->target());
   int component = window_util::GetNonClientComponent(target, event->location());
-  gfx::Point event_location = event->location();
+  gfx::PointF event_location = event->location_f();
 
   aura::Window* original_target = target;
   bool client_area_drag = false;
@@ -388,7 +323,7 @@ void ToplevelWindowEventHandler::OnGestureEvent(ui::GestureEvent* event) {
 
       ShowResizeShadow(target, component);
 
-      gfx::Point location_in_parent = event_location;
+      gfx::PointF location_in_parent = event_location;
       aura::Window::ConvertPointToTarget(target, target->parent(),
                                          &location_in_parent);
       AttemptToStartDrag(target, location_in_parent, component,
@@ -447,7 +382,7 @@ void ToplevelWindowEventHandler::OnGestureEvent(ui::GestureEvent* event) {
       if (!client_area_drag && !CanStartOneFingerDrag(component))
         return;
 
-      gfx::Point location_in_parent = event_location;
+      gfx::PointF location_in_parent = event_location;
       aura::Window::ConvertPointToTarget(target, target->parent(),
                                          &location_in_parent);
       AttemptToStartDrag(target, location_in_parent, component,
@@ -466,7 +401,7 @@ void ToplevelWindowEventHandler::OnGestureEvent(ui::GestureEvent* event) {
   switch (event->type()) {
     case ui::ET_GESTURE_SCROLL_UPDATE: {
       gfx::Rect bounds_in_screen = target->GetRootWindow()->GetBoundsInScreen();
-      gfx::Point screen_location = event->location();
+      gfx::PointF screen_location = event->location_f();
       ::wm::ConvertPointToScreen(target, &screen_location);
 
       // It is physically not possible to move a touch pointer from one display
@@ -475,16 +410,16 @@ void ToplevelWindowEventHandler::OnGestureEvent(ui::GestureEvent* event) {
       // display (as happens with gestures on the bezel), and dragging via touch
       // should not trigger moving to a new display.(see
       // https://crbug.com/917060)
-      if (!bounds_in_screen.Contains(screen_location)) {
-        int x = std::max(
-            std::min(screen_location.x(), bounds_in_screen.right() - 1),
-            bounds_in_screen.x());
-        int y = std::max(
-            std::min(screen_location.y(), bounds_in_screen.bottom() - 1),
-            bounds_in_screen.y());
-        gfx::Point updated_location(x, y);
+      if (!bounds_in_screen.Contains(gfx::ToRoundedPoint(screen_location))) {
+        float x = std::max(
+            std::min(screen_location.x(), bounds_in_screen.right() - 1.f),
+            static_cast<float>(bounds_in_screen.x()));
+        float y = std::max(
+            std::min(screen_location.y(), bounds_in_screen.bottom() - 1.f),
+            static_cast<float>(bounds_in_screen.y()));
+        gfx::PointF updated_location(x, y);
         ::wm::ConvertPointFromScreen(target, &updated_location);
-        event->set_location(updated_location);
+        event->set_location_f(updated_location);
       }
 
       HandleDrag(target, event);
@@ -512,7 +447,7 @@ void ToplevelWindowEventHandler::OnGestureEvent(ui::GestureEvent* event) {
 
 bool ToplevelWindowEventHandler::AttemptToStartDrag(
     aura::Window* window,
-    const gfx::Point& point_in_parent,
+    const gfx::PointF& point_in_parent,
     int window_component,
     ToplevelWindowEventHandler::EndClosure end_closure) {
   ::wm::WindowMoveSource source = gesture_target_
@@ -525,7 +460,7 @@ bool ToplevelWindowEventHandler::AttemptToStartDrag(
 
 bool ToplevelWindowEventHandler::AttemptToStartDrag(
     aura::Window* window,
-    const gfx::Point& point_in_parent,
+    const gfx::PointF& point_in_parent,
     int window_component,
     ::wm::WindowMoveSource source,
     EndClosure end_closure,
@@ -619,18 +554,18 @@ aura::Window* ToplevelWindowEventHandler::GetTargetForClientAreaGesture(
   DCHECK(!in_move_loop_);  // Can only handle one nested loop at a time.
   aura::Window* root_window = source->GetRootWindow();
   DCHECK(root_window);
-  gfx::Point drag_location;
+  gfx::PointF drag_location;
   if (move_source == ::wm::WINDOW_MOVE_SOURCE_TOUCH &&
       aura::Env::GetInstance()->is_touch_down()) {
     gfx::PointF drag_location_f;
     bool has_point = aura::Env::GetInstance()
                          ->gesture_recognizer()
                          ->GetLastTouchPointForTarget(source, &drag_location_f);
-    drag_location = gfx::ToFlooredPoint(drag_location_f);
+    drag_location = drag_location_f;
     DCHECK(has_point);
   } else {
-    drag_location =
-        root_window->GetHost()->dispatcher()->GetLastMouseLocationInRoot();
+    drag_location = gfx::PointF(
+        root_window->GetHost()->dispatcher()->GetLastMouseLocationInRoot());
     aura::Window::ConvertPointToTarget(root_window, source->parent(),
                                        &drag_location);
   }
@@ -639,7 +574,7 @@ aura::Window* ToplevelWindowEventHandler::GetTargetForClientAreaGesture(
   aura::client::CursorClient* cursor_client =
       aura::client::GetCursorClient(root_window);
   if (cursor_client)
-    cursor_client->SetCursor(ui::CursorType::kPointer);
+    cursor_client->SetCursor(ui::mojom::CursorType::kPointer);
 
   base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
 
@@ -682,7 +617,7 @@ void ToplevelWindowEventHandler::EndMoveLoop() {
 
 bool ToplevelWindowEventHandler::PrepareForDrag(
     aura::Window* window,
-    const gfx::Point& point_in_parent,
+    const gfx::PointF& point_in_parent,
     int window_component,
     ::wm::WindowMoveSource source) {
   if (window_resizer_)
@@ -736,7 +671,7 @@ void ToplevelWindowEventHandler::HandleMousePressed(aura::Window* target,
   if ((event->flags() & (ui::EF_IS_DOUBLE_CLICK | ui::EF_IS_TRIPLE_CLICK)) ==
           0 &&
       WindowResizer::GetBoundsChangeForWindowComponent(component)) {
-    gfx::Point location_in_parent = event->location();
+    gfx::PointF location_in_parent = event->location_f();
     aura::Window::ConvertPointToTarget(target, target->parent(),
                                        &location_in_parent);
     AttemptToStartDrag(target, location_in_parent, component,
@@ -772,7 +707,7 @@ void ToplevelWindowEventHandler::HandleDrag(aura::Window* target,
 
   if (!window_resizer_)
     return;
-  gfx::Point location_in_parent = event->location();
+  gfx::PointF location_in_parent = event->location_f();
   aura::Window::ConvertPointToTarget(target, target->parent(),
                                      &location_in_parent);
   window_resizer_->resizer()->Drag(location_in_parent, event->flags());
@@ -847,7 +782,7 @@ void ToplevelWindowEventHandler::OnWindowDestroying(aura::Window* window) {
 
 void ToplevelWindowEventHandler::UpdateGestureTarget(
     aura::Window* target,
-    const gfx::Point& location) {
+    const gfx::PointF& location) {
   event_location_in_gesture_target_ = location;
   if (gesture_target_ == target)
     return;
@@ -857,62 +792,6 @@ void ToplevelWindowEventHandler::UpdateGestureTarget(
   gesture_target_ = target;
   if (gesture_target_)
     gesture_target_->AddObserver(this);
-}
-
-bool ToplevelWindowEventHandler::HandleGoingBackFromLeftEdge(
-    ui::GestureEvent* event) {
-  if (!CanStartGoingBack())
-    return false;
-
-  gfx::Point screen_location = event->location();
-  ::wm::ConvertPointToScreen(static_cast<aura::Window*>(event->target()),
-                             &screen_location);
-  switch (event->type()) {
-    case ui::ET_GESTURE_SCROLL_BEGIN: {
-      going_back_started_ = StartedAwayFromLeftArea(event);
-      if (!going_back_started_)
-        break;
-      back_gesture_affordance_ =
-          std::make_unique<BackGestureAffordance>(screen_location);
-      return true;
-    }
-    case ui::ET_GESTURE_SCROLL_UPDATE:
-      if (!going_back_started_)
-        break;
-      DCHECK(back_gesture_affordance_);
-      back_gesture_affordance_->SetDragProgress(screen_location.x());
-      return true;
-    case ui::ET_GESTURE_SCROLL_END:
-    case ui::ET_SCROLL_FLING_START: {
-      if (!going_back_started_)
-        break;
-      DCHECK(back_gesture_affordance_);
-      if ((event->type() == ui::ET_GESTURE_SCROLL_END &&
-           screen_location.x() >= kSwipingDistanceForGoingBack) ||
-          (event->type() == ui::ET_SCROLL_FLING_START &&
-           event->details().velocity_x() >= kFlingVelocityForGoingBack)) {
-        aura::Window* root_window =
-            window_util::GetRootWindowAt(screen_location);
-        ui::KeyEvent press_key_event(ui::ET_KEY_PRESSED, ui::VKEY_BROWSER_BACK,
-                                     ui::EF_NONE);
-        ignore_result(
-            root_window->GetHost()->SendEventToSink(&press_key_event));
-        ui::KeyEvent release_key_event(ui::ET_KEY_RELEASED,
-                                       ui::VKEY_BROWSER_BACK, ui::EF_NONE);
-        ignore_result(
-            root_window->GetHost()->SendEventToSink(&release_key_event));
-        back_gesture_affordance_->Complete();
-      } else {
-        back_gesture_affordance_->Abort();
-      }
-      going_back_started_ = false;
-      return true;
-    }
-    default:
-      break;
-  }
-
-  return false;
 }
 
 }  // namespace ash

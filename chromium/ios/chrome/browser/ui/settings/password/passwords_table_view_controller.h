@@ -9,16 +9,7 @@
 #import "ios/chrome/browser/ui/settings/settings_navigation_controller.h"
 #import "ios/chrome/browser/ui/settings/settings_root_table_view_controller.h"
 
-namespace ios {
 class ChromeBrowserState;
-}  // namespace ios
-
-// The accessibility identifier of the password details table view.
-extern NSString* const kPasswordsTableViewId;
-extern NSString* const kPasswordsExportConfirmViewId;
-extern NSString* const kPasswordsSearchBarId;
-extern NSString* const kPasswordsScrimViewId;
-
 @protocol ReauthenticationProtocol;
 @class PasswordExporter;
 
@@ -26,13 +17,10 @@ extern NSString* const kPasswordsScrimViewId;
     : SettingsRootTableViewController <SettingsControllerProtocol>
 
 // The designated initializer. |browserState| must not be nil.
-- (instancetype)initWithBrowserState:(ios::ChromeBrowserState*)browserState
+- (instancetype)initWithBrowserState:(ChromeBrowserState*)browserState
     NS_DESIGNATED_INITIALIZER;
 
-- (instancetype)initWithTableViewStyle:(UITableViewStyle)style
-                           appBarStyle:
-                               (ChromeTableViewControllerStyle)appBarStyle
-    NS_UNAVAILABLE;
+- (instancetype)initWithStyle:(UITableViewStyle)style NS_UNAVAILABLE;
 
 @end
 

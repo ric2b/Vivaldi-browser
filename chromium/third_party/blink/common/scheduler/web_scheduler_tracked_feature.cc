@@ -41,14 +41,16 @@ const char* FeatureToString(WebSchedulerTrackedFeature feature) {
       return "Dedicated worker or worklet present";
     case WebSchedulerTrackedFeature::kSharedWorker:
       return "Shared worker present";
-    case WebSchedulerTrackedFeature::kOutstandingNetworkRequest:
-      return "outstanding network request";
+    case WebSchedulerTrackedFeature::kOutstandingNetworkRequestFetch:
+      return "outstanding network request (fetch)";
+    case WebSchedulerTrackedFeature::kOutstandingNetworkRequestXHR:
+      return "outstanding network request (XHR)";
+    case WebSchedulerTrackedFeature::kOutstandingNetworkRequestOthers:
+      return "outstanding network request (others)";
     case WebSchedulerTrackedFeature::kServiceWorkerControlledPage:
       return "ServiceWorker-controlled page";
     case WebSchedulerTrackedFeature::kOutstandingIndexedDBTransaction:
       return "outstanding IndexedDB transaction";
-    case WebSchedulerTrackedFeature::kHasScriptableFramesInMultipleTabs:
-      return "has scriptable frames in multiple tabs";
     case WebSchedulerTrackedFeature::kRequestedGeolocationPermission:
       return "requested geolocation permission";
     case WebSchedulerTrackedFeature::kRequestedNotificationsPermission:
@@ -59,7 +61,7 @@ const char* FeatureToString(WebSchedulerTrackedFeature feature) {
       return "requested audio capture permission";
     case WebSchedulerTrackedFeature::kRequestedVideoCapturePermission:
       return "requested video capture permission";
-    case WebSchedulerTrackedFeature::kRequestedSensorsPermission:
+    case WebSchedulerTrackedFeature::kRequestedBackForwardCacheBlockedSensors:
       return "requested sensors permission";
     case WebSchedulerTrackedFeature::kRequestedBackgroundWorkPermission:
       return "requested background work permission";
@@ -75,6 +77,18 @@ const char* FeatureToString(WebSchedulerTrackedFeature feature) {
       return "WebXR";
     case WebSchedulerTrackedFeature::kWebLocks:
       return "WebLocks";
+    case WebSchedulerTrackedFeature::kWebHID:
+      return "WebHID";
+    case WebSchedulerTrackedFeature::kWakeLock:
+      return "WakeLock";
+    case WebSchedulerTrackedFeature::kWebShare:
+      return "WebShare";
+    case WebSchedulerTrackedFeature::kRequestedStorageAccessGrant:
+      return "requested storage access permission";
+    case WebSchedulerTrackedFeature::kWebNfc:
+      return "WebNfc";
+    case WebSchedulerTrackedFeature::kWebFileSystem:
+      return "WebFileSystem";
   }
 }
 

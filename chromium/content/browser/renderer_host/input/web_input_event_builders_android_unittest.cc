@@ -9,7 +9,7 @@
 
 #include "base/android/jni_android.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/public/platform/web_input_event.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
 #include "ui/events/android/key_event_utils.h"
 #include "ui/events/gesture_detection/motion_event.h"
 #include "ui/events/keycodes/dom/dom_code.h"
@@ -221,11 +221,11 @@ TEST(WebInputEventBuilderAndroidTest, WebMouseEventCoordinates) {
   WebMouseEvent web_event = content::WebMouseEventBuilder::Build(
       motion_event, blink::WebInputEvent::kMouseDown, 1,
       ui::MotionEvent::BUTTON_PRIMARY);
-  EXPECT_EQ(web_event.PositionInWidget().x, p0.pos_x_pixels * kPixToDip);
-  EXPECT_EQ(web_event.PositionInWidget().y, p0.pos_y_pixels * kPixToDip);
-  EXPECT_EQ(web_event.PositionInScreen().x,
+  EXPECT_EQ(web_event.PositionInWidget().x(), p0.pos_x_pixels * kPixToDip);
+  EXPECT_EQ(web_event.PositionInWidget().y(), p0.pos_y_pixels * kPixToDip);
+  EXPECT_EQ(web_event.PositionInScreen().x(),
             (p0.pos_x_pixels + raw_offset_x) * kPixToDip);
-  EXPECT_EQ(web_event.PositionInScreen().y,
+  EXPECT_EQ(web_event.PositionInScreen().y(),
             (p0.pos_y_pixels + raw_offset_y) * kPixToDip);
   EXPECT_EQ(web_event.button, blink::WebPointerProperties::Button::kLeft);
   EXPECT_EQ(web_event.TimeStamp(), event_time);

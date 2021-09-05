@@ -17,7 +17,7 @@ traits_headers =
       "//chrome/common/importer/profile_import_process_param_traits.h",
       "//importer/vivaldi_profile_import_process_messages.h",
     ]
-deps = [
+public_deps = [
   "//chrome/common",
   "//components/favicon_base",
   "//ipc",

@@ -13,6 +13,7 @@ import android.text.TextUtils;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 import androidx.browser.customtabs.CustomTabsService;
 import androidx.browser.customtabs.CustomTabsService.Relation;
 
@@ -21,16 +22,15 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.StrictModeContext;
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
-import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.base.task.PostTask;
-import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.IntentHandler;
+import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.util.UrlConstants;
+import org.chromium.components.embedder_support.util.Origin;
+import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.content_public.browser.BrowserStartupController;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.browser.WebContents;
@@ -87,6 +87,9 @@ public class OriginVerifier {
     private static final AtomicReference<Set<String>> sVerificationOverrides =
             new AtomicReference<>();
 
+    /**
+     * Factory that can be injected by Dagger.
+     */
     @Reusable
     public static class Factory {
         @Inject
@@ -164,9 +167,8 @@ public class OriginVerifier {
      */
     public static boolean wasPreviouslyVerified(String packageName, Origin origin,
             @Relation int relation) {
-        return shouldOverrideVerification(packageName, origin, relation)
-                || VerificationResultStore.isRelationshipSaved(new Relationship(packageName,
-                getCertificateSHA256FingerprintForPackage(packageName), origin, relation));
+        return wasPreviouslyVerified(packageName,
+                getCertificateSHA256FingerprintForPackage(packageName), origin, relation);
     }
 
 
@@ -183,7 +185,8 @@ public class OriginVerifier {
      */
     private static boolean wasPreviouslyVerified(String packageName, String signatureFingerprint,
             Origin origin, @Relation int relation) {
-        return VerificationResultStore.isRelationshipSaved(
+        return shouldOverrideVerification(packageName, origin, relation)
+                || VerificationResultStore.isRelationshipSaved(
                 new Relationship(packageName, signatureFingerprint, origin, relation));
     }
 
@@ -237,7 +240,7 @@ public class OriginVerifier {
         String disableDalUrl = CommandLine.getInstance().getSwitchValue(
                 ChromeSwitches.DISABLE_DIGITAL_ASSET_LINK_VERIFICATION);
         if (!TextUtils.isEmpty(disableDalUrl)
-                && mOrigin.equals(new Origin(disableDalUrl))) {
+                && mOrigin.equals(Origin.create(disableDalUrl))) {
             Log.i(TAG, "Verification skipped for %s due to command line flag.", origin);
             PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT, new VerifiedCallback(true, null));
             return;
@@ -260,14 +263,12 @@ public class OriginVerifier {
         }
 
         if (mNativeOriginVerifier != 0) cleanUp();
-        if (!BrowserStartupController.get(LibraryProcessType.PROCESS_BROWSER)
-                        .isFullBrowserStarted()) {
-            // Early return for testing without native.
-            return;
-        }
+        // Early return for testing without native.
+        if (!BrowserStartupController.getInstance().isFullBrowserStarted()) return;
+
         if (mWebContents != null && mWebContents.isDestroyed()) mWebContents = null;
-        mNativeOriginVerifier = OriginVerifierJni.get().init(OriginVerifier.this, mWebContents,
-                Profile.getLastUsedProfile().getOriginalProfile());
+        mNativeOriginVerifier = OriginVerifierJni.get().init(
+                OriginVerifier.this, mWebContents, Profile.getLastUsedRegularProfile());
         assert mNativeOriginVerifier != 0;
         String relationship = null;
         switch (mRelation) {

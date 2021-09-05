@@ -9,8 +9,11 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/task/task_traits.h"
 #include "base/threading/sequence_bound.h"
-#include "mojo/public/cpp/bindings/binding.h"
+#include "content/common/content_export.h"
+#include "mojo/public/cpp/bindings/receiver.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "services/tracing/public/mojom/perfetto_service.mojom.h"
 
 namespace content {
@@ -42,11 +45,10 @@ class PerfettoFileTracer : public tracing::mojom::TracingSessionClient {
 
   void OnTracingSessionEnded();
 
-  const scoped_refptr<base::SequencedTaskRunner> background_task_runner_;
   base::SequenceBound<BackgroundDrainer> background_drainer_;
-  mojo::Binding<tracing::mojom::TracingSessionClient> binding_{this};
-  tracing::mojom::TracingSessionHostPtr tracing_session_host_;
-  tracing::mojom::ConsumerHostPtr consumer_host_;
+  mojo::Receiver<tracing::mojom::TracingSessionClient> receiver_{this};
+  mojo::Remote<tracing::mojom::TracingSessionHost> tracing_session_host_;
+  mojo::Remote<tracing::mojom::ConsumerHost> consumer_host_;
   bool has_been_disabled_ = false;
 
   base::WeakPtrFactory<PerfettoFileTracer> weak_factory_{this};

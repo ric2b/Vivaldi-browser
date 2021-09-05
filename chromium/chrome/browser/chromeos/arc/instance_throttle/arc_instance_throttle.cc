@@ -11,6 +11,7 @@
 #include "chrome/browser/chromeos/arc/instance_throttle/arc_active_window_throttle_observer.h"
 #include "chrome/browser/chromeos/arc/instance_throttle/arc_app_launch_throttle_observer.h"
 #include "chrome/browser/chromeos/arc/instance_throttle/arc_boot_phase_throttle_observer.h"
+#include "chrome/browser/chromeos/arc/instance_throttle/arc_pip_window_throttle_observer.h"
 #include "components/arc/arc_browser_context_keyed_service_factory_base.h"
 #include "components/arc/arc_util.h"
 
@@ -22,8 +23,8 @@ class DefaultDelegateImpl : public ArcInstanceThrottle::Delegate {
  public:
   DefaultDelegateImpl() = default;
   ~DefaultDelegateImpl() override = default;
-  void SetCpuRestriction(bool restrict) override {
-    SetArcCpuRestriction(restrict);
+  void SetCpuRestriction(CpuRestrictionState cpu_restriction_state) override {
+    SetArcCpuRestriction(cpu_restriction_state);
   }
 
   void RecordCpuRestrictionDisabledUMA(const std::string& observer_name,
@@ -78,8 +79,9 @@ ArcInstanceThrottle::ArcInstanceThrottle(content::BrowserContext* context,
     : ThrottleService(context),
       delegate_(std::make_unique<DefaultDelegateImpl>()) {
   AddObserver(std::make_unique<ArcActiveWindowThrottleObserver>());
-  AddObserver(std::make_unique<ArcBootPhaseThrottleObserver>());
   AddObserver(std::make_unique<ArcAppLaunchThrottleObserver>());
+  AddObserver(std::make_unique<ArcBootPhaseThrottleObserver>());
+  AddObserver(std::make_unique<ArcPipWindowThrottleObserver>());
   StartObservers();
 }
 
@@ -95,11 +97,13 @@ void ArcInstanceThrottle::ThrottleInstance(
     case chromeos::ThrottleObserver::PriorityLevel::CRITICAL:
     case chromeos::ThrottleObserver::PriorityLevel::IMPORTANT:
     case chromeos::ThrottleObserver::PriorityLevel::NORMAL:
-      delegate_->SetCpuRestriction(false);
+      delegate_->SetCpuRestriction(
+          CpuRestrictionState::CPU_RESTRICTION_FOREGROUND);
       break;
     case chromeos::ThrottleObserver::PriorityLevel::LOW:
     case chromeos::ThrottleObserver::PriorityLevel::UNKNOWN:
-      delegate_->SetCpuRestriction(true);
+      delegate_->SetCpuRestriction(
+          CpuRestrictionState::CPU_RESTRICTION_BACKGROUND);
       break;
   }
 }

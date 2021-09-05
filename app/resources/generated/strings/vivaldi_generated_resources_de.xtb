@@ -2,13 +2,14 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="de">
 <translation id="1017280919048282932">&amp;Zum Wörterbuch hinzufügen</translation>
+<translation id="1029317248976101138">Zoomen</translation>
 <translation id="1031362278801463162">Vorschau wird geladen…</translation>
 <translation id="1047431265488717055">Linkte&amp;xt kopieren</translation>
 <translation id="1049795001945932310">&amp;Spracheinstellungen</translation>
 <translation id="1054153489933238809">&amp;Original in neuem Tab öffnen</translation>
 <translation id="1056898198331236512">Warnung</translation>
 <translation id="1084824384139382525">Adr&amp;esse des Links kopieren</translation>
-<translation id="1128109161498068552">Keinen Sites den Zugriff  mit systemexklusiven Nachrichten auf MIDI-Geräte erlauben</translation>
+<translation id="1128109161498068552">Websites nicht gestatten, mittels systemexklusiver Meldungen auf MIDI-Geräte zuzugreifen</translation>
 <translation id="1163931534039071049">Frame-Quelltext &amp;anzeigen</translation>
 <translation id="1165039591588034296">Fehler</translation>
 <translation id="1175364870820465910">&amp;Drucken...</translation>
@@ -54,6 +55,7 @@
 <translation id="1886996562706621347">Registrierung von Websites als Standard-Handler für Protokolle zulassen (empfohlen)</translation>
 <translation id="1901303067676059328">&amp;Alles auswählen</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
+<translation id="1936931585862840749">Geben Sie eine Zahl ein, um die Anzahl der zu druckenden Exemplare festzulegen (1 bis <ph name="MAX_COPIES" />).</translation>
 <translation id="1963227389609234879">Alle entfernen</translation>
 <translation id="1994173015038366702">Website-URL</translation>
 <translation id="2019718679933488176">&amp;Audio in neuem Tab öffnen</translation>
@@ -66,7 +68,6 @@
 <translation id="2150139952286079145">Ziele suchen</translation>
 <translation id="215753907730220065">Vollbildmodus aus</translation>
 <translation id="2177950615300672361">Privater Tab: <ph name="TAB_NAME" /></translation>
-<translation id="218070003709087997">Geben Sie eine Zahl ein, um die Anzahl der zu druckenden Exemplare festzulegen (1 bis 999).</translation>
 <translation id="219008588003277019">Natives Client-Modul: <ph name="NEXE_NAME" /></translation>
 <translation id="220138918934036434">Schaltfläche ausblenden</translation>
 <translation id="2218515861914035131">Als unformatierten Text einfügen</translation>
@@ -78,11 +79,9 @@
 <translation id="2282146716419988068">GPU-Verarbeitung</translation>
 <translation id="2301382460326681002">Stammverzeichnis der Erweiterung ist ungültig.</translation>
 <translation id="2318143611928805047">Papierformat</translation>
-<translation id="2318923050469484167">Aktuelle private Sitzung (<ph name="EMBEDDING" />)</translation>
 <translation id="2322193970951063277">Kopf- und Fußzeilen</translation>
 <translation id="2326931316514688470">App &amp;neu laden</translation>
 <translation id="2327492829706409234">App aktivieren</translation>
-<translation id="2344028582131185878">Auto-Downloads</translation>
 <translation id="2348176352564285430">App: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">Erweiterungsverzeichnis auswählen.</translation>
 <translation id="2379281330731083556">Über das Systemdialogfeld drucken… <ph name="SHORTCUT_KEY" /></translation>
@@ -95,12 +94,12 @@
 <translation id="2470702053775288986">Nicht unterstützte Erweiterungen deaktiviert</translation>
 <translation id="2476578072172137802">Website-Einstellungen</translation>
 <translation id="2482878487686419369">Benachrichtigungen</translation>
+<translation id="2498539833203011245">Im Dock ablegen ***</translation>
 <translation id="2509495747794740764">Der Wert für die Skalierung muss zwischen 10 und 200 liegen.</translation>
 <translation id="253557089021624350">Keepalive-Zahl</translation>
 <translation id="2546283357679194313">Cookies und Websitedaten</translation>
 <translation id="2550212893339833758">Swap-Speicher</translation>
 <translation id="2553440850688409052">Dieses Plug-in ausblenden</translation>
-<translation id="2580924999637585241">Gesamt: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="26224892172169984">Verarbeitung von Protokollen für keine Website zulassen</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Wieder aktivieren</translation>
@@ -120,7 +119,6 @@
 <translation id="2932883381142163287">Missbrauch melden</translation>
 <translation id="2941112035454246133">Niedrig</translation>
 <translation id="2972581237482394796">&amp;Wiederholen</translation>
-<translation id="299483336428448530">Von Deinen Eltern installiert.</translation>
 <translation id="3003623123441819449">CSS-Cache</translation>
 <translation id="3008272652534848354">Berechtigungen zurücksetzen</translation>
 <translation id="3012631534724231212">(Iframe)</translation>
@@ -205,7 +203,7 @@
 <translation id="4100839878934973028">Ein anderes Programm auf Ihrem Computer hat eine App hinzugefügt, die sich möglicherweise auf die Funktionsweise von Vivaldi auswirkt.</translation>
 <translation id="4109898769411476438">Browser vor dem Import schließen</translation>
 <translation id="4115080753528843955">Einige Inhaltsdienste verwenden eindeutige Identifikatoren, um den Zugriff auf geschützte Inhalte zu autorisieren.</translation>
-<translation id="4130207949184424187">Diese Erweiterung hat die Seite geändert, die bei der Suche über die Adressleiste angezeigt wird.</translation>
+<translation id="4130207949184424187">Diese Erweiterung hat eine Änderung der Seite vorgenommen, die bei der Suche über die Adressleiste angezeigt wird.</translation>
 <translation id="4131410914670010031">Schwarz-Weiß</translation>
 <translation id="4176463684765177261">Deaktiviert</translation>
 <translation id="4200983522494130825">&amp;Neuer Tab</translation>
@@ -274,7 +272,6 @@
 <translation id="5425042808445046667">Download fortsetzen</translation>
 <translation id="5427459444770871191">Im &amp;Uhrzeigersinn drehen</translation>
 <translation id="5431318178759467895">Farbe</translation>
-<translation id="5472133193607270166">Wenn die Funktion aktiviert ist, können Websites Ihre Browseraktivitäten auf anderen Websites nicht verwenden, um Werbung zu personalisieren. Einige Websites funktionieren dann eventuell nicht richtig.</translation>
 <translation id="5483785310822538350">Datei- und Gerätezugriff aufheben</translation>
 <translation id="5485102783864353244">App hinzufügen</translation>
 <translation id="5486561344817861625">Browser-Neustart simulieren</translation>
@@ -302,7 +299,6 @@
 <translation id="5804241973901381774">Berechtigungen</translation>
 <translation id="5828633471261496623">Wird gedruckt…</translation>
 <translation id="583281660410589416">Unbekannt</translation>
-<translation id="5838456317242088717">Aktuelle private Sitzung</translation>
 <translation id="5860491529813859533">Aktivieren</translation>
 <translation id="5867841422488265304">Suche oder URL eingeben</translation>
 <translation id="5908769186679515905">Ausführen von Flash auf Websites blockieren</translation>
@@ -322,7 +318,6 @@
 <translation id="6147020289383635445">Druckvorschau fehlgeschlagen.</translation>
 <translation id="6156863943908443225">Skript-Cache</translation>
 <translation id="6169666352732958425">Der Desktop kann nicht übertragen werden.</translation>
-<translation id="6196640612572343990">Drittanbieter-Cookies blockieren</translation>
 <translation id="6196854373336333322">Die Erweiterung <ph name="EXTENSION_NAME" /> hat die Kontrolle über Ihre Proxyeinstellungen übernommen. Das bedeutet, dass sie sämtliche Onlineaktivitäten ändern, stören oder überwachen kann. Wenn Sie nicht sicher sind, wie es zu dieser Änderung gekommen ist, war sie wahrscheinlich nicht gewollt.</translation>
 <translation id="6206311232642889873">Bild kop&amp;ieren</translation>
 <translation id="6239558157302047471">&amp;Frame neu laden</translation>
@@ -335,9 +330,10 @@
 <translation id="6295158916970320988">Alle Websites</translation>
 <translation id="6295855836753816081">Wird gespeichert…</translation>
 <translation id="6308937455967653460">&amp;Link speichern unter...</translation>
+<translation id="6315493146179903667">Alle nach vorne bringen</translation>
 <translation id="6326855256003666642">Keepalive-Zahl</translation>
 <translation id="6374469231428023295">Erneut versuchen</translation>
-<translation id="6385543213911723544">Websites können Cookiedaten speichern und lesen.</translation>
+<translation id="6385543213911723544">Websites können Daten in Cookies speichern und lesen</translation>
 <translation id="6398765197997659313">Vollbildmodus beenden</translation>
 <translation id="6406303162637086258">Browser-Neustart simulieren</translation>
 <translation id="6445450263907939268">Wenn diese Änderungen nicht von Ihnen gewollt waren, können Sie Ihre vorherigen Einstellungen wiederherstellen.</translation>
@@ -355,7 +351,7 @@
 <translation id="6723354935081862304">Drucken Sie über Google Docs und andere Cloud-Ziele. <ph name="BEGIN_LINK" />Melden Sie sich an<ph name="END_LINK" />, um über Google Cloud Print zu drucken.</translation>
 <translation id="6798954102094737107">Plug-in: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Änderungen beibehalten</translation>
-<translation id="6817174620439930047">Nachfragen wenn eine Seite über systemexklusive Nachrichten auf MIDI-Geräte zugreifen möchte (empfohlen)</translation>
+<translation id="6817174620439930047">Nachfragen, wenn eine Website versucht, mit systemexklusiven Meldungen auf MIDI-Geräte zuzugreifen (empfohlen)</translation>
 <translation id="682123305478866682">Desktop streamen</translation>
 <translation id="6824564591481349393">E-Mail-Adr&amp;esse kopieren</translation>
 <translation id="6840155290835956714">Vor dem Senden nachfragen</translation>
@@ -375,11 +371,12 @@
 <translation id="708060913198414444">Audioadresse k&amp;opieren</translation>
 <translation id="7175353351958621980">Geladen von:</translation>
 <translation id="7186088072322679094">In Symbolleiste behalten</translation>
-<translation id="7270858098575133036">Nachfragen, wenn eine Webseite mit systemexklusiven Nachrichten auf MIDI-Geräte zugreifen möchte</translation>
+<translation id="7270858098575133036">Nachfragen, wenn eine Website versucht, mit systemexklusiven Meldungen auf MIDI-Geräte zuzugreifen</translation>
 <translation id="7287143125007575591">Zugriff verweigert.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">&amp;Steuerelemente anzeigen</translation>
 <translation id="7311079019872751559">Plug-in-Zugriff ohne Sandbox</translation>
+<translation id="73174032666024687"><ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="7385854874724088939">Beim Drucken ist ein Fehler aufgetreten. Bitte überprüfen Sie Ihren Drucker und versuchen Sie es erneut.</translation>
 <translation id="7412226954991670867">GPU-Speicher</translation>
 <translation id="7421925624202799674">Seitenquelltext &amp;anzeigen</translation>
@@ -425,7 +422,7 @@
 <translation id="7982789257301363584">Netzwerk</translation>
 <translation id="7997826902155442747">Prozesspriorität</translation>
 <translation id="7999229196265990314">Folgende Dateien wurden erstellt:
-        
+
 Erweiterung: <ph name="EXTENSION_FILE" />
 Schlüsseldatei: <ph name="KEY_FILE" />
 
@@ -446,7 +443,7 @@ Speichern Sie Ihre Schlüsseldatei an einem sicheren Ort. Sie benötigen die Dat
 <translation id="8382913212082956454">E-Mail-Adr&amp;esse kopieren</translation>
 <translation id="8413385045638830869">Nachfragen (empfohlen)</translation>
 <translation id="8434480141477525001">NaCl-Debug-Port</translation>
-<translation id="8449008133205184768">Einfügen und Formatvorlage anpassen</translation>
+<translation id="8449008133205184768">Einfügen und Stil anpassen</translation>
 <translation id="8496717697661868878">Dieses Plug-in ausführen</translation>
 <translation id="8512476990829870887">Prozess beenden</translation>
 <translation id="8523493869875972733">Änderungen beibehalten</translation>

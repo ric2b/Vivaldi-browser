@@ -114,12 +114,12 @@ class TestConnectDelegate : public WebSocketStream::ConnectDelegate {
   ~TestConnectDelegate() override = default;
 
   void OnCreateRequest(URLRequest* request) override {}
-  void OnSuccess(std::unique_ptr<WebSocketStream> stream) override {}
+  void OnSuccess(
+      std::unique_ptr<WebSocketStream> stream,
+      std::unique_ptr<WebSocketHandshakeResponseInfo> response) override {}
   void OnFailure(const std::string& failure_message) override {}
   void OnStartOpeningHandshake(
       std::unique_ptr<WebSocketHandshakeRequestInfo> request) override {}
-  void OnFinishOpeningHandshake(
-      std::unique_ptr<WebSocketHandshakeResponseInfo> response) override {}
   void OnSSLCertificateError(
       std::unique_ptr<WebSocketEventInterface::SSLErrorCallbacks>
           ssl_error_callbacks,
@@ -300,7 +300,7 @@ class WebSocketHandshakeStreamCreateHelperTest
   WebSocketEndpointLockManager websocket_endpoint_lock_manager_;
 };
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          WebSocketHandshakeStreamCreateHelperTest,
                          Values(BASIC_HANDSHAKE_STREAM,
                                 HTTP2_HANDSHAKE_STREAM));

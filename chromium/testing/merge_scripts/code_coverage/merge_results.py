@@ -43,6 +43,7 @@ def _MergeAPIArgumentParser(*args, **kwargs):
       '--profdata-dir', required=True, help='where to store the merged data')
   parser.add_argument(
       '--llvm-profdata', required=True, help='path to llvm-profdata executable')
+  parser.add_argument('--test-target-name', help='test target name')
   parser.add_argument(
       '--java-coverage-dir', help='directory for Java coverage data')
   parser.add_argument(
@@ -50,6 +51,10 @@ def _MergeAPIArgumentParser(*args, **kwargs):
   parser.add_argument(
       '--merged-jacoco-filename',
       help='filename used to uniquely name the merged exec file.')
+  parser.add_argument(
+      '--per-cl-coverage',
+      action='store_true',
+      help='set to indicate that this is a per-CL coverage build')
   return parser
 
 
@@ -71,24 +76,40 @@ def main():
     coverage_merger.merge_java_exec_files(
         params.task_output_dir, output_path, params.jacococli_path)
 
+  # Name the output profdata file name as {test_target}.profdata or
+  # default.profdata.
+  output_prodata_filename = (params.test_target_name or 'default') + '.profdata'
+
   # NOTE: The coverage data merge script must make sure that the profraw files
   # are deleted from the task output directory after merging, otherwise, other
   # test results merge script such as layout tests will treat them as json test
   # results files and result in errors.
   logging.info('Merging code coverage profraw data')
-  invalid_profiles = coverage_merger.merge_profiles(
+  invalid_profiles, counter_overflows = coverage_merger.merge_profiles(
       params.task_output_dir,
-      os.path.join(params.profdata_dir, 'default.profdata'), '.profraw',
+      os.path.join(params.profdata_dir, output_prodata_filename), '.profraw',
       params.llvm_profdata)
+
+  # At the moment counter overflows overlap with invalid profiles, but this is
+  # not guaranteed to remain the case indefinitely. To avoid future conflicts
+  # treat these separately.
+  if counter_overflows:
+    with open(
+        os.path.join(params.profdata_dir, 'profiles_with_overflows.json'),
+        'w') as f:
+      json.dump(counter_overflows, f)
+
   if invalid_profiles:
     with open(os.path.join(params.profdata_dir, 'invalid_profiles.json'),
               'w') as f:
       json.dump(invalid_profiles, f)
 
-    # We don't want to invalidate shards in a CQ build, which we determine by
-    # the existence of the 'patch_storage' property.
-    build_properties = json.loads(params.build_properties)
-    if not build_properties.get('patch_storage'):
+    # We don't want to invalidate shards in a CQ build, because we should not
+    # interfere with the actual test results of a CQ builder.
+    # TODO(crbug.com/1050858) Remove patch_storage completely once recipe-side
+    # change passes --per-cl-coverage.
+    patch_storage = json.loads(params.build_properties).get('patch_storage')
+    if not params.per_cl_coverage and not patch_storage:
       mark_invalid_shards(
           coverage_merger.get_shards_to_retry(invalid_profiles),
           params.jsons_to_merge)

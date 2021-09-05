@@ -21,7 +21,7 @@ namespace blink {
 
 PresentationController::PresentationController(LocalFrame& frame)
     : Supplement<LocalFrame>(frame),
-      ContextLifecycleObserver(frame.GetDocument()) {}
+      ExecutionContextLifecycleObserver(frame.GetDocument()) {}
 
 PresentationController::~PresentationController() = default;
 
@@ -45,19 +45,19 @@ PresentationController* PresentationController::FromContext(
   if (!execution_context)
     return nullptr;
 
-  Document* document = To<Document>(execution_context);
+  Document* document = Document::From(execution_context);
   if (!document->GetFrame())
     return nullptr;
 
   return PresentationController::From(*document->GetFrame());
 }
 
-void PresentationController::Trace(blink::Visitor* visitor) {
+void PresentationController::Trace(Visitor* visitor) {
   visitor->Trace(presentation_);
   visitor->Trace(connections_);
   visitor->Trace(availability_state_);
   Supplement<LocalFrame>::Trace(visitor);
-  ContextLifecycleObserver::Trace(visitor);
+  ExecutionContextLifecycleObserver::Trace(visitor);
 }
 
 void PresentationController::SetPresentation(Presentation* presentation) {
@@ -132,7 +132,7 @@ void PresentationController::OnDefaultPresentationStarted(
                    std::move(result->connection_receiver));
 }
 
-void PresentationController::ContextDestroyed(ExecutionContext*) {
+void PresentationController::ContextDestroyed() {
   presentation_controller_receiver_.reset();
 }
 

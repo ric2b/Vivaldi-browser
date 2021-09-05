@@ -7,10 +7,10 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
-#include "base/message_loop/message_loop.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_switches.h"
@@ -24,14 +24,23 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
+#if defined(OS_CHROMEOS) || defined(OS_LINUX) || defined(OS_MACOSX) || \
+    defined(OS_WIN)
+#include "components/ukm/test_ukm_recorder.h"
+#include "testing/gmock/include/gmock/gmock.h"
+#endif
+
 namespace dom_distiller {
 namespace {
 
 using ::testing::_;
 using ::testing::AllOf;
 using ::testing::Field;
+using ::testing::InvokeWithoutArgs;
 using ::testing::Not;
 using ::testing::Optional;
+using ::testing::Pointee;
+using ::testing::SizeIs;
 
 const char kSimpleArticlePath[] = "/dom_distiller/simple_article.html";
 const char kSimpleArticleIFramePath[] =
@@ -88,7 +97,7 @@ class TestOption : public InProcessBrowserTest {
 
     // This blocks until the navigation has completely finished.
     ui_test_utils::NavigateToURL(browser(), article_url);
-    content::WaitForLoadStop(web_contents_);
+    EXPECT_TRUE(content::WaitForLoadStop(web_contents_));
 
     if (!test_timeout.is_zero())
       QuitAfter(test_timeout);
@@ -249,5 +258,50 @@ IN_PROC_BROWSER_TEST_F(DistillablePageUtilsBrowserTestAllArticles,
       GetLatestResult(web_contents_),
       Optional(AllOf(Not(IsDistillable()), IsLast(), Not(IsMobileFriendly()))));
 }
+
+IN_PROC_BROWSER_TEST_F(DistillablePageUtilsBrowserTestAllArticles,
+                       ObserverNotCalledAfterRemoval) {
+  RemoveObserver(web_contents_, &holder_);
+  EXPECT_CALL(holder_, OnResult(_)).Times(0);
+  NavigateAndWait(kSimpleArticlePath, kWaitNoExpectedCall);
+  EXPECT_THAT(
+      GetLatestResult(web_contents_),
+      Optional(AllOf(IsDistillable(), IsLast(), Not(IsMobileFriendly()))));
+}
+
+#if defined(OS_CHROMEOS) || defined(OS_LINUX) || defined(OS_MACOSX) || \
+    defined(OS_WIN)
+IN_PROC_BROWSER_TEST_F(DistillablePageUtilsBrowserTestAllArticles,
+                       RecordPageIsDistillableOnArticleLoad) {
+  ON_CALL(holder_, OnResult(IsLast()))
+      .WillByDefault(InvokeWithoutArgs(this, &TestOption::QuitSoon));
+
+  ukm::TestAutoSetUkmRecorder ukm_recorder;
+  NavigateAndWait(kSimpleArticlePath, base::TimeDelta());
+
+  std::vector<const ukm::mojom::UkmEntry*> distillability_entries =
+      ukm_recorder.GetEntriesByName("ReaderModeReceivedDistillability");
+  ASSERT_THAT(distillability_entries, SizeIs(1));
+  EXPECT_THAT(ukm_recorder.GetEntryMetric(distillability_entries.front(),
+                                          "IsPageDistillable"),
+              Pointee(true));
+}
+
+IN_PROC_BROWSER_TEST_F(DistillablePageUtilsBrowserTestAllArticles,
+                       RecordPageIsNotDistillableOnNonArticleLoad) {
+  ON_CALL(holder_, OnResult(IsLast()))
+      .WillByDefault(InvokeWithoutArgs(this, &TestOption::QuitSoon));
+
+  ukm::TestAutoSetUkmRecorder ukm_recorder;
+  NavigateAndWait(kNonArticlePath, base::TimeDelta());
+
+  std::vector<const ukm::mojom::UkmEntry*> distillability_entries =
+      ukm_recorder.GetEntriesByName("ReaderModeReceivedDistillability");
+  ASSERT_THAT(distillability_entries, SizeIs(1));
+  EXPECT_THAT(ukm_recorder.GetEntryMetric(distillability_entries.front(),
+                                          "IsPageDistillable"),
+              Pointee(false));
+}
+#endif  // OS_CHROMEOS || OS_LINUX || OS_MACOS || OS_WIN
 
 }  // namespace dom_distiller

@@ -1,0 +1,740 @@
+// Copyright (c) 2019 Vivaldi Technologies AS. All rights reserved
+
+[
+  {
+    "namespace": "contentBlocking",
+    "compiler_options": {
+      "implemented_in": "extensions/api/content_blocking/content_blocking_api.h"
+    },
+    "description": "Provides control over the Adblocking service and other implemented content blocking measures",
+    "types": [
+      {
+        "id": "RuleGroup",
+        "description": "Used to specify whether a specific operation should apply to tracking blocking or adblocking.",
+        "type": "string",
+        "enum": [ "tracking", "ad_blocking" ]
+      },
+      {
+        "id": "ExceptionList",
+        "description": "Used to inform whether the exception list used in a rule group is a list of exemptions or a list for which process is enabled",
+        "type": "string",
+        "enum": [ "process_list", "exempt_list" ]
+      },
+      {
+        "id": "FetchResult",
+        "description": "The result of a fetch operation on a rule source.",
+        "type": "string",
+        "enum": [
+          {
+            "name": "success",
+            "description": "Fetch completed successfully."
+          },
+          {
+            "name": "download_failed",
+            "description": "For an online source, failed to download using the provided URL."
+          },
+          {
+            "name": "file_not_found",
+            "description": "For a local source, the file provided didn't seem to exist."
+          },
+          {
+            "name": "file_read_error",
+            "description": "For a local source, the file provided couldn't be read."
+          },
+          {
+            "name": "file_unsupported",
+            "description": "The rules file is of an invalid format or doesn't contain any valid rule."
+          },
+          {
+            "name": "failed_saving_parsed_rules",
+            "description": "The rules were fetched and compiled properly, but the result couldn't be saved to the profile."
+          },
+          {
+            "name": "unknown",
+            "description": "No fetching attempt has completed yet."
+          }
+        ]
+      },
+      {
+        "id": "RulesInfo",
+        "description": "Information about the rules themselves and more detailed parsing results",
+        "type": "object",
+        "properties": {
+          "valid_rules": {
+            "type": "integer",
+            "description": "The number of entries in the file that resulted in a rule being compiled."
+          },
+          "unsupported_rules": {
+            "type": "integer",
+            "description": "The number of entries in the file that resolved to valid rules that either didn't make sense or are not supported at this time."
+          },
+          "invalid_rules": {
+            "type": "integer",
+            "description": "The number of entries in the file that resolved to valid rules that could not be parsed to a rule or were explicitly against the spec."
+          }
+        }
+      },
+      {
+        "id": "AdBlockMetadata",
+        "description": "Information extracted from the adblock file comments. If the user added a malicous source, these could be anything. Handle with care.",
+        "type": "object",
+        "properties": {
+          "homepage": {
+            "type": "string",
+            "description": "URL pointing to the original website for this list."
+          },
+          "title": {
+            "type": "string",
+            "description": "List name."
+          },
+          "expires": {
+            "type": "integer",
+            "description": "How often the list is refreshed, in hours."
+          },
+          "license": {
+            "type": "string",
+            "description": "URL pointing to licensing info for the list."
+          },
+          "version": {
+            "type": "integer",
+            "description": "Version number of the list."
+          }
+        }
+      },
+      {
+        "id": "RuleSource",
+        "description": "Information about a loaded rule source, including its fetching status and metadata retrieved when extracting rules from it",
+        "type": "object",
+        "properties": {
+          "source_url": {
+            "description": "For an online source, this is the url that was provided when setting it up.",
+            "type": "string"
+          },
+          "source_file":{
+            "description": "For an local source, this is the file that was provided when setting it up.",
+            "type": "string"
+          },
+          "is_from_url": {
+            "description": "indicates whether the rule source is online or local, and which of the source_url and source_file fields is valid",
+            "type": "boolean"
+          },
+          "group": {
+            "description": "which rule group the source is part of",
+            "$ref": "RuleGroup"
+          },
+          "id": {
+            "type": "integer"
+          },
+          "rules_list_checksum": {
+            "description": "Checksum of the compiled rule file derived from this source. This will be the empty string if the rule source has never been fetched succesfully.",
+            "type": "string"
+          },
+          "unsafe_adblock_metadata": {
+            "$ref": "AdBlockMetadata"
+          },
+          "last_update": {
+            "description": "The last time the source was successfully fetched and the corresponding rules updated.",
+            "type": "number"
+          },
+          "next_fetch": {
+            "description": "The next time a fetching and updating from the rule source will be attempted.",
+            "type": "number"
+          },
+          "last_fetch_result": {
+            "description": "The result of the last fetch attempt",
+            "$ref": "FetchResult"
+          },
+          "rules_info": {
+            "$ref": "RulesInfo"
+          },
+          "removable": {
+            "type": "boolean"
+          },
+          "loaded": {
+            "type": "boolean"
+          }
+        }
+      },
+      {
+        "id": "BlockedUrlsInfo",
+        "description": "Information about a blocked URL",
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "blocked_count": {
+            "type": "integer"
+          }
+        }
+      },
+      {
+        "id": "TabBlockedUrlsInfo",
+        "description": "Information about urls that got blocked, per tab",
+        "type": "object",
+        "properties": {
+          "tab_id": {
+            "type": "integer"
+          },
+          "total_blocked_count": {
+            "type": "integer"
+          },
+          "blocked_urls_info": {
+            "type": "array",
+            "items": {
+              "$ref": "BlockedUrlsInfo"
+            }
+          }
+        }
+      }
+    ],
+    "functions": [
+      {
+        "name": "setRuleGroupEnabled",
+        "type": "function",
+        "description": "Changes whether a particular type of blocking is in effect.",
+        "parameters": [
+          {
+            "name": "rule_group",
+            "$ref": "RuleGroup"
+          },
+          {
+            "name": "enabled",
+            "type": "boolean"
+          }
+        ]
+      },
+      {
+        "name": "isRuleGroupEnabled",
+        "type": "function",
+        "description": "Checks whether a specific type of blocking is in effect.",
+        "parameters": [
+          {
+            "name": "rule_group",
+            "$ref": "RuleGroup"
+          },
+          {
+            "name": "callback",
+            "type": "function",
+            "parameters": [
+              {
+                "name": "enabled",
+                "type": "boolean"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "addKnownSourceFromURL",
+        "type": "function",
+        "description": "Adds an online rule source. Newly added sources are automatically enabled.",
+        "parameters": [
+          {
+            "name": "rule_group",
+            "$ref": "RuleGroup"
+          },
+          {
+            "name": "url",
+            "type": "string"
+          },
+          {
+            "name": "callback",
+            "type": "function",
+            "parameters":[
+              {
+                "name": "source_id",
+                "type": "integer"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "addKnownSourceFromFile",
+        "type": "function",
+        "description": "Adds an local rule source. Newly added sources are automatically enabled.",
+        "parameters": [
+          {
+            "name": "rule_group",
+            "$ref": "RuleGroup"
+          },
+          {
+            "name": "file",
+            "type": "string"
+          },
+          {
+            "name": "callback",
+            "type": "function",
+            "parameters":[
+              {
+                "name": "source_id",
+                "type": "integer"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "enableSource",
+        "type": "function",
+        "description": "Enables and loads a known rule source",
+        "parameters": [
+          {
+            "name": "rule_group",
+            "$ref": "RuleGroup"
+          },
+          {
+            "name": "source_id",
+            "type": "integer"
+          }
+        ]
+      },
+      {
+        "name": "disableSource",
+        "type": "function",
+        "description": "Disables and unloads a known rule source",
+        "parameters": [
+          {
+            "name": "rule_group",
+            "$ref": "RuleGroup"
+          },
+          {
+            "name": "source_id",
+            "type": "integer"
+          }
+        ]
+      },
+      {
+        "name": "fetchSourceNow",
+        "type": "function",
+        "description": "Forces fetching of a loaded rule source. Does nothing if a fetch is already in progress",
+        "parameters": [
+          {
+            "name": "rule_group",
+            "$ref": "RuleGroup"
+          },
+          {
+            "name": "source_id",
+            "type": "integer"
+          }
+        ]
+      },
+      {
+        "name": "deleteKnownSource",
+        "type": "function",
+        "description": "Remove a known rule source. The source will be disabled before removal.",
+        "parameters": [
+          {
+            "name": "rule_group",
+            "$ref": "RuleGroup"
+          },
+          {
+            "name": "source_id",
+            "type": "integer"
+          }
+        ]
+      },
+      {
+        "name": "resetPresetSources",
+        "type": "function",
+        "description": "Re-adds all preset sources that were removed by the user.",
+        "parameters": [
+          {
+            "name": "rule_group",
+            "$ref": "RuleGroup"
+          }
+        ]
+      },
+      {
+        "name": "getRuleSource",
+        "type": "function",
+        "description": "Gets detailed information about a known rule source",
+        "parameters": [
+          {
+            "name": "rule_group",
+            "$ref": "RuleGroup"
+          },
+          {
+            "name": "source_id",
+            "type": "integer"
+          },
+          {
+            "name": "callback",
+            "type": "function",
+            "parameters": [
+              {
+                "name": "rule_source",
+                "$ref": "RuleSource"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "getRuleSources",
+        "type": "function",
+        "description": "Gets detailed information about all known rule sources. Loaded sources will have extra information.",
+        "parameters": [
+          {
+            "name": "rule_group",
+            "$ref": "RuleGroup"
+          },
+          {
+            "name": "callback",
+            "type": "function",
+            "parameters": [
+              {
+                "name": "rule_sources",
+                "type": "array",
+                "items": {
+                  "$ref": "RuleSource"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "setActiveExceptionsList",
+        "type": "function",
+        "description": "Sets whether a rule group should use a list of exempted domains or a list of domains to which it applies.",
+        "parameters": [
+          {
+            "name": "rule_group",
+            "$ref": "RuleGroup"
+          },
+          {
+            "name": "state",
+            "$ref": "ExceptionList"
+          }
+        ]
+      },
+      {
+        "name": "getActiveExceptionsList",
+        "type": "function",
+        "description": "Checks whether a rule group is using a list of exempted domains or a list of domains to which it applies",
+        "parameters": [
+          {
+            "name": "rule_group",
+            "$ref": "RuleGroup"
+          },
+          {
+            "name": "callback",
+            "type": "function",
+            "parameters": [
+              {
+                "name": "state",
+                "$ref": "ExceptionList"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "addExceptionForDomain",
+        "type": "function",
+        "description":"Adds an item to the exception list",
+        "parameters": [
+          {
+            "name": "rule_group",
+            "$ref": "RuleGroup"
+          },
+          {
+            "name": "exception_list",
+            "$ref": "ExceptionList"
+          },
+          {
+            "name": "domain",
+            "type": "string"
+          }
+        ]
+      },
+      {
+        "name": "removeExceptionForDomain",
+        "type": "function",
+        "description":"Removes an item from the exception list",
+        "parameters": [
+          {
+            "name": "rule_group",
+            "$ref": "RuleGroup"
+          },
+          {
+            "name": "exception_list",
+            "$ref": "ExceptionList"
+          },
+          {
+            "name": "domain",
+            "type": "string"
+          }
+        ]
+      },
+      {
+        "name": "removeAllExceptions",
+        "type": "function",
+        "description":"Removes all domains from the exception list",
+        "parameters": [
+          {
+            "name": "rule_group",
+            "$ref": "RuleGroup"
+          },
+          {
+            "name": "exception_list",
+            "$ref": "ExceptionList"
+          }
+        ]
+      },
+      {
+        "name": "getExceptions",
+        "type": "function",
+        "description":"Retrieves all domains from the exeption list",
+        "parameters": [
+          {
+            "name": "rule_group",
+            "$ref": "RuleGroup"
+          },
+          {
+            "name": "exception_list",
+            "$ref": "ExceptionList"
+          },
+          {
+            "name": "callback",
+            "type": "function",
+            "parameters":[
+              {
+                "name": "origins",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "getAllExceptionLists",
+        "type": "function",
+        "description":"Retrieves all the exception lists",
+        "parameters": [
+          {
+            "name": "callback",
+            "type": "function",
+            "parameters":[
+              {
+                "name": "origins",
+                "type": "object",
+                "properties": {
+                  "tracking": {
+                    "type": "object",
+                    "properties": {
+                      "process_list": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "exempt_list": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  "ad_blocking": {
+                    "type": "object",
+                    "properties": {
+                      "process_list": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "exempt_list": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "getBlockedUrlsInfo",
+        "type": "function",
+        "description": "Retrieves information about which URLs have been blocked from loading in a given tab",
+        "parameters": [
+          {
+            "name": "rule_group",
+            "$ref": "RuleGroup"
+          },
+          {
+            "name": "tab_ids",
+            "type": "array",
+            "description": "A list of tabs for which to retrieve blocked urls information.",
+            "items": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "callback",
+            "type": "function",
+            "parameters": [
+              {
+                "name": "blocked_urls_info_for_tab",
+                "type": "array",
+                "items": {
+                  "$ref": "TabBlockedUrlsInfo"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "isExemptOfFiltering",
+        "type": "function",
+        "description": "Returns whether a page URL will be exempt from filtering by a given rule group, based on the active exception list.",
+        "parameters": [
+          {
+            "name": "rule_group",
+            "$ref": "RuleGroup"
+          },
+          {
+            "name": "url",
+            "type": "string"
+          },
+          {
+            "name": "callback",
+            "type": "function",
+            "parameters":[
+              {
+                "name": "exempt",
+                "type": "boolean"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "events": [
+      {
+        "name": "onRuleSourceAdded",
+        "type": "function",
+        "description": "Fired when a known rule source has been added",
+        "parameters": [
+          {
+            "name" : "rule_source",
+            "$ref": "RuleSource"
+          }
+        ]
+      },
+      {
+        "name": "onRulesFetchComplete",
+        "type": "function",
+        "description": "Fired when an attempt to fetch rules for a loaded rule source completed, successfully or not.",
+        "parameters": [
+          {
+            "name" : "rule_source",
+            "$ref": "RuleSource"
+          }
+        ]
+      },
+      {
+        "name": "onRuleSourceEnabled",
+        "type": "function",
+        "description": "Fired when a known rule source has been enabled",
+        "parameters": [
+          {
+            "name": "source_id",
+            "type": "integer"
+          },
+          {
+            "name": "rule_group",
+            "$ref": "RuleGroup"
+          }
+        ]
+      },
+      {
+        "name": "onRuleSourceDisabled",
+        "type": "function",
+        "description": "Fired when a known rule source has been disabled",
+        "parameters": [
+          {
+            "name": "source_id",
+            "type": "integer"
+          },
+          {
+            "name": "rule_group",
+            "$ref": "RuleGroup"
+          }
+        ]
+      },
+      {
+        "name": "onRuleSourceRemoved",
+        "type": "function",
+        "description": "Fired when a known rule source has been removed",
+        "parameters": [
+          {
+            "name": "source_id",
+            "type": "integer"
+          },
+          {
+            "name": "rule_group",
+            "$ref": "RuleGroup"
+          }
+        ]
+      },
+      {
+        "name": "onStateChanged",
+        "type": "function",
+        "description": "Fired when a group has been enabled/disabled or when an exception state has changed.",
+        "parameters": [
+          {
+            "name": "rule_group",
+            "$ref": "RuleGroup"
+          }
+        ]
+      },
+      {
+        "name": "onExceptionsChanged",
+        "type": "function",
+        "description": "Fired when the list of exceptions has changed.",
+        "parameters": [
+          {
+            "name": "rule_group",
+            "$ref": "RuleGroup"
+          },
+          {
+            "name": "exception_list",
+            "$ref": "ExceptionList"
+          }
+        ]
+      },
+      {
+        "name": "onUrlsBlocked",
+        "type": "function",
+        "description": "Fired when urls have been blocked by either the ad-blocker or the tracker-blocker. This is fired at most once per second.",
+        "parameters": [
+          {
+            "name": "rule_group",
+            "$ref": "RuleGroup"
+          },
+          {
+            "name": "tab_ids",
+            "type": "array",
+            "items": {
+              "type": "integer"
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

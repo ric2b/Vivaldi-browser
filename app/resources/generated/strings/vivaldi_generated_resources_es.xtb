@@ -7,7 +7,7 @@
 <translation id="1049795001945932310">Configuración de &amp;idioma</translation>
 <translation id="1054153489933238809">Abrir &amp;imagen original en una pestaña nueva</translation>
 <translation id="1056898198331236512">Advertencia</translation>
-<translation id="1084824384139382525">Copiar la &amp;dirección del enlace</translation>
+<translation id="1084824384139382525">Copi&amp;ar la dirección del enlace</translation>
 <translation id="1128109161498068552">No permitir a ningún sitio utilizar mensajes exclusivos del sistema para acceder a los dispositivos MIDI</translation>
 <translation id="1163931534039071049">Ver fuente del &amp;marco</translation>
 <translation id="1165039591588034296">Error</translation>
@@ -47,7 +47,7 @@
 <translation id="1729533290416704613">También controla qué página se muestra al hacer búsquedas desde el omnibox.</translation>
 <translation id="1744108098763830590">página en segundo plano</translation>
 <translation id="176587472219019965">&amp;Nueva ventana</translation>
-<translation id="1769104665586091481">Abrir enlace en una &amp;ventana nueva</translation>
+<translation id="1769104665586091481">Abrir el enlace en una &amp;ventana nueva</translation>
 <translation id="1815083418640426271">Pegar como texto sin formato</translation>
 <translation id="1828901632669367785">Imprimir usando el diálogo del sistema…</translation>
 <translation id="1850508293116537636">Rotar a &amp;derechas</translation>
@@ -66,7 +66,6 @@
 <translation id="2150139952286079145">Buscar destinos</translation>
 <translation id="215753907730220065">Salir de pantalla completa</translation>
 <translation id="2177950615300672361">Pestaña de incógnito: <ph name="TAB_NAME" /></translation>
-<translation id="218070003709087997">Usa un número para indicar cuántas copias quieres imprimir (de 1 a 999).</translation>
 <translation id="219008588003277019">Módulo cliente nativo: <ph name="NEXE_NAME" /></translation>
 <translation id="220138918934036434">Ocultar botón</translation>
 <translation id="2218515861914035131">Pegar como texto sin formato</translation>
@@ -78,11 +77,9 @@
 <translation id="2282146716419988068">Proceso de GPU</translation>
 <translation id="2301382460326681002">El directorio raíz de la extensión no es válido.</translation>
 <translation id="2318143611928805047">Tamaño de papel</translation>
-<translation id="2318923050469484167">Sesión de incógnito actual (<ph name="EMBEDDING" />)</translation>
 <translation id="2322193970951063277">Encabezado y pie de página</translation>
 <translation id="2326931316514688470">&amp;Recargar la aplicación</translation>
 <translation id="2327492829706409234">Habilitar aplicación</translation>
-<translation id="2344028582131185878">Descargas automáticas</translation>
 <translation id="2348176352564285430">Aplicación: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">Selecciona el directorio de la extensión.</translation>
 <translation id="2379281330731083556">Imprimir usando el cuadro de diálogo del sistema… <ph name="SHORTCUT_KEY" /></translation>
@@ -95,11 +92,12 @@
 <translation id="2470702053775288986">Inhabilitadas las extensiones no soportadas</translation>
 <translation id="2476578072172137802">Configuración del sitio</translation>
 <translation id="2482878487686419369">Notificaciones</translation>
+<translation id="2498539833203011245">Minimizar</translation>
 <translation id="2509495747794740764">El valor de la escala debe ser un número entre 10 y 200.</translation>
+<translation id="253557089021624350">Keepalive count</translation>
 <translation id="2546283357679194313">Cookies y datos de sitios</translation>
 <translation id="2550212893339833758">Memoria trasladada al espacio de reserva</translation>
 <translation id="2553440850688409052">Ocultar este complemento</translation>
-<translation id="2580924999637585241">Total: <ph name="NUMBER_OF_SHEETS" /> 1 <ph name="SHEETS_LABEL" /> 2</translation>
 <translation id="26224892172169984">No permitir a los sitios web procesar protocolos</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Volver a habilitar</translation>
@@ -119,7 +117,6 @@
 <translation id="2932883381142163287">Notificar uso inadecuado</translation>
 <translation id="2941112035454246133">Baja</translation>
 <translation id="2972581237482394796">&amp;Rehacer</translation>
-<translation id="299483336428448530">Instalada por tu predecesor.</translation>
 <translation id="3003623123441819449">Caché de CSS</translation>
 <translation id="3008272652534848354">Restablecer permisos</translation>
 <translation id="3012631534724231212">(iframe)</translation>
@@ -159,7 +156,7 @@
 <translation id="345693547134384690">Abrir &amp;imagen en una pestaña nueva</translation>
 <translation id="3494769164076977169">Preguntar cuando un sitio web intente descargar automáticamente archivos tras hacerlo con uno antes (recomendado)</translation>
 <translation id="3505030558724226696">Revocar acceso al dispositivo</translation>
-<translation id="3511307672085573050">Copiar dire&amp;cción del enlace</translation>
+<translation id="3511307672085573050">Copi&amp;ar la dirección del enlace</translation>
 <translation id="3523642406908660543">Preguntar cuando un sitio intente utilizar un complemento para acceder a mi ordenador (recomendado)</translation>
 <translation id="354068948465830244">Puede leer y cambiar datos de sitios web</translation>
 <translation id="3560034655160545939">Revi&amp;sión ortográfica</translation>
@@ -273,7 +270,6 @@
 <translation id="5425042808445046667">Seguir descargando</translation>
 <translation id="5427459444770871191">Rotar a &amp;derechas</translation>
 <translation id="5431318178759467895">Color</translation>
-<translation id="5472133193607270166">Si activas esta opción, los sitios web no podrán personalizar anuncios usando datos de tu actividad integral en tu navegación web. Es posible que algunos sitios no funcionen correctamente.</translation>
 <translation id="5483785310822538350">Revocar acceso al archivo y al dispositivo</translation>
 <translation id="5485102783864353244">Añadir aplicación</translation>
 <translation id="5486561344817861625">Simular reinicio del navegador</translation>
@@ -301,7 +297,6 @@
 <translation id="5804241973901381774">Permisos</translation>
 <translation id="5828633471261496623">Imprimiendo...</translation>
 <translation id="583281660410589416">Desconocido</translation>
-<translation id="5838456317242088717">Sesión de incógnito actual</translation>
 <translation id="5860491529813859533">Activar</translation>
 <translation id="5867841422488265304">Busca o escribe una dirección web</translation>
 <translation id="5908769186679515905">Impedir a los sitios web la ejecución de Flash</translation>
@@ -321,7 +316,6 @@
 <translation id="6147020289383635445">Error al obtener la vista previa de la impresión.</translation>
 <translation id="6156863943908443225">Caché de secuencias de órdenes</translation>
 <translation id="6169666352732958425">No se ha podido emitir el escritorio.</translation>
-<translation id="6196640612572343990">Bloquear cookies de terceros</translation>
 <translation id="6196854373336333322">La extensión <ph name="EXTENSION_NAME" /> ahora controla la configuración del proxy, lo que significa que puede cambiar, deshacer o espiar cualquier acción que hagas online. Si no estás seguro de los motivos por los que se ha producido este cambio, probablemente no haya sido intencionado.</translation>
 <translation id="6206311232642889873">Copia&amp;r imagen</translation>
 <translation id="6239558157302047471">Recargar &amp;marco</translation>
@@ -334,6 +328,7 @@
 <translation id="6295158916970320988">Todos los sitios</translation>
 <translation id="6295855836753816081">Guardando...</translation>
 <translation id="6308937455967653460">Guardar &amp;enlace como...</translation>
+<translation id="6326855256003666642">Keepalive Count</translation>
 <translation id="6374469231428023295">Volver a intentarlo</translation>
 <translation id="6385543213911723544">Los sitios web pueden guardar y consultar datos de cookies</translation>
 <translation id="6398765197997659313">Salir del modo a pantalla completa</translation>
@@ -398,7 +393,7 @@
 <translation id="7701869757853594372">Handles de USUARIO</translation>
 <translation id="7704305437604973648">Tarea</translation>
 <translation id="7710568461918838723">&amp;Emitir…</translation>
-<translation id="7750228210027921155">Imagen sobre imagen</translation>
+<translation id="7750228210027921155">Picture in Picture</translation>
 <translation id="7751260505918304024">Mostrar todo</translation>
 <translation id="7760004034676677601">¿Es esta la página de inicio que esperabas?</translation>
 <translation id="7771452384635174008">Diseño</translation>
@@ -418,7 +413,7 @@
 <translation id="7938594894617528435">Sin conexión actualmente</translation>
 <translation id="7947962633355574091">C&amp;opiar dirección de vídeo</translation>
 <translation id="7966241909927244760">C&amp;opiar dirección de imagen</translation>
-<translation id="7973394300052703468">Ventana Nueva y Privada</translation>
+<translation id="7973394300052703468">Nueva ventana &amp;privada</translation>
 <translation id="7978412674231730200">Clave privada</translation>
 <translation id="7982789257301363584">Red</translation>
 <translation id="7997826902155442747">Prioridad del proceso</translation>
@@ -456,7 +451,7 @@ Guarda tu archivo de clave en un lugar seguro. Lo necesitarás para crear nuevas
 <translation id="8605428685123651449">Memoria de SQLite</translation>
 <translation id="8615618338313291042">Aplicación de incógnito: <ph name="APP_NAME" /></translation>
 <translation id="862750493060684461">Caché de CSS</translation>
-<translation id="8661290697478713397">Abrir enlace en una ventana de incó&amp;gnito</translation>
+<translation id="8661290697478713397">Abrir el enlace en una ventana de incó&amp;gnito</translation>
 <translation id="8664389313780386848">Ver &amp;código fuente de la página</translation>
 <translation id="8708000541097332489">Limpiar al salir</translation>
 <translation id="8714838604780058252">Gráficos de fondo</translation>
@@ -481,10 +476,10 @@ Guarda tu archivo de clave en un lugar seguro. Lo necesitarás para crear nuevas
 <translation id="897939795688207351">En <ph name="ORIGIN" /></translation>
 <translation id="8996526648899750015">Añadir cuenta...</translation>
 <translation id="9003647077635673607">Permitir en todos los dominios</translation>
-<translation id="9027459031423301635">Abrir enlace en una &amp;pestaña nueva</translation>
+<translation id="9027459031423301635">Abrir el enlace en una &amp;pestaña nueva</translation>
 <translation id="9056810968620647706">No se han encontrado coincidencias.</translation>
 <translation id="9137916601698928395">Abrir enlace como <ph name="USER" /></translation>
-<translation id="916607977885256133">Imagen sobre Imagen</translation>
+<translation id="916607977885256133">Picture in Picture</translation>
 <translation id="9170848237812810038">&amp;Deshacer</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" añadida</translation>
 <translation id="9218430445555521422">Establecer como predeterminado</translation>

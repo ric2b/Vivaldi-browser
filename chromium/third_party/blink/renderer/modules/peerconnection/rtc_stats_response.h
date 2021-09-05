@@ -46,9 +46,9 @@ class RTCStatsResponse final : public RTCStatsResponseBase {
   }
   RTCLegacyStatsReport* namedItem(const AtomicString& name);
 
-  void AddStats(const WebRTCLegacyStats&) override;
+  void AddStats(const RTCLegacyStats&) override;
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  private:
   HeapVector<Member<RTCLegacyStatsReport>> result_;

@@ -11,7 +11,11 @@ sourcedir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 is_windows = platform.system() == "Windows"
 is_linux = platform.system() == "Linux"
+is_mac = platform.system() == "Darwin"
 is_android = os.access(os.path.join(sourcedir, ".enable_android"), os.F_OK)
+use_gn_ide_all = os.access(os.path.join(sourcedir, ".enable_gn_all_ide"), os.F_OK)
+use_gn_unique_name = os.access(os.path.join(sourcedir, ".enable_gn_unique_name"), os.F_OK)
+use_gn_goma = os.access(os.path.join(sourcedir, ".enable_gn_goma"), os.F_OK)
 
 # Check python version on Windows
 if is_windows:
@@ -43,8 +47,10 @@ parser.add_argument("--name");
 parser.add_argument("--no-ide", action="store_true");
 parser.add_argument("--ide")
 parser.add_argument("--ide-all", action="store_true");
+parser.add_argument("--ide-unique-name", action="store_true");
 parser.add_argument("--official", action="store_true");
 parser.add_argument("--static", action="store_true");
+parser.add_argument("--goma", action="store_true");
 parser.add_argument("--args-gn")
 parser.add_argument("args", nargs=argparse.REMAINDER);
 
@@ -55,6 +61,7 @@ gclient_gni_content = """checkout_nacl=false
 checkout_oculus_sdk=false
 checkout_openxr=false
 build_with_chromium=true
+checkout_google_benchmark=false
 """
 
 gclient_gni_file_name = os.path.join(sourcedir, "chromium/build/config/gclient_args.gni")
@@ -140,7 +147,7 @@ if args.refresh or args.bootstrap or not os.access(gn_path, os.F_OK):
   if full_bootstrap:
     def do_full_bootstrap():
       extra_bootstrap_args = []
-      if os.access(os.path.join(sourcedir, "thirdparty", "gn", "last_commit_position.h"), os.F_OK):
+      if os.access(os.path.join(sourcedir, "thirdparty", "gn", "src", "last_commit_position.h"), os.F_OK):
         extra_bootstrap_args.append("--no-last-commit-position")
       if subprocess.call(["python",
         os.path.join(sourcedir, "thirdparty", "gn", "build",
@@ -181,27 +188,44 @@ if args.official:
 if args.static:
   gn_defines += " is_component_build=false"
 
-user_arg_files = []
-user_arg_files.append(os.path.expanduser("~/.gn/args.gn"))
-if args.args_gn:
-  user_arg_files.append(args.args_gn)
-user_arg_files.append(os.path.abspath("args.gn"))
+if  args.goma or use_gn_goma:
+  _paths = os.environ["PATH"].split(os.pathsep)
+  goma_path = "bin/goma/goma-"
+  goma_cc = "gomacc"
+  if is_windows:
+    goma_cc = goma_cc+".exe"
+    goma_path = goma_path+"win"
+  elif is_mac:
+    goma_path = goma_path+"mac"
+  else:
+    goma_path = goma_path+"linux"
 
-
-tmp_args = []
-for f in user_arg_files:
-  if f and os.access(f, os.F_OK):
-    if is_windows:
-       # convert to gn absolute file system label
-      f = f.replace("\\", "/")
-      if not args.args_gn:
-        f= "/"+f
-    tmp_args.append(f)
-user_arg_files = tmp_args
+  goma_cand = None
+  for _p in _paths:
+    goma_cand = os.path.join(_p, goma_path, goma_cc)
+    if os.access(goma_cand, os.F_OK):
+      break
+    goma_cand = None
+  if goma_cand:
+    gn_defines += ' use_goma=true goma_dir="{}"'.format(os.path.join(_p, goma_path))
+  else:
+    print("NOTE! Goma was not found and has not been enabled!")
 
 if args.refresh or not args.args:
   is_builder = os.environ.get("CHROME_HEADLESS", 0) != 0
   ide_profile_name = args.name or os.path.basename(sourcedir)
+  if (args.ide_unique_name or use_gn_unique_name) and not args.name and ide_profile_name.lower() == "vivaldi":
+    test_drive, test_dir = os.path.splitdrive(os.path.dirname(sourcedir))
+    test_dir = test_dir.replace("\\","/")
+    while test_dir and test_dir != "/":
+      dirname = os.path.basename(test_dir)
+      ide_profile_name = dirname+"_"+ide_profile_name
+      if dirname.lower() not in ["src", "vivaldi"]:
+        break
+      test_dir = os.path.dirname(test_dir)
+    if (test_dir == "/" or not test_dir) and test_drive:
+      ide_profile_name = test_drive[0]+"_"+ide_profile_name
+
   ide_kind = args.ide or os.environ.get("GN_IDE", None)
   produce_ide = not args.no_ide and ide_kind != "None" and not is_builder
   if produce_ide and not ide_kind:
@@ -214,19 +238,38 @@ if args.refresh or not args.args:
 
   platform_target=' target_os="android"' if is_android else ""
 
-  include_arg = "".join(['import(\"'+ f + '\") ' for f in user_arg_files])
+  def include_arg(mode):
+    user_arg_files = []
+    user_arg_files.append(os.path.expanduser("~/.gn/args.gn"))
+    if args.args_gn:
+      user_arg_files.append(args.args_gn)
+    user_arg_files.append(os.path.abspath("args.gn"))
+    user_arg_files.append(os.path.abspath("args.{}.gn".format(mode)))
+
+    tmp_args = []
+    for f in user_arg_files:
+      if f and os.access(f, os.F_OK):
+        if is_windows:
+           # convert to gn absolute file system label
+          f = f.replace("\\", "/")
+          if not args.args_gn:
+            f= "/"+f
+        tmp_args.append(f)
+    user_arg_files = tmp_args
+
+    return "".join(['import(\"'+ f + '\") ' for f in user_arg_files])
 
   profiles = [
       # args MUST be unquoted. are passed directly to the command
-      ("out/Release", ['--args='+ include_arg +'is_debug=false'+platform_target+' ' + gn_defines]),
+      ("out/Release", ['--args='+ include_arg("Release") +'is_debug=false'+platform_target+' ' + gn_defines]),
     ]
   if not is_builder and not args.official:
-    profiles.append(("out/Debug", ['--args='+ include_arg +'is_debug=true'+platform_target+' ' + gn_defines]))
+    profiles.append(("out/Debug", ['--args='+ include_arg("Debug") +'is_debug=true'+platform_target+' ' + gn_defines]))
   if is_windows and is_builder:
     profiles.append(("out/Release_x64",
-                    ['--args='+ include_arg +'is_debug=false target_cpu="x64"'+gn_defines]))
+                    ['--args='+ include_arg("Release_x64") +'is_debug=false target_cpu="x64"'+gn_defines]))
 
-  if args.ide_all:
+  if args.ide_all or use_gn_ide_all:
     ide_profile_name += "_all"
 
   for (target, target_args ) in profiles:
@@ -236,7 +279,7 @@ if args.refresh or not args.args:
         "--ide="+ide_kind,
         #"--no-deps",
         ]
-      if not args.ide_all:
+      if not (args.ide_all or use_gn_ide_all):
         ide_args.append('--filters=:vivaldi')
 
       name = ide_profile_name+"_"+os.path.basename(target)

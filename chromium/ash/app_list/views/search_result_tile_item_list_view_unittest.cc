@@ -20,8 +20,10 @@
 #include "base/test/scoped_feature_list.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/accessibility/ax_node_data.h"
+#include "ui/base/l10n/l10n_util.h"
+#include "ui/strings/grit/ui_strings.h"
 #include "ui/views/controls/textfield/textfield.h"
-#include "ui/views/test/views_test_base.h"
+#include "ui/views/test/widget_test.h"
 
 namespace ash {
 
@@ -36,11 +38,23 @@ constexpr size_t kRecommendedAppsWithDisplayIndex = 3;
 }  // namespace
 
 class SearchResultTileItemListViewTest
-    : public views::ViewsTestBase,
+    : public views::test::WidgetTest,
       public ::testing::WithParamInterface<std::pair<bool, bool>> {
  public:
   SearchResultTileItemListViewTest() = default;
   ~SearchResultTileItemListViewTest() override = default;
+
+  // Overridden from testing::Test:
+  void SetUp() override {
+    views::test::WidgetTest::SetUp();
+    widget_ = CreateTopLevelPlatformWidget();
+  }
+
+  void TearDown() override {
+    view_.reset();
+    widget_->CloseNow();
+    views::test::WidgetTest::TearDown();
+  }
 
  protected:
   void CreateSearchResultTileItemListView() {
@@ -77,6 +91,9 @@ class SearchResultTileItemListViewTest
     textfield_ = std::make_unique<views::Textfield>();
     view_ = std::make_unique<SearchResultTileItemListView>(
         nullptr, textfield_.get(), &view_delegate_);
+    widget_->SetBounds(gfx::Rect(0, 0, 300, 200));
+    widget_->GetContentsView()->AddChildView(view_.get());
+    widget_->Show();
     view_->SetResults(view_delegate_.GetSearchModel()->results());
   }
 
@@ -127,11 +144,10 @@ class SearchResultTileItemListViewTest
         std::unique_ptr<TestSearchResult> result =
             std::make_unique<TestSearchResult>();
         result->set_result_id("RecommendedApp " + base::NumberToString(i));
-        result->set_display_type(SearchResultDisplayType::kRecommendation);
+        result->set_display_type(SearchResultDisplayType::kTile);
+        result->set_is_recommendation(true);
         result->set_result_type(
             AppListSearchResultType::kPlayStoreReinstallApp);
-        result->set_display_location(
-            SearchResultDisplayLocation::kTileListContainer);
         result->set_display_index(SearchResultDisplayIndex::kSixthIndex);
         result->set_title(base::ASCIIToUTF16("RecommendedApp ") +
                           base::NumberToString16(i));
@@ -189,11 +205,10 @@ class SearchResultTileItemListViewTest
         std::unique_ptr<TestSearchResult> result =
             std::make_unique<TestSearchResult>();
         result->set_result_id("RecommendedApp " + base::NumberToString(i));
-        result->set_display_type(SearchResultDisplayType::kRecommendation);
+        result->set_display_type(SearchResultDisplayType::kTile);
+        result->set_is_recommendation(true);
         result->set_result_type(
             AppListSearchResultType::kPlayStoreReinstallApp);
-        result->set_display_location(
-            SearchResultDisplayLocation::kTileListContainer);
         result->set_display_index(display_indexes[i]);
         result->set_title(base::ASCIIToUTF16("RecommendedApp ") +
                           base::NumberToString16(i));
@@ -225,6 +240,7 @@ class SearchResultTileItemListViewTest
  private:
   test::AppListTestViewDelegate view_delegate_;
   std::unique_ptr<SearchResultTileItemListView> view_;
+  views::Widget* widget_;
   std::unique_ptr<views::Textfield> textfield_;
   base::test::ScopedFeatureList scoped_feature_list_;
 
@@ -263,8 +279,10 @@ TEST_P(SearchResultTileItemListViewTest, Basic) {
     ui::AXNodeData node_data;
     view()->children()[first_child + i * child_step]->GetAccessibleNodeData(
         &node_data);
-    EXPECT_EQ(ax::mojom::Role::kButton, node_data.role);
-    EXPECT_EQ("InstalledApp " + base::NumberToString(i),
+    EXPECT_EQ(ax::mojom::Role::kListBoxOption, node_data.role);
+    EXPECT_EQ(l10n_util::GetStringFUTF8(
+                  IDS_APP_ACCESSIBILITY_INSTALLED_APP_ANNOUNCEMENT,
+                  base::UTF8ToUTF16("InstalledApp " + base::NumberToString(i))),
               node_data.GetStringAttribute(ax::mojom::StringAttribute::kName));
   }
 
@@ -277,11 +295,14 @@ TEST_P(SearchResultTileItemListViewTest, Basic) {
     view()
         ->children()[first_child + (i + kInstalledApps) * child_step]
         ->GetAccessibleNodeData(&node_data);
-    EXPECT_EQ(ax::mojom::Role::kButton, node_data.role);
-    EXPECT_EQ("PlayStoreApp " + base::NumberToString(i) + ", Star rating " +
-                  base::NumberToString(i + 1) + ".0, Price " +
-                  base::NumberToString(i),
-              node_data.GetStringAttribute(ax::mojom::StringAttribute::kName));
+    EXPECT_EQ(ax::mojom::Role::kListBoxOption, node_data.role);
+    EXPECT_EQ(
+        l10n_util::GetStringFUTF8(
+            IDS_APP_ACCESSIBILITY_ARC_APP_ANNOUNCEMENT,
+            base::UTF8ToUTF16("PlayStoreApp " + base::NumberToString(i))) +
+            ", Star rating " + base::NumberToString(i + 1) + ".0, Price " +
+            base::NumberToString(i),
+        node_data.GetStringAttribute(ax::mojom::StringAttribute::kName));
   }
 
   // Recommendations.
@@ -291,10 +312,13 @@ TEST_P(SearchResultTileItemListViewTest, Basic) {
     view()
         ->children()[first_child + (i + start_index) * child_step]
         ->GetAccessibleNodeData(&node_data);
-    EXPECT_EQ(ax::mojom::Role::kButton, node_data.role);
-    EXPECT_EQ("RecommendedApp " + base::NumberToString(i) + ", Star rating " +
-                  base::NumberToString(i + 1) + ".0, App recommendation",
-              node_data.GetStringAttribute(ax::mojom::StringAttribute::kName));
+    EXPECT_EQ(ax::mojom::Role::kListBoxOption, node_data.role);
+    EXPECT_EQ(
+        l10n_util::GetStringFUTF8(
+            IDS_APP_ACCESSIBILITY_APP_RECOMMENDATION_ARC,
+            base::UTF8ToUTF16("RecommendedApp " + base::NumberToString(i))) +
+            ", Star rating " + base::NumberToString(i + 1) + ".0",
+        node_data.GetStringAttribute(ax::mojom::StringAttribute::kName));
   }
 
   ResetOpenResultCount();
@@ -332,10 +356,13 @@ TEST_P(SearchResultTileItemListViewTest, TestRecommendations) {
     ui::AXNodeData node_data;
     view()->children()[first_index + i * child_step]->GetAccessibleNodeData(
         &node_data);
-    EXPECT_EQ(ax::mojom::Role::kButton, node_data.role);
-    EXPECT_EQ("RecommendedApp " + base::NumberToString(i) + ", Star rating " +
-                  base::NumberToString(i + 1) + ".0, App recommendation",
-              node_data.GetStringAttribute(ax::mojom::StringAttribute::kName));
+    EXPECT_EQ(ax::mojom::Role::kListBoxOption, node_data.role);
+    EXPECT_EQ(
+        l10n_util::GetStringFUTF8(
+            IDS_APP_ACCESSIBILITY_APP_RECOMMENDATION_ARC,
+            base::UTF8ToUTF16("RecommendedApp " + base::NumberToString(i))) +
+            ", Star rating " + base::NumberToString(i + 1) + ".0",
+        node_data.GetStringAttribute(ax::mojom::StringAttribute::kName));
   }
 }
 

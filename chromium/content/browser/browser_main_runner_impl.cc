@@ -10,7 +10,6 @@
 #include "base/debug/leak_annotations.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
-#include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/run_loop.h"
 #include "base/synchronization/atomic_flag.h"
@@ -101,7 +100,8 @@ int BrowserMainRunnerImpl::Initialize(const MainFunctionParams& parameters) {
     main_loop_->Init();
 
     if (parameters.created_main_parts_closure) {
-      parameters.created_main_parts_closure->Run(main_loop_->parts());
+      std::move(*parameters.created_main_parts_closure)
+          .Run(main_loop_->parts());
       delete parameters.created_main_parts_closure;
     }
 

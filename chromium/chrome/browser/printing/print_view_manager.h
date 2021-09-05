@@ -5,13 +5,11 @@
 #ifndef CHROME_BROWSER_PRINTING_PRINT_VIEW_MANAGER_H_
 #define CHROME_BROWSER_PRINTING_PRINT_VIEW_MANAGER_H_
 
-#include <map>
-
 #include "base/macros.h"
 #include "chrome/browser/printing/print_view_manager_base.h"
-#include "components/printing/common/print.mojom.h"
+#include "components/printing/common/print.mojom-forward.h"
 #include "content/public/browser/web_contents_user_data.h"
-#include "mojo/public/cpp/bindings/associated_remote.h"
+#include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "printing/buildflags/buildflags.h"
 
 namespace content {
@@ -46,7 +44,7 @@ class PrintViewManager : public PrintViewManagerBase,
   // the print document.
   bool PrintPreviewWithPrintRenderer(
       content::RenderFrameHost* rfh,
-      mojom::PrintRendererAssociatedPtrInfo print_renderer);
+      mojo::PendingAssociatedRemote<mojom::PrintRenderer> print_renderer);
 
   // Notify PrintViewManager that print preview is starting in the renderer for
   // a particular WebNode.
@@ -82,19 +80,15 @@ class PrintViewManager : public PrintViewManagerBase,
 
   struct FrameDispatchHelper;
 
-  // Helper method to fetch the PrintRenderFrame associated remote interface
-  // pointer.
-  const mojo::AssociatedRemote<printing::mojom::PrintRenderFrame>&
-  GetPrintRenderFrame(content::RenderFrameHost* rfh);
-
   // Helper method for PrintPreviewNow() and PrintPreviewWithRenderer().
   // Initiate print preview of the current document by first notifying the
   // renderer. Since this happens asynchronously, the print preview dialog
   // creation will not be completed on the return of this function. Returns
   // false if print preview is impossible at the moment.
-  bool PrintPreview(content::RenderFrameHost* rfh,
-                    mojom::PrintRendererAssociatedPtrInfo print_renderer,
-                    bool has_selection);
+  bool PrintPreview(
+      content::RenderFrameHost* rfh,
+      mojo::PendingAssociatedRemote<mojom::PrintRenderer> print_renderer,
+      bool has_selection);
 
   // IPC Message handlers.
   void OnDidShowPrintDialog(content::RenderFrameHost* rfh);
@@ -124,13 +118,6 @@ class PrintViewManager : public PrintViewManagerBase,
   // Indicates whether we're switching from print preview to system dialog. This
   // flag is true between PrintForSystemDialogNow() and PrintPreviewDone().
   bool is_switching_to_system_dialog_ = false;
-
-  // Stores a PrintRenderFrame associated remote with the RenderFrameHost used
-  // to bind it. The PrintRenderFrame is used to transmit mojo interface method
-  // calls to the associated receiver.
-  std::map<content::RenderFrameHost*,
-           mojo::AssociatedRemote<printing::mojom::PrintRenderFrame>>
-      print_render_frames_;
 
   WEB_CONTENTS_USER_DATA_KEY_DECL();
 

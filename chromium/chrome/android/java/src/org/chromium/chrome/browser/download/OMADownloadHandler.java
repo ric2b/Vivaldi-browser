@@ -11,19 +11,20 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Environment;
 import android.os.ParcelFileDescriptor;
 import android.provider.Browser;
-import android.support.v7.app.AlertDialog;
 import android.text.TextUtils;
 import android.util.LongSparseArray;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.webkit.URLUtil;
 import android.widget.TextView;
+
+import androidx.annotation.VisibleForTesting;
+import androidx.appcompat.app.AlertDialog;
 
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
@@ -32,17 +33,17 @@ import org.xmlpull.v1.XmlPullParserFactory;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.BuildInfo;
 import org.chromium.base.ContentUriUtils;
-import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.ObserverList;
 import org.chromium.base.PackageManagerUtils;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.base.task.AsyncTask;
-import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.content.ContentUtils;
 import org.chromium.chrome.browser.download.DownloadManagerBridge.DownloadEnqueueRequest;
 import org.chromium.chrome.browser.download.DownloadManagerBridge.DownloadEnqueueResponse;
 import org.chromium.chrome.browser.download.items.OfflineContentAggregatorFactory;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
+import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.download.R;
 import org.chromium.components.download.DownloadCollectionBridge;
 import org.chromium.components.offline_items_collection.LegacyHelpers;
@@ -89,13 +90,6 @@ public class OMADownloadHandler extends BroadcastReceiver {
     public interface TestObserver { void onDownloadEnqueued(long downloadId); }
 
     private static final String TAG = "OMADownloadHandler";
-    private static final String PENDING_OMA_DOWNLOADS = "PendingOMADownloads";
-
-    // MIME types for OMA downloads.
-    public static final String OMA_DOWNLOAD_DESCRIPTOR_MIME = "application/vnd.oma.dd+xml";
-    public static final String OMA_DRM_MESSAGE_MIME = "application/vnd.oma.drm.message";
-    public static final String OMA_DRM_CONTENT_MIME = "application/vnd.oma.drm.content";
-    public static final String OMA_DRM_RIGHTS_MIME = "application/vnd.oma.drm.rights+wbxml";
 
     // Valid download descriptor attributes.
     protected static final String OMA_TYPE = "type";
@@ -126,7 +120,7 @@ public class OMADownloadHandler extends BroadcastReceiver {
     private static final String DOWNLOAD_STATUS_LOADER_ERROR = "954 Loader Error \n\r";
 
     private final Context mContext;
-    private final SharedPreferences mSharedPrefs;
+    private final SharedPreferencesManager mSharedPrefs;
     private final LongSparseArray<DownloadItem> mSystemDownloadIdMap =
             new LongSparseArray<DownloadItem>();
     private final LongSparseArray<OMAInfo> mPendingOMADownloads =
@@ -209,8 +203,8 @@ public class OMADownloadHandler extends BroadcastReceiver {
          */
         String getDrmType() {
             for (String type : mTypes) {
-                if (type.equalsIgnoreCase(OMA_DRM_MESSAGE_MIME)
-                        || type.equalsIgnoreCase(OMA_DRM_CONTENT_MIME)) {
+                if (type.equalsIgnoreCase(MimeUtils.OMA_DRM_MESSAGE_MIME)
+                        || type.equalsIgnoreCase(MimeUtils.OMA_DRM_CONTENT_MIME)) {
                     return type;
                 }
             }
@@ -259,7 +253,7 @@ public class OMADownloadHandler extends BroadcastReceiver {
     /** Constructor. */
     public OMADownloadHandler(Context context) {
         mContext = context;
-        mSharedPrefs = ContextUtils.getAppSharedPreferences();
+        mSharedPrefs = SharedPreferencesManager.getInstance();
     }
 
     /**
@@ -295,7 +289,7 @@ public class OMADownloadHandler extends BroadcastReceiver {
             OMAInfo omaInfo = null;
             final DownloadManager manager =
                     (DownloadManager) mContext.getSystemService(Context.DOWNLOAD_SERVICE);
-            boolean isContentUri = (mDownloadId == DownloadItem.INVALID_DOWNLOAD_ID)
+            boolean isContentUri = (mDownloadId == DownloadConstants.INVALID_DOWNLOAD_ID)
                     && ContentUriUtils.isContentUri(mDownloadInfo.getFilePath());
             try {
                 ParcelFileDescriptor fd = null;
@@ -341,14 +335,14 @@ public class OMADownloadHandler extends BroadcastReceiver {
             // Send notification if required attributes are missing.
             if (omaInfo.getTypes().isEmpty() || getSize(omaInfo) <= 0
                     || omaInfo.isValueEmpty(OMA_OBJECT_URI)) {
-                sendNotification(omaInfo, mDownloadInfo, DownloadItem.INVALID_DOWNLOAD_ID,
+                sendNotification(omaInfo, mDownloadInfo, DownloadConstants.INVALID_DOWNLOAD_ID,
                         DOWNLOAD_STATUS_INVALID_DESCRIPTOR);
                 return;
             }
             // Check version. Null version are treated as 1.0.
             String version = omaInfo.getValue(OMA_DD_VERSION);
             if (version != null && !version.startsWith("1.")) {
-                sendNotification(omaInfo, mDownloadInfo, DownloadItem.INVALID_DOWNLOAD_ID,
+                sendNotification(omaInfo, mDownloadInfo, DownloadConstants.INVALID_DOWNLOAD_ID,
                         DOWNLOAD_STATUS_INVALID_DDVERSION);
                 return;
             }
@@ -374,8 +368,8 @@ public class OMADownloadHandler extends BroadcastReceiver {
         String action = intent.getAction();
         if (!DownloadManager.ACTION_DOWNLOAD_COMPLETE.equals(action)) return;
         long downloadId = intent.getLongExtra(
-                DownloadManager.EXTRA_DOWNLOAD_ID, DownloadItem.INVALID_DOWNLOAD_ID);
-        if (downloadId == DownloadItem.INVALID_DOWNLOAD_ID) return;
+                DownloadManager.EXTRA_DOWNLOAD_ID, DownloadConstants.INVALID_DOWNLOAD_ID);
+        if (downloadId == DownloadConstants.INVALID_DOWNLOAD_ID) return;
         boolean isPendingOMADownload = isPendingOMADownload(downloadId);
         boolean isInOMASharedPrefs = isDownloadIdInOMASharedPrefs(downloadId);
         if (isPendingOMADownload || isInOMASharedPrefs) {
@@ -522,8 +516,7 @@ public class OMADownloadHandler extends BroadcastReceiver {
             if (which == AlertDialog.BUTTON_POSITIVE) {
                 downloadOMAContent(downloadId, downloadInfo, omaInfo);
             } else {
-                sendNotification(omaInfo, downloadInfo,
-                        DownloadItem.INVALID_DOWNLOAD_ID,
+                sendNotification(omaInfo, downloadInfo, DownloadConstants.INVALID_DOWNLOAD_ID,
                         DOWNLOAD_STATUS_USER_CANCELLED);
             }
         };
@@ -554,7 +547,7 @@ public class OMADownloadHandler extends BroadcastReceiver {
         DialogInterface.OnClickListener clickListener = (dialog, which) -> {
             if (which == AlertDialog.BUTTON_POSITIVE) {
                 sendInstallNotificationAndNextStep(omaInfo, downloadInfo,
-                        DownloadItem.INVALID_DOWNLOAD_ID, statusMessage);
+                        DownloadConstants.INVALID_DOWNLOAD_ID, statusMessage);
             }
         };
         new AlertDialog
@@ -608,10 +601,10 @@ public class OMADownloadHandler extends BroadcastReceiver {
         Intent intent = new Intent(Intent.ACTION_VIEW);
         Uri uri = Uri.parse(omaInfo.getValue(OMA_OBJECT_URI));
         for (String type : omaInfo.getTypes()) {
-            if (!type.equalsIgnoreCase(OMA_DRM_MESSAGE_MIME)
-                    && !type.equalsIgnoreCase(OMA_DRM_CONTENT_MIME)
-                    && !type.equalsIgnoreCase(OMA_DOWNLOAD_DESCRIPTOR_MIME)
-                    && !type.equalsIgnoreCase(OMA_DRM_RIGHTS_MIME)) {
+            if (!type.equalsIgnoreCase(MimeUtils.OMA_DRM_MESSAGE_MIME)
+                    && !type.equalsIgnoreCase(MimeUtils.OMA_DRM_CONTENT_MIME)
+                    && !type.equalsIgnoreCase(MimeUtils.OMA_DOWNLOAD_DESCRIPTOR_MIME)
+                    && !type.equalsIgnoreCase(MimeUtils.OMA_DRM_RIGHTS_MIME)) {
                 intent.setDataAndType(uri, type);
                 if (!PackageManagerUtils
                                 .queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
@@ -782,13 +775,6 @@ public class OMADownloadHandler extends BroadcastReceiver {
             return;
         }
 
-        if (!TextUtils.isEmpty(response.filePath)) {
-            DownloadInfo newInfo =
-                    DownloadInfo.Builder.fromDownloadInfo(downloadItem.getDownloadInfo())
-                            .setFilePath(response.filePath)
-                            .build();
-            downloadItem.setDownloadInfo(newInfo);
-        }
         if (mSystemDownloadIdMap.size() == 0) {
             mContext.registerReceiver(
                     this, new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE));
@@ -835,10 +821,8 @@ public class OMADownloadHandler extends BroadcastReceiver {
             builder.setBytesTotalSize(result.bytesTotal);
             if (!TextUtils.isEmpty(result.fileName)) builder.setFileName(result.fileName);
             if (!TextUtils.isEmpty(result.mimeType)) builder.setMimeType(result.mimeType);
+            builder.setFilePath(result.filePath);
 
-            // Since the requested file path may not be same as the actual file path, set it to
-            // null. This will result in using contentUri instead.
-            builder.setFilePath(null);
             item.setDownloadInfo(builder.build());
 
             showDownloadsUi(downloadId, item, result, installNotifyURI);
@@ -858,11 +842,16 @@ public class OMADownloadHandler extends BroadcastReceiver {
 
             @Override
             protected void onPostExecute(Boolean canResolve) {
-                if (result.downloadStatus == DownloadManagerService.DownloadStatus.COMPLETE) {
+                if (result.downloadStatus == DownloadStatus.COMPLETE) {
+                    DownloadInfo.Builder builder = item.getDownloadInfo() == null
+                            ? new DownloadInfo.Builder()
+                            : DownloadInfo.Builder.fromDownloadInfo(item.getDownloadInfo());
+                    builder.setFilePath(result.filePath);
+                    item.setDownloadInfo(builder.build());
                     onDownloadCompleted(item.getDownloadInfo(), downloadId, installNotifyURI);
                     removeOMADownloadFromSharedPrefs(downloadId);
                     showDownloadOnInfoBar(item, result.downloadStatus);
-                } else if (result.downloadStatus == DownloadManagerService.DownloadStatus.FAILED) {
+                } else if (result.downloadStatus == DownloadStatus.FAILED) {
                     onDownloadFailed(item.getDownloadInfo(), downloadId, result.failureReason,
                             installNotifyURI);
                     removeOMADownloadFromSharedPrefs(downloadId);
@@ -878,11 +867,11 @@ public class OMADownloadHandler extends BroadcastReceiver {
                 DownloadManagerService.getDownloadManagerService().getInfoBarController(
                         downloadItem.getDownloadInfo().isOffTheRecord());
         if (infobarController == null) return;
-        OfflineItem offlineItem = DownloadInfo.createOfflineItem(downloadItem.getDownloadInfo());
+        OfflineItem offlineItem = DownloadItem.createOfflineItem(downloadItem);
         offlineItem.id.namespace = LegacyHelpers.LEGACY_ANDROID_DOWNLOAD_NAMESPACE;
-        if (downloadStatus == DownloadManagerService.DownloadStatus.COMPLETE) {
+        if (downloadStatus == DownloadStatus.COMPLETE) {
             offlineItem.state = OfflineItemState.COMPLETE;
-        } else if (downloadStatus == DownloadManagerService.DownloadStatus.FAILED) {
+        } else if (downloadStatus == DownloadStatus.FAILED) {
             offlineItem.state = OfflineItemState.FAILED;
         }
 
@@ -893,8 +882,9 @@ public class OMADownloadHandler extends BroadcastReceiver {
      * Clear any pending OMA downloads by reading them from shared prefs.
      */
     void clearPendingOMADownloads() {
-        if (mSharedPrefs.contains(PENDING_OMA_DOWNLOADS)) {
-            Set<String> omaDownloads = getStoredDownloadInfo(mSharedPrefs, PENDING_OMA_DOWNLOADS);
+        if (mSharedPrefs.contains(ChromePreferenceKeys.DOWNLOAD_PENDING_OMA_DOWNLOADS)) {
+            Set<String> omaDownloads = getStoredDownloadInfo(
+                    mSharedPrefs, ChromePreferenceKeys.DOWNLOAD_PENDING_OMA_DOWNLOADS);
             for (String omaDownload : omaDownloads) {
                 OMAEntry entry = OMAEntry.parseOMAEntry(omaDownload);
                 clearPendingOMADownload(entry.mDownloadId, entry.mInstallNotifyURI);
@@ -908,7 +898,8 @@ public class OMADownloadHandler extends BroadcastReceiver {
      * @param type Type of the information to retrieve.
      * @return download information saved to the SharedPrefs for the given type.
      */
-    private static Set<String> getStoredDownloadInfo(SharedPreferences sharedPrefs, String type) {
+    private static Set<String> getStoredDownloadInfo(
+            SharedPreferencesManager sharedPrefs, String type) {
         return DownloadManagerService.getStoredDownloadInfo(sharedPrefs, type);
     }
 
@@ -921,7 +912,7 @@ public class OMADownloadHandler extends BroadcastReceiver {
      * @param downloadInfo Information to be saved.
      */
     static void storeDownloadInfo(
-            SharedPreferences sharedPrefs, String type, Set<String> downloadInfo) {
+            SharedPreferencesManager sharedPrefs, String type, Set<String> downloadInfo) {
         DownloadManagerService.storeDownloadInfo(
                 sharedPrefs, type, downloadInfo, false /* forceCommit */);
     }
@@ -1055,7 +1046,7 @@ public class OMADownloadHandler extends BroadcastReceiver {
         protected void onPostExecute(Boolean success) {
             if (success) {
                 showNextUrlDialog(mOMAInfo);
-            } else if (mDownloadId != DownloadItem.INVALID_DOWNLOAD_ID) {
+            } else if (mDownloadId != DownloadConstants.INVALID_DOWNLOAD_ID) {
                 // Remove the downloaded content.
                 ((DownloadManager) mContext.getSystemService(Context.DOWNLOAD_SERVICE))
                         .remove(mDownloadId);
@@ -1068,9 +1059,11 @@ public class OMADownloadHandler extends BroadcastReceiver {
      * @param omaInfo OMA download information to save.
      */
     private void addOMADownloadToSharedPrefs(String omaInfo) {
-        Set<String> omaDownloads = getStoredDownloadInfo(mSharedPrefs, PENDING_OMA_DOWNLOADS);
+        Set<String> omaDownloads = getStoredDownloadInfo(
+                mSharedPrefs, ChromePreferenceKeys.DOWNLOAD_PENDING_OMA_DOWNLOADS);
         omaDownloads.add(omaInfo);
-        storeDownloadInfo(mSharedPrefs, PENDING_OMA_DOWNLOADS, omaDownloads);
+        storeDownloadInfo(
+                mSharedPrefs, ChromePreferenceKeys.DOWNLOAD_PENDING_OMA_DOWNLOADS, omaDownloads);
     }
 
     /**
@@ -1078,12 +1071,14 @@ public class OMADownloadHandler extends BroadcastReceiver {
      * @param downloadId ID to be removed.
      */
     private void removeOMADownloadFromSharedPrefs(long downloadId) {
-        Set<String> omaDownloads = getStoredDownloadInfo(mSharedPrefs, PENDING_OMA_DOWNLOADS);
+        Set<String> omaDownloads = getStoredDownloadInfo(
+                mSharedPrefs, ChromePreferenceKeys.DOWNLOAD_PENDING_OMA_DOWNLOADS);
         for (String omaDownload : omaDownloads) {
             OMAEntry entry = OMAEntry.parseOMAEntry(omaDownload);
             if (entry.mDownloadId == downloadId) {
                 omaDownloads.remove(omaDownload);
-                storeDownloadInfo(mSharedPrefs, PENDING_OMA_DOWNLOADS, omaDownloads);
+                storeDownloadInfo(mSharedPrefs, ChromePreferenceKeys.DOWNLOAD_PENDING_OMA_DOWNLOADS,
+                        omaDownloads);
                 return;
             }
         }
@@ -1092,10 +1087,11 @@ public class OMADownloadHandler extends BroadcastReceiver {
     /**
      * Check if a download ID is in OMA SharedPrefs.
      * @param downloadId Download identifier to check.
-     * @param true if it is in the SharedPrefs, or false otherwise.
+     * @return true if it is in the SharedPrefs, or false otherwise.
      */
     private boolean isDownloadIdInOMASharedPrefs(long downloadId) {
-        Set<String> omaDownloads = getStoredDownloadInfo(mSharedPrefs, PENDING_OMA_DOWNLOADS);
+        Set<String> omaDownloads = getStoredDownloadInfo(
+                mSharedPrefs, ChromePreferenceKeys.DOWNLOAD_PENDING_OMA_DOWNLOADS);
         for (String omaDownload : omaDownloads) {
             OMAEntry entry = OMAEntry.parseOMAEntry(omaDownload);
             if (entry.mDownloadId == downloadId) return true;

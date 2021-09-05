@@ -250,6 +250,15 @@ static base::LazyInstance<WebViewKeyToIDMap>::DestructorAtExit
 
 }  // namespace
 
+WebViewGuest::NewWindowInfo::NewWindowInfo(const GURL& url,
+                                           const std::string& name)
+    : name(name), url(url) {}
+
+WebViewGuest::NewWindowInfo::NewWindowInfo(const WebViewGuest::NewWindowInfo&) =
+    default;
+
+WebViewGuest::NewWindowInfo::~NewWindowInfo() = default;
+
 // static
 void WebViewGuest::CleanUp(content::BrowserContext* browser_context,
                            int embedder_process_id,
@@ -594,7 +603,7 @@ void WebViewGuest::CreateWebContents(const base::DictionaryValue& create_params,
     // of the AppWindow has been muted due to thumbnail capturing, so we also
     // mute the webview webcontents.
     chrome::SetTabAudioMuted(
-        new_contents, true, TabMutedReason::MEDIA_CAPTURE,
+        new_contents, true, TabMutedReason::EXTENSION,
         LastMuteMetadata::FromWebContents(owner_web_contents())->extension_id);
   }
 
@@ -838,24 +847,6 @@ void WebViewGuest::WillDestroy() {
   }
 }
 
-bool WebViewGuest::DidAddMessageToConsole(
-    WebContents* source,
-    blink::mojom::ConsoleMessageLevel log_level,
-    const base::string16& message,
-    int32_t line_no,
-    const base::string16& source_id) {
-  auto args = std::make_unique<base::DictionaryValue>();
-  // Log levels are from base/logging.h: LogSeverity.
-  args->SetInteger(webview::kLevel,
-                   blink::ConsoleMessageLevelToLogSeverity(log_level));
-  args->SetString(webview::kMessage, message);
-  args->SetInteger(webview::kLine, line_no);
-  args->SetString(webview::kSourceId, source_id);
-  DispatchEventToView(std::make_unique<GuestViewEvent>(
-      webview::kEventConsoleMessage, std::move(args)));
-  return false;
-}
-
 void WebViewGuest::CloseContents(WebContents* source) {
   auto args = std::make_unique<base::DictionaryValue>();
   DispatchEventToView(
@@ -910,17 +901,6 @@ bool WebViewGuest::HandleKeyboardEvent(
 bool WebViewGuest::PreHandleGestureEvent(WebContents* source,
                                          const blink::WebGestureEvent& event) {
   return !allow_scaling_ && GuestViewBase::PreHandleGestureEvent(source, event);
-}
-
-void WebViewGuest::LoadProgressChanged(WebContents* source, double progress) {
-#if 0  // NOTE(pettern): Ignore as we get the extended event handled by
-       // WebViewGuest::ExtendedLoadProgressChanged
-  auto args = std::make_unique<base::DictionaryValue>();
-  args->SetString(guest_view::kUrl, web_contents()->GetURL().spec());
-  args->SetDouble(webview::kProgress, progress);
-  DispatchEventToView(std::make_unique<GuestViewEvent>(
-      webview::kEventLoadProgress, std::move(args)));
-#endif
 }
 
 void WebViewGuest::LoadAbort(bool is_top_level,
@@ -1048,7 +1028,8 @@ void WebViewGuest::SetUserAgentOverride(
   if (is_overriding_user_agent_) {
     base::RecordAction(UserMetricsAction("WebView.Guest.OverrideUA"));
   }
-  web_contents()->SetUserAgentOverride(user_agent_override, false);
+  web_contents()->SetUserAgentOverride(
+      blink::UserAgentOverride::UserAgentOnly(user_agent_override), false);
 }
 
 void WebViewGuest::Stop() {
@@ -1218,6 +1199,14 @@ void WebViewGuest::DidFinishNavigation(
   find_helper_.CancelAllFindSessions();
 }
 
+void WebViewGuest::LoadProgressChanged(double progress) {
+  auto args = std::make_unique<base::DictionaryValue>();
+  args->SetString(guest_view::kUrl, web_contents()->GetURL().spec());
+  args->SetDouble(webview::kProgress, progress);
+  DispatchEventToView(std::make_unique<GuestViewEvent>(
+      webview::kEventLoadProgress, std::move(args)));
+}
+
 void WebViewGuest::DocumentOnLoadCompletedInMainFrame() {
   auto args = std::make_unique<base::DictionaryValue>();
   DispatchEventToView(std::make_unique<GuestViewEvent>(
@@ -1271,12 +1260,13 @@ void WebViewGuest::RenderProcessGone(base::TerminationStatus status) {
       std::make_unique<GuestViewEvent>(webview::kEventExit, std::move(args)));
 }
 
-void WebViewGuest::UserAgentOverrideSet(const std::string& user_agent) {
+void WebViewGuest::UserAgentOverrideSet(
+    const blink::UserAgentOverride& ua_override) {
   content::NavigationController& controller = web_contents()->GetController();
   content::NavigationEntry* entry = controller.GetVisibleEntry();
   if (!entry)
     return;
-  entry->SetIsOverridingUserAgent(!user_agent.empty());
+  entry->SetIsOverridingUserAgent(!ua_override.ua_string_override.empty());
   web_contents()->GetController().Reload(content::ReloadType::NORMAL, false);
 }
 
@@ -1296,6 +1286,22 @@ void WebViewGuest::OnAudioStateChanged(bool audible) {
   args->Set(webview::kAudible, std::make_unique<base::Value>(audible));
   DispatchEventToView(std::make_unique<GuestViewEvent>(
       webview::kEventAudioStateChanged, std::move(args)));
+}
+
+void WebViewGuest::OnDidAddMessageToConsole(
+    blink::mojom::ConsoleMessageLevel log_level,
+    const base::string16& message,
+    int32_t line_no,
+    const base::string16& source_id) {
+  auto args = std::make_unique<base::DictionaryValue>();
+  // Log levels are from base/logging.h: LogSeverity.
+  args->SetInteger(webview::kLevel,
+                   blink::ConsoleMessageLevelToLogSeverity(log_level));
+  args->SetString(webview::kMessage, message);
+  args->SetInteger(webview::kLine, line_no);
+  args->SetString(webview::kSourceId, source_id);
+  DispatchEventToView(std::make_unique<GuestViewEvent>(
+      webview::kEventConsoleMessage, std::move(args)));
 }
 
 void WebViewGuest::OnVisibilityChanged(content::Visibility visibility) {
@@ -1376,16 +1382,6 @@ void WebViewGuest::CanDownload(const GURL& url,
                                            std::move(callback));
 }
 
-void WebViewGuest::RequestPointerLockPermission(
-    bool user_gesture,
-    bool last_unlocked_by_target,
-    const base::Callback<void(bool)>& callback) {
-  web_view_permission_helper_->RequestPointerLockPermission(
-      user_gesture,
-      last_unlocked_by_target,
-      callback);
-}
-
 void WebViewGuest::SignalWhenReady(base::OnceClosure callback) {
   auto* manager = WebViewContentScriptManager::Get(browser_context());
   manager->SignalOnScriptsLoaded(std::move(callback));
@@ -1457,7 +1453,8 @@ bool WebViewGuest::HandleKeyboardShortcuts(
   // mouse if necessary.
   if ((event.windows_key_code == ui::VKEY_ESCAPE) &&
       !(event.GetModifiers() & blink::WebInputEvent::kInputModifiers)) {
-    return web_contents()->GotResponseToLockMouseRequest(false);
+    return web_contents()->GotResponseToLockMouseRequest(
+        blink::mojom::PointerLockResult::kUserRejected);
   }
 
 #if defined(OS_MACOSX)
@@ -1833,10 +1830,10 @@ bool WebViewGuest::IsFullscreenForTabOrPending(
 void WebViewGuest::RequestToLockMouse(WebContents* web_contents,
                                       bool user_gesture,
                                       bool last_unlocked_by_target) {
-  RequestPointerLockPermission(
+  web_view_permission_helper_->RequestPointerLockPermission(
       user_gesture, last_unlocked_by_target,
       base::Bind(
-          base::IgnoreResult(&WebContents::GotResponseToLockMouseRequest),
+          base::IgnoreResult(&WebContents::GotLockMousePermissionResponse),
           base::Unretained(web_contents)));
 }
 
@@ -1920,7 +1917,7 @@ void WebViewGuest::LoadURLWithParams(
   if (params) {
     // NOTE(espen@vivaldi.com) Add post data if present. Allows image search
     // and other tasks where post data is needed.
-    if (params->uses_post) {
+    if (params->post_data) {
       load_url_params.load_type =
           content::NavigationController::LOAD_TYPE_HTTP_POST;
       load_url_params.extra_headers = params->extra_headers;

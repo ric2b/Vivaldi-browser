@@ -8,6 +8,7 @@
 #include "third_party/blink/public/web/web_content_capture_client.h"
 #include "third_party/blink/public/web/web_content_holder.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_gc_controller.h"
+#include "third_party/blink/renderer/core/dom/dom_node_ids.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/node.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
@@ -19,6 +20,7 @@
 #include "third_party/blink/renderer/core/testing/page_test_base.h"
 #include "third_party/blink/renderer/core/testing/sim/sim_request.h"
 #include "third_party/blink/renderer/core/testing/sim/sim_test.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 
 namespace blink {
 
@@ -118,21 +120,26 @@ class ContentCaptureManagerTestHelper : public ContentCaptureManager {
       LocalFrame& local_frame_root,
       WebContentCaptureClientTestHelper& content_capture_client)
       : ContentCaptureManager(local_frame_root) {
-    content_capture_task_ = base::MakeRefCounted<ContentCaptureTaskTestHelper>(
+    content_capture_task_ = MakeGarbageCollected<ContentCaptureTaskTestHelper>(
         local_frame_root, GetTaskSessionForTesting(), content_capture_client);
   }
 
-  scoped_refptr<ContentCaptureTaskTestHelper> GetContentCaptureTask() {
+  ContentCaptureTaskTestHelper* GetContentCaptureTask() {
     return content_capture_task_;
   }
 
+  void Trace(Visitor* visitor) override {
+    visitor->Trace(content_capture_task_);
+    ContentCaptureManager::Trace(visitor);
+  }
+
  protected:
-  scoped_refptr<ContentCaptureTask> CreateContentCaptureTask() override {
+  ContentCaptureTask* CreateContentCaptureTask() override {
     return content_capture_task_;
   }
 
  private:
-  scoped_refptr<ContentCaptureTaskTestHelper> content_capture_task_;
+  Member<ContentCaptureTaskTestHelper> content_capture_task_;
 };
 
 class ContentCaptureLocalFrameClientHelper : public EmptyLocalFrameClient {
@@ -186,12 +193,13 @@ class ContentCaptureTest : public PageTestBase {
   void CreateTextNodeAndNotifyManager() {
     Document& doc = GetDocument();
     Node* node = doc.createTextNode("New Text");
-    Element* element = Element::Create(html_names::kPTag, &doc);
+    Element* element = MakeGarbageCollected<Element>(html_names::kPTag, &doc);
     element->appendChild(node);
     Element* div_element = GetElementById("d1");
     div_element->appendChild(element);
     UpdateAllLifecyclePhasesForTest();
-    created_node_id_ = GetContentCaptureManager()->GetNodeId(*node);
+    GetContentCaptureManager()->ScheduleTaskIfNeeded();
+    created_node_id_ = DOMNodeIds::IdForNode(node);
     Vector<DOMNodeId> captured_content{created_node_id_};
     content_capture_manager_->GetContentCaptureTask()
         ->SetCapturedContentForTesting(captured_content);
@@ -205,7 +213,7 @@ class ContentCaptureTest : public PageTestBase {
     return content_capture_client_.get();
   }
 
-  scoped_refptr<ContentCaptureTaskTestHelper> GetContentCaptureTask() const {
+  ContentCaptureTaskTestHelper* GetContentCaptureTask() const {
     return GetContentCaptureManager()->GetContentCaptureTask();
   }
 
@@ -267,7 +275,8 @@ class ContentCaptureTest : public PageTestBase {
       CHECK(layout_object);
       CHECK(layout_object->IsText());
       nodes_.push_back(node);
-      node_ids_.push_back(GetContentCaptureManager()->GetNodeId(*node));
+      GetContentCaptureManager()->ScheduleTaskIfNeeded();
+      node_ids_.push_back(DOMNodeIds::IdForNode(node));
     }
   }
 
@@ -520,6 +529,38 @@ TEST_F(ContentCaptureTest, TaskHistogramReporter) {
       ContentCaptureTaskHistogramReporter::kSentContentCount, 9u, 1u);
 }
 
+TEST_F(ContentCaptureTest, RescheduleTask) {
+  // This test assumes test runs much faster than task's long delay which is 5s.
+  Persistent<ContentCaptureTaskTestHelper> task = GetContentCaptureTask();
+  task->CancelTaskForTesting();
+  EXPECT_TRUE(task->GetTaskNextFireIntervalForTesting().is_zero());
+  task->Schedule(ContentCaptureTask::ScheduleReason::kContentChange);
+  auto begin = base::TimeTicks::Now();
+  base::TimeDelta interval1 = task->GetTaskNextFireIntervalForTesting();
+  task->Schedule(ContentCaptureTask::ScheduleReason::kScrolling);
+  base::TimeDelta interval2 = task->GetTaskNextFireIntervalForTesting();
+  auto test_running_time = base::TimeTicks::Now() - begin;
+  // The interval1 will be greater than interval2 even the task wasn't
+  // rescheduled, removing the test_running_time from interval1 make sure
+  // task rescheduled.
+  EXPECT_GT(interval1 - test_running_time, interval2);
+}
+
+TEST_F(ContentCaptureTest, NotRescheduleTask) {
+  // This test assumes test runs much faster than task's long delay which is 5s.
+  Persistent<ContentCaptureTaskTestHelper> task = GetContentCaptureTask();
+  task->CancelTaskForTesting();
+  EXPECT_TRUE(task->GetTaskNextFireIntervalForTesting().is_zero());
+  task->Schedule(ContentCaptureTask::ScheduleReason::kContentChange);
+  auto begin = base::TimeTicks::Now();
+  base::TimeDelta interval1 = task->GetTaskNextFireIntervalForTesting();
+  task->Schedule(ContentCaptureTask::ScheduleReason::kContentChange);
+  base::TimeDelta interval2 = task->GetTaskNextFireIntervalForTesting();
+  auto test_running_time = base::TimeTicks::Now() - begin;
+  EXPECT_GE(interval1, interval2);
+  EXPECT_LE(interval1 - test_running_time, interval2);
+}
+
 // TODO(michaelbai): use RenderingTest instead of PageTestBase for multiple
 // frame test.
 class ContentCaptureSimTest : public SimTest {
@@ -630,7 +671,7 @@ class ContentCaptureSimTest : public SimTest {
     auto* child_frame =
         To<HTMLIFrameElement>(GetDocument().getElementById("frame"));
     child_document_ = child_frame->contentDocument();
-    child_document_->UpdateStyleAndLayout();
+    child_document_->UpdateStyleAndLayout(DocumentUpdateReason::kTest);
     Compositor().BeginFrame();
     InitMainFrameNodeHolders();
     InitChildFrameNodeHolders(*child_document_);
@@ -667,7 +708,7 @@ class ContentCaptureSimTest : public SimTest {
 
   void AddNodeToDocument(Document& doc, Vector<DOMNodeId>& buffer) {
     Node* node = doc.createTextNode("New Text");
-    Element* element = Element::Create(html_names::kPTag, &doc);
+    auto* element = MakeGarbageCollected<Element>(html_names::kPTag, &doc);
     element->appendChild(node);
     Element* div_element = doc.getElementById("d1");
     div_element->appendChild(element);

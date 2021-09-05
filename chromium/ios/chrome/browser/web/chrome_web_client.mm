@@ -10,6 +10,7 @@
 #include "base/mac/bundle_locations.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/dom_distiller/core/url_constants.h"
+#include "components/google/core/common/google_util.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/version_info/version_info.h"
 #include "ios/chrome/browser/application_context.h"
@@ -19,16 +20,18 @@
 #include "ios/chrome/browser/chrome_url_constants.h"
 #include "ios/chrome/browser/ios_chrome_main_parts.h"
 #include "ios/chrome/browser/passwords/password_manager_features.h"
-#include "ios/chrome/browser/reading_list/features.h"
 #import "ios/chrome/browser/reading_list/offline_page_tab_helper.h"
 #include "ios/chrome/browser/ssl/ios_ssl_error_handler.h"
 #import "ios/chrome/browser/ui/elements/windowed_container_view.h"
 #import "ios/chrome/browser/web/error_page_util.h"
+#include "ios/chrome/browser/web/features.h"
+#include "ios/components/webui/web_ui_url_constants.h"
 #include "ios/public/provider/chrome/browser/browser_url_rewriter_provider.h"
 #import "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #include "ios/public/provider/chrome/browser/voice/audio_session_controller.h"
 #include "ios/public/provider/chrome/browser/voice/voice_search_provider.h"
+#include "ios/web/common/features.h"
 #include "ios/web/common/user_agent.h"
 #include "ios/web/public/navigation/browser_url_rewriter.h"
 #include "net/http/http_util.h"
@@ -60,12 +63,6 @@ NSString* GetPageScript(NSString* script_file_name) {
   return content;
 }
 }  // namespace
-
-const char kDesktopUserAgent[] =
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_5) "
-    "AppleWebKit/605.1.15 (KHTML, like Gecko) "
-    "Version/11.1.1 "
-    "Safari/605.1.15";
 
 ChromeWebClient::ChromeWebClient() {}
 
@@ -128,11 +125,9 @@ std::string ChromeWebClient::GetUserAgent(web::UserAgentType type) const {
 
   // Using desktop user agent overrides a command-line user agent, so that
   // request desktop site can still work when using an overridden UA.
-  if (type == web::UserAgentType::DESKTOP)
-    return kDesktopUserAgent;
-
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (command_line->HasSwitch(switches::kUserAgent)) {
+  if (type != web::UserAgentType::DESKTOP &&
+      command_line->HasSwitch(switches::kUserAgent)) {
     std::string user_agent =
         command_line->GetSwitchValueASCII(switches::kUserAgent);
     if (net::HttpUtil::IsValidHeaderValue(user_agent))
@@ -140,7 +135,7 @@ std::string ChromeWebClient::GetUserAgent(web::UserAgentType type) const {
     LOG(WARNING) << "Ignored invalid value for flag --" << switches::kUserAgent;
   }
 
-  return web::BuildUserAgentFromProduct(GetProduct());
+  return web::BuildUserAgentFromProduct(type, GetProduct());
 }
 
 base::string16 ChromeWebClient::GetLocalizedString(int message_id) const {
@@ -188,8 +183,6 @@ NSString* ChromeWebClient::GetDocumentStartScriptForMainFrame(
     [scripts addObject:GetPageScript(@"credential_manager")];
   }
 
-  [scripts addObject:GetPageScript(@"payment_request")];
-
   return [scripts componentsJoinedByString:@";"];
 }
 
@@ -217,28 +210,45 @@ void ChromeWebClient::PrepareErrorPage(
     NSError* error,
     bool is_post,
     bool is_off_the_record,
+    const base::Optional<net::SSLInfo>& info,
+    int64_t navigation_id,
     base::OnceCallback<void(NSString*)> callback) {
-  if (reading_list::IsOfflinePageWithoutNativeContentEnabled()) {
-    OfflinePageTabHelper* offline_page_tab_helper =
-        OfflinePageTabHelper::FromWebState(web_state);
-    // WebState that are not attached to a tab may not have an
-    // OfflinePageTabHelper.
-    if (offline_page_tab_helper &&
-        offline_page_tab_helper->HasDistilledVersionForOnlineUrl(url)) {
-      // An offline version of the page will be displayed to replace this error
-      // page. Loading an error page here can cause a race between the
-      // navigation to load the error page and the navigation to display the
-      // offline version of the page. If the latter navigation interrupts the
-      // former and causes it to fail, this can incorrectly appear to be a
-      // navigation back to the previous committed URL. To avoid this race,
-      // return a nil error page here to avoid an error page load. See
-      // crbug.com/980912.
-      std::move(callback).Run(nil);
-      return;
-    }
+  OfflinePageTabHelper* offline_page_tab_helper =
+      OfflinePageTabHelper::FromWebState(web_state);
+  // WebState that are not attached to a tab may not have an
+  // OfflinePageTabHelper.
+  if (offline_page_tab_helper &&
+      offline_page_tab_helper->HasDistilledVersionForOnlineUrl(url)) {
+    // An offline version of the page will be displayed to replace this error
+    // page. Loading an error page here can cause a race between the
+    // navigation to load the error page and the navigation to display the
+    // offline version of the page. If the latter navigation interrupts the
+    // former and causes it to fail, this can incorrectly appear to be a
+    // navigation back to the previous committed URL. To avoid this race,
+    // return a nil error page here to avoid an error page load. See
+    // crbug.com/980912.
+    std::move(callback).Run(nil);
+    return;
   }
   DCHECK(error);
-  std::move(callback).Run(GetErrorPage(url, error, is_post, is_off_the_record));
+  __block NSString* error_html = nil;
+  __block base::OnceCallback<void(NSString*)> error_html_callback =
+      std::move(callback);
+  if (info.has_value()) {
+    base::OnceCallback<void(bool)> proceed_callback;
+    base::OnceCallback<void(NSString*)> blocking_page_callback =
+        base::BindOnce(^(NSString* blocking_page_html) {
+          error_html = blocking_page_html;
+          std::move(error_html_callback).Run(error_html);
+        });
+    IOSSSLErrorHandler::HandleSSLError(
+        web_state, net::MapCertStatusToNetError(info.value().cert_status),
+        info.value(), url, info.value().is_fatal_cert_error, navigation_id,
+        std::move(proceed_callback), std::move(blocking_page_callback));
+  } else {
+    std::move(error_html_callback)
+        .Run(GetErrorPage(url, error, is_post, is_off_the_record));
+  }
 }
 
 UIView* ChromeWebClient::GetWindowedContainer() {
@@ -252,4 +262,27 @@ std::string ChromeWebClient::GetProduct() const {
   std::string product("CriOS/");
   product += version_info::GetVersionNumber();
   return product;
+}
+
+bool ChromeWebClient::ForceMobileVersionByDefault(const GURL& url) {
+  DCHECK(base::FeatureList::IsEnabled(
+      web::features::kUseDefaultUserAgentInWebClient));
+  if (base::FeatureList::IsEnabled(web::kMobileGoogleSRP)) {
+    return google_util::IsGoogleSearchUrl(url);
+  }
+  return false;
+}
+
+web::UserAgentType ChromeWebClient::GetDefaultUserAgent(UIView* web_view,
+                                                        const GURL& url) {
+  DCHECK(base::FeatureList::IsEnabled(
+      web::features::kUseDefaultUserAgentInWebClient));
+  if (ForceMobileVersionByDefault(url))
+    return web::UserAgentType::MOBILE;
+  BOOL isRegularRegular = web_view.traitCollection.horizontalSizeClass ==
+                              UIUserInterfaceSizeClassRegular &&
+                          web_view.traitCollection.verticalSizeClass ==
+                              UIUserInterfaceSizeClassRegular;
+  return isRegularRegular ? web::UserAgentType::DESKTOP
+                          : web::UserAgentType::MOBILE;
 }

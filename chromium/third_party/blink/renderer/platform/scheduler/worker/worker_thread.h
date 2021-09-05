@@ -6,7 +6,6 @@
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_SCHEDULER_WORKER_WORKER_THREAD_H_
 
 #include "base/callback_forward.h"
-#include "base/message_loop/message_loop.h"
 #include "base/message_loop/message_loop_current.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -141,7 +140,7 @@ class PLATFORM_EXPORT WorkerThread : public Thread {
   };
 
   std::unique_ptr<SimpleThreadImpl> thread_;
-  const WebThreadType thread_type_;
+  const ThreadType thread_type_;
   std::unique_ptr<scheduler::WorkerSchedulerProxy> worker_scheduler_proxy_;
   bool supports_gc_;
 };

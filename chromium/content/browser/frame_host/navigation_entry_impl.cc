@@ -20,13 +20,13 @@
 #include "build/build_config.h"
 #include "components/url_formatter/url_formatter.h"
 #include "content/browser/frame_host/navigation_controller_impl.h"
-#include "content/browser/web_package/bundled_exchanges_navigation_info.h"
 #include "content/common/content_constants_internal.h"
 #include "content/common/navigation_params.h"
 #include "content/common/page_state_serialization.h"
 #include "content/public/browser/reload_type.h"
 #include "content/public/common/content_constants.h"
 #include "content/public/common/url_constants.h"
+#include "third_party/blink/public/mojom/frame/frame.mojom.h"
 #include "ui/gfx/text_elider.h"
 
 #if defined(OS_ANDROID)
@@ -179,6 +179,48 @@ bool InSameTreePosition(FrameTreeNode* frame_tree_node,
   return true;
 }
 
+void InitRestoredTreeNode(BrowserContext* browser_context,
+                          NavigationEntryImpl::TreeNode* node) {
+  DCHECK(browser_context);
+  DCHECK(node);
+
+  // Check that this is a freshly restored entry.
+  FrameNavigationEntry* frame_entry = node->frame_entry.get();
+  DCHECK(!frame_entry->site_instance());
+
+  // Check that the entry has been already populated with required information.
+  DCHECK(frame_entry->page_state().IsValid());
+
+  // For about:blank and data: URLs create a SiteInstance based on the initiator
+  // origin.  See also https://crbug.com/1026474.
+  if (frame_entry->url().IsAboutBlank() ||
+      frame_entry->url().SchemeIs(url::kDataScheme)) {
+    // TODO(lukasza): We should consider also creating a SiteInstance if there
+    // is no initiator origin.  Doing this would allow us to
+    // 1) remove special-casing of data URLs in
+    //    SiteInstanceImpl::GetSiteForURLInternal where sometimes we use the
+    //    whole data URL as a site URL to avoid session restore trouble.
+    // 2) start asserting that an initialized FrameNavigationEntry should always
+    //    have a non-null SiteInstance.
+    if (frame_entry->initiator_origin().has_value()) {
+      url::SchemeHostPort initiator_tuple =
+          frame_entry->initiator_origin()->GetTupleOrPrecursorTupleIfOpaque();
+      frame_entry->set_site_instance(SiteInstanceImpl::CreateForURL(
+          browser_context, initiator_tuple.GetURL()));
+    }
+  }
+}
+
+void RecursivelyInitRestoredTreeNode(BrowserContext* browser_context,
+                                     NavigationEntryImpl::TreeNode* node) {
+  DCHECK(browser_context);
+  DCHECK(node);
+
+  InitRestoredTreeNode(browser_context, node);
+  for (const auto& child : node->children)
+    RecursivelyInitRestoredTreeNode(browser_context, child.get());
+}
+
 }  // namespace
 
 NavigationEntryImpl::TreeNode::TreeNode(
@@ -313,7 +355,6 @@ NavigationEntryImpl::NavigationEntryImpl(
                                          -1,
                                          std::move(blob_url_loader_factory)))),
       unique_id_(CreateUniqueEntryID()),
-      bindings_(kInvalidBindings),
       page_type_(PAGE_TYPE_NORMAL),
       update_virtual_url_with_url_(false),
       title_(title),
@@ -447,13 +488,6 @@ void NavigationEntryImpl::set_site_instance(
   frame_tree_->frame_entry->set_site_instance(std::move(site_instance));
 }
 
-void NavigationEntryImpl::SetBindings(int bindings) {
-  // Ensure this is set to a valid value, and that it stays the same once set.
-  CHECK_NE(bindings, kInvalidBindings);
-  CHECK(bindings_ == kInvalidBindings || bindings_ == bindings);
-  bindings_ = bindings;
-}
-
 const base::string16& NavigationEntryImpl::GetTitleForDisplay() {
   // Most pages have real titles. Don't even bother caching anything if this is
   // the case.
@@ -508,7 +542,7 @@ const base::string16& NavigationEntryImpl::GetTitleForDisplay() {
   }
 #endif
 
-  gfx::ElideString(title, kMaxTitleChars, &cached_display_title_);
+  gfx::ElideString(title, blink::mojom::kMaxTitleChars, &cached_display_title_);
   return cached_display_title_;
 }
 
@@ -628,6 +662,11 @@ int64_t NavigationEntryImpl::GetMainFrameDocumentSequenceNumber() {
   return frame_tree_->frame_entry->document_sequence_number();
 }
 
+void NavigationEntryImpl::InitRestoredEntry(BrowserContext* browser_context) {
+  DCHECK(browser_context);
+  RecursivelyInitRestoredTreeNode(browser_context, root_node());
+}
+
 void NavigationEntryImpl::SetCanLoadLocalResources(bool allow) {
   can_load_local_resources_ = allow;
 }
@@ -655,7 +694,6 @@ std::unique_ptr<NavigationEntryImpl> NavigationEntryImpl::CloneAndReplace(
 
   // Copy most state over, unless cleared in ResetForCommit.
   // Don't copy unique_id_, otherwise it won't be unique.
-  copy->bindings_ = bindings_;
   copy->page_type_ = page_type_;
   copy->virtual_url_ = virtual_url_;
   copy->update_virtual_url_with_url_ = update_virtual_url_with_url_;
@@ -685,10 +723,6 @@ std::unique_ptr<NavigationEntryImpl> NavigationEntryImpl::CloneAndReplace(
   copy->CloneDataFrom(*this);
   copy->replaced_entry_data_ = replaced_entry_data_;
   copy->should_skip_on_back_forward_ui_ = should_skip_on_back_forward_ui_;
-  if (bundled_exchanges_navigation_info_) {
-    copy->bundled_exchanges_navigation_info_ =
-        bundled_exchanges_navigation_info_->Clone();
-  }
 
   return copy;
 }
@@ -712,9 +746,9 @@ NavigationEntryImpl::ConstructCommonNavigationParams(
       GetTransitionType(), navigation_type, download_policy,
       should_replace_entry(), GetBaseURLForDataURL(), GetHistoryURLForDataURL(),
       previews_state, navigation_start, frame_entry.method(),
-      post_body ? post_body : post_data_, base::Optional<SourceLocation>(),
-      has_started_from_context_menu(), has_user_gesture(), InitiatorCSPInfo(),
-      std::vector<int>(), std::string(),
+      post_body ? post_body : post_data_, network::mojom::SourceLocation::New(),
+      has_started_from_context_menu(), has_user_gesture(),
+      CreateInitiatorCSPInfo(), std::vector<int>(), std::string(),
       false /* is_history_navigation_in_new_child_frame */, input_start);
 }
 
@@ -728,7 +762,8 @@ NavigationEntryImpl::ConstructCommitNavigationParams(
     bool intended_as_new_entry,
     int pending_history_list_offset,
     int current_history_list_offset,
-    int current_history_list_length) {
+    int current_history_list_length,
+    const blink::FramePolicy& frame_policy) {
   // Set the redirect chain to the navigation's redirects, unless returning to a
   // completed navigation (whose previous redirects don't apply).
   std::vector<GURL> redirects;
@@ -765,7 +800,9 @@ NavigationEntryImpl::ConstructCommitNavigationParams(
           std::string(),
 #endif
           false, network::mojom::IPAddressSpace::kUnknown,
-          GURL() /* base_url_override_for_bundled_exchanges */);
+          GURL() /* web_bundle_physical_url */,
+          GURL() /* base_url_override_for_web_bundle */, frame_policy,
+          std::vector<std::string>() /* force_enabled_origin_trials */);
 #if defined(OS_ANDROID)
   if (NavigationControllerImpl::ValidateDataURLAsString(GetDataURLAsString())) {
     commit_params->data_url_as_string = GetDataURLAsString()->data();
@@ -952,18 +989,6 @@ void NavigationEntryImpl::RemoveEntryForFrame(FrameTreeNode* frame_tree_node,
 
 GURL NavigationEntryImpl::GetHistoryURLForDataURL() {
   return GetBaseURLForDataURL().is_empty() ? GURL() : GetVirtualURL();
-}
-
-void NavigationEntryImpl::set_bundled_exchanges_navigation_info(
-    std::unique_ptr<BundledExchangesNavigationInfo>
-        bundled_exchanges_navigation_info) {
-  bundled_exchanges_navigation_info_ =
-      std::move(bundled_exchanges_navigation_info);
-}
-
-BundledExchangesNavigationInfo*
-NavigationEntryImpl::bundled_exchanges_navigation_info() const {
-  return bundled_exchanges_navigation_info_.get();
 }
 
 }  // namespace content

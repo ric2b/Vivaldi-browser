@@ -10,7 +10,7 @@
 #include <utility>
 
 #include "ash/detachable_base/detachable_base_pairing_status.h"
-#include "ash/ime/ime_controller.h"
+#include "ash/ime/ime_controller_impl.h"
 #include "ash/login/login_screen_controller.h"
 #include "ash/login/ui/lock_contents_view.h"
 #include "ash/login/ui/lock_screen.h"
@@ -432,10 +432,11 @@ class LockDebugView::DebugDataDispatcherTransformer
 
   void AddSystemInfo(const std::string& os_version,
                      const std::string& enterprise_info,
-                     const std::string& bluetooth_name) {
+                     const std::string& bluetooth_name,
+                     bool adb_sideloading_enabled) {
     debug_dispatcher_.SetSystemInfo(true /*show*/, false /*enforced*/,
-                                    os_version, enterprise_info,
-                                    bluetooth_name);
+                                    os_version, enterprise_info, bluetooth_name,
+                                    adb_sideloading_enabled);
   }
 
   void UpdateWarningMessage(const base::string16& message) {
@@ -752,7 +753,7 @@ LockDebugView::LockDebugView(mojom::TrayActionState initial_note_action_state,
         views::ScrollView::CreateScrollViewWithBorder();
     scroll->SetPreferredSize(gfx::Size(600, height));
     scroll->SetContents(base::WrapUnique(content));
-    scroll->SetBackgroundColor(SK_ColorTRANSPARENT);
+    scroll->SetBackgroundColor(base::nullopt);
     scroll->SetVerticalScrollBar(
         std::make_unique<views::OverlayScrollBar>(false));
     scroll->SetHorizontalScrollBar(
@@ -846,8 +847,10 @@ void LockDebugView::ButtonPressed(views::Button* sender,
 
   // Enable or disable wallpaper blur.
   if (sender->GetID() == ButtonId::kGlobalToggleBlur) {
-    Shell::Get()->wallpaper_controller()->UpdateWallpaperBlur(
-        !Shell::Get()->wallpaper_controller()->IsWallpaperBlurred());
+    Shell::Get()->wallpaper_controller()->UpdateWallpaperBlurForLockState(
+        !Shell::Get()
+             ->wallpaper_controller()
+             ->IsWallpaperBlurredForLockState());
     return;
   }
 
@@ -859,7 +862,7 @@ void LockDebugView::ButtonPressed(views::Button* sender,
 
   // Enable or disable caps lock.
   if (sender->GetID() == ButtonId::kGlobalToggleCapsLock) {
-    ImeController* ime_controller = Shell::Get()->ime_controller();
+    ImeControllerImpl* ime_controller = Shell::Get()->ime_controller();
     ime_controller->SetCapsLockEnabled(!ime_controller->IsCapsLockEnabled());
     return;
   }
@@ -877,8 +880,9 @@ void LockDebugView::ButtonPressed(views::Button* sender,
         (num_system_info_clicks_ % 4) / 2 ? kDebugEnterpriseInfo : "";
     std::string bluetooth_name =
         num_system_info_clicks_ % 2 ? kDebugBluetoothName : "";
-    debug_data_dispatcher_->AddSystemInfo(os_version, enterprise_info,
-                                          bluetooth_name);
+    bool adb_sideloading_enabled = num_system_info_clicks_ % 3;
+    debug_data_dispatcher_->AddSystemInfo(
+        os_version, enterprise_info, bluetooth_name, adb_sideloading_enabled);
     return;
   }
 

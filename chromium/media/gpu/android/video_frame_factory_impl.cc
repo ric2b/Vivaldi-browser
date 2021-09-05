@@ -41,8 +41,7 @@ gpu::TextureOwner::Mode GetTextureOwnerMode(
   switch (overlay_mode) {
     case VideoFrameFactory::OverlayMode::kDontRequestPromotionHints:
     case VideoFrameFactory::OverlayMode::kRequestPromotionHints:
-      return a_image_reader_supported && base::FeatureList::IsEnabled(
-                                             media::kAImageReaderVideoOutput)
+      return a_image_reader_supported
                  ? gpu::TextureOwner::Mode::kAImageReaderInsecure
                  : gpu::TextureOwner::Mode::kSurfaceTextureInsecure;
     case VideoFrameFactory::OverlayMode::kSurfaceControlSecure:
@@ -60,7 +59,7 @@ gpu::TextureOwner::Mode GetTextureOwnerMode(
 // Run on the GPU main thread to allocate the texture owner, and return it
 // via |init_cb|.
 static void AllocateTextureOwnerOnGpuThread(
-    VideoFrameFactory::InitCb init_cb,
+    VideoFrameFactory::InitCB init_cb,
     VideoFrameFactory::OverlayMode overlay_mode,
     scoped_refptr<gpu::SharedContextState> shared_context_state) {
   if (!shared_context_state) {
@@ -95,7 +94,7 @@ VideoFrameFactoryImpl::~VideoFrameFactoryImpl() {
 }
 
 void VideoFrameFactoryImpl::Initialize(OverlayMode overlay_mode,
-                                       InitCb init_cb) {
+                                       InitCB init_cb) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   overlay_mode_ = overlay_mode;
   // On init success, create the TextureOwner and hop it back to this thread to
@@ -142,13 +141,20 @@ void VideoFrameFactoryImpl::CreateVideoFrame(
     base::TimeDelta timestamp,
     gfx::Size natural_size,
     PromotionHintAggregator::NotifyPromotionHintCB promotion_hint_cb,
-    OnceOutputCb output_cb) {
+    OnceOutputCB output_cb) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   gfx::Size coded_size = output_buffer->size();
   gfx::Rect visible_rect(coded_size);
-  // The pixel format doesn't matter as long as it's valid for texture frames.
-  VideoPixelFormat pixel_format = PIXEL_FORMAT_ARGB;
+
+  // The pixel format doesn't matter here as long as it's valid for texture
+  // frames. But SkiaRenderer wants to ensure that the format of the resource
+  // used here which will eventually create a promise image must match the
+  // format of the resource(SharedImageVideo) used to create fulfill image.
+  // crbug.com/1028746. Since we create all the textures/abstract textures as
+  // well as shared images for video to be of format RGBA, we need to use the
+  // pixel format as ABGR here(which corresponds to 32bpp RGBA).
+  VideoPixelFormat pixel_format = PIXEL_FORMAT_ABGR;
 
   // Check that we can create a VideoFrame for this config before trying to
   // create the textures for it.
@@ -179,7 +185,7 @@ void VideoFrameFactoryImpl::CreateVideoFrame(
 // static
 void VideoFrameFactoryImpl::CreateVideoFrame_OnImageReady(
     base::WeakPtr<VideoFrameFactoryImpl> thiz,
-    OnceOutputCb output_cb,
+    OnceOutputCB output_cb,
     base::TimeDelta timestamp,
     gfx::Size coded_size,
     gfx::Size natural_size,
@@ -263,7 +269,7 @@ void VideoFrameFactoryImpl::CreateVideoFrame_OnYCbCrInfo(
 }
 
 void VideoFrameFactoryImpl::CreateVideoFrame_Finish(
-    OnceOutputCb output_cb,
+    OnceOutputCB output_cb,
     base::TimeDelta timestamp,
     gfx::Size coded_size,
     gfx::Size natural_size,

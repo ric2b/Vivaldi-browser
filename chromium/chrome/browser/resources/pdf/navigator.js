@@ -2,13 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-'use strict';
+import {OpenPdfParamsParser} from './open_pdf_params_parser.js';
+import {Viewport} from './viewport.js';
 
 /**
  * NavigatorDelegate for calling browser-specific functions to do the actual
  * navigating.
  */
-class NavigatorDelegate {
+export class NavigatorDelegate {
   /**
    * @param {number} tabId The tab ID of the PDF viewer or -1 if the viewer is
    *     not displayed in a tab.
@@ -25,7 +26,7 @@ class NavigatorDelegate {
   navigateInCurrentTab(url) {
     // When the PDFviewer is inside a browser tab, prefer the tabs API because
     // it can navigate from one file:// URL to another.
-    if (chrome.tabs && this.tabId_ != -1) {
+    if (chrome.tabs && this.tabId_ !== -1) {
       chrome.tabs.update(this.tabId_, {url: url});
     } else {
       window.location.href = url;
@@ -63,7 +64,7 @@ class NavigatorDelegate {
 }
 
 /** Navigator for navigating to links inside or outside the PDF. */
-class PdfNavigator {
+export class PdfNavigator {
   /**
    * @param {string} originalUrl The original page URL.
    * @param {!Viewport} viewport The viewport info of the page.
@@ -99,7 +100,7 @@ class PdfNavigator {
    *     disposition when navigating to the new URL.
    */
   navigate(urlString, disposition) {
-    if (urlString.length == 0) {
+    if (urlString.length === 0) {
       return;
     }
 
@@ -168,7 +169,7 @@ class PdfNavigator {
     }
 
     const pageNumber = viewportPosition.page;
-    if (pageNumber != undefined && this.originalUrl_ && newUrl &&
+    if (pageNumber !== undefined && this.originalUrl_ && newUrl &&
         this.originalUrl_.origin === newUrl.origin &&
         this.originalUrl_.pathname === newUrl.pathname) {
       this.viewport_.goToPage(pageNumber);
@@ -235,7 +236,7 @@ class PdfNavigator {
     }
     if (!url.startsWith('.')) {
       const domainSeparatorIndex = url.indexOf('/');
-      const domainName = domainSeparatorIndex == -1 ?
+      const domainName = domainSeparatorIndex === -1 ?
           url :
           url.substr(0, domainSeparatorIndex);
       const domainDotCount = (domainName.match(/\./g) || []).length;
@@ -261,3 +262,7 @@ PdfNavigator.WindowOpenDisposition = {
   NEW_WINDOW: 6,
   SAVE_TO_DISK: 7
 };
+
+// Export on |window| such that scripts injected from pdf_extension_test.cc can
+// access it.
+window.PdfNavigator = PdfNavigator;

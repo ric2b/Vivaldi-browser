@@ -217,7 +217,7 @@ TestMediaController::~TestMediaController() = default;
 mojo::Remote<mojom::MediaController>
 TestMediaController::CreateMediaControllerRemote() {
   mojo::Remote<mojom::MediaController> remote;
-  binding_.Bind(remote.BindNewPipeAndPassReceiver());
+  receiver_.Bind(remote.BindNewPipeAndPassReceiver());
   return remote;
 }
 
@@ -264,6 +264,14 @@ void TestMediaController::Seek(base::TimeDelta seek_time) {
 void TestMediaController::SeekTo(base::TimeDelta seek_time) {
   seek_to_time_ = seek_time;
   ++seek_to_count_;
+}
+
+void TestMediaController::EnterPictureInPicture() {
+  // TODO(crbug.com/1040263): Implement EnterPictureInPicture.
+}
+
+void TestMediaController::ExitPictureInPicture() {
+  // TODO(crbug.com/1040263): Implement ExitPictureInPicture.
 }
 
 void TestMediaController::SimulateMediaSessionInfoChanged(

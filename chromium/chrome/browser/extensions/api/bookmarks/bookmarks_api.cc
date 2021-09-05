@@ -21,6 +21,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/bookmarks/bookmark_html_writer.h"
@@ -55,7 +56,6 @@
 
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_constants.h"
-#include "components/bookmarks/vivaldi_bookmark_api_helpers.h"
 #include "components/bookmarks/vivaldi_bookmark_kit.h"
 
 using bookmarks::BookmarkModel;
@@ -203,6 +203,11 @@ const BookmarkNode* BookmarksFunction::CreateBookmarkNode(
     vivaldi_meta.SetMap(*meta_info);
   }
   if (details.nickname) {
+    if (!details.nickname->empty() && vivaldi_bookmark_kit::DoesNickExists(
+                                          model, *details.nickname, nullptr)) {
+      error_ = vivaldi::kNicknameExists;
+      return nullptr;
+    }
     vivaldi_meta.SetNickname(*details.nickname);
   }
   if (details.description) {
@@ -219,9 +224,6 @@ const BookmarkNode* BookmarksFunction::CreateBookmarkNode(
   }
   if (details.partner) {
     vivaldi_meta.SetPartner(*details.partner);
-  }
-  if (details.default_favicon_uri) {
-    vivaldi_meta.SetDefaultFaviconUri(*details.default_favicon_uri);
   }
   meta_info = vivaldi_meta.map();
 
@@ -387,14 +389,16 @@ void BookmarkEventRouter::BookmarkNodeChanged(BookmarkModel* model,
   if (node->is_url())
     change_info.url.reset(new std::string(node->url().spec()));
   // Additions for vivaldi
-  change_info.speeddial.reset(new bool(node->GetSpeeddial()));
-  change_info.bookmarkbar.reset(new bool(node->GetBookmarkbar()));
+  change_info.speeddial.reset(
+      new bool(vivaldi_bookmark_kit::GetSpeeddial(node)));
+  change_info.bookmarkbar.reset(
+      new bool(vivaldi_bookmark_kit::GetBookmarkbar(node)));
   change_info.description.reset(
-      new std::string(base::UTF16ToUTF8(node->GetDescription())));
+      new std::string(vivaldi_bookmark_kit::GetDescription(node)));
   change_info.thumbnail.reset(
-      new std::string(base::UTF16ToUTF8(node->GetThumbnail())));
+      new std::string(vivaldi_bookmark_kit::GetThumbnail(node)));
   change_info.nickname.reset(
-      new std::string(base::UTF16ToUTF8(node->GetNickName())));
+      new std::string(vivaldi_bookmark_kit::GetNickname(node)));
 
   DispatchEvent(events::BOOKMARKS_ON_CHANGED,
                 api::bookmarks::OnChanged::kEventName,
@@ -495,7 +499,7 @@ bool BookmarksGetFunction::RunOnReady() {
     bookmark_api_helpers::AddNode(managed, node, &nodes, false);
   }
 
-  results_ = api::bookmarks::Get::Results::Create(nodes);
+  SetResultList(api::bookmarks::Get::Results::Create(nodes));
   return true;
 }
 
@@ -514,7 +518,7 @@ bool BookmarksGetChildrenFunction::RunOnReady() {
                                   &nodes, false);
   }
 
-  results_ = api::bookmarks::GetChildren::Results::Create(nodes);
+  SetResultList(api::bookmarks::GetChildren::Results::Create(nodes));
   return true;
 }
 
@@ -536,7 +540,7 @@ bool BookmarksGetRecentFunction::RunOnReady() {
                                   &tree_nodes, false);
   }
 
-  results_ = api::bookmarks::GetRecent::Results::Create(tree_nodes);
+  SetResultList(api::bookmarks::GetRecent::Results::Create(tree_nodes));
   return true;
 }
 
@@ -546,7 +550,7 @@ bool BookmarksGetTreeFunction::RunOnReady() {
       BookmarkModelFactory::GetForBrowserContext(GetProfile())->root_node();
   bookmark_api_helpers::AddNode(GetManagedBookmarkService(), node, &nodes,
                                 true);
-  results_ = api::bookmarks::GetTree::Results::Create(nodes);
+  SetResultList(api::bookmarks::GetTree::Results::Create(nodes));
   return true;
 }
 
@@ -562,7 +566,7 @@ bool BookmarksGetSubTreeFunction::RunOnReady() {
   std::vector<BookmarkTreeNode> nodes;
   bookmark_api_helpers::AddNode(GetManagedBookmarkService(), node, &nodes,
                                 true);
-  results_ = api::bookmarks::GetSubTree::Results::Create(nodes);
+  SetResultList(api::bookmarks::GetSubTree::Results::Create(nodes));
   return true;
 }
 
@@ -602,7 +606,7 @@ bool BookmarksSearchFunction::RunOnReady() {
   for (const BookmarkNode* node : nodes)
     bookmark_api_helpers::AddNode(managed, node, &tree_nodes, false);
 
-  results_ = api::bookmarks::Search::Results::Create(tree_nodes);
+  SetResultList(api::bookmarks::Search::Results::Create(tree_nodes));
   return true;
 }
 
@@ -619,14 +623,13 @@ bool BookmarksRemoveFunctionBase::RunOnReady() {
     return false;
 
   BookmarkModel* model = GetBookmarkModel();
+
   if (extension() && IsVivaldiApp(extension_id()) == false) {
     // VB-10596 - Enforce that extensions cannot delete a folder
     // we are using as a Speed Dial folder.
     const BookmarkNode* node = ::bookmarks::GetBookmarkNodeByID(model, id);
     if (node) {
-      std::string is_speeddial;
-      if (node->is_folder() && node->GetMetaInfo("Speeddial", &is_speeddial) &&
-          is_speeddial == "true") {
+      if (node->is_folder() && vivaldi_bookmark_kit::GetSpeeddial(node)) {
         // Ignore the delete request for this Speed Dial folder but pretend it
         // succeeded.
         return true;
@@ -634,22 +637,37 @@ bool BookmarksRemoveFunctionBase::RunOnReady() {
     }
   }
 
-  // Vivaldi spcecific section: Remove separator node immediately.
-  // TODO(espen@vivaldi.com): Add separator flag to node. Needed many places.
-  const BookmarkNode* node = ::bookmarks::GetBookmarkNodeByID(model, id);
-  if (node && node->GetTitle() == base::UTF8ToUTF16("---") &&
-      node->GetDescription() == base::UTF8ToUTF16("separator")) {
-    ManagedBookmarkService* managed = GetManagedBookmarkService();
-    return bookmark_api_helpers::RemoveNode(model, managed, id, false, &error_);
+  if (vivaldi::IsVivaldiRunning()) {
+    // Move to trash if possible
+    const BookmarkNode* trash_node = model->trash_node();
+    DCHECK(trash_node);
+    const BookmarkNode* node = bookmarks::GetBookmarkNodeByID(model, id);
+    if (!node || !trash_node) {
+      error_ = bookmark_api_constants::kNoNodeError;
+      return false;
+    }
+    if (model->is_permanent_node(node)) {
+      error_ = bookmark_api_constants::kModifySpecialError;
+      return false;
+    }
+
+    // If it's already in trash or a separator, just delete it.
+    if (bookmarks::IsDescendantOf(node, trash_node) ||
+        vivaldi_bookmark_kit::IsSeparator(node)) {
+      model->Remove(node);
+    } else {
+      model->Move(node, trash_node, 0);
+    }
+    return true;
   }
-  // Vivaldi spcecific section ends
 
   ManagedBookmarkService* managed = GetManagedBookmarkService();
-  if (!vivaldi::IsVivaldiRunning()) {
-    return bookmark_api_helpers::RemoveNode(model, managed, id, is_recursive(),
-                                            &error_);
+  if (!bookmark_api_helpers::RemoveNode(model, managed, id, is_recursive(),
+                                        &error_)) {
+    return false;
   }
-  return bookmark_api_helpers::MoveNodeToTrash(model, managed, id, 0, &error_);
+
+  return true;
 }
 
 bool BookmarksRemoveFunction::is_recursive() const {
@@ -668,20 +686,6 @@ bool BookmarksCreateFunction::RunOnReady() {
       api::bookmarks::Create::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  if (params->bookmark.nickname.get()) {
-    base::string16 nick = base::UTF8ToUTF16(*params->bookmark.nickname.get());
-
-    if (nick.length() > 0) {
-      bool doesNickExists = bookmark_api_helpers::DoesNickExists(
-          BookmarkModelFactory::GetForBrowserContext(GetProfile()), nick, -1);
-
-      if (doesNickExists) {
-        error_ = vivaldi::kNicknameExists;
-        return false;
-      }
-    }
-  }
-
   BookmarkModel* model =
       BookmarkModelFactory::GetForBrowserContext(GetProfile());
   const BookmarkNode* node = CreateBookmarkNode(model, params->bookmark, NULL);
@@ -690,7 +694,7 @@ bool BookmarksCreateFunction::RunOnReady() {
 
   BookmarkTreeNode ret = bookmark_api_helpers::GetBookmarkTreeNode(
       GetManagedBookmarkService(), node, false, false);
-  results_ = api::bookmarks::Create::Results::Create(ret);
+  SetResultList(api::bookmarks::Create::Results::Create(ret));
 
   return true;
 }
@@ -724,6 +728,15 @@ bool BookmarksMoveFunction::RunOnReady() {
       return false;
 
     parent = bookmarks::GetBookmarkNodeByID(model, parentId);
+    if (vivaldi::IsVivaldiRunning()){
+      // Do not move a folder into itself. We could rely on a test in JS, but
+      // other extensions could trigger this as well. In vivaldi this can happen
+      // if we try to move a folder to the bookmark bar folder and the folder is
+      // already the bookmark bar folder or a parent of it.
+      if (node->is_folder() && bookmarks::IsDescendantOf(parent, node)) {
+        return false;
+      }
+    }
   }
   if (!CanBeModified(parent) || !CanBeModified(node))
     return false;
@@ -744,7 +757,7 @@ bool BookmarksMoveFunction::RunOnReady() {
 
   BookmarkTreeNode tree_node = bookmark_api_helpers::GetBookmarkTreeNode(
       GetManagedBookmarkService(), node, false, false);
-  results_ = api::bookmarks::Move::Results::Create(tree_node);
+  SetResultList(api::bookmarks::Move::Results::Create(tree_node));
 
   return true;
 }
@@ -756,27 +769,6 @@ bool BookmarksUpdateFunction::RunOnReady() {
   std::unique_ptr<api::bookmarks::Update::Params> params(
       api::bookmarks::Update::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
-
-  if (params->changes.nickname.get()) {
-    base::string16 nick = base::UTF8ToUTF16(*params->changes.nickname.get());
-
-    if (nick.length() > 0) {
-      int64_t idToCheck;
-
-      if (!GetBookmarkIdAsInt64(params->id, &idToCheck)) {
-        return false;
-      }
-
-      bool doesNickExists = bookmark_api_helpers::DoesNickExists(
-          BookmarkModelFactory::GetForBrowserContext(GetProfile()),
-                                                     nick, idToCheck);
-
-      if (doesNickExists) {
-        error_ = vivaldi::kNicknameExists;
-        return false;
-      }
-    }
-  }
 
   // Optional but we need to distinguish non present from an empty title.
   base::string16 title;
@@ -822,6 +814,13 @@ bool BookmarksUpdateFunction::RunOnReady() {
     return false;
   }
 
+  if (params->changes.nickname && !params->changes.nickname->empty() &&
+      ::vivaldi_bookmark_kit::DoesNickExists(model, *params->changes.nickname,
+                                             node)) {
+    error_ = vivaldi::kNicknameExists;
+    return false;
+  }
+
   if (has_title)
     model->SetTitle(node, title);
   if (!url.is_empty())
@@ -854,7 +853,7 @@ bool BookmarksUpdateFunction::RunOnReady() {
 
   BookmarkTreeNode tree_node = bookmark_api_helpers::GetBookmarkTreeNode(
       GetManagedBookmarkService(), node, false, false);
-  results_ = api::bookmarks::Update::Results::Create(tree_node);
+  SetResultList(api::bookmarks::Update::Results::Create(tree_node));
   return true;
 }
 
@@ -943,9 +942,9 @@ bool BookmarksExportFunction::RunOnReady() {
   // extensions use user gesture for export, so use USER_VISIBLE priority.
   // GetDefaultFilepathForBookmarkExport() might have to touch filesystem
   // (stat or access, for example), so this requires IO.
-  base::PostTaskAndReplyWithResult(
+  base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE,
-      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE,
+      {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
        base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
       base::BindOnce(&GetDefaultFilepathForBookmarkExport),
       base::BindOnce(&BookmarksIOFunction::ShowSelectFileDialog, this,

@@ -29,6 +29,7 @@
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
+#include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/html/html_body_element.h"
 #include "third_party/blink/renderer/core/layout/geometry/transform_state.h"
 #include "third_party/blink/renderer/core/layout/layout_block.h"
@@ -36,6 +37,8 @@
 #include "third_party/blink/renderer/core/layout/layout_geometry_map.h"
 #include "third_party/blink/renderer/core/layout/layout_inline.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
+#include "third_party/blink/renderer/core/layout/ng/ng_constraint_space.h"
+#include "third_party/blink/renderer/core/layout/ng/ng_layout_result.h"
 #include "third_party/blink/renderer/core/paint/compositing/composited_layer_mapping.h"
 #include "third_party/blink/renderer/core/paint/compositing/paint_layer_compositor.h"
 #include "third_party/blink/renderer/core/paint/object_paint_invalidator.h"
@@ -85,10 +88,6 @@ void LayoutBoxModelObject::ContentChanged(ContentChangeType change_type) {
   Layer()->ContentChanged(change_type);
 }
 
-bool LayoutBoxModelObject::HasAcceleratedCompositing() const {
-  return View()->Compositor()->HasAcceleratedCompositing();
-}
-
 LayoutBoxModelObject::LayoutBoxModelObject(ContainerNode* node)
     : LayoutObject(node) {}
 
@@ -97,9 +96,10 @@ bool LayoutBoxModelObject::UsesCompositedScrolling() const {
          Layer()->GetScrollableArea()->UsesCompositedScrolling();
 }
 
-BackgroundPaintLocation LayoutBoxModelObject::GetBackgroundPaintLocation(
+BackgroundPaintLocation
+LayoutBoxModelObject::ComputeBackgroundPaintLocationIfComposited(
     uint32_t* main_thread_scrolling_reasons) const {
-  bool may_have_scrolling_layers_without_scrolling = IsLayoutView();
+  bool may_have_scrolling_layers_without_scrolling = IsA<LayoutView>(this);
   const auto* scrollable_area = GetScrollableArea();
   bool scrolls_overflow = scrollable_area && scrollable_area->ScrollsOverflow();
   if (!scrolls_overflow && !may_have_scrolling_layers_without_scrolling)
@@ -108,9 +108,8 @@ BackgroundPaintLocation LayoutBoxModelObject::GetBackgroundPaintLocation(
   // If we care about LCD text, paint root backgrounds into scrolling contents
   // layer even if style suggests otherwise. (For non-root scrollers, we just
   // avoid compositing - see PLSA::ComputeNeedsCompositedScrolling.)
-  if (IsLayoutView()) {
-    DCHECK(Layer()->Compositor());
-    if (!Layer()->Compositor()->PreferCompositingToLCDTextEnabled())
+  if (IsA<LayoutView>(this)) {
+    if (!GetDocument().GetSettings()->GetPreferCompositingToLCDTextEnabled())
       return kBackgroundPaintInScrollingContents;
   }
 
@@ -283,13 +282,9 @@ void LayoutBoxModelObject::StyleDidChange(StyleDifference diff,
   // block/inline position.
   // Position changes and other types of display changes are handled elsewhere.
   if (old_style && IsOutOfFlowPositioned() && Parent() &&
-      (Parent() != ContainingBlock()) &&
       (StyleRef().GetPosition() == old_style->GetPosition()) &&
-      (StyleRef().OriginalDisplay() != old_style->OriginalDisplay()) &&
-      ((StyleRef().OriginalDisplay() == EDisplay::kBlock) ||
-       (StyleRef().OriginalDisplay() == EDisplay::kInlineBlock)) &&
-      ((old_style->OriginalDisplay() == EDisplay::kBlock) ||
-       (old_style->OriginalDisplay() == EDisplay::kInlineBlock)))
+      (StyleRef().IsOriginalDisplayInlineType() !=
+       old_style->IsOriginalDisplayInlineType()))
     Parent()->SetNeedsLayout(layout_invalidation_reason::kChildChanged,
                              kMarkContainerChain);
 
@@ -320,7 +315,7 @@ void LayoutBoxModelObject::StyleDidChange(StyleDifference diff,
     if (EverHadLayout())
       SetChildNeedsLayout();
     if (had_transform_related_property) {
-      SetNeedsLayoutAndPrefWidthsRecalcAndFullPaintInvalidation(
+      SetNeedsLayoutAndIntrinsicWidthsRecalcAndFullPaintInvalidation(
           layout_invalidation_reason::kStyleChange);
     }
     if (!NeedsLayout()) {
@@ -329,9 +324,11 @@ void LayoutBoxModelObject::StyleDidChange(StyleDifference diff,
     }
   }
 
-  if (old_style &&
-      (could_contain_fixed != CanContainFixedPositionObjects() ||
-       could_contain_absolute != CanContainAbsolutePositionObjects())) {
+  bool can_contain_fixed = CanContainFixedPositionObjects();
+  bool can_contain_absolute = CanContainAbsolutePositionObjects();
+
+  if (old_style && (could_contain_fixed != can_contain_fixed ||
+                    could_contain_absolute != can_contain_absolute)) {
     // If out of flow element containment changed, then we need to force a
     // subtree paint property update, since the children elements may now be
     // referencing a different container.
@@ -345,6 +342,32 @@ void LayoutBoxModelObject::StyleDidChange(StyleDifference diff,
     SetNeedsPaintPropertyUpdate();
     if (Layer())
       Layer()->SetNeedsCompositingInputsUpdate();
+  }
+
+  if (old_style && Parent()) {
+    LayoutBlock* block = FindNonAnonymousContainingBlock(this);
+
+    if ((could_contain_fixed && !can_contain_fixed) ||
+        (could_contain_absolute && !can_contain_absolute)) {
+      // Clear our positioned objects list. Our absolute and fixed positioned
+      // descendants will be inserted into our containing block's positioned
+      // objects list during layout.
+      block->RemovePositionedObjects(nullptr, kNewContainingBlock);
+    }
+    if (!could_contain_absolute && can_contain_absolute) {
+      // Remove our absolute positioned descendants from their current
+      // containing block.
+      // They will be inserted into our positioned objects list during layout.
+      if (LayoutBlock* cb = block->ContainingBlockForAbsolutePosition())
+        cb->RemovePositionedObjects(this, kNewContainingBlock);
+    }
+    if (!could_contain_fixed && can_contain_fixed) {
+      // Remove our fixed positioned descendants from their current containing
+      // block.
+      // They will be inserted into our positioned objects list during layout.
+      if (LayoutBlock* cb = block->ContainingBlockForFixedPosition())
+        cb->RemovePositionedObjects(this, kNewContainingBlock);
+    }
   }
 
   if (Layer()) {
@@ -416,7 +439,6 @@ void LayoutBoxModelObject::StyleDidChange(StyleDifference diff,
 
         // Remove sticky constraints for this layer.
         if (Layer()) {
-          DisableCompositingQueryAsserts disabler;
           if (const PaintLayer* ancestor_overflow_layer =
                   Layer()->AncestorOverflowLayer()) {
             if (PaintLayerScrollableArea* scrollable_area =
@@ -444,7 +466,7 @@ void LayoutBoxModelObject::StyleDidChange(StyleDifference diff,
     SetNeedsPaintPropertyUpdate();
   }
 
-  if (old_style && HasLayer() && !Layer()->NeedsRepaint() &&
+  if (old_style && HasLayer() && !Layer()->SelfNeedsRepaint() &&
       diff.TransformChanged() &&
       (RuntimeEnabledFeatures::CompositeAfterPaintEnabled() ||
        !Layer()->HasStyleDeterminedDirectCompositingReasons())) {
@@ -491,7 +513,6 @@ void LayoutBoxModelObject::InvalidateStickyConstraints() {
   // This intentionally uses the stale ancestor overflow layer compositing input
   // as if we have saved constraints for this layer they were saved in the
   // previous frame.
-  DisableCompositingQueryAsserts disabler;
   if (const PaintLayer* ancestor_overflow_layer =
           enclosing->AncestorOverflowLayer()) {
     if (PaintLayerScrollableArea* ancestor_scrollable_area =
@@ -509,6 +530,8 @@ void LayoutBoxModelObject::CreateLayerAfterStyleChange() {
   // Creating a layer may affect existence of the LocalBorderBoxProperties, so
   // we need to ensure that we update paint properties.
   SetNeedsPaintPropertyUpdate();
+  if (GetScrollableArea())
+    GetScrollableArea()->InvalidateScrollTimeline();
 }
 
 void LayoutBoxModelObject::DestroyLayer() {
@@ -518,6 +541,7 @@ void LayoutBoxModelObject::DestroyLayer() {
   // Removing a layer may affect existence of the LocalBorderBoxProperties, so
   // we need to ensure that we update paint properties.
   SetNeedsPaintPropertyUpdate();
+  SetBackgroundPaintLocation(kBackgroundPaintInGraphicsLayer);
 }
 
 bool LayoutBoxModelObject::HasSelfPaintingLayer() const {
@@ -651,7 +675,7 @@ LayoutBlock* LayoutBoxModelObject::ContainingBlockForAutoHeightDetection(
 
   // Match LayoutBox::availableLogicalHeightUsing by special casing the layout
   // view. The available height is taken from the frame.
-  if (cb->IsLayoutView())
+  if (IsA<LayoutView>(cb))
     return nullptr;
 
   if (IsOutOfFlowPositionedWithImplicitHeight(cb))
@@ -672,10 +696,17 @@ bool LayoutBoxModelObject::HasAutoHeightOrContainingBlockWithAutoHeight(
       logical_height_length.IsPercentOrCalc() && cb && IsBox()) {
     cb->AddPercentHeightDescendant(const_cast<LayoutBox*>(ToLayoutBox(this)));
   }
-  if (this_box && this_box->IsFlexItem()) {
-    const LayoutFlexibleBox& flex_box = ToLayoutFlexibleBox(*Parent());
-    if (flex_box.UseOverrideLogicalHeightForPerentageResolution(*this_box))
-      return false;
+  if (this_box && this_box->IsFlexItemIncludingNG()) {
+    if (this_box->IsFlexItem()) {
+      const LayoutFlexibleBox& flex_box = ToLayoutFlexibleBox(*Parent());
+      if (flex_box.UseOverrideLogicalHeightForPerentageResolution(*this_box))
+        return false;
+    } else if (this_box->GetCachedLayoutResult()) {
+      const NGConstraintSpace& space =
+          this_box->GetCachedLayoutResult()->GetConstraintSpaceForCaching();
+      if (space.IsFixedBlockSize() && !space.IsFixedBlockSizeIndefinite())
+        return false;
+    }
   }
   if (this_box && this_box->IsGridItem() &&
       this_box->HasOverrideContainingBlockContentLogicalHeight())
@@ -694,8 +725,14 @@ bool LayoutBoxModelObject::HasAutoHeightOrContainingBlockWithAutoHeight(
     // resolve the block-size of the descendant, except when in quirks mode.
     // Flexboxes follow strict behavior even in quirks mode, though.
     if (!GetDocument().InQuirksMode() ||
-        cb->IsFlexibleBoxIncludingDeprecatedAndNG())
+        cb->IsFlexibleBoxIncludingDeprecatedAndNG()) {
+      if (this_box &&
+          this_box->HasOverrideContainingBlockContentLogicalHeight()) {
+        return this_box->OverrideContainingBlockContentLogicalHeight() ==
+               LayoutUnit(-1);
+      }
       return !cb->HasDefiniteLogicalHeight();
+    }
   }
 
   return false;
@@ -828,10 +865,10 @@ PhysicalOffset LayoutBoxModelObject::RelativePositionOffset() const {
 void LayoutBoxModelObject::UpdateStickyPositionConstraints() const {
   DCHECK(StyleRef().HasStickyConstrainedPosition());
 
-  const FloatSize constraining_size = ComputeStickyConstrainingRect().Size();
+  const PhysicalSize constraining_size = ComputeStickyConstrainingRect().size;
 
   StickyPositionScrollingConstraints constraints;
-  FloatSize skipped_containers_offset;
+  PhysicalOffset skipped_containers_offset;
   LayoutBlock* containing_block = ContainingBlock();
   // The location container for boxes is not always the containing block.
   LayoutObject* location_container =
@@ -847,14 +884,13 @@ void LayoutBoxModelObject::UpdateStickyPositionConstraints() const {
   // TODO(crbug.com/966131): Is kIgnoreTransforms correct here?
   MapCoordinatesFlags flags =
       kIgnoreTransforms | kIgnoreScrollOffset | kIgnoreStickyOffset;
-  skipped_containers_offset =
-      FloatSize(location_container->LocalToAncestorPoint(
-          PhysicalOffset(), containing_block, flags));
+  skipped_containers_offset = location_container->LocalToAncestorPoint(
+      PhysicalOffset(), containing_block, flags);
   LayoutBox& scroll_ancestor =
       ToLayoutBox(Layer()->AncestorOverflowLayer()->GetLayoutObject());
 
   LayoutUnit max_container_width =
-      containing_block->IsLayoutView()
+      IsA<LayoutView>(containing_block)
           ? containing_block->LogicalWidth()
           : containing_block->ContainingBlockLogicalWidthForContent();
   // Sticky positioned element ignore any override logical width on the
@@ -866,22 +902,24 @@ void LayoutBoxModelObject::UpdateStickyPositionConstraints() const {
 
   // Map the containing block to the inner corner of the scroll ancestor without
   // transforms.
-  FloatRect scroll_container_relative_padding_box_rect(
+  PhysicalRect scroll_container_relative_padding_box_rect(
       containing_block->LayoutOverflowRect());
-  FloatSize scroll_container_border_offset =
-      FloatSize(scroll_ancestor.BorderLeft(), scroll_ancestor.BorderTop());
   if (containing_block != &scroll_ancestor) {
     PhysicalRect local_rect = containing_block->PhysicalPaddingBoxRect();
     scroll_container_relative_padding_box_rect =
-        FloatRect(containing_block->LocalToAncestorRect(
-            local_rect, &scroll_ancestor, flags));
+        containing_block->LocalToAncestorRect(local_rect, &scroll_ancestor,
+                                              flags);
   }
+
   // Remove top-left border offset from overflow scroller.
+  PhysicalOffset scroll_container_border_offset(scroll_ancestor.BorderLeft(),
+                                                scroll_ancestor.BorderTop());
   scroll_container_relative_padding_box_rect.Move(
       -scroll_container_border_offset);
 
-  LayoutRect scroll_container_relative_containing_block_rect(
+  PhysicalRect scroll_container_relative_containing_block_rect(
       scroll_container_relative_padding_box_rect);
+
   // This is removing the padding of the containing block's overflow rect to get
   // the flow box rectangle and removing the margin of the sticky element to
   // ensure that space between the sticky element and its containing flow box.
@@ -902,32 +940,29 @@ void LayoutBoxModelObject::UpdateStickyPositionConstraints() const {
           MinimumValueForLength(StyleRef().MarginLeft(), max_width));
 
   constraints.scroll_container_relative_containing_block_rect =
-      FloatRect(scroll_container_relative_containing_block_rect);
+      scroll_container_relative_containing_block_rect;
 
-  FloatRect sticky_box_rect;
+  PhysicalRect sticky_box_rect;
   if (IsLayoutInline()) {
-    sticky_box_rect =
-        FloatRect(ToLayoutInline(this)->PhysicalLinesBoundingBox());
+    sticky_box_rect = ToLayoutInline(this)->PhysicalLinesBoundingBox();
   } else {
-    PhysicalRect physical_rect =
+    sticky_box_rect =
         containing_block->FlipForWritingMode(ToLayoutBox(this)->FrameRect());
-    sticky_box_rect = FloatRect(physical_rect);
   }
-  FloatPoint sticky_location =
-      sticky_box_rect.Location() + skipped_containers_offset;
+  PhysicalOffset sticky_location =
+      sticky_box_rect.offset + skipped_containers_offset;
 
   // The scrollContainerRelativePaddingBoxRect's position is the padding box so
   // we need to remove the border when finding the position of the sticky box
   // within the scroll ancestor if the container is not our scroll ancestor. If
   // the container is our scroll ancestor, we also need to remove the border
   // box because we want the position from within the scroller border.
-  FloatSize container_border_offset(containing_block->BorderLeft(),
-                                    containing_block->BorderTop());
+  PhysicalOffset container_border_offset(containing_block->BorderLeft(),
+                                         containing_block->BorderTop());
   sticky_location -= container_border_offset;
-  constraints.scroll_container_relative_sticky_box_rect =
-      FloatRect(scroll_container_relative_padding_box_rect.Location() +
-                    ToFloatSize(sticky_location),
-                sticky_box_rect.Size());
+  constraints.scroll_container_relative_sticky_box_rect = PhysicalRect(
+      scroll_container_relative_padding_box_rect.offset + sticky_location,
+      sticky_box_rect.size);
 
   // To correctly compute the offsets, the constraints need to know about any
   // nested position:sticky elements between themselves and their
@@ -947,31 +982,29 @@ void LayoutBoxModelObject::UpdateStickyPositionConstraints() const {
   // We skip the right or top sticky offset if there is not enough space to
   // honor both the left/right or top/bottom offsets.
   LayoutUnit horizontal_offsets =
-      MinimumValueForLength(StyleRef().Right(),
-                            LayoutUnit(constraining_size.Width())) +
-      MinimumValueForLength(StyleRef().Left(),
-                            LayoutUnit(constraining_size.Width()));
+      MinimumValueForLength(StyleRef().Right(), constraining_size.width) +
+      MinimumValueForLength(StyleRef().Left(), constraining_size.width);
   bool skip_right = false;
   bool skip_left = false;
   if (!StyleRef().Left().IsAuto() && !StyleRef().Right().IsAuto()) {
     if (horizontal_offsets >
             scroll_container_relative_containing_block_rect.Width() ||
         horizontal_offsets + sticky_box_rect.Width() >
-            constraining_size.Width()) {
+            constraining_size.width) {
       skip_right = StyleRef().IsLeftToRightDirection();
       skip_left = !skip_right;
     }
   }
 
   if (!StyleRef().Left().IsAuto() && !skip_left) {
-    constraints.left_offset = MinimumValueForLength(
-        StyleRef().Left(), LayoutUnit(constraining_size.Width()));
+    constraints.left_offset =
+        MinimumValueForLength(StyleRef().Left(), constraining_size.width);
     constraints.is_anchored_left = true;
   }
 
   if (!StyleRef().Right().IsAuto() && !skip_right) {
-    constraints.right_offset = MinimumValueForLength(
-        StyleRef().Right(), LayoutUnit(constraining_size.Width()));
+    constraints.right_offset =
+        MinimumValueForLength(StyleRef().Right(), constraining_size.width);
     constraints.is_anchored_right = true;
   }
 
@@ -980,28 +1013,26 @@ void LayoutBoxModelObject::UpdateStickyPositionConstraints() const {
   // mode when related sections are fixed in spec.
   // See http://lists.w3.org/Archives/Public/www-style/2014May/0286.html
   LayoutUnit vertical_offsets =
-      MinimumValueForLength(StyleRef().Top(),
-                            LayoutUnit(constraining_size.Height())) +
-      MinimumValueForLength(StyleRef().Bottom(),
-                            LayoutUnit(constraining_size.Height()));
+      MinimumValueForLength(StyleRef().Top(), constraining_size.height) +
+      MinimumValueForLength(StyleRef().Bottom(), constraining_size.height);
   if (!StyleRef().Top().IsAuto() && !StyleRef().Bottom().IsAuto()) {
     if (vertical_offsets >
             scroll_container_relative_containing_block_rect.Height() ||
         vertical_offsets + sticky_box_rect.Height() >
-            constraining_size.Height()) {
+            constraining_size.height) {
       skip_bottom = true;
     }
   }
 
   if (!StyleRef().Top().IsAuto()) {
-    constraints.top_offset = MinimumValueForLength(
-        StyleRef().Top(), LayoutUnit(constraining_size.Height()));
+    constraints.top_offset =
+        MinimumValueForLength(StyleRef().Top(), constraining_size.height);
     constraints.is_anchored_top = true;
   }
 
   if (!StyleRef().Bottom().IsAuto() && !skip_bottom) {
-    constraints.bottom_offset = MinimumValueForLength(
-        StyleRef().Bottom(), LayoutUnit(constraining_size.Height()));
+    constraints.bottom_offset =
+        MinimumValueForLength(StyleRef().Bottom(), constraining_size.height);
     constraints.is_anchored_bottom = true;
   }
   PaintLayerScrollableArea* scrollable_area =
@@ -1036,22 +1067,24 @@ bool LayoutBoxModelObject::IsSlowRepaintConstrainedObject() const {
   return (layer->GetCompositingState() == kNotComposited);
 }
 
-FloatRect LayoutBoxModelObject::ComputeStickyConstrainingRect() const {
+PhysicalRect LayoutBoxModelObject::ComputeStickyConstrainingRect() const {
   LayoutBox* enclosing_clipping_box =
       Layer()->AncestorOverflowLayer()->GetLayoutBox();
   DCHECK(enclosing_clipping_box);
-  FloatRect constraining_rect;
+  PhysicalRect constraining_rect;
   constraining_rect =
-      FloatRect(enclosing_clipping_box->OverflowClipRect(LayoutPoint()));
-  constraining_rect.Move(-enclosing_clipping_box->BorderLeft() +
-                             enclosing_clipping_box->PaddingLeft(),
-                         -enclosing_clipping_box->BorderTop() +
-                             enclosing_clipping_box->PaddingTop());
-  constraining_rect.Contract(
-      FloatSize(enclosing_clipping_box->PaddingLeft() +
-                    enclosing_clipping_box->PaddingRight(),
-                enclosing_clipping_box->PaddingTop() +
-                    enclosing_clipping_box->PaddingBottom()));
+      PhysicalRect(enclosing_clipping_box->OverflowClipRect(LayoutPoint()));
+  constraining_rect.Move(
+      PhysicalOffset(-enclosing_clipping_box->BorderLeft() +
+                         enclosing_clipping_box->PaddingLeft(),
+                     -enclosing_clipping_box->BorderTop() +
+                         enclosing_clipping_box->PaddingTop()));
+  constraining_rect.ContractEdges(LayoutUnit(),
+                                  enclosing_clipping_box->PaddingLeft() +
+                                      enclosing_clipping_box->PaddingRight(),
+                                  enclosing_clipping_box->PaddingTop() +
+                                      enclosing_clipping_box->PaddingBottom(),
+                                  LayoutUnit());
   return constraining_rect;
 }
 
@@ -1074,11 +1107,10 @@ PhysicalOffset LayoutBoxModelObject::StickyPositionOffset() const {
 
   // The sticky offset is physical, so we can just return the delta computed in
   // absolute coords (though it may be wrong with transforms).
-  FloatRect constraining_rect = ComputeStickyConstrainingRect();
-  constraining_rect.MoveBy(
-      ancestor_overflow_layer->GetScrollableArea()->ScrollPosition());
-  return PhysicalOffset::FromFloatSizeRound(
-      constraints->ComputeStickyOffset(constraining_rect, constraints_map));
+  PhysicalRect constraining_rect = ComputeStickyConstrainingRect();
+  constraining_rect.Move(PhysicalOffset::FromFloatPointRound(
+      ancestor_overflow_layer->GetScrollableArea()->ScrollPosition()));
+  return constraints->ComputeStickyOffset(constraining_rect, constraints_map);
 }
 
 PhysicalOffset LayoutBoxModelObject::AdjustedPositionRelativeTo(

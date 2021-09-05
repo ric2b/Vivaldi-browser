@@ -44,8 +44,9 @@ public final class TabParentIntent extends EmptyTabObserver implements UserData 
         boolean isSelected = TabModelSelector.from(mTab).getCurrentTab() == tab;
 
         // If the parent Tab belongs to another Activity, fire the Intent to bring it back.
-        if (isSelected && mParentIntent != null && tab.getActivity().getIntent() != mParentIntent) {
-            tab.getActivity().startActivity(mParentIntent);
+        if (isSelected && mParentIntent != null
+                && TabUtils.getActivity(tab).getIntent() != mParentIntent) {
+            TabUtils.getActivity(tab).startActivity(mParentIntent);
         }
     }
 

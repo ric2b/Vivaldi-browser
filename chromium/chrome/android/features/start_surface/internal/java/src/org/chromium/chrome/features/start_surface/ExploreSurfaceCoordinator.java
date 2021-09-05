@@ -9,12 +9,11 @@ import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.ViewGroup;
 
-import com.google.android.libraries.feed.api.client.stream.Stream;
-
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.feed.FeedProcessScopeFactory;
 import org.chromium.chrome.browser.feed.FeedSurfaceCoordinator;
 import org.chromium.chrome.browser.feed.StreamLifecycleManager;
+import org.chromium.chrome.browser.feed.library.api.client.stream.Stream;
 import org.chromium.chrome.browser.ntp.snippets.SectionHeaderView;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -88,7 +87,8 @@ class ExploreSurfaceCoordinator implements FeedSurfaceCoordinator.FeedSurfaceDel
                         FeedProcessScopeFactory.getFeedConsumptionObserver(),
                         FeedProcessScopeFactory.getFeedOfflineIndicator(),
                         OfflinePageBridge.getForProfile(Profile.getLastUsedProfile()),
-                        FeedProcessScopeFactory.getFeedLoggingBridge());
+                        FeedProcessScopeFactory.getFeedLoggingBridge(), mActivity,
+                        Profile.getLastUsedRegularProfile().getOriginalProfile());
 
         SectionHeaderView sectionHeaderView = null;
         if (hasHeader) {
@@ -96,8 +96,10 @@ class ExploreSurfaceCoordinator implements FeedSurfaceCoordinator.FeedSurfaceDel
             sectionHeaderView =
                     (SectionHeaderView) inflater.inflate(R.layout.ss_feed_header, null, false);
         }
-        return new FeedSurfaceCoordinator(mActivity, null, null, null, sectionHeaderView,
-                exploreSurfaceActionHandler, isInNightMode, this);
+        FeedSurfaceCoordinator feedSurfaceCoordinator = new FeedSurfaceCoordinator(mActivity, null,
+                null, sectionHeaderView, exploreSurfaceActionHandler, isInNightMode, this);
+        feedSurfaceCoordinator.getView().setId(R.id.start_surface_explore_view);
+        return feedSurfaceCoordinator;
         // TODO(crbug.com/982018): Customize surface background for incognito and dark mode.
         // TODO(crbug.com/982018): Hide signin promo UI in incognito mode.
     }

@@ -12,17 +12,22 @@
   </outputs>
   <release seq="1">
     <includes>
-      <include name="IDR_EXTENSIONS_VULCANIZED_HTML"
-               file="${root_gen_dir}\chrome\browser\resources\extensions\vulcanized.html"
+      <include name="IDR_EXTENSIONS_EXTENSIONS_HTML"
+               file="extensions.html"
+               type="chrome_html"
+               compress="gzip" />
+      <include name="IDR_EXTENSIONS_EXTENSIONS_ROLLUP_JS"
+               file="${root_gen_dir}\chrome\browser\resources\extensions\extensions.rollup.js"
                use_base_dir="false"
-               flattenhtml="true"
-               allowexternalscript="true"
+               preprocess="true"
                type="BINDATA"
                compress="gzip" />
-      <include name="IDR_EXTENSIONS_CRISPER_JS"
-               file="${root_gen_dir}\chrome\browser\resources\extensions\crisper.js"
-               use_base_dir="false"
-               flattenhtml="true"
+      <include name="IDR_EXTENSIONS_CHECKUP_IMAGE"
+               file="checkup_image.svg"
+               type="BINDATA"
+               compress="gzip" />
+      <include name="IDR_EXTENSIONS_CHECKUP_IMAGE_DARK"
+               file="checkup_image_dark.svg"
                type="BINDATA"
                compress="gzip" />
     </includes>

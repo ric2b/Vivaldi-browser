@@ -17,9 +17,7 @@ source_set("cpp") {
     "//services/video_capture/public/mojom",
   ]
 
-  deps = [
-    "//mojo/public/cpp/bindings:bindings",
-  ]
+  deps = [ "//mojo/public/cpp/bindings:bindings" ]
 }
 
 source_set("mocks") {
@@ -32,10 +30,10 @@ source_set("mocks") {
     "mock_producer.h",
     "mock_push_subscription.cc",
     "mock_push_subscription.h",
-    "mock_receiver.cc",
-    "mock_receiver.h",
     "mock_video_capture_service.cc",
     "mock_video_capture_service.h",
+    "mock_video_frame_handler.cc",
+    "mock_video_frame_handler.h",
     "mock_video_source.cc",
     "mock_video_source.h",
     "mock_video_source_provider.cc",

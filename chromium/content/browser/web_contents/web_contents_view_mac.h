@@ -21,7 +21,8 @@
 #include "content/common/drag_event_source_info.h"
 #include "content/common/web_contents_ns_view_bridge.mojom.h"
 #include "content/public/browser/visibility.h"
-#include "mojo/public/cpp/bindings/associated_binding.h"
+#include "mojo/public/cpp/bindings/associated_receiver.h"
+#include "mojo/public/cpp/bindings/associated_remote.h"
 #import "ui/base/cocoa/views_hostable.h"
 #include "ui/gfx/geometry/size.h"
 
@@ -75,12 +76,10 @@ class WebContentsViewMac : public WebContentsView,
   gfx::Rect GetViewBounds() const override;
   void CreateView(gfx::NativeView context) override;
   RenderWidgetHostViewBase* CreateViewForWidget(
-      RenderWidgetHost* render_widget_host,
-      bool is_guest_view_hack) override;
+      RenderWidgetHost* render_widget_host) override;
   RenderWidgetHostViewBase* CreateViewForChildWidget(
       RenderWidgetHost* render_widget_host) override;
   void SetPageTitle(const base::string16& title) override;
-  void RenderViewCreated(RenderViewHost* host) override;
   void RenderViewReady() override;
   void RenderViewHostChanged(RenderViewHost* old_host,
                              RenderViewHost* new_host) override;
@@ -132,7 +131,7 @@ class WebContentsViewMac : public WebContentsView,
   WebDragDest* drag_dest() const { return drag_dest_.get(); }
 
   using RenderWidgetHostViewCreateFunction =
-      RenderWidgetHostViewMac* (*)(RenderWidgetHost*, bool);
+      RenderWidgetHostViewMac* (*)(RenderWidgetHost*);
 
   // Used to override the creation of RenderWidgetHostViews in tests.
   CONTENT_EXPORT static void InstallCreateHookForTests(
@@ -216,9 +215,10 @@ class WebContentsViewMac : public WebContentsView,
       in_process_ns_view_bridge_;
 
   // Mojo bindings for an out of process instance of this NSView.
-  remote_cocoa::mojom::WebContentsNSViewAssociatedPtr remote_ns_view_;
-  mojo::AssociatedBinding<remote_cocoa::mojom::WebContentsNSViewHost>
-      remote_ns_view_host_binding_;
+  mojo::AssociatedRemote<remote_cocoa::mojom::WebContentsNSView>
+      remote_ns_view_;
+  mojo::AssociatedReceiver<remote_cocoa::mojom::WebContentsNSViewHost>
+      remote_ns_view_host_receiver_{this};
 
   // Used by CloseTabAfterEventTrackingIfNeeded.
   base::WeakPtrFactory<WebContentsViewMac> deferred_close_weak_ptr_factory_;

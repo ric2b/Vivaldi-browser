@@ -19,25 +19,24 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
 
-import org.chromium.chrome.browser.browserservices.trustedwebactivityui.TwaFinishHandler;
-import org.chromium.chrome.browser.customtabs.CustomTabIntentDataProvider;
+import androidx.browser.customtabs.TrustedWebUtils;
+import androidx.browser.trusted.TrustedWebActivityIntentBuilder;
+import androidx.browser.trusted.splashscreens.SplashScreenParamKey;
+
+import org.chromium.base.IntentUtils;
+import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider;
 import org.chromium.chrome.browser.customtabs.TranslucentCustomTabActivity;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.InflationObserver;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.util.ColorUtils;
-import org.chromium.chrome.browser.util.IntentUtils;
 import org.chromium.chrome.browser.webapps.SplashController;
 import org.chromium.chrome.browser.webapps.SplashDelegate;
 import org.chromium.chrome.browser.webapps.SplashscreenObserver;
 import org.chromium.content_public.browser.ScreenOrientationProvider;
 import org.chromium.ui.base.ActivityWindowAndroid;
+import org.chromium.ui.util.ColorUtils;
 
 import javax.inject.Inject;
-
-import androidx.browser.customtabs.TrustedWebUtils;
-import androidx.browser.trusted.TrustedWebActivityIntentBuilder;
-import androidx.browser.trusted.splashscreens.SplashScreenParamKey;
 
 /**
  * Orchestrates the flow of showing and removing splash screens for apps based on Trusted Web
@@ -47,7 +46,7 @@ import androidx.browser.trusted.splashscreens.SplashScreenParamKey;
  * - TWA client app verifies conditions for showing splash screen. If the checks pass, it shows the
  * splash screen immediately.
  * - The client passes the URI to a file with the splash image to
- * {@link android.support.customtabs.CustomTabsService}. The image is decoded and put into
+ * {@link androidx.browser.customtabs.CustomTabsService}. The image is decoded and put into
  * {@link SplashImageHolder}.
  * - The client then launches a TWA, at which point the Bitmap is already available.
  * - ChromeLauncherActivity calls {@link #handleIntent}, which starts
@@ -78,15 +77,14 @@ public class TwaSplashController
     private final ActivityLifecycleDispatcher mLifecycleDispatcher;
     private final ScreenOrientationProvider mScreenOrientationProvider;
     private final SplashImageHolder mSplashImageCache;
-    private final CustomTabIntentDataProvider mIntentDataProvider;
-    private final TwaFinishHandler mFinishHandler;
+    private final BrowserServicesIntentDataProvider mIntentDataProvider;
 
     @Inject
     public TwaSplashController(SplashController splashController, Activity activity,
             ActivityWindowAndroid activityWindowAndroid,
             ActivityLifecycleDispatcher lifecycleDispatcher,
             ScreenOrientationProvider screenOrientationProvider, SplashImageHolder splashImageCache,
-            CustomTabIntentDataProvider intentDataProvider, TwaFinishHandler finishHandler) {
+            BrowserServicesIntentDataProvider intentDataProvider) {
         mSplashController = splashController;
         mActivity = activity;
         mActivityWindowAndroid = activityWindowAndroid;
@@ -94,10 +92,10 @@ public class TwaSplashController
         mScreenOrientationProvider = screenOrientationProvider;
         mSplashImageCache = splashImageCache;
         mIntentDataProvider = intentDataProvider;
-        mFinishHandler = finishHandler;
 
         long splashHideAnimationDurationMs = IntentUtils.safeGetInt(
-                getSplashScreenParamsFromIntent(), SplashScreenParamKey.FADE_OUT_DURATION_MS, 0);
+                getSplashScreenParamsFromIntent(), SplashScreenParamKey.KEY_FADE_OUT_DURATION_MS,
+                0);
         boolean isWindowInitiallyTranslucent = mActivity instanceof TranslucentCustomTabActivity;
         mSplashController.setConfig(
                 this, isWindowInitiallyTranslucent, splashHideAnimationDurationMs);
@@ -110,11 +108,6 @@ public class TwaSplashController
         if (Build.VERSION.SDK_INT == Build.VERSION_CODES.O) {
             mScreenOrientationProvider.delayOrientationRequests(mActivityWindowAndroid);
         }
-
-        // If the client's activity is opaque, finishing the activities one after another may lead
-        // to bottom activity showing itself in a short flash. The problem can be solved by bottom
-        // activity killing the whole task.
-        mFinishHandler.setShouldAttemptFinishingTask(true);
     }
 
     @Override
@@ -134,7 +127,6 @@ public class TwaSplashController
     @Override
     public void onSplashHidden(Tab tab, @SplashController.SplashHidesReason int reason,
             long startTimestamp, long endTimestamp) {
-        mFinishHandler.setShouldAttemptFinishingTask(false);
         mLifecycleDispatcher.unregister(this); // Unregister to get gc-ed
     }
 
@@ -162,11 +154,12 @@ public class TwaSplashController
     private void applyCustomizationsToSplashScreenView(ImageView imageView) {
         Bundle params = getSplashScreenParamsFromIntent();
 
-        int backgroundColor =
-                IntentUtils.safeGetInt(params, SplashScreenParamKey.BACKGROUND_COLOR, Color.WHITE);
+        int backgroundColor = IntentUtils.safeGetInt(params,
+                SplashScreenParamKey.KEY_BACKGROUND_COLOR, Color.WHITE);
         imageView.setBackgroundColor(ColorUtils.getOpaqueColor(backgroundColor));
 
-        int scaleTypeOrdinal = IntentUtils.safeGetInt(params, SplashScreenParamKey.SCALE_TYPE, -1);
+        int scaleTypeOrdinal = IntentUtils.safeGetInt(params,
+                SplashScreenParamKey.KEY_SCALE_TYPE, -1);
         ImageView.ScaleType[] scaleTypes = ImageView.ScaleType.values();
         ImageView.ScaleType scaleType;
         if (scaleTypeOrdinal < 0 || scaleTypeOrdinal >= scaleTypes.length) {
@@ -178,7 +171,7 @@ public class TwaSplashController
 
         if (scaleType != ImageView.ScaleType.MATRIX) return;
         float[] matrixValues = IntentUtils.safeGetFloatArray(
-                params, SplashScreenParamKey.IMAGE_TRANSFORMATION_MATRIX);
+                params, SplashScreenParamKey.KEY_IMAGE_TRANSFORMATION_MATRIX);
         if (matrixValues == null || matrixValues.length != 9) return;
         Matrix matrix = new Matrix();
         matrix.setValues(matrixValues);

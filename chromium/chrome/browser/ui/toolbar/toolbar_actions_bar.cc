@@ -18,7 +18,6 @@
 #include "base/time/time.h"
 #include "chrome/browser/extensions/extension_message_bubble_controller.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/extensions/extension_action_view_controller.h"
@@ -113,8 +112,7 @@ ToolbarActionsBar::ToolbarActionsBar(ToolbarActionsBarDelegate* delegate,
   if (model_)  // |model_| can be null in unittests.
     model_observer_.Add(model_);
 
-  if (base::FeatureList::IsEnabled(features::kExtensionsToolbarMenu))
-    DCHECK(!in_overflow_mode());
+  DCHECK(!base::FeatureList::IsEnabled(features::kExtensionsToolbarMenu));
 
   browser_->tab_strip_model()->AddObserver(this);
 }
@@ -131,6 +129,14 @@ ToolbarActionsBar::~ToolbarActionsBar() {
 
   for (ToolbarActionsBarObserver& observer : observers_)
     observer.OnToolbarActionsBarDestroyed();
+}
+
+// static
+ToolbarActionsBar* ToolbarActionsBar::FromBrowserWindow(BrowserWindow* window) {
+  DCHECK(!base::FeatureList::IsEnabled(features::kExtensionsToolbarMenu));
+  // The ToolbarActionsBar is the only implementation of the ExtensionsContainer
+  // if the ExtensionsMenu feature is disabled.
+  return static_cast<ToolbarActionsBar*>(window->GetExtensionsContainer());
 }
 
 // static
@@ -486,6 +492,20 @@ bool ToolbarActionsBar::IsActionVisibleOnToolbar(
       return true;
 
   return false;
+}
+
+extensions::ExtensionContextMenuModel::ButtonVisibility
+ToolbarActionsBar::GetActionVisibility(
+    const ToolbarActionViewController* action) const {
+  extensions::ExtensionContextMenuModel::ButtonVisibility visibility =
+      extensions::ExtensionContextMenuModel::VISIBLE;
+
+  if (GetPoppedOutAction() == action) {
+    visibility = extensions::ExtensionContextMenuModel::TRANSITIVELY_VISIBLE;
+  } else if (!IsActionVisibleOnToolbar(action)) {
+    visibility = extensions::ExtensionContextMenuModel::OVERFLOWED;
+  }
+  return visibility;
 }
 
 void ToolbarActionsBar::PopOutAction(ToolbarActionViewController* controller,

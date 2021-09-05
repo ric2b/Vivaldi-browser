@@ -99,7 +99,7 @@ class IgnoredReason {
   IgnoredReason(AXIgnoredReason r, const AXObject* obj)
       : reason(r), related_object(obj) {}
 
-  void Trace(blink::Visitor* visitor) { visitor->Trace(related_object); }
+  void Trace(Visitor* visitor) { visitor->Trace(related_object); }
 };
 
 class NameSourceRelatedObject final
@@ -111,7 +111,7 @@ class NameSourceRelatedObject final
   NameSourceRelatedObject(AXObject* object, String text)
       : object(object), text(text) {}
 
-  void Trace(blink::Visitor* visitor) { visitor->Trace(object); }
+  void Trace(Visitor* visitor) { visitor->Trace(object); }
 
   DISALLOW_COPY_AND_ASSIGN(NameSourceRelatedObject);
 };
@@ -136,7 +136,7 @@ class NameSource {
   explicit NameSource(bool superseded)
       : superseded(superseded), attribute(QualifiedName::Null()) {}
 
-  void Trace(blink::Visitor* visitor) { visitor->Trace(related_objects); }
+  void Trace(Visitor* visitor) { visitor->Trace(related_objects); }
 };
 
 class DescriptionSource {
@@ -158,7 +158,7 @@ class DescriptionSource {
   explicit DescriptionSource(bool superseded)
       : superseded(superseded), attribute(QualifiedName::Null()) {}
 
-  void Trace(blink::Visitor* visitor) { visitor->Trace(related_objects); }
+  void Trace(Visitor* visitor) { visitor->Trace(related_objects); }
 };
 
 }  // namespace blink
@@ -227,7 +227,7 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
       return static_cast<AXObject*>(current_);
     }
 
-    void Trace(blink::Visitor* visitor) {
+    void Trace(Visitor* visitor) {
       visitor->Trace(current_);
       visitor->Trace(previous_);
     }
@@ -302,7 +302,7 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
       return static_cast<AXObject*>(current_);
     }
 
-    void Trace(blink::Visitor* visitor) { visitor->Trace(current_); }
+    void Trace(Visitor* visitor) { visitor->Trace(current_); }
 
     MODULES_EXPORT friend void swap(AncestorsIterator& left,
                                     AncestorsIterator& right) {
@@ -335,7 +335,7 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
 
  public:
   virtual ~AXObject();
-  virtual void Trace(blink::Visitor*);
+  virtual void Trace(Visitor*);
 
   static unsigned NumberOfLiveAXObjects() { return number_of_live_ax_objects_; }
 
@@ -409,7 +409,6 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   }
   virtual bool IsControl() const { return false; }
   virtual bool IsDefault() const { return false; }
-  virtual bool IsEmbeddedObject() const { return false; }
   virtual bool IsFieldset() const { return false; }
   virtual bool IsHeading() const { return false; }
   virtual bool IsImage() const { return false; }
@@ -497,9 +496,11 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   virtual bool IsVisible() const;
   virtual bool IsVisited() const { return false; }
 
-  // Check whether certain properties can be modified.
-  bool CanSetFocusAttribute() const;
+  // Check whether value can be modified.
   bool CanSetValueAttribute() const;
+
+  // Is the element focusable?
+  bool CanSetFocusAttribute() const;
 
   // Whether objects are ignored, i.e. hidden from the AT.
   bool AccessibilityIsIgnored() const;
@@ -687,6 +688,11 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   // The start and end character offset of each word in the object's text.
   virtual void GetWordBoundaries(Vector<int>& word_starts,
                                  Vector<int>& word_ends) const;
+  // Returns the text offset (text offset as in AXPosition, not as in
+  // pixel offset) in the container of an inline text box.
+  virtual unsigned TextOffsetInContainer(unsigned offset) const {
+    return offset;
+  }
 
   // Properties of interactive elements.
   ax::mojom::DefaultActionVerb Action() const;
@@ -711,6 +717,7 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   virtual ax::mojom::Role DetermineAccessibilityRole();
   ax::mojom::Role DetermineAriaRoleAttribute() const;
   virtual ax::mojom::Role AriaRoleAttribute() const;
+  virtual bool HasAriaAttribute() const { return false; }
   virtual AXObject* ActiveDescendant() { return nullptr; }
   virtual String AutoComplete() const { return String(); }
   virtual void AriaOwnsElements(AXObjectVector& owns) const {}
@@ -730,7 +737,6 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   bool SupportsARIAExpanded() const;
   virtual bool SupportsARIADragging() const { return false; }
   virtual void Dropeffects(Vector<ax::mojom::Dropeffect>& dropeffects) const {}
-  virtual bool SupportsARIAFlowTo() const { return false; }
   virtual bool SupportsARIAOwns() const { return false; }
   bool SupportsRangeValue() const;
   bool SupportsARIAReadOnly() const;
@@ -894,6 +900,7 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
 
   // Properties of the object's owning document or page.
   virtual double EstimatedLoadingProgress() const { return 0; }
+  virtual AXObject* RootScroller() const;
 
   // DOM and layout tree access.
   virtual Node* GetNode() const { return nullptr; }
@@ -909,6 +916,7 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
 
   // Scrollable containers.
   bool IsScrollableContainer() const;
+  bool IsUserScrollable() const;  // Only true if actual scrollbars are present.
   IntPoint GetScrollOffset() const;
   IntPoint MinimumScrollOffset() const;
   IntPoint MaximumScrollOffset() const;
@@ -967,8 +975,8 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   bool RequestScrollToMakeVisibleAction();
   bool RequestScrollToMakeVisibleWithSubFocusAction(
       const IntRect&,
-      blink::ScrollAlignment horizontal_scroll_alignment,
-      blink::ScrollAlignment vertical_scroll_alignment);
+      blink::mojom::blink::ScrollAlignment horizontal_scroll_alignment,
+      blink::mojom::blink::ScrollAlignment vertical_scroll_alignment);
   bool RequestSetSelectedAction(bool);
   bool RequestSetSequentialFocusNavigationStartingPointAction();
   bool RequestSetValueAction(const String&);
@@ -991,8 +999,8 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   bool OnNativeScrollToMakeVisibleAction() const;
   bool OnNativeScrollToMakeVisibleWithSubFocusAction(
       const IntRect&,
-      blink::ScrollAlignment horizontal_scroll_alignment,
-      blink::ScrollAlignment vertical_scroll_alignment) const;
+      blink::mojom::blink::ScrollAlignment horizontal_scroll_alignment,
+      blink::mojom::blink::ScrollAlignment vertical_scroll_alignment) const;
   virtual bool OnNativeSetSelectedAction(bool);
   virtual bool OnNativeSetSequentialFocusNavigationStartingPointAction();
   virtual bool OnNativeSetValueAction(const String&);
@@ -1025,6 +1033,9 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
                                               const AXObject& second,
                                               int* index_in_ancestor1,
                                               int* index_in_ancestor2);
+
+  // Blink-internal DOM Node ID. Currently used for PDF exporting.
+  int GetDOMNodeId() const;
 
   // Returns a string representation of this object.
   String ToString() const;
@@ -1075,7 +1086,6 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
     return nullptr;
   }
 
-  bool CanReceiveAccessibilityFocus() const;
   bool NameFromContents(bool recursive) const;
   bool NameFromSelectedOption(bool recursive) const;
 
@@ -1139,6 +1149,7 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   bool HasInternalsAttribute(Element&, const QualifiedName&) const;
   const AtomicString& GetInternalsAttribute(Element&,
                                             const QualifiedName&) const;
+  bool IsHiddenViaStyle() const;
 
   static unsigned number_of_live_ax_objects_;
 
@@ -1152,10 +1163,6 @@ MODULES_EXPORT bool operator<=(const AXObject& first, const AXObject& second);
 MODULES_EXPORT bool operator>(const AXObject& first, const AXObject& second);
 MODULES_EXPORT bool operator>=(const AXObject& first, const AXObject& second);
 MODULES_EXPORT std::ostream& operator<<(std::ostream&, const AXObject&);
-
-#define DEFINE_AX_OBJECT_TYPE_CASTS(thisType, predicate)           \
-  DEFINE_TYPE_CASTS(thisType, AXObject, object, object->predicate, \
-                    object.predicate)
 
 }  // namespace blink
 

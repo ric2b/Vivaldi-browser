@@ -17,11 +17,11 @@ std::unique_ptr<protocol::Media::PlayerEvent> ConvertInspectorPlayerEvent(
     const InspectorPlayerEvent& event) {
   protocol::Media::PlayerEventType event_type;
   switch (event.type) {
-    case InspectorPlayerEvent::PLAYBACK_EVENT:
-      event_type = protocol::Media::PlayerEventTypeEnum::PlaybackEvent;
+    case InspectorPlayerEvent::ERROR_EVENT:
+      event_type = protocol::Media::PlayerEventTypeEnum::ErrorEvent;
       break;
-    case InspectorPlayerEvent::SYSTEM_EVENT:
-      event_type = protocol::Media::PlayerEventTypeEnum::SystemEvent;
+    case InspectorPlayerEvent::TRIGGERED_EVENT:
+      event_type = protocol::Media::PlayerEventTypeEnum::TriggeredEvent;
       break;
     case InspectorPlayerEvent::MESSAGE_EVENT:
       event_type = protocol::Media::PlayerEventTypeEnum::MessageEvent;
@@ -72,18 +72,18 @@ void InspectorMediaAgent::RegisterAgent() {
 
 protocol::Response InspectorMediaAgent::enable() {
   if (enabled_.Get())
-    return protocol::Response::OK();
+    return protocol::Response::Success();
   enabled_.Set(true);
   RegisterAgent();
-  return protocol::Response::OK();
+  return protocol::Response::Success();
 }
 
 protocol::Response InspectorMediaAgent::disable() {
   if (!enabled_.Get())
-    return protocol::Response::OK();
+    return protocol::Response::Success();
   enabled_.Clear();
   instrumenting_agents_->RemoveInspectorMediaAgent(this);
-  return protocol::Response::OK();
+  return protocol::Response::Success();
 }
 
 void InspectorMediaAgent::PlayerPropertiesChanged(
@@ -117,7 +117,7 @@ void InspectorMediaAgent::PlayersCreated(const Vector<WebString>& player_ids) {
   GetFrontend()->playersCreated(std::move(protocol_players));
 }
 
-void InspectorMediaAgent::Trace(blink::Visitor* visitor) {
+void InspectorMediaAgent::Trace(Visitor* visitor) {
   visitor->Trace(local_frame_);
   InspectorBaseAgent::Trace(visitor);
 }

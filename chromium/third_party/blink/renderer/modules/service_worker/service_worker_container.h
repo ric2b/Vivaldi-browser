@@ -38,12 +38,12 @@
 #include "third_party/blink/public/platform/modules/service_worker/web_service_worker_provider_client.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_property.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_registration_options.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
-#include "third_party/blink/renderer/core/execution_context/context_lifecycle_observer.h"
+#include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/modules/service_worker/message_from_service_worker.h"
-#include "third_party/blink/renderer/modules/service_worker/registration_options.h"
 #include "third_party/blink/renderer/modules/service_worker/service_worker.h"
 #include "third_party/blink/renderer/modules/service_worker/service_worker_registration.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
@@ -54,11 +54,12 @@
 namespace blink {
 
 class ExecutionContext;
+class ExceptionState;
 
 class MODULES_EXPORT ServiceWorkerContainer final
     : public EventTargetWithInlineData,
       public Supplement<Document>,
-      public ContextLifecycleObserver,
+      public ExecutionContextLifecycleObserver,
       public WebServiceWorkerProviderClient {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(ServiceWorkerContainer);
@@ -78,10 +79,10 @@ class MODULES_EXPORT ServiceWorkerContainer final
   explicit ServiceWorkerContainer(Document*);
   ~ServiceWorkerContainer() override;
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
   ServiceWorker* controller() { return controller_; }
-  ScriptPromise ready(ScriptState*);
+  ScriptPromise ready(ScriptState*, ExceptionState&);
 
   ScriptPromise registerServiceWorker(ScriptState*,
                                       const String& pattern,
@@ -91,7 +92,7 @@ class MODULES_EXPORT ServiceWorkerContainer final
 
   void startMessages();
 
-  void ContextDestroyed(ExecutionContext*) override;
+  void ContextDestroyed() override;
 
   // WebServiceWorkerProviderClient implementation.
   void SetController(WebServiceWorkerObjectInfo,
@@ -109,6 +110,8 @@ class MODULES_EXPORT ServiceWorkerContainer final
   void setOnmessage(EventListener* listener);
   EventListener* onmessage();
 
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(messageerror, kMessageerror)
+
   // Returns the ServiceWorkerRegistration object described by the given info.
   // Creates a new object if needed, or else returns the existing one.
   ServiceWorkerRegistration* GetOrCreateServiceWorkerRegistration(
@@ -122,8 +125,7 @@ class MODULES_EXPORT ServiceWorkerContainer final
   class DomContentLoadedListener;
 
   using ReadyProperty =
-      ScriptPromiseProperty<Member<ServiceWorkerContainer>,
-                            Member<ServiceWorkerRegistration>,
+      ScriptPromiseProperty<Member<ServiceWorkerRegistration>,
                             Member<ServiceWorkerRegistration>>;
   ReadyProperty* CreateReadyProperty();
 

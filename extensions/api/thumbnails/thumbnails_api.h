@@ -7,13 +7,15 @@
 
 #include <string>
 
-#include "base/memory/shared_memory_handle.h"
+#include "base/memory/unsafe_shared_memory_region.h"
 #include "browser/thumbnails/capture_page.h"
 #include "components/datasource/vivaldi_data_source_api.h"
 #include "content/public/common/drop_data.h"
 #include "extensions/browser/extension_function.h"
 #include "extensions/common/api/extension_types.h"
 #include "extensions/schema/thumbnails.h"
+#include "third_party/skia/include/core/SkBitmap.h"
+
 
 namespace content {
 class RenderWidgetHostView;

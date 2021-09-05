@@ -17,7 +17,7 @@
 #include "chromeos/constants/chromeos_switches.h"
 #include "ui/aura/window.h"
 #include "ui/events/event.h"
-#include "ui/events/event_constants.h"
+#include "ui/events/types/event_type.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/wm/core/window_animations.h"
 
@@ -96,8 +96,8 @@ void ShelfTooltipManager::ShowTooltip(views::View* view) {
 void ShelfTooltipManager::ShowTooltipWithDelay(views::View* view) {
   if (ShouldShowTooltipForView(view)) {
     timer_.Start(FROM_HERE, base::TimeDelta::FromMilliseconds(timer_delay_),
-                 base::Bind(&ShelfTooltipManager::ShowTooltip,
-                            weak_factory_.GetWeakPtr(), view));
+                 base::BindOnce(&ShelfTooltipManager::ShowTooltip,
+                                weak_factory_.GetWeakPtr(), view));
   }
 }
 

@@ -4,9 +4,11 @@
 
 #include "components/exo/keyboard.h"
 
+#include "ash/accessibility/accessibility_controller_impl.h"
 #include "ash/keyboard/ui/keyboard_ui_controller.h"
 #include "ash/keyboard/ui/keyboard_util.h"
 #include "ash/public/cpp/app_types.h"
+#include "ash/shell.h"
 #include "base/bind.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/exo/input_trace.h"
@@ -212,7 +214,16 @@ void Keyboard::SetNeedKeyboardKeyAcks(bool need_acks) {
 }
 
 bool Keyboard::AreKeyboardKeyAcksNeeded() const {
-  return are_keyboard_key_acks_needed_;
+  // Keyboard class doesn't need key acks while the spoken feedback is enabled.
+  // While the spoken feedback is enabled, a key event is sent to both of a
+  // wayland client and Chrome to give a chance to work to Chrome OS's
+  // shortcuts.
+  return are_keyboard_key_acks_needed_
+         // TODO(yhanada): Remove this once ARC++ can send ack with a serial
+         // correctly while ChromeVox is on.
+         && !ash::Shell::Get()
+                 ->accessibility_controller()
+                 ->spoken_feedback_enabled();
 }
 
 void Keyboard::AckKeyboardKey(uint32_t serial, bool handled) {
@@ -232,15 +243,21 @@ void Keyboard::OnKeyEvent(ui::KeyEvent* event) {
   if (!focus_)
     return;
 
-  // Ignore synthetic key repeat events.
-  if (event->is_repeat())
-    return;
-
   // If the event target is not an exo::Surface, let another handler process the
   // event. This check may not be necessary once https://crbug.com/624168 is
   // resolved.
   if (!GetShellMainSurface(static_cast<aura::Window*>(event->target())) &&
       !Surface::AsSurface(static_cast<aura::Window*>(event->target()))) {
+    return;
+  }
+
+  // Ignore synthetic key repeat events.
+  if (event->is_repeat()) {
+    // Clients should not see key repeat events and instead handle them on the
+    // client side.
+    // Mark the key repeat events as handled to avoid them from invoking
+    // accelerators.
+    event->SetHandled();
     return;
   }
 
@@ -285,7 +302,7 @@ void Keyboard::OnKeyEvent(ui::KeyEvent* event) {
           physical_code != ui::DomCode::NONE) {
         uint32_t serial =
             delegate_->OnKeyboardKey(event->time_stamp(), event->code(), true);
-        if (are_keyboard_key_acks_needed_) {
+        if (AreKeyboardKeyAcksNeeded()) {
           pending_key_acks_.insert(
               {serial,
                {*event, base::TimeTicks::Now() +
@@ -307,7 +324,7 @@ void Keyboard::OnKeyEvent(ui::KeyEvent* event) {
         // client to track the state of the physical keyboard.
         uint32_t serial =
             delegate_->OnKeyboardKey(event->time_stamp(), it->second, false);
-        if (are_keyboard_key_acks_needed_) {
+        if (AreKeyboardKeyAcksNeeded()) {
           pending_key_acks_.insert(
               {serial,
                {*event, base::TimeTicks::Now() +

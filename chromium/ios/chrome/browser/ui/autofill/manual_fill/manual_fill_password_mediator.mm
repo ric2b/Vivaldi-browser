@@ -12,10 +12,10 @@
 #import "ios/chrome/browser/autofill/manual_fill/passwords_fetcher.h"
 #import "ios/chrome/browser/favicon/favicon_loader.h"
 #include "ios/chrome/browser/passwords/password_manager_features.h"
-#import "ios/chrome/browser/ui/autofill/manual_fill/action_cell.h"
-#import "ios/chrome/browser/ui/autofill/manual_fill/credential.h"
-#import "ios/chrome/browser/ui/autofill/manual_fill/credential_password_form.h"
+#import "ios/chrome/browser/ui/autofill/manual_fill/manual_fill_action_cell.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/manual_fill_content_injector.h"
+#import "ios/chrome/browser/ui/autofill/manual_fill/manual_fill_credential+PasswordForm.h"
+#import "ios/chrome/browser/ui/autofill/manual_fill/manual_fill_credential.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/manual_fill_password_cell.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/password_consumer.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/password_list_navigator.h"
@@ -29,11 +29,6 @@
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
-
-namespace {
-// Minimum favicon size to retrieve.
-const CGFloat kMinFaviconSizePt = 8.0;
-}  // namespace
 
 namespace manual_fill {
 
@@ -255,9 +250,8 @@ BOOL AreCredentialsAtIndexesConnected(
 - (void)faviconForURL:(const GURL&)URL
            completion:(void (^)(FaviconAttributes*))completion {
   DCHECK(completion);
-  self.faviconLoader->FaviconForPageUrl(
-      URL, gfx::kFaviconSize, kMinFaviconSizePt,
-      /*fallback_to_google_server=*/false, completion);
+  self.faviconLoader->FaviconForPageUrlOrHost(URL, gfx::kFaviconSize,
+                                              completion);
 }
 
 @end

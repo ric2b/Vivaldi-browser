@@ -124,8 +124,8 @@ source_set("geolocation") {
 
   if (is_win) {
     sources += [
-      "location_provider_winrt.cc",
-      "location_provider_winrt.h",
+      "win/location_provider_winrt.cc",
+      "win/location_provider_winrt.h",
     ]
 
     deps += [ "//services/device/public/cpp:device_features" ]
@@ -141,7 +141,7 @@ if (is_android) {
   }
 
   android_library("geolocation_java") {
-    java_files = [
+    sources = [
       "android/java/src/org/chromium/device/geolocation/LocationProviderAdapter.java",
       "android/java/src/org/chromium/device/geolocation/LocationProviderAndroid.java",
       "android/java/src/org/chromium/device/geolocation/LocationProviderFactory.java",
@@ -149,7 +149,6 @@ if (is_android) {
     ]
 
     deps = [
-      ":geolocation",
       ":geolocation_jni_headers",
       "$google_play_services_package:google_play_services_base_java",
       "$google_play_services_package:google_play_services_basement_java",
@@ -174,9 +173,7 @@ source_set("test_support") {
     "position_cache_test_util.cc",
     "position_cache_test_util.h",
   ]
-  public_deps = [
-    ":geolocation",
-  ]
+  public_deps = [ ":geolocation" ]
   deps = [
     "//services/device/public/cpp/geolocation",
     "//testing/gmock",

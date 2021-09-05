@@ -4,6 +4,8 @@
 
 #include "third_party/blink/renderer/core/typed_arrays/dom_array_buffer.h"
 
+#include <algorithm>
+
 #include "base/memory/scoped_refptr.h"
 #include "third_party/blink/renderer/platform/bindings/dom_data_store.h"
 #include "third_party/blink/renderer/platform/bindings/dom_wrapper_world.h"
@@ -38,15 +40,25 @@ bool DOMArrayBuffer::IsDetachable(v8::Isolate* isolate) {
 }
 
 bool DOMArrayBuffer::Transfer(v8::Isolate* isolate,
-                              WTF::ArrayBufferContents& result) {
+                              ArrayBufferContents& result) {
   DOMArrayBuffer* to_transfer = this;
   if (!IsDetachable(isolate)) {
     to_transfer =
-        DOMArrayBuffer::Create(Buffer()->Data(), Buffer()->ByteLength());
+        DOMArrayBuffer::Create(Content()->Data(), ByteLengthAsSizeT());
   }
 
-  if (!to_transfer->Buffer()->Transfer(result))
+  if (IsDetached()) {
+    result.Detach();
     return false;
+  }
+
+  if (!Content()->Data()) {
+    // We transfer an empty ArrayBuffer, we can just allocate an empty content.
+    result = ArrayBufferContents(Content()->BackingStore());
+  } else {
+    Content()->Transfer(result);
+    Detach();
+  }
 
   Vector<v8::Local<v8::ArrayBuffer>, 4> buffer_handles;
   v8::HandleScope handle_scope(isolate);
@@ -58,28 +70,42 @@ bool DOMArrayBuffer::Transfer(v8::Isolate* isolate,
   return true;
 }
 
-DOMArrayBuffer* DOMArrayBuffer::CreateUninitializedOrNull(
-    unsigned num_elements,
-    unsigned element_byte_size) {
-  scoped_refptr<ArrayBuffer> buffer =
-      WTF::ArrayBuffer::CreateUninitializedOrNull(num_elements,
-                                                  element_byte_size);
-  if (!buffer)
+DOMArrayBuffer* DOMArrayBuffer::CreateOrNull(size_t num_elements,
+                                             size_t element_byte_size) {
+  ArrayBufferContents contents(num_elements, element_byte_size,
+                               ArrayBufferContents::kNotShared,
+                               ArrayBufferContents::kZeroInitialize);
+  if (!contents.Data()) {
     return nullptr;
-  return Create(std::move(buffer));
+  }
+  return Create(std::move(contents));
 }
 
-v8::Local<v8::Object> DOMArrayBuffer::Wrap(
+DOMArrayBuffer* DOMArrayBuffer::CreateUninitializedOrNull(
+    size_t num_elements,
+    size_t element_byte_size) {
+  ArrayBufferContents contents(num_elements, element_byte_size,
+                               ArrayBufferContents::kNotShared,
+                               ArrayBufferContents::kDontInitialize);
+  if (!contents.Data()) {
+    return nullptr;
+  }
+  return Create(std::move(contents));
+}
+
+v8::Local<v8::Value> DOMArrayBuffer::Wrap(
     v8::Isolate* isolate,
     v8::Local<v8::Object> creation_context) {
   DCHECK(!DOMDataStore::ContainsWrapper(this, isolate));
 
   const WrapperTypeInfo* wrapper_type_info = this->GetWrapperTypeInfo();
 
-  v8::Local<v8::Object> wrapper;
+  v8::Local<v8::ArrayBuffer> wrapper;
   {
     v8::Context::Scope context_scope(creation_context->CreationContext());
-    wrapper = v8::ArrayBuffer::New(isolate, Data(), ByteLength());
+    wrapper = v8::ArrayBuffer::New(isolate, Content()->BackingStore());
+
+    wrapper->Externalize(Content()->BackingStore());
   }
 
   return AssociateWithWrapper(isolate, wrapper_type_info, wrapper);
@@ -87,19 +113,19 @@ v8::Local<v8::Object> DOMArrayBuffer::Wrap(
 
 DOMArrayBuffer* DOMArrayBuffer::Create(
     scoped_refptr<SharedBuffer> shared_buffer) {
-  WTF::ArrayBufferContents contents(shared_buffer->size(), 1,
-                                    WTF::ArrayBufferContents::kNotShared,
-                                    WTF::ArrayBufferContents::kDontInitialize);
+  ArrayBufferContents contents(shared_buffer->size(), 1,
+                               ArrayBufferContents::kNotShared,
+                               ArrayBufferContents::kDontInitialize);
   uint8_t* data = static_cast<uint8_t*>(contents.Data());
   if (UNLIKELY(!data))
-    OOM_CRASH();
+    OOM_CRASH(shared_buffer->size());
 
   for (const auto& span : *shared_buffer) {
     memcpy(data, span.data(), span.size());
     data += span.size();
   }
 
-  return Create(ArrayBuffer::Create(contents));
+  return Create(std::move(contents));
 }
 
 DOMArrayBuffer* DOMArrayBuffer::Create(
@@ -108,19 +134,24 @@ DOMArrayBuffer* DOMArrayBuffer::Create(
   for (const auto& span : data) {
     size += span.size();
   }
-  WTF::ArrayBufferContents contents(size, 1,
-                                    WTF::ArrayBufferContents::kNotShared,
-                                    WTF::ArrayBufferContents::kDontInitialize);
+  ArrayBufferContents contents(size, 1, ArrayBufferContents::kNotShared,
+                               ArrayBufferContents::kDontInitialize);
   uint8_t* ptr = static_cast<uint8_t*>(contents.Data());
   if (UNLIKELY(!ptr))
-    OOM_CRASH();
+    OOM_CRASH(size);
 
   for (const auto& span : data) {
     memcpy(ptr, span.data(), span.size());
     ptr += span.size();
   }
 
-  return Create(ArrayBuffer::Create(contents));
+  return Create(std::move(contents));
 }
 
+DOMArrayBuffer* DOMArrayBuffer::Slice(size_t begin, size_t end) const {
+  begin = std::min(begin, ByteLengthAsSizeT());
+  end = std::min(end, ByteLengthAsSizeT());
+  size_t size = begin <= end ? end - begin : 0;
+  return Create(static_cast<const char*>(Data()) + begin, size);
+}
 }  // namespace blink

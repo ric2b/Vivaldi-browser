@@ -7,8 +7,9 @@ const Mojo = {};
 /**
  * @param {string} name
  * @param {MojoHandle} handle
+ * @param {string=} scope
  */
-Mojo.bindInterface = function(name, handle) {};
+Mojo.bindInterface = function(name, handle, scope) {};
 
 /** @typedef {number} */
 let MojoResult;

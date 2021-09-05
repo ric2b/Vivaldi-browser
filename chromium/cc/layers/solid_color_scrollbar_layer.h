@@ -11,6 +11,8 @@
 
 namespace cc {
 
+// A solid color scrollbar that can be fully drawn on the impl thread. In
+// practice, this is used for overlay scrollbars on Android.
 class CC_EXPORT SolidColorScrollbarLayer : public ScrollbarLayerBase {
  public:
   std::unique_ptr<LayerImpl> CreateLayerImpl(LayerTreeImpl* tree_impl) override;
@@ -30,17 +32,20 @@ class CC_EXPORT SolidColorScrollbarLayer : public ScrollbarLayerBase {
   void SetNeedsDisplayRect(const gfx::Rect& rect) override;
   bool HitTestable() const override;
 
- protected:
+  int thumb_thickness() const { return thumb_thickness_; }
+  int track_start() const { return track_start_; }
+
+  ScrollbarLayerType ScrollbarLayerTypeForTesting() const override;
+
+ private:
   SolidColorScrollbarLayer(ScrollbarOrientation orientation,
                            int thumb_thickness,
                            int track_start,
                            bool is_left_side_vertical_scrollbar);
   ~SolidColorScrollbarLayer() override;
 
-  ScrollbarOrientation orientation_;
   int thumb_thickness_;
   int track_start_;
-  bool is_left_side_vertical_scrollbar_;
 };
 
 }  // namespace cc

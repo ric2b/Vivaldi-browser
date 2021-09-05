@@ -9,20 +9,31 @@ from os import path
 import subprocess
 import sys
 
-__js_minifier = None
+import six
 
+__js_minifier = None
+__css_minifier = None
 
 def SetJsMinifier(minifier):
   global __js_minifier
   __js_minifier = minifier.split()
 
+def SetCssMinifier(minifier):
+  global __css_minifier
+  __css_minifier = minifier.split()
 
 def Minify(source, filename):
+  """Minify |source| (bytes) from |filename| and return bytes."""
   file_type = path.splitext(filename)[1]
-  if not file_type == '.js' or not __js_minifier:
+  minifier = None
+  if file_type == '.js':
+    minifier = __js_minifier
+  elif file_type == '.css':
+    minifier = __css_minifier
+  if not minifier:
     return source
   p = subprocess.Popen(
-      __js_minifier,
+      minifier,
       stdin=subprocess.PIPE,
       stdout=subprocess.PIPE,
       stderr=subprocess.PIPE)

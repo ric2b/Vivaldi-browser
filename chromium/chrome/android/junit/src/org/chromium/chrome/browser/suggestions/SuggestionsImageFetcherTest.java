@@ -23,16 +23,16 @@ import org.robolectric.annotation.Config;
 
 import org.chromium.base.Callback;
 import org.chromium.base.DiscardableReferencePool;
+import org.chromium.base.metrics.test.DisableHistogramsRule;
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.chrome.browser.favicon.LargeIconBridge;
-import org.chromium.chrome.browser.favicon.LargeIconBridge.LargeIconCallback;
 import org.chromium.chrome.browser.ntp.cards.CardsVariationParameters;
 import org.chromium.chrome.browser.ntp.snippets.KnownCategories;
 import org.chromium.chrome.browser.ntp.snippets.SnippetArticle;
 import org.chromium.chrome.browser.ntp.snippets.SuggestionsSource;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.widget.ThumbnailProvider;
-import org.chromium.chrome.test.support.DisableHistogramsRule;
+import org.chromium.chrome.browser.thumbnail.generator.ThumbnailProvider;
+import org.chromium.chrome.browser.ui.favicon.LargeIconBridge;
+import org.chromium.chrome.browser.ui.favicon.LargeIconBridge.LargeIconCallback;
 import org.chromium.chrome.test.util.browser.suggestions.SuggestionsDependenciesRule;
 
 import java.util.HashMap;
@@ -122,7 +122,7 @@ public class SuggestionsImageFetcherTest {
         imageFetcher.makeLargeIconRequest(URL_STRING, IMAGE_SIZE_PX, mock(LargeIconCallback.class));
 
         verify(mLargeIconBridge)
-                .getLargeIconForUrl(
+                .getLargeIconForStringUrl(
                         eq(URL_STRING), eq(IMAGE_SIZE_PX), any(LargeIconCallback.class));
     }
 }

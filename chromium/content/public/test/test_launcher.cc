@@ -35,8 +35,10 @@
 #include "base/test/test_timeouts.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "content/common/url_schemes.h"
 #include "content/public/app/content_main.h"
 #include "content/public/app/content_main_delegate.h"
+#include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/sandbox_init.h"
 #include "content/public/test/browser_test.h"
@@ -74,6 +76,8 @@ namespace {
 // that span browser restarts.
 const char kPreTestPrefix[] = "PRE_";
 
+const char kManualTestPrefix[] = "MANUAL_";
+
 TestLauncherDelegate* g_launcher_delegate = nullptr;
 #if !defined(OS_ANDROID)
 // ContentMain is not run on Android in the test process, and is run via
@@ -99,7 +103,7 @@ void PrintUsage() {
           "  --test-launcher-jobs=N\n"
           "    Sets the number of parallel test jobs to N.\n"
           "\n"
-          "  --single_process\n"
+          "  --single-process-tests\n"
           "    Runs the tests and the launcher in the same process. Useful\n"
           "    for debugging a specific test in a debugger.\n"
           "\n"
@@ -118,7 +122,11 @@ void PrintUsage() {
           "    Sets the total number of shards to N.\n"
           "\n"
           "  --test-launcher-shard-index=N\n"
-          "    Sets the shard index to run to N (from 0 to TOTAL - 1).\n");
+          "    Sets the shard index to run to N (from 0 to TOTAL - 1).\n"
+          "\n"
+          "  --test-launcher-print-temp-leaks\n"
+          "    Prints information about leaked files and/or directories in\n"
+          "    child process's temporary directories (Windows and macOS).\n");
 }
 
 // Implementation of base::TestLauncherDelegate. This is also a test launcher,
@@ -127,7 +135,10 @@ class WrapperTestLauncherDelegate : public base::TestLauncherDelegate {
  public:
   explicit WrapperTestLauncherDelegate(
       content::TestLauncherDelegate* launcher_delegate)
-      : launcher_delegate_(launcher_delegate) {}
+      : launcher_delegate_(launcher_delegate) {
+    run_manual_tests_ = base::CommandLine::ForCurrentProcess()->HasSwitch(
+        switches::kRunManualTestsFlag);
+  }
 
   // base::TestLauncherDelegate:
   bool GetTests(std::vector<base::TestIdentifier>* output) override;
@@ -144,6 +155,8 @@ class WrapperTestLauncherDelegate : public base::TestLauncherDelegate {
 
   base::TimeDelta GetTimeout() override;
 
+  bool ShouldRunTest(const base::TestIdentifier& test) override;
+
  private:
   // Relays timeout notification from the TestLauncher (by way of a
   // ProcessLifetimeObserver) to the caller's content::TestLauncherDelegate.
@@ -155,7 +168,7 @@ class WrapperTestLauncherDelegate : public base::TestLauncherDelegate {
 
   content::TestLauncherDelegate* launcher_delegate_;
 
-
+  bool run_manual_tests_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(WrapperTestLauncherDelegate);
 };
@@ -186,8 +199,10 @@ base::CommandLine WrapperTestLauncherDelegate::GetCommandLine(
   CreateDirectory(user_data_dir);
   base::CommandLine cmd_line(*base::CommandLine::ForCurrentProcess());
   launcher_delegate_->PreRunTest();
-  CHECK(launcher_delegate_->AdjustChildProcessCommandLine(&cmd_line,
-                                                          user_data_dir));
+  const std::string user_data_dir_switch =
+      launcher_delegate_->GetUserDataDirectoryCommandLineSwitch();
+  if (!user_data_dir_switch.empty())
+    cmd_line.AppendSwitchPath(user_data_dir_switch, user_data_dir);
   base::CommandLine new_cmd_line(cmd_line.GetProgram());
   base::CommandLine::SwitchMap switches = cmd_line.GetSwitches();
   // Strip out gtest_output flag because otherwise we would overwrite results
@@ -244,8 +259,14 @@ void WrapperTestLauncherDelegate::ProcessTestResults(
 
   launcher_delegate_->PostRunTest(&test_results.front());
 }
-
-}  // namespace
+// TODO(isamsonov): crbug.com/1004417 remove when windows builders
+// stop flaking on MANAUAL_ tests.
+bool WrapperTestLauncherDelegate::ShouldRunTest(
+    const base::TestIdentifier& test) {
+  return run_manual_tests_ ||
+         !base::StartsWith(test.test_name, kManualTestPrefix,
+                           base::CompareCase::SENSITIVE);
+}
 
 void AppendCommandLineSwitches() {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
@@ -257,6 +278,19 @@ void AppendCommandLineSwitches() {
       switches::kDisableGpuProcessForDX12VulkanInfoCollection);
 }
 
+}  // namespace
+
+class ContentClientCreator {
+ public:
+  static void Create(ContentMainDelegate* delegate) {
+    SetContentClient(delegate->CreateContentClient());
+  }
+};
+
+std::string TestLauncherDelegate::GetUserDataDirectoryCommandLineSwitch() {
+  return std::string();
+}
+
 int LaunchTests(TestLauncherDelegate* launcher_delegate,
                 size_t parallel_jobs,
                 int argc,
@@ -266,8 +300,14 @@ int LaunchTests(TestLauncherDelegate* launcher_delegate,
 
   base::CommandLine::Init(argc, argv);
   AppendCommandLineSwitches();
-  const base::CommandLine* command_line =
-      base::CommandLine::ForCurrentProcess();
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+
+  // TODO(tluk) Remove deprecation warning after a few releases. Deprecation
+  // warning issued version 79.
+  if (command_line->HasSwitch("single_process")) {
+    fprintf(stderr, "use --single-process-tests instead of --single_process");
+    exit(1);
+  }
 
   if (command_line->HasSwitch(switches::kHelpFlag)) {
     PrintUsage();
@@ -283,6 +323,11 @@ int LaunchTests(TestLauncherDelegate* launcher_delegate,
   // browser test target and is not created by the |launcher_delegate|.
   std::unique_ptr<ContentMainDelegate> content_main_delegate(
       launcher_delegate->CreateContentMainDelegate());
+  ContentClientCreator::Create(content_main_delegate.get());
+  // Many tests use GURL during setup, so we need to register schemes early in
+  // test launching.
+  RegisterContentSchemes();
+
   // ContentMain is not run on Android in the test process, and is run via
   // java for child processes.
   ContentMainParams params(content_main_delegate.get());
@@ -322,6 +367,18 @@ int LaunchTests(TestLauncherDelegate* launcher_delegate,
       command_line->HasSwitch(base::kGTestHelpFlag)) {
 #if !defined(OS_ANDROID)
     g_params = &params;
+    // The call to RunTestSuite() below bypasses TestLauncher, which creates
+    // a temporary directory that is used as the user-data-dir. Create a
+    // temporary directory now so that the test doesn't use the users home
+    // directory as it's data dir.
+    base::ScopedTempDir tmp_dir;
+    const std::string user_data_dir_switch =
+        launcher_delegate->GetUserDataDirectoryCommandLineSwitch();
+    if (!user_data_dir_switch.empty() &&
+        !command_line->HasSwitch(user_data_dir_switch)) {
+      CHECK(tmp_dir.CreateUniqueTempDir());
+      command_line->AppendSwitchPath(user_data_dir_switch, tmp_dir.GetPath());
+    }
 #endif
     return launcher_delegate->RunTestSuite(argc, argv);
   }

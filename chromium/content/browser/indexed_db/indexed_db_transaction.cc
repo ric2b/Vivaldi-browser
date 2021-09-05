@@ -20,7 +20,7 @@
 #include "content/browser/indexed_db/indexed_db_database.h"
 #include "content/browser/indexed_db/indexed_db_database_callbacks.h"
 #include "content/browser/indexed_db/indexed_db_tracing.h"
-#include "third_party/blink/public/platform/modules/indexeddb/web_idb_database_exception.h"
+#include "third_party/blink/public/mojom/indexeddb/indexeddb.mojom.h"
 #include "third_party/leveldatabase/env_chromium.h"
 
 namespace content {
@@ -42,21 +42,21 @@ enum UmaIDBException {
 };
 
 // Used for UMA metrics - do not change mappings.
-UmaIDBException ExceptionCodeToUmaEnum(uint16_t code) {
+UmaIDBException ExceptionCodeToUmaEnum(blink::mojom::IDBException code) {
   switch (code) {
-    case blink::kWebIDBDatabaseExceptionUnknownError:
+    case blink::mojom::IDBException::kUnknownError:
       return UmaIDBExceptionUnknownError;
-    case blink::kWebIDBDatabaseExceptionConstraintError:
+    case blink::mojom::IDBException::kConstraintError:
       return UmaIDBExceptionConstraintError;
-    case blink::kWebIDBDatabaseExceptionDataError:
+    case blink::mojom::IDBException::kDataError:
       return UmaIDBExceptionDataError;
-    case blink::kWebIDBDatabaseExceptionVersionError:
+    case blink::mojom::IDBException::kVersionError:
       return UmaIDBExceptionVersionError;
-    case blink::kWebIDBDatabaseExceptionAbortError:
+    case blink::mojom::IDBException::kAbortError:
       return UmaIDBExceptionAbortError;
-    case blink::kWebIDBDatabaseExceptionQuotaError:
+    case blink::mojom::IDBException::kQuotaError:
       return UmaIDBExceptionQuotaError;
-    case blink::kWebIDBDatabaseExceptionTimeoutError:
+    case blink::mojom::IDBException::kTimeoutError:
       return UmaIDBExceptionTimeoutError;
     default:
       NOTREACHED();
@@ -244,6 +244,12 @@ void IndexedDBTransaction::UnregisterOpenCursor(IndexedDBCursor* cursor) {
 }
 
 void IndexedDBTransaction::Start() {
+  // The transaction has the potential to be aborted after the Start() task was
+  // posted.
+  if (state_ == FINISHED) {
+    DCHECK(locks_receiver_.locks.empty());
+    return;
+  }
   DCHECK_EQ(CREATED, state_);
   state_ = STARTED;
   DCHECK(!locks_receiver_.locks.empty());
@@ -259,26 +265,26 @@ void IndexedDBTransaction::EnsureBackingStoreTransactionBegun() {
 }
 
 leveldb::Status IndexedDBTransaction::BlobWriteComplete(
-    IndexedDBBackingStore::BlobWriteResult result) {
+    BlobWriteResult result) {
   IDB_TRACE("IndexedDBTransaction::BlobWriteComplete");
   if (state_ == FINISHED)  // aborted
     return leveldb::Status::OK();
   DCHECK_EQ(state_, COMMITTING);
 
   switch (result) {
-    case IndexedDBBackingStore::BlobWriteResult::kFailure: {
+    case BlobWriteResult::kFailure: {
       leveldb::Status status = Abort(IndexedDBDatabaseError(
-          blink::kWebIDBDatabaseExceptionDataError, "Failed to write blobs."));
+          blink::mojom::IDBException::kDataError, "Failed to write blobs."));
       if (!status.ok())
         tear_down_callback_.Run(status);
       // The result is ignored.
       return leveldb::Status::OK();
     }
-    case IndexedDBBackingStore::BlobWriteResult::kRunPhaseTwoAsync:
+    case BlobWriteResult::kRunPhaseTwoAsync:
       ScheduleTask(base::BindOnce(&CommitPhaseTwoProxy));
       run_tasks_callback_.Run();
       return leveldb::Status::OK();
-    case IndexedDBBackingStore::BlobWriteResult::kRunPhaseTwoAndReturnResult: {
+    case BlobWriteResult::kRunPhaseTwoAndReturnResult: {
       return CommitPhaseTwo();
     }
   }
@@ -318,7 +324,7 @@ leveldb::Status IndexedDBTransaction::Commit() {
   if (num_errors_sent_ != num_errors_handled_) {
     is_commit_pending_ = false;
     return Abort(
-        IndexedDBDatabaseError(blink::kWebIDBDatabaseExceptionUnknownError));
+        IndexedDBDatabaseError(blink::mojom::IDBException::kUnknownError));
   }
 
   state_ = COMMITTING;
@@ -331,7 +337,7 @@ leveldb::Status IndexedDBTransaction::Commit() {
     // to write.
     s = transaction_->CommitPhaseOne(base::BindOnce(
         [](base::WeakPtr<IndexedDBTransaction> transaction,
-           IndexedDBBackingStore::BlobWriteResult result) {
+           BlobWriteResult result) {
           if (!transaction)
             return leveldb::Status::OK();
           return transaction->BlobWriteComplete(result);
@@ -428,12 +434,11 @@ leveldb::Status IndexedDBTransaction::CommitPhaseTwo() {
     IndexedDBDatabaseError error;
     if (leveldb_env::IndicatesDiskFull(s)) {
       error = IndexedDBDatabaseError(
-          blink::kWebIDBDatabaseExceptionQuotaError,
+          blink::mojom::IDBException::kQuotaError,
           "Encountered disk full while committing transaction.");
     } else {
-      error =
-          IndexedDBDatabaseError(blink::kWebIDBDatabaseExceptionUnknownError,
-                                 "Internal error committing transaction.");
+      error = IndexedDBDatabaseError(blink::mojom::IDBException::kUnknownError,
+                                     "Internal error committing transaction.");
     }
     callbacks_->OnAbort(*this, error);
     if (database_)
@@ -509,7 +514,8 @@ IndexedDBTransaction::RunTasks() {
   // Otherwise, start a timer in case the front-end gets wedged and
   // never requests further activity. Read-only transactions don't
   // block other transactions, so don't time those out.
-  if (mode_ != blink::mojom::IDBTransactionMode::ReadOnly &&
+  if (!HasPendingTasks() &&
+      mode_ != blink::mojom::IDBTransactionMode::ReadOnly &&
       state_ == STARTED) {
     timeout_timer_.Start(FROM_HERE, GetInactivityTimeout(),
                          base::BindOnce(&IndexedDBTransaction::Timeout,
@@ -525,7 +531,7 @@ base::TimeDelta IndexedDBTransaction::GetInactivityTimeout() const {
 
 void IndexedDBTransaction::Timeout() {
   leveldb::Status result = Abort(IndexedDBDatabaseError(
-      blink::kWebIDBDatabaseExceptionTimeoutError,
+      blink::mojom::IDBException::kTimeoutError,
       base::ASCIIToUTF16("Transaction timed out due to inactivity.")));
   if (!result.ok())
     tear_down_callback_.Run(result);

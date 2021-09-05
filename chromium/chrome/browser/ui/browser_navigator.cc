@@ -35,8 +35,10 @@
 #include "chrome/browser/ui/status_bubble.h"
 #include "chrome/browser/ui/tab_helpers.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/url_constants.h"
+#include "components/captive_portal/core/buildflags.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_url_handler.h"
 #include "content/public/browser/navigation_entry.h"
@@ -52,7 +54,6 @@
 #include "ash/public/cpp/multi_user_window_manager.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager_helper.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "components/account_id/account_id.h"
 #endif
 
@@ -60,9 +61,12 @@
 #include "ui/aura/window.h"
 #endif
 
+#if BUILDFLAG(ENABLE_CAPTIVE_PORTAL_DETECTION)
+#include "components/captive_portal/content/captive_portal_tab_helper.h"
+#endif
+
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-#include "chrome/browser/extensions/extension_util.h"
-#include "chrome/browser/extensions/tab_helper.h"
+#include "chrome/browser/apps/app_service/launch_utils.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension.h"
@@ -87,6 +91,8 @@ class BrowserNavigatorWebContentsAdoption {
 };
 
 namespace {
+
+bool allow_os_settings_in_tab = false;
 
 // Returns true if the specified Browser can open tabs. Not all Browsers support
 // multiple tabs, such as app frames and popups. This function returns false for
@@ -150,12 +156,11 @@ std::pair<Browser*, int> GetBrowserAndTabForDisposition(
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   if (params.open_pwa_window_if_possible) {
-    const extensions::Extension* app = extensions::util::GetInstalledPwaForUrl(
-        profile, params.url,
-        extensions::LaunchContainer::kLaunchContainerWindow);
-    if (app) {
-      std::string app_name =
-          web_app::GenerateApplicationNameFromAppId(app->id());
+    base::Optional<web_app::AppId> app_id =
+        web_app::FindInstalledAppWithUrlInScope(profile, params.url,
+                                                /*window_only=*/true);
+    if (app_id) {
+      std::string app_name = web_app::GenerateApplicationNameFromAppId(*app_id);
       return {
           new Browser(Browser::CreateParams::CreateForApp(
               app_name,
@@ -218,12 +223,10 @@ std::pair<Browser*, int> GetBrowserAndTabForDisposition(
       } else if (params.browser && !params.browser->app_name().empty()) {
         app_name = params.browser->app_name();
       } else if (params.source_contents) {
-        extensions::TabHelper* extensions_tab_helper =
-            extensions::TabHelper::FromWebContents(params.source_contents);
-        if (extensions_tab_helper && extensions_tab_helper->is_app()) {
-          app_name = web_app::GenerateApplicationNameFromAppId(
-              extensions_tab_helper->GetAppId());
-        }
+        std::string app_id =
+            apps::GetAppIdForWebContents(params.source_contents);
+        if (!app_id.empty())
+          app_name = web_app::GenerateApplicationNameFromAppId(app_id);
       }
 #endif
       if (app_name.empty()) {
@@ -353,7 +356,7 @@ void LoadURLInContents(WebContents* target_contents,
                 GetSourceProfile(params)));
   }
 
-  if (params->uses_post) {
+  if (params->post_data) {
     load_url_params.load_type = NavigationController::LOAD_TYPE_HTTP_POST;
     load_url_params.post_data = params->post_data;
   }
@@ -437,8 +440,17 @@ std::unique_ptr<content::WebContents> CreateTargetContents(
   // immediately.
   BrowserNavigatorWebContentsAdoption::AttachTabHelpers(target_contents.get());
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  extensions::TabHelper::FromWebContents(target_contents.get())
-      ->SetExtensionAppById(params.extension_app_id);
+  apps::SetAppIdForWebContents(params.browser->profile(), target_contents.get(),
+                               params.extension_app_id);
+#endif
+
+#if BUILDFLAG(ENABLE_CAPTIVE_PORTAL_DETECTION)
+  if (params.is_captive_portal_popup) {
+    DCHECK_EQ(WindowOpenDisposition::NEW_POPUP, params.disposition);
+    captive_portal::CaptivePortalTabHelper::FromWebContents(
+        target_contents.get())
+        ->set_is_captive_portal_window();
+  }
 #endif
 
   return target_contents;
@@ -532,12 +544,9 @@ void Navigate(NavigateParams* params) {
   }
 #if defined(OS_CHROMEOS)
   if (source_browser) {
-    // If OS Settings is accessed in any means other than explicitly typing the
-    // URL into the URL bar, open OS Settings in its own standalone surface.
-    if (chromeos::features::IsSplitSettingsEnabled() &&
-        params->url.host() == chrome::kChromeUIOSSettingsHost &&
-        !PageTransitionCoreTypeIs(params->transition,
-                                  ui::PageTransition::PAGE_TRANSITION_TYPED)) {
+    // Open OS settings in PWA, even when user types in URL bar.
+    if (params->url.host() == chrome::kChromeUIOSSettingsHost &&
+        !allow_os_settings_in_tab) {
       chrome::SettingsWindowManager* settings_window_manager =
           chrome::SettingsWindowManager::GetInstance();
       if (!settings_window_manager->IsSettingsBrowser(source_browser)) {
@@ -611,18 +620,7 @@ void Navigate(NavigateParams* params) {
   // inform the target WebContents, and we may need to update the UI.
   bool user_initiated =
       params->transition & ui::PAGE_TRANSITION_FROM_ADDRESS_BAR ||
-      ui::PageTransitionCoreTypeIs(params->transition,
-                                   ui::PAGE_TRANSITION_TYPED) ||
-      ui::PageTransitionCoreTypeIs(params->transition,
-                                   ui::PAGE_TRANSITION_AUTO_BOOKMARK) ||
-      ui::PageTransitionCoreTypeIs(params->transition,
-                                   ui::PAGE_TRANSITION_GENERATED) ||
-      ui::PageTransitionCoreTypeIs(params->transition,
-                                   ui::PAGE_TRANSITION_AUTO_TOPLEVEL) ||
-      ui::PageTransitionCoreTypeIs(params->transition,
-                                   ui::PAGE_TRANSITION_RELOAD) ||
-      ui::PageTransitionCoreTypeIs(params->transition,
-                                   ui::PAGE_TRANSITION_KEYWORD);
+      !ui::PageTransitionIsWebTriggerable(params->transition);
 
   // Did we use a prerender?
   bool swapped_in_prerender = false;
@@ -701,6 +699,9 @@ void Navigate(NavigateParams* params) {
         contents_to_navigate_or_insert, params->transition,
         params->window_action, user_initiated);
   } else if (singleton_index == -1) {
+    if (source_browser != params->browser)
+      params->tabstrip_index = params->browser->tab_strip_model()->count();
+
     // If some non-default value is set for the index, we should tell the
     // TabStripModel to respect it.
     if (params->tabstrip_index != -1)
@@ -803,7 +804,8 @@ bool IsHostAllowedInIncognito(const GURL& url) {
          host != chrome::kChromeUIThumbnailHost2 &&
          host != chrome::kChromeUIThumbnailListHost &&
          host != chrome::kChromeUISuggestionsHost &&
-         host != chrome::kChromeUIDevicesHost;
+         host != chrome::kChromeUIDevicesHost &&
+         host != chrome::kChromeUINewTabPageHost;
 }
 
 bool IsURLAllowedInIncognito(const GURL& url,
@@ -821,4 +823,8 @@ bool IsURLAllowedInIncognito(const GURL& url,
   }
 
   return IsHostAllowedInIncognito(url);
+}
+
+void SetAllowOsSettingsInTabForTesting(bool is_allowed) {
+  allow_os_settings_in_tab = is_allowed;
 }

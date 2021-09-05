@@ -13,6 +13,7 @@
 #include "chrome/browser/supervised_user/child_accounts/child_account_service.h"
 #include "chrome/browser/supervised_user/child_accounts/child_account_service_factory.h"
 #include "components/google/core/common/google_util.h"
+#include "components/signin/public/identity_manager/consent_level.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
@@ -135,7 +136,9 @@ SupervisedUserGoogleAuthNavigationThrottle::ShouldProceed() {
     Profile* profile =
         Profile::FromBrowserContext(web_contents->GetBrowserContext());
     auto* identity_manager = IdentityManagerFactory::GetForProfile(profile);
-    CoreAccountInfo account_info = identity_manager->GetPrimaryAccountInfo();
+    // This class doesn't care about browser sync consent.
+    CoreAccountInfo account_info = identity_manager->GetPrimaryAccountInfo(
+        signin::ConsentLevel::kNotRequired);
     ReauthenticateChildAccount(
         web_contents, account_info.email,
         base::Bind(&SupervisedUserGoogleAuthNavigationThrottle::

@@ -5,7 +5,9 @@
 #include <memory>
 
 #include "base/at_exit.h"
+#include "base/base_switches.h"
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/i18n/icu_util.h"
 #include "base/memory/ptr_util.h"
@@ -13,6 +15,7 @@
 #include "base/power_monitor/power_monitor.h"
 #include "base/power_monitor/power_monitor_device_source.h"
 #include "base/run_loop.h"
+#include "base/test/scoped_run_loop_timeout.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_discardable_memory_allocator.h"
 #include "base/test/test_timeouts.h"
@@ -22,7 +25,6 @@
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
 #include "mojo/core/embedder/embedder.h"
 #include "ui/base/ime/init/input_method_initializer.h"
-#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_paths.h"
 #include "ui/compositor/test/in_process_context_factory.h"
@@ -30,6 +32,7 @@
 #include "ui/gfx/font_util.h"
 #include "ui/gl/gl_switches.h"
 #include "ui/gl/init/gl_factory.h"
+#include "ui/views/buildflags.h"
 #include "ui/views/examples/example_base.h"
 #include "ui/views/examples/examples_window.h"
 #include "ui/views/test/desktop_test_views_delegate.h"
@@ -39,12 +42,16 @@
 #include "ui/wm/core/wm_state.h"
 #endif
 
-#if !defined(OS_CHROMEOS) && defined(USE_AURA)
+#if BUILDFLAG(ENABLE_DESKTOP_AURA)
 #include "ui/views/widget/desktop_aura/desktop_screen.h"
 #endif
 
 #if defined(OS_WIN)
 #include "ui/base/win/scoped_ole_initializer.h"
+#endif
+
+#if defined(USE_OZONE)
+#include "ui/ozone/public/ozone_platform.h"
 #endif
 
 #if defined(USE_X11)
@@ -61,15 +68,26 @@ int main(int argc, char** argv) {
 
   base::CommandLine::Init(argc, argv);
 
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+
   // Disabling Direct Composition works around the limitation that
   // InProcessContextFactory doesn't work with Direct Composition, causing the
   // window to not render. See http://crbug.com/936249.
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      switches::kDisableDirectComposition);
+  command_line->AppendSwitch(switches::kDisableDirectComposition);
+
+  base::FeatureList::InitializeInstance(
+      command_line->GetSwitchValueASCII(switches::kEnableFeatures),
+      command_line->GetSwitchValueASCII(switches::kDisableFeatures));
 
   base::AtExitManager at_exit;
 
   mojo::core::Init();
+
+#if defined(USE_OZONE)
+  ui::OzonePlatform::InitParams params;
+  params.single_process = true;
+  ui::OzonePlatform::InitializeForGPU(params);
+#endif
 
 #if defined(USE_X11)
   // This demo uses InProcessContextFactory which uses X on a separate Gpu
@@ -83,6 +101,10 @@ int main(int argc, char** argv) {
   // values from TestTimeouts. This ensures they're properly initialized.
   TestTimeouts::Initialize();
 
+  // Viz depends on the task environment to correctly tear down.
+  base::test::TaskEnvironment task_environment(
+      base::test::TaskEnvironment::MainThreadType::UI);
+
   // The ContextFactory must exist before any Compositors are created.
   viz::HostFrameSinkManager host_frame_sink_manager;
   viz::ServerSharedBitmapManager shared_bitmap_manager;
@@ -92,9 +114,6 @@ int main(int argc, char** argv) {
   auto context_factory = std::make_unique<ui::InProcessContextFactory>(
       &host_frame_sink_manager, &frame_sink_manager);
   context_factory->set_use_test_surface(false);
-
-  base::test::TaskEnvironment task_environment(
-      base::test::TaskEnvironment::MainThreadType::UI);
 
   base::i18n::InitializeICU();
 
@@ -115,24 +134,22 @@ int main(int argc, char** argv) {
 #if defined(USE_AURA)
   std::unique_ptr<aura::Env> env = aura::Env::CreateInstance();
   aura::Env::GetInstance()->set_context_factory(context_factory.get());
-  aura::Env::GetInstance()->set_context_factory_private(context_factory.get());
 #endif
   ui::InitializeInputMethodForTesting();
-  ui::MaterialDesignController::Initialize();
 
   {
     views::DesktopTestViewsDelegate views_delegate;
 #if defined(USE_AURA)
     wm::WMState wm_state;
 #endif
-#if !defined(OS_CHROMEOS) && defined(USE_AURA)
+#if BUILDFLAG(ENABLE_DESKTOP_AURA)
     std::unique_ptr<display::Screen> desktop_screen(
         views::CreateDesktopScreen());
     display::Screen::SetScreenInstance(desktop_screen.get());
 #endif
 
     // This app isn't a test and shouldn't timeout.
-    base::RunLoop::ScopedDisableRunTimeoutForTest disable_timeout;
+    base::test::ScopedDisableRunLoopTimeout disable_timeout;
 
     base::RunLoop run_loop;
     views::examples::ShowExamplesWindow(run_loop.QuitClosure());

@@ -58,13 +58,12 @@ namespace {
 // defined in the Fetch spec:
 // https://fetch.spec.whatwg.org/#request-destination-script-like
 bool IsRequestContextSupported(mojom::RequestContextType request_context) {
-  // TODO(nhiroki): Support |kRequestContextSharedWorker| for module loading for
-  // shared workers (https://crbug.com/824646).
   // TODO(nhiroki): Support "audioworklet" and "paintworklet" destinations.
   switch (request_context) {
     case mojom::RequestContextType::SCRIPT:
     case mojom::RequestContextType::WORKER:
     case mojom::RequestContextType::SERVICE_WORKER:
+    case mojom::RequestContextType::SHARED_WORKER:
       return true;
     default:
       break;
@@ -140,7 +139,7 @@ void ScriptResource::Prefinalize() {
   watcher_.reset();
 }
 
-void ScriptResource::Trace(blink::Visitor* visitor) {
+void ScriptResource::Trace(Visitor* visitor) {
   visitor->Trace(streamer_);
   visitor->Trace(response_body_loader_client_);
   TextResource::Trace(visitor);
@@ -232,7 +231,8 @@ void ScriptResource::DestroyDecodedDataForFailedRevalidation() {
   SetDecodedSize(0);
 }
 
-void ScriptResource::SetRevalidatingRequest(const ResourceRequest& request) {
+void ScriptResource::SetRevalidatingRequest(
+    const ResourceRequestHead& request) {
   CHECK_EQ(streaming_state_, StreamingState::kFinishedNotificationSent);
   if (streamer_) {
     CHECK(streamer_->IsStreamingFinished());

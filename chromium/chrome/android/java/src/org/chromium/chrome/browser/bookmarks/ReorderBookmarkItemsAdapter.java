@@ -5,8 +5,6 @@
 package org.chromium.chrome.browser.bookmarks;
 
 import android.content.Context;
-import android.support.v7.widget.RecyclerView;
-import android.support.v7.widget.RecyclerView.ViewHolder;
 import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
@@ -14,8 +12,10 @@ import android.view.ViewGroup;
 
 import androidx.annotation.IntDef;
 import androidx.annotation.LayoutRes;
+import androidx.annotation.VisibleForTesting;
+import androidx.recyclerview.widget.RecyclerView;
+import androidx.recyclerview.widget.RecyclerView.ViewHolder;
 
-import org.chromium.base.VisibleForTesting;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
@@ -25,10 +25,10 @@ import org.chromium.chrome.browser.bookmarks.BookmarkManager.ItemsAdapter;
 import org.chromium.chrome.browser.bookmarks.BookmarkRow.Location;
 import org.chromium.chrome.browser.signin.PersonalizedSigninPromoView;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
-import org.chromium.chrome.browser.ui.widget.dragreorder.DragReorderableListAdapter;
-import org.chromium.chrome.browser.ui.widget.highlight.ViewHighlighter;
 import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.components.bookmarks.BookmarkType;
+import org.chromium.components.browser_ui.widget.dragreorder.DragReorderableListAdapter;
+import org.chromium.components.browser_ui.widget.highlight.ViewHighlighter;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -324,7 +324,9 @@ class ReorderBookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkIte
     public void refresh() {
         // TODO(crbug.com/160194): Clean up after bookmark reordering launches.
         // Tell the RecyclerView to update its elements.
-        notifyDataSetChanged();
+        if (mElements != null) {
+            notifyDataSetChanged();
+        }
     }
 
     /**
@@ -580,6 +582,5 @@ class ReorderBookmarkItemsAdapter extends DragReorderableListAdapter<BookmarkIte
         return mCurrentFolder != null &&
                 mCurrentFolder.getId() == mDelegate.getModel().getTrashFolderId().getId();
     }
-
 
 }

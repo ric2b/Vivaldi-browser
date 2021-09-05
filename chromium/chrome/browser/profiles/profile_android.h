@@ -21,7 +21,7 @@ class ProfileAndroid : public base::SupportsUserData::Data {
   static Profile* FromProfileAndroid(
       const base::android::JavaRef<jobject>& obj);
 
-  static base::android::ScopedJavaLocalRef<jobject> GetLastUsedProfile(
+  static base::android::ScopedJavaLocalRef<jobject> GetLastUsedRegularProfile(
       JNIEnv* env);
 
   // Destroys this Profile when possible.

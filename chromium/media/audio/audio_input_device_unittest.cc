@@ -7,14 +7,13 @@
 #include <utility>
 
 #include "base/memory/ptr_util.h"
-#include "base/memory/shared_memory.h"
+#include "base/memory/read_only_shared_memory_region.h"
 #include "base/process/process_handle.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/sync_socket.h"
 #include "base/test/task_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"
-#include "testing/gmock_mutant.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using base::CancelableSyncSocket;
@@ -110,9 +109,6 @@ TEST(AudioInputDeviceTest, CreateStream) {
 
   ASSERT_TRUE(
       CancelableSyncSocket::CreatePair(&browser_socket, &renderer_socket));
-  SyncSocket::TransitDescriptor audio_device_socket_descriptor;
-  ASSERT_TRUE(renderer_socket.PrepareTransitDescriptor(
-      base::GetCurrentProcessHandle(), &audio_device_socket_descriptor));
   base::ReadOnlySharedMemoryRegion duplicated_shared_memory_region =
       shared_memory.region.Duplicate();
   ASSERT_TRUE(duplicated_shared_memory_region.IsValid());
@@ -127,10 +123,8 @@ TEST(AudioInputDeviceTest, CreateStream) {
   EXPECT_CALL(*input_ipc, CreateStream(_, _, _, _))
       .WillOnce(InvokeWithoutArgs([&]() {
         static_cast<AudioInputIPCDelegate*>(device.get())
-            ->OnStreamCreated(
-                std::move(duplicated_shared_memory_region),
-                SyncSocket::UnwrapHandle(audio_device_socket_descriptor),
-                false);
+            ->OnStreamCreated(std::move(duplicated_shared_memory_region),
+                              renderer_socket.Take(), false);
       }));
   EXPECT_CALL(*input_ipc, RecordStream());
 

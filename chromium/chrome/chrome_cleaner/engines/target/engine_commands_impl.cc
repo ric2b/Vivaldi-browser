@@ -18,13 +18,6 @@
 
 namespace chrome_cleaner {
 
-using mojom::CleanerEngineRequestsAssociatedPtr;
-using mojom::CleanerEngineRequestsAssociatedPtrInfo;
-using mojom::EngineFileRequestsAssociatedPtr;
-using mojom::EngineFileRequestsAssociatedPtrInfo;
-using mojom::EngineRequestsAssociatedPtr;
-using mojom::EngineRequestsAssociatedPtrInfo;
-
 namespace {
 
 constexpr char kStageCrashKey[] = "stage";
@@ -62,17 +55,15 @@ EngineCommandsImpl::EngineCommandsImpl(
 EngineCommandsImpl::~EngineCommandsImpl() = default;
 
 void EngineCommandsImpl::Initialize(
-    mojom::EngineFileRequestsAssociatedPtrInfo file_requests,
+    mojo::PendingAssociatedRemote<mojom::EngineFileRequests> file_requests,
     const base::FilePath& log_directory_path,
     InitializeCallback callback) {
   ScopedCrashStageRecorder crash_stage(__func__);
 
   // Create proxies to pass requests to the broker process over Mojo.
-  mojom::EngineFileRequestsAssociatedPtr file_requests_ptr;
-  file_requests_ptr.Bind(std::move(file_requests));
   scoped_refptr<EngineFileRequestsProxy> file_requests_proxy =
-      base::MakeRefCounted<EngineFileRequestsProxy>(
-          std::move(file_requests_ptr), task_runner_);
+      base::MakeRefCounted<EngineFileRequestsProxy>(std::move(file_requests),
+                                                    task_runner_);
 
   // This object is not retained because it outlives the callback: it's
   // destroyed on this sequence, once the main thread returns, which should only
@@ -82,31 +73,28 @@ void EngineCommandsImpl::Initialize(
   engine_delegate_->Initialize(
       log_directory_path, file_requests_proxy,
       base::BindOnce(&EngineCommandsImpl::PostInitializeCallback,
-                     base::Unretained(this), base::Passed(&callback)));
+                     base::Unretained(this), std::move(callback)));
 }
 
 void EngineCommandsImpl::StartScan(
     const std::vector<UwSId>& enabled_uws,
     const std::vector<UwS::TraceLocation>& enabled_trace_locations,
     bool include_details,
-    mojom::EngineFileRequestsAssociatedPtrInfo file_requests,
-    mojom::EngineRequestsAssociatedPtrInfo sandboxed_engine_requests,
+    mojo::PendingAssociatedRemote<mojom::EngineFileRequests> file_requests,
+    mojo::PendingAssociatedRemote<mojom::EngineRequests>
+        sandboxed_engine_requests,
     mojo::PendingAssociatedRemote<mojom::EngineScanResults> scan_results,
     StartScanCallback callback) {
   ScopedCrashStageRecorder crash_stage(__func__);
 
   // Create proxies to pass requests to the broker process over Mojo.
-  EngineFileRequestsAssociatedPtr file_requests_ptr;
-  file_requests_ptr.Bind(std::move(file_requests));
   scoped_refptr<EngineFileRequestsProxy> file_requests_proxy =
-      base::MakeRefCounted<EngineFileRequestsProxy>(
-          std::move(file_requests_ptr), task_runner_);
+      base::MakeRefCounted<EngineFileRequestsProxy>(std::move(file_requests),
+                                                    task_runner_);
 
-  EngineRequestsAssociatedPtr engine_requests_ptr;
-  engine_requests_ptr.Bind(std::move(sandboxed_engine_requests));
   scoped_refptr<EngineRequestsProxy> engine_requests_proxy =
-      base::MakeRefCounted<EngineRequestsProxy>(std::move(engine_requests_ptr),
-                                                task_runner_);
+      base::MakeRefCounted<EngineRequestsProxy>(
+          std::move(sandboxed_engine_requests), task_runner_);
 
   // Create an EngineScanResults proxy to send results back over the
   // Mojo connection.
@@ -122,33 +110,27 @@ void EngineCommandsImpl::StartScan(
 
 void EngineCommandsImpl::StartCleanup(
     const std::vector<UwSId>& enabled_uws,
-    mojom::EngineFileRequestsAssociatedPtrInfo file_requests,
-    mojom::EngineRequestsAssociatedPtrInfo sandboxed_engine_requests,
-    mojom::CleanerEngineRequestsAssociatedPtrInfo
+    mojo::PendingAssociatedRemote<mojom::EngineFileRequests> file_requests,
+    mojo::PendingAssociatedRemote<mojom::EngineRequests>
+        sandboxed_engine_requests,
+    mojo::PendingAssociatedRemote<mojom::CleanerEngineRequests>
         sandboxed_cleaner_engine_requests,
     mojo::PendingAssociatedRemote<mojom::EngineCleanupResults> cleanup_results,
     StartCleanupCallback callback) {
   ScopedCrashStageRecorder crash_stage(__func__);
 
   // Create proxies to pass requests to the broker process over Mojo.
-  EngineFileRequestsAssociatedPtr file_requests_ptr;
-  file_requests_ptr.Bind(std::move(file_requests));
   scoped_refptr<EngineFileRequestsProxy> file_requests_proxy =
-      base::MakeRefCounted<EngineFileRequestsProxy>(
-          std::move(file_requests_ptr), task_runner_);
+      base::MakeRefCounted<EngineFileRequestsProxy>(std::move(file_requests),
+                                                    task_runner_);
 
-  EngineRequestsAssociatedPtr engine_requests_ptr;
-  engine_requests_ptr.Bind(std::move(sandboxed_engine_requests));
   scoped_refptr<EngineRequestsProxy> engine_requests_proxy =
-      base::MakeRefCounted<EngineRequestsProxy>(std::move(engine_requests_ptr),
-                                                task_runner_);
+      base::MakeRefCounted<EngineRequestsProxy>(
+          std::move(sandboxed_engine_requests), task_runner_);
 
-  CleanerEngineRequestsAssociatedPtr cleaner_engine_requests_ptr;
-  cleaner_engine_requests_ptr.Bind(
-      std::move(sandboxed_cleaner_engine_requests));
   scoped_refptr<CleanerEngineRequestsProxy> cleaner_engine_requests_proxy =
       base::MakeRefCounted<CleanerEngineRequestsProxy>(
-          std::move(cleaner_engine_requests_ptr), task_runner_);
+          std::move(sandboxed_cleaner_engine_requests), task_runner_);
 
   // Create an EngineCleanupResults proxy to send results back over the
   // Mojo connection.

@@ -36,6 +36,7 @@
 <translation id="2292556288342944218">Váš prístup k internetu je blokovaný</translation>
 <translation id="2317259163369394535">Doména <ph name="DOMAIN" /> vyžaduje používateľské meno a heslo.</translation>
 <translation id="2337852623177822836">Nastavenie ovládané správcom</translation>
+<translation id="2344028582131185878">Automatické stiahnutia</translation>
 <translation id="2355395290879513365">Útočníci môžu vidieť obrázky, ktoré si prehliadate na tejto stránke, a môžu vás napadnúť tým, že ich podvodným spôsobom upravia.</translation>
 <translation id="2356070529366658676">Opýtať sa</translation>
 <translation id="2359808026110333948">Pokračovať</translation>
@@ -84,7 +85,6 @@
 <translation id="3973234410852337861">Web <ph name="HOST_NAME" /> je zablokovaný</translation>
 <translation id="3987940399970879459">Menej ako 1 MB</translation>
 <translation id="4075732493274867456">Klient a server nepodporujú spoločnú verziu protokolu SSL ani šifrovaciu súpravu.</translation>
-<translation id="410351446219883937">Automatické prehrávanie</translation>
 <translation id="4116663294526079822">Vždy povoliť na tejto stránke</translation>
 <translation id="4130226655945681476">Skontrolovať sieťové káble, modem a smerovač</translation>
 <translation id="4151403195736952345">Použiť globálne predvolené nastavenie (Rozpoznávať)</translation>

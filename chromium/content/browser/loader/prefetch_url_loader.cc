@@ -14,7 +14,7 @@
 #include "content/browser/web_package/signed_exchange_utils.h"
 #include "content/public/common/content_features.h"
 #include "net/base/load_flags.h"
-#include "services/network/loader_util.h"
+#include "net/http/http_request_headers.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "third_party/blink/public/common/features.h"
@@ -34,7 +34,7 @@ PrefetchURLLoader::PrefetchURLLoader(
     uint32_t options,
     int frame_tree_node_id,
     const network::ResourceRequest& resource_request,
-    network::mojom::URLLoaderClientPtr client,
+    mojo::PendingRemote<network::mojom::URLLoaderClient> client,
     const net::MutableNetworkTrafficAnnotationTag& traffic_annotation,
     scoped_refptr<network::SharedURLLoaderFactory> network_loader_factory,
     URLLoaderThrottlesGetter url_loader_throttles_getter,
@@ -49,7 +49,6 @@ PrefetchURLLoader::PrefetchURLLoader(
     : frame_tree_node_id_(frame_tree_node_id),
       resource_request_(resource_request),
       network_loader_factory_(std::move(network_loader_factory)),
-      client_binding_(this),
       forwarding_client_(std::move(client)),
       url_loader_throttles_getter_(url_loader_throttles_getter),
       signed_exchange_prefetch_metric_recorder_(
@@ -67,7 +66,8 @@ PrefetchURLLoader::PrefetchURLLoader(
     // Set the SignedExchange accept header.
     // (https://wicg.github.io/webpackage/draft-yasskin-http-origin-signed-responses.html#internet-media-type-applicationsigned-exchange).
     resource_request_.headers.SetHeader(
-        network::kAcceptHeader, kSignedExchangeEnabledAcceptHeaderForPrefetch);
+        net::HttpRequestHeaders::kAccept,
+        kSignedExchangeEnabledAcceptHeaderForPrefetch);
     if (prefetched_signed_exchange_cache &&
         resource_request.is_signed_exchange_prefetch_cache_enabled) {
       prefetched_signed_exchange_cache_adapter_ =
@@ -78,13 +78,12 @@ PrefetchURLLoader::PrefetchURLLoader(
     }
   }
 
-  network::mojom::URLLoaderClientPtr network_client;
-  client_binding_.Bind(mojo::MakeRequest(&network_client));
-  client_binding_.set_connection_error_handler(base::BindOnce(
-      &PrefetchURLLoader::OnNetworkConnectionError, base::Unretained(this)));
   network_loader_factory_->CreateLoaderAndStart(
-      mojo::MakeRequest(&loader_), routing_id, request_id, options,
-      resource_request_, std::move(network_client), traffic_annotation);
+      loader_.BindNewPipeAndPassReceiver(), routing_id, request_id, options,
+      resource_request_, client_receiver_.BindNewPipeAndPassRemote(),
+      traffic_annotation);
+  client_receiver_.set_disconnect_handler(base::BindOnce(
+      &PrefetchURLLoader::OnNetworkConnectionError, base::Unretained(this)));
 }
 
 PrefetchURLLoader::~PrefetchURLLoader() = default;
@@ -112,9 +111,9 @@ void PrefetchURLLoader::FollowRedirect(
     RecordPrefetchRedirectHistogram(
         PrefetchRedirect::kPrefetchRedirectedSXGHandler);
 
-    // Rebind |client_binding_| and |loader_|.
-    client_binding_.Bind(signed_exchange_prefetch_handler_->FollowRedirect(
-        mojo::MakeRequest(&loader_)));
+    // Rebind |client_receiver_| and |loader_|.
+    client_receiver_.Bind(signed_exchange_prefetch_handler_->FollowRedirect(
+        loader_.BindNewPipeAndPassReceiver()));
     return;
   }
 
@@ -150,19 +149,19 @@ void PrefetchURLLoader::OnReceiveResponse(
     network::mojom::URLResponseHeadPtr response) {
   if (is_signed_exchange_handling_enabled_ &&
       signed_exchange_utils::ShouldHandleAsSignedHTTPExchange(
-          resource_request_.url, response)) {
+          resource_request_.url, *response)) {
     DCHECK(!signed_exchange_prefetch_handler_);
     if (prefetched_signed_exchange_cache_adapter_) {
       prefetched_signed_exchange_cache_adapter_->OnReceiveOuterResponse(
-          response);
+          response.Clone());
     }
     // Note that after this point this doesn't directly get upcalls from the
     // network. (Until |this| calls the handler's FollowRedirect.)
     signed_exchange_prefetch_handler_ =
         std::make_unique<SignedExchangePrefetchHandler>(
-            frame_tree_node_id_, resource_request_, response,
-            mojo::ScopedDataPipeConsumerHandle(), std::move(loader_),
-            client_binding_.Unbind(), network_loader_factory_,
+            frame_tree_node_id_, resource_request_, std::move(response),
+            mojo::ScopedDataPipeConsumerHandle(), loader_.Unbind(),
+            client_receiver_.Unbind(), network_loader_factory_,
             url_loader_throttles_getter_, this,
             signed_exchange_prefetch_metric_recorder_, accept_langs_);
     return;
@@ -185,7 +184,8 @@ void PrefetchURLLoader::OnReceiveResponse(
 
   if (prefetched_signed_exchange_cache_adapter_ &&
       signed_exchange_prefetch_handler_) {
-    prefetched_signed_exchange_cache_adapter_->OnReceiveInnerResponse(response);
+    prefetched_signed_exchange_cache_adapter_->OnReceiveInnerResponse(
+        response.Clone());
   }
 
   forwarding_client_->OnReceiveResponse(std::move(response));
@@ -263,7 +263,7 @@ bool PrefetchURLLoader::SendEmptyBody() {
     forwarding_client_->OnComplete(
         network::URLLoaderCompletionStatus(net::ERR_INSUFFICIENT_RESOURCES));
     forwarding_client_.reset();
-    client_binding_.Close();
+    client_receiver_.reset();
     return false;
   }
   forwarding_client_->OnStartLoadingResponseBody(std::move(consumer));

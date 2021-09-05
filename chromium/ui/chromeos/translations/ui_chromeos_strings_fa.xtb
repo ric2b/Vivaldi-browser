@@ -29,6 +29,7 @@
 <translation id="1243314992276662751">بارگذاری</translation>
 <translation id="1249250836236328755">ژانر</translation>
 <translation id="1278813325885878377">‏صفحه‌کلید QWERTY مجارستانی</translation>
+<translation id="1293556467332435079">Files</translation>
 <translation id="1297922636971898492">‏Google Drive در حال حاضر در دسترس نیست. به محض در دسترس قرار گرفتن Google Drive بارگذاری کردن به صورت خودکار دوباره شروع می‌شود.</translation>
 <translation id="1307931752636661898">‏نمی‌توان فایل‌های Linux را مشاهده کرد</translation>
 <translation id="1310751437842832374">‏نویسه‌گردانی (mausam ← ‏ନମସ୍ତେ)</translation>
@@ -80,6 +81,7 @@
 <translation id="1847880352285315359">ذخیره شد</translation>
 <translation id="1864756863218646478">این فایل پیدا نشد.</translation>
 <translation id="1921986354447415460">‏صفحه‌کلید ترکی F</translation>
+<translation id="1924372192547904021"><ph name="DRIVE_NAME" /> قالب‌بندی شد</translation>
 <translation id="1931134289871235022">اسلواکی</translation>
 <translation id="1933345018156373194">انتقال انجام نشد، خطای غیرمنتظره: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="1936717151811561466">فنلاندی</translation>
@@ -163,6 +165,7 @@
 <translation id="2942290791863759244">‏صفحه‌کلید آلمانی NEO 2</translation>
 <translation id="2943400156390503548">اسلایدها</translation>
 <translation id="2943503720238418293">از نام کوتاه‌تری استفاده کنید</translation>
+<translation id="2949781154072577687">درحال قالب‌بندی <ph name="DRIVE_NAME" />…</translation>
 <translation id="2951236788251446349">عروس دریایی</translation>
 <translation id="2963783323012015985">صفحه‌کلید ترکی</translation>
 <translation id="2966459079597787514">صفحه‌کلید سوئدی</translation>
@@ -222,7 +225,7 @@
 <translation id="3644896802912593514">عرض</translation>
 <translation id="3645531960514756307">برداشتن پین پوشه</translation>
 <translation id="3678559383040232393">صفحه‌کلید مالتی</translation>
-<translation id="3685122418104378273">‏هنگام استفاده از داده‌های شبکه همراه، همگام‌سازی Google Drive به صورت پیش‌فرض غیرفعال است.</translation>
+<translation id="3685122418104378273">‏هنگام استفاده از داده‌های شبکه همراه، همگام‌سازی Google Drive به‌صورت پیش‌فرض غیرفعال است.</translation>
 <translation id="3689865792480713551">لغو <ph name="ACTIVITY_DESCRIPTION" />.</translation>
 <translation id="3726463242007121105">این دستگاه باز نمی‌شود زیرا سیستم فایل آن پشتیبانی نمی‌شود.</translation>
 <translation id="3741243925913727067">‏از عکس‌ها و ویدیوهای دستگاه رسانه‌تان در Google Drive پشتیبان بگیرید.</translation>
@@ -275,6 +278,7 @@
 <translation id="4336032328163998280">فرایند رونوشت‌برداری انجام نشد. <ph name="ERROR_MESSAGE" /></translation>
 <translation id="4364327530094270451">خربزه</translation>
 <translation id="4372884569765913867">۱x۱</translation>
+<translation id="4394214039309501350">پیوند خارجی</translation>
 <translation id="4425149324548788773">My Drive</translation>
 <translation id="4465830120256509958">صفحه‌کلید برزیلی</translation>
 <translation id="4470564870223067757">مجموعه هانگول ۲</translation>
@@ -505,6 +509,7 @@
 <translation id="6878261347041253038">صفحه‌کلید دواناگری (آوایی)</translation>
 <translation id="6885780034956018177">حلزون</translation>
 <translation id="6896758677409633944">کپی</translation>
+<translation id="6898028766943174120">پوشه‌های فرعی بیشتر...</translation>
 <translation id="691516599546977041">در <ph name="FOLDER_NAME" /> ذخیره نشد. تصاویر ویرایش‌شده در پوشه بارگیری‌ها ذخیره خواهند شد.</translation>
 <translation id="6915678159055240887">Chromebox</translation>
 <translation id="6918340160281024199">US Workman</translation>
@@ -517,6 +522,7 @@
 <translation id="696203921837389374">فعال کردن همگام‌سازی از طریق داده تلفن همراه</translation>
 <translation id="6965382102122355670">قبول</translation>
 <translation id="6970230597523682626">بلغاری</translation>
+<translation id="6973630695168034713">پوشه‌ها</translation>
 <translation id="6978611942794658017">‏این فایل برای رایانه‌ای که از نرم‌افزار Windows استفاده می‌کند طراحی شده است. این فایل با دستگاه شما که سیستم عامل Chrome را اجرا می‌کند، سازگار نیست. لطفاً «نت‌بازار Chrome» را برای یک برنامه جایگزین مناسب جستجو کنید.</translation>
 <translation id="6979158407327259162">Google Drive</translation>
 <translation id="6990081529015358884">فضای شما تمام شده است</translation>
@@ -564,9 +570,11 @@
 <translation id="7589661784326793847">چند ثانیه صبر کنید</translation>
 <translation id="7603724359189955920">شبکه‌ها</translation>
 <translation id="7627790789328695202">اوه، <ph name="FILE_NAME" /> از قبل وجود دارد. نام آن را تغییر دهید و دوباره امتحان کنید.</translation>
+<translation id="7628656427739290098"><ph name="PERCENT" />% کامل شد.</translation>
 <translation id="7649070708921625228">راهنما</translation>
 <translation id="7654209398114106148">درحال انتقال <ph name="NUMBER_OF_ITEMS" /> مورد…</translation>
 <translation id="7658239707568436148">لغو</translation>
+<translation id="7695430100978772476"><ph name="DRIVE_NAME" /> قالب‌بندی نشد</translation>
 <translation id="770015031906360009">یونانی</translation>
 <translation id="7706319470528945664">صفحه‌کلید پرتغالی</translation>
 <translation id="7711920809702896782">اطلاعات تصویر</translation>

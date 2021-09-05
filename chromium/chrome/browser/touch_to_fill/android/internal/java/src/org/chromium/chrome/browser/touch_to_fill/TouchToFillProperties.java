@@ -7,6 +7,7 @@ package org.chromium.chrome.browser.touch_to_fill;
 import android.graphics.Bitmap;
 
 import androidx.annotation.IntDef;
+import androidx.annotation.Nullable;
 
 import org.chromium.base.Callback;
 import org.chromium.chrome.browser.touch_to_fill.data.Credential;
@@ -23,6 +24,7 @@ import java.lang.annotation.RetentionPolicy;
  */
 class TouchToFillProperties {
     static final String FIELD_TRIAL_PARAM_SHOW_CONFIRMATION_BUTTON = "show_confirmation_button";
+    static final String FIELD_TRIAL_PARAM_BRANDING_MESSAGE = "branding_message";
 
     static final PropertyModel.WritableBooleanPropertyKey VISIBLE =
             new PropertyModel.WritableBooleanPropertyKey("visible");
@@ -45,7 +47,26 @@ class TouchToFillProperties {
      * Properties for a credential entry in TouchToFill sheet.
      */
     static class CredentialProperties {
-        static final PropertyModel.WritableObjectPropertyKey<Bitmap> FAVICON =
+        static class FaviconOrFallback {
+            final String mUrl;
+            final @Nullable Bitmap mIcon;
+            final int mFallbackColor;
+            final boolean mIsFallbackColorDefault;
+            final int mIconType;
+            final int mIconSize;
+
+            FaviconOrFallback(String originUrl, @Nullable Bitmap icon, int fallbackColor,
+                    boolean isFallbackColorDefault, int iconType, int iconSize) {
+                mUrl = originUrl;
+                mIcon = icon;
+                mFallbackColor = fallbackColor;
+                mIsFallbackColorDefault = isFallbackColorDefault;
+                mIconType = iconType;
+                mIconSize = iconSize;
+            }
+        }
+        static final PropertyModel
+                .WritableObjectPropertyKey<FaviconOrFallback> FAVICON_OR_FALLBACK =
                 new PropertyModel.WritableObjectPropertyKey<>("favicon");
         static final PropertyModel.ReadableObjectPropertyKey<Credential> CREDENTIAL =
                 new PropertyModel.ReadableObjectPropertyKey<>("credential");
@@ -56,7 +77,7 @@ class TouchToFillProperties {
                 new PropertyModel.ReadableObjectPropertyKey<>("on_click_listener");
 
         static final PropertyKey[] ALL_KEYS = {
-                FAVICON, CREDENTIAL, FORMATTED_ORIGIN, ON_CLICK_LISTENER};
+                FAVICON_OR_FALLBACK, CREDENTIAL, FORMATTED_ORIGIN, ON_CLICK_LISTENER};
 
         private CredentialProperties() {}
     }
@@ -65,17 +86,26 @@ class TouchToFillProperties {
      * Properties defined here reflect the visible state of the header in the TouchToFill sheet.
      */
     static class HeaderProperties {
+        static final PropertyModel.ReadableBooleanPropertyKey SINGLE_CREDENTIAL =
+                new PropertyModel.ReadableBooleanPropertyKey("single_credential");
         static final PropertyModel.ReadableObjectPropertyKey<String> FORMATTED_URL =
                 new PropertyModel.ReadableObjectPropertyKey<>("formatted_url");
         static final PropertyModel.ReadableBooleanPropertyKey ORIGIN_SECURE =
                 new PropertyModel.ReadableBooleanPropertyKey("origin_secure");
 
-        static final PropertyKey[] ALL_KEYS = {FORMATTED_URL, ORIGIN_SECURE};
+        static final PropertyKey[] ALL_KEYS = {SINGLE_CREDENTIAL, FORMATTED_URL, ORIGIN_SECURE};
 
         private HeaderProperties() {}
     }
 
-    @IntDef({ItemType.HEADER, ItemType.CREDENTIAL, ItemType.FILL_BUTTON})
+    static class FooterProperties {
+        static final PropertyModel.ReadableIntPropertyKey BRANDING_MESSAGE_ID =
+                new PropertyModel.ReadableIntPropertyKey("branding_message_id");
+        static final PropertyKey[] ALL_KEYS = {BRANDING_MESSAGE_ID};
+        private FooterProperties() {}
+    }
+
+    @IntDef({ItemType.HEADER, ItemType.CREDENTIAL, ItemType.FILL_BUTTON, ItemType.FOOTER})
     @Retention(RetentionPolicy.SOURCE)
     @interface ItemType {
         /**
@@ -92,6 +122,11 @@ class TouchToFillProperties {
          * The fill button at the end of the sheet that filling more obvious for one suggestion.
          */
         int FILL_BUTTON = 3;
+
+        /**
+         * The branding message at the bottom of the sheet to draw attention to the feature.
+         */
+        int FOOTER = 4;
     }
 
     /**

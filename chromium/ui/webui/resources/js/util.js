@@ -85,14 +85,18 @@
  * @param {Node} node The node to check.
  * @param {function(Node):boolean} predicate The function that tests the
  *     nodes.
+ * @param {boolean=} includeShadowHosts
  * @return {Node} The found ancestor or null if not found.
  */
-/* #export */ function findAncestor(node, predicate) {
-  let last = false;
-  while (node != null && !(last = predicate(node))) {
-    node = node.parentNode;
+/* #export */ function findAncestor(node, predicate, includeShadowHosts) {
+  while (node !== null) {
+    if (predicate(node)) {
+      break;
+    }
+    node = includeShadowHosts && node instanceof ShadowRoot ? node.host :
+                                                              node.parentNode;
   }
-  return last ? node : null;
+  return node;
 }
 
 /**
@@ -125,7 +129,7 @@
  * @return {boolean} True if Chrome is running an RTL UI.
  */
 /* #export */ function isRTL() {
-  return document.documentElement.dir == 'rtl';
+  return document.documentElement.dir === 'rtl';
 }
 
 /**
@@ -155,55 +159,6 @@
       element, HTMLElement, 'Missing required element: ' + selectors);
 }
 
-// Handle click on a link. If the link points to a chrome: or file: url, then
-// call into the browser to do the navigation.
-['click', 'auxclick'].forEach(function(eventName) {
-  document.addEventListener(eventName, function(e) {
-    if (e.button > 1) {
-      return;
-    }  // Ignore buttons other than left and middle.
-    if (e.defaultPrevented) {
-      return;
-    }
-
-    const eventPath = e.path;
-    let anchor = null;
-    if (eventPath) {
-      for (let i = 0; i < eventPath.length; i++) {
-        const element = eventPath[i];
-        if (element.tagName === 'A' && element.href) {
-          anchor = element;
-          break;
-        }
-      }
-    }
-
-    // Fallback if Event.path is not available.
-    let el = e.target;
-    if (!anchor && el.nodeType == Node.ELEMENT_NODE &&
-        el.webkitMatchesSelector('A, A *')) {
-      while (el.tagName != 'A') {
-        el = el.parentElement;
-      }
-      anchor = el;
-    }
-
-    if (!anchor) {
-      return;
-    }
-
-    anchor = /** @type {!HTMLAnchorElement} */ (anchor);
-    if ((anchor.protocol == 'file:' || anchor.protocol == 'about:') &&
-        (e.button == 0 || e.button == 1)) {
-      chrome.send('navigateToUrl', [
-        anchor.href, anchor.target, e.button, e.altKey, e.ctrlKey, e.metaKey,
-        e.shiftKey
-      ]);
-      e.preventDefault();
-    }
-  });
-});
-
 /**
  * Creates a new URL which is the old URL with a GET param of key=value.
  * @param {string} url The base URL. There is not sanity checking on the URL so
@@ -215,7 +170,7 @@
 /* #export */ function appendParam(url, key, value) {
   const param = encodeURIComponent(key) + '=' + encodeURIComponent(value);
 
-  if (url.indexOf('?') == -1) {
+  if (url.indexOf('?') === -1) {
     return url + '?' + param;
   }
   return url + '&' + param;
@@ -375,7 +330,7 @@
 if (!('key' in KeyboardEvent.prototype)) {
   Object.defineProperty(KeyboardEvent.prototype, 'key', {
     /** @this {KeyboardEvent} */
-    get: function() {
+    get() {
       // 0-9
       if (this.keyCode >= 0x30 && this.keyCode <= 0x39) {
         return String.fromCharCode(this.keyCode);
@@ -483,6 +438,6 @@ if (!('key' in KeyboardEvent.prototype)) {
  * @param {!Element} el
  * @return {boolean} Whether the element is interactive via text input.
  */
-function isTextInputElement(el) {
-  return el.tagName == 'INPUT' || el.tagName == 'TEXTAREA';
+/* #export */ function isTextInputElement(el) {
+  return el.tagName === 'INPUT' || el.tagName === 'TEXTAREA';
 }

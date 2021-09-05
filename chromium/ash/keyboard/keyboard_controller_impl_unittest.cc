@@ -13,18 +13,23 @@
 #include "ash/keyboard/ui/test/keyboard_test_util.h"
 #include "ash/public/cpp/keyboard/keyboard_controller.h"
 #include "ash/public/cpp/test/test_keyboard_controller_observer.h"
+#include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/ash_test_helper.h"
+#include "ash/wm/tablet_mode/tablet_mode_controller_test_api.h"
 #include "base/bind.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "base/test/bind_test_util.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/aura/window.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/test/display_manager_test_api.h"
+#include "ui/wm/core/window_util.h"
 
 using keyboard::KeyboardConfig;
 using keyboard::KeyboardEnableFlag;
@@ -32,6 +37,10 @@ using keyboard::KeyboardEnableFlag;
 namespace ash {
 
 namespace {
+
+ShelfLayoutManager* GetShelfLayoutManager() {
+  return AshTestBase::GetPrimaryShelf()->shelf_layout_manager();
+}
 
 class TestContainerBehavior : public keyboard::ContainerBehavior {
  public:
@@ -67,6 +76,10 @@ class TestContainerBehavior : public keyboard::ContainerBehavior {
                           const display::Display& current_display) override {
     return false;
   }
+  bool HandleGestureEvent(const ui::GestureEvent& event,
+                          const gfx::Rect& bounds_in_screen) override {
+    return false;
+  }
 
   keyboard::ContainerType GetType() const override { return type_; }
 
@@ -87,13 +100,21 @@ class TestContainerBehavior : public keyboard::ContainerBehavior {
     draggable_area_ = rect;
   }
 
+  void SetAreaToRemainOnScreen(const gfx::Rect& rect) override {
+    area_to_remain_on_screen_ = rect;
+  }
+
   const gfx::Rect& occluded_bounds() const { return occluded_bounds_; }
   const gfx::Rect& draggable_area() const { return draggable_area_; }
+  const gfx::Rect& area_to_remain_on_screen() const {
+    return area_to_remain_on_screen_;
+  }
 
  private:
   keyboard::ContainerType type_ = keyboard::ContainerType::kFullWidth;
   gfx::Rect occluded_bounds_;
   gfx::Rect draggable_area_;
+  gfx::Rect area_to_remain_on_screen_;
 };
 
 class KeyboardControllerImplTest : public AshTestBase {
@@ -102,6 +123,9 @@ class KeyboardControllerImplTest : public AshTestBase {
   ~KeyboardControllerImplTest() override = default;
 
   void SetUp() override {
+    base::test::ScopedFeatureList feature_list;
+    feature_list.InitAndEnableFeature(chromeos::features::kShelfHotseat);
+
     AshTestBase::SetUp();
 
     // Set the initial observer config to the default config.
@@ -324,6 +348,21 @@ TEST_F(KeyboardControllerImplTest, SetDraggableArea) {
   EXPECT_EQ(bounds, behavior->draggable_area());
 }
 
+TEST_F(KeyboardControllerImplTest, SetAreaToRemainOnScreen) {
+  // Enable the keyboard.
+  keyboard_controller()->SetEnableFlag(KeyboardEnableFlag::kExtensionEnabled);
+
+  // Override the container behavior.
+  auto scoped_behavior = std::make_unique<TestContainerBehavior>();
+  TestContainerBehavior* behavior = scoped_behavior.get();
+  keyboard_ui_controller()->set_container_behavior_for_test(
+      std::move(scoped_behavior));
+
+  gfx::Rect bounds(10, 20, 30, 40);
+  keyboard_ui_controller()->SetAreaToRemainOnScreen(bounds);
+  EXPECT_EQ(bounds, behavior->area_to_remain_on_screen());
+}
+
 TEST_F(KeyboardControllerImplTest, ChangingSessionRebuildsKeyboard) {
   // Enable the keyboard.
   keyboard_controller()->SetEnableFlag(KeyboardEnableFlag::kExtensionEnabled);
@@ -347,7 +386,8 @@ TEST_F(KeyboardControllerImplTest, VisualBoundsInMultipleDisplays) {
 
   // Show the keyboard in the second display.
   keyboard_ui_controller()->ShowKeyboardInDisplay(
-      Shell::Get()->display_manager()->GetSecondaryDisplay());
+      display::test::DisplayManagerTestApi(Shell::Get()->display_manager())
+          .GetSecondaryDisplay());
   ASSERT_TRUE(keyboard::WaitUntilShown());
 
   gfx::Rect root_bounds = keyboard_ui_controller()->visual_bounds_in_root();
@@ -364,7 +404,8 @@ TEST_F(KeyboardControllerImplTest, OccludedBoundsInMultipleDisplays) {
 
   // Show the keyboard in the second display.
   keyboard_ui_controller()->ShowKeyboardInDisplay(
-      Shell::Get()->display_manager()->GetSecondaryDisplay());
+      display::test::DisplayManagerTestApi(Shell::Get()->display_manager())
+          .GetSecondaryDisplay());
   ASSERT_TRUE(keyboard::WaitUntilShown());
 
   gfx::Rect screen_bounds =
@@ -525,6 +566,63 @@ TEST_F(KeyboardControllerImplTest, ShowKeyboardInSecondaryDisplay) {
   ASSERT_TRUE(keyboard::WaitUntilShown());
   EXPECT_TRUE(
       !keyboard_ui_controller()->GetKeyboardWindow()->bounds().IsEmpty());
+}
+
+TEST_F(KeyboardControllerImplTest, SwipeUpToShowHotSeat) {
+  TabletModeControllerTestApi().EnterTabletMode();
+
+  std::unique_ptr<aura::Window> window =
+      AshTestBase::CreateTestWindow(gfx::Rect(0, 0, 400, 400));
+  wm::ActivateWindow(window.get());
+
+  keyboard_controller()->SetEnableFlag(KeyboardEnableFlag::kExtensionEnabled);
+
+  keyboard_ui_controller()->ShowKeyboard(/* lock */ false);
+  ASSERT_TRUE(keyboard::WaitUntilShown());
+
+  gfx::Rect display_bounds =
+      display::Screen::GetScreen()->GetPrimaryDisplay().bounds();
+  const gfx::Point start(display_bounds.bottom_center());
+  const gfx::Point end(start + gfx::Vector2d(0, -80));
+  const base::TimeDelta time_delta = base::TimeDelta::FromMilliseconds(100);
+  const int num_scroll_steps = 4;
+  GetEventGenerator()->GestureScrollSequence(start, end, time_delta,
+                                             num_scroll_steps);
+
+  // Keyboard should hide and gesture should forward to the shelf.
+  ASSERT_TRUE(keyboard::WaitUntilHidden());
+  EXPECT_EQ(HotseatState::kExtended, GetShelfLayoutManager()->hotseat_state());
+}
+
+TEST_F(KeyboardControllerImplTest, FlingUpToShowOverviewMode) {
+  TabletModeControllerTestApi().EnterTabletMode();
+
+  std::unique_ptr<aura::Window> window =
+      AshTestBase::CreateTestWindow(gfx::Rect(0, 0, 400, 400));
+  wm::ActivateWindow(window.get());
+
+  keyboard_controller()->SetEnableFlag(KeyboardEnableFlag::kExtensionEnabled);
+
+  keyboard_ui_controller()->ShowKeyboard(/* lock */ false);
+  ASSERT_TRUE(keyboard::WaitUntilShown());
+
+  gfx::Rect display_bounds =
+      display::Screen::GetScreen()->GetPrimaryDisplay().bounds();
+  const gfx::Point start(display_bounds.bottom_center());
+  const gfx::Point end(start + gfx::Vector2d(0, -200));
+  const int fling_speed =
+      DragWindowFromShelfController::kVelocityToHomeScreenThreshold + 1;
+  const int scroll_steps = 20;
+  base::TimeDelta scroll_time =
+      GetEventGenerator()->CalculateScrollDurationForFlingVelocity(
+          start, end, fling_speed, scroll_steps);
+  GetEventGenerator()->GestureScrollSequence(start, end, scroll_time,
+                                             scroll_steps);
+
+  // Keyboard should hide and gesture should forward to the shelf.
+  ASSERT_TRUE(keyboard::WaitUntilHidden());
+  EXPECT_EQ(HotseatState::kShownHomeLauncher,
+            GetShelfLayoutManager()->hotseat_state());
 }
 
 }  // namespace ash

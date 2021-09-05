@@ -38,6 +38,23 @@ namespace search_provider_logos {
 class LogoService;
 }  // namespace search_provider_logos
 
+extern const char kGoogleGIconResourceName[];
+extern const char kBookmarkIconResourceName[];
+extern const char kCalculatorIconResourceName[];
+extern const char kClockIconResourceName[];
+extern const char kDriveDocsIconResourceName[];
+extern const char kDriveFolderIconResourceName[];
+extern const char kDriveFormIconResourceName[];
+extern const char kDriveImageIconResourceName[];
+extern const char kDriveLogoIconResourceName[];
+extern const char kDrivePdfIconResourceName[];
+extern const char kDriveSheetsIconResourceName[];
+extern const char kDriveSlidesIconResourceName[];
+extern const char kDriveVideoIconResourceName[];
+extern const char kExtensionAppIconResourceName[];
+extern const char kPageIconResourceName[];
+extern const char kSearchIconResourceName[];
+
 // Serves HTML and resources for the local New Tab page, i.e.
 // chrome-search://local-ntp/local-ntp.html.
 // WARNING: Due to the threading model of URLDataSource, some methods of this
@@ -59,10 +76,10 @@ class LocalNtpSource : public content::URLDataSource,
   class DesktopLogoObserver;
 
   struct NtpBackgroundRequest {
-    NtpBackgroundRequest(
-        base::TimeTicks start_time,
-        const content::URLDataSource::GotDataCallback& callback);
-    NtpBackgroundRequest(const NtpBackgroundRequest&);
+    NtpBackgroundRequest(base::TimeTicks start_time,
+                         content::URLDataSource::GotDataCallback callback);
+    NtpBackgroundRequest(NtpBackgroundRequest&&);
+    NtpBackgroundRequest& operator=(NtpBackgroundRequest&&);
     ~NtpBackgroundRequest();
 
     base::TimeTicks start_time;
@@ -72,9 +89,9 @@ class LocalNtpSource : public content::URLDataSource,
   // Overridden from content::URLDataSource:
   std::string GetSource() override;
   void StartDataRequest(
-      const std::string& path,
+      const GURL& url,
       const content::WebContents::Getter& wc_getter,
-      const content::URLDataSource::GotDataCallback& callback) override;
+      content::URLDataSource::GotDataCallback callback) override;
   std::string GetMimeType(const std::string& path) override;
   bool AllowCaching() override;
   bool ShouldServiceRequest(const GURL& url,
@@ -110,7 +127,7 @@ class LocalNtpSource : public content::URLDataSource,
   // is returned immediately, otherwise it is returned when it becomes available
   // in ServeOneGoogleBar.
   void ServeOneGoogleBarWhenAvailable(
-      const content::URLDataSource::GotDataCallback& callback);
+      content::URLDataSource::GotDataCallback callback);
 
   // Called when the promo data is available and serves |data| to any pending
   // requests from the NTP.
@@ -119,12 +136,12 @@ class LocalNtpSource : public content::URLDataSource,
   // is returned immediately, otherwise it is returned when it becomes
   // available in ServePromo.
   void ServePromoWhenAvailable(
-      const content::URLDataSource::GotDataCallback& callback);
+      content::URLDataSource::GotDataCallback callback);
 
   // If suggestion data is available return it immediately, otherwise no search
   // suggestions will be shown on this NTP load.
   void ServeSearchSuggestionsIfAvailable(
-      const content::URLDataSource::GotDataCallback& callback);
+      content::URLDataSource::GotDataCallback callback);
 
   // Start requests for the promo and OGB.
   void InitiatePromoAndOGBRequests();

@@ -13,21 +13,8 @@ GEN_INCLUDE([
   'settings_accessibility_test.js',
 ]);
 
-GEN('#include "chromeos/constants/chromeos_features.h"');
-
 // eslint-disable-next-line no-var
 var GoogleAssistantA11yTest = class extends PolymerTest {
-  /** @override */
-  get featureList() {
-    // Always test with SplitSettings on because the pages are the same in the
-    // legacy combined settings and we don't want to test everything twice.
-    return {
-      enabled: [
-        'chromeos::features::kSplitSettings'
-      ]
-    };
-  }
-
   /** @override */
   get browsePreload() {
     return 'chrome://os-settings/';
@@ -44,7 +31,7 @@ AccessibilityTest.define('GoogleAssistantA11yTest', {
 
   /** @override */
   setup: function() {
-    settings.router.navigateTo(settings.routes.GOOGLE_ASSISTANT);
+    settings.Router.getInstance().navigateTo(settings.routes.GOOGLE_ASSISTANT);
     Polymer.dom.flush();
   },
 

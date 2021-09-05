@@ -14,6 +14,7 @@
 #include "chrome/chrome_cleaner/os/early_exit.h"
 #include "chrome/chrome_cleaner/parsers/target/parser_impl.h"
 #include "components/chrome_cleaner/public/constants/result_codes.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 
 namespace chrome_cleaner {
 
@@ -31,28 +32,28 @@ class ParserSandboxTargetHooks : public MojoSandboxTargetHooks {
                        [](std::unique_ptr<ParserImpl> parser_impl) {
                          parser_impl.reset();
                        },
-                       base::Passed(&parser_impl_)));
+                       std::move(parser_impl_)));
   }
 
   // SandboxTargetHooks
   ResultCode TargetDroppedPrivileges(
       const base::CommandLine& command_line) override {
-    mojom::ParserRequest request(ExtractSandboxMessagePipe(command_line));
+    mojo::PendingReceiver<mojom::Parser> receiver(
+        ExtractSandboxMessagePipe(command_line));
 
     // This loop will run forever. Once the communication channel with the
     // broker process is broken, mojo error handler will abort this process.
     base::RunLoop run_loop;
     mojo_task_runner_->PostTask(
-        FROM_HERE,
-        base::BindOnce(&ParserSandboxTargetHooks::CreateParserImpl,
-                       base::Unretained(this), base::Passed(&request)));
+        FROM_HERE, base::BindOnce(&ParserSandboxTargetHooks::CreateParserImpl,
+                                  base::Unretained(this), std::move(receiver)));
     run_loop.Run();
     return RESULT_CODE_SUCCESS;
   }
 
  private:
-  void CreateParserImpl(mojom::ParserRequest request) {
-    parser_impl_ = std::make_unique<ParserImpl>(std::move(request),
+  void CreateParserImpl(mojo::PendingReceiver<mojom::Parser> receiver) {
+    parser_impl_ = std::make_unique<ParserImpl>(std::move(receiver),
                                                 base::BindOnce(&EarlyExit, 1));
   }
 

@@ -15,26 +15,28 @@
 
 #include "base/feature_list.h"
 #include "base/macros.h"
-#include "base/memory/shared_memory.h"
 #include "base/process/process_handle.h"
 #include "base/run_loop.h"
 #include "base/test/task_environment.h"
 #include "content/common/appcache_interfaces.h"
 #include "content/public/common/content_features.h"
+#include "content/public/common/referrer.h"
 #include "content/public/renderer/request_peer.h"
 #include "content/public/renderer/resource_dispatcher_delegate.h"
 #include "content/renderer/loader/navigation_response_override_parameters.h"
 #include "content/renderer/loader/request_extra_data.h"
 #include "content/renderer/loader/test_request_peer.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/net_errors.h"
 #include "net/base/request_priority.h"
 #include "net/http/http_response_headers.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "services/network/public/cpp/resource_request.h"
-#include "services/network/public/cpp/resource_response.h"
 #include "services/network/public/cpp/url_loader_completion_status.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
+#include "services/network/public/mojom/url_response_head.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
@@ -86,14 +88,14 @@ class ResourceDispatcherTest : public testing::Test,
   }
 
   void CreateLoaderAndStart(
-      network::mojom::URLLoaderRequest request,
+      mojo::PendingReceiver<network::mojom::URLLoader> receiver,
       int32_t routing_id,
       int32_t request_id,
       uint32_t options,
       const network::ResourceRequest& url_request,
-      network::mojom::URLLoaderClientPtr client,
+      mojo::PendingRemote<network::mojom::URLLoaderClient> client,
       const net::MutableNetworkTrafficAnnotationTag& annotation) override {
-    loader_and_clients_.emplace_back(std::move(request), std::move(client));
+    loader_and_clients_.emplace_back(std::move(receiver), std::move(client));
   }
 
   void Clone(mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver)
@@ -102,13 +104,13 @@ class ResourceDispatcherTest : public testing::Test,
   }
 
   void CallOnReceiveResponse(network::mojom::URLLoaderClient* client) {
-    network::ResourceResponseHead head;
+    auto head = network::mojom::URLResponseHead::New();
     std::string raw_headers(kTestPageHeaders);
     std::replace(raw_headers.begin(), raw_headers.end(), '\n', '\0');
-    head.headers = new net::HttpResponseHeaders(raw_headers);
-    head.mime_type = kTestPageMimeType;
-    head.charset = kTestPageCharset;
-    client->OnReceiveResponse(head);
+    head->headers = new net::HttpResponseHeaders(raw_headers);
+    head->mime_type = kTestPageMimeType;
+    head->charset = kTestPageCharset;
+    client->OnReceiveResponse(std::move(head));
   }
 
   std::unique_ptr<network::ResourceRequest> CreateResourceRequest() {
@@ -117,14 +119,16 @@ class ResourceDispatcherTest : public testing::Test,
 
     request->method = "GET";
     request->url = GURL(kTestPageUrl);
-    request->site_for_cookies = GURL(kTestPageUrl);
+    request->site_for_cookies =
+        net::SiteForCookies::FromUrl(GURL(kTestPageUrl));
     request->referrer_policy = Referrer::GetDefaultReferrerPolicy();
-    request->resource_type = static_cast<int>(ResourceType::kSubResource);
+    request->resource_type =
+        static_cast<int>(blink::mojom::ResourceType::kSubResource);
     request->priority = net::LOW;
     request->mode = network::mojom::RequestMode::kNoCors;
 
-    const RequestExtraData extra_data;
-    extra_data.CopyToResourceRequest(request.get());
+    auto extra_data = base::MakeRefCounted<RequestExtraData>();
+    extra_data->CopyToResourceRequest(request.get());
 
     return request;
   }
@@ -157,8 +161,8 @@ class ResourceDispatcherTest : public testing::Test,
   }
 
  protected:
-  std::vector<std::pair<network::mojom::URLLoaderRequest,
-                        network::mojom::URLLoaderClientPtr>>
+  std::vector<std::pair<mojo::PendingReceiver<network::mojom::URLLoader>,
+                        mojo::PendingRemote<network::mojom::URLLoaderClient>>>
       loader_and_clients_;
   base::test::SingleThreadTaskEnvironment task_environment_;
   std::unique_ptr<ResourceDispatcher> dispatcher_;
@@ -239,8 +243,8 @@ TEST_F(ResourceDispatcherTest, DelegateTest) {
   StartAsync(std::move(request), nullptr, &peer_context);
 
   ASSERT_EQ(1u, loader_and_clients_.size());
-  network::mojom::URLLoaderClientPtr client =
-      std::move(loader_and_clients_[0].second);
+  mojo::Remote<network::mojom::URLLoaderClient> client(
+      std::move(loader_and_clients_[0].second));
   loader_and_clients_.clear();
 
   // Set the delegate that inserts a new peer in OnReceivedResponse.
@@ -287,8 +291,8 @@ TEST_F(ResourceDispatcherTest, CancelDuringCallbackWithWrapperPeer) {
   peer_context.cancel_on_receive_response = true;
 
   ASSERT_EQ(1u, loader_and_clients_.size());
-  network::mojom::URLLoaderClientPtr client =
-      std::move(loader_and_clients_[0].second);
+  mojo::Remote<network::mojom::URLLoaderClient> client(
+      std::move(loader_and_clients_[0].second));
   loader_and_clients_.clear();
 
   // Set the delegate that inserts a new peer in OnReceivedResponse.
@@ -337,51 +341,54 @@ TEST_F(ResourceDispatcherTest, SerializedPostData) {
 
 class TimeConversionTest : public ResourceDispatcherTest {
  public:
-  void PerformTest(const network::ResourceResponseHead& response_head) {
+  void PerformTest(network::mojom::URLResponseHeadPtr response_head) {
     std::unique_ptr<network::ResourceRequest> request(CreateResourceRequest());
     TestRequestPeer::Context peer_context;
     StartAsync(std::move(request), nullptr, &peer_context);
 
     ASSERT_EQ(1u, loader_and_clients_.size());
-    auto client = std::move(loader_and_clients_[0].second);
+    mojo::Remote<network::mojom::URLLoaderClient> client(
+        std::move(loader_and_clients_[0].second));
     loader_and_clients_.clear();
-    client->OnReceiveResponse(response_head);
+    client->OnReceiveResponse(std::move(response_head));
   }
 
-  const network::ResourceResponseInfo& response_info() const {
-    return response_info_;
+  const network::mojom::URLResponseHead& response_info() const {
+    return *response_info_;
   }
 
  private:
-  network::ResourceResponseInfo response_info_;
+  network::mojom::URLResponseHeadPtr response_info_ =
+      network::mojom::URLResponseHead::New();
 };
 
 // TODO(simonjam): Enable this when 10829031 lands.
 TEST_F(TimeConversionTest, DISABLED_ProperlyInitialized) {
-  network::ResourceResponseHead response_head;
-  response_head.request_start = base::TimeTicks::FromInternalValue(5);
-  response_head.response_start = base::TimeTicks::FromInternalValue(15);
-  response_head.load_timing.request_start_time = base::Time::Now();
-  response_head.load_timing.request_start =
+  auto response_head = network::mojom::URLResponseHead::New();
+  response_head->request_start = base::TimeTicks::FromInternalValue(5);
+  response_head->response_start = base::TimeTicks::FromInternalValue(15);
+  response_head->load_timing.request_start_time = base::Time::Now();
+  response_head->load_timing.request_start =
       base::TimeTicks::FromInternalValue(10);
-  response_head.load_timing.connect_timing.connect_start =
+  response_head->load_timing.connect_timing.connect_start =
       base::TimeTicks::FromInternalValue(13);
 
-  PerformTest(response_head);
+  auto request_start = response_head->load_timing.request_start;
+  PerformTest(std::move(response_head));
 
   EXPECT_LT(base::TimeTicks(), response_info().load_timing.request_start);
   EXPECT_EQ(base::TimeTicks(),
             response_info().load_timing.connect_timing.dns_start);
-  EXPECT_LE(response_head.load_timing.request_start,
+  EXPECT_LE(request_start,
             response_info().load_timing.connect_timing.connect_start);
 }
 
 TEST_F(TimeConversionTest, PartiallyInitialized) {
-  network::ResourceResponseHead response_head;
-  response_head.request_start = base::TimeTicks::FromInternalValue(5);
-  response_head.response_start = base::TimeTicks::FromInternalValue(15);
+  auto response_head = network::mojom::URLResponseHead::New();
+  response_head->request_start = base::TimeTicks::FromInternalValue(5);
+  response_head->response_start = base::TimeTicks::FromInternalValue(15);
 
-  PerformTest(response_head);
+  PerformTest(std::move(response_head));
 
   EXPECT_EQ(base::TimeTicks(), response_info().load_timing.request_start);
   EXPECT_EQ(base::TimeTicks(),
@@ -389,9 +396,9 @@ TEST_F(TimeConversionTest, PartiallyInitialized) {
 }
 
 TEST_F(TimeConversionTest, NotInitialized) {
-  network::ResourceResponseHead response_head;
+  auto response_head = network::mojom::URLResponseHead::New();
 
-  PerformTest(response_head);
+  PerformTest(std::move(response_head));
 
   EXPECT_EQ(base::TimeTicks(), response_info().load_timing.request_start);
   EXPECT_EQ(base::TimeTicks(),
@@ -407,16 +414,17 @@ class CompletionTimeConversionTest : public ResourceDispatcherTest {
     StartAsync(std::move(request), nullptr, &peer_context_);
 
     ASSERT_EQ(1u, loader_and_clients_.size());
-    auto client = std::move(loader_and_clients_[0].second);
-    network::ResourceResponseHead response_head;
-    response_head.request_start = remote_request_start;
-    response_head.load_timing.request_start = remote_request_start;
-    response_head.load_timing.receive_headers_end = remote_request_start;
+    mojo::Remote<network::mojom::URLLoaderClient> client(
+        std::move(loader_and_clients_[0].second));
+    auto response_head = network::mojom::URLResponseHead::New();
+    response_head->request_start = remote_request_start;
+    response_head->load_timing.request_start = remote_request_start;
+    response_head->load_timing.receive_headers_end = remote_request_start;
     // We need to put somthing non-null time, otherwise no values will be
     // copied.
-    response_head.load_timing.request_start_time =
+    response_head->load_timing.request_start_time =
         base::Time() + base::TimeDelta::FromSeconds(99);
-    client->OnReceiveResponse(response_head);
+    client->OnReceiveResponse(std::move(response_head));
 
     mojo::DataPipe pipe;
     client->OnStartLoadingResponseBody(std::move(pipe.consumer_handle));

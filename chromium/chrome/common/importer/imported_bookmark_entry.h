@@ -30,7 +30,6 @@ struct ImportedBookmarkEntry {
   std::string description;
   std::string thumbnail;
   bool speeddial = false;
-  base::Time visited_time;
 };
 
 #endif  // CHROME_COMMON_IMPORTER_IMPORTED_BOOKMARK_ENTRY_H_

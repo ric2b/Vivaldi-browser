@@ -5,7 +5,6 @@
 #include <utility>
 
 #include "base/fuchsia/fuchsia_logging.h"
-#include "base/message_loop/message_loop.h"
 #include "base/test/launcher/test_launcher.h"
 #include "base/test/test_suite.h"
 #include "content/public/common/content_switches.h"
@@ -24,15 +23,11 @@ class WebEngineTestLauncherDelegate : public content::TestLauncherDelegate {
   // content::TestLauncherDelegate implementation:
   int RunTestSuite(int argc, char** argv) override {
     base::TestSuite test_suite(argc, argv);
-    // Browser tests are expected not to tear-down various globals.
+    // Browser tests are expected not to tear-down various globals and may
+    // complete with the thread priority being above NORMAL.
     test_suite.DisableCheckForLeakedGlobals();
+    test_suite.DisableCheckForThreadPriorityAtTestEnd();
     return test_suite.Run();
-  }
-
-  bool AdjustChildProcessCommandLine(
-      base::CommandLine* command_line,
-      const base::FilePath& temp_data_dir) override {
-    return true;
   }
 
   content::ContentMainDelegate* CreateContentMainDelegate() override {

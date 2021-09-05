@@ -6,6 +6,7 @@
 
 #include "base/stl_util.h"
 #include "base/strings/string_piece.h"
+#include "build/chromecast_buildflags.h"
 
 namespace extensions {
 
@@ -13,10 +14,14 @@ const char kExtensionScheme[] = "chrome-extension";
 
 const base::FilePath::CharType kManifestFilename[] =
     FILE_PATH_LITERAL("manifest.json");
+const base::FilePath::CharType kDifferentialFingerprintFilename[] =
+    FILE_PATH_LITERAL("manifest.fingerprint");
 const base::FilePath::CharType kLocaleFolder[] =
     FILE_PATH_LITERAL("_locales");
 const base::FilePath::CharType kMessagesFilename[] =
     FILE_PATH_LITERAL("messages.json");
+const base::FilePath::CharType kGzippedMessagesFilename[] =
+    FILE_PATH_LITERAL("messages.json.gz");
 const base::FilePath::CharType kPlatformSpecificFolder[] =
     FILE_PATH_LITERAL("_platform_specific");
 const base::FilePath::CharType kMetadataFolder[] =
@@ -25,8 +30,8 @@ const base::FilePath::CharType kVerifiedContentsFilename[] =
     FILE_PATH_LITERAL("verified_contents.json");
 const base::FilePath::CharType kComputedHashesFilename[] =
     FILE_PATH_LITERAL("computed_hashes.json");
-const base::FilePath::CharType kIndexedRulesetFilename[] =
-    FILE_PATH_LITERAL("generated_indexed_ruleset");
+const base::FilePath::CharType kIndexedRulesetDirectory[] =
+    FILE_PATH_LITERAL("generated_indexed_rulesets");
 
 const char kInstallDirectoryName[] = "Extensions";
 
@@ -95,7 +100,7 @@ const char kMimeTypePng[] = "image/png";
 
 namespace extension_misc {
 
-#if defined(OS_CHROMEOS) || defined(IS_CHROMECAST)
+#if defined(OS_CHROMEOS) || BUILDFLAG(IS_CHROMECAST)
 // The extension id for the built-in component extension.
 const char kChromeVoxExtensionId[] = "mndnfokpggljbaajbnioimlmbfngpief";
 #else
@@ -112,6 +117,7 @@ const char kQuickOfficeExtensionId[] = "gbkeegbaiigmenfmjfclcdgdpimamgkj";
 const char kMimeHandlerPrivateTestExtensionId[] =
     "oickdpebdnfbgkcaoklfcdhjniefkcji";
 const char kCameraAppId[] = "hfhhnacclhffhdffklopdkcgdhifgngh";
+const char kCameraAppDevId[] = "flgnmkgjffmkephdokeeliiopbjaafpm";
 const char kChromeAppId[] = "mgndgikekgjfcpckkfioiadnlibdjbkf";
 const char kFilesManagerAppId[] = "hhaomjibdihmijegdhdafkllkbggdgoj";
 const char kGoogleKeepAppId[] = "hmjkmjkepdijhoojdojkdfohbdgmmhki";
@@ -127,7 +133,8 @@ const char kHighlightsAltAppId[] = "gjeelkjnolfmhphfhhjokaijbicopfln";
 const char kScreensaverAppId[] = "mnoijifedipmbjaoekhadjcijipaijjc";
 const char kScreensaverEveAppId[] = "gdobaoeekhiklaljmhladjfdfkigampc";
 const char kScreensaverNocturneAppId[] = "lminefdanffajachfahfpmphfkhahcnj";
-const char kScreensaverAltAppId[] = "bnabjkecnachpogjlfilfcnlpcmacglh";
+const char kScreensaverAtlasAppId[] = "bnabjkecnachpogjlfilfcnlpcmacglh";
+const char kScreensaverKukuiAppId[] = "fafhbhdboeiciklpkminlncemohljlkj";
 
 bool IsSystemUIApp(base::StringPiece extension_id) {
   static const char* const kApps[] = {
@@ -142,7 +149,7 @@ bool IsSystemUIApp(base::StringPiece extension_id) {
       kHighlightsAppId,
       kScreensaverEveAppId,
       kScreensaverNocturneAppId,
-      kScreensaverAltAppId,
+      kScreensaverAtlasAppId,
       kScreensaverAppId,
       // clang-format on
   };

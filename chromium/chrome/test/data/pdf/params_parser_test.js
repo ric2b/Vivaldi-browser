@@ -2,24 +2,29 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-var tests = [
+import {FittingType} from 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/constants.js';
+import {OpenPdfParamsParser} from 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/open_pdf_params_parser.js';
+import {PDFScriptingAPI} from 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/pdf_scripting_api.js';
+
+
+const tests = [
   /**
    * Test named destinations.
    */
   function testParamsParser() {
-    var paramsParser = new OpenPdfParamsParser(function(destination) {
-      if (destination == 'RU') {
+    const paramsParser = new OpenPdfParamsParser(function(destination) {
+      if (destination === 'RU') {
         paramsParser.onNamedDestinationReceived(26);
-      } else if (destination == 'US') {
+      } else if (destination === 'US') {
         paramsParser.onNamedDestinationReceived(0);
-      } else if (destination == 'UY') {
+      } else if (destination === 'UY') {
         paramsParser.onNamedDestinationReceived(22);
       } else {
         paramsParser.onNamedDestinationReceived(-1);
       }
     });
 
-    var url = 'http://xyz.pdf';
+    const url = 'http://xyz.pdf';
 
     // Checking #nameddest.
     paramsParser.getViewportFromUrlParams(`${url}#RU`, function(params) {
@@ -135,7 +140,7 @@ var tests = [
         });
 
     // Checking #toolbar=0 to disable the toolbar.
-    var uiParams = paramsParser.getUiUrlParams(`${url}#toolbar=0`);
+    let uiParams = paramsParser.getUiUrlParams(`${url}#toolbar=0`);
     chrome.test.assertFalse(uiParams.toolbar);
     uiParams = paramsParser.getUiUrlParams(`${url}#toolbar=1`);
     chrome.test.assertTrue(uiParams.toolbar);
@@ -144,7 +149,7 @@ var tests = [
   }
 ];
 
-var scriptingAPI = new PDFScriptingAPI(window, window);
-scriptingAPI.setLoadCallback(function() {
+const scriptingAPI = new PDFScriptingAPI(window, window);
+scriptingAPI.setLoadCompleteCallback(function() {
   chrome.test.runTests(tests);
 });

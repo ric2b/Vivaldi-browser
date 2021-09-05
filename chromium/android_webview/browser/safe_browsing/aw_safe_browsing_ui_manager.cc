@@ -4,21 +4,29 @@
 
 #include "android_webview/browser/safe_browsing/aw_safe_browsing_ui_manager.h"
 
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "android_webview/browser/aw_content_browser_client.h"
 #include "android_webview/browser/safe_browsing/aw_safe_browsing_blocking_page.h"
+#include "android_webview/browser/safe_browsing/aw_safe_browsing_subresource_helper.h"
 #include "android_webview/common/aw_paths.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
 #include "base/task/post_task.h"
-#include "components/safe_browsing/base_ui_manager.h"
-#include "components/safe_browsing/browser/safe_browsing_network_context.h"
-#include "components/safe_browsing/common/safebrowsing_constants.h"
-#include "components/safe_browsing/db/v4_protocol_manager_util.h"
-#include "components/safe_browsing/ping_manager.h"
+#include "components/safe_browsing/content/base_ui_manager.h"
+#include "components/safe_browsing/core/browser/safe_browsing_network_context.h"
+#include "components/safe_browsing/core/common/safebrowsing_constants.h"
+#include "components/safe_browsing/core/db/v4_protocol_manager_util.h"
+#include "components/safe_browsing/core/ping_manager.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/navigation_controller.h"
+#include "content/public/browser/navigation_entry.h"
 #include "services/network/public/mojom/network_service.mojom.h"
 
 using content::BrowserThread;
@@ -74,7 +82,8 @@ void AwSafeBrowsingUIManager::DisplayBlockingPage(
   if (!client || !client->CanShowInterstitial()) {
     RecordIsWebViewViewable(false);
     OnBlockingPageDone(std::vector<UnsafeResource>{resource}, false,
-                       web_contents, resource.url.GetWithEmptyPath());
+                       web_contents, resource.url.GetWithEmptyPath(),
+                       false /* showed_interstitial */);
     return;
   }
   RecordIsWebViewViewable(true);
@@ -93,7 +102,8 @@ AwSafeBrowsingUIManager::GetURLLoaderFactoryOnIOThread() {
     base::PostTask(
         FROM_HERE, {BrowserThread::UI},
         base::BindOnce(&AwSafeBrowsingUIManager::CreateURLLoaderFactoryForIO,
-                       this, MakeRequest(&url_loader_factory_on_io_)));
+                       this,
+                       url_loader_factory_on_io_.BindNewPipeAndPassReceiver()));
     shared_url_loader_factory_on_io_ =
         base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
             url_loader_factory_on_io_.get());
@@ -102,8 +112,7 @@ AwSafeBrowsingUIManager::GetURLLoaderFactoryOnIOThread() {
 }
 
 int AwSafeBrowsingUIManager::GetErrorUiType(
-    const UnsafeResource& resource) const {
-  WebContents* web_contents = resource.web_contents_getter.Run();
+    content::WebContents* web_contents) const {
   UIManagerClient* client = UIManagerClient::FromWebContents(web_contents);
   DCHECK(client);
   return client->GetErrorUiType();
@@ -125,6 +134,18 @@ void AwSafeBrowsingUIManager::SendSerializedThreatDetails(
     DVLOG(1) << "Sending serialized threat details";
     ping_manager_->ReportThreatDetails(serialized);
   }
+}
+
+safe_browsing::BaseBlockingPage*
+AwSafeBrowsingUIManager::CreateBlockingPageForSubresource(
+    content::WebContents* contents,
+    const GURL& blocked_url,
+    const UnsafeResource& unsafe_resource) {
+  AwSafeBrowsingSubresourceHelper::CreateForWebContents(contents);
+  AwSafeBrowsingBlockingPage* blocking_page =
+      AwSafeBrowsingBlockingPage::CreateBlockingPage(
+          this, contents, blocked_url, unsafe_resource, nullptr);
+  return blocking_page;
 }
 
 void AwSafeBrowsingUIManager::CreateURLLoaderFactoryForIO(

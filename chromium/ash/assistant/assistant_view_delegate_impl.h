@@ -19,16 +19,18 @@ class AssistantViewDelegateImpl : public AssistantViewDelegate {
   AssistantViewDelegateImpl(AssistantController* assistant_controller);
   ~AssistantViewDelegateImpl() override;
 
-  void NotifyDeepLinkReceived(assistant::util::DeepLinkType type,
-                              const std::map<std::string, std::string>& params);
-
   // AssistantViewDelegate:
+  const AssistantAlarmTimerModel* GetAlarmTimerModel() const override;
   const AssistantInteractionModel* GetInteractionModel() const override;
   const AssistantNotificationModel* GetNotificationModel() const override;
   const AssistantSuggestionsModel* GetSuggestionsModel() const override;
   const AssistantUiModel* GetUiModel() const override;
   void AddObserver(AssistantViewDelegateObserver* observer) override;
   void RemoveObserver(AssistantViewDelegateObserver* observer) override;
+  void AddAlarmTimerModelObserver(
+      AssistantAlarmTimerModelObserver* observer) override;
+  void RemoveAlarmTimerModelObserver(
+      AssistantAlarmTimerModelObserver* observer) override;
   void AddInteractionModelObserver(
       AssistantInteractionModelObserver* observer) override;
   void RemoveInteractionModelObserver(
@@ -43,19 +45,16 @@ class AssistantViewDelegateImpl : public AssistantViewDelegate {
       AssistantSuggestionsModelObserver* observer) override;
   void AddUiModelObserver(AssistantUiModelObserver* observer) override;
   void RemoveUiModelObserver(AssistantUiModelObserver* observer) override;
-  CaptionBarDelegate* GetCaptionBarDelegate() override;
   void DownloadImage(
       const GURL& url,
       AssistantImageDownloader::DownloadCallback callback) override;
   ::wm::CursorManager* GetCursorManager() override;
-  void GetNavigableContentsFactoryForView(
-      mojo::PendingReceiver<content::mojom::NavigableContentsFactory> receiver)
-      override;
+  aura::Window* GetRootWindowForDisplayId(int64_t display_id) override;
   aura::Window* GetRootWindowForNewWindows() override;
   bool IsTabletMode() const override;
   void OnDialogPlateButtonPressed(AssistantButtonId id) override;
   void OnDialogPlateContentsCommitted(const std::string& text) override;
-  void OnMiniViewPressed() override;
+  void OnHostViewVisibilityChanged(bool visible) override;
   void OnNotificationButtonPressed(const std::string& notification_id,
                                    int notification_button_index) override;
   void OnOptInButtonPressed() override;

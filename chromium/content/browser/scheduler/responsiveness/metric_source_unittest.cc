@@ -7,7 +7,6 @@
 #include <atomic>
 
 #include "base/bind_helpers.h"
-#include "base/task/post_task.h"
 #include "base/test/bind_test_util.h"
 #include "content/browser/scheduler/responsiveness/native_event_observer.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -32,14 +31,16 @@ class FakeDelegate : public MetricSource::Delegate {
   void TearDownOnUIThread() override { tear_down_on_ui_thread_ = true; }
   void TearDownOnIOThread() override { tear_down_on_io_thread_ = true; }
 
-  void WillRunTaskOnUIThread(const base::PendingTask* task) override {
+  void WillRunTaskOnUIThread(const base::PendingTask* task,
+                             bool /* was_blocked_or_low_priority */) override {
     will_run_task_on_ui_thread_++;
   }
   void DidRunTaskOnUIThread(const base::PendingTask* task) override {
     did_run_task_on_ui_thread_++;
   }
 
-  void WillRunTaskOnIOThread(const base::PendingTask* task) override {
+  void WillRunTaskOnIOThread(const base::PendingTask* task,
+                             bool /* was_blocked_or_low_priority */) override {
     will_run_task_on_io_thread_++;
   }
   void DidRunTaskOnIOThread(const base::PendingTask* task) override {
@@ -154,12 +155,12 @@ TEST_F(ResponsivenessMetricSourceTest, RunTasks) {
   task_environment_.RunIOThreadUntilIdle();
   task_environment_.RunUntilIdle();
 
-  base::PostTask(FROM_HERE, {content::BrowserThread::UI}, base::DoNothing());
+  content::GetUIThreadTaskRunner({})->PostTask(FROM_HERE, base::DoNothing());
   task_environment_.RunUntilIdle();
   EXPECT_GT(delegate->will_run_task_on_ui_thread(), 0);
   EXPECT_GT(delegate->did_run_task_on_ui_thread(), 0);
 
-  base::PostTask(FROM_HERE, {content::BrowserThread::IO}, base::DoNothing());
+  content::GetIOThreadTaskRunner({})->PostTask(FROM_HERE, base::DoNothing());
   task_environment_.RunUntilIdle();
   EXPECT_GT(delegate->will_run_task_on_io_thread(), 0);
   EXPECT_GT(delegate->did_run_task_on_io_thread(), 0);

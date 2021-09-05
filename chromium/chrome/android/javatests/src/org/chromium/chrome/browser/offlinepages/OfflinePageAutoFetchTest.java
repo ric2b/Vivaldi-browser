@@ -24,18 +24,18 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.DeviceConditions;
+import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.offlinepages.AutoFetchNotifier.NotificationAction;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tabmodel.TabLaunchType;
+import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
-import org.chromium.chrome.browser.util.UrlConstants;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.ChromeTabUtils;
+import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
@@ -56,8 +56,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 /** Unit tests for auto-fetch-on-net-error-page. */
 @RunWith(ChromeJUnit4ClassRunner.class)
-@CommandLineFlags.
-Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE, "enable-features=AutoFetchOnNetErrorPage"})
+@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class OfflinePageAutoFetchTest {
     private static final String TAG = "AutoFetchTest";
     private static final long WAIT_TIMEOUT_MS = 20000;
@@ -69,7 +68,13 @@ public class OfflinePageAutoFetchTest {
     public TestWatcher mTestWatcher = new TestWatcher() {
         @Override
         protected void failed(Throwable e, Description description) {
-            logAdditionalContext();
+            try {
+                logAdditionalContext();
+            } catch (Exception ex) {
+                // Exceptions here are typical if the test failed to start. Catch them, or it will
+                // obscure the actual failure.
+                Log.w(TAG, "Failed to log additional context: " + ex.toString());
+            }
         }
     };
 
@@ -149,7 +154,7 @@ public class OfflinePageAutoFetchTest {
 
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             mInitialHistograms = histogramSnapshot();
-            mProfile = activityTab().getProfile();
+            mProfile = Profile.fromWebContents(activityTab().getWebContents());
             mOfflinePageBridge = OfflinePageBridge.getForProfile(mProfile);
 
             if (!NetworkChangeNotifier.isInitialized()) {
@@ -237,6 +242,7 @@ public class OfflinePageAutoFetchTest {
     @Test
     @MediumTest
     @Feature({"OfflineAutoFetch"})
+    @DisabledTest(message = "https://crbug.com/1042215")
     public void testAutoFetchWithRedirect() throws Exception {
         startWebServer();
         useRedirectWebServerResponse();
@@ -494,7 +500,9 @@ public class OfflinePageAutoFetchTest {
         String[] keys = newValues.keySet().toArray(new String[] {});
         Arrays.sort(keys);
         for (String key : keys) {
-            int diff = newValues.get(key) - oldValues.get(key);
+            Integer oldValue = oldValues.get(key);
+            oldValue = oldValue == null ? 0 : oldValue;
+            int diff = newValues.get(key) - oldValue;
             if (diff > 0) {
                 if (result.length() > 0) result.append("\n");
                 result.append(key);
@@ -546,9 +554,13 @@ public class OfflinePageAutoFetchTest {
         return TabModelUtils.getCurrentTab(getCurrentTabModel());
     }
     private void logAdditionalContext() {
+        TabModel tabModel = getCurrentTabModel();
+        // Return early if the test setup didn't complete.
+        if (mInitialHistograms == null || tabModel == null) {
+            return;
+        }
         Log.d(TAG, "Logging additional context");
         Log.d(TAG, "Histogram Diff: " + histogramDiff(mInitialHistograms, histogramSnapshot()));
-        TabModel tabModel = getCurrentTabModel();
         int tabCount = tabModel.getCount();
         Log.d(TAG, "Tab Count: " + tabCount);
         for (int i = 0; i < tabCount; ++i) {

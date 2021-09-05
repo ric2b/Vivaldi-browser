@@ -90,12 +90,6 @@ class AppsNavigationThrottle : public content::NavigationThrottle {
   content::NavigationThrottle::ThrottleCheckResult WillRedirectRequest()
       override;
 
-  // Overridden for Chrome OS to allow asynchronous handling of ARC apps.
-  virtual void OnDeferredNavigationProcessed(
-      AppsNavigationAction action,
-      std::vector<IntentPickerAppInfo> apps) {}
-
- protected:
   // These enums are used to define the buckets for an enumerated UMA histogram
   // and need to be synced with the ArcIntentHandlerAction enum in enums.xml.
   // This enum class should also be treated as append-only.
@@ -125,11 +119,12 @@ class AppsNavigationThrottle : public content::NavigationThrottle {
     ERROR_BEFORE_PICKER = 10,
     INVALID = 11,
     DEVICE_PRESSED = 12,
-    kMaxValue = DEVICE_PRESSED,
+    MAC_NATIVE_APP_PRESSED = 13,
+    kMaxValue = MAC_NATIVE_APP_PRESSED,
   };
 
   // As for PickerAction, these define the buckets for an UMA histogram, so this
-  // must be treated in an append-only fashion. This helps especify where a
+  // must be treated in an append-only fashion. This helps specify where a
   // navigation will continue. Must be kept in sync with the
   // ArcIntentHandlerDestinationPlatform enum in enums.xml.
   enum class Platform : int {
@@ -137,27 +132,11 @@ class AppsNavigationThrottle : public content::NavigationThrottle {
     CHROME = 1,
     PWA = 2,
     DEVICE = 3,
-    kMaxValue = DEVICE,
+    MAC_NATIVE = 4,
+    kMaxValue = MAC_NATIVE,
   };
 
-  // These enums are used to define the intent picker show state, whether the
-  // picker is popped out or just displayed as a clickable omnibox icon.
-  enum class PickerShowState {
-    kOmnibox = 1,  // Only show the intent icon in the omnibox
-    kPopOut = 2,   // show the intent picker icon and pop out bubble
-  };
-
-  // Checks whether we can create the apps_navigation_throttle.
-  static bool CanCreate(content::WebContents* web_contents);
-
-  static void RecordUma(const std::string& selected_app_package,
-                        PickerEntryType entry_type,
-                        IntentPickerCloseReason close_reason,
-                        Source source,
-                        bool should_persist,
-                        PickerAction action,
-                        Platform platform);
-
+  // TODO(ajlinker): move these two functions below to IntentHandlingMetrics.
   // Determines the destination of the current navigation. We know that if the
   // |picker_action| is either ERROR or DIALOG_DEACTIVATED the navigation MUST
   // stay in Chrome, and when |picker_action| is PWA_APP_PRESSED the navigation
@@ -172,6 +151,17 @@ class AppsNavigationThrottle : public content::NavigationThrottle {
   static PickerAction GetPickerAction(PickerEntryType entry_type,
                                       IntentPickerCloseReason close_reason,
                                       bool should_persist);
+
+ protected:
+  // These enums are used to define the intent picker show state, whether the
+  // picker is popped out or just displayed as a clickable omnibox icon.
+  enum class PickerShowState {
+    kOmnibox = 1,  // Only show the intent icon in the omnibox
+    kPopOut = 2,   // show the intent picker icon and pop out bubble
+  };
+
+  // Checks whether we can create the apps_navigation_throttle.
+  static bool CanCreate(content::WebContents* web_contents);
 
   // This is a wrapper method for querying apps for a URL. Normally this
   // method will simply querying PWAs that can handle the URL from. If we are
@@ -192,18 +182,18 @@ class AppsNavigationThrottle : public content::NavigationThrottle {
 
   static void CloseOrGoBack(content::WebContents* web_contents);
 
-  static bool ContainsOnlyPwas(
+  static bool ContainsOnlyPwasAndMacApps(
       const std::vector<apps::IntentPickerAppInfo>& apps);
 
   static bool ShouldShowPersistenceOptions(
       std::vector<apps::IntentPickerAppInfo>& apps);
 
-  // Overridden for Chrome OS to allow arc handling.
+  // Overrides for Chrome OS to allow ARC handling.
   virtual void MaybeRemoveComingFromArcFlag(content::WebContents* web_contents,
                                             const GURL& previous_url,
                                             const GURL& current_url) {}
 
-  virtual bool ShouldDeferNavigationForArc(content::NavigationHandle* handle);
+  virtual bool ShouldDeferNavigation(content::NavigationHandle* handle);
 
   void ShowIntentPickerForApps(
       content::WebContents* web_contents,

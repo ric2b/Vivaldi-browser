@@ -17,11 +17,16 @@ class PseudoElementData final : public GarbageCollected<PseudoElementData> {
 
   void SetPseudoElement(PseudoId, PseudoElement*);
   PseudoElement* GetPseudoElement(PseudoId) const;
+
+  using PseudoElementVector = HeapVector<Member<PseudoElement>, 2>;
+  PseudoElementVector GetPseudoElements() const;
+
   bool HasPseudoElements() const;
   void ClearPseudoElements();
   void Trace(Visitor* visitor) {
     visitor->Trace(generated_before_);
     visitor->Trace(generated_after_);
+    visitor->Trace(generated_marker_);
     visitor->Trace(generated_first_letter_);
     visitor->Trace(backdrop_);
   }
@@ -29,19 +34,21 @@ class PseudoElementData final : public GarbageCollected<PseudoElementData> {
  private:
   Member<PseudoElement> generated_before_;
   Member<PseudoElement> generated_after_;
+  Member<PseudoElement> generated_marker_;
   Member<PseudoElement> generated_first_letter_;
   Member<PseudoElement> backdrop_;
   DISALLOW_COPY_AND_ASSIGN(PseudoElementData);
 };
 
 inline bool PseudoElementData::HasPseudoElements() const {
-  return generated_before_ || generated_after_ || backdrop_ ||
-         generated_first_letter_;
+  return generated_before_ || generated_after_ || generated_marker_ ||
+         backdrop_ || generated_first_letter_;
 }
 
 inline void PseudoElementData::ClearPseudoElements() {
   SetPseudoElement(kPseudoIdBefore, nullptr);
   SetPseudoElement(kPseudoIdAfter, nullptr);
+  SetPseudoElement(kPseudoIdMarker, nullptr);
   SetPseudoElement(kPseudoIdBackdrop, nullptr);
   SetPseudoElement(kPseudoIdFirstLetter, nullptr);
 }
@@ -58,6 +65,11 @@ inline void PseudoElementData::SetPseudoElement(PseudoId pseudo_id,
       if (generated_after_)
         generated_after_->Dispose();
       generated_after_ = element;
+      break;
+    case kPseudoIdMarker:
+      if (generated_marker_)
+        generated_marker_->Dispose();
+      generated_marker_ = element;
       break;
     case kPseudoIdBackdrop:
       if (backdrop_)
@@ -80,6 +92,8 @@ inline PseudoElement* PseudoElementData::GetPseudoElement(
     return generated_before_;
   if (kPseudoIdAfter == pseudo_id)
     return generated_after_;
+  if (kPseudoIdMarker == pseudo_id)
+    return generated_marker_;
 // Workaround for CPU bug. This avoids compiler optimizing
 // this group of if conditions into switch. See http://crbug.com/855390.
 #if defined(ARCH_CPU_ARMEL)
@@ -90,6 +104,22 @@ inline PseudoElement* PseudoElementData::GetPseudoElement(
   if (kPseudoIdFirstLetter == pseudo_id)
     return generated_first_letter_;
   return nullptr;
+}
+
+inline PseudoElementData::PseudoElementVector
+PseudoElementData::GetPseudoElements() const {
+  PseudoElementData::PseudoElementVector result;
+  if (generated_before_)
+    result.push_back(generated_before_);
+  if (generated_after_)
+    result.push_back(generated_after_);
+  if (generated_marker_)
+    result.push_back(generated_marker_);
+  if (generated_first_letter_)
+    result.push_back(generated_first_letter_);
+  if (backdrop_)
+    result.push_back(backdrop_);
+  return result;
 }
 
 }  // namespace blink

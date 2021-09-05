@@ -14,12 +14,11 @@ import unittest
 
 from chrome_telemetry_build import chromium_config
 
-from core import path_util
 from core import perf_benchmark
+from core import results_processor
+from core import testing
 
 from telemetry import decorators
-from telemetry.internal.browser import browser_finder
-from telemetry.testing import options_for_unittests
 from telemetry.testing import progress_reporter
 
 from py_utils import discover
@@ -37,169 +36,69 @@ def GetSystemHealthBenchmarksToSmokeTest():
 
 
 _DISABLED_TESTS = frozenset({
-  # crbug.com/983326 - flaky.
-  'system_health.memory_desktop/browse_accessibility:media:youtube',
+    # crbug.com/983326 - flaky.
+    'system_health.memory_desktop/browse_accessibility:media:youtube',
 
-  # crbug.com/878390 - These stories are already covered by their 2018 versions
-  # and will later be removed.
-  'system_health.memory_mobile/browse:tech:discourse_infinite_scroll',
-  'system_health.memory_mobile/browse:shopping:amazon',
-  'system_health.memory_mobile/browse:social:facebook_infinite_scroll',
-  'system_health.memory_mobile/browse:social:instagram',
-  'system_health.memory_mobile/browse:news:reddit',
-  'system_health.memory_mobile/browse:social:tumblr_infinite_scroll',
-  'system_health.memory_mobile/browse:social:twitter',
-  'system_health.memory_mobile/browse:tools:maps',
-  'system_health.memory_mobile/browse:news:cnn',
-  'system_health.memory_mobile/browse:news:washingtonpost',
-  'system_health.memory_mobile/load:media:facebook_photos',
-  'system_health.memory_mobile/load:news:cnn',
-  'system_health.memory_mobile/load:news:nytimes',
-  'system_health.memory_mobile/load:news:qq',
-  'system_health.memory_mobile/load:news:reddit',
-  'system_health.memory_mobile/load:news:washingtonpost',
-  'system_health.memory_mobile/load:tools:stackoverflow',
-  'system_health.memory_desktop/load_accessibility:shopping:amazon',
-  'system_health.memory_desktop/browse_accessibility:tech:codesearch',
-  'system_health.memory_desktop/load_accessibility:media:wikipedia',
-  'system_health.memory_desktop/browse:tech:discourse_infinite_scroll',
-  'system_health.memory_desktop/browse:tools:maps',
-  'system_health.memory_desktop/browse:social:facebook_infinite_scroll',
-  'system_health.memory_desktop/browse:social:tumblr_infinite_scroll',
-  'system_health.memory_desktop/browse:news:flipboard',
-  'system_health.memory_desktop/browse:search:google',
-  'system_health.memory_desktop/browse:news:hackernews',
-  'system_health.memory_desktop/load:search:amazon',
-  'system_health.memory_desktop/load:news:bbc',
-  'system_health.memory_desktop/load:news:hackernews',
-  'system_health.memory_desktop/load:social:instagram',
-  'system_health.memory_desktop/load:news:reddit',
-  'system_health.memory_desktop/load:search:taobao',
-  'system_health.memory_desktop/multitab:misc:typical24',
-  'system_health.memory_desktop/browse:news:reddit',
-  'system_health.memory_desktop/browse:media:tumblr',
-  'system_health.memory_desktop/browse:social:twitter_infinite_scroll',
-  'system_health.memory_mobile/load:social:twitter',
-  'system_health.memory_desktop/load:social:vk',
+    # crbug.com/878390 - These stories are already covered by their 2018 or
+    # 2019 versions and will later be removed.
+    'system_health.memory_desktop/multitab:misc:typical24',
 
-  # crbug.com/637230
-  'system_health.memory_desktop/browse:news:cnn',
-  # Permenently disabled from smoke test for being long-running.
-  'system_health.memory_mobile/long_running:tools:gmail-foreground',
-  'system_health.memory_mobile/long_running:tools:gmail-background',
-  'system_health.memory_desktop/long_running:tools:gmail-foreground',
-  'system_health.memory_desktop/long_running:tools:gmail-background',
+    # crbug.com/637230
+    'system_health.memory_desktop/browse:news:cnn',
+    # Permenently disabled from smoke test for being long-running.
+    'system_health.memory_mobile/long_running:tools:gmail-foreground',
+    'system_health.memory_mobile/long_running:tools:gmail-background',
+    'system_health.memory_desktop/long_running:tools:gmail-foreground',
+    'system_health.memory_desktop/long_running:tools:gmail-background',
 
-  # crbug.com/769263
-  'system_health.memory_desktop/play:media:soundcloud',
+    # crbug.com/885320
+    'system_health.memory_desktop/browse:search:google:2018',
 
-  # crbug.com/987858
-  'system_health.memory_desktop/play:media:soundcloud:2018',
+    # crbug.com/893615
+    'system_health.memory_desktop/multitab:misc:typical24:2018',
 
+    # crbug.com/903849
+    'system_health.memory_mobile/browse:news:cnn:2018',
 
-  # crbug.com/
-  'system_health.memory_desktop/browse:news:nytimes',
+    # crbug.com/978358
+    'system_health.memory_desktop/browse:news:flipboard:2018',
 
-  # crbug.com/688190
-  'system_health.memory_mobile/browse:news:washingtonpost',
+    # crbug.com/1008001
+    'system_health.memory_desktop/browse:tools:sheets:2019',
+    'system_health.memory_desktop/browse:tools:maps:2019',
 
-  # crbug.com/696824
-  'system_health.memory_desktop/load:news:qq',
-  # crbug.com/893615
-  # DESKTOP:
-  'system_health.memory_desktop/browse:media:pinterest',
-  'system_health.memory_desktop/browse:media:youtube',
-  'system_health.memory_desktop/browse:search:google_india',
-  'system_health.memory_desktop/load:games:alphabetty',
-  'system_health.memory_desktop/load:games:bubbles',
-  'system_health.memory_desktop/load:games:miniclip',
-  'system_health.memory_desktop/load:games:spychase',
-  'system_health.memory_desktop/load:media:flickr',
-  'system_health.memory_desktop/load:media:google_images',
-  'system_health.memory_desktop/load:media:imgur',
-  'system_health.memory_desktop/load:media:soundcloud',
-  'system_health.memory_desktop/load:media:youtube',
-  'system_health.memory_desktop/load:news:cnn',
-  'system_health.memory_desktop/load:news:wikipedia',
-  'system_health.memory_desktop/load:search:baidu',
-  'system_health.memory_desktop/load:search:ebay',
-  'system_health.memory_desktop/load:search:google',
-  'system_health.memory_desktop/load:search:yahoo',
-  'system_health.memory_desktop/load:search:yandex',
-  'system_health.memory_desktop/load:tools:stackoverflow',
-  'system_health.memory_mobile/load:media:soundcloud',
-  # MOBILE:
-  'system_health.memory_mobile/load:games:bubbles',
-  'system_health.memory_mobile/load:games:spychase',
-  'system_health.memory_mobile/load:media:flickr',
-  'system_health.memory_mobile/load:media:google_images',
-  'system_health.memory_mobile/load:media:imgur',
-  'system_health.memory_mobile/load:media:youtube',
-  'system_health.memory_mobile/load:news:wikipedia',
-  'system_health.memory_mobile/load:search:baidu',
-  'system_health.memory_mobile/load:search:ebay',
-  'system_health.memory_mobile/load:search:google',
-  'system_health.memory_mobile/load:search:yahoo',
-  'system_health.memory_mobile/load:search:yandex',
+    # crbug.com/1014661
+    'system_health.memory_desktop/browse:social:tumblr_infinite_scroll:2018'
+    'system_health.memory_desktop/browse:search:google_india:2018'
 
-  # crbug.com/698006
-  'system_health.memory_desktop/load:tools:drive',
-  'system_health.memory_desktop/load:tools:gmail',
-
-  # crbug.com/725386
-  'system_health.memory_desktop/browse:social:twitter',
-
-  # crbug.com/816482
-  'system_health.memory_desktop/load:news:nytimes',
-
-  # crbug.com/885320
-  'system_health.memory_desktop/browse:search:google:2018',
-
-  # crbug.com/893615
-  'system_health.memory_desktop/multitab:misc:typical24:2018',
-
-  # crbug.com/903849
-  'system_health.memory_mobile/browse:news:cnn:2018',
-
-  # crbug.com/937006
-  'system_health.memory_mobile/browse:news:toi',
-
-  # crbug.com/978358
-  'system_health.memory_desktop/browse:news:flipboard:2018',
-
-  # crbug.com/1008001
-  'system_health.memory_desktop/browse:tools:sheets:2019',
-  'system_health.memory_desktop/browse:tools:maps:2019',
-
-  # crbug.com/1014661
-  'system_health.memory_desktop/browse:social:tumblr_infinite_scroll:2018'
-  'system_health.memory_desktop/browse:search:google_india:2018'
-
-  # The following tests are disabled because they are disabled on the perf
-  # waterfall (using tools/perf/expectations.config) on one platform or another.
-  # They may run fine on the CQ, but it isn't worth the bot time to run them.
-  # [
-  # crbug.com/799106
-  'system_health.memory_desktop/browse:media:flickr_infinite_scroll'
-  # crbug.com/836407
-  'system_health.memory_desktop/browse:tools:maps'
-  # crbug.com/924330
-  'system_health.memory_desktop/browse:media:pinterest:2018'
-  # crbug.com/899887
-  'system_health.memory_desktop/browse:social:facebook_infinite_scroll:2018'
-  # crbug.com/649392
-  'system_health.memory_desktop/play:media:google_play_music'
-  # crbug.com/934885
-  'system_health.memory_desktop/load_accessibility:media:wikipedia:2018'
-  # crbug.com/942952
-  'system_health.memory_desktop/browse:news:hackernews:2018',
-  # crbug.com/992436
-  'system_health.memory_desktop/browse:social:twitter:2018'
-  # ]
+    # The following tests are disabled because they are disabled on the perf
+    # waterfall (using tools/perf/expectations.config) on one platform or
+    # another. They may run fine on the CQ, but it isn't worth the bot time to
+    # run them.
+    # [
+    # crbug.com/924330
+    'system_health.memory_desktop/browse:media:pinterest:2018'
+    # crbug.com/899887
+    'system_health.memory_desktop/browse:social:facebook_infinite_scroll:2018'
+    # crbug.com/649392
+    'system_health.memory_desktop/play:media:google_play_music'
+    # crbug.com/934885
+    'system_health.memory_desktop/load_accessibility:media:wikipedia:2018'
+    # crbug.com/942952
+    'system_health.memory_desktop/browse:news:hackernews:2018',
+    # crbug.com/992436
+    'system_health.memory_desktop/browse:social:twitter:2018'
+    # crbug.com/1060068
+    'system_health.memory_desktop/browse:tech:discourse_infinite_scroll:2018',
+    # ]
 })
 
 
-MAX_NUM_VALUES = 50000
+# We want to prevent benchmarks from accidentally trying to upload too much
+# data to the chrome perf dashboard. So the smoke tests below cap the max
+# number of values that each story tested would produce when running on the
+# waterfall.
+MAX_VALUES_PER_TEST_CASE = 1000
 
 
 def _GenerateSmokeTestCase(benchmark_class, story_to_smoke_test):
@@ -216,18 +115,6 @@ def _GenerateSmokeTestCase(benchmark_class, story_to_smoke_test):
       def CreateStorySet(self, options):
         # pylint: disable=super-on-old-class
         story_set = super(SinglePageBenchmark, self).CreateStorySet(options)
-
-        # We want to prevent benchmarks from accidentally trying to upload too
-        # much data to the chrome perf dashboard. So this tests tries to
-        # estimate the amount of values that the benchmark _would_ create when
-        # running on the waterfall, and fails if too many values are produced.
-        # As we run a single story and not the whole benchmark, the number of
-        # max values allowed is scaled proportionally.
-        # TODO(crbug.com/981349): This logic is only really valid for legacy
-        # values, and does not take histograms into account. An alternative
-        # should be implemented when using the results processor.
-        type(self).MAX_NUM_VALUES = MAX_NUM_VALUES / len(story_set)
-
         stories_to_remove = [s for s in story_set.stories if s !=
                              story_to_smoke_test]
         for s in stories_to_remove:
@@ -240,34 +127,28 @@ def _GenerateSmokeTestCase(benchmark_class, story_to_smoke_test):
       options = GenerateBenchmarkOptions(
           output_dir=temp_dir,
           benchmark_cls=SinglePageBenchmark)
-      possible_browser = browser_finder.FindBrowser(options)
-      if possible_browser is None:
-        self.skipTest('Cannot find the browser to run the test.')
-
       simplified_test_name = self.id().replace(
           'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.',
           '')
-
       # Sanity check to ensure that that substring removal was effective.
       assert len(simplified_test_name) < len(self.id())
 
       if (simplified_test_name in _DISABLED_TESTS and
           not options.run_disabled_tests):
         self.skipTest('Test is explicitly disabled')
-
       single_page_benchmark = SinglePageBenchmark()
-      # TODO(crbug.com/985103): Remove this code once
-      # AugmentExpectationsWithFile is deleted and replaced with functionality
-      # in story_filter.py.
-      if hasattr(single_page_benchmark, 'AugmentExpectationsWithFile'):
-        with open(path_util.GetExpectationsPath()) as fp:
-          single_page_benchmark.AugmentExpectationsWithFile(fp.read())
-
       return_code = single_page_benchmark.Run(options)
-
-    if return_code == -1:
-      self.skipTest('The benchmark was not run.')
-    self.assertEqual(0, return_code, msg='Failed: %s' % benchmark_class)
+      # TODO(crbug.com/1019139): Make 111 be the exit code that means
+      # "no stories were run.".
+      if return_code in (-1, 111):
+        self.skipTest('The benchmark was not run.')
+      self.assertEqual(
+          return_code, 0,
+          msg='Benchmark run failed: %s' % benchmark_class.Name())
+      return_code = results_processor.ProcessResults(options)
+      self.assertEqual(
+          return_code, 0,
+          msg='Result processing failed: %s' % benchmark_class.Name())
 
   # We attach the test method to SystemHealthBenchmarkSmokeTest dynamically
   # so that we can set the test method name to include
@@ -284,10 +165,13 @@ def _GenerateSmokeTestCase(benchmark_class, story_to_smoke_test):
 
 
 def GenerateBenchmarkOptions(output_dir, benchmark_cls):
-  options = options_for_unittests.GetRunOptions(
+  options = testing.GetRunOptions(
       output_dir=output_dir, benchmark_cls=benchmark_cls,
+      overrides={'run_full_story_set': True},
       environment=chromium_config.GetDefaultChromiumConfig())
   options.pageset_repeat = 1  # For smoke testing only run each page once.
+  options.output_formats = ['histograms']
+  options.max_values_per_test_case = MAX_VALUES_PER_TEST_CASE
 
   # Enable browser logging in the smoke test only. Hopefully, this will detect
   # all crashes and hence remove the need to enable logging in actual perf
@@ -295,36 +179,37 @@ def GenerateBenchmarkOptions(output_dir, benchmark_cls):
   options.browser_options.logging_verbosity = 'non-verbose'
   options.target_platforms = benchmark_cls.GetSupportedPlatformNames(
       benchmark_cls.SUPPORTED_PLATFORMS)
+  results_processor.ProcessOptions(options)
   return options
 
 
-def load_tests(loader, standard_tests, pattern):
-  del loader, standard_tests, pattern  # unused
-  suite = progress_reporter.TestSuite()
+def _create_story_set(benchmark_class):
+  # HACK: these options should be derived from GetRunOptions which are
+  # the resolved options from run_tests' arguments. However, options is only
+  # parsed during test time which happens after load_tests are called.
+  # Since none of our system health benchmarks creates stories based on
+  # command line options, it should be ok to pass options=None to
+  # CreateStorySet.
+  return benchmark_class().CreateStorySet(options=None)
+
+
+def _should_skip_story(benchmark_class, story):
+  # Per crbug.com/1019383 we don't have many device cycles to work with on
+  # Android, so let's just run the most important stories.
+  return (benchmark_class.Name() == 'system_health.memory_mobile' and
+      'health_check' not in story.tags)
+
+
+def validate_smoke_test_name_versions():
   benchmark_classes = GetSystemHealthBenchmarksToSmokeTest()
   assert benchmark_classes, 'This list should never be empty'
   names_stories_to_smoke_tests = []
   for benchmark_class in benchmark_classes:
-
-    # HACK: these options should be derived from options_for_unittests which are
-    # the resolved options from run_tests' arguments. However, options is only
-    # parsed during test time which happens after load_tests are called.
-    # Since none of our system health benchmarks creates stories based on
-    # command line options, it should be ok to pass options=None to
-    # CreateStorySet.
-    stories_set = benchmark_class().CreateStorySet(options=None)
-
-    # Prefetch WPR archive needed by the stories set to avoid race condition
-    # when feching them when tests are run in parallel.
-    # See crbug.com/700426 for more details.
-    story_names = [s.name for s in stories_set if not s.is_local]
-    stories_set.wpr_archive_info.DownloadArchivesIfNeeded(
-        story_names=story_names)
+    stories_set = _create_story_set(benchmark_class)
 
     for story_to_smoke_test in stories_set.stories:
-      suite.addTest(
-          _GenerateSmokeTestCase(benchmark_class, story_to_smoke_test))
-
+      if _should_skip_story(benchmark_class, story_to_smoke_test):
+        continue
       names_stories_to_smoke_tests.append(
           benchmark_class.Name() + '/' + story_to_smoke_test.name)
 
@@ -345,6 +230,32 @@ def load_tests(loader, standard_tests, pattern):
         'list or remove them to save CQ capacity (see crbug.com/893615)). '
         'You can use crbug.com/878390 for the disabling reference.'
         '[StoryName] : [StoryVersion1],[StoryVersion2]...\n%s' % (msg))
+
+  return
+
+
+def load_tests(loader, standard_tests, pattern):
+  del loader, standard_tests, pattern  # unused
+  suite = progress_reporter.TestSuite()
+  benchmark_classes = GetSystemHealthBenchmarksToSmokeTest()
+  assert benchmark_classes, 'This list should never be empty'
+  validate_smoke_test_name_versions()
+  for benchmark_class in benchmark_classes:
+    stories_set = _create_story_set(benchmark_class)
+
+    remote_story_names = []
+    for story_to_smoke_test in stories_set:
+      if _should_skip_story(benchmark_class, story_to_smoke_test):
+        continue
+      if not story_to_smoke_test.is_local:
+        remote_story_names.append(story_to_smoke_test)
+      suite.addTest(
+          _GenerateSmokeTestCase(benchmark_class, story_to_smoke_test))
+    # Prefetch WPR archive needed by the stories set to avoid race condition
+    # when fetching them when tests are run in parallel.
+    # See crbug.com/700426 for more details.
+    stories_set.wpr_archive_info.DownloadArchivesIfNeeded(
+        story_names=remote_story_names)
 
   return suite
 

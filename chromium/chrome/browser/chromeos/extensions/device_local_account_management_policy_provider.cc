@@ -64,10 +64,6 @@ const char* const kSafeManifestEntries[] = {
     // double check how the search provider policy behaves in PS.
     // emk::kSettingsOverride,
 
-    // Custom bookmark managers - I think this is fair game, bookmarks should be
-    // URLs only, and it's restricted to whitelist on stable.
-    emk::kUIOverride,
-
     // Bookmark manager, history, new tab - should be safe.
     emk::kChromeURLOverrides,
 
@@ -238,7 +234,7 @@ const char* const kSafeManifestEntries[] = {
 
     emk::kTheme,
 
-    // Might need this for accessibilty, but has content access. Manual
+    // Might need this for accessibility, but has content access. Manual
     // whitelisting might be reasonable here?
     // emk::kTtsEngine,
 
@@ -858,8 +854,9 @@ bool DeviceLocalAccountManagementPolicyProvider::UserMayLoad(
         && IsSafeForPublicSession(extension)) {
       return true;
     }
-  } else if (account_type_ == policy::DeviceLocalAccount::TYPE_KIOSK_APP) {
-    // For single-app kiosk sessions, allow platform apps, extesions and shared
+  } else if (account_type_ == policy::DeviceLocalAccount::TYPE_KIOSK_APP ||
+             account_type_ == policy::DeviceLocalAccount::TYPE_WEB_KIOSK_APP) {
+    // For single-app kiosk sessions, allow platform apps, extensions and shared
     // modules.
     if (extension->GetType() == extensions::Manifest::TYPE_PLATFORM_APP ||
         extension->GetType() == extensions::Manifest::TYPE_SHARED_MODULE ||

@@ -4,7 +4,7 @@
 
 #include "third_party/blink/renderer/modules/background_sync/sync_manager.h"
 
-#include "third_party/blink/public/platform/interface_provider.h"
+#include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/bindings/core/v8/callback_promise_adapter.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
@@ -12,6 +12,7 @@
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/modules/service_worker/service_worker_registration.h"
+#include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
@@ -26,12 +27,13 @@ SyncManager::SyncManager(ServiceWorkerRegistration* registration,
 }
 
 ScriptPromise SyncManager::registerFunction(ScriptState* script_state,
-                                            const String& tag) {
+                                            const String& tag,
+                                            ExceptionState& exception_state) {
   if (!registration_->active()) {
-    return ScriptPromise::RejectWithDOMException(
-        script_state, MakeGarbageCollected<DOMException>(
-                          DOMExceptionCode::kInvalidStateError,
-                          "Registration failed - no active Service Worker"));
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kInvalidStateError,
+        "Registration failed - no active Service Worker");
+    return ScriptPromise();
   }
 
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
@@ -64,7 +66,7 @@ ScriptPromise SyncManager::getTags(ScriptState* script_state) {
 const mojo::Remote<mojom::blink::OneShotBackgroundSyncService>&
 SyncManager::GetBackgroundSyncServiceRemote() {
   if (!background_sync_service_.is_bound()) {
-    Platform::Current()->GetInterfaceProvider()->GetInterface(
+    Platform::Current()->GetBrowserInterfaceBroker()->GetInterface(
         background_sync_service_.BindNewPipeAndPassReceiver(task_runner_));
   }
   return background_sync_service_;
@@ -109,7 +111,8 @@ void SyncManager::RegisterCallback(
       break;
     case mojom::blink::BackgroundSyncError::NO_SERVICE_WORKER:
       resolver->Reject(MakeGarbageCollected<DOMException>(
-          DOMExceptionCode::kUnknownError, "No service worker is active."));
+          DOMExceptionCode::kInvalidStateError,
+          "Registration failed - no active Service Worker"));
       break;
   }
 }
@@ -147,7 +150,7 @@ void SyncManager::GetRegistrationsCallback(
   }
 }
 
-void SyncManager::Trace(blink::Visitor* visitor) {
+void SyncManager::Trace(Visitor* visitor) {
   visitor->Trace(registration_);
   ScriptWrappable::Trace(visitor);
 }

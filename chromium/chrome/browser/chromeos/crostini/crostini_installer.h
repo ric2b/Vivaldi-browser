@@ -7,8 +7,11 @@
 
 #include "base/callback_forward.h"
 #include "base/macros.h"
+#include "base/scoped_observer.h"
+#include "chrome/browser/chromeos/crostini/ansible/ansible_management_service.h"
 #include "chrome/browser/chromeos/crostini/crostini_installer_ui_delegate.h"
 #include "chrome/browser/chromeos/crostini/crostini_manager.h"
+#include "chrome/browser/chromeos/crostini/crostini_types.mojom-forward.h"
 #include "components/keyed_service/core/keyed_service.h"
 
 class Profile;
@@ -21,10 +24,12 @@ namespace crostini {
 
 class CrostiniInstaller : public KeyedService,
                           public CrostiniManager::RestartObserver,
-                          public CrostiniInstallerUIDelegate {
+                          public CrostiniInstallerUIDelegate,
+                          public AnsibleManagementService::Observer {
  public:
   // These values are persisted to logs. Entries should not be renumbered and
   // numeric values should never be reused.
+  // When you add entries to this enum don't forget to update enums.xml
   enum class SetupResult {
     kNotStarted = 0,
     // kUserCancelled = 1,
@@ -52,7 +57,13 @@ class CrostiniInstaller : public KeyedService,
 
     kErrorInsufficientDiskSpace = 22,
 
-    kMaxValue = kErrorInsufficientDiskSpace,
+    kErrorConfiguringContainer = 23,
+    kUserCancelledConfiguringContainer = 24,
+
+    kErrorCreateContainer = 25,
+    kErrorUnknown = 26,
+
+    kMaxValue = kErrorUnknown,
   };
 
   static CrostiniInstaller* GetForProfile(Profile* profile);
@@ -61,13 +72,17 @@ class CrostiniInstaller : public KeyedService,
   ~CrostiniInstaller() override;
   void Shutdown() override;
 
+  void ShowDialog(CrostiniUISurface ui_surface);
+
   // CrostiniInstallerUIDelegate:
-  void Install(ProgressCallback progress_callback,
+  void Install(CrostiniManager::RestartOptions options,
+               ProgressCallback progress_callback,
                ResultCallback result_callback) override;
   void Cancel(base::OnceClosure callback) override;
   void CancelBeforeStart() override;
 
   // CrostiniManager::RestartObserver:
+  void OnStageStarted(crostini::mojom::InstallerState stage) override;
   void OnComponentLoaded(crostini::CrostiniResult result) override;
   void OnConciergeStarted(bool success) override;
   void OnDiskImageCreated(bool success,
@@ -79,6 +94,11 @@ class CrostiniInstaller : public KeyedService,
   void OnContainerSetup(bool success) override;
   void OnContainerStarted(crostini::CrostiniResult result) override;
   void OnSshKeysFetched(bool success) override;
+  void OnContainerMounted(bool success) override;
+
+  // AnsibleManagementService::Observer:
+  void OnAnsibleSoftwareConfigurationStarted() override;
+  void OnAnsibleSoftwareConfigurationFinished(bool success) override;
 
   // Return true if internal state allows starting installation.
   bool CanInstall();
@@ -111,6 +131,9 @@ class CrostiniInstaller : public KeyedService,
   void OnCrostiniRestartFinished(crostini::CrostiniResult result);
   void OnAvailableDiskSpace(int64_t bytes);
 
+  void OnCrostiniRemovedAfterConfigurationFailed(
+      crostini::CrostiniResult result);
+
   Profile* profile_;
 
   State state_ = State::IDLE;
@@ -123,12 +146,16 @@ class CrostiniInstaller : public KeyedService,
   int32_t container_download_percent_;
   crostini::CrostiniManager::RestartId restart_id_ =
       crostini::CrostiniManager::kUninitializedRestartId;
+  CrostiniManager::RestartOptions restart_options_;
 
   bool skip_launching_terminal_for_testing_ = false;
 
   ProgressCallback progress_callback_;
   ResultCallback result_callback_;
   base::OnceClosure cancel_callback_;
+
+  ScopedObserver<AnsibleManagementService, AnsibleManagementService::Observer>
+      ansible_management_service_observer_{this};
 
   base::WeakPtrFactory<CrostiniInstaller> weak_ptr_factory_{this};
 

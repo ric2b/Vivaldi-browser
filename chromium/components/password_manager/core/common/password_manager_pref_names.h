@@ -13,10 +13,6 @@ namespace prefs {
 // Alphabetical list of preference names specific to the PasswordManager
 // component.
 
-// Boolean indicating whether blacklisted credentials in the password store
-// have already been normalized.
-extern const char kBlacklistedCredentialsNormalized[];
-
 // Boolean controlling whether the password manager allows automatic signing in
 // through Credential Manager API.
 extern const char kCredentialsEnableAutosignin[];
@@ -67,6 +63,11 @@ extern const char kNumberSignInPasswordPromoShown[];
 // Safe to remove for M82.
 extern const char kSignInPasswordPromoRevive[];
 
+// A dictionary of account-storage-related settings that exist per Gaia account
+// (e.g. whether that user has opted in). It maps from hash of Gaia ID to
+// dictionary of key-value pairs.
+extern const char kAccountStoragePerAccountSettings[];
+
 // String that represents the sync password hash.
 extern const char kSyncPasswordHash[];
 
@@ -78,6 +79,9 @@ extern const char kSyncPasswordLengthAndHashSalt[];
 // Indicates the time (in seconds) when last cleaning of obsolete HTTP
 // credentials was performed.
 extern const char kLastTimeObsoleteHttpCredentialsRemoved[];
+
+// The last time the password check has run to completion.
+extern const char kLastTimePasswordCheckCompleted[];
 
 // List that contains captured password hashes.
 extern const char kPasswordHashDataList[];

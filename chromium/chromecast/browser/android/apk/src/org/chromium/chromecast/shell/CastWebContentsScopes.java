@@ -8,9 +8,10 @@ import android.app.Activity;
 import android.content.Context;
 import android.graphics.drawable.ColorDrawable;
 import android.os.IBinder;
-import android.support.annotation.ColorInt;
-import android.support.annotation.Nullable;
 import android.widget.FrameLayout;
+
+import androidx.annotation.ColorInt;
+import androidx.annotation.Nullable;
 
 import org.chromium.chromecast.base.Observer;
 import org.chromium.components.embedder_support.view.ContentView;
@@ -25,6 +26,8 @@ class CastWebContentsScopes {
         @Nullable
         IBinder provideWindowToken();
     }
+
+    static final String VIEW_TAG_CONTENT_VIEW = "ContentView";
 
     public static Observer<WebContents> onLayoutActivity(
             Activity activity, FrameLayout layout, @ColorInt int backgroundColor) {
@@ -77,6 +80,7 @@ class CastWebContentsScopes {
             layout.addView(contentView, matchParent);
             contentView.setFocusable(true);
             contentView.requestFocus();
+            contentView.setTag(VIEW_TAG_CONTENT_VIEW);
             contentViewRenderView.setCurrentWebContents(webContents);
             return () -> {
                 layout.setForeground(new ColorDrawable(backgroundColor));

@@ -13,6 +13,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "chrome/test/chromedriver/chrome/devtools_event_listener.h"
+#include "chrome/test/chromedriver/chrome/javascript_dialog_manager.h"
 #include "chrome/test/chromedriver/chrome/log.h"
 #include "chrome/test/chromedriver/chrome/status.h"
 #include "chrome/test/chromedriver/chrome/util.h"
@@ -25,8 +26,7 @@ namespace {
 
 const char kInspectorDefaultContextError[] =
     "Cannot find default execution context";
-const char kInspectorContextError[] =
-    "Cannot find execution context with given id";
+const char kInspectorContextError[] = "Cannot find context with specified id";
 const char kInspectorInvalidURL[] = "Cannot navigate to invalid URL";
 const char kInspectorInsecureContext[] =
     "Permission can't be granted in current context.";
@@ -185,9 +185,31 @@ Status DevToolsClientImpl::ConnectIfNecessary() {
     }
   }
 
+  // These lines must be before the following SendCommandXxx calls
   unnotified_connect_listeners_ = listeners_;
   unnotified_event_listeners_.clear();
   response_info_map_.clear();
+
+  if (id_ != kBrowserwideDevToolsClientId) {
+    base::DictionaryValue params;
+    std::string script =
+        "(function () {"
+        "window.cdc_adoQpoasnfa76pfcZLmcfl_Array = window.Array;"
+        "window.cdc_adoQpoasnfa76pfcZLmcfl_Promise = window.Promise;"
+        "window.cdc_adoQpoasnfa76pfcZLmcfl_Symbol = window.Symbol;"
+        "}) ();";
+    params.SetString("source", script);
+    Status status = SendCommandAndIgnoreResponse(
+        "Page.addScriptToEvaluateOnNewDocument", params);
+    if (status.IsError())
+      return status;
+
+    params.Clear();
+    params.SetString("expression", script);
+    status = SendCommandAndIgnoreResponse("Runtime.evaluate", params);
+    if (status.IsError())
+      return status;
+  }
 
   // Notify all listeners of the new connection. Do this now so that any errors
   // that occur are reported now instead of later during some unrelated call.
@@ -259,7 +281,7 @@ void DevToolsClientImpl::AddListener(DevToolsEventListener* listener) {
 }
 
 Status DevToolsClientImpl::HandleReceivedEvents() {
-  return HandleEventsUntil(base::Bind(&ConditionIsMet),
+  return HandleEventsUntil(base::BindRepeating(&ConditionIsMet),
                            Timeout(base::TimeDelta()));
 }
 
@@ -278,9 +300,25 @@ Status DevToolsClientImpl::HandleEventsUntil(
         return Status(kOk);
     }
 
-    Status status = ProcessNextMessage(-1, timeout);
-    if (status.IsError())
+    // Create a small timeout so conditional_func can be retried
+    // when only funcinterval has expired, continue while loop
+    // but return timeout status if primary timeout has expired
+    // This supports cases when loading state is updated by a different client
+    Timeout funcinterval =
+        Timeout(base::TimeDelta::FromMilliseconds(500), &timeout);
+    Status status = ProcessNextMessage(-1, false, funcinterval);
+    if (status.code() == kTimeout) {
+      if (timeout.IsExpired()) {
+        // Build status message based on timeout parameter, not funcinterval
+        std::string err =
+            "Timed out receiving message from renderer: " +
+            base::StringPrintf("%.3lf", timeout.GetDuration().InSecondsF());
+        LOG(ERROR) << err;
+        return Status(kTimeout, err);
+      }
+    } else if (status.IsError()) {
       return status;
+    }
   }
 }
 
@@ -342,8 +380,11 @@ Status DevToolsClientImpl::SendCommandInternal(
 
     if (wait_for_response) {
       while (response_info->state == kWaiting) {
+        // Use a long default timeout if user has not requested one.
         Status status = ProcessNextMessage(
-            command_id, Timeout(base::TimeDelta::FromMinutes(10), timeout));
+            command_id, true,
+            timeout != nullptr ? *timeout
+                               : Timeout(base::TimeDelta::FromMinutes(10)));
         if (status.IsError()) {
           if (response_info->state == kReceived)
             response_info_map_.erase(command_id);
@@ -352,6 +393,15 @@ Status DevToolsClientImpl::SendCommandInternal(
       }
       if (response_info->state == kBlocked) {
         response_info->state = kIgnored;
+        if (owner_) {
+          std::string alert_text;
+          Status status =
+              owner_->GetJavaScriptDialogManager()->GetDialogMessage(
+                  &alert_text);
+          if (status.IsOk())
+            return Status(kUnexpectedAlertOpen,
+                          "{Alert text : " + alert_text + "}");
+        }
         return Status(kUnexpectedAlertOpen);
       }
       CHECK_EQ(response_info->state, kReceived);
@@ -367,9 +417,9 @@ Status DevToolsClientImpl::SendCommandInternal(
   return Status(kOk);
 }
 
-Status DevToolsClientImpl::ProcessNextMessage(
-    int expected_id,
-    const Timeout& timeout) {
+Status DevToolsClientImpl::ProcessNextMessage(int expected_id,
+                                              bool log_timeout,
+                                              const Timeout& timeout) {
   ScopedIncrementer increment_stack_count(&stack_count_);
 
   Status status = EnsureListenersNotifiedOfConnect();
@@ -398,7 +448,7 @@ Status DevToolsClientImpl::ProcessNextMessage(
     return Status(kTargetDetached);
 
   if (parent_ != nullptr)
-    return parent_->ProcessNextMessage(-1, timeout);
+    return parent_->ProcessNextMessage(-1, log_timeout, timeout);
 
   std::string message;
   switch (socket_->ReceiveNextMessage(&message, timeout)) {
@@ -413,7 +463,8 @@ Status DevToolsClientImpl::ProcessNextMessage(
       std::string err =
           "Timed out receiving message from renderer: " +
           base::StringPrintf("%.3lf", timeout.GetDuration().InSecondsF());
-      LOG(ERROR) << err;
+      if (log_timeout)
+        LOG(ERROR) << err;
       return Status(kTimeout, err);
     }
     default:
@@ -447,6 +498,7 @@ Status DevToolsClientImpl::HandleMessage(int expected_id,
     }
     client = it->second;
   }
+  WebViewImplHolder client_holder(client->owner_);
   if (type == internal::kEventMessageType) {
     return client->ProcessEvent(event);
   }
@@ -648,7 +700,7 @@ Status ParseInspectorError(const std::string& error_json) {
   if (error_found) {
     if (error_message == kInspectorDefaultContextError ||
         error_message == kInspectorContextError) {
-      return Status(kNoSuchExecutionContext);
+      return Status(kNoSuchWindow);
     } else if (error_message == kInspectorInvalidURL) {
       return Status(kInvalidArgument);
     } else if (error_message == kInspectorInsecureContext) {

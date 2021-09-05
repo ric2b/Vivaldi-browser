@@ -53,14 +53,12 @@ class CWVAutofillDataManagerTest : public PlatformTest {
         std::make_unique<autofill::TestPersonalDataManager>();
 
     // Set to stub out behavior inside PersonalDataManager.
-    personal_data_manager_->SetAutofillEnabled(true);
     personal_data_manager_->SetAutofillProfileEnabled(true);
     personal_data_manager_->SetAutofillCreditCardEnabled(true);
     personal_data_manager_->SetAutofillWalletImportEnabled(true);
 
     password_store_ = new password_manager::TestPasswordStore();
-    password_store_->Init(base::RepeatingCallback<void(syncer::ModelType)>(),
-                          nullptr);
+    password_store_->Init(nullptr);
 
     autofill_data_manager_ = [[CWVAutofillDataManager alloc]
         initWithPersonalDataManager:personal_data_manager_.get()
@@ -110,7 +108,6 @@ class CWVAutofillDataManagerTest : public PlatformTest {
     password_form.password_value = base::SysNSStringToUTF16(@"test");
     password_form.submit_element = base::SysNSStringToUTF16(@"signIn");
     password_form.signon_realm = "http://www.example.com/";
-    password_form.preferred = false;
     password_form.scheme = autofill::PasswordForm::Scheme::kHtml;
     password_form.blacklisted_by_user = false;
     return password_form;
@@ -250,7 +247,8 @@ TEST_F(CWVAutofillDataManagerTest, ReturnPassword) {
   password_store_->AddLogin(test_password);
   NSArray<CWVPassword*>* fetched_passwords = FetchPasswords();
   EXPECT_EQ(1ul, fetched_passwords.count);
-  EXPECT_EQ(test_password, *[fetched_passwords[0] internalPasswordForm]);
+  EXPECT_THAT(test_password, password_manager::MatchesFormExceptStore(
+                                 *[fetched_passwords[0] internalPasswordForm]));
 }
 
 // Tests CWVAutofillDataManager properly deletes passwords.
@@ -261,35 +259,6 @@ TEST_F(CWVAutofillDataManagerTest, DeletePassword) {
   [autofill_data_manager_ deletePassword:passwords[0]];
   passwords = FetchPasswords();
   EXPECT_EQ(0ul, passwords.count);
-}
-
-// Tests CWVAutofillDataManager properly deletes all local data.
-TEST_F(CWVAutofillDataManagerTest, ClearAllLocalData) {
-  personal_data_manager_->AddCreditCard(autofill::test::GetCreditCard());
-  personal_data_manager_->AddCreditCard(autofill::test::GetCreditCard2());
-  personal_data_manager_->AddServerCreditCard(
-      autofill::test::GetMaskedServerCard());
-  personal_data_manager_->AddProfile(autofill::test::GetFullProfile());
-  personal_data_manager_->AddProfile(autofill::test::GetFullProfile2());
-
-  EXPECT_TRUE(FetchCreditCards(^(NSArray<CWVCreditCard*>* credit_cards) {
-    EXPECT_EQ(3ul, credit_cards.count);
-  }));
-
-  EXPECT_TRUE(FetchProfiles(^(NSArray<CWVAutofillProfile*>* profiles) {
-    EXPECT_EQ(2ul, profiles.count);
-  }));
-
-  [autofill_data_manager_ clearAllLocalData];
-
-  EXPECT_TRUE(FetchCreditCards(^(NSArray<CWVCreditCard*>* credit_cards) {
-    EXPECT_EQ(1ul, credit_cards.count);
-    EXPECT_TRUE(credit_cards.firstObject.fromGooglePay);
-  }));
-
-  EXPECT_TRUE(FetchProfiles(^(NSArray<CWVAutofillProfile*>* profiles) {
-    EXPECT_EQ(0ul, profiles.count);
-  }));
 }
 
 }  // namespace ios_web_view

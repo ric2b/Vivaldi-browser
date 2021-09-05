@@ -21,19 +21,10 @@ namespace blink {
 
 namespace {
 
-// Translate from media::VideoEncodeAccelerator::SupportedProfile to
-// webrtc::SdpVideoFormat, or return nothing if the profile isn't supported.
-base::Optional<webrtc::SdpVideoFormat> VEAToWebRTCFormat(
-    const media::VideoEncodeAccelerator::SupportedProfile& profile) {
-  DCHECK_EQ(profile.max_framerate_denominator, 1U);
-
-  if (profile.profile >= media::VP8PROFILE_MIN &&
-      profile.profile <= media::VP8PROFILE_MAX) {
-    if (base::FeatureList::IsEnabled(blink::features::kWebRtcHWVP8Encoding)) {
-      return webrtc::SdpVideoFormat("VP8");
-    }
-  } else if (profile.profile >= media::H264PROFILE_MIN &&
-             profile.profile <= media::H264PROFILE_MAX) {
+base::Optional<media::VideoCodecProfile> WebRTCFormatToCodecProfile(
+    const webrtc::SdpVideoFormat& sdp) {
+  if (sdp.name == "H264") {
+#if !defined(OS_ANDROID)
     // Enable H264 HW encode for WebRTC when SW fallback is available, which is
     // checked by kWebRtcH264WithOpenH264FFmpeg flag. This check should be
     // removed when SW implementation is fully enabled.
@@ -42,58 +33,92 @@ base::Optional<webrtc::SdpVideoFormat> VEAToWebRTCFormat(
     webrtc_h264_sw_enabled = base::FeatureList::IsEnabled(
         blink::features::kWebRtcH264WithOpenH264FFmpeg);
 #endif  // BUILDFLAG(RTC_USE_H264) && BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS)
-    if (webrtc_h264_sw_enabled ||
-        base::FeatureList::IsEnabled(blink::features::kWebRtcHWH264Encoding)) {
-      webrtc::H264::Profile h264_profile;
-      switch (profile.profile) {
-        case media::H264PROFILE_BASELINE:
-#if defined(OS_ANDROID)
-          // Force HW H264 on Android to be CBP for most compatibility, since:
-          // - Only HW H264 is available on Android at present.
-          // - MediaCodec only advise BP, which works same as CBP in most cases.
-          // - Some peers only expect CBP in negotiation.
-          h264_profile = webrtc::H264::kProfileConstrainedBaseline;
-#else
-          h264_profile = webrtc::H264::kProfileBaseline;
+    if (!webrtc_h264_sw_enabled)
+      return base::nullopt;
 #endif
-          break;
-        case media::H264PROFILE_MAIN:
-          h264_profile = webrtc::H264::kProfileMain;
-          break;
-        case media::H264PROFILE_HIGH:
-          h264_profile = webrtc::H264::kProfileHigh;
-          break;
-        default:
-          // Unsupported H264 profile in WebRTC.
-          return base::nullopt;
-      }
 
-      const int width = profile.max_resolution.width();
-      const int height = profile.max_resolution.height();
-      const int fps = profile.max_framerate_numerator;
-      DCHECK_EQ(1u, profile.max_framerate_denominator);
-
-      const absl::optional<webrtc::H264::Level> h264_level =
-          webrtc::H264::SupportedLevel(width * height, fps);
-      const webrtc::H264::ProfileLevelId profile_level_id(
-          h264_profile, h264_level.value_or(webrtc::H264::kLevel1));
-
-      webrtc::SdpVideoFormat format("H264");
-      format.parameters = {
-          {cricket::kH264FmtpProfileLevelId,
-           *webrtc::H264::ProfileLevelIdToString(profile_level_id)},
-          {cricket::kH264FmtpLevelAsymmetryAllowed, "1"},
-          {cricket::kH264FmtpPacketizationMode, "1"}};
-      return format;
-    }
-  } else if (profile.profile >= media::VP9PROFILE_MIN &&
-             profile.profile <= media::VP9PROFILE_MAX) {
-    if (base::FeatureList::IsEnabled(blink::features::kWebRtcHWVP9Encoding)) {
-      return webrtc::SdpVideoFormat("VP9");
-    }
+    return media::VideoCodecProfile::H264PROFILE_MIN;
+  } else if (sdp.name == "VP8") {
+    return media::VideoCodecProfile::VP8PROFILE_MIN;
+  } else if (sdp.name == "VP9") {
+    return media::VideoCodecProfile::VP9PROFILE_MIN;
   }
   return base::nullopt;
 }
+
+// Translate from media::VideoEncodeAccelerator::SupportedProfile to
+// webrtc::SdpVideoFormat, or return nothing if the profile isn't supported.
+base::Optional<webrtc::SdpVideoFormat> VEAToWebRTCFormat(
+    const media::VideoEncodeAccelerator::SupportedProfile& profile) {
+  DCHECK_EQ(profile.max_framerate_denominator, 1U);
+
+  if (profile.profile >= media::VP8PROFILE_MIN &&
+      profile.profile <= media::VP8PROFILE_MAX) {
+    return webrtc::SdpVideoFormat("VP8");
+  }
+  if (profile.profile >= media::H264PROFILE_MIN &&
+      profile.profile <= media::H264PROFILE_MAX) {
+#if !defined(OS_ANDROID)
+    // Enable H264 HW encode for WebRTC when SW fallback is available, which is
+    // checked by kWebRtcH264WithOpenH264FFmpeg flag. This check should be
+    // removed when SW implementation is fully enabled.
+    bool webrtc_h264_sw_enabled = false;
+#if BUILDFLAG(RTC_USE_H264) && BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS)
+    webrtc_h264_sw_enabled = base::FeatureList::IsEnabled(
+        blink::features::kWebRtcH264WithOpenH264FFmpeg);
+#endif  // BUILDFLAG(RTC_USE_H264) && BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS)
+    if (!webrtc_h264_sw_enabled)
+      return base::nullopt;
+#endif
+
+    webrtc::H264::Profile h264_profile;
+    switch (profile.profile) {
+      case media::H264PROFILE_BASELINE:
+#if defined(OS_ANDROID)
+        // Force HW H264 on Android to be CBP for most compatibility, since:
+        // - Only HW H264 is available on Android at present.
+        // - MediaCodec only advise BP, which works same as CBP in most cases.
+        // - Some peers only expect CBP in negotiation.
+        h264_profile = webrtc::H264::kProfileConstrainedBaseline;
+#else
+        h264_profile = webrtc::H264::kProfileBaseline;
+#endif
+        break;
+      case media::H264PROFILE_MAIN:
+        h264_profile = webrtc::H264::kProfileMain;
+        break;
+      case media::H264PROFILE_HIGH:
+        h264_profile = webrtc::H264::kProfileHigh;
+        break;
+      default:
+        // Unsupported H264 profile in WebRTC.
+        return base::nullopt;
+    }
+
+    const int width = profile.max_resolution.width();
+    const int height = profile.max_resolution.height();
+    const int fps = profile.max_framerate_numerator;
+    DCHECK_EQ(1u, profile.max_framerate_denominator);
+
+    const absl::optional<webrtc::H264::Level> h264_level =
+        webrtc::H264::SupportedLevel(width * height, fps);
+    const webrtc::H264::ProfileLevelId profile_level_id(
+        h264_profile, h264_level.value_or(webrtc::H264::kLevel1));
+
+    webrtc::SdpVideoFormat format("H264");
+    format.parameters = {
+        {cricket::kH264FmtpProfileLevelId,
+         *webrtc::H264::ProfileLevelIdToString(profile_level_id)},
+        {cricket::kH264FmtpLevelAsymmetryAllowed, "1"},
+        {cricket::kH264FmtpPacketizationMode, "1"}};
+    return format;
+  }
+  if (profile.profile >= media::VP9PROFILE_MIN &&
+      profile.profile <= media::VP9PROFILE_MAX) {
+    return webrtc::SdpVideoFormat("VP9");
+  }
+  return base::nullopt;
+}  // namespace
 
 bool IsSameFormat(const webrtc::SdpVideoFormat& format1,
                   const webrtc::SdpVideoFormat& format2) {
@@ -101,38 +126,63 @@ bool IsSameFormat(const webrtc::SdpVideoFormat& format1,
                               format2.parameters);
 }
 
+struct SupportedFormats {
+  bool unknown = true;
+  std::vector<media::VideoCodecProfile> profiles;
+  std::vector<webrtc::SdpVideoFormat> sdp_formats;
+};
+
+SupportedFormats GetSupportedFormatsInternal(
+    media::GpuVideoAcceleratorFactories* gpu_factories) {
+  SupportedFormats supported_formats;
+  auto profiles = gpu_factories->GetVideoEncodeAcceleratorSupportedProfiles();
+  if (!profiles)
+    return supported_formats;
+
+  // |profiles| are either the info at GpuInfo instance or the info got by
+  // querying GPU process.
+  supported_formats.unknown = false;
+  for (const auto& profile : *profiles) {
+    base::Optional<webrtc::SdpVideoFormat> format = VEAToWebRTCFormat(profile);
+    if (format) {
+      supported_formats.profiles.push_back(profile.profile);
+      supported_formats.sdp_formats.push_back(std::move(*format));
+    }
+  }
+  return supported_formats;
+}
+
 }  // anonymous namespace
 
 RTCVideoEncoderFactory::RTCVideoEncoderFactory(
     media::GpuVideoAcceleratorFactories* gpu_factories)
-    : gpu_factories_(gpu_factories) {
-  const media::VideoEncodeAccelerator::SupportedProfiles& profiles =
-      gpu_factories_->GetVideoEncodeAcceleratorSupportedProfiles();
-  for (const auto& profile : profiles) {
-    base::Optional<webrtc::SdpVideoFormat> format = VEAToWebRTCFormat(profile);
-    if (format) {
-      supported_formats_.push_back(std::move(*format));
-      profiles_.push_back(profile.profile);
-    }
-  }
-}
+    : gpu_factories_(gpu_factories) {}
 
 RTCVideoEncoderFactory::~RTCVideoEncoderFactory() {}
 
 std::unique_ptr<webrtc::VideoEncoder>
 RTCVideoEncoderFactory::CreateVideoEncoder(
     const webrtc::SdpVideoFormat& format) {
-  for (size_t i = 0; i < supported_formats_.size(); ++i) {
-    if (IsSameFormat(format, supported_formats_[i])) {
-      return std::make_unique<RTCVideoEncoder>(profiles_[i], gpu_factories_);
+  std::unique_ptr<webrtc::VideoEncoder> encoder;
+  auto supported_formats = GetSupportedFormatsInternal(gpu_factories_);
+  if (!supported_formats.unknown) {
+    for (size_t i = 0; i < supported_formats.sdp_formats.size(); ++i) {
+      if (IsSameFormat(format, supported_formats.sdp_formats[i])) {
+        encoder = std::make_unique<RTCVideoEncoder>(
+            supported_formats.profiles[i], gpu_factories_);
+      }
     }
+  } else {
+    auto profile = WebRTCFormatToCodecProfile(format);
+    if (profile)
+      encoder = std::make_unique<RTCVideoEncoder>(*profile, gpu_factories_);
   }
-  return nullptr;
+  return encoder;
 }
 
 std::vector<webrtc::SdpVideoFormat>
 RTCVideoEncoderFactory::GetSupportedFormats() const {
-  return supported_formats_;
+  return GetSupportedFormatsInternal(gpu_factories_).sdp_formats;
 }
 
 webrtc::VideoEncoderFactory::CodecInfo

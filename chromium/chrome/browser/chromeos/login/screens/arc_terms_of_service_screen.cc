@@ -5,6 +5,7 @@
 #include "chrome/browser/chromeos/login/screens/arc_terms_of_service_screen.h"
 
 #include "base/feature_list.h"
+#include "base/metrics/histogram_functions.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
 #include "chrome/browser/metrics/metrics_reporting_state.h"
 #include "chrome/browser/profiles/profile.h"
@@ -13,7 +14,6 @@
 #include "chrome/browser/ui/webui/chromeos/login/arc_terms_of_service_screen_handler.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/webui_url_constants.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "components/prefs/pref_service.h"
 
 namespace {
@@ -25,26 +25,34 @@ constexpr char kUserActionBack[] = "go-back";
 namespace chromeos {
 
 // static
+std::string ArcTermsOfServiceScreen::GetResultString(Result result) {
+  switch (result) {
+    case Result::ACCEPTED:
+      return "Accepted";
+    case Result::SKIPPED:
+      return "Skipped";
+    case Result::BACK:
+      return "Back";
+  }
+}
+
+// static
 void ArcTermsOfServiceScreen::MaybeLaunchArcSettings(Profile* profile) {
   if (profile->GetPrefs()->GetBoolean(prefs::kShowArcSettingsOnSessionStart)) {
     profile->GetPrefs()->ClearPref(prefs::kShowArcSettingsOnSessionStart);
     // TODO(jhorwich) Handle the case where the user chooses to review both ARC
     // settings and sync settings - currently the Settings window will only
     // show one settings page. See crbug.com/901184#c4 for details.
-    if (base::FeatureList::IsEnabled(chromeos::features::kSplitSettings)) {
-      chrome::SettingsWindowManager::GetInstance()->ShowOSSettings(
-          profile, chrome::kAndroidAppsDetailsSubPage);
-    } else {
-      chrome::SettingsWindowManager::GetInstance()->ShowOSSettings(
-          profile, chrome::kAndroidAppsDetailsSubPageInBrowserSettings);
-    }
+    chrome::SettingsWindowManager::GetInstance()->ShowOSSettings(
+        profile, chrome::kAndroidAppsDetailsSubPage);
   }
 }
 
 ArcTermsOfServiceScreen::ArcTermsOfServiceScreen(
     ArcTermsOfServiceScreenView* view,
     const ScreenExitCallback& exit_callback)
-    : BaseScreen(ArcTermsOfServiceScreenView::kScreenId),
+    : BaseScreen(ArcTermsOfServiceScreenView::kScreenId,
+                 OobeScreenPriority::DEFAULT),
       view_(view),
       exit_callback_(exit_callback) {
   DCHECK(view_);
@@ -61,7 +69,7 @@ ArcTermsOfServiceScreen::~ArcTermsOfServiceScreen() {
   }
 }
 
-void ArcTermsOfServiceScreen::Show() {
+void ArcTermsOfServiceScreen::ShowImpl() {
   if (!view_)
     return;
 
@@ -69,7 +77,7 @@ void ArcTermsOfServiceScreen::Show() {
   view_->Show();
 }
 
-void ArcTermsOfServiceScreen::Hide() {
+void ArcTermsOfServiceScreen::HideImpl() {
   if (view_)
     view_->Hide();
 }
@@ -87,6 +95,8 @@ void ArcTermsOfServiceScreen::OnSkip() {
 }
 
 void ArcTermsOfServiceScreen::OnAccept(bool review_arc_settings) {
+  base::UmaHistogramBoolean("OOBE.ArcTermsOfServiceScreen.ReviewFollowingSetup",
+                            review_arc_settings);
   if (review_arc_settings) {
     Profile* const profile = ProfileManager::GetActiveUserProfile();
     CHECK(profile);

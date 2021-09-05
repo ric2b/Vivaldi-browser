@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/memory/unsafe_shared_memory_region.h"
 #include "base/run_loop.h"
 #include "base/threading/thread.h"
 #include "build/build_config.h"
@@ -74,6 +75,8 @@ class TestGpuService : public mojom::GpuService {
     gfx::GpuMemoryBufferHandle handle;
     handle.id = req.id;
     handle.type = gfx::SHARED_MEMORY_BUFFER;
+    constexpr size_t kBufferSizeBytes = 100;
+    handle.region = base::UnsafeSharedMemoryRegion::Create(kBufferSizeBytes);
 
     DCHECK(req.callback);
     std::move(req.callback).Run(std::move(handle));
@@ -145,8 +148,9 @@ class TestGpuService : public mojom::GpuService {
   void RequestCompleteGpuInfo(
       RequestCompleteGpuInfoCallback callback) override {}
 
-  void GetGpuSupportedRuntimeVersion(
-      GetGpuSupportedRuntimeVersionCallback callback) override {}
+  void GetGpuSupportedRuntimeVersionAndDevicePerfInfo(
+      GetGpuSupportedRuntimeVersionAndDevicePerfInfoCallback callback)
+      override {}
 #endif
 
   void RequestHDRStatus(RequestHDRStatusCallback callback) override {}
@@ -157,7 +161,11 @@ class TestGpuService : public mojom::GpuService {
 
   void WakeUpGpu() override {}
 
-  void GpuSwitched() override {}
+  void GpuSwitched(gl::GpuPreference active_gpu_heuristic) override {}
+
+  void DisplayAdded() override {}
+
+  void DisplayRemoved() override {}
 
   void DestroyAllChannels() override {}
 
@@ -166,6 +174,11 @@ class TestGpuService : public mojom::GpuService {
   void OnBackgrounded() override {}
 
   void OnForegrounded() override {}
+
+#if !defined(OS_ANDROID)
+  void OnMemoryPressure(
+      base::MemoryPressureListener::MemoryPressureLevel level) override {}
+#endif
 
 #if defined(OS_MACOSX)
   void BeginCATransaction() override {}
@@ -217,6 +230,10 @@ class HostGpuMemoryBufferManagerTest : public ::testing::Test {
         std::move(gpu_service_provider), 1,
         std::move(gpu_memory_buffer_support),
         base::ThreadTaskRunnerHandle::Get());
+#if defined(USE_X11)
+    // X11 requires GPU process initialization to determine GMB support.
+    gpu_memory_buffer_manager_->native_configurations_initialized_.Signal();
+#endif
   }
 
   // Not all platforms support native configurations (currently only Windows,

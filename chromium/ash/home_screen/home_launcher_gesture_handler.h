@@ -13,20 +13,19 @@
 #include "ash/home_screen/home_screen_delegate.h"
 #include "ash/public/cpp/tablet_mode_observer.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
+#include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "base/optional.h"
 #include "base/scoped_observer.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_observer.h"
 #include "ui/compositor/layer_animation_observer.h"
-#include "ui/gfx/geometry/point.h"
+#include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/transform.h"
 
 namespace ash {
 
-class HomeLauncherGestureHandlerObserver;
 class SwipeHomeToOverviewController;
-class DragWindowFromShelfController;
 
 // HomeLauncherGestureHandler makes modifications to a window's transform and
 // opacity when gesture drag events are received and forwarded to it.
@@ -45,11 +44,6 @@ class ASH_EXPORT HomeLauncherGestureHandler
     // Sliding up the MRU window to display launcher. If in overview mode,
     // slides up overview mode as well.
     kSlideUpToShow,
-    // Sliding up from the shelf to drag the MRU window (or one of the snapped
-    // window in splitview) around to enter either home launcher screen or to
-    // overview screen. If in overview mode, this mode is a no-op. Note: This
-    // mode is behind the feature flag kDragFromShelfToHomeOrOverview.
-    kDragWindowToHomeOrOverview,
     // Sliding down the MRU window to hide launcher.
     kSlideDownToHide,
     // Sliding up from the shelf in home launcher screen to the overview screen.
@@ -62,11 +56,11 @@ class ASH_EXPORT HomeLauncherGestureHandler
   // Called by owner of this object when a gesture event is received. |location|
   // should be in screen coordinates. Returns false if the the gesture event
   // was not processed.
-  bool OnPressEvent(Mode mode, const gfx::Point& location);
-  bool OnScrollEvent(const gfx::Point& location,
+  bool OnPressEvent(Mode mode, const gfx::PointF& location);
+  bool OnScrollEvent(const gfx::PointF& location,
                      float scroll_x,
                      float scroll_y);
-  bool OnReleaseEvent(const gfx::Point& location,
+  bool OnReleaseEvent(const gfx::PointF& location,
                       base::Optional<float> velocity_y);
 
   // Cancel a current drag and animates the items to their final state based on
@@ -76,21 +70,13 @@ class ASH_EXPORT HomeLauncherGestureHandler
   // Hide MRU window and show home launcher on specified display.
   bool ShowHomeLauncher(const display::Display& display);
 
-  // Hide home launcher and show MRU window on specified display.
-  bool HideHomeLauncherForWindow(const display::Display& display,
-                                 aura::Window* window);
-
   // Returns the windows being tracked. May be null.
   aura::Window* GetActiveWindow();
   aura::Window* GetSecondaryWindow();
 
-  bool IsDragInProgress() const { return last_event_location_.has_value(); }
+  bool IsDragInProgress() const;
 
-  void AddObserver(HomeLauncherGestureHandlerObserver* observer);
-  void RemoveObserver(HomeLauncherGestureHandlerObserver* obsever);
-
-  void NotifyHomeLauncherTargetPositionChanged(bool showing,
-                                               int64_t display_id);
+  void NotifyHomeLauncherPositionChanged(int percent_shown, int64_t display_id);
   void NotifyHomeLauncherAnimationComplete(bool shown, int64_t display_id);
 
   // TODO(sammiequon): Investigate if it is needed to observe potential window
@@ -104,7 +90,15 @@ class ASH_EXPORT HomeLauncherGestureHandler
   // ui::ImplicitAnimationObserver:
   void OnImplicitAnimationsCompleted() override;
 
+  // Returns true if animation is running.
+  bool IsAnimating();
+
   Mode mode() const { return mode_; }
+
+  SwipeHomeToOverviewController*
+  swipe_home_to_overview_controller_for_testing() {
+    return swipe_home_to_overview_controller_.get();
+  }
 
  private:
   class ScopedWindowModifier;
@@ -135,7 +129,11 @@ class ASH_EXPORT HomeLauncherGestureHandler
   // original opacity and transform, and 1.0 means the window will be faded out
   // and transformed offscreen. This function is used by kSlideUpToShow and
   // kSlideDownToHide mode.
-  void UpdateWindowsForSlideUpOrDown(double progress, bool animate);
+  // If and only if |animation_trigger| is set, the windows updates will be
+  // animated. |animation_trigger| should indicate what triggered the animation.
+  void UpdateWindowsForSlideUpOrDown(
+      double progress,
+      base::Optional<AnimationTrigger> animation_trigger);
 
   // Stop observing all windows and remove their local pointers.
   void RemoveObserversAndStopTracking();
@@ -143,32 +141,27 @@ class ASH_EXPORT HomeLauncherGestureHandler
   // Returns true if there's no gesture dragging and animation.
   bool IsIdle();
 
-  // Returns true if animation is running.
-  bool IsAnimating();
-
   // Returns true if home launcher should run animation to show. Otherwise,
   // returns false.
   bool IsFinalStateShow();
 
   // Sets up windows that will be used in dragging and animation. If |window| is
   // not null for kSlideDownToHide mode, it will be set as the window to run
-  // slide down animation. |window| is not used for kSlideUpToShow or
-  // kDragWindowToHomeOrOverview mode. |location_in_screen| is only used for
-  // kDragWindowToHomeOrOverview mode to find the eligible widnow to drag.
-  // Returns true if windows are successfully set up.
-  bool SetUpWindows(Mode mode,
-                    aura::Window* window,
-                    base::Optional<gfx::Point> location_in_screen);
+  // slide down animation. |window| is not used for kSlideUpToShow mode. Returns
+  // true if windows are successfully set up.
+  bool SetUpWindows(Mode mode, aura::Window* window);
 
   // Called by OnPress/Scroll/ReleaseEvent() when the drag from the shelf or
   // from the top starts/continues/ends. |location| is in screen coordinate.
-  void OnDragStarted(const gfx::Point& location);
-  void OnDragContinued(const gfx::Point& location,
+  void OnDragStarted(const gfx::PointF& location);
+  void OnDragContinued(const gfx::PointF& location,
                        float scroll_x,
                        float scroll_y);
-  bool OnDragEnded(const gfx::Point& location,
+  bool OnDragEnded(const gfx::PointF& location,
                    base::Optional<float> velocity_y);
   void OnDragCancelled();
+
+  void PauseBackdropUpdatesForActiveWindow();
 
   Mode mode_ = Mode::kNone;
 
@@ -192,7 +185,7 @@ class ASH_EXPORT HomeLauncherGestureHandler
 
   // Tracks the location of the last received event in screen coordinates. Empty
   // if there is currently no window being processed.
-  base::Optional<gfx::Point> last_event_location_;
+  base::Optional<gfx::PointF> last_event_location_;
 
   // Tracks the last y scroll amount. On gesture end, animates to end state if
   // |last_scroll_y_| is greater than a certain threshold, even if
@@ -216,16 +209,16 @@ class ASH_EXPORT HomeLauncherGestureHandler
   // The display where the windows are being processed.
   display::Display display_;
 
-  // The window drag controller that will be used in kDragWindowToHomeOrOverview
-  // mode. Will not be created in other modes.
-  std::unique_ptr<DragWindowFromShelfController> window_drag_controller_;
-
   // The gesture controller that switches from home screen to overview when it
   // detects a swipe from the shelf area.
   std::unique_ptr<SwipeHomeToOverviewController>
       swipe_home_to_overview_controller_;
 
-  base::ObserverList<HomeLauncherGestureHandlerObserver> observers_;
+  // The closure runner returned by BackdropController::PauseUpdates() requested
+  // when app window drag starts to prevent backdrop from showing up mid-drag.
+  // Keeping this in scope keeps backdrop changes paused (it's reset when the
+  // drag gesture sequence finishes).
+  base::Optional<base::ScopedClosureRunner> scoped_backdrop_update_pause_;
 
   DISALLOW_COPY_AND_ASSIGN(HomeLauncherGestureHandler);
 };

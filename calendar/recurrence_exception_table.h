@@ -12,6 +12,7 @@
 #include <stddef.h>
 
 #include "base/macros.h"
+#include "calendar/event_type.h"
 #include "calendar/recurrence_exception_type.h"
 #include "sql/statement.h"
 
@@ -40,6 +41,7 @@ class RecurrrenceExceptionTable {
   bool UpdateRecurrenceExceptionRow(const RecurrenceExceptionRow& exception_id);
   bool DeleteRecurrenceException(RecurrenceExceptionID exception_id);
   bool DeleteRecurrenceExceptions(EventID event_id);
+  bool DeleteRecurrenceExceptionsForCalendar(CalendarID calendar_id);
   bool GetAllRecurrenceExceptionsForEvent(EventID event_id,
                                           RecurrenceExceptionRows* exceptions);
   bool DoesRecurrenceExceptionExistForEvent(EventID event_id);

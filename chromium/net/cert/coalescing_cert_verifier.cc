@@ -11,13 +11,17 @@
 #include "base/containers/unique_ptr_adapters.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/time/time.h"
 #include "net/base/net_errors.h"
 #include "net/cert/cert_verify_result.h"
+#include "net/cert/crl_set.h"
+#include "net/cert/pem.h"
 #include "net/cert/x509_certificate_net_log_param.h"
 #include "net/log/net_log_event_type.h"
 #include "net/log/net_log_source.h"
 #include "net/log/net_log_source_type.h"
+#include "net/log/net_log_values.h"
 #include "net/log/net_log_with_source.h"
 
 namespace net {
@@ -66,27 +70,22 @@ namespace net {
 
 namespace {
 
-base::Value CertVerifyResultParams(const CertVerifyResult& verify_result) {
-  base::DictionaryValue results;
-  results.SetBoolean("has_md5", verify_result.has_md5);
-  results.SetBoolean("has_md2", verify_result.has_md2);
-  results.SetBoolean("has_md4", verify_result.has_md4);
-  results.SetBoolean("is_issued_by_known_root",
-                     verify_result.is_issued_by_known_root);
-  results.SetBoolean("is_issued_by_additional_trust_anchor",
-                     verify_result.is_issued_by_additional_trust_anchor);
-  results.SetInteger("cert_status", verify_result.cert_status);
-  results.SetKey("verified_cert", NetLogX509CertificateParams(
-                                      verify_result.verified_cert.get()));
-
-  std::unique_ptr<base::ListValue> hashes(new base::ListValue());
-  for (auto it = verify_result.public_key_hashes.begin();
-       it != verify_result.public_key_hashes.end(); ++it) {
-    hashes->AppendString(it->ToString());
+base::Value CertVerifierParams(const CertVerifier::RequestParams& params) {
+  base::Value dict(base::Value::Type::DICTIONARY);
+  dict.SetKey("certificates",
+              NetLogX509CertificateList(params.certificate().get()));
+  if (!params.ocsp_response().empty()) {
+    dict.SetStringPath("ocsp_response", PEMEncode(params.ocsp_response(),
+                                                  "NETLOG OCSP RESPONSE"));
   }
-  results.Set("public_key_hashes", std::move(hashes));
+  if (!params.sct_list().empty()) {
+    dict.SetStringPath("sct_list",
+                       PEMEncode(params.sct_list(), "NETLOG SCT LIST"));
+  }
+  dict.SetPath("host", NetLogStringValue(params.hostname()));
+  dict.SetIntPath("verifier_flags", params.flags());
 
-  return std::move(results);
+  return dict;
 }
 
 }  // namespace
@@ -248,9 +247,8 @@ int CoalescingCertVerifier::Job::Start(CertVerifier* underlying_verifier) {
   // multiple times).
   DCHECK(!pending_request_);
 
-  net_log_.BeginEvent(NetLogEventType::CERT_VERIFIER_JOB, [&] {
-    return NetLogX509CertificateParams(params_.certificate().get());
-  });
+  net_log_.BeginEvent(NetLogEventType::CERT_VERIFIER_JOB,
+                      [&] { return CertVerifierParams(params_); });
 
   verify_result_.Reset();
 
@@ -259,13 +257,13 @@ int CoalescingCertVerifier::Job::Start(CertVerifier* underlying_verifier) {
       params_, &verify_result_,
       // Safe, because |verify_request_| is self-owned and guarantees the
       // callback won't be called if |this| is deleted.
-      base::Bind(&CoalescingCertVerifier::Job::OnVerifyComplete,
-                 base::Unretained(this)),
+      base::BindOnce(&CoalescingCertVerifier::Job::OnVerifyComplete,
+                     base::Unretained(this)),
       &pending_request_, net_log_);
   if (result != ERR_IO_PENDING) {
     LogMetrics();
     net_log_.EndEvent(NetLogEventType::CERT_VERIFIER_JOB,
-                      [&] { return CertVerifyResultParams(verify_result_); });
+                      [&] { return verify_result_.NetLogParams(result); });
   }
 
   return result;
@@ -276,7 +274,7 @@ void CoalescingCertVerifier::Job::OnVerifyComplete(int result) {
 
   pending_request_.reset();  // Reset to signal clean completion.
   net_log_.EndEvent(NetLogEventType::CERT_VERIFIER_JOB,
-                    [&] { return CertVerifyResultParams(verify_result_); });
+                    [&] { return verify_result_.NetLogParams(result); });
 
   // It's possible that during the process of invoking a callback for a
   // Request, |this| may get deleted (along with the associated parent). If
@@ -354,6 +352,8 @@ CoalescingCertVerifier::Request::~Request() {
 }
 
 void CoalescingCertVerifier::Request::Complete(int result) {
+  DCHECK(job_);  // There must be a pending/non-aborted job to complete.
+
   *verify_result_ = job_->verify_result();
 
   // On successful completion, the Job removes the Request from its set;
@@ -368,12 +368,16 @@ void CoalescingCertVerifier::Request::Complete(int result) {
 }
 
 void CoalescingCertVerifier::Request::OnJobAbort() {
+  DCHECK(job_);  // There must be a pending job to abort.
+
   // If the Job is deleted before the Request, just clean up. The Request will
   // eventually be deleted by the caller.
   net_log_.AddEvent(NetLogEventType::CANCELLED);
   net_log_.EndEvent(NetLogEventType::CERT_VERIFIER_REQUEST);
 
   job_ = nullptr;
+  // Note: May delete |this|, if the caller made |callback_| own the Request.
+  callback_.Reset();
 }
 
 CoalescingCertVerifier::CoalescingCertVerifier(

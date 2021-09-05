@@ -4,6 +4,7 @@
 file://ENG_REVIEW_OWNERS
 
 per-file .clang-format=thakis@chromium.org
+per-file .clang-tidy=file://styleguide/c++/OWNERS
 per-file .eslintrc.js=file://tools/web_dev_style/OWNERS
 per-file .gitattributes=*
 per-file .gitignore=*
@@ -13,6 +14,7 @@ per-file .gn=file://build/OWNERS
 per-file .vpython*=dpranke@chromium.org
 per-file .vpython*=iannucci@chromium.org
 per-file .vpython*=jbudorick@chromium.org
+per-file .yapfignore=*
 per-file AUTHORS=*
 per-file BUILD.gn=file://build/OWNERS
 per-file codereview.settings=agable@chromium.org

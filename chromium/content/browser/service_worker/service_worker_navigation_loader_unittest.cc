@@ -12,11 +12,13 @@
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/scoped_feature_list.h"
 #include "content/browser/loader/navigation_loader_interceptor.h"
 #include "content/browser/loader/single_request_url_loader_factory.h"
 #include "content/browser/service_worker/embedded_worker_test_helper.h"
 #include "content/browser/service_worker/fake_embedded_worker_instance_client.h"
 #include "content/browser/service_worker/fake_service_worker.h"
+#include "content/browser/service_worker/service_worker_container_host.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_registration.h"
 #include "content/browser/service_worker/service_worker_test_utils.h"
@@ -24,15 +26,13 @@
 #include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/mock_render_process_host.h"
-#include "mojo/public/cpp/bindings/pending_receiver.h"
-#include "mojo/public/cpp/bindings/pending_remote.h"
-#include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/system/data_pipe_utils.h"
 #include "net/ssl/ssl_info.h"
 #include "net/test/cert_test_util.h"
 #include "net/test/test_data_directory.h"
-#include "services/network/public/cpp/resource_response.h"
+#include "services/network/public/cpp/features.h"
 #include "services/network/public/mojom/fetch_api.mojom.h"
+#include "services/network/public/mojom/url_response_head.mojom.h"
 #include "services/network/test/test_url_loader_client.h"
 #include "storage/browser/blob/blob_data_builder.h"
 #include "storage/browser/blob/blob_data_handle.h"
@@ -84,6 +84,15 @@ blink::mojom::FetchAPIResponsePtr RedirectResponse(
   return response;
 }
 
+blink::mojom::FetchAPIResponsePtr HeadersResponse(
+    const base::flat_map<std::string, std::string>& headers) {
+  auto response = blink::mojom::FetchAPIResponse::New();
+  response->status_code = 200;
+  response->status_text = "OK";
+  response->headers.insert(headers.begin(), headers.end());
+  return response;
+}
+
 // Simulates a service worker handling fetch events. The response can be
 // customized via RespondWith* functions.
 class FetchEventServiceWorker : public FakeServiceWorker {
@@ -120,6 +129,14 @@ class FetchEventServiceWorker : public FakeServiceWorker {
 
   // Tells this worker to respond to fetch events with an error response.
   void RespondWithError() { response_mode_ = ResponseMode::kErrorResponse; }
+
+  // Tells this worker to respond to fetch events with a response containing
+  // specific headers.
+  void RespondWithHeaders(
+      const base::flat_map<std::string, std::string>& headers) {
+    response_mode_ = ResponseMode::kHeaders;
+    headers_ = headers;
+  }
 
   // Tells this worker to respond to fetch events with the redirect response.
   void RespondWithRedirectResponse(const GURL& new_url) {
@@ -262,6 +279,13 @@ class FetchEventServiceWorker : public FakeServiceWorker {
         std::move(finish_callback)
             .Run(blink::mojom::ServiceWorkerEventStatus::COMPLETED);
         break;
+      case ResponseMode::kHeaders:
+        response_callback->OnResponse(
+            HeadersResponse(headers_),
+            blink::mojom::ServiceWorkerFetchEventTiming::New());
+        std::move(finish_callback)
+            .Run(blink::mojom::ServiceWorkerEventStatus::COMPLETED);
+        break;
     }
 
     if (quit_closure_for_fetch_event_)
@@ -278,7 +302,8 @@ class FetchEventServiceWorker : public FakeServiceWorker {
     kFailFetchEventDispatch,
     kDeferredResponse,
     kEarlyResponse,
-    kRedirect
+    kRedirect,
+    kHeaders
   };
 
   ResponseMode response_mode_ = ResponseMode::kDefault;
@@ -299,6 +324,9 @@ class FetchEventServiceWorker : public FakeServiceWorker {
   // For ResponseMode::kRedirect.
   GURL redirected_url_;
 
+  // For ResponseMode::kHeaders
+  base::flat_map<std::string, std::string> headers_;
+
   bool has_received_fetch_event_ = false;
   base::OnceClosure quit_closure_for_fetch_event_;
 
@@ -309,9 +337,8 @@ class FetchEventServiceWorker : public FakeServiceWorker {
 
 // Returns typical response info for a resource load that went through a service
 // worker.
-std::unique_ptr<network::ResourceResponseHead>
-CreateResponseInfoFromServiceWorker() {
-  auto head = std::make_unique<network::ResourceResponseHead>();
+network::mojom::URLResponseHeadPtr CreateResponseInfoFromServiceWorker() {
+  auto head = network::mojom::URLResponseHead::New();
   head->was_fetched_via_service_worker = true;
   head->was_fallback_required_by_service_worker = false;
   head->url_list_via_service_worker = std::vector<GURL>();
@@ -344,17 +371,16 @@ class ServiceWorkerNavigationLoaderTest : public testing::Test {
     storage()->LazyInitializeForTest();
     blink::mojom::ServiceWorkerRegistrationOptions options;
     options.scope = GURL("https://example.com/");
-    registration_ =
-        new ServiceWorkerRegistration(options, storage()->NewRegistrationId(),
-                                      helper_->context()->AsWeakPtr());
-    version_ = new ServiceWorkerVersion(
-        registration_.get(), GURL("https://example.com/service_worker.js"),
-        blink::mojom::ScriptType::kClassic, storage()->NewVersionId(),
-        helper_->context()->AsWeakPtr());
-    std::vector<ServiceWorkerDatabase::ResourceRecord> records;
-    records.push_back(WriteToDiskCacheSync(
-        storage(), version_->script_url(), storage()->NewResourceId(),
-        {} /* headers */, "I'm the body", "I'm the meta data"));
+    registration_ = CreateNewServiceWorkerRegistration(
+        helper_->context()->registry(), options);
+    version_ = CreateNewServiceWorkerVersion(
+        helper_->context()->registry(), registration_.get(),
+        GURL("https://example.com/service_worker.js"),
+        blink::mojom::ScriptType::kClassic);
+    std::vector<storage::mojom::ServiceWorkerResourceRecordPtr> records;
+    records.push_back(WriteToDiskCacheSync(storage(), version_->script_url(),
+                                           {} /* headers */, "I'm the body",
+                                           "I'm the meta data"));
     version_->script_cache_map()->SetResources(records);
     version_->set_fetch_handler_existence(
         ServiceWorkerVersion::FetchHandlerExistence::EXISTS);
@@ -365,7 +391,7 @@ class ServiceWorkerNavigationLoaderTest : public testing::Test {
     registration_->set_last_update_check(base::Time::Now());
     base::Optional<blink::ServiceWorkerStatusCode> status;
     base::RunLoop run_loop;
-    storage()->StoreRegistration(
+    registry()->StoreRegistration(
         registration_.get(), version_.get(),
         ReceiveServiceWorkerStatus(&status, run_loop.QuitClosure()));
     run_loop.Run();
@@ -381,22 +407,25 @@ class ServiceWorkerNavigationLoaderTest : public testing::Test {
             helper_.get(), client);
   }
 
+  ServiceWorkerRegistry* registry() { return helper_->context()->registry(); }
   ServiceWorkerStorage* storage() { return helper_->context()->storage(); }
 
   // Starts a request. After calling this, the request is ongoing and the
   // caller can use functions like client_.RunUntilComplete() to wait for
   // completion.
   void StartRequest(std::unique_ptr<network::ResourceRequest> request) {
-    // Create a ServiceWorkerProviderHost and simulate what
+    // Create a ServiceWorkerContainerHost and simulate what
     // ServiceWorkerControlleeRequestHandler does to assign it a controller.
-    if (!provider_host_) {
-      provider_host_ = CreateProviderHostForWindow(
-          helper_->mock_render_process_id(), /*is_parent_frame_secure=*/true,
-          helper_->context()->AsWeakPtr(), &provider_endpoints_);
-      provider_host_->UpdateUrls(request->url, request->url,
-                                 url::Origin::Create(request->url));
-      provider_host_->AddMatchingRegistration(registration_.get());
-      provider_host_->SetControllerRegistration(
+    if (!container_host_) {
+      container_host_ = CreateContainerHostForWindow(
+          helper_->mock_render_process_id(),
+          /*is_parent_frame_secure=*/true, helper_->context()->AsWeakPtr(),
+          &provider_endpoints_);
+      container_host_->UpdateUrls(request->url,
+                                  net::SiteForCookies::FromUrl(request->url),
+                                  url::Origin::Create(request->url));
+      container_host_->AddMatchingRegistration(registration_.get());
+      container_host_->SetControllerRegistration(
           registration_, /*notify_controllerchange=*/false);
     }
 
@@ -404,13 +433,13 @@ class ServiceWorkerNavigationLoaderTest : public testing::Test {
     loader_ = std::make_unique<ServiceWorkerNavigationLoader>(
         base::BindOnce(&ServiceWorkerNavigationLoaderTest::Fallback,
                        base::Unretained(this)),
-        provider_host_,
+        container_host_,
         base::WrapRefCounted<URLLoaderFactoryGetter>(
             helper_->context()->loader_factory_getter()));
 
     // Load |request.url|.
-    loader_->StartRequest(*request, mojo::MakeRequest(&loader_ptr_),
-                          client_.CreateInterfacePtr());
+    loader_->StartRequest(*request, loader_remote_.BindNewPipeAndPassReceiver(),
+                          client_.CreateRemote());
   }
 
   // The |fallback_callback| passed to the ServiceWorkerNavigationLoader in
@@ -433,8 +462,9 @@ class ServiceWorkerNavigationLoaderTest : public testing::Test {
     run_loop.Run();
   }
 
-  void ExpectResponseInfo(const network::ResourceResponseHead& info,
-                          const network::ResourceResponseHead& expected_info) {
+  void ExpectResponseInfo(
+      const network::mojom::URLResponseHead& info,
+      const network::mojom::URLResponseHead& expected_info) {
     EXPECT_EQ(expected_info.was_fetched_via_service_worker,
               info.was_fetched_via_service_worker);
     EXPECT_EQ(expected_info.was_fallback_required_by_service_worker,
@@ -442,9 +472,10 @@ class ServiceWorkerNavigationLoaderTest : public testing::Test {
     EXPECT_EQ(expected_info.url_list_via_service_worker,
               info.url_list_via_service_worker);
     EXPECT_EQ(expected_info.response_type, info.response_type);
-    EXPECT_FALSE(info.service_worker_start_time.is_null());
-    EXPECT_FALSE(info.service_worker_ready_time.is_null());
-    EXPECT_LT(info.service_worker_start_time, info.service_worker_ready_time);
+    EXPECT_FALSE(info.load_timing.service_worker_start_time.is_null());
+    EXPECT_FALSE(info.load_timing.service_worker_ready_time.is_null());
+    EXPECT_LT(info.load_timing.service_worker_start_time,
+              info.load_timing.service_worker_ready_time);
     EXPECT_EQ(expected_info.is_in_cache_storage, info.is_in_cache_storage);
     EXPECT_EQ(expected_info.cache_storage_cache_name,
               info.cache_storage_cache_name);
@@ -476,8 +507,8 @@ class ServiceWorkerNavigationLoaderTest : public testing::Test {
   storage::BlobStorageContext blob_context_;
   network::TestURLLoaderClient client_;
   std::unique_ptr<ServiceWorkerNavigationLoader> loader_;
-  network::mojom::URLLoaderPtr loader_ptr_;
-  base::WeakPtr<ServiceWorkerProviderHost> provider_host_;
+  mojo::Remote<network::mojom::URLLoader> loader_remote_;
+  base::WeakPtr<ServiceWorkerContainerHost> container_host_;
   ServiceWorkerRemoteProviderEndpoint provider_endpoints_;
 
   bool did_call_fallback_callback_ = false;
@@ -493,13 +524,13 @@ TEST_F(ServiceWorkerNavigationLoaderTest, Basic) {
   client_.RunUntilComplete();
 
   EXPECT_EQ(net::OK, client_.completion_status().error_code);
-  const network::ResourceResponseHead& info = client_.response_head();
-  EXPECT_EQ(200, info.headers->response_code());
-  EXPECT_FALSE(info.load_timing.receive_headers_start.is_null());
-  EXPECT_FALSE(info.load_timing.receive_headers_end.is_null());
-  EXPECT_LE(info.load_timing.receive_headers_start,
-            info.load_timing.receive_headers_end);
-  ExpectResponseInfo(info, *CreateResponseInfoFromServiceWorker());
+  auto& info = client_.response_head();
+  EXPECT_EQ(200, info->headers->response_code());
+  EXPECT_FALSE(info->load_timing.receive_headers_start.is_null());
+  EXPECT_FALSE(info->load_timing.receive_headers_end.is_null());
+  EXPECT_LE(info->load_timing.receive_headers_start,
+            info->load_timing.receive_headers_end);
+  ExpectResponseInfo(*info, *CreateResponseInfoFromServiceWorker());
 
   histogram_tester.ExpectUniqueSample(kHistogramMainResourceFetchEvent,
                                       blink::ServiceWorkerStatusCode::kOk, 1);
@@ -512,13 +543,14 @@ TEST_F(ServiceWorkerNavigationLoaderTest, Basic) {
 TEST_F(ServiceWorkerNavigationLoaderTest, NoActiveWorker) {
   base::HistogramTester histogram_tester;
 
-  // Make a provider host without a controller.
-  provider_host_ = CreateProviderHostForWindow(
+  // Make a container host without a controller.
+  container_host_ = CreateContainerHostForWindow(
       helper_->mock_render_process_id(), /*is_parent_frame_secure=*/true,
       helper_->context()->AsWeakPtr(), &provider_endpoints_);
-  provider_host_->UpdateUrls(GURL("https://example.com/"),
-                             GURL("https://example.com/"),
-                             url::Origin::Create(GURL("https://example.com/")));
+  container_host_->UpdateUrls(
+      GURL("https://example.com/"),
+      net::SiteForCookies::FromUrl(GURL("https://example.com/")),
+      url::Origin::Create(GURL("https://example.com/")));
 
   // Perform the request.
   StartRequest(CreateRequest());
@@ -576,10 +608,10 @@ TEST_F(ServiceWorkerNavigationLoaderTest, BlobResponse) {
   StartRequest(CreateRequest());
   client_.RunUntilComplete();
 
-  const network::ResourceResponseHead& info = client_.response_head();
-  EXPECT_EQ(200, info.headers->response_code());
-  ExpectResponseInfo(info, *CreateResponseInfoFromServiceWorker());
-  EXPECT_EQ(33, info.content_length);
+  auto& info = client_.response_head();
+  EXPECT_EQ(200, info->headers->response_code());
+  ExpectResponseInfo(*info, *CreateResponseInfoFromServiceWorker());
+  EXPECT_EQ(33, info->content_length);
 
   // Test the body.
   std::string body;
@@ -617,9 +649,9 @@ TEST_F(ServiceWorkerNavigationLoaderTest, BrokenBlobResponse) {
 
   // We should get a valid response once the headers arrive.
   client_.RunUntilResponseReceived();
-  const network::ResourceResponseHead& info = client_.response_head();
-  EXPECT_EQ(200, info.headers->response_code());
-  ExpectResponseInfo(info, *CreateResponseInfoFromServiceWorker());
+  auto& info = client_.response_head();
+  EXPECT_EQ(200, info->headers->response_code());
+  ExpectResponseInfo(*info, *CreateResponseInfoFromServiceWorker());
 
   // However, since the blob is broken we should get an error while transferring
   // the body.
@@ -652,9 +684,9 @@ TEST_F(ServiceWorkerNavigationLoaderTest, StreamResponse) {
   StartRequest(CreateRequest());
   client_.RunUntilResponseReceived();
 
-  const network::ResourceResponseHead& info = client_.response_head();
-  EXPECT_EQ(200, info.headers->response_code());
-  ExpectResponseInfo(info, *CreateResponseInfoFromServiceWorker());
+  auto& info = client_.response_head();
+  EXPECT_EQ(200, info->headers->response_code());
+  ExpectResponseInfo(*info, *CreateResponseInfoFromServiceWorker());
 
   EXPECT_FALSE(version_->HasNoWork());
 
@@ -700,9 +732,9 @@ TEST_F(ServiceWorkerNavigationLoaderTest, StreamResponse_Abort) {
   StartRequest(CreateRequest());
   client_.RunUntilResponseReceived();
 
-  const network::ResourceResponseHead& info = client_.response_head();
-  EXPECT_EQ(200, info.headers->response_code());
-  ExpectResponseInfo(info, *CreateResponseInfoFromServiceWorker());
+  auto& info = client_.response_head();
+  EXPECT_EQ(200, info->headers->response_code());
+  ExpectResponseInfo(*info, *CreateResponseInfoFromServiceWorker());
 
   // Start writing the body stream, then abort before finishing.
   uint32_t written_bytes = sizeof(kResponseBody) - 1;
@@ -750,9 +782,9 @@ TEST_F(ServiceWorkerNavigationLoaderTest, StreamResponseAndCancel) {
   StartRequest(CreateRequest());
   client_.RunUntilResponseReceived();
 
-  const network::ResourceResponseHead& info = client_.response_head();
-  EXPECT_EQ(200, info.headers->response_code());
-  ExpectResponseInfo(info, *CreateResponseInfoFromServiceWorker());
+  auto& info = client_.response_head();
+  EXPECT_EQ(200, info->headers->response_code());
+  ExpectResponseInfo(*info, *CreateResponseInfoFromServiceWorker());
 
   // Start writing the body stream, then break the Mojo connection to the loader
   // before finishing.
@@ -762,7 +794,7 @@ TEST_F(ServiceWorkerNavigationLoaderTest, StreamResponseAndCancel) {
   ASSERT_EQ(MOJO_RESULT_OK, mojo_result);
   EXPECT_EQ(sizeof(kResponseBody) - 1, written_bytes);
   EXPECT_TRUE(data_pipe.producer_handle.is_valid());
-  loader_ptr_.reset();
+  loader_remote_.reset();
   base::RunLoop().RunUntilIdle();
 
   // Although ServiceWorkerNavigationLoader resets its URLLoaderClient pointer
@@ -804,7 +836,7 @@ TEST_F(ServiceWorkerNavigationLoaderTest, FallbackResponse) {
 
   // The request should not be handled by the loader, but it shouldn't be a
   // failure.
-  EXPECT_TRUE(provider_host_->controller());
+  EXPECT_TRUE(container_host_->controller());
   histogram_tester.ExpectUniqueSample(kHistogramMainResourceFetchEvent,
                                       blink::ServiceWorkerStatusCode::kOk, 1);
 
@@ -846,7 +878,7 @@ TEST_F(ServiceWorkerNavigationLoaderTest, FailFetchDispatch) {
   // The fallback callback should be called.
   RunUntilFallbackCallback();
   EXPECT_TRUE(reset_subresource_loader_params_);
-  EXPECT_FALSE(provider_host_->controller());
+  EXPECT_FALSE(container_host_->controller());
 
   histogram_tester.ExpectUniqueSample(
       kHistogramMainResourceFetchEvent,
@@ -867,9 +899,9 @@ TEST_F(ServiceWorkerNavigationLoaderTest, EarlyResponse) {
   StartRequest(CreateRequest());
   client_.RunUntilComplete();
 
-  const network::ResourceResponseHead& info = client_.response_head();
-  EXPECT_EQ(200, info.headers->response_code());
-  ExpectResponseInfo(info, *CreateResponseInfoFromServiceWorker());
+  auto& info = client_.response_head();
+  EXPECT_EQ(200, info->headers->response_code());
+  ExpectResponseInfo(*info, *CreateResponseInfoFromServiceWorker());
 
   // Although the response was already received, the event remains outstanding
   // until waitUntil() resolves.
@@ -888,9 +920,9 @@ TEST_F(ServiceWorkerNavigationLoaderTest, Redirect) {
   StartRequest(CreateRequest());
   client_.RunUntilRedirectReceived();
 
-  const network::ResourceResponseHead& info = client_.response_head();
-  EXPECT_EQ(301, info.headers->response_code());
-  ExpectResponseInfo(info, *CreateResponseInfoFromServiceWorker());
+  auto& info = client_.response_head();
+  EXPECT_EQ(301, info->headers->response_code());
+  ExpectResponseInfo(*info, *CreateResponseInfoFromServiceWorker());
 
   const net::RedirectInfo& redirect_info = client_.redirect_info();
   EXPECT_EQ(301, redirect_info.status_code);
@@ -914,9 +946,9 @@ TEST_F(ServiceWorkerNavigationLoaderTest, Lifetime) {
   loader_.release()->DetachedFromRequest();
   EXPECT_TRUE(loader);
 
-  // When the interface pointer to |loader_| is disconnected, its weak pointers
-  // (|loader|) are invalidated.
-  loader_ptr_.reset();
+  // When the remote for |loader_| is disconnected, its weak pointers (|loader|)
+  // are invalidated.
+  loader_remote_.reset();
   base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(loader);
 
@@ -931,7 +963,7 @@ TEST_F(ServiceWorkerNavigationLoaderTest, ConnectionErrorDuringFetchEvent) {
   service_worker_->RunUntilFetchEvent();
 
   // Break the Mojo connection. The loader should return an aborted status.
-  loader_ptr_.reset();
+  loader_remote_.reset();
   client_.RunUntilComplete();
   EXPECT_EQ(net::ERR_ABORTED, client_.completion_status().error_code);
 
@@ -947,14 +979,28 @@ TEST_F(ServiceWorkerNavigationLoaderTest, ConnectionErrorDuringFetchEvent) {
 TEST_F(ServiceWorkerNavigationLoaderTest, CancelNavigationDuringFetchEvent) {
   StartRequest(CreateRequest());
 
-  // Delete the provider host during the request. The load should abort without
+  // Delete the container host during the request. The load should abort without
   // crashing.
   provider_endpoints_.host_remote()->reset();
   base::RunLoop().RunUntilIdle();
-  EXPECT_FALSE(provider_host_);
+  EXPECT_FALSE(container_host_);
 
   client_.RunUntilComplete();
   EXPECT_EQ(net::ERR_ABORTED, client_.completion_status().error_code);
+}
+
+TEST_F(ServiceWorkerNavigationLoaderTest, ResponseWithCoop) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures({network::features::kCrossOriginOpenerPolicy},
+                                {});
+  service_worker_->RespondWithHeaders(
+      {{"Cross-Origin-Opener-Policy", "same-origin"}});
+
+  // Perform the request.
+  StartRequest(CreateRequest());
+  client_.RunUntilComplete();
+  EXPECT_EQ(network::mojom::CrossOriginOpenerPolicy::kSameOrigin,
+            client_.response_head()->cross_origin_opener_policy);
 }
 
 }  // namespace service_worker_navigation_loader_unittest

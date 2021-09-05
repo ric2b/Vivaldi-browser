@@ -4,6 +4,7 @@
 
 module content.mojom;
 
+import "services/network/public/mojom/host_resolver.mojom";
 import "services/network/public/mojom/url_response_head.mojom";
 import "services/network/public/mojom/url_loader.mojom";
 import "services/network/public/mojom/url_loader_factory.mojom";
@@ -27,8 +28,8 @@ interface NavigationClient {
   // Note: |url_loader_client_endpoints| will be empty iff the navigation URL
   // wasn't handled by the network stack (i.e. about:blank, ...)
   //
-  // Note: |response_body| is only used when NavigationImmediateResponseBody is
-  // enabled. It contains the datapipe used to read the response body.
+  // Note: |response_body| will be invalid iff the navigation URL wasn't handled
+  // by the network stack (i.e. about:blank, ...)
   //
   // When the Network Service is enabled, |subresource_loader_factories| may
   // also be provided by the browser as a a means for the renderer to load
@@ -82,6 +83,7 @@ interface NavigationClient {
       CommitNavigationParams request_params,
       bool has_stale_copy_in_cache,
       int32 error_code,
+      network.mojom.ResolveErrorInfo resolve_error_info,
       string? error_page_content,
       blink.mojom.URLLoaderFactoryBundle? subresource_loader_factories)
       => (DidCommitProvisionalLoadParams params,

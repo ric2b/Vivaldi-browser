@@ -13,16 +13,18 @@
 #include "ash/assistant/model/assistant_interaction_model_observer.h"
 #include "ash/assistant/model/assistant_query.h"
 #include "ash/assistant/model/assistant_response.h"
-#include "ash/assistant/model/assistant_ui_element.h"
 #include "ash/assistant/model/assistant_ui_model.h"
+#include "ash/assistant/model/ui/assistant_card_element.h"
+#include "ash/assistant/model/ui/assistant_text_element.h"
+#include "ash/assistant/model/ui/assistant_timers_element.h"
 #include "ash/assistant/ui/assistant_ui_constants.h"
 #include "ash/assistant/util/assistant_util.h"
 #include "ash/assistant/util/deep_link_util.h"
 #include "ash/assistant/util/histogram_util.h"
 #include "ash/public/cpp/android_intent_helper.h"
-#include "ash/public/cpp/app_list/app_list_features.h"
 #include "ash/public/cpp/ash_pref_names.h"
 #include "ash/public/cpp/assistant/assistant_setup.h"
+#include "ash/public/cpp/assistant/assistant_state.h"
 #include "ash/public/cpp/assistant/proactive_suggestions.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
@@ -42,7 +44,11 @@ namespace ash {
 
 namespace {
 
-constexpr int kWarmerWelcomesMaxTimesTriggered = 3;
+using assistant::ui::kWarmerWelcomesMaxTimesTriggered;
+using chromeos::assistant::features::IsResponseProcessingV2Enabled;
+using chromeos::assistant::features::IsTimersV2Enabled;
+
+// Android.
 constexpr char kAndroidIntentScheme[] = "intent://";
 constexpr char kAndroidIntentPrefix[] = "#Intent";
 
@@ -66,9 +72,40 @@ chromeos::assistant::mojom::AssistantSuggestionPtr CreateSearchSuggestion(
   return suggestion;
 }
 
+ash::TabletModeController* GetTabletModeController() {
+  return Shell::Get()->tablet_mode_controller();
+}
+
 // Returns true if device is in tablet mode, false otherwise.
 bool IsTabletMode() {
-  return Shell::Get()->tablet_mode_controller()->InTabletMode();
+  return GetTabletModeController()->InTabletMode();
+}
+
+bool launch_with_mic_open() {
+  return AssistantState::Get()->launch_with_mic_open().value_or(false);
+}
+
+// Returns whether the Assistant UI should open in voice mode by default.
+// Note that this can be overruled by the entry-point (for example using hotword
+// will always open in voice mode).
+bool IsPreferVoice() {
+  return launch_with_mic_open() || IsTabletMode();
+}
+
+PrefService* pref_service() {
+  auto* result =
+      Shell::Get()->session_controller()->GetLastActiveUserPrefService();
+  DCHECK(result);
+  return result;
+}
+
+int num_warmer_welcome_triggered() {
+  return pref_service()->GetInteger(prefs::kAssistantNumWarmerWelcomeTriggered);
+}
+
+void IncrementNumWarmerWelcomeTriggered() {
+  pref_service()->SetInteger(prefs::kAssistantNumWarmerWelcomeTriggered,
+                             num_warmer_welcome_triggered() + 1);
 }
 
 }  // namespace
@@ -81,9 +118,11 @@ AssistantInteractionController::AssistantInteractionController(
   AddModelObserver(this);
   assistant_controller_->AddObserver(this);
   Shell::Get()->highlighter_controller()->AddObserver(this);
+  GetTabletModeController()->AddObserver(this);
 }
 
 AssistantInteractionController::~AssistantInteractionController() {
+  GetTabletModeController()->RemoveObserver(this);
   Shell::Get()->highlighter_controller()->RemoveObserver(this);
   assistant_controller_->RemoveObserver(this);
   RemoveModelObserver(this);
@@ -125,14 +164,17 @@ void AssistantInteractionController::OnDeepLinkReceived(
   using assistant::util::DeepLinkType;
 
   if (type == DeepLinkType::kWhatsOnMyScreen) {
+    DCHECK(AssistantState::Get()->IsScreenContextAllowed());
+
     // Explicitly call ShowUi() to set the correct Assistant entry point.
     // ShowUi() will no-op if UI is already shown.
     assistant_controller_->ui_controller()->ShowUi(
         AssistantEntryPoint::kDeepLink);
 
-    // Currently the only way to trigger this deeplink is via suggestion chip.
-    // TODO(b/119841827): Use source specified from deep link.
-    StartScreenContextInteraction(AssistantQuerySource::kSuggestionChip);
+    // The "What's on my screen" chip initiates a screen context interaction.
+    StartScreenContextInteraction(
+        /*include_assistant_structure=*/true,
+        /*region=*/gfx::Rect(), AssistantQuerySource::kWhatsOnMyScreen);
     return;
   }
 
@@ -203,41 +245,6 @@ void AssistantInteractionController::OnDeepLinkReceived(
                        /*query_source=*/AssistantQuerySource::kDeepLink);
 }
 
-void AssistantInteractionController::OnUiModeChanged(AssistantUiMode ui_mode,
-                                                     bool due_to_interaction) {
-  if (ui_mode == AssistantUiMode::kMiniUi)
-    return;
-
-  switch (model_.input_modality()) {
-    case InputModality::kStylus:
-      // When the Assistant is not in mini state there should not be an active
-      // metalayer session. If we were in mini state when the UI mode was
-      // changed, we need to clean up the metalayer session.
-      Shell::Get()->highlighter_controller()->AbortSession();
-
-      // If the UI mode change was not due to interaction, we should reset the
-      // default input modality. We don't do this if the change occurred due to
-      // an Assistant interaction because we might inadvertently stop the active
-      // interaction by changing input modality. When this is the case, the
-      // modality will be correctly set in |OnInteractionStarted| if needed.
-      if (!due_to_interaction)
-        model_.SetInputModality(InputModality::kKeyboard);
-      break;
-    case InputModality::kVoice:
-      // When transitioning to web UI we abort any in progress voice query. We
-      // do this to prevent Assistant from listening to the user while we
-      // navigate away from the main stage.
-      if (ui_mode == AssistantUiMode::kWebUi &&
-          model_.pending_query().type() == AssistantQueryType::kVoice) {
-        StopActiveInteraction(false);
-      }
-      break;
-    case InputModality::kKeyboard:
-      // No action necessary.
-      break;
-  }
-}
-
 void AssistantInteractionController::OnUiVisibilityChanged(
     AssistantVisibility new_visibility,
     AssistantVisibility old_visibility,
@@ -249,16 +256,7 @@ void AssistantInteractionController::OnUiVisibilityChanged(
       // reset the interaction state and restore the default input modality.
       StopActiveInteraction(true);
       model_.ClearInteraction();
-      model_.SetInputModality(InputModality::kKeyboard);
-      break;
-    case AssistantVisibility::kHidden:
-      // When the UI is hidden we stop any voice query in progress so that we
-      // don't listen to the user while not visible. We also restore the default
-      // input modality for the next launch.
-      if (model_.pending_query().type() == AssistantQueryType::kVoice) {
-        StopActiveInteraction(false);
-      }
-      model_.SetInputModality(InputModality::kKeyboard);
+      model_.SetInputModality(GetDefaultInputModality());
       break;
     case AssistantVisibility::kVisible:
       OnUiVisible(entry_point.value());
@@ -266,38 +264,19 @@ void AssistantInteractionController::OnUiVisibilityChanged(
   }
 }
 
-void AssistantInteractionController::OnHighlighterEnabledChanged(
-    HighlighterEnabledState state) {
-  switch (state) {
-    case HighlighterEnabledState::kEnabled:
-      // Skip setting input modality to stylus when the embedded Assistant
-      // feature is enabled to prevent highlighter aborting sessions in
-      // OnUiModeChanged.
-      if (!app_list_features::IsEmbeddedAssistantUIEnabled())
-        model_.SetInputModality(InputModality::kStylus);
-      break;
-    case HighlighterEnabledState::kDisabledByUser:
-    case HighlighterEnabledState::kDisabledBySessionComplete:
-      model_.SetInputModality(InputModality::kKeyboard);
-      break;
-    case HighlighterEnabledState::kDisabledBySessionAbort:
-      // When metalayer mode has been aborted, no action necessary. Abort occurs
-      // as a result of an interaction starting, most likely due to hotword
-      // detection. Setting the input modality in these cases would have the
-      // unintended consequence of stopping the active interaction.
-      break;
-  }
-}
-
 void AssistantInteractionController::OnHighlighterSelectionRecognized(
     const gfx::Rect& rect) {
+  DCHECK(AssistantState::Get()->IsScreenContextAllowed());
+
   assistant_controller_->ui_controller()->ShowUi(AssistantEntryPoint::kStylus);
-  StartMetalayerInteraction(/*region=*/rect);
+  StartScreenContextInteraction(
+      /*include_assistant_structure=*/false, rect,
+      AssistantQuerySource::kStylus);
 }
 
 void AssistantInteractionController::OnInteractionStateChanged(
     InteractionState interaction_state) {
-  if (interaction_state != InteractionState::kActive)
+  if (!HasActiveInteraction())
     return;
 
   // Metalayer mode should not be sticky. Disable it on interaction start.
@@ -306,10 +285,8 @@ void AssistantInteractionController::OnInteractionStateChanged(
 
 void AssistantInteractionController::OnInputModalityChanged(
     InputModality input_modality) {
-  if (assistant_controller_->ui_controller()->model()->visibility() !=
-      AssistantVisibility::kVisible) {
+  if (!IsVisible())
     return;
-  }
 
   if (input_modality == InputModality::kVoice)
     return;
@@ -370,6 +347,9 @@ void AssistantInteractionController::OnCommittedQueryChanged(
 // pending query that occur outside of this method.
 void AssistantInteractionController::OnInteractionStarted(
     AssistantInteractionMetadataPtr metadata) {
+  // Abort any request in progress.
+  screen_context_request_factory_.InvalidateWeakPtrs();
+
   // Stop the interaction if the opt-in window is active.
   auto* assistant_setup = AssistantSetup::GetInstance();
   if (assistant_setup && assistant_setup->BounceOptInWindowIfActive()) {
@@ -407,8 +387,8 @@ void AssistantInteractionController::OnInteractionStarted(
     // set the pending query from outside of the interaction lifecycle, the
     // pending query type will always be |kNull| here.
     if (model_.pending_query().type() == AssistantQueryType::kNull) {
-      model_.SetPendingQuery(
-          std::make_unique<AssistantTextQuery>(metadata->query));
+      model_.SetPendingQuery(std::make_unique<AssistantTextQuery>(
+          metadata->query, metadata->source));
     }
     model_.CommitPendingQuery();
     model_.SetMicState(MicState::kClosed);
@@ -420,6 +400,14 @@ void AssistantInteractionController::OnInteractionStarted(
 
 void AssistantInteractionController::OnInteractionFinished(
     AssistantInteractionResolution resolution) {
+  // If we don't have an active interaction, that indicates that this
+  // interaction was explicitly stopped outside of LibAssistant. In this case,
+  // we ensure that the mic is closed but otherwise ignore this event.
+  if (IsResponseProcessingV2Enabled() && !HasActiveInteraction()) {
+    model_.SetMicState(MicState::kClosed);
+    return;
+  }
+
   model_.SetInteractionState(InteractionState::kInactive);
   model_.SetMicState(MicState::kClosed);
 
@@ -444,28 +432,31 @@ void AssistantInteractionController::OnInteractionFinished(
   // In some irregular cases, however, it has not. This happens during multi-
   // device hotword loss, for example, but can also occur if the interaction
   // errors out. In these cases we still need to commit the pending query as
-  // this is a prerequisite step to being able to finalize the pending response.
+  // this is a prerequisite step to being able to commit the pending response.
   if (model_.pending_query().type() != AssistantQueryType::kNull)
     model_.CommitPendingQuery();
 
-  // It's possible that the pending response has already been finalized. This
-  // occurs if the response contained TTS, as we flush the response to the UI
-  // when TTS is started to reduce latency.
-  if (!model_.pending_response())
-    return;
+  if (!IsResponseProcessingV2Enabled()) {
+    // It's possible that the pending response has already been committed. This
+    // occurs if the response contained TTS, as we flush the response to the UI
+    // when TTS is started to reduce latency.
+    if (!model_.pending_response())
+      return;
+  }
+
+  AssistantResponse* response = GetResponseForActiveInteraction();
 
   // Some interaction resolutions require special handling.
   switch (resolution) {
     case AssistantInteractionResolution::kError:
       // In the case of error, we show an appropriate message to the user.
-      model_.pending_response()->AddUiElement(
-          std::make_unique<AssistantTextElement>(
-              l10n_util::GetStringUTF8(IDS_ASH_ASSISTANT_ERROR_GENERIC)));
+      response->AddUiElement(std::make_unique<AssistantTextElement>(
+          l10n_util::GetStringUTF8(IDS_ASH_ASSISTANT_ERROR_GENERIC)));
       break;
     case AssistantInteractionResolution::kMultiDeviceHotwordLoss:
       // In the case of hotword loss to another device, we show an appropriate
       // message to the user.
-      model_.pending_response()->AddUiElement(
+      response->AddUiElement(
           std::make_unique<AssistantTextElement>(l10n_util::GetStringUTF8(
               IDS_ASH_ASSISTANT_MULTI_DEVICE_HOTWORD_LOSS)));
       break;
@@ -480,26 +471,45 @@ void AssistantInteractionController::OnInteractionFinished(
       break;
   }
 
+  if (IsResponseProcessingV2Enabled()) {
+    // If |response| is pending, commit it to cause the response for the
+    // previous interaction, if one exists, to be animated off stage and the new
+    // |response| to begin rendering.
+    if (response == model_.pending_response())
+      model_.CommitPendingResponse();
+    return;
+  }
+
   // Perform processing on the pending response before flushing to UI.
   OnProcessPendingResponse();
 }
 
 void AssistantInteractionController::OnHtmlResponse(
-    const std::string& response,
+    const std::string& html,
     const std::string& fallback) {
-  if (model_.interaction_state() != InteractionState::kActive) {
+  if (!HasActiveInteraction())
     return;
+
+  if (!IsResponseProcessingV2Enabled()) {
+    // If this occurs, the server has broken our response ordering agreement. We
+    // should not crash but we cannot handle the response so we ignore it.
+    if (!HasUnprocessedPendingResponse()) {
+      NOTREACHED();
+      return;
+    }
   }
 
-  // If this occurs, the server has broken our response ordering agreement. We
-  // should not crash but we cannot handle the response so we ignore it.
-  if (!HasUnprocessedPendingResponse()) {
-    NOTREACHED();
-    return;
-  }
+  AssistantResponse* response = GetResponseForActiveInteraction();
+  response->AddUiElement(
+      std::make_unique<AssistantCardElement>(html, fallback));
 
-  model_.pending_response()->AddUiElement(
-      std::make_unique<AssistantCardElement>(response, fallback));
+  if (IsResponseProcessingV2Enabled()) {
+    // If |response| is pending, commit it to cause the response for the
+    // previous interaction, if one exists, to be animated off stage and the new
+    // |response| to begin rendering.
+    if (response == model_.pending_response())
+      model_.CommitPendingResponse();
+  }
 }
 
 void AssistantInteractionController::OnSuggestionChipPressed(
@@ -508,7 +518,7 @@ void AssistantInteractionController::OnSuggestionChipPressed(
   // suggestion chip pressed event by launching the action url in the browser.
   if (!suggestion->action_url.is_empty()) {
     // Note that we post a new task when opening the |action_url| associated
-    // with |sugggestion| as this will potentially cause Assistant UI to close
+    // with |suggestion| as this will potentially cause Assistant UI to close
     // and destroy |suggestion| in the process. Failure to post in this case
     // would cause any subsequent observers of this suggestion chip event to
     // receive a deleted pointer.
@@ -527,42 +537,106 @@ void AssistantInteractionController::OnSuggestionChipPressed(
   // is because suggestion chips pressed after a voice query should continue to
   // return TTS, as really the text interaction is just a continuation of the
   // user's preceding voice interaction.
-  StartTextInteraction(suggestion->text, /*allow_tts=*/model_.response() &&
-                                             model_.response()->has_tts(),
-                       /*query_source=*/AssistantQuerySource::kSuggestionChip);
+  StartTextInteraction(
+      suggestion->text,
+      /*allow_tts=*/model_.response() && model_.response()->has_tts(),
+      /*query_source=*/suggestion->type ==
+              AssistantSuggestionType::kConversationStarter
+          ? AssistantQuerySource::kConversationStarter
+          : AssistantQuerySource::kSuggestionChip);
+}
+
+void AssistantInteractionController::OnTabletModeStarted() {
+  OnTabletModeChanged();
+}
+
+void AssistantInteractionController::OnTabletModeEnded() {
+  OnTabletModeChanged();
+}
+
+void AssistantInteractionController::OnTabletModeChanged() {
+  // The default input modality is different for tablet and normal mode.
+  // Change input modality to the new default input modality.
+  if (!HasActiveInteraction() && !IsVisible())
+    model_.SetInputModality(GetDefaultInputModality());
 }
 
 void AssistantInteractionController::OnSuggestionsResponse(
-    std::vector<AssistantSuggestionPtr> response) {
-  if (model_.interaction_state() != InteractionState::kActive) {
+    std::vector<AssistantSuggestionPtr> suggestions) {
+  if (!HasActiveInteraction())
     return;
+
+  if (!IsResponseProcessingV2Enabled()) {
+    // If this occurs, the server has broken our response ordering agreement. We
+    // should not crash but we cannot handle the response so we ignore it.
+    if (!HasUnprocessedPendingResponse()) {
+      NOTREACHED();
+      return;
+    }
   }
 
-  // If this occurs, the server has broken our response ordering agreement. We
-  // should not crash but we cannot handle the response so we ignore it.
-  if (!HasUnprocessedPendingResponse()) {
-    NOTREACHED();
-    return;
-  }
+  AssistantResponse* response = GetResponseForActiveInteraction();
+  response->AddSuggestions(std::move(suggestions));
 
-  model_.pending_response()->AddSuggestions(std::move(response));
+  if (IsResponseProcessingV2Enabled()) {
+    // If |response| is pending, commit it to cause the response for the
+    // previous interaction, if one exists, to be animated off stage and the new
+    // |response| to begin rendering.
+    if (response == model_.pending_response())
+      model_.CommitPendingResponse();
+  }
 }
 
-void AssistantInteractionController::OnTextResponse(
-    const std::string& response) {
-  if (model_.interaction_state() != InteractionState::kActive) {
+void AssistantInteractionController::OnTextResponse(const std::string& text) {
+  if (!HasActiveInteraction())
     return;
+
+  if (!IsResponseProcessingV2Enabled()) {
+    // If this occurs, the server has broken our response ordering agreement. We
+    // should not crash but we cannot handle the response so we ignore it.
+    if (!HasUnprocessedPendingResponse()) {
+      NOTREACHED();
+      return;
+    }
   }
 
-  // If this occurs, the server has broken our response ordering agreement. We
-  // should not crash but we cannot handle the response so we ignore it.
-  if (!HasUnprocessedPendingResponse()) {
-    NOTREACHED();
+  AssistantResponse* response = GetResponseForActiveInteraction();
+  response->AddUiElement(std::make_unique<AssistantTextElement>(text));
+
+  if (IsResponseProcessingV2Enabled()) {
+    // If |response| is pending, commit it to cause the response for the
+    // previous interaction, if one exists, to be animated off stage and the new
+    // |response| to begin rendering.
+    if (response == model_.pending_response())
+      model_.CommitPendingResponse();
+  }
+}
+
+void AssistantInteractionController::OnTimersResponse(
+    const std::vector<std::string>& timer_ids) {
+  DCHECK(IsTimersV2Enabled());
+  if (!HasActiveInteraction())
     return;
+
+  if (!IsResponseProcessingV2Enabled()) {
+    // If this occurs, the server has broken our response ordering agreement. We
+    // should not crash but we cannot handle the response so we ignore it.
+    if (!HasUnprocessedPendingResponse()) {
+      NOTREACHED();
+      return;
+    }
   }
 
-  model_.pending_response()->AddUiElement(
-      std::make_unique<AssistantTextElement>(response));
+  AssistantResponse* response = GetResponseForActiveInteraction();
+  response->AddUiElement(std::make_unique<AssistantTimersElement>(timer_ids));
+
+  if (IsResponseProcessingV2Enabled()) {
+    // If |response| is pending, commit it to cause the response for the
+    // previous interaction, if one exists, to be animated off stage and the new
+    // |response| to begin rendering.
+    if (response == model_.pending_response())
+      model_.CommitPendingResponse();
+  }
 }
 
 void AssistantInteractionController::OnSpeechRecognitionStarted() {}
@@ -595,45 +669,55 @@ void AssistantInteractionController::OnSpeechLevelUpdated(float speech_level) {
 }
 
 void AssistantInteractionController::OnTtsStarted(bool due_to_error) {
-  if (model_.interaction_state() != InteractionState::kActive) {
+  if (!HasActiveInteraction())
     return;
-  }
 
   // Commit the pending query in whatever state it's in. In most cases the
   // pending query is already committed, but we must always commit the pending
-  // query before finalizing a pending result.
-  if (model_.pending_query().type() != AssistantQueryType::kNull) {
+  // query before committing a pending response.
+  if (model_.pending_query().type() != AssistantQueryType::kNull)
     model_.CommitPendingQuery();
-  }
+
+  AssistantResponse* response = GetResponseForActiveInteraction();
 
   if (due_to_error) {
     // In the case of an error occurring during a voice interaction, this is our
     // earliest indication that the mic has closed.
     model_.SetMicState(MicState::kClosed);
 
-    // It is possible that an error Tts could be sent in addition to server Tts.
-    // In that case, the pending_response may have already been finalized.
-    if (!model_.pending_response())
-      model_.SetPendingResponse(base::MakeRefCounted<AssistantResponse>());
+    if (!IsResponseProcessingV2Enabled()) {
+      // It is possible that an error Tts could be sent in addition to server
+      // Tts. In that case the pending_response may have already been committed.
+      if (!model_.pending_response()) {
+        model_.SetPendingResponse(base::MakeRefCounted<AssistantResponse>());
+        response = model_.pending_response();
+      }
+    }
 
     // Add an error message to the response.
-    model_.pending_response()->AddUiElement(
-        std::make_unique<AssistantTextElement>(
-            l10n_util::GetStringUTF8(IDS_ASH_ASSISTANT_ERROR_GENERIC)));
+    response->AddUiElement(std::make_unique<AssistantTextElement>(
+        l10n_util::GetStringUTF8(IDS_ASH_ASSISTANT_ERROR_GENERIC)));
   }
 
-  model_.pending_response()->set_has_tts(true);
+  response->set_has_tts(true);
+
+  if (IsResponseProcessingV2Enabled()) {
+    // If |response| is pending, commit it to cause the response for the
+    // previous interaction, if one exists, to be animated off stage and the new
+    // |response| to begin rendering.
+    if (response == model_.pending_response())
+      model_.CommitPendingResponse();
+    return;
+  }
 
   // We have an agreement with the server that TTS will always be the last part
-  // of an interaction to be processed. To be timely in updating UI, we use
-  // this as an opportunity to begin processing the Assistant response.
-  // TODO(xiaohuic): sometimes we actually do receive additional TTS responses,
-  // need to properly handle those cases.
+  // of an interaction to be processed. To be timely in updating UI, we use this
+  // as an opportunity to begin processing the Assistant response.
   OnProcessPendingResponse();
 }
 
 void AssistantInteractionController::OnWaitStarted() {
-  if (model_.interaction_state() != InteractionState::kActive)
+  if (!HasActiveInteraction())
     return;
 
   // Commit the pending query in whatever state it's in. Note that the server
@@ -645,7 +729,16 @@ void AssistantInteractionController::OnWaitStarted() {
   if (model_.pending_query().type() != AssistantQueryType::kNull)
     model_.CommitPendingQuery();
 
-  // Finalize the pending response so that the UI is flushed to the screen while
+  if (IsResponseProcessingV2Enabled()) {
+    // If our response is pending, commit it to cause the response for the
+    // previous interaction, if one exists, to be animated off stage and the new
+    // |response| to begin rendering.
+    if (model_.pending_response())
+      model_.CommitPendingResponse();
+    return;
+  }
+
+  // Commit the pending response so that the UI is flushed to the screen while
   // the wait occurs, giving the user time to digest the current response before
   // the routine begins its next leg in the next interaction.
   OnProcessPendingResponse();
@@ -653,8 +746,9 @@ void AssistantInteractionController::OnWaitStarted() {
 
 void AssistantInteractionController::OnOpenUrlResponse(const GURL& url,
                                                        bool in_background) {
-  if (model_.interaction_state() != InteractionState::kActive)
+  if (!HasActiveInteraction())
     return;
+
   // We need to indicate that the navigation attempt is occurring as a result of
   // a server response so that we can differentiate from navigation attempts
   // initiated by direct user interaction.
@@ -664,8 +758,10 @@ void AssistantInteractionController::OnOpenUrlResponse(const GURL& url,
 void AssistantInteractionController::OnOpenAppResponse(
     chromeos::assistant::mojom::AndroidAppInfoPtr app_info,
     OnOpenAppResponseCallback callback) {
-  if (model_.interaction_state() != InteractionState::kActive)
+  if (!HasActiveInteraction()) {
+    std::move(callback).Run(false);
     return;
+  }
 
   auto* android_helper = AndroidIntentHelper::GetInstance();
   if (!android_helper) {
@@ -724,12 +820,19 @@ void AssistantInteractionController::OnDialogPlateContentsCommitted(
 }
 
 bool AssistantInteractionController::HasUnprocessedPendingResponse() {
+  DCHECK(!IsResponseProcessingV2Enabled());
   return model_.pending_response() &&
          model_.pending_response()->processing_state() ==
              AssistantResponse::ProcessingState::kUnprocessed;
 }
 
+bool AssistantInteractionController::HasActiveInteraction() const {
+  return model_.interaction_state() == InteractionState::kActive;
+}
+
 void AssistantInteractionController::OnProcessPendingResponse() {
+  DCHECK(!IsResponseProcessingV2Enabled());
+
   // It's possible that the pending response is already being processed. This
   // can occur if the response contains TTS, as we begin processing before the
   // interaction is finished in such cases to reduce UI latency.
@@ -738,50 +841,44 @@ void AssistantInteractionController::OnProcessPendingResponse() {
     return;
   }
 
-  // Bind an interface to a navigable contents factory that is needed for
-  // processing card elements.
-  mojo::Remote<content::mojom::NavigableContentsFactory> factory;
-  assistant_controller_->GetNavigableContentsFactory(
-      factory.BindNewPipeAndPassReceiver());
-
   // Start processing.
-  model_.pending_response()->Process(
-      std::move(factory),
-      base::BindOnce(
-          &AssistantInteractionController::OnPendingResponseProcessed,
-          weak_factory_.GetWeakPtr()));
+  model_.pending_response()->Process(base::BindOnce(
+      &AssistantInteractionController::OnPendingResponseProcessed,
+      weak_factory_.GetWeakPtr()));
 }
 
-void AssistantInteractionController::OnPendingResponseProcessed(bool success) {
-  if (!success)
+void AssistantInteractionController::OnPendingResponseProcessed(
+    bool is_completed) {
+  DCHECK(!IsResponseProcessingV2Enabled());
+
+  // If the response processing has been interrupted and not completed, we will
+  // ignore it and don't flush to the UI. This can happen if two queries were
+  // sent close enough, and the interaction started by the second query arrived
+  // before the first query's response even finished processing.
+  if (!is_completed)
     return;
 
   // Once the pending response has been processed it is safe to flush to the UI.
-  // We accomplish this by finalizing the pending response.
-  model_.FinalizePendingResponse();
+  // We accomplish this by committing the pending response.
+  model_.CommitPendingResponse();
 }
 
 void AssistantInteractionController::OnUiVisible(
     AssistantEntryPoint entry_point) {
-  DCHECK_EQ(AssistantVisibility::kVisible,
-            assistant_controller_->ui_controller()->model()->visibility());
+  DCHECK(IsVisible());
 
-  const bool launch_with_mic_open =
-      AssistantState::Get()->launch_with_mic_open().value_or(false);
-  const bool prefer_voice = launch_with_mic_open || IsTabletMode();
+  ++number_of_times_shown_;
 
   // We don't explicitly start a new voice interaction if the entry point
   // is hotword since in such cases a voice interaction will already be in
   // progress.
-  if (assistant::util::IsVoiceEntryPoint(entry_point, prefer_voice) &&
+  if (assistant::util::IsVoiceEntryPoint(entry_point, IsPreferVoice()) &&
       entry_point != AssistantEntryPoint::kHotword) {
-    should_attempt_warmer_welcome_ = false;
     StartVoiceInteraction();
     return;
   }
 
   if (entry_point == AssistantEntryPoint::kProactiveSuggestions) {
-    should_attempt_warmer_welcome_ = false;
     // When entering Assistant with a proactive suggestions interaction, there
     // will be no server latency as the response for the interaction has already
     // been cached on the client. To avoid jank, we need to post a task to start
@@ -797,65 +894,48 @@ void AssistantInteractionController::OnUiVisible(
     return;
   }
 
-  if (entry_point == AssistantEntryPoint::kStylus) {
-    should_attempt_warmer_welcome_ = false;
-    // When the embedded Assistant feature is enabled, we call ShowUi(kStylus)
-    // OnHighlighterSelectionRecognized. But we are not actually using stylus.
-    if (!app_list_features::IsEmbeddedAssistantUIEnabled())
-      model_.SetInputModality(InputModality::kStylus);
-    return;
-  }
-
-  if (!chromeos::assistant::features::IsWarmerWelcomeEnabled())
-    return;
-
-  should_attempt_warmer_welcome_ =
-      should_attempt_warmer_welcome_ &&
-      assistant::util::ShouldAttemptWarmerWelcome(entry_point);
-
-  // Explicitly check the interaction state to ensure warmer welcome will
-  // not interrupt any ongoing active interactions. This happens, for example,
-  // when the first Assistant launch of the current user session is trigger by
-  // Assistant notification, or directly sending query without showing Ui
-  // during integration test.
-  if (model_.interaction_state() == InteractionState::kActive)
-    should_attempt_warmer_welcome_ = false;
-
-  if (!should_attempt_warmer_welcome_)
-    return;
-
-  // TODO(yileili): Currently WW is only triggered when the first Assistant
-  // launch of the user session does not automatically start an interaction that
-  // would otherwise cause us to interrupt the user. Need further UX design to
-  // attempt WW after the first interaction.
-  auto* pref_service =
-      Shell::Get()->session_controller()->GetLastActiveUserPrefService();
-
-  DCHECK(pref_service);
-
-  auto num_warmer_welcome_triggered =
-      pref_service->GetInteger(prefs::kAssistantNumWarmerWelcomeTriggered);
-  if (num_warmer_welcome_triggered < kWarmerWelcomesMaxTimesTriggered) {
-    // If the user has opted to launch Assistant with the mic open, we can
-    // reasonably assume there is an expectation of TTS.
-    assistant_->StartWarmerWelcomeInteraction(
-        num_warmer_welcome_triggered,
-        /*allow_tts=*/launch_with_mic_open);
-    pref_service->SetInteger(prefs::kAssistantNumWarmerWelcomeTriggered,
-                             ++num_warmer_welcome_triggered);
-  }
-  should_attempt_warmer_welcome_ = false;
+  if (ShouldAttemptWarmerWelcome(entry_point))
+    AttemptWarmerWelcome();
 }
 
-void AssistantInteractionController::StartMetalayerInteraction(
-    const gfx::Rect& region) {
-  StopActiveInteraction(false);
+bool AssistantInteractionController::ShouldAttemptWarmerWelcome(
+    AssistantEntryPoint entry_point) const {
+  if (!chromeos::assistant::features::IsWarmerWelcomeEnabled())
+    return false;
 
-  model_.SetPendingQuery(std::make_unique<AssistantTextQuery>(
-      l10n_util::GetStringUTF8(IDS_ASH_ASSISTANT_CHIP_WHATS_ON_MY_SCREEN),
-      AssistantQuerySource::kStylus));
+  if (number_of_times_shown_ > 1)
+    return false;
 
-  assistant_->StartMetalayerInteraction(region);
+  if (!assistant::util::ShouldAttemptWarmerWelcome(entry_point))
+    return false;
+
+  // Explicitly check the interaction state to ensure warmer welcome will not
+  // interrupt any ongoing active interactions. This happens, for example, when
+  // the first Assistant launch of the current user session is trigger by
+  // Assistant notification, or directly sending query without showing Ui during
+  // integration test.
+  if (HasActiveInteraction())
+    return false;
+
+  if (num_warmer_welcome_triggered() >= kWarmerWelcomesMaxTimesTriggered)
+    return false;
+
+  return true;
+}
+
+void AssistantInteractionController::AttemptWarmerWelcome() {
+  // TODO(yileili): Currently WW is only triggered when the first Assistant
+  // launch of the user session does not automatically start an interaction that
+  // would otherwise cause us to interrupt the user.  Need further UX design to
+  // attempt WW after the first interaction.
+
+  // If the user has opted to launch Assistant with the mic open, we
+  // can reasonably assume there is an expectation of TTS.
+  bool allow_tts = launch_with_mic_open();
+
+  assistant_->StartWarmerWelcomeInteraction(num_warmer_welcome_triggered(),
+                                            allow_tts);
+  IncrementNumWarmerWelcomeTriggered();
 }
 
 void AssistantInteractionController::StartProactiveSuggestionsInteraction(
@@ -874,10 +954,12 @@ void AssistantInteractionController::StartProactiveSuggestionsInteraction(
   const std::string& description = proactive_suggestions->description();
   const std::string& search_query = proactive_suggestions->search_query();
 
-  model_.SetPendingQuery(std::make_unique<AssistantTextQuery>(description));
+  model_.SetPendingQuery(std::make_unique<AssistantTextQuery>(
+      description, AssistantQuerySource::kProactiveSuggestions));
 
   OnInteractionStarted(AssistantInteractionMetadata::New(
-      AssistantInteractionType::kText, /*query=*/description));
+      AssistantInteractionType::kText,
+      AssistantQuerySource::kProactiveSuggestions, /*query=*/description));
 
   OnHtmlResponse(proactive_suggestions->html(), /*fallback=*/std::string());
 
@@ -892,6 +974,8 @@ void AssistantInteractionController::StartProactiveSuggestionsInteraction(
 }
 
 void AssistantInteractionController::StartScreenContextInteraction(
+    bool include_assistant_structure,
+    const gfx::Rect& region,
     AssistantQuerySource query_source) {
   StopActiveInteraction(false);
 
@@ -899,20 +983,33 @@ void AssistantInteractionController::StartScreenContextInteraction(
       l10n_util::GetStringUTF8(IDS_ASH_ASSISTANT_CHIP_WHATS_ON_MY_SCREEN),
       query_source));
 
-  // Note that screen context was cached when the UI was launched.
-  assistant_->StartCachedScreenContextInteraction();
+  assistant_controller_->screen_context_controller()->RequestScreenContext(
+      include_assistant_structure, region,
+      base::BindOnce(
+          [](const base::WeakPtr<AssistantInteractionController>& self,
+             ax::mojom::AssistantStructurePtr assistant_structure,
+             const std::vector<uint8_t>& screenshot) {
+            if (!self)
+              return;
+
+            self->assistant_->StartScreenContextInteraction(
+                std::move(assistant_structure), screenshot);
+          },
+          screen_context_request_factory_.GetWeakPtr()));
 }
 
 void AssistantInteractionController::StartTextInteraction(
-    const std::string text,
+    const std::string& text,
     bool allow_tts,
     AssistantQuerySource query_source) {
+  DCHECK(assistant_);
+
   StopActiveInteraction(false);
 
   model_.SetPendingQuery(
       std::make_unique<AssistantTextQuery>(text, query_source));
 
-  assistant_->StartTextInteraction(text, allow_tts);
+  assistant_->StartTextInteraction(text, query_source, allow_tts);
 }
 
 void AssistantInteractionController::StartVoiceInteraction() {
@@ -932,12 +1029,39 @@ void AssistantInteractionController::StopActiveInteraction(
   model_.SetInteractionState(InteractionState::kInactive);
   model_.ClearPendingQuery();
 
+  // Abort any request in progress.
+  screen_context_request_factory_.InvalidateWeakPtrs();
+
   assistant_->StopActiveInteraction(cancel_conversation);
 
   // Because we are stopping an interaction in progress, we discard any pending
-  // response for it that is cached to prevent it from being finalized when the
+  // response for it that is cached to prevent it from being committed when the
   // interaction is finished.
   model_.ClearPendingResponse();
+}
+
+InputModality AssistantInteractionController::GetDefaultInputModality() const {
+  return IsPreferVoice() ? InputModality::kVoice : InputModality::kKeyboard;
+}
+
+AssistantResponse*
+AssistantInteractionController::GetResponseForActiveInteraction() {
+  // Returns the response for the active interaction. In response processing v2,
+  // this may be the pending response (if no client ops have yet been received)
+  // or else is the committed response. In response processing v2, this is
+  // always the pending response.
+  return IsResponseProcessingV2Enabled() ? model_.pending_response()
+                                               ? model_.pending_response()
+                                               : model_.response()
+                                         : model_.pending_response();
+}
+
+AssistantVisibility AssistantInteractionController::GetVisibility() const {
+  return assistant_controller_->ui_controller()->model()->visibility();
+}
+
+bool AssistantInteractionController::IsVisible() const {
+  return GetVisibility() == AssistantVisibility::kVisible;
 }
 
 }  // namespace ash

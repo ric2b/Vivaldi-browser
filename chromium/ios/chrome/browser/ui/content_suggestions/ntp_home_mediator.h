@@ -33,10 +33,11 @@ class AuthenticationService;
 @protocol LogoVendor;
 @protocol NTPHomeConsumer;
 @class NTPHomeMetrics;
-@protocol OmniboxFocuser;
+@protocol OmniboxCommands;
 class TemplateURLService;
 @protocol SnackbarCommands;
-class UrlLoadingService;
+class UrlLoadingBrowserAgent;
+class VoiceSearchAvailability;
 
 // Mediator for the NTP Home panel, handling the interactions with the
 // suggestions.
@@ -46,19 +47,21 @@ class UrlLoadingService;
                ContentSuggestionsHeaderViewControllerDelegate>
 
 - (nullable instancetype)
-      initWithWebState:(nonnull web::WebState*)webState
-    templateURLService:(nonnull TemplateURLService*)templateURLService
-     urlLoadingService:(nonnull UrlLoadingService*)urlLoadingService
-           authService:(nonnull AuthenticationService*)authService
-       identityManager:(nonnull signin::IdentityManager*)identityManager
-            logoVendor:(nonnull id<LogoVendor>)logoVendor
+           initWithWebState:(nonnull web::WebState*)webState
+         templateURLService:(nonnull TemplateURLService*)templateURLService
+                  URLLoader:(nonnull UrlLoadingBrowserAgent*)URLLoader
+                authService:(nonnull AuthenticationService*)authService
+            identityManager:(nonnull signin::IdentityManager*)identityManager
+                 logoVendor:(nonnull id<LogoVendor>)logoVendor
+    voiceSearchAvailability:
+        (nonnull VoiceSearchAvailability*)voiceSearchAvailability
     NS_DESIGNATED_INITIALIZER;
 
 - (nullable instancetype)init NS_UNAVAILABLE;
 
 // Dispatcher.
 @property(nonatomic, weak, nullable)
-    id<ApplicationCommands, BrowserCommands, OmniboxFocuser, SnackbarCommands>
+    id<ApplicationCommands, BrowserCommands, OmniboxCommands, SnackbarCommands>
         dispatcher;
 // Suggestions service used to get the suggestions.
 @property(nonatomic, assign, nonnull)
@@ -84,6 +87,12 @@ class UrlLoadingService;
 
 // Cleans the mediator.
 - (void)shutdown;
+
+// The location bar has lost focus.
+- (void)locationBarDidResignFirstResponder;
+
+// Tell location bar has taken focus.
+- (void)locationBarDidBecomeFirstResponder;
 
 @end
 

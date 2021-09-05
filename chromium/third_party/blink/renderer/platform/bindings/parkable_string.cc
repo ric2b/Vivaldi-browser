@@ -10,11 +10,13 @@
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/process/memory.h"
 #include "base/single_thread_task_runner.h"
 #include "base/timer/elapsed_timer.h"
 #include "base/trace_event/trace_event.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/platform/bindings/parkable_string_manager.h"
+#include "third_party/blink/renderer/platform/crypto.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/web_process_memory_dump.h"
 #include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread.h"
@@ -184,18 +186,60 @@ enum class ParkableStringImpl::Status : uint8_t {
   kLocked
 };
 
-ParkableStringImpl::ParkableStringImpl(scoped_refptr<StringImpl>&& impl,
-                                       ParkableState parkable)
+ParkableStringImpl::ParkableMetadata::ParkableMetadata(
+    String string,
+    std::unique_ptr<SecureDigest> digest)
     : mutex_(),
       lock_depth_(0),
       state_(State::kUnparked),
-      string_(std::move(impl)),
       compressed_(nullptr),
+      digest_(*digest),
       is_young_(true),
-      may_be_parked_(parkable == ParkableState::kParkable),
-      is_8bit_(string_.Is8Bit()),
-      length_(string_.length()),
-      hash_(string_.Impl()->GetHash())
+      is_8bit_(string.Is8Bit()),
+      length_(string.length()) {}
+
+// static
+std::unique_ptr<ParkableStringImpl::SecureDigest>
+ParkableStringImpl::HashString(StringImpl* string) {
+  DigestValue digest_result;
+  bool ok = ComputeDigest(kHashAlgorithmSha256,
+                          static_cast<const char*>(string->Bytes()),
+                          string->CharactersSizeInBytes(), digest_result);
+
+  // The only case where this can return false in BoringSSL is an allocation
+  // failure of the temporary data required for hashing. In this case, there
+  // is nothing better to do than crashing.
+  if (!ok) {
+    // Don't know the exact size, the SHA256 spec hints at ~64 (block size)
+    // + 32 (digest) bytes.
+    base::TerminateBecauseOutOfMemory(64 + kDigestSize);
+  }
+  // Unless SHA256 is... not 256 bits?
+  DCHECK(digest_result.size() == kDigestSize);
+  return std::make_unique<SecureDigest>(digest_result);
+}
+
+// static
+scoped_refptr<ParkableStringImpl> ParkableStringImpl::MakeNonParkable(
+    scoped_refptr<StringImpl>&& impl) {
+  return base::AdoptRef(new ParkableStringImpl(std::move(impl), nullptr));
+}
+
+// static
+scoped_refptr<ParkableStringImpl> ParkableStringImpl::MakeParkable(
+    scoped_refptr<StringImpl>&& impl,
+    std::unique_ptr<SecureDigest> digest) {
+  DCHECK(!!digest);
+  return base::AdoptRef(
+      new ParkableStringImpl(std::move(impl), std::move(digest)));
+}
+
+ParkableStringImpl::ParkableStringImpl(scoped_refptr<StringImpl>&& impl,
+                                       std::unique_ptr<SecureDigest> digest)
+    : string_(std::move(impl)),
+      metadata_(digest ? std::make_unique<ParkableMetadata>(string_,
+                                                            std::move(digest))
+                       : nullptr)
 #if DCHECK_IS_ON()
       ,
       owning_thread_(CurrentThread())
@@ -211,17 +255,18 @@ ParkableStringImpl::~ParkableStringImpl() {
 
   DCHECK_EQ(0, lock_depth_for_testing());
   AsanUnpoisonString(string_);
-  DCHECK(state_ == State::kParked || state_ == State::kUnparked);
+  DCHECK(metadata_->state_ == State::kParked ||
+         metadata_->state_ == State::kUnparked);
 
   ParkableStringManager::Instance().Remove(this);
 }
 
 void ParkableStringImpl::Lock() {
-  if (!may_be_parked_)
+  if (!may_be_parked())
     return;
 
-  MutexLocker locker(mutex_);
-  lock_depth_ += 1;
+  MutexLocker locker(metadata_->mutex_);
+  metadata_->lock_depth_ += 1;
   // Make young as this is a strong (but not certain) indication that the string
   // will be accessed soon.
   MakeYoung();
@@ -231,8 +276,8 @@ void ParkableStringImpl::Lock() {
 
 void ParkableStringImpl::LockWithoutMakingYoung() {
   DCHECK(may_be_parked());
-  MutexLocker locker(mutex_);
-  lock_depth_ += 1;
+  MutexLocker locker(metadata_->mutex_);
+  metadata_->lock_depth_ += 1;
 }
 
 #endif  // defined(ADDRESS_SANITIZER)
@@ -241,9 +286,9 @@ void ParkableStringImpl::Unlock() {
   if (!may_be_parked())
     return;
 
-  MutexLocker locker(mutex_);
-  DCHECK_GT(lock_depth_, 0);
-  lock_depth_ -= 1;
+  MutexLocker locker(metadata_->mutex_);
+  DCHECK_GT(metadata_->lock_depth_, 0);
+  metadata_->lock_depth_ -= 1;
 
 #if defined(ADDRESS_SANITIZER) && DCHECK_IS_ON()
   // There are no external references to the data, nobody should touch the data.
@@ -265,62 +310,8 @@ void ParkableStringImpl::Unlock() {
 
 void ParkableStringImpl::PurgeMemory() {
   AssertOnValidThread();
-  if (state_ == State::kUnparked)
-    compressed_ = nullptr;
-}
-
-bool ParkableStringImpl::Equal(const ParkableStringImpl& rhs) const {
-  // This is called when two strings share the same bucket. Either string can
-  // be parked.
-  //
-  // As a consequence, for a hash collision or true equality, a string can be
-  // unparked in this function, making it expensive (see below).
-  AssertOnValidThread();
-
-  if (this == &rhs)
-    return true;
-
-  // The hash is actually only 24 bits. If collisions become an issue, replace
-  // it either with a stronger one (murmur2 for instance), or switch to SHA256
-  // and don't check for equality.
-  if (GetHash() != rhs.GetHash() || length() != rhs.length())
-    return false;
-
-  // Can be expensive.
-  //
-  // Using the transient version because otherwise a lot of code in
-  // ParkableStringManager becomes more reentrant than it already is, and many
-  // parts of ParkableStringImpl would become mutable.
-  // For instance, ToString() can unpark a string, and that would call into
-  // ParkableStringManager::OnUnparked(), from ParkableStringManager::Add().
-  //
-  // Note that we only get here in two cases:
-  // - Hash collision
-  // - True equality
-  //
-  // Assuming that collisions are rare, unparking for true equality is not too
-  // bad, as the obvious alternative is to compare a cryptographic hash. On
-  // low-end ARM devices, unparking is roughly as expensive as SHA256, but we
-  // only do it for one of the two strings, so this is still expected to be
-  // faster than SHA256, at the cost of more memory (since both strings are held
-  // in memory temporarily).
-  return ToStringTransient() == rhs.ToStringTransient();
-}
-
-bool ParkableStringImpl::Equal(scoped_refptr<StringImpl> string) const {
-  // See above for comments about cost of this function. This is called from
-  // ParkableStringManager::Add() through ParkableStringImplTranslator.
-  AssertOnValidThread();
-
-  if (GetHash() != string->GetHash() || length() != string->length())
-    return false;
-
-  return ToStringTransient() == String(string);
-}
-
-void ParkableStringImpl::MakeYoung() {
-  mutex_.AssertAcquired();
-  is_young_ = true;
+  if (metadata_->state_ == State::kUnparked)
+    metadata_->compressed_ = nullptr;
 }
 
 const String& ParkableStringImpl::ToString() {
@@ -328,40 +319,51 @@ const String& ParkableStringImpl::ToString() {
   if (!may_be_parked())
     return string_;
 
-  MutexLocker locker(mutex_);
+  MutexLocker locker(metadata_->mutex_);
   MakeYoung();
   AsanUnpoisonString(string_);
   Unpark();
   return string_;
 }
 
-String ParkableStringImpl::ToStringTransient() const {
-  AssertOnValidThread();
-  if (!is_parked()) {
-    AsanUnpoisonString(string_);
-    return string_;
-  }
-
-  return UnparkInternal();
-}
-
 unsigned ParkableStringImpl::CharactersSizeInBytes() const {
   AssertOnValidThread();
-  return length_ * (is_8bit() ? sizeof(LChar) : sizeof(UChar));
+  if (!may_be_parked())
+    return string_.CharactersSizeInBytes();
+
+  return metadata_->length_ * (is_8bit() ? sizeof(LChar) : sizeof(UChar));
+}
+
+size_t ParkableStringImpl::MemoryFootprintForDump() const {
+  AssertOnValidThread();
+  size_t size = sizeof(ParkableStringImpl);
+
+  if (!may_be_parked())
+    return size + string_.CharactersSizeInBytes();
+
+  size += sizeof(ParkableMetadata);
+
+  if (!is_parked())
+    size += string_.CharactersSizeInBytes();
+
+  if (metadata_->compressed_)
+    size += metadata_->compressed_->size();
+
+  return size;
 }
 
 ParkableStringImpl::AgeOrParkResult ParkableStringImpl::MaybeAgeOrParkString() {
-  MutexLocker locker(mutex_);
+  MutexLocker locker(metadata_->mutex_);
   AssertOnValidThread();
   DCHECK(may_be_parked());
   DCHECK(!is_parked());
 
   Status status = CurrentStatus();
-  if (is_young_) {
+  if (metadata_->is_young_) {
     if (status == Status::kUnreferencedExternally)
-      is_young_ = false;
+      metadata_->is_young_ = false;
   } else {
-    if (state_ == State::kParkingInProgress)
+    if (metadata_->state_ == State::kParkingInProgress)
       return AgeOrParkResult::kSuccessOrTransientFailure;
 
     if (CanParkNow()) {
@@ -378,16 +380,17 @@ ParkableStringImpl::AgeOrParkResult ParkableStringImpl::MaybeAgeOrParkString() {
 }
 
 bool ParkableStringImpl::Park(ParkingMode mode) {
-  MutexLocker locker(mutex_);
+  MutexLocker locker(metadata_->mutex_);
   AssertOnValidThread();
   DCHECK(may_be_parked());
 
-  if (state_ == State::kParkingInProgress || state_ == State::kParked)
+  if (metadata_->state_ == State::kParkingInProgress ||
+      metadata_->state_ == State::kParked)
     return true;
 
   // Making the string old to cancel parking if it is accessed/locked before
   // parking is complete.
-  is_young_ = false;
+  metadata_->is_young_ = false;
   if (!CanParkNow())
     return false;
 
@@ -395,15 +398,42 @@ bool ParkableStringImpl::Park(ParkingMode mode) {
   return true;
 }
 
+bool ParkableStringImpl::is_parked() const {
+  DCHECK(may_be_parked());
+  return metadata_->state_ == State::kParked;
+}
+
+void ParkableStringImpl::MakeYoung() {
+  metadata_->is_young_ = true;
+}
+
+ParkableStringImpl::Status ParkableStringImpl::CurrentStatus() const {
+  AssertOnValidThread();
+  DCHECK(may_be_parked());
+  // Can park iff:
+  // - |this| is not locked.
+  // - There are no external reference to |string_|. Since |this| holds a
+  //   reference to |string_|, it must the only one.
+  if (metadata_->lock_depth_ != 0)
+    return Status::kLocked;
+  if (!string_.Impl()->HasOneRef())
+    return Status::kTooManyReferences;
+  return Status::kUnreferencedExternally;
+}
+
+bool ParkableStringImpl::CanParkNow() const {
+  return CurrentStatus() == Status::kUnreferencedExternally &&
+         !metadata_->is_young_;
+}
+
 void ParkableStringImpl::ParkInternal(ParkingMode mode) {
-  mutex_.AssertAcquired();
-  DCHECK_EQ(State::kUnparked, state_);
-  DCHECK(!is_young_);
+  DCHECK_EQ(State::kUnparked, metadata_->state_);
+  DCHECK(!metadata_->is_young_);
   DCHECK(CanParkNow());
 
   // Parking can proceed synchronously.
   if (has_compressed_data()) {
-    state_ = State::kParked;
+    metadata_->state_ = State::kParked;
     ParkableStringManager::Instance().OnParked(this);
 
     // Must unpoison the memory before releasing it.
@@ -420,45 +450,21 @@ void ParkableStringImpl::ParkInternal(ParkingMode mode) {
         FROM_HERE,
         CrossThreadBindOnce(&ParkableStringImpl::CompressInBackground,
                             WTF::Passed(std::move(params))));
-    state_ = State::kParkingInProgress;
+    metadata_->state_ = State::kParkingInProgress;
   }
-}
-
-bool ParkableStringImpl::is_parked() const {
-  return state_ == State::kParked;
-}
-
-ParkableStringImpl::Status ParkableStringImpl::CurrentStatus() const {
-  AssertOnValidThread();
-  mutex_.AssertAcquired();
-  DCHECK(may_be_parked());
-  // Can park iff:
-  // - |this| is not locked.
-  // - There are no external reference to |string_|. Since |this| holds a
-  //   reference to |string_|, it must the only one.
-  if (lock_depth_ != 0)
-    return Status::kLocked;
-  if (!string_.Impl()->HasOneRef())
-    return Status::kTooManyReferences;
-  return Status::kUnreferencedExternally;
-}
-
-bool ParkableStringImpl::CanParkNow() const {
-  return CurrentStatus() == Status::kUnreferencedExternally && !is_young_;
 }
 
 void ParkableStringImpl::Unpark() {
   AssertOnValidThread();
   DCHECK(may_be_parked());
-  mutex_.AssertAcquired();
-  if (state_ != State::kParked)
+  if (metadata_->state_ != State::kParked)
     return;
 
   TRACE_EVENT1("blink", "ParkableStringImpl::Unpark", "size",
                CharactersSizeInBytes());
-  DCHECK(compressed_);
+  DCHECK(metadata_->compressed_);
   string_ = UnparkInternal();
-  state_ = State::kUnparked;
+  metadata_->state_ = State::kUnparked;
   ParkableStringManager::Instance().OnUnparked(this);
 }
 
@@ -470,8 +476,8 @@ String ParkableStringImpl::UnparkInternal() const {
 
   base::ElapsedTimer timer;
   base::StringPiece compressed_string_piece(
-      reinterpret_cast<const char*>(compressed_->data()),
-      compressed_->size() * sizeof(uint8_t));
+      reinterpret_cast<const char*>(metadata_->compressed_->data()),
+      metadata_->compressed_->size() * sizeof(uint8_t));
   String uncompressed;
   base::StringPiece uncompressed_string_piece;
   size_t size = CharactersSizeInBytes();
@@ -513,15 +519,15 @@ void ParkableStringImpl::OnParkingCompleteOnMainThread(
     std::unique_ptr<CompressionTaskParams> params,
     std::unique_ptr<Vector<uint8_t>> compressed,
     base::TimeDelta parking_thread_time) {
-  MutexLocker locker(mutex_);
-  DCHECK_EQ(State::kParkingInProgress, state_);
+  MutexLocker locker(metadata_->mutex_);
+  DCHECK_EQ(State::kParkingInProgress, metadata_->state_);
 
   // Always keep the compressed data. Compression is expensive, so even if the
   // uncompressed representation cannot be discarded now, avoid compressing
   // multiple times. This will allow synchronous parking next time.
-  DCHECK(!compressed_);
+  DCHECK(!metadata_->compressed_);
   if (compressed)
-    compressed_ = std::move(compressed);
+    metadata_->compressed_ = std::move(compressed);
 
   // Between |Park()| and now, things may have happened:
   // 1. |ToString()| or
@@ -529,15 +535,15 @@ void ParkableStringImpl::OnParkingCompleteOnMainThread(
   //
   // Both of these will make the string young again, and if so we don't
   // discard the compressed representation yet.
-  if (CanParkNow() && compressed_) {
-    state_ = State::kParked;
+  if (CanParkNow() && metadata_->compressed_) {
+    metadata_->state_ = State::kParked;
     ParkableStringManager::Instance().OnParked(this);
 
     // Must unpoison the memory before releasing it.
     AsanUnpoisonString(string_);
     string_ = String();
   } else {
-    state_ = State::kUnparked;
+    metadata_->state_ = State::kUnparked;
   }
   // Record the time no matter whether the string was parked or not, as the
   // parking cost was paid.
@@ -628,6 +634,7 @@ void ParkableStringImpl::CompressInBackground(
   RecordStatistics(size, timer.Elapsed(), ParkingAction::kParked);
 }
 
+
 ParkableString::ParkableString(scoped_refptr<StringImpl>&& impl) {
   if (!impl) {
     impl_ = nullptr;
@@ -638,8 +645,7 @@ ParkableString::ParkableString(scoped_refptr<StringImpl>&& impl) {
   if (is_parkable) {
     impl_ = ParkableStringManager::Instance().Add(std::move(impl));
   } else {
-    impl_ = base::MakeRefCounted<ParkableStringImpl>(
-        std::move(impl), ParkableStringImpl::ParkableState::kNotParkable);
+    impl_ = ParkableStringImpl::MakeNonParkable(std::move(impl));
   }
 }
 
@@ -657,14 +663,16 @@ void ParkableString::Unlock() const {
 
 void ParkableString::OnMemoryDump(WebProcessMemoryDump* pmd,
                                   const String& name) const {
-  // Parkable strings are reported by ParkableStringManager.
-  if (!impl_ || may_be_parked())
+  if (!impl_)
     return;
 
   auto* dump = pmd->CreateMemoryAllocatorDump(name);
-  dump->AddScalar("size", "bytes", CharactersSizeInBytes());
-  pmd->AddSuballocation(dump->Guid(),
-                        String(WTF::Partitions::kAllocatedObjectPoolName));
+  dump->AddScalar("size", "bytes", impl_->MemoryFootprintForDump());
+
+  const char* parent_allocation =
+      may_be_parked() ? ParkableStringManager::kAllocatorDumpName
+                      : WTF::Partitions::kAllocatedObjectPoolName;
+  pmd->AddSuballocation(dump->Guid(), parent_allocation);
 }
 
 bool ParkableString::Is8Bit() const {

@@ -1,5 +1,0 @@
-specific_include_rules = {
-  "CoreAccountInfo.java": [
-    "+components/signin/core/browser/android/java/src/org/chromium/components/signin/AccountManagerFacade.java"
-  ],
-}

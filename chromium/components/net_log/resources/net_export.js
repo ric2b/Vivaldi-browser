@@ -15,29 +15,29 @@ document.addEventListener('DOMContentLoaded', onLoad);
  * This class handles the presentation of the net-export view. Used as a
  * singleton.
  */
-var NetExportView = (function() {
+const NetExportView = (function() {
   'use strict';
 
   // --------------------------------------------------------------------------
 
-  var kIdStateDivUninitialized = 'state-uninitialized';
-  var kIdStateDivInitial = 'state-initial';
-  var kIdStateDivLogging = 'state-logging';
-  var kIdStateDivStopped = 'state-stopped';
-  var kIdStartLoggingButton = 'start-logging';
-  var kIdStopLoggingButton = 'stop-logging';
-  var kIdEmailLogButton = 'mobile-email';
-  var kIdShowFileButton = 'show-file';
-  var kIdCaptureModeLogging = 'capture-mode-logging';
-  var kIdFilePathLogging = 'file-path-logging';
-  var kIdCaptureModeStopped = 'capture-mode-stopped';
-  var kIdFilePathStoppedLogging = 'file-path-stopped';
-  var kIdStartOverButton = 'startover';
-  var kIdPrivacyReadMoreLink = 'privacy-read-more-link';
-  var kIdPrivacyReadMoreDiv = 'privacy-read-more'
-  var kIdTooBigReadMoreLink = 'toobig-read-more-link';
-  var kIdTooBigReadMoreDiv = 'toobig-read-more'
-  var kIdLogMaxFileSizeInput = 'log-max-filesize'
+  const kIdStateDivUninitialized = 'state-uninitialized';
+  const kIdStateDivInitial = 'state-initial';
+  const kIdStateDivLogging = 'state-logging';
+  const kIdStateDivStopped = 'state-stopped';
+  const kIdStartLoggingButton = 'start-logging';
+  const kIdStopLoggingButton = 'stop-logging';
+  const kIdEmailLogButton = 'mobile-email';
+  const kIdShowFileButton = 'show-file';
+  const kIdCaptureModeLogging = 'capture-mode-logging';
+  const kIdFilePathLogging = 'file-path-logging';
+  const kIdCaptureModeStopped = 'capture-mode-stopped';
+  const kIdFilePathStoppedLogging = 'file-path-stopped';
+  const kIdStartOverButton = 'startover';
+  const kIdPrivacyReadMoreLink = 'privacy-read-more-link';
+  const kIdPrivacyReadMoreDiv = 'privacy-read-more';
+  const kIdTooBigReadMoreLink = 'toobig-read-more-link';
+  const kIdTooBigReadMoreDiv = 'toobig-read-more';
+  const kIdLogMaxFileSizeInput = 'log-max-filesize';
 
   /**
    * @constructor
@@ -56,16 +56,16 @@ var NetExportView = (function() {
     /**
      * Starts saving NetLog data to a file.
      */
-    onStartLogging_: function() {
+    onStartLogging_() {
       // Determine the capture mode to use.
-      var logMode =
+      const logMode =
           document.querySelector('input[name="log-mode"]:checked').value;
 
       // Determine the maximum file size, as the number of bytes (or -1 to mean
       // no limit)
-      var maxLogFileSizeBytes = -1;
-      var fileSizeString = $(kIdLogMaxFileSizeInput).value;
-      var numMegabytes = parseFloat(fileSizeString);
+      let maxLogFileSizeBytes = -1;
+      const fileSizeString = $(kIdLogMaxFileSizeInput).value;
+      const numMegabytes = parseFloat(fileSizeString);
       if (!isNaN(numMegabytes)) {
         // Convert to an integral number of bytes.
         maxLogFileSizeBytes = Math.round(numMegabytes * 1024 * 1024);
@@ -77,14 +77,14 @@ var NetExportView = (function() {
     /**
      * Stops saving NetLog data to a file.
      */
-    onStopLogging_: function() {
+    onStopLogging_() {
       chrome.send('stopNetLog');
     },
 
     /**
      * Sends NetLog data via email from browser (mobile only).
      */
-    onSendEmail_: function() {
+    onSendEmail_() {
       chrome.send('sendNetLog');
     },
 
@@ -92,14 +92,14 @@ var NetExportView = (function() {
      * Reveals the log file in the shell (i.e. selects it in the Finder on
      * Mac).
      */
-    onShowFile_: function() {
+    onShowFile_() {
       chrome.send('showFile');
     },
 
     /**
      * Transitions back to the "Start logging to disk" state.
      */
-    onStartOver_: function() {
+    onStartOver_() {
       this.infoForLoggedFile_ = null;
       this.renderInitial_();
     },
@@ -140,7 +140,7 @@ var NetExportView = (function() {
      *        finalized. Once the state transitions to NOT_LOGGING then the log
      *        is complete, and can safely be copied/emailed.
      */
-    onExportNetLogInfoChanged: function(info) {
+    onExportNetLogInfoChanged(info) {
       switch (info.state) {
         case 'UNINITIALIZED':
         case 'INITIALIZING':
@@ -190,7 +190,7 @@ var NetExportView = (function() {
      * visible for a short period of time, or longer if initialization failed
      * (and didn't transition to a different state).
      */
-    renderUninitialized_: function() {
+    renderUninitialized_() {
       this.showStateDiv_(kIdStateDivUninitialized);
     },
 
@@ -199,7 +199,7 @@ var NetExportView = (function() {
      * logging has not been started yet, and there are controls to start
      * logging.
      */
-    renderInitial_: function() {
+    renderInitial_() {
       this.showStateDiv_(kIdStateDivInitial);
       $(kIdStartLoggingButton).onclick = this.onStartLogging_.bind(this);
     },
@@ -208,7 +208,7 @@ var NetExportView = (function() {
      * Updates the UI to display the "logging" state. This is the state while
      * capturing is in progress and being written to disk.
      */
-    renderLogging_: function(info) {
+    renderLogging_(info) {
       this.showStateDiv_(kIdStateDivLogging);
 
       $(kIdStopLoggingButton).onclick = this.onStopLogging_.bind(this);
@@ -219,15 +219,17 @@ var NetExportView = (function() {
     /*
      * Updates the UI to display the state when logging has stopped.
      */
-    renderStoppedLogging_: function(info) {
+    renderStoppedLogging_(info) {
       this.showStateDiv_(kIdStateDivStopped);
 
       // The email button is only available in the mobile UI.
-      if ($(kIdEmailLogButton))
+      if ($(kIdEmailLogButton)) {
         $(kIdEmailLogButton).onclick = this.onSendEmail_.bind(this);
+      }
       // The show file button is only available in the desktop UI.
-      if ($(kIdShowFileButton))
+      if ($(kIdShowFileButton)) {
         $(kIdShowFileButton).onclick = this.onShowFile_.bind(this);
+      }
       $(kIdStartOverButton).onclick = this.onStartOver_.bind(this);
 
       $(kIdFilePathStoppedLogging).textContent = info.file;
@@ -248,39 +250,41 @@ var NetExportView = (function() {
     /**
      * Gets the textual label for a capture mode from the HTML.
      */
-    getCaptureModeText_: function(info) {
+    getCaptureModeText_(info) {
       // TODO(eroman): Should not hardcode "Unknown" (will not work properly if
       //               the HTML is internationalized).
-      if (!info.logCaptureModeKnown)
-        return "Unknown";
-
-      var radioButton = document.querySelector(
-          'input[name="log-mode"][value="' + info.captureMode + '"]');
-      if (!radioButton)
+      if (!info.logCaptureModeKnown) {
         return 'Unknown';
+      }
+
+      const radioButton = document.querySelector(
+          'input[name="log-mode"][value="' + info.captureMode + '"]');
+      if (!radioButton) {
+        return 'Unknown';
+      }
       return radioButton.parentElement.textContent;
     },
 
-    showPrivacyReadMore_: function(show) {
+    showPrivacyReadMore_(show) {
       $(kIdPrivacyReadMoreDiv).hidden = !show;
       $(kIdPrivacyReadMoreLink).hidden = show;
     },
 
-    showTooBigReadMore_: function(show) {
+    showTooBigReadMore_(show) {
       $(kIdTooBigReadMoreDiv).hidden = !show;
       $(kIdTooBigReadMoreLink).hidden = show;
     },
 
-    showStateDiv_: function(divId) {
-      var kAllDivIds = [
+    showStateDiv_(divId) {
+      const kAllDivIds = [
         kIdStateDivUninitialized,
         kIdStateDivInitial,
         kIdStateDivLogging,
         kIdStateDivStopped
       ];
 
-      for (var curDivId of kAllDivIds) {
-        $(curDivId).hidden = divId != curDivId;
+      for (const curDivId of kAllDivIds) {
+        $(curDivId).hidden = divId !== curDivId;
       }
     },
   };

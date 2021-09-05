@@ -20,9 +20,8 @@
 #include <set>
 #include <string>
 
+#include "base/compiler_specific.h"
 #include "base/lazy_instance.h"
-#include "base/memory/protected_memory.h"
-#include "base/memory/protected_memory_cfi.h"
 #include "base/pickle.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/posix/global_descriptors.h"
@@ -38,7 +37,6 @@ namespace {
 // they fork. (This means that it'll be incorrect for global constructor
 // functions and before ZygoteMain is called - beware).
 bool g_am_zygote_or_renderer = false;
-bool g_use_localtime_override = true;
 int g_backchannel_fd = -1;
 
 base::LazyInstance<std::set<std::string>>::Leaky g_timezones =
@@ -115,7 +113,7 @@ void WriteTimeStruct(base::Pickle* pickle, const struct tm& time) {
 }
 
 // See
-// https://chromium.googlesource.com/chromium/src/+/master/docs/linux_zygote.md
+// https://chromium.googlesource.com/chromium/src/+/master/docs/linux/zygote.md
 void ProxyLocaltimeCallToBrowser(time_t input,
                                  struct tm* output,
                                  char* timezone_out,
@@ -174,32 +172,24 @@ bool HandleLocalTime(int fd,
 typedef struct tm* (*LocaltimeFunction)(const time_t* timep);
 typedef struct tm* (*LocaltimeRFunction)(const time_t* timep,
                                          struct tm* result);
-struct LibcFunctions {
-  LocaltimeFunction localtime;
-  LocaltimeFunction localtime64;
-  LocaltimeRFunction localtime_r;
-  LocaltimeRFunction localtime64_r;
-};
 
-static pthread_once_t g_libc_funcs_guard = PTHREAD_ONCE_INIT;
-// The libc function pointers are stored in read-only memory after being
-// dynamically resolved as a security mitigation to prevent the pointer from
-// being tampered with. See https://crbug.com/771365 for details.
-static PROTECTED_MEMORY_SECTION base::ProtectedMemory<LibcFunctions>
-    g_libc_funcs;
+static pthread_once_t g_libc_localtime_funcs_guard = PTHREAD_ONCE_INIT;
+static LocaltimeFunction g_libc_localtime;
+static LocaltimeFunction g_libc_localtime64;
+static LocaltimeRFunction g_libc_localtime_r;
+static LocaltimeRFunction g_libc_localtime64_r;
 
 static void InitLibcLocaltimeFunctionsImpl() {
-  auto writer = base::AutoWritableMemory::Create(g_libc_funcs);
-  g_libc_funcs->localtime =
+  g_libc_localtime =
       reinterpret_cast<LocaltimeFunction>(dlsym(RTLD_NEXT, "localtime"));
-  g_libc_funcs->localtime64 =
+  g_libc_localtime64 =
       reinterpret_cast<LocaltimeFunction>(dlsym(RTLD_NEXT, "localtime64"));
-  g_libc_funcs->localtime_r =
+  g_libc_localtime_r =
       reinterpret_cast<LocaltimeRFunction>(dlsym(RTLD_NEXT, "localtime_r"));
-  g_libc_funcs->localtime64_r =
+  g_libc_localtime64_r =
       reinterpret_cast<LocaltimeRFunction>(dlsym(RTLD_NEXT, "localtime64_r"));
 
-  if (!g_libc_funcs->localtime || !g_libc_funcs->localtime_r) {
+  if (!g_libc_localtime || !g_libc_localtime_r) {
     // https://bugs.chromium.org/p/chromium/issues/detail?id=16800
     //
     // Nvidia's libGL.so overrides dlsym for an unknown reason and replaces
@@ -211,14 +201,14 @@ static void InitLibcLocaltimeFunctionsImpl() {
                   "https://bugs.chromium.org/p/chromium/issues/detail?id=16800";
   }
 
-  if (!g_libc_funcs->localtime)
-    g_libc_funcs->localtime = gmtime;
-  if (!g_libc_funcs->localtime64)
-    g_libc_funcs->localtime64 = g_libc_funcs->localtime;
-  if (!g_libc_funcs->localtime_r)
-    g_libc_funcs->localtime_r = gmtime_r;
-  if (!g_libc_funcs->localtime64_r)
-    g_libc_funcs->localtime64_r = g_libc_funcs->localtime_r;
+  if (!g_libc_localtime)
+    g_libc_localtime = gmtime;
+  if (!g_libc_localtime64)
+    g_libc_localtime64 = g_libc_localtime;
+  if (!g_libc_localtime_r)
+    g_libc_localtime_r = gmtime_r;
+  if (!g_libc_localtime64_r)
+    g_libc_localtime64_r = g_libc_localtime_r;
 }
 
 // Define localtime_override() function with asm name "localtime", so that all
@@ -228,9 +218,10 @@ static void InitLibcLocaltimeFunctionsImpl() {
 __attribute__((__visibility__("default"))) struct tm* localtime_override(
     const time_t* timep) __asm__("localtime");
 
+NO_SANITIZE("cfi-icall")
 __attribute__((__visibility__("default"))) struct tm* localtime_override(
     const time_t* timep) {
-  if (g_am_zygote_or_renderer && g_use_localtime_override) {
+  if (g_am_zygote_or_renderer) {
     static struct tm time_struct;
     static char timezone_string[64];
     ProxyLocaltimeCallToBrowser(*timep, &time_struct, timezone_string,
@@ -239,8 +230,7 @@ __attribute__((__visibility__("default"))) struct tm* localtime_override(
   }
 
   InitLibcLocaltimeFunctions();
-  struct tm* res =
-      base::UnsanitizedCfiCall(g_libc_funcs, &LibcFunctions::localtime)(timep);
+  struct tm* res = g_libc_localtime(timep);
 #if defined(MEMORY_SANITIZER)
   if (res)
     __msan_unpoison(res, sizeof(*res));
@@ -254,9 +244,10 @@ __attribute__((__visibility__("default"))) struct tm* localtime_override(
 __attribute__((__visibility__("default"))) struct tm* localtime64_override(
     const time_t* timep) __asm__("localtime64");
 
+NO_SANITIZE("cfi-icall")
 __attribute__((__visibility__("default"))) struct tm* localtime64_override(
     const time_t* timep) {
-  if (g_am_zygote_or_renderer && g_use_localtime_override) {
+  if (g_am_zygote_or_renderer) {
     static struct tm time_struct;
     static char timezone_string[64];
     ProxyLocaltimeCallToBrowser(*timep, &time_struct, timezone_string,
@@ -265,8 +256,7 @@ __attribute__((__visibility__("default"))) struct tm* localtime64_override(
   }
 
   InitLibcLocaltimeFunctions();
-  struct tm* res = base::UnsanitizedCfiCall(g_libc_funcs,
-                                            &LibcFunctions::localtime64)(timep);
+  struct tm* res = g_libc_localtime64(timep);
 #if defined(MEMORY_SANITIZER)
   if (res)
     __msan_unpoison(res, sizeof(*res));
@@ -280,17 +270,17 @@ __attribute__((__visibility__("default"))) struct tm* localtime_r_override(
     const time_t* timep,
     struct tm* result) __asm__("localtime_r");
 
+NO_SANITIZE("cfi-icall")
 __attribute__((__visibility__("default"))) struct tm* localtime_r_override(
     const time_t* timep,
     struct tm* result) {
-  if (g_am_zygote_or_renderer && g_use_localtime_override) {
+  if (g_am_zygote_or_renderer) {
     ProxyLocaltimeCallToBrowser(*timep, result, nullptr, 0);
     return result;
   }
 
   InitLibcLocaltimeFunctions();
-  struct tm* res = base::UnsanitizedCfiCall(
-      g_libc_funcs, &LibcFunctions::localtime_r)(timep, result);
+  struct tm* res = g_libc_localtime_r(timep, result);
 #if defined(MEMORY_SANITIZER)
   if (res)
     __msan_unpoison(res, sizeof(*res));
@@ -304,17 +294,17 @@ __attribute__((__visibility__("default"))) struct tm* localtime64_r_override(
     const time_t* timep,
     struct tm* result) __asm__("localtime64_r");
 
+NO_SANITIZE("cfi-icall")
 __attribute__((__visibility__("default"))) struct tm* localtime64_r_override(
     const time_t* timep,
     struct tm* result) {
-  if (g_am_zygote_or_renderer && g_use_localtime_override) {
+  if (g_am_zygote_or_renderer) {
     ProxyLocaltimeCallToBrowser(*timep, result, nullptr, 0);
     return result;
   }
 
   InitLibcLocaltimeFunctions();
-  struct tm* res = base::UnsanitizedCfiCall(
-      g_libc_funcs, &LibcFunctions::localtime64_r)(timep, result);
+  struct tm* res = g_libc_localtime64_r(timep, result);
 #if defined(MEMORY_SANITIZER)
   if (res)
     __msan_unpoison(res, sizeof(*res));
@@ -322,10 +312,6 @@ __attribute__((__visibility__("default"))) struct tm* localtime64_r_override(
     __msan_unpoison_string(res->tm_zone);
 #endif
   return res;
-}
-
-void SetUseLocaltimeOverride(bool enable) {
-  g_use_localtime_override = enable;
 }
 
 void SetAmZygoteOrRenderer(bool enable, int backchannel_fd) {
@@ -344,8 +330,8 @@ bool HandleInterceptedCall(int kind,
 }
 
 void InitLibcLocaltimeFunctions() {
-  CHECK_EQ(0,
-           pthread_once(&g_libc_funcs_guard, InitLibcLocaltimeFunctionsImpl));
+  CHECK_EQ(0, pthread_once(&g_libc_localtime_funcs_guard,
+                           InitLibcLocaltimeFunctionsImpl));
 }
 
 }  // namespace sandbox

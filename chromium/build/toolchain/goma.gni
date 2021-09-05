@@ -9,9 +9,9 @@ declare_args() {
   use_goma = false
 
   # This flag is for ChromeOS compiler wrapper.
-  # By passing gomacc path via GOMACC_PATH environment variable, ChromeOS'
-  # compiler wrapper invokes gomacc inside it.
-  has_gomacc_path = false
+  # By passing gomacc path via cmd-line arg, ChromeOS' compiler wrapper
+  # invokes gomacc inside it.
+  needs_gomacc_path_arg = false
 
   # Set the default value based on the platform.
   if (host_os == "win") {
@@ -26,6 +26,15 @@ declare_args() {
       goma_dir = getenv("HOME") + "/goma"
     }
   }
+}
+
+declare_args() {
+  # TODO(crbug.com/726475): true if use_goma = true in the future.
+  use_java_goma = false
+
+  # Auto-configure for Goma RBE backend.
+  # TODO(crbug.com/1015730): true if use_goma = true in the future.
+  ios_use_goma_rbe = false
 }
 
 assert(!is_win || !use_goma || is_clang,

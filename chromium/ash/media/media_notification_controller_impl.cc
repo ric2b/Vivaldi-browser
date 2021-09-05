@@ -10,12 +10,12 @@
 #include "ash/session/session_controller_impl.h"
 #include "ash/session/session_observer.h"
 #include "ash/shell.h"
+#include "ash/shell_delegate.h"
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/stl_util.h"
-#include "components/media_message_center/media_notification_item.h"
 #include "components/media_message_center/media_notification_util.h"
-#include "services/media_session/public/mojom/constants.mojom.h"
-#include "services/service_manager/public/cpp/connector.h"
+#include "services/media_session/public/mojom/media_session_service.mojom.h"
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/notification_blocker.h"
 #include "ui/message_center/public/cpp/notification.h"
@@ -96,8 +96,7 @@ class MediaNotificationBlocker : public message_center::NotificationBlocker,
 
 }  // namespace
 
-MediaNotificationControllerImpl::MediaNotificationControllerImpl(
-    service_manager::Connector* connector)
+MediaNotificationControllerImpl::MediaNotificationControllerImpl()
     : blocker_(std::make_unique<MediaNotificationBlocker>(
           message_center::MessageCenter::Get(),
           Shell::Get()->session_controller())) {
@@ -108,16 +107,17 @@ MediaNotificationControllerImpl::MediaNotificationControllerImpl(
         base::BindRepeating(&CreateCustomMediaNotificationView));
   }
 
-  // |connector| can be null in tests.
-  if (!connector)
+  // May be null in tests.
+  media_session::mojom::MediaSessionService* service =
+      Shell::Get()->shell_delegate()->GetMediaSessionService();
+  if (!service)
     return;
 
   mojo::Remote<media_session::mojom::AudioFocusManager> audio_focus_remote;
-  connector->Connect(media_session::mojom::kServiceName,
-                     audio_focus_remote.BindNewPipeAndPassReceiver());
-  connector->Connect(media_session::mojom::kServiceName,
-                     controller_manager_remote.BindNewPipeAndPassReceiver());
-
+  service->BindAudioFocusManager(
+      audio_focus_remote.BindNewPipeAndPassReceiver());
+  service->BindMediaControllerManager(
+      controller_manager_remote.BindNewPipeAndPassReceiver());
   audio_focus_remote->AddObserver(
       audio_focus_observer_receiver_.BindNewPipeAndPassRemote());
 }
@@ -136,8 +136,8 @@ void MediaNotificationControllerImpl::OnFocusGained(
 
   mojo::Remote<media_session::mojom::MediaController> controller;
 
-  // |controller_manager_remote| may be null in tests where connector is
-  // unavailable.
+  // |controller_manager_remote| may be null in tests where the Media Session
+  // service is unavailable.
   if (controller_manager_remote) {
     controller_manager_remote->CreateMediaControllerForSession(
         controller.BindNewPipeAndPassReceiver(), *session->request_id);
@@ -165,7 +165,7 @@ void MediaNotificationControllerImpl::OnFocusLost(
 
   // If we lost focus then we should freeze the notification as it may regain
   // focus after a second or so.
-  it->second.Freeze();
+  it->second.Freeze(base::DoNothing());
 }
 
 void MediaNotificationControllerImpl::ShowNotification(const std::string& id) {
@@ -174,7 +174,7 @@ void MediaNotificationControllerImpl::ShowNotification(const std::string& id) {
     return;
 
   std::unique_ptr<message_center::Notification> notification =
-      ash::CreateSystemNotification(
+      CreateSystemNotification(
           message_center::NotificationType::NOTIFICATION_TYPE_CUSTOM, id,
           base::string16(), base::string16(), base::string16(), GURL(),
           message_center::NotifierId(
@@ -214,7 +214,7 @@ MediaNotificationControllerImpl::GetTaskRunner() const {
 std::unique_ptr<MediaNotificationContainerImpl>
 MediaNotificationControllerImpl::CreateMediaNotification(
     const message_center::Notification& notification) {
-  base::WeakPtr<media_message_center::MediaNotificationItem> item;
+  base::WeakPtr<media_message_center::MediaSessionNotificationItem> item;
 
   auto it = notifications_.find(notification.id());
   if (it != notifications_.end())

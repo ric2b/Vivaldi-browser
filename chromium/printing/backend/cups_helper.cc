@@ -17,9 +17,11 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
+#include "base/time/time.h"
 #include "base/values.h"
 #include "printing/backend/print_backend.h"
 #include "printing/backend/print_backend_consts.h"
+#include "printing/printing_utils.h"
 #include "printing/units.h"
 #include "url/gurl.h"
 
@@ -30,13 +32,30 @@ namespace printing {
 // This section contains helper code for PPD parsing for semantic capabilities.
 namespace {
 
-const char kColorDevice[] = "ColorDevice";
-const char kColorModel[] = "ColorModel";
-const char kColorMode[] = "ColorMode";
-const char kProcessColorModel[] = "ProcessColorModel";
-const char kPrintoutMode[] = "PrintoutMode";
-const char kDraftGray[] = "Draft.Gray";
-const char kHighGray[] = "High.Gray";
+// Function availability can be tested by checking whether its address is not
+// nullptr. Weak symbols remove the need for platform specific build flags and
+// allow for appropriate CUPS usage on platforms with non-uniform version
+// support, namely Linux.
+#define WEAK_CUPS_FN(x) extern "C" __attribute__((weak)) decltype(x) x
+
+WEAK_CUPS_FN(httpConnect2);
+
+// Timeout for establishing a CUPS connection.  It is expected that cupsd is
+// able to start and respond on all systems within this duration.
+constexpr base::TimeDelta kCupsTimeout = base::TimeDelta::FromSeconds(5);
+
+// CUPS default max copies value (taken from default cupsMaxCopies parsing in
+// cups/ppd-cache.c).
+constexpr int32_t kDefaultMaxCopies = 9999;
+
+constexpr char kColorDevice[] = "ColorDevice";
+constexpr char kColorModel[] = "ColorModel";
+constexpr char kColorMode[] = "ColorMode";
+constexpr char kInk[] = "Ink";
+constexpr char kProcessColorModel[] = "ProcessColorModel";
+constexpr char kPrintoutMode[] = "PrintoutMode";
+constexpr char kDraftGray[] = "Draft.Gray";
+constexpr char kHighGray[] = "High.Gray";
 
 constexpr char kDuplex[] = "Duplex";
 constexpr char kDuplexNone[] = "None";
@@ -49,9 +68,24 @@ constexpr char kBrotherDuplex[] = "BRDuplex";
 constexpr char kBrotherMonoColor[] = "BRMonoColor";
 constexpr char kBrotherPrintQuality[] = "BRPrintQuality";
 
+// HP printer specific options.
+constexpr char kHpColorMode[] = "HPColorMode";
+constexpr char kHpColorPrint[] = "ColorPrint";
+constexpr char kHpGrayscalePrint[] = "GrayscalePrint";
+
 // Samsung printer specific options.
 constexpr char kSamsungColorTrue[] = "True";
 constexpr char kSamsungColorFalse[] = "False";
+
+// Sharp printer specific options.
+constexpr char kSharpARCMode[] = "ARCMode";
+constexpr char kSharpCMColor[] = "CMColor";
+constexpr char kSharpCMBW[] = "CMBW";
+
+// Xerox printer specific options.
+constexpr char kXeroxXRXColor[] = "XRXColor";
+constexpr char kXeroxAutomatic[] = "Automatic";
+constexpr char kXeroxBW[] = "BW";
 
 void ParseLpOptions(const base::FilePath& filepath,
                     base::StringPiece printer_name,
@@ -107,12 +141,9 @@ void ParseLpOptions(const base::FilePath& filepath,
   }
 }
 
-void MarkLpOptions(base::StringPiece printer_name, ppd_file_t** ppd) {
-  cups_option_t* options = nullptr;
-  int num_options = 0;
-
-  const char kSystemLpOptionPath[] = "/etc/cups/lpoptions";
-  const char kUserLpOptionPath[] = ".cups/lpoptions";
+void MarkLpOptions(base::StringPiece printer_name, ppd_file_t* ppd) {
+  static constexpr char kSystemLpOptionPath[] = "/etc/cups/lpoptions";
+  static constexpr char kUserLpOptionPath[] = ".cups/lpoptions";
 
   std::vector<base::FilePath> file_locations;
   file_locations.push_back(base::FilePath(kSystemLpOptionPath));
@@ -121,11 +152,11 @@ void MarkLpOptions(base::StringPiece printer_name, ppd_file_t** ppd) {
   file_locations.push_back(base::FilePath(homedir.Append(kUserLpOptionPath)));
 
   for (const base::FilePath& location : file_locations) {
-    num_options = 0;
-    options = nullptr;
+    int num_options = 0;
+    cups_option_t* options = nullptr;
     ParseLpOptions(location, printer_name, &num_options, &options);
     if (num_options > 0 && options) {
-      cupsMarkOptions(*ppd, num_options, options);
+      cupsMarkOptions(ppd, num_options, options);
       cupsFreeOptions(num_options, options);
     }
   }
@@ -320,7 +351,7 @@ bool GetHPColorSettings(ppd_file_t* ppd,
                         ColorModel* color_model_for_black,
                         ColorModel* color_model_for_color,
                         bool* color_is_default) {
-  // HP printers use "Color/Color Model" attribute in their PPDs.
+  // Some HP printers use "Color/Color Model" attribute in their PPDs.
   ppd_option_t* color_mode_option = ppdFindOption(ppd, kColor);
   if (!color_mode_option)
     return false;
@@ -337,6 +368,114 @@ bool GetHPColorSettings(ppd_file_t* ppd,
   }
   if (mode_choice) {
     *color_is_default = EqualsCaseInsensitiveASCII(mode_choice->choice, kColor);
+  }
+  return true;
+}
+
+bool GetHPColorModeSettings(ppd_file_t* ppd,
+                            ColorModel* color_model_for_black,
+                            ColorModel* color_model_for_color,
+                            bool* color_is_default) {
+  // Some HP printers use "HPColorMode/Mode" attribute in their PPDs.
+  ppd_option_t* color_mode_option = ppdFindOption(ppd, kHpColorMode);
+  if (!color_mode_option)
+    return false;
+
+  if (ppdFindChoice(color_mode_option, kHpColorPrint))
+    *color_model_for_color = HP_COLOR_COLOR;
+  if (ppdFindChoice(color_mode_option, kHpGrayscalePrint))
+    *color_model_for_black = HP_COLOR_BLACK;
+
+  ppd_choice_t* mode_choice = ppdFindMarkedChoice(ppd, kHpColorMode);
+  if (!mode_choice) {
+    mode_choice =
+        ppdFindChoice(color_mode_option, color_mode_option->defchoice);
+  }
+  if (mode_choice) {
+    *color_is_default =
+        EqualsCaseInsensitiveASCII(mode_choice->choice, kHpColorPrint);
+  }
+  return true;
+}
+
+bool GetEpsonInkSettings(ppd_file_t* ppd,
+                         ColorModel* color_model_for_black,
+                         ColorModel* color_model_for_color,
+                         bool* color_is_default) {
+  // Epson printers use "Ink" attribute in their PPDs.
+  ppd_option_t* color_mode_option = ppdFindOption(ppd, kInk);
+  if (!color_mode_option)
+    return false;
+
+  if (ppdFindChoice(color_mode_option, kColor))
+    *color_model_for_color = EPSON_INK_COLOR;
+  if (ppdFindChoice(color_mode_option, kMono))
+    *color_model_for_black = EPSON_INK_MONO;
+
+  ppd_choice_t* mode_choice = ppdFindMarkedChoice(ppd, kInk);
+  if (!mode_choice) {
+    mode_choice =
+        ppdFindChoice(color_mode_option, color_mode_option->defchoice);
+  }
+
+  if (mode_choice) {
+    *color_is_default = EqualsCaseInsensitiveASCII(mode_choice->choice, kColor);
+  }
+  return true;
+}
+
+bool GetSharpARCModeSettings(ppd_file_t* ppd,
+                             ColorModel* color_model_for_black,
+                             ColorModel* color_model_for_color,
+                             bool* color_is_default) {
+  // Sharp printers use "ARCMode" attribute in their PPDs.
+  ppd_option_t* color_mode_option = ppdFindOption(ppd, kSharpARCMode);
+  if (!color_mode_option)
+    return false;
+
+  if (ppdFindChoice(color_mode_option, kSharpCMColor))
+    *color_model_for_color = SHARP_ARCMODE_CMCOLOR;
+  if (ppdFindChoice(color_mode_option, kSharpCMBW))
+    *color_model_for_black = SHARP_ARCMODE_CMBW;
+
+  ppd_choice_t* mode_choice = ppdFindMarkedChoice(ppd, kSharpARCMode);
+  if (!mode_choice) {
+    mode_choice =
+        ppdFindChoice(color_mode_option, color_mode_option->defchoice);
+  }
+
+  if (mode_choice) {
+    // Many Sharp printers use "CMAuto" as the default color mode.
+    *color_is_default =
+        !EqualsCaseInsensitiveASCII(mode_choice->choice, kSharpCMBW);
+  }
+  return true;
+}
+
+bool GetXeroxColorSettings(ppd_file_t* ppd,
+                           ColorModel* color_model_for_black,
+                           ColorModel* color_model_for_color,
+                           bool* color_is_default) {
+  // Some Xerox printers use "XRXColor" attribute in their PPDs.
+  ppd_option_t* color_mode_option = ppdFindOption(ppd, kXeroxXRXColor);
+  if (!color_mode_option)
+    return false;
+
+  if (ppdFindChoice(color_mode_option, kXeroxAutomatic))
+    *color_model_for_color = XEROX_XRXCOLOR_AUTOMATIC;
+  if (ppdFindChoice(color_mode_option, kXeroxBW))
+    *color_model_for_black = XEROX_XRXCOLOR_BW;
+
+  ppd_choice_t* mode_choice = ppdFindMarkedChoice(ppd, kXeroxXRXColor);
+  if (!mode_choice) {
+    mode_choice =
+        ppdFindChoice(color_mode_option, color_mode_option->defchoice);
+  }
+
+  if (mode_choice) {
+    // Many Xerox printers use "Automatic" as the default color mode.
+    *color_is_default =
+        !EqualsCaseInsensitiveASCII(mode_choice->choice, kXeroxBW);
   }
   return true;
 }
@@ -386,7 +525,11 @@ bool GetColorModelSettings(ppd_file_t* ppd,
          GetPrintOutModeColorSettings(ppd, cm_black, cm_color, is_color) ||
          GetColorModeSettings(ppd, cm_black, cm_color, is_color) ||
          GetHPColorSettings(ppd, cm_black, cm_color, is_color) ||
+         GetHPColorModeSettings(ppd, cm_black, cm_color, is_color) ||
          GetBrotherColorSettings(ppd, cm_black, cm_color, is_color) ||
+         GetEpsonInkSettings(ppd, cm_black, cm_color, is_color) ||
+         GetSharpARCModeSettings(ppd, cm_black, cm_color, is_color) ||
+         GetXeroxColorSettings(ppd, cm_black, cm_color, is_color) ||
          GetProcessColorModelSettings(ppd, cm_black, cm_color, is_color);
 }
 
@@ -398,7 +541,8 @@ const int kDefaultIPPServerPort = 631;
 // Helper wrapper around http_t structure, with connection and cleanup
 // functionality.
 HttpConnectionCUPS::HttpConnectionCUPS(const GURL& print_server_url,
-                                       http_encryption_t encryption)
+                                       http_encryption_t encryption,
+                                       bool blocking)
     : http_(nullptr) {
   // If we have an empty url, use default print server.
   if (print_server_url.is_empty())
@@ -408,11 +552,26 @@ HttpConnectionCUPS::HttpConnectionCUPS(const GURL& print_server_url,
   if (port == url::PORT_UNSPECIFIED)
     port = kDefaultIPPServerPort;
 
-  http_ = httpConnectEncrypt(print_server_url.host().c_str(), port, encryption);
+  if (httpConnect2) {
+    http_ = httpConnect2(print_server_url.host().c_str(), port,
+                         /*addrlist=*/nullptr, AF_UNSPEC, encryption,
+                         blocking ? 1 : 0, kCupsTimeout.InMilliseconds(),
+                         /*cancel=*/nullptr);
+  } else {
+    // Continue to use deprecated CUPS calls because because older Linux
+    // distribution such as RHEL/CentOS 7 are shipped with CUPS 1.6.
+    http_ =
+        httpConnectEncrypt(print_server_url.host().c_str(), port, encryption);
+  }
+
   if (!http_) {
     LOG(ERROR) << "CP_CUPS: Failed connecting to print server: "
                << print_server_url;
+    return;
   }
+
+  if (!httpConnect2)
+    httpBlocking(http_, blocking ? 1 : 0);
 }
 
 HttpConnectionCUPS::~HttpConnectionCUPS() {
@@ -420,15 +579,12 @@ HttpConnectionCUPS::~HttpConnectionCUPS() {
     httpClose(http_);
 }
 
-void HttpConnectionCUPS::SetBlocking(bool blocking) {
-  httpBlocking(http_, blocking ? 1 : 0);
-}
-
 http_t* HttpConnectionCUPS::http() {
   return http_;
 }
 
 bool ParsePpdCapabilities(base::StringPiece printer_name,
+                          base::StringPiece locale,
                           base::StringPiece printer_capabilities,
                           PrinterSemanticCapsAndDefaults* printer_info) {
   base::FilePath ppd_file_path;
@@ -451,17 +607,19 @@ bool ParsePpdCapabilities(base::StringPiece printer_name,
     return false;
   }
   ppdMarkDefaults(ppd);
-  MarkLpOptions(printer_name, &ppd);
+  MarkLpOptions(printer_name, ppd);
 
   PrinterSemanticCapsAndDefaults caps;
   caps.collate_capable = true;
   caps.collate_default = true;
-  caps.copies_capable = true;
+  // TODO(crbug.com/1027830): Parse PPD for cupsMaxCopies value.
+  caps.copies_max = kDefaultMaxCopies;
 
   GetDuplexSettings(ppd, &caps.duplex_modes, &caps.duplex_default);
 
+  ColorModel cm_black = UNKNOWN_COLOR_MODEL;
+  ColorModel cm_color = UNKNOWN_COLOR_MODEL;
   bool is_color = false;
-  ColorModel cm_color = UNKNOWN_COLOR_MODEL, cm_black = UNKNOWN_COLOR_MODEL;
   if (!GetColorModelSettings(ppd, &cm_black, &cm_color, &is_color)) {
     VLOG(1) << "Unknown printer color model";
   }
@@ -476,11 +634,12 @@ bool ParsePpdCapabilities(base::StringPiece printer_name,
   if (ppd->num_sizes > 0 && ppd->sizes) {
     VLOG(1) << "Paper list size - " << ppd->num_sizes;
     ppd_option_t* paper_option = ppdFindOption(ppd, kPageSize);
+    bool is_default_found = false;
     for (int i = 0; i < ppd->num_sizes; ++i) {
       gfx::Size paper_size_microns(
           ConvertUnit(ppd->sizes[i].width, kPointsPerInch, kMicronsPerInch),
           ConvertUnit(ppd->sizes[i].length, kPointsPerInch, kMicronsPerInch));
-      if (paper_size_microns.width() > 0 && paper_size_microns.height() > 0) {
+      if (!paper_size_microns.IsEmpty()) {
         PrinterSemanticCapsAndDefaults::Paper paper;
         paper.size_um = paper_size_microns;
         paper.vendor_id = ppd->sizes[i].name;
@@ -494,10 +653,32 @@ bool ParsePpdCapabilities(base::StringPiece printer_name,
           }
         }
         caps.papers.push_back(paper);
-        if (i == 0 || ppd->sizes[i].marked) {
+        if (ppd->sizes[i].marked) {
           caps.default_paper = paper;
+          is_default_found = true;
         }
       }
+    }
+    if (!is_default_found) {
+      gfx::Size locale_paper_microns =
+          GetDefaultPaperSizeFromLocaleMicrons(locale);
+      for (const PrinterSemanticCapsAndDefaults::Paper& paper : caps.papers) {
+        // Set epsilon to 500 microns to allow tolerance of rounded paper sizes.
+        // While the above utility function returns paper sizes in microns, they
+        // are still rounded to the nearest millimeter (1000 microns).
+        constexpr int kSizeEpsilon = 500;
+        if (SizesEqualWithinEpsilon(paper.size_um, locale_paper_microns,
+                                    kSizeEpsilon)) {
+          caps.default_paper = paper;
+          is_default_found = true;
+          break;
+        }
+      }
+
+      // If no default was set in the PPD or if the locale default is not within
+      // the printer's capabilities, select the first on the list.
+      if (!is_default_found)
+        caps.default_paper = caps.papers[0];
     }
   }
 

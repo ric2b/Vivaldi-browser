@@ -24,7 +24,7 @@ bool PassesSameOriginCheck(const ResourceResponse& response,
   const KURL& response_url = response.ResponseUrl();
   scoped_refptr<const SecurityOrigin> resource_origin =
       SecurityOrigin::Create(response_url);
-  return resource_origin->IsSameSchemeHostPort(&initiator_security_origin);
+  return resource_origin->IsSameOriginWith(&initiator_security_origin);
 }
 
 bool AllowNavigationTimingRedirect(
@@ -49,15 +49,15 @@ PerformanceNavigationTiming::PerformanceNavigationTiming(
     LocalFrame* frame,
     ResourceTimingInfo* info,
     base::TimeTicks time_origin,
-    const WebVector<WebServerTimingInfo>& server_timing)
+    HeapVector<Member<PerformanceServerTiming>> server_timing)
     : PerformanceResourceTiming(
           info ? AtomicString(
                      info->FinalResponse().CurrentRequestUrl().GetString())
                : g_empty_atom,
           time_origin,
           SecurityOrigin::IsSecure(frame->GetDocument()->Url()),
-          server_timing),
-      ContextClient(frame),
+          std::move(server_timing)),
+      ExecutionContextClient(frame),
       resource_timing_info_(info) {
   DCHECK(frame);
   DCHECK(frame->GetDocument());
@@ -74,8 +74,8 @@ PerformanceEntryType PerformanceNavigationTiming::EntryTypeEnum() const {
   return PerformanceEntry::EntryType::kNavigation;
 }
 
-void PerformanceNavigationTiming::Trace(blink::Visitor* visitor) {
-  ContextClient::Trace(visitor);
+void PerformanceNavigationTiming::Trace(Visitor* visitor) {
+  ExecutionContextClient::Trace(visitor);
   PerformanceResourceTiming::Trace(visitor);
 }
 
@@ -151,7 +151,7 @@ AtomicString PerformanceNavigationTiming::initiatorType() const {
 
 bool PerformanceNavigationTiming::GetAllowRedirectDetails() const {
   blink::ExecutionContext* context =
-      GetFrame() ? GetFrame()->GetDocument() : nullptr;
+      GetFrame() ? GetFrame()->GetDocument()->ToExecutionContext() : nullptr;
   const blink::SecurityOrigin* security_origin = nullptr;
   if (context)
     security_origin = context->GetSecurityOrigin();

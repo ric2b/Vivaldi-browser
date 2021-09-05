@@ -6,13 +6,15 @@
  * @fileoverview 'os-settings-languages-page' is the settings sub-page
  * for language and input method settings.
  */
-cr.exportPath('settings');
+cr.define('settings', function() {
+  /**
+   * @type {number} Millisecond delay that can be used when closing an action
+   *      menu to keep it briefly on-screen.
+   */
+  const kMenuCloseDelay = 100;
 
-/**
- * @type {number} Millisecond delay that can be used when closing an action
- *      menu to keep it briefly on-screen.
- */
-settings.kMenuCloseDelay = 100;
+  return {kMenuCloseDelay};
+});
 
 (function() {
 'use strict';
@@ -57,22 +59,16 @@ Polymer({
     /** @private */
     showAddLanguagesDialog_: Boolean,
 
-    /** @private {!Map<string, string>} */
-    focusConfig_: {
+    /** @type {!Map<string, (string|Function)>} */
+    focusConfig: {
       type: Object,
-      value: function() {
-        const map = new Map();
-        if (settings.routes.INPUT_METHODS) {
-          map.set(settings.routes.INPUT_METHODS.path, '#manageInputMethods');
-        }
-        return map;
-      },
+      observer: 'focusConfigChanged_',
     },
 
     /** @private */
     isGuest_: {
       type: Boolean,
-      value: function() {
+      value() {
         return loadTimeData.getBoolean('isGuest');
       },
     },
@@ -82,18 +78,32 @@ Polymer({
   isChangeInProgress_: false,
 
   /**
+   * @param {!Map<string, (string|Function)>} newConfig
+   * @param {?Map<string, (string|Function)>} oldConfig
+   * @private
+   */
+  focusConfigChanged_(newConfig, oldConfig) {
+    // focusConfig is set only once on the parent, so this observer should only
+    // fire once.
+    assert(!oldConfig);
+    this.focusConfig.set(
+        settings.routes.INPUT_METHODS.path,
+        () => cr.ui.focusWithoutInk(this.$.manageInputMethods));
+  },
+
+  /**
    * Stamps and opens the Add Languages dialog, registering a listener to
    * disable the dialog's dom-if again on close.
    * @param {!Event} e
    * @private
    */
-  onAddLanguagesTap_: function(e) {
+  onAddLanguagesTap_(e) {
     e.preventDefault();
     this.showAddLanguagesDialog_ = true;
   },
 
   /** @private */
-  onAddLanguagesDialogClose_: function() {
+  onAddLanguagesDialogClose_() {
     this.showAddLanguagesDialog_ = false;
     cr.ui.focusWithoutInk(assert(this.$.addLanguages));
   },
@@ -105,7 +115,7 @@ Polymer({
    * @return {boolean} True if there is at least one available language.
    * @private
    */
-  canEnableSomeSupportedLanguage_: function(languages) {
+  canEnableSomeSupportedLanguage_(languages) {
     return languages == undefined || languages.supported.some(language => {
       return this.languageHelper.canEnableLanguage(language);
     });
@@ -118,7 +128,7 @@ Polymer({
    *     language.
    * @private
    */
-  shouldShowDialogSeparator_: function() {
+  shouldShowDialogSeparator_() {
     return this.languages != undefined && this.languages.enabled.length > 1 &&
         !this.isGuest_;
   },
@@ -131,7 +141,7 @@ Polymer({
    *     enabled languages.
    * @private
    */
-  isNthLanguage_: function(n) {
+  isNthLanguage_(n) {
     if (this.languages == undefined || this.detailLanguage_ == undefined) {
       return false;
     }
@@ -149,7 +159,7 @@ Polymer({
    *     visible.
    * @private
    */
-  showMoveUp_: function() {
+  showMoveUp_() {
     // "Move up" is a no-op for the top language, and redundant with
     // "Move to top" for the 2nd language.
     return !this.isNthLanguage_(0) && !this.isNthLanguage_(1);
@@ -160,7 +170,7 @@ Polymer({
    *     visible.
    * @private
    */
-  showMoveDown_: function() {
+  showMoveDown_() {
     return this.languages != undefined &&
         !this.isNthLanguage_(this.languages.enabled.length - 1);
   },
@@ -169,7 +179,7 @@ Polymer({
    * @param {!Object} change Polymer change object for languages.enabled.*.
    * @return {boolean} True if there are less than 2 languages.
    */
-  isHelpTextHidden_: function(change) {
+  isHelpTextHidden_(change) {
     return this.languages != undefined && this.languages.enabled.length <= 1;
   },
 
@@ -177,8 +187,8 @@ Polymer({
    * Opens the Manage Input Methods page.
    * @private
    */
-  onManageInputMethodsTap_: function() {
-    settings.navigateTo(settings.routes.INPUT_METHODS);
+  onManageInputMethodsTap_() {
+    settings.Router.getInstance().navigateTo(settings.routes.INPUT_METHODS);
   },
 
   /**
@@ -189,7 +199,7 @@ Polymer({
    *           type: string,
    *           key: (string|undefined)}} e
    */
-  onInputMethodTap_: function(e) {
+  onInputMethodTap_(e) {
     // Taps on the button are handled in onInputMethodOptionsTap_.
     // TODO(dschuyler): The row has two operations that are not clearly
     // delineated. crbug.com/740691
@@ -212,7 +222,7 @@ Polymer({
    * @param {!{model: !{item: chrome.languageSettingsPrivate.InputMethod}}} e
    * @private
    */
-  onInputMethodOptionsTap_: function(e) {
+  onInputMethodOptionsTap_(e) {
     this.languageHelper.openInputMethodOptions(e.model.item.id);
   },
 
@@ -220,7 +230,7 @@ Polymer({
    * @return {boolean} True for a secondary user in a multi-profile session.
    * @private
    */
-  isSecondaryUser_: function() {
+  isSecondaryUser_() {
     return loadTimeData.getBoolean('isSecondaryUser');
   },
 
@@ -231,7 +241,7 @@ Polymer({
    *     |languageCode| but requires a restart to take effect.
    * @private
    */
-  isRestartRequired_: function(languageCode, prospectiveUILanguage) {
+  isRestartRequired_(languageCode, prospectiveUILanguage) {
     return prospectiveUILanguage == languageCode &&
         this.languageHelper.requiresRestart();
   },
@@ -257,7 +267,7 @@ Polymer({
    *     prospective UI language by the user.
    * @private
    */
-  disableUILanguageCheckbox_: function(languageState, prospectiveUILanguage) {
+  disableUILanguageCheckbox_(languageState, prospectiveUILanguage) {
     if (this.detailLanguage_ === undefined) {
       return true;
     }
@@ -293,7 +303,7 @@ Polymer({
    * @param {!{target: !Element}} e
    * @private
    */
-  onUILanguageChange_: function(e) {
+  onUILanguageChange_(e) {
     // We don't support unchecking this checkbox. TODO(michaelpg): Ask for a
     // simpler widget.
     assert(e.target.checked);
@@ -309,38 +319,42 @@ Polymer({
    * Moves the language to the top of the list.
    * @private
    */
-  onMoveToTopTap_: function() {
+  onMoveToTopTap_() {
     /** @type {!CrActionMenuElement} */ (this.$.menu.get()).close();
     this.languageHelper.moveLanguageToFront(this.detailLanguage_.language.code);
+    settings.recordSettingChange();
   },
 
   /**
    * Moves the language up in the list.
    * @private
    */
-  onMoveUpTap_: function() {
+  onMoveUpTap_() {
     /** @type {!CrActionMenuElement} */ (this.$.menu.get()).close();
     this.languageHelper.moveLanguage(
         this.detailLanguage_.language.code, true /* upDirection */);
+    settings.recordSettingChange();
   },
 
   /**
    * Moves the language down in the list.
    * @private
    */
-  onMoveDownTap_: function() {
+  onMoveDownTap_() {
     /** @type {!CrActionMenuElement} */ (this.$.menu.get()).close();
     this.languageHelper.moveLanguage(
         this.detailLanguage_.language.code, false /* upDirection */);
+    settings.recordSettingChange();
   },
 
   /**
    * Disables the language.
    * @private
    */
-  onRemoveLanguageTap_: function() {
+  onRemoveLanguageTap_() {
     /** @type {!CrActionMenuElement} */ (this.$.menu.get()).close();
     this.languageHelper.disableLanguage(this.detailLanguage_.language.code);
+    settings.recordSettingChange();
   },
 
   /**
@@ -352,7 +366,7 @@ Polymer({
    *     pref (which may be different from the actual UI language).
    * @private
    */
-  isProspectiveUILanguage_: function(languageCode, prospectiveUILanguage) {
+  isProspectiveUILanguage_(languageCode, prospectiveUILanguage) {
     return languageCode == prospectiveUILanguage;
   },
 
@@ -364,7 +378,7 @@ Polymer({
    * @return {string} The class name for the language item.
    * @private
    */
-  getLanguageItemClass_: function(languageCode, prospectiveUILanguage) {
+  getLanguageItemClass_(languageCode, prospectiveUILanguage) {
     if (languageCode == prospectiveUILanguage) {
       return 'selected';
     }
@@ -377,7 +391,7 @@ Polymer({
    * @return {boolean} True if the IDs match.
    * @private
    */
-  isCurrentInputMethod_: function(id, currentId) {
+  isCurrentInputMethod_(id, currentId) {
     return id == currentId;
   },
 
@@ -387,7 +401,7 @@ Polymer({
    * @return {string} The class for the input method item.
    * @private
    */
-  getInputMethodItemClass_: function(id, currentId) {
+  getInputMethodItemClass_(id, currentId) {
     return this.isCurrentInputMethod_(id, currentId) ? 'selected' : '';
   },
 
@@ -395,7 +409,7 @@ Polymer({
    * @param {!Event} e
    * @private
    */
-  onDotsTap_: function(e) {
+  onDotsTap_(e) {
     // Set a copy of the LanguageState object since it is not data-bound to the
     // languages model directly.
     this.detailLanguage_ = /** @type {!LanguageState} */ (Object.assign(
@@ -424,7 +438,7 @@ Polymer({
    * clicked it can be seen to change state before disappearing.
    * @private
    */
-  closeMenuSoon_: function() {
+  closeMenuSoon_() {
     const menu = /** @type {!CrActionMenuElement} */ (this.$.menu.get());
     setTimeout(function() {
       if (menu.open) {
@@ -437,7 +451,8 @@ Polymer({
    * Handler for the restart button.
    * @private
    */
-  onRestartTap_: function() {
+  onRestartTap_() {
+    settings.recordSettingChange();
     settings.LifetimeBrowserProxyImpl.getInstance().signOutAndRestart();
   },
 
@@ -446,7 +461,7 @@ Polymer({
    * @param {!Event} e
    * @private
    */
-  toggleExpandButton_: function(e) {
+  toggleExpandButton_(e) {
     // The expand button handles toggling itself.
     const expandButtonTag = 'CR-EXPAND-BUTTON';
     if (e.target.tagName == expandButtonTag) {
@@ -472,7 +487,7 @@ Polymer({
    *     effectively unsets the tabindex attribute.
    * @private
    */
-  getInputMethodTabIndex_: function(id, currentId) {
+  getInputMethodTabIndex_(id, currentId) {
     return id == currentId ? '' : '0';
   },
 
@@ -483,9 +498,18 @@ Polymer({
    * @param {!Event} e
    * @private
    */
-  onMouseDown_: function(e) {
+  onMouseDown_(e) {
     // Preventing the mousedown event from propagating prevents focus being set.
     e.preventDefault();
+  },
+
+  /**
+   * @param {string} language The language displayed in the row
+   * @return {string}
+   * @private
+   */
+  getRestartButtonDescription_(language) {
+    return this.i18n('displayLanguageRestart', language);
   },
 });
 })();

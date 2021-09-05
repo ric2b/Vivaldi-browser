@@ -227,14 +227,37 @@ IN_PROC_BROWSER_TEST_P(CompositorImplBrowserTest,
   CompositorSwapRunLoop(compositor_impl()).RunUntilSwap();
 }
 
+// This test waits for a presentation feedback token to arrive from the GPU. If
+// this test is timing out then it demonstrates a bug.
+IN_PROC_BROWSER_TEST_P(CompositorImplBrowserTest,
+                       CompositorImplReceivesPresentationTimeCallbacks) {
+  // OOP-R is required for this test to succeed with SkDDL, but is disabled on
+  // Android L and lower.
+  if (GetParam() == CompositorImplMode::kSkiaRenderer &&
+      base::android::BuildInfo::GetInstance()->sdk_int() <
+          base::android::SDK_VERSION_MARSHMALLOW) {
+    return;
+  }
+
+  // Presentation feedback occurs after the GPU has presented content to the
+  // display. This is later than the buffers swap.
+  base::RunLoop loop;
+  // The callback will cancel the loop used to wait.
+  static_cast<content::Compositor*>(compositor_impl())
+      ->RequestPresentationTimeForNextFrame(base::BindOnce(
+          [](base::OnceClosure quit,
+             const gfx::PresentationFeedback& feedback) {
+            std::move(quit).Run();
+          },
+          loop.QuitClosure()));
+  loop.Run();
+}
+
 class CompositorImplBrowserTestRefreshRate
     : public CompositorImplBrowserTest,
       public ui::WindowAndroid::TestHooks {
  public:
   std::string GetTestUrl() override { return "/media/tulip2.webm"; }
-  void AppendFeatures(std::vector<base::Feature>* features) override {
-    features->push_back(media::kUseSurfaceLayerForVideo);
-  }
 
   // WindowAndroid::TestHooks impl.
   std::vector<float> GetSupportedRates() override {
@@ -243,6 +266,12 @@ class CompositorImplBrowserTestRefreshRate
   void SetPreferredRate(float refresh_rate) override {
     if (fabs(refresh_rate - expected_refresh_rate_) < 2.f)
       run_loop_->Quit();
+  }
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    content::ContentBrowserTest::SetUpCommandLine(command_line);
+    command_line->AppendSwitchASCII(
+        switches::kAutoplayPolicy,
+        switches::autoplay::kNoUserGestureRequiredPolicy);
   }
 
   float expected_refresh_rate_ = 0.f;

@@ -5,43 +5,33 @@
 package org.chromium.chrome.browser.omnibox.suggestions.basic;
 
 import android.content.Context;
-import android.graphics.Bitmap;
-import android.text.Spannable;
-import android.text.SpannableString;
 import android.text.TextUtils;
-import android.text.style.StyleSpan;
-import android.util.Pair;
-import android.util.TypedValue;
-import android.view.View;
 
-import org.chromium.base.ApiCompatibilityUtils;
-import org.chromium.base.VisibleForTesting;
+import androidx.annotation.DrawableRes;
+
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeFeatureList;
-import org.chromium.chrome.browser.favicon.LargeIconBridge;
 import org.chromium.chrome.browser.omnibox.MatchClassificationStyle;
 import org.chromium.chrome.browser.omnibox.OmniboxSuggestionType;
 import org.chromium.chrome.browser.omnibox.UrlBarEditingTextStateProvider;
 import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestion;
 import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestionUiType;
-import org.chromium.chrome.browser.omnibox.suggestions.SuggestionCommonProperties;
-import org.chromium.chrome.browser.omnibox.suggestions.SuggestionProcessor;
+import org.chromium.chrome.browser.omnibox.suggestions.base.BaseSuggestionViewProcessor;
+import org.chromium.chrome.browser.omnibox.suggestions.base.SuggestionDrawableState;
+import org.chromium.chrome.browser.omnibox.suggestions.base.SuggestionSpannable;
 import org.chromium.chrome.browser.omnibox.suggestions.basic.SuggestionViewProperties.SuggestionIcon;
-import org.chromium.chrome.browser.omnibox.suggestions.basic.SuggestionViewProperties.SuggestionTextContainer;
-import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.ui.favicon.LargeIconBridge;
 import org.chromium.ui.modelutil.PropertyModel;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /** A class that handles model and view creation for the basic omnibox suggestions. */
-public class BasicSuggestionProcessor implements SuggestionProcessor {
+public class BasicSuggestionProcessor extends BaseSuggestionViewProcessor {
     private final Context mContext;
-    private final SuggestionHost mSuggestionHost;
     private final UrlBarEditingTextStateProvider mUrlBarEditingTextProvider;
-    private LargeIconBridge mLargeIconBridge;
-    private boolean mEnableSuggestionFavicons;
+    private final Supplier<LargeIconBridge> mIconBridgeSupplier;
     private final int mDesiredFaviconWidthPx;
 
     /**
@@ -50,12 +40,15 @@ public class BasicSuggestionProcessor implements SuggestionProcessor {
      * @param editingTextProvider A means of accessing the text in the omnibox.
      */
     public BasicSuggestionProcessor(Context context, SuggestionHost suggestionHost,
-            UrlBarEditingTextStateProvider editingTextProvider) {
+            UrlBarEditingTextStateProvider editingTextProvider,
+            Supplier<LargeIconBridge> iconBridgeSupplier) {
+        super(context, suggestionHost);
+
         mContext = context;
         mDesiredFaviconWidthPx = mContext.getResources().getDimensionPixelSize(
                 R.dimen.omnibox_suggestion_favicon_size);
-        mSuggestionHost = suggestionHost;
         mUrlBarEditingTextProvider = editingTextProvider;
+        mIconBridgeSupplier = iconBridgeSupplier;
     }
 
     @Override
@@ -74,17 +67,6 @@ public class BasicSuggestionProcessor implements SuggestionProcessor {
     }
 
     @Override
-    public void populateModel(OmniboxSuggestion suggestion, PropertyModel model, int position) {
-        model.set(SuggestionViewProperties.DELEGATE,
-                mSuggestionHost.createSuggestionViewDelegate(suggestion, position));
-
-        setStateForSuggestion(model, suggestion);
-    }
-
-    @Override
-    public void onUrlFocusChange(boolean hasFocus) {}
-
-    @Override
     public void recordSuggestionPresented(OmniboxSuggestion suggestion, PropertyModel model) {
         RecordHistogram.recordEnumeratedHistogram("Omnibox.IconOrFaviconShown",
                 model.get(SuggestionViewProperties.SUGGESTION_ICON_TYPE),
@@ -98,24 +80,13 @@ public class BasicSuggestionProcessor implements SuggestionProcessor {
                 SuggestionIcon.TOTAL_COUNT);
     }
 
-    /**
-     * Signals that native initialization has completed.
-     */
+    /** Decide whether suggestion should receive a refine arrow. */
     @Override
-    public void onNativeInitialized() {
-        // Experiment: controls presence of certain answer icon types.
-        mEnableSuggestionFavicons =
-                ChromeFeatureList.isEnabled(ChromeFeatureList.OMNIBOX_SHOW_SUGGESTION_FAVICONS);
-    }
+    protected boolean canRefine(OmniboxSuggestion suggestion) {
+        final @OmniboxSuggestionType int suggestionType = suggestion.getType();
 
-    /**
-     * Updates the profile used for extracting website favicons.
-     * @param profile The profile to be used.
-     */
-    public void setProfile(Profile profile) {
-        if (mEnableSuggestionFavicons) {
-            mLargeIconBridge = new LargeIconBridge(profile);
-        }
+        return !mUrlBarEditingTextProvider.getTextWithoutAutocomplete().trim().equalsIgnoreCase(
+                suggestion.getDisplayText());
     }
 
     /**
@@ -125,13 +96,9 @@ public class BasicSuggestionProcessor implements SuggestionProcessor {
      * Note that the stock icons do not include Favicon - Favicon is only declared
      * when we know we have a valid and large enough site favicon to present.
      */
-    @VisibleForTesting
-    public @SuggestionIcon int getSuggestionIconType(OmniboxSuggestion suggestion) {
+    private @SuggestionIcon int getSuggestionIconType(OmniboxSuggestion suggestion) {
         if (suggestion.isUrlSuggestion()) {
-            if (suggestion.getType() == OmniboxSuggestionType.CLIPBOARD_TEXT
-                    || suggestion.getType() == OmniboxSuggestionType.CLIPBOARD_IMAGE) {
-                return SuggestionIcon.MAGNIFIER;
-            } else if (suggestion.isStarred()) {
+            if (suggestion.isStarred()) {
                 return SuggestionIcon.BOOKMARK;
             } else {
                 return SuggestionIcon.GLOBE;
@@ -151,95 +118,73 @@ public class BasicSuggestionProcessor implements SuggestionProcessor {
         }
     }
 
-    private void setStateForSuggestion(PropertyModel model, OmniboxSuggestion suggestion) {
-        int suggestionType = suggestion.getType();
-        Spannable textLine1;
+    private void updateSuggestionIcon(OmniboxSuggestion suggestion, PropertyModel model) {
+        @SuggestionIcon
+        int type = getSuggestionIconType(suggestion);
+        @DrawableRes
+        int icon = R.drawable.ic_suggestion_magnifier;
 
-        Spannable textLine2;
-        int textLine2Color = 0;
-        int textLine2Direction = View.TEXT_DIRECTION_INHERIT;
+        switch (type) {
+            case SuggestionIcon.BOOKMARK:
+                icon = R.drawable.btn_star;
+                break;
+
+            case SuggestionIcon.HISTORY:
+                icon = R.drawable.ic_history_googblue_24dp;
+                break;
+
+            case SuggestionIcon.GLOBE:
+                icon = R.drawable.ic_globe_24dp;
+                break;
+
+            case SuggestionIcon.MAGNIFIER:
+                icon = R.drawable.ic_suggestion_magnifier;
+                break;
+
+            case SuggestionIcon.VOICE:
+                icon = R.drawable.btn_mic;
+                break;
+
+            default:
+                // All other cases are invalid.
+                assert false : "Suggestion type " + type + " is not valid.";
+        }
+
+        model.set(SuggestionViewProperties.SUGGESTION_ICON_TYPE, type);
+        setSuggestionDrawableState(model,
+                SuggestionDrawableState.Builder.forDrawableRes(mContext, icon)
+                        .setAllowTint(true)
+                        .build());
+    }
+
+    @Override
+    public void populateModel(OmniboxSuggestion suggestion, PropertyModel model, int position) {
+        super.populateModel(suggestion, model, position);
+        final @OmniboxSuggestionType int suggestionType = suggestion.getType();
+        SuggestionSpannable textLine2 = null;
+        boolean urlHighlighted = false;
 
         if (suggestion.isUrlSuggestion()) {
-            boolean urlHighlighted = false;
             if (!TextUtils.isEmpty(suggestion.getUrl())) {
-                Spannable str = SpannableString.valueOf(suggestion.getDisplayText());
+                SuggestionSpannable str = new SuggestionSpannable(suggestion.getDisplayText());
                 urlHighlighted = applyHighlightToMatchRegions(
                         str, suggestion.getDisplayTextClassifications());
                 textLine2 = str;
-                textLine2Color = ApiCompatibilityUtils.getColor(mContext.getResources(),
-                        model.get(SuggestionCommonProperties.USE_DARK_COLORS)
-                                ? R.color.suggestion_url_dark_modern
-                                : R.color.suggestion_url_light_modern);
-
-                if (suggestionType == OmniboxSuggestionType.CLIPBOARD_TEXT) {
-                    textLine2Direction = View.TEXT_DIRECTION_INHERIT;
-                } else {
-                    textLine2Direction = View.TEXT_DIRECTION_LTR;
-                }
-            } else {
-                textLine2 = null;
             }
-            textLine1 = getSuggestedQuery(suggestion, true, !urlHighlighted);
-        } else {
-            textLine1 = getSuggestedQuery(suggestion, false, true);
-            if ((suggestionType == OmniboxSuggestionType.SEARCH_SUGGEST_ENTITY)
-                    || (suggestionType == OmniboxSuggestionType.SEARCH_SUGGEST_PROFILE)) {
-                textLine2 = SpannableString.valueOf(suggestion.getDescription());
-                textLine2Color = ApiCompatibilityUtils.getColor(mContext.getResources(),
-                        model.get(SuggestionCommonProperties.USE_DARK_COLORS)
-                                ? R.color.default_text_color_dark
-                                : R.color.default_text_color_light);
-                textLine2Direction = View.TEXT_DIRECTION_INHERIT;
-            } else {
-                textLine2 = null;
-            }
+        } else if (suggestionType == OmniboxSuggestionType.SEARCH_SUGGEST_PROFILE) {
+            textLine2 = new SuggestionSpannable(suggestion.getDescription());
         }
 
-        model.set(SuggestionViewProperties.SUGGESTION_ICON_TYPE, getSuggestionIconType(suggestion));
-        model.set(SuggestionViewProperties.SUGGESTION_ICON_BITMAP, null);
+        final SuggestionSpannable textLine1 =
+                getSuggestedQuery(suggestion, suggestion.isUrlSuggestion(), !urlHighlighted);
 
-        model.set(
-                SuggestionViewProperties.TEXT_LINE_1_TEXT, new SuggestionTextContainer(textLine1));
-        model.set(SuggestionViewProperties.TEXT_LINE_1_SIZING,
-                Pair.create(TypedValue.COMPLEX_UNIT_PX,
-                        (int) mContext.getResources().getDimension(
-                                org.chromium.chrome.R.dimen
-                                        .omnibox_suggestion_first_line_text_size)));
-
-        model.set(
-                SuggestionViewProperties.TEXT_LINE_2_TEXT, new SuggestionTextContainer(textLine2));
-        model.set(SuggestionViewProperties.TEXT_LINE_2_TEXT_COLOR, textLine2Color);
-        model.set(SuggestionViewProperties.TEXT_LINE_2_TEXT_DIRECTION, textLine2Direction);
-        model.set(SuggestionViewProperties.TEXT_LINE_2_SIZING,
-                Pair.create(TypedValue.COMPLEX_UNIT_PX,
-                        (int) mContext.getResources().getDimension(
-                                org.chromium.chrome.R.dimen
-                                        .omnibox_suggestion_second_line_text_size)));
-        model.set(SuggestionViewProperties.TEXT_LINE_1_MAX_LINES, 1);
-        model.set(SuggestionViewProperties.TEXT_LINE_2_MAX_LINES, 1);
-
-        // Include site favicon if we are presenting URL and have favicon available.
-        // TODO(gangwu): Create a saparate processor for clipboard suggestions.
-        if (mLargeIconBridge != null && suggestion.getUrl() != null
-                && suggestion.getType() != OmniboxSuggestionType.CLIPBOARD_TEXT) {
-            mLargeIconBridge.getLargeIconForUrl(suggestion.getUrl(), mDesiredFaviconWidthPx,
-                    (Bitmap icon, int fallbackColor, boolean isFallbackColorDefault,
-                            int iconType) -> {
-                        if (!mSuggestionHost.isActiveModel(model)) return;
-                        if (icon != null) {
-                            model.set(SuggestionViewProperties.SUGGESTION_ICON_BITMAP, icon);
-                            model.set(SuggestionViewProperties.SUGGESTION_ICON_TYPE,
-                                    SuggestionIcon.FAVICON);
-                            mSuggestionHost.notifyPropertyModelsChanged();
-                        }
-                    });
-        }
-
-        boolean sameAsTyped =
-                mUrlBarEditingTextProvider.getTextWithoutAutocomplete().trim().equalsIgnoreCase(
-                        suggestion.getDisplayText());
-        model.set(SuggestionViewProperties.REFINABLE, !sameAsTyped);
-
+        updateSuggestionIcon(suggestion, model);
+        model.set(SuggestionViewProperties.IS_SEARCH_SUGGESTION, !suggestion.isUrlSuggestion());
+        model.set(SuggestionViewProperties.TEXT_LINE_1_TEXT, textLine1);
+        model.set(SuggestionViewProperties.TEXT_LINE_2_TEXT, textLine2);
+        fetchSuggestionFavicon(model, suggestion.getUrl(), mIconBridgeSupplier.get(), () -> {
+            model.set(SuggestionViewProperties.SUGGESTION_ICON_TYPE, SuggestionIcon.FAVICON);
+        });
     }
 
     /**
@@ -250,7 +195,7 @@ public class BasicSuggestionProcessor implements SuggestionProcessor {
      * @param shouldHighlight Whether the query should be highlighted.
      * @return The first line of text.
      */
-    private Spannable getSuggestedQuery(OmniboxSuggestion suggestion,
+    private SuggestionSpannable getSuggestedQuery(OmniboxSuggestion suggestion,
             boolean showDescriptionIfPresent, boolean shouldHighlight) {
         String userQuery = mUrlBarEditingTextProvider.getTextWithoutAutocomplete();
         String suggestedQuery = null;
@@ -271,50 +216,8 @@ public class BasicSuggestionProcessor implements SuggestionProcessor {
                     new OmniboxSuggestion.MatchClassification(0, MatchClassificationStyle.NONE));
         }
 
-        if (suggestion.getType() == OmniboxSuggestionType.SEARCH_SUGGEST_TAIL) {
-            String fillIntoEdit = suggestion.getFillIntoEdit();
-            final String ellipsisPrefix = "\u2026 ";
-            suggestedQuery = ellipsisPrefix + suggestedQuery;
-            // Offset the match classifications by the length of the ellipsis prefix to ensure
-            // the highlighting remains correct.
-            for (int i = 0; i < classifications.size(); i++) {
-                classifications.set(i,
-                        new OmniboxSuggestion.MatchClassification(
-                                classifications.get(i).offset + ellipsisPrefix.length(),
-                                classifications.get(i).style));
-            }
-            classifications.add(
-                    0, new OmniboxSuggestion.MatchClassification(0, MatchClassificationStyle.NONE));
-        }
-
-        Spannable str = SpannableString.valueOf(suggestedQuery);
+        SuggestionSpannable str = new SuggestionSpannable(suggestedQuery);
         if (shouldHighlight) applyHighlightToMatchRegions(str, classifications);
         return str;
-    }
-
-    private static boolean applyHighlightToMatchRegions(
-            Spannable str, List<OmniboxSuggestion.MatchClassification> classifications) {
-        boolean hasMatch = false;
-        for (int i = 0; i < classifications.size(); i++) {
-            OmniboxSuggestion.MatchClassification classification = classifications.get(i);
-            if ((classification.style & MatchClassificationStyle.MATCH)
-                    == MatchClassificationStyle.MATCH) {
-                int matchStartIndex = classification.offset;
-                int matchEndIndex;
-                if (i == classifications.size() - 1) {
-                    matchEndIndex = str.length();
-                } else {
-                    matchEndIndex = classifications.get(i + 1).offset;
-                }
-                matchStartIndex = Math.min(matchStartIndex, str.length());
-                matchEndIndex = Math.min(matchEndIndex, str.length());
-
-                hasMatch = true;
-                // Bold the part of the URL that matches the user query.
-                str.setSpan(new StyleSpan(android.graphics.Typeface.BOLD), matchStartIndex,
-                        matchEndIndex, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
-            }
-        }
-        return hasMatch;
     }
 }

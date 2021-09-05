@@ -35,7 +35,7 @@ import re
 
 from blinkpy.web_tests.layout_package.json_results_generator import convert_times_trie_to_flat_paths
 from blinkpy.web_tests.models import test_expectations
-
+from blinkpy.web_tests.models.typ_types import ResultType
 
 _log = logging.getLogger(__name__)
 
@@ -162,16 +162,20 @@ class WebTestFinder(object):
             return line
 
     def skip_tests(self, paths, all_tests_list, expectations, http_tests):
+        if self._options.no_expectations:
+            # do not skip anything.
+            return []
+
         all_tests = set(all_tests_list)
-
-        tests_to_skip = expectations.get_tests_with_result_type(test_expectations.SKIP)
-
-        if self._options.skip_timeouts:
-            tests_to_skip.update(expectations.get_tests_with_result_type(test_expectations.TIMEOUT))
-        if self._options.skip_failing_tests:
-            tests_to_skip.update(expectations.get_tests_with_result_type(test_expectations.FAIL))
-            tests_to_skip.update(expectations.get_tests_with_result_type(test_expectations.FLAKY))
-
+        tests_to_skip = set()
+        for test in all_tests:
+            expected_results = expectations.get_expectations(test).results
+            if ResultType.Skip in expected_results:
+                tests_to_skip.update({test})
+            if self._options.skip_timeouts and ResultType.Timeout in expected_results:
+                tests_to_skip.update({test})
+            if self._options.skip_failing_tests and ResultType.Failure in expected_results:
+                tests_to_skip.update({test})
         if self._options.skipped == 'only':
             tests_to_skip = all_tests - tests_to_skip
         elif self._options.skipped == 'ignore':
@@ -185,7 +189,7 @@ class WebTestFinder(object):
     def split_into_chunks(self, test_names):
         """split into a list to run and a set to skip, based on --shard_index and --total_shards."""
         if self._options.shard_index is None and self._options.total_shards is None:
-            return test_names, set()
+            return test_names
 
         if self._options.shard_index is None:
             raise ValueError('Must provide --shard-index or GTEST_SHARD_INDEX when sharding.')
@@ -207,15 +211,11 @@ class WebTestFinder(object):
             test_name
             for test_name, test_index in tests_and_indices
             if test_index == index]
-        other_tests = [
-            test_name
-            for test_name, test_index in tests_and_indices
-            if test_index != index]
 
         _log.debug('chunk %d of %d contains %d tests of %d',
                    index, count, len(tests_to_run), len(test_names))
 
-        return tests_to_run, other_tests
+        return tests_to_run
 
 
 def filter_tests(tests, filters):

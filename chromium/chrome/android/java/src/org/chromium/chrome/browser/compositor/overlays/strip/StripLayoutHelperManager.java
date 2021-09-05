@@ -9,7 +9,8 @@ import android.content.res.Resources;
 import android.graphics.RectF;
 import android.os.SystemClock;
 
-import org.chromium.base.VisibleForTesting;
+import androidx.annotation.VisibleForTesting;
+
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.compositor.LayerTitleCache;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManager;
@@ -25,18 +26,24 @@ import org.chromium.chrome.browser.compositor.overlays.SceneOverlay;
 import org.chromium.chrome.browser.compositor.scene_layer.SceneOverlayLayer;
 import org.chromium.chrome.browser.compositor.scene_layer.TabStripSceneLayer;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabCreationState;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabObserver;
-import org.chromium.chrome.browser.tabmodel.TabSelectionType;
 import org.chromium.ui.base.LocalizationUtils;
 import org.chromium.ui.resources.ResourceManager;
 
 import java.util.List;
 
+import org.chromium.chrome.browser.ActivityTabProvider;
+import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.ChromeTabbedActivity;
+import org.chromium.chrome.browser.tab.TabLaunchType;
+import org.chromium.chrome.browser.tab.TabSelectionType;
+import org.chromium.chrome.browser.tab.TabThemeColorHelper;
 
 /**
  * This class handles managing which {@link StripLayoutHelper} is currently active and dispatches
@@ -48,7 +55,7 @@ public class StripLayoutHelperManager implements SceneOverlay {
 
     // Model selector buttons constants.
     private static final float MODEL_SELECTOR_BUTTON_Y_OFFSET_DP = 10.f;
-    private static final float MODEL_SELECTOR_BUTTON_END_PADDING_DP = 6.f;
+    private static final float MODEL_SELECTOR_BUTTON_END_PADDING_DP = 11.f;
     private static final float MODEL_SELECTOR_BUTTON_START_PADDING_DP = 3.f;
     private static final float MODEL_SELECTOR_BUTTON_WIDTH_DP = 24.f;
     private static final float MODEL_SELECTOR_BUTTON_HEIGHT_DP = 24.f;
@@ -75,6 +82,9 @@ public class StripLayoutHelperManager implements SceneOverlay {
 
     private TabStripEventHandler mTabStripEventHandler;
 
+    // Vivaldi
+    private final ChromeTabbedActivity mActivity;
+
     private class TabStripEventHandler implements GestureHandler {
         @Override
         public void onDown(float x, float y, boolean fromMouse, int buttons) {
@@ -84,6 +94,10 @@ public class StripLayoutHelperManager implements SceneOverlay {
 
         @Override
         public void onUpOrCancel() {
+            // Note(david@vivaldi.com): We are abusing the |mModelSelectorButton| to create a new tab.
+            if (ChromeApplication.isVivaldi())
+                if (mModelSelectorButton.onUpOrCancel()) createNewTab();
+            else
             if (mModelSelectorButton.onUpOrCancel() && mTabModelSelector != null) {
                 getActiveStripLayoutHelper().finishAnimation();
                 if (!mModelSelectorButton.isVisible()) return;
@@ -158,9 +172,10 @@ public class StripLayoutHelperManager implements SceneOverlay {
         mModelSelectorButton.setVisible(false);
         // Pressed resources are the same as the unpressed resources.
         if(ChromeApplication.isVivaldi()) {
-            mModelSelectorButton.setResources(R.drawable.vivaldi_private_toggle,
-                    R.drawable.vivaldi_private_toggle, R.drawable.vivaldi_tab_switch_private_mode,
-                    R.drawable.vivaldi_tab_switch_private_mode);
+            mModelSelectorButton.setResources(R.drawable.btn_tabstrip_new_tab_normal,
+                    R.drawable.btn_tabstrip_new_tab_pressed, R.drawable.btn_tabstrip_new_tab_normal,
+                    R.drawable.btn_tabstrip_new_tab_pressed);
+            mModelSelectorButton.setVisible(true);
         } else {
         mModelSelectorButton.setResources(R.drawable.btn_tabstrip_switch_normal,
                 R.drawable.btn_tabstrip_switch_normal, R.drawable.location_bar_incognito_badge,
@@ -169,6 +184,12 @@ public class StripLayoutHelperManager implements SceneOverlay {
         mModelSelectorButton.setY(MODEL_SELECTOR_BUTTON_Y_OFFSET_DP);
 
         Resources res = context.getResources();
+        // Note(david@vivaldi.com): Set the correct height for the phone tab strip.
+        mActivity = (ChromeTabbedActivity)context;
+        if (ChromeApplication.isVivaldi() && !mActivity.isTablet())
+            mHeight = res.getDimension(R.dimen.tab_strip_height_phone_with_tabs)
+                    / res.getDisplayMetrics().density;
+        else
         mHeight = res.getDimension(R.dimen.tab_strip_height) / res.getDisplayMetrics().density;
         mModelSelectorButton.setAccessibilityDescription(
                 res.getString(R.string.accessibility_tabstrip_btn_incognito_toggle_standard),
@@ -188,6 +209,11 @@ public class StripLayoutHelperManager implements SceneOverlay {
     }
 
     private void handleModelSelectorButtonClick() {
+        // Note(david@vivaldi.com): We are abusing the |mModelSelectorButton| to create a new tab.
+        if (ChromeApplication.isVivaldi()) {
+            createNewTab();
+            return;
+        }
         if (mTabModelSelector == null) return;
         getActiveStripLayoutHelper().finishAnimation();
         if (!mModelSelectorButton.isVisible()) return;
@@ -359,7 +385,8 @@ public class StripLayoutHelperManager implements SceneOverlay {
 
             /** Vivaldi **/
             @Override
-            public void didAddTab(Tab tab, int type) {
+            public void didAddTab(Tab tab, @TabLaunchType int type,
+                                  @TabCreationState int creationState) {
                 updateModelSwitcherButton();
             }
 
@@ -394,6 +421,23 @@ public class StripLayoutHelperManager implements SceneOverlay {
             @Override
             public void onCrash(Tab tab) {
                 getStripLayoutHelper(tab.isIncognito()).tabPageLoadFinished(tab.getId());
+            }
+
+            // Vivaldi
+            @Override
+            public void onDidChangeThemeColor(Tab tab, int color) {
+                if (mTabModelSelector.getCurrentTab() == tab)
+                    mTabStripTreeProvider.setTabStripBackgroundColor(color);
+            }
+        };
+
+        // Vivaldi
+        new ActivityTabProvider.ActivityTabTabObserver(mActivity.getActivityTabProvider()) {
+            @Override
+            protected void onObservingDifferentTab(Tab tab) {
+                if (tab != null && !tab.isBeingRestored())
+                    mTabStripTreeProvider.setTabStripBackgroundColor(
+                            TabThemeColorHelper.getColor(tab));
             }
         };
     }
@@ -465,7 +509,10 @@ public class StripLayoutHelperManager implements SceneOverlay {
         mModelSelectorButton.setIncognito(mIsIncognito);
         if (mTabModelSelector != null) {
             boolean isVisible = mTabModelSelector.getModel(true).getCount() != 0;
+            // Note (david@vivaldi.com): No model selector button in Vivaldi.
+            if (!ChromeApplication.isVivaldi()) {
             mModelSelectorButton.setVisible(isVisible);
+            }
 
             float endMargin = isVisible
                     ? MODEL_SELECTOR_BUTTON_WIDTH_DP + MODEL_SELECTOR_BUTTON_END_PADDING_DP
@@ -501,5 +548,13 @@ public class StripLayoutHelperManager implements SceneOverlay {
 
     private StripLayoutHelper getInactiveStripLayoutHelper() {
         return mIsIncognito ? mNormalHelper : mIncognitoHelper;
+    }
+
+    /** Vivaldi **/
+    private void createNewTab() {
+        TabModel currentTabModel = mTabModelSelector.getCurrentModel();
+        if (currentTabModel == null) return;
+        if (!currentTabModel.isIncognito()) currentTabModel.commitAllTabClosures();
+        ((ChromeActivity) mActivity).getTabCreator(currentTabModel.isIncognito()).launchNTP();
     }
 }

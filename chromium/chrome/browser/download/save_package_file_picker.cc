@@ -10,6 +10,7 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/i18n/file_util_icu.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
@@ -30,6 +31,7 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/save_page_type.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/content_features.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #include "app/vivaldi_apptools.h"
@@ -60,18 +62,28 @@ void AddHtmlOnlyFileTypeInfo(
   extensions.push_back(FILE_PATH_LITERAL("htm"));
   if (!extra_extension.empty())
     extensions.push_back(extra_extension);
-  file_type_info->extensions.push_back(extensions);
+  file_type_info->extensions.emplace_back(std::move(extensions));
 }
 
-// Adds "Web Archive, Single File" type to FileTypeInfo.
+// Adds "Webpage, Single File" type to FileTypeInfo.
 void AddSingleFileFileTypeInfo(
     ui::SelectFileDialog::FileTypeInfo* file_type_info) {
   file_type_info->extension_description_overrides.push_back(
       l10n_util::GetStringUTF16(IDS_SAVE_PAGE_DESC_SINGLE_FILE));
 
-  std::vector<base::FilePath::StringType> extensions;
-  extensions.push_back(FILE_PATH_LITERAL("mhtml"));
-  file_type_info->extensions.push_back(extensions);
+  file_type_info->extensions.emplace_back(
+      std::initializer_list<base::FilePath::StringType>{
+          FILE_PATH_LITERAL("mhtml")});
+}
+
+// Adds "Webpage, Single File (Web Bundle)" type to FileTypeInfo.
+void AddWebBundleFileFileTypeInfo(
+    ui::SelectFileDialog::FileTypeInfo* file_type_info) {
+  file_type_info->extension_description_overrides.push_back(
+      l10n_util::GetStringUTF16(IDS_SAVE_PAGE_DESC_WEB_BUNDLE_FILE));
+  file_type_info->extensions.emplace_back(
+      std::initializer_list<base::FilePath::StringType>{
+          FILE_PATH_LITERAL("wbn")});
 }
 
 // Chrome OS doesn't support HTML-Complete. crbug.com/154823
@@ -136,18 +148,18 @@ SavePackageFilePicker::SavePackageFilePicker(
     const base::FilePath::StringType& default_extension,
     bool can_save_as_complete,
     DownloadPrefs* download_prefs,
-    const content::SavePackagePathPickedCallback& callback)
+    content::SavePackagePathPickedCallback callback)
     : render_process_id_(web_contents->GetMainFrame()->GetProcess()->GetID()),
       can_save_as_complete_(can_save_as_complete),
       download_prefs_(download_prefs),
-      callback_(callback) {
+      callback_(std::move(callback)) {
   base::FilePath suggested_path_copy = suggested_path;
   base::FilePath::StringType default_extension_copy = default_extension;
   int file_type_index = 0;
   ui::SelectFileDialog::FileTypeInfo file_type_info;
 
   file_type_info.allowed_paths =
-      ui::SelectFileDialog::FileTypeInfo::NATIVE_OR_DRIVE_PATH;
+      ui::SelectFileDialog::FileTypeInfo::NATIVE_PATH;
 
   if (can_save_as_complete_) {
     // The option index is not zero-based. Put a dummy entry.
@@ -174,6 +186,11 @@ SavePackageFilePicker::SavePackageFilePicker(
     if (can_save_as_complete_) {
       AddSingleFileFileTypeInfo(&file_type_info);
       save_types_.push_back(content::SAVE_PAGE_TYPE_AS_MHTML);
+
+      if (base::FeatureList::IsEnabled(features::kSavePageAsWebBundle)) {
+        AddWebBundleFileFileTypeInfo(&file_type_info);
+        save_types_.push_back(content::SAVE_PAGE_TYPE_AS_WEB_BUNDLE);
+      }
     }
 
 #if !defined(OS_CHROMEOS)
@@ -266,8 +283,8 @@ void SavePackageFilePicker::FileSelected(
 
   download_prefs_->SetSaveFilePath(path_copy.DirName());
 
-  callback_.Run(path_copy, save_type,
-                base::Bind(&OnSavePackageDownloadCreated));
+  std::move(callback_).Run(path_copy, save_type,
+                           base::BindOnce(&OnSavePackageDownloadCreated));
 }
 
 void SavePackageFilePicker::FileSelectionCanceled(void* unused_params) {

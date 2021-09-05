@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="it">
 <translation id="1017280919048282932">&amp;Aggiungi al dizionario</translation>
+<translation id="1029317248976101138">Zoom</translation>
 <translation id="1031362278801463162">Caricamento anteprima in corso</translation>
 <translation id="1047431265488717055">Copia Testo del Lin&amp;k</translation>
 <translation id="1049795001945932310">&amp;Impostazioni lingua</translation>
@@ -54,6 +55,7 @@
 <translation id="1886996562706621347">Consenti ai siti di chiedere di diventare gestori predefiniti dei protocolli (opzione consigliata)</translation>
 <translation id="1901303067676059328">Selezion&amp;a tutto</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
+<translation id="1936931585862840749">Specifica un numero per indicare la quantità di copie da stampare (da 1 a <ph name="MAX_COPIES" />).</translation>
 <translation id="1963227389609234879">Rimuovi tutto</translation>
 <translation id="1994173015038366702">URL sito</translation>
 <translation id="2019718679933488176">&amp;Apri audio in nuova scheda</translation>
@@ -66,7 +68,6 @@
 <translation id="2150139952286079145">Cerca destinazioni</translation>
 <translation id="215753907730220065">Esci da schermo intero</translation>
 <translation id="2177950615300672361">Scheda di navigazione in incognito: <ph name="TAB_NAME" /></translation>
-<translation id="218070003709087997">Specifica un numero per indicare la quantità di copie da stampare (da 1 a 999).</translation>
 <translation id="219008588003277019">Modulo Native Client: <ph name="NEXE_NAME" /></translation>
 <translation id="220138918934036434">Nascondi pulsante</translation>
 <translation id="2218515861914035131">Incolla come testo semplice</translation>
@@ -78,11 +79,9 @@
 <translation id="2282146716419988068">Processo GPU</translation>
 <translation id="2301382460326681002">Directory principale dell'estensione non valida.</translation>
 <translation id="2318143611928805047">Formato carta</translation>
-<translation id="2318923050469484167">Sessione di navigazione in incognito corrente (<ph name="EMBEDDING" />)</translation>
 <translation id="2322193970951063277">Intestazioni e piè di pagina</translation>
 <translation id="2326931316514688470">&amp;Ricarica app</translation>
 <translation id="2327492829706409234">Attiva applicazione</translation>
-<translation id="2344028582131185878">Download automatici</translation>
 <translation id="2348176352564285430">App: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">Seleziona la directory dell'estensione.</translation>
 <translation id="2379281330731083556">Stampa utilizzando la finestra di dialogo di sistema... <ph name="SHORTCUT_KEY" /></translation>
@@ -95,12 +94,12 @@
 <translation id="2470702053775288986">Estensioni non supportate disattivate</translation>
 <translation id="2476578072172137802">Impostazioni sito</translation>
 <translation id="2482878487686419369">Notifiche</translation>
+<translation id="2498539833203011245">Minimizza</translation>
 <translation id="2509495747794740764">Il valore Scala deve essere un numero compreso tra 10 e 200.</translation>
 <translation id="253557089021624350">Numero attività keep-alive</translation>
 <translation id="2546283357679194313">Cookie e dati dei siti</translation>
 <translation id="2550212893339833758">Memoria in swap</translation>
 <translation id="2553440850688409052">Nascondi questo plug-in</translation>
-<translation id="2580924999637585241">Totale: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="26224892172169984">Non consentire ad alcun sito di gestire i protocolli</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Riattiva</translation>
@@ -120,7 +119,6 @@
 <translation id="2932883381142163287">Segnala abuso</translation>
 <translation id="2941112035454246133">Bassa</translation>
 <translation id="2972581237482394796">&amp;Ripeti</translation>
-<translation id="299483336428448530">Installata da un genitore.</translation>
 <translation id="3003623123441819449">Cache CSS</translation>
 <translation id="3008272652534848354">Reimposta le autorizzazioni</translation>
 <translation id="3012631534724231212">(iframe)</translation>
@@ -274,7 +272,6 @@
 <translation id="5425042808445046667">Continua il trasferimento</translation>
 <translation id="5427459444770871191">Ruota in senso &amp;Orario</translation>
 <translation id="5431318178759467895">A colori</translation>
-<translation id="5472133193607270166">Se questa opzione è attiva, i siti non possono usare la tua attività di navigazione su siti web diversi per personalizzare gli annunci. Alcuni siti potrebbero non funzionare correttamente.</translation>
 <translation id="5483785310822538350">Revoca accesso a file e dispositivi</translation>
 <translation id="5485102783864353244">Aggiungi app</translation>
 <translation id="5486561344817861625">Simula riavvio browser</translation>
@@ -302,7 +299,6 @@
 <translation id="5804241973901381774">Autorizzazioni</translation>
 <translation id="5828633471261496623">Stampa in corso...</translation>
 <translation id="583281660410589416">Sconosciuto</translation>
-<translation id="5838456317242088717">Sessione di navigazione in incognito corrente</translation>
 <translation id="5860491529813859533">Attiva</translation>
 <translation id="5867841422488265304">Cerca o digita l'indirizzo web</translation>
 <translation id="5908769186679515905">Impedisci ai siti di eseguire Flash</translation>
@@ -322,7 +318,6 @@
 <translation id="6147020289383635445">Anteprima di stampa non riuscita.</translation>
 <translation id="6156863943908443225">Cache script</translation>
 <translation id="6169666352732958425">Impossibile trasmettere il desktop.</translation>
-<translation id="6196640612572343990">Blocca cookie di terze parti</translation>
 <translation id="6196854373336333322">L'estensione "<ph name="EXTENSION_NAME" />" ha assunto il controllo delle tue impostazioni proxy, il che significa che può cambiare, interrompere o intercettare tutto ciò che fai online. Se non sei sicuro del motivo per cui si sia verificato questo cambiamento, è probabile che sia indesiderato.</translation>
 <translation id="6206311232642889873">Cop&amp;ia immagine</translation>
 <translation id="6239558157302047471">Ricarica &amp;frame</translation>
@@ -335,6 +330,7 @@
 <translation id="6295158916970320988">Tutti i siti</translation>
 <translation id="6295855836753816081">Salvataggio in corso...</translation>
 <translation id="6308937455967653460">Salva lin&amp;k come...</translation>
+<translation id="6315493146179903667">Porta tutto in primo piano</translation>
 <translation id="6326855256003666642">Numero attività keep-alive</translation>
 <translation id="6374469231428023295">Riprova</translation>
 <translation id="6385543213911723544">I siti possono salvare e leggere i dati dei cookie</translation>
@@ -380,6 +376,7 @@
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">Mostra &amp;controlli</translation>
 <translation id="7311079019872751559">Accesso con plug-in senza sandbox</translation>
+<translation id="73174032666024687"><ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="7385854874724088939">Si è verificato un problema durante il tentativo di stampa. Controlla la stampante e riprova.</translation>
 <translation id="7412226954991670867">Memoria GPU</translation>
 <translation id="7421925624202799674">&amp;Visualizza sorgente pagina</translation>
@@ -424,8 +421,8 @@
 <translation id="7978412674231730200">Chiave privata</translation>
 <translation id="7982789257301363584">Rete</translation>
 <translation id="7997826902155442747">Priorità Processo</translation>
-<translation id="7999229196265990314">Sono stati creati i file seguenti:
-        
+<translation id="7999229196265990314">Sono stati creati i seguenti file:
+
 Estensione: <ph name="EXTENSION_FILE" />
 File di chiave: <ph name="KEY_FILE" />
 

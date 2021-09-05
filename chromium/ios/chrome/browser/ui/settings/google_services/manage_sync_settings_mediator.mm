@@ -16,13 +16,14 @@
 #import "ios/chrome/browser/ui/list_model/list_model.h"
 #import "ios/chrome/browser/ui/settings/cells/sync_switch_item.h"
 #import "ios/chrome/browser/ui/settings/google_services/manage_sync_settings_command_handler.h"
+#import "ios/chrome/browser/ui/settings/google_services/manage_sync_settings_constants.h"
 #import "ios/chrome/browser/ui/settings/google_services/manage_sync_settings_consumer.h"
 #import "ios/chrome/browser/ui/settings/utils/pref_backed_boolean.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_cells_constants.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_image_item.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_item.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
-#import "ios/chrome/common/colors/UIColor+cr_semantic_colors.h"
+#import "ios/chrome/common/ui/colors/UIColor+cr_semantic_colors.h"
 #include "ios/chrome/grit/ios_chromium_strings.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -32,9 +33,6 @@
 #endif
 
 using l10n_util::GetNSString;
-
-NSString* const kDataFromChromeSyncAccessibilityIdentifier =
-    @"DataFromChromeSyncAccessibilityIdentifier";
 
 namespace {
 
@@ -285,6 +283,16 @@ NSString* kGoogleServicesSyncErrorImage = @"google_services_sync_error";
         [UIImage imageNamed:kGoogleServicesSyncErrorImage];
     self.encryptionItem.detailText = GetNSString(
         IDS_IOS_GOOGLE_SERVICES_SETTINGS_ENTER_PASSPHRASE_TO_START_SYNC);
+  } else if (self.shouldEncryptionItemBeEnabled &&
+             self.syncSetupService->GetSyncServiceState() ==
+                 SyncSetupService::kSyncServiceNeedsTrustedVaultKey) {
+    needsUpdate = needsUpdate || self.encryptionItem.image == nil;
+    self.encryptionItem.image =
+        [UIImage imageNamed:kGoogleServicesSyncErrorImage];
+    self.encryptionItem.detailText =
+        GetNSString(self.syncSetupService->IsEncryptEverythingEnabled()
+                        ? IDS_IOS_SYNC_ERROR_DESCRIPTION
+                        : IDS_IOS_SYNC_PASSWORDS_ERROR_DESCRIPTION);
   } else {
     needsUpdate = needsUpdate || self.encryptionItem.image != nil;
     self.encryptionItem.image = nil;
@@ -355,7 +363,8 @@ NSString* kGoogleServicesSyncErrorImage = @"google_services_sync_error";
   SyncSetupService::SyncServiceState state =
       self.syncSetupService->GetSyncServiceState();
   return state != SyncSetupService::kNoSyncServiceError &&
-         state != SyncSetupService::kSyncServiceNeedsPassphrase;
+         state != SyncSetupService::kSyncServiceNeedsPassphrase &&
+         state != SyncSetupService::kSyncServiceNeedsTrustedVaultKey;
 }
 
 - (BOOL)shouldSyncDataItemEnabled {
@@ -460,6 +469,11 @@ NSString* kGoogleServicesSyncErrorImage = @"google_services_sync_error";
   ItemType itemType = static_cast<ItemType>(item.type);
   switch (itemType) {
     case EncryptionItemType:
+      if (self.syncSetupService->GetSyncServiceState() ==
+          SyncSetupService::kSyncServiceNeedsTrustedVaultKey) {
+        // TODO(crbug.com/1019685): Open key retrieval dialog.
+        break;
+      }
       [self.commandHandler openPassphraseDialog];
       break;
     case GoogleActivityControlsItemType:

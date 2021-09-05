@@ -57,6 +57,8 @@ class UpdateScreen : public BaseScreen, public VersionUpdater::Delegate {
  public:
   using Result = VersionUpdater::Result;
 
+  static std::string GetResultString(Result result);
+
   static UpdateScreen* Get(ScreenManager* manager);
 
   using ScreenExitCallback = base::RepeatingCallback<void(Result result)>;
@@ -68,11 +70,6 @@ class UpdateScreen : public BaseScreen, public VersionUpdater::Delegate {
   // Called when the being destroyed. This should call Unbind() on the
   // associated View if this class is destroyed before it.
   void OnViewDestroyed(UpdateView* view);
-
-  // BaseScreen:
-  void Show() override;
-  void Hide() override;
-  void OnUserAction(const std::string& action_id) override;
 
   base::OneShotTimer* GetShowTimerForTesting();
   base::OneShotTimer* GetErrorMessageTimerForTesting();
@@ -96,6 +93,11 @@ class UpdateScreen : public BaseScreen, public VersionUpdater::Delegate {
   void FinishExitUpdate(VersionUpdater::Result result) override;
 
  protected:
+  // BaseScreen:
+  void ShowImpl() override;
+  void HideImpl() override;
+  void OnUserAction(const std::string& action_id) override;
+
   void ExitUpdate(Result result);
 
  private:

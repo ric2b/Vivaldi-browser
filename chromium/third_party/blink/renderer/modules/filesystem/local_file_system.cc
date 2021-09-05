@@ -47,12 +47,12 @@
 #include "third_party/blink/renderer/modules/filesystem/dom_file_system.h"
 #include "third_party/blink/renderer/modules/filesystem/file_system_callbacks.h"
 #include "third_party/blink/renderer/modules/filesystem/file_system_dispatcher.h"
+#include "third_party/blink/renderer/platform/scheduler/public/frame_scheduler.h"
+#include "third_party/blink/renderer/platform/scheduler/public/scheduling_policy.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
 
 namespace blink {
-
-LocalFileSystem::~LocalFileSystem() = default;
 
 void LocalFileSystem::ResolveURL(ExecutionContext* context,
                                  const KURL& file_system_url,
@@ -90,6 +90,9 @@ void LocalFileSystem::RequestFileSystem(
       WTF::Bind(&LocalFileSystem::RequestFileSystemCallback,
                 WrapCrossThreadPersistent(this), WrapPersistent(context), type,
                 std::move(callbacks), sync_type));
+  context->GetScheduler()->RegisterStickyFeature(
+      blink::SchedulingPolicy::Feature::kWebFileSystem,
+      {blink::SchedulingPolicy::RecordMetricsForBackForwardCache()});
 }
 
 void LocalFileSystem::RequestFileSystemCallback(
@@ -110,7 +113,7 @@ void LocalFileSystem::RequestFileSystemAccessInternal(
     base::OnceCallback<void(bool)> callback) {
   if (context->IsDocument()) {
     auto* client =
-        To<Document>(context)->GetFrame()->GetContentSettingsClient();
+        Document::From(context)->GetFrame()->GetContentSettingsClient();
     if (!client) {
       std::move(callback).Run(true);
     } else {
@@ -182,7 +185,7 @@ LocalFileSystem::LocalFileSystem(LocalFrame& frame)
 LocalFileSystem::LocalFileSystem(WorkerGlobalScope& worker_global_scope)
     : Supplement<WorkerGlobalScope>(worker_global_scope) {}
 
-void LocalFileSystem::Trace(blink::Visitor* visitor) {
+void LocalFileSystem::Trace(Visitor* visitor) {
   Supplement<LocalFrame>::Trace(visitor);
   Supplement<WorkerGlobalScope>::Trace(visitor);
 }
@@ -190,7 +193,7 @@ void LocalFileSystem::Trace(blink::Visitor* visitor) {
 const char LocalFileSystem::kSupplementName[] = "LocalFileSystem";
 
 LocalFileSystem* LocalFileSystem::From(ExecutionContext& context) {
-  if (auto* document = DynamicTo<Document>(context)) {
+  if (auto* document = Document::DynamicFrom(context)) {
     LocalFileSystem* file_system =
         Supplement<LocalFrame>::From<LocalFileSystem>(document->GetFrame());
     DCHECK(file_system);

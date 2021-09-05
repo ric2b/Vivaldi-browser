@@ -26,9 +26,15 @@
 
 namespace {
 
+// Returns true if the Data Reduction Proxy is forced to be enabled from the
+// command line.
+bool ShouldForceEnableDataReductionProxy() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      data_reduction_proxy::switches::kEnableDataReductionProxy);
+}
+
 // Key of the UMA DataReductionProxy.StartupState histogram.
-const char kUMAProxyStartupStateHistogram[] =
-    "DataReductionProxy.StartupState";
+const char kUMAProxyStartupStateHistogram[] = "DataReductionProxy.StartupState";
 
 void RecordSettingsEnabledState(
     data_reduction_proxy::DataReductionSettingsEnabledAction action) {
@@ -48,11 +54,15 @@ void RecordDaysSinceEnabledMetric(int days_since_enabled) {
 
 namespace data_reduction_proxy {
 
-DataReductionProxySettings::DataReductionProxySettings()
+DataReductionProxySettings::DataReductionProxySettings(
+    bool is_off_the_record_profile)
     : unreachable_(false),
       prefs_(nullptr),
       config_(nullptr),
-      clock_(base::DefaultClock::GetInstance()) {}
+      clock_(base::DefaultClock::GetInstance()),
+      is_off_the_record_profile_(is_off_the_record_profile) {
+  DCHECK(!is_off_the_record_profile_);
+}
 
 DataReductionProxySettings::~DataReductionProxySettings() = default;
 
@@ -75,7 +85,7 @@ void DataReductionProxySettings::InitDataReductionProxySettings(
                           base::Unretained(this)));
 
 #if defined(OS_ANDROID)
-  if (IsDataSaverEnabledByUser(prefs_)) {
+  if (IsDataSaverEnabledByUser(is_off_the_record_profile_, prefs_)) {
     data_reduction_proxy_service_->compression_stats()
         ->SetDataUsageReportingEnabled(true);
   }
@@ -99,8 +109,12 @@ void DataReductionProxySettings::SetCallbackToRegisterSyntheticFieldTrial(
 }
 
 // static
-bool DataReductionProxySettings::IsDataSaverEnabledByUser(PrefService* prefs) {
-  if (params::ShouldForceEnableDataReductionProxy())
+bool DataReductionProxySettings::IsDataSaverEnabledByUser(
+    bool is_off_the_record_profile,
+    PrefService* prefs) {
+  if (is_off_the_record_profile)
+    return false;
+  if (ShouldForceEnableDataReductionProxy())
     return true;
 
 #if defined(OS_ANDROID)
@@ -131,13 +145,14 @@ bool DataReductionProxySettings::IsDataReductionProxyEnabled() const {
   if (!params::IsEnabledWithNetworkService()) {
     return false;
   }
-  return IsDataSaverEnabledByUser(GetOriginalProfilePrefs());
+  return IsDataSaverEnabledByUser(is_off_the_record_profile_,
+                                  GetOriginalProfilePrefs());
 }
 
 bool DataReductionProxySettings::CanUseDataReductionProxy(
     const GURL& url) const {
   return url.is_valid() && url.scheme() == url::kHttpScheme &&
-      IsDataReductionProxyEnabled();
+         IsDataReductionProxyEnabled();
 }
 
 bool DataReductionProxySettings::IsDataReductionProxyManaged() {
@@ -163,8 +178,8 @@ void DataReductionProxySettings::SetDataReductionProxyEnabled(bool enabled) {
 int64_t DataReductionProxySettings::GetDataReductionLastUpdateTime() {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(data_reduction_proxy_service_->compression_stats());
-  return
-      data_reduction_proxy_service_->compression_stats()->GetLastUpdateTime();
+  return data_reduction_proxy_service_->compression_stats()
+      ->GetLastUpdateTime();
 }
 
 void DataReductionProxySettings::ClearDataSavingStatistics(
@@ -231,7 +246,7 @@ void DataReductionProxySettings::MaybeActivateDataReductionProxy(
   if (!prefs)
     return;
 
-  bool enabled = IsDataSaverEnabledByUser(prefs);
+  bool enabled = IsDataSaverEnabledByUser(is_off_the_record_profile_, prefs);
 
   if (enabled && at_startup) {
     // Record the number of days since data reduction proxy has been enabled.
@@ -284,6 +299,21 @@ void DataReductionProxySettings::SetProxyRequestHeaders(
     observer.OnProxyRequestHeadersChanged(headers);
 }
 
+const std::vector<GURL>& DataReductionProxySettings::GetPrefetchProxies()
+    const {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  return prefetch_proxies_;
+}
+
+void DataReductionProxySettings::UpdatePrefetchProxyHosts(
+    const std::vector<GURL>& prefetch_proxies) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  prefetch_proxies_ = prefetch_proxies;
+  for (auto& observer : observers_)
+    observer.OnPrefetchProxyHostsChanged(prefetch_proxies);
+  LOCAL_HISTOGRAM_BOOLEAN("DataReductionProxy.Settings.ConfigReceived", true);
+}
+
 bool DataReductionProxySettings::IsConfiguredDataReductionProxy(
     const net::ProxyServer& proxy_server) const {
   if (proxy_server.is_direct() || !proxy_server.is_valid())
@@ -331,8 +361,7 @@ void DataReductionProxySettings::RecordDataReductionInit() const {
 
 void DataReductionProxySettings::RecordStartupState(
     ProxyStartupState state) const {
-  UMA_HISTOGRAM_ENUMERATION(kUMAProxyStartupStateHistogram,
-                            state,
+  UMA_HISTOGRAM_ENUMERATION(kUMAProxyStartupStateHistogram, state,
                             PROXY_STARTUP_STATE_COUNT);
 }
 
@@ -368,12 +397,12 @@ void DataReductionProxySettings::RecordStartupSavings() const {
   }
 }
 
-ContentLengthList
-DataReductionProxySettings::GetDailyContentLengths(const char* pref_name) {
+ContentLengthList DataReductionProxySettings::GetDailyContentLengths(
+    const char* pref_name) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(data_reduction_proxy_service_->compression_stats());
-  return data_reduction_proxy_service_->compression_stats()->
-      GetDailyContentLengths(pref_name);
+  return data_reduction_proxy_service_->compression_stats()
+      ->GetDailyContentLengths(pref_name);
 }
 
 void DataReductionProxySettings::GetContentLengths(

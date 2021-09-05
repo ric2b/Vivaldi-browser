@@ -23,7 +23,9 @@ SharedWorkerFactoryImpl::SharedWorkerFactoryImpl() {}
 
 void SharedWorkerFactoryImpl::CreateSharedWorker(
     blink::mojom::SharedWorkerInfoPtr info,
+    const url::Origin& constructor_origin,
     const std::string& user_agent,
+    const blink::UserAgentMetadata& ua_metadata,
     bool pause_on_start,
     const base::UnguessableToken& devtools_worker_token,
     blink::mojom::RendererPreferencesPtr renderer_preferences,
@@ -35,23 +37,23 @@ void SharedWorkerFactoryImpl::CreateSharedWorker(
         service_worker_provider_info,
     const base::Optional<base::UnguessableToken>& appcache_host_id,
     blink::mojom::WorkerMainScriptLoadParamsPtr main_script_load_params,
-    std::unique_ptr<blink::URLLoaderFactoryBundleInfo>
+    std::unique_ptr<blink::PendingURLLoaderFactoryBundle>
         subresource_loader_factories,
     blink::mojom::ControllerServiceWorkerInfoPtr controller_info,
     mojo::PendingRemote<blink::mojom::SharedWorkerHost> host,
     mojo::PendingReceiver<blink::mojom::SharedWorker> receiver,
-    service_manager::mojom::InterfaceProviderPtr interface_provider,
     mojo::PendingRemote<blink::mojom::BrowserInterfaceBroker>
         browser_interface_broker) {
   // Bound to the lifetime of the underlying blink::WebSharedWorker instance.
   new EmbeddedSharedWorkerStub(
-      std::move(info), user_agent, pause_on_start, devtools_worker_token,
-      *renderer_preferences, std::move(preference_watcher_receiver),
-      std::move(content_settings), std::move(service_worker_provider_info),
+      std::move(info), constructor_origin, user_agent, ua_metadata,
+      pause_on_start, devtools_worker_token, *renderer_preferences,
+      std::move(preference_watcher_receiver), std::move(content_settings),
+      std::move(service_worker_provider_info),
       appcache_host_id.value_or(base::UnguessableToken()),
       std::move(main_script_load_params),
       std::move(subresource_loader_factories), std::move(controller_info),
-      std::move(host), std::move(receiver), std::move(interface_provider),
+      std::move(host), std::move(receiver),
       std::move(browser_interface_broker));
 }
 

@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "base/logging.h"
+#include "base/strings/string_number_conversions.h"
 #include "media/base/limits.h"
 #include "media/base/media_util.h"
 #include "media/base/video_types.h"
@@ -67,23 +68,18 @@ VideoCodec VideoCodecProfileToVideoCodec(VideoCodecProfile profile) {
   return kUnknownVideoCodec;
 }
 
-VideoDecoderConfig::VideoDecoderConfig()
-    : codec_(kUnknownVideoCodec),
-      profile_(VIDEO_CODEC_PROFILE_UNKNOWN),
-      alpha_mode_(AlphaMode::kIsOpaque),
-      transformation_(kNoTransformation) {}
+VideoDecoderConfig::VideoDecoderConfig() = default;
 
-VideoDecoderConfig::VideoDecoderConfig(
-    VideoCodec codec,
-    VideoCodecProfile profile,
-    AlphaMode alpha_mode,
-    const VideoColorSpace& color_space,
-    VideoTransformation rotation,
-    const gfx::Size& coded_size,
-    const gfx::Rect& visible_rect,
-    const gfx::Size& natural_size,
-    const std::vector<uint8_t>& extra_data,
-    const EncryptionScheme& encryption_scheme) {
+VideoDecoderConfig::VideoDecoderConfig(VideoCodec codec,
+                                       VideoCodecProfile profile,
+                                       AlphaMode alpha_mode,
+                                       const VideoColorSpace& color_space,
+                                       VideoTransformation rotation,
+                                       const gfx::Size& coded_size,
+                                       const gfx::Rect& visible_rect,
+                                       const gfx::Size& natural_size,
+                                       const std::vector<uint8_t>& extra_data,
+                                       EncryptionScheme encryption_scheme) {
   Initialize(codec, profile, alpha_mode, color_space, rotation, coded_size,
              visible_rect, natural_size, extra_data, encryption_scheme);
 }
@@ -92,23 +88,6 @@ VideoDecoderConfig::VideoDecoderConfig(const VideoDecoderConfig& other) =
     default;
 
 VideoDecoderConfig::~VideoDecoderConfig() = default;
-
-void VideoDecoderConfig::set_color_space_info(
-    const VideoColorSpace& color_space) {
-  color_space_info_ = color_space;
-}
-
-const VideoColorSpace& VideoDecoderConfig::color_space_info() const {
-  return color_space_info_;
-}
-
-void VideoDecoderConfig::set_hdr_metadata(const HDRMetadata& hdr_metadata) {
-  hdr_metadata_ = hdr_metadata;
-}
-
-const base::Optional<HDRMetadata>& VideoDecoderConfig::hdr_metadata() const {
-  return hdr_metadata_;
-}
 
 void VideoDecoderConfig::Initialize(VideoCodec codec,
                                     VideoCodecProfile profile,
@@ -119,7 +98,7 @@ void VideoDecoderConfig::Initialize(VideoCodec codec,
                                     const gfx::Rect& visible_rect,
                                     const gfx::Size& natural_size,
                                     const std::vector<uint8_t>& extra_data,
-                                    const EncryptionScheme& encryption_scheme) {
+                                    EncryptionScheme encryption_scheme) {
   codec_ = codec;
   profile_ = profile;
   alpha_mode_ = alpha_mode;
@@ -146,15 +125,18 @@ bool VideoDecoderConfig::Matches(const VideoDecoderConfig& config) const {
          visible_rect() == config.visible_rect() &&
          natural_size() == config.natural_size() &&
          extra_data() == config.extra_data() &&
-         encryption_scheme().Matches(config.encryption_scheme()) &&
+         encryption_scheme() == config.encryption_scheme() &&
          color_space_info() == config.color_space_info() &&
-         hdr_metadata() == config.hdr_metadata();
+         hdr_metadata() == config.hdr_metadata() && level() == config.level();
 }
 
 std::string VideoDecoderConfig::AsHumanReadableString() const {
   std::ostringstream s;
   s << "codec: " << GetCodecName(codec())
-    << ", profile: " << GetProfileName(profile()) << ", alpha_mode: "
+    << ", profile: " << GetProfileName(profile()) << ", level: "
+    << (level() > kNoVideoCodecLevel ? base::NumberToString(level())
+                                     : "not available")
+    << ", alpha_mode: "
     << (alpha_mode() == AlphaMode::kHasAlpha ? "has_alpha" : "is_opaque")
     << ", coded size: [" << coded_size().width() << "," << coded_size().height()
     << "]"
@@ -167,6 +149,7 @@ std::string VideoDecoderConfig::AsHumanReadableString() const {
     << ", rotation: " << VideoRotationToString(video_transformation().rotation)
     << ", flipped: " << video_transformation().mirrored
     << ", color space: " << color_space_info().ToGfxColorSpace().ToString();
+
   if (hdr_metadata().has_value()) {
     s << std::setprecision(4) << ", luminance range: "
       << hdr_metadata()->mastering_metadata.luminance_min << "-"
@@ -180,6 +163,7 @@ std::string VideoDecoderConfig::AsHumanReadableString() const {
       << hdr_metadata()->mastering_metadata.white_point.x() << ","
       << hdr_metadata()->mastering_metadata.white_point.y() << ")";
   }
+
   return s.str();
 }
 
@@ -197,16 +181,17 @@ void VideoDecoderConfig::SetExtraData(const std::vector<uint8_t>& extra_data) {
 
 void VideoDecoderConfig::SetIsEncrypted(bool is_encrypted) {
   if (!is_encrypted) {
-    DCHECK(encryption_scheme_.is_encrypted()) << "Config is already clear.";
-    encryption_scheme_ = Unencrypted();
+    DCHECK_NE(encryption_scheme_, EncryptionScheme::kUnencrypted)
+        << "Config is already clear.";
+    encryption_scheme_ = EncryptionScheme::kUnencrypted;
   } else {
-    DCHECK(!encryption_scheme_.is_encrypted())
+    DCHECK_EQ(encryption_scheme_, EncryptionScheme::kUnencrypted)
         << "Config is already encrypted.";
     // TODO(xhwang): This is only used to guide decoder selection, so set
     // a common encryption scheme that should be supported by all decrypting
     // decoders. We should be able to remove this when we support switching
     // decoders at run time. See http://crbug.com/695595
-    encryption_scheme_ = AesCtrEncryptionScheme();
+    encryption_scheme_ = EncryptionScheme::kCenc;
   }
 }
 

@@ -6,6 +6,7 @@
 
 #include <vector>
 
+#include "base/debug/dump_without_crashing.h"
 #include "base/logging.h"
 #include "mojo/public/cpp/base/file_mojom_traits.h"
 #include "mojo/public/cpp/base/file_path_mojom_traits.h"
@@ -14,6 +15,7 @@
 #include "services/network/public/cpp/http_request_headers_mojom_traits.h"
 #include "services/network/public/cpp/network_ipc_param_traits.h"
 #include "services/network/public/cpp/resource_request_body.h"
+#include "services/network/public/mojom/trust_tokens.mojom.h"
 #include "services/network/public/mojom/url_loader.mojom-shared.h"
 #include "url/mojom/origin_mojom_traits.h"
 #include "url/mojom/url_gurl_mojom_traits.h"
@@ -158,6 +160,8 @@ bool StructTraits<network::mojom::TrustedUrlRequestParamsDataView,
     return false;
   out->update_network_isolation_key_on_redirect =
       data.update_network_isolation_key_on_redirect();
+  out->disable_secure_dns = data.disable_secure_dns();
+  out->has_user_activation = data.has_user_activation();
   return true;
 }
 
@@ -182,14 +186,19 @@ bool StructTraits<
       !data.ReadFetchIntegrity(&out->fetch_integrity) ||
       !data.ReadRequestBody(&out->request_body) ||
       !data.ReadThrottlingProfileId(&out->throttling_profile_id) ||
-      !data.ReadCustomProxyPreCacheHeaders(
-          &out->custom_proxy_pre_cache_headers) ||
-      !data.ReadCustomProxyPostCacheHeaders(
-          &out->custom_proxy_post_cache_headers) ||
       !data.ReadFetchWindowId(&out->fetch_window_id) ||
       !data.ReadDevtoolsRequestId(&out->devtools_request_id) ||
       !data.ReadRecursivePrefetchToken(&out->recursive_prefetch_token)) {
+    // Note that data.ReadTrustTokenParams is temporarily handled below.
     return false;
+  }
+
+  // Temporarily separated from the remainder of the deserialization in order to
+  // help debug crbug.com/1062637.
+  if (!data.ReadTrustTokenParams(&out->trust_token_params.as_ptr())) {
+    // We don't return false here to avoid duplicate reports.
+    out->trust_token_params = base::nullopt;
+    base::debug::DumpWithoutCrashing();
   }
 
   out->attach_same_site_cookies = data.attach_same_site_cookies();
@@ -204,6 +213,7 @@ bool StructTraits<
   out->corb_detachable = data.corb_detachable();
   out->corb_excluded = data.corb_excluded();
   out->fetch_request_context_type = data.fetch_request_context_type();
+  out->destination = data.destination();
   out->keepalive = data.keepalive();
   out->has_user_gesture = data.has_user_gesture();
   out->enable_load_timing = data.enable_load_timing();

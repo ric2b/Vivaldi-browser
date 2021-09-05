@@ -4,6 +4,7 @@
 
 #include "chrome/browser/safe_browsing/safe_browsing_subresource_tab_helper.h"
 
+#include "base/memory/ptr_util.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/safe_browsing/safe_browsing_blocking_page.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
@@ -18,7 +19,7 @@ namespace safe_browsing {
 
 SafeBrowsingSubresourceTabHelper::~SafeBrowsingSubresourceTabHelper() {}
 
-void SafeBrowsingSubresourceTabHelper::DidFinishNavigation(
+void SafeBrowsingSubresourceTabHelper::ReadyToCommitNavigation(
     content::NavigationHandle* navigation_handle) {
   if (navigation_handle->GetNetErrorCode() == net::ERR_BLOCKED_BY_CLIENT) {
     safe_browsing::SafeBrowsingService* service =
@@ -33,7 +34,8 @@ void SafeBrowsingSubresourceTabHelper::DidFinishNavigation(
       safe_browsing::SafeBrowsingBlockingPage* blocking_page =
           safe_browsing::SafeBrowsingBlockingPage::CreateBlockingPage(
               manager.get(), navigation_handle->GetWebContents(),
-              navigation_handle->GetURL(), resource);
+              navigation_handle->GetURL(), resource,
+              /*should_trigger_reporting=*/true);
       security_interstitials::SecurityInterstitialTabHelper::
           AssociateBlockingPage(navigation_handle->GetWebContents(),
                                 navigation_handle->GetNavigationId(),

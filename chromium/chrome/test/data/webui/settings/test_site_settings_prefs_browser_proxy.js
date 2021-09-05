@@ -2,6 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// clang-format off
+// #import {assert} from 'chrome://resources/js/assert.m.js';
+// #import {ContentSetting,SiteSettingSource} from 'chrome://settings/lazy_load.js';
+// #import {createSiteGroup,createSiteSettingsPrefs, getContentSettingsTypeFromChooserType} from 'chrome://test/settings/test_util.m.js';
+// #import {TestBrowserProxy} from 'chrome://test/test_browser_proxy.m.js';
+// clang-format on
+
 /**
  * In the real (non-test) code, this data comes from the C++ handler.
  * Only used for tests.
@@ -21,7 +28,7 @@ let SiteSettingsPref;
  *
  * @implements {settings.SiteSettingsPrefsBrowserProxy}
  */
-class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy {
+/* #export */ class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy {
   constructor() {
     super([
       'clearFlashPref',
@@ -48,6 +55,7 @@ class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy {
       'setProtocolDefault',
       'updateIncognitoStatus',
       'clearEtldPlus1DataAndCookies',
+      'clearOriginDataAndCookies',
       'recordAction',
     ]);
 
@@ -71,6 +79,12 @@ class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy {
 
     /** @private {boolean} */
     this.isPatternValidForType_ = true;
+
+    this.mockMethods([
+      'getCookieSettingDescription',
+      'getCookieControlsManagedState',
+      'getRecentSitePermissions',
+    ]);
   }
 
   /**
@@ -94,7 +108,7 @@ class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy {
       cr.webUIListenerCallback('contentSettingCategoryChanged', type);
     }
     for (const type in this.prefs_.exceptions) {
-      let exceptionList = this.prefs_.exceptions[type];
+      const exceptionList = this.prefs_.exceptions[type];
       for (let i = 0; i < exceptionList.length; ++i) {
         cr.webUIListenerCallback(
             'contentSettingSitePermissionChanged', type,
@@ -102,7 +116,7 @@ class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy {
       }
     }
     for (const type in this.prefs_.chooserExceptions) {
-      let chooserExceptionList = this.prefs_.chooserExceptions[type];
+      const chooserExceptionList = this.prefs_.chooserExceptions[type];
       for (let i = 0; i < chooserExceptionList.length; ++i) {
         cr.webUIListenerCallback(
             'contentSettingChooserPermissionChanged', type);
@@ -167,8 +181,8 @@ class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy {
   /** @override */
   setOriginPermissions(origin, contentTypes, blanketSetting) {
     for (let i = 0; i < contentTypes.length; ++i) {
-      let type = contentTypes[i];
-      let exceptionList = this.prefs_.exceptions[type];
+      const type = contentTypes[i];
+      const exceptionList = this.prefs_.exceptions[type];
       for (let j = 0; j < exceptionList.length; ++j) {
         let effectiveSetting = blanketSetting;
         if (blanketSetting == settings.ContentSetting.DEFAULT) {
@@ -204,7 +218,7 @@ class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy {
     });
 
     const origins_array = [...origins_set];
-    let result = [];
+    const result = [];
     origins_array.forEach((origin, index) => {
       // Functionality to get the eTLD+1 from an origin exists only on the
       // C++ side, so just do an (incorrect) approximate extraction here.
@@ -213,14 +227,21 @@ class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy {
       urlParts = urlParts.slice(Math.max(urlParts.length - 2, 0));
       const etldPlus1Name = urlParts.join('.');
 
-      let existing = result.find(siteGroup => {
+      const existing = result.find(siteGroup => {
         return siteGroup.etldPlus1 == etldPlus1Name;
       });
 
+      const mockUsage = index * 100;
+
+      // TODO(https://crbug.com/1021606): Add test where existing evaluates to
+      // true.
       if (existing) {
-        existing.origins.push(test_util.createOriginInfo(origin));
+        const originInfo =
+            test_util.createOriginInfo(origin, {usage: mockUsage});
+        existing.origins.push(originInfo);
       } else {
-        const entry = test_util.createSiteGroup(etldPlus1Name, [origin]);
+        const entry =
+            test_util.createSiteGroup(etldPlus1Name, [origin], mockUsage);
         result.push(entry);
       }
     });
@@ -237,7 +258,7 @@ class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy {
   /** @override */
   getDefaultValueForContentType(contentType) {
     this.methodCalled('getDefaultValueForContentType', contentType);
-    let pref = this.prefs_.defaults[contentType];
+    const pref = this.prefs_.defaults[contentType];
     assert(pref != undefined, 'Pref is missing for ' + contentType);
     return Promise.resolve(pref);
   }
@@ -271,14 +292,15 @@ class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy {
     // permission, however the test stores the permissions with the setting
     // category, so we need to get the content settings type that pertains to
     // this chooser type.
-    let setting = test_util.getContentSettingsTypeFromChooserType(chooserType);
+    const setting =
+        test_util.getContentSettingsTypeFromChooserType(chooserType);
     assert(
-        settings != null,
+        setting != null,
         'ContentSettingsType mapping missing for ' + chooserType);
 
     // Create a deep copy of the pref so that the chooser-exception-list element
     // is able update the UI appropriately when incognito mode is toggled.
-    let pref =
+    const pref =
         JSON.parse(JSON.stringify(this.prefs_.chooserExceptions[setting]));
     assert(pref != undefined, 'Pref is missing for ' + chooserType);
 
@@ -361,7 +383,7 @@ class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy {
     contentTypes.forEach(function(contentType) {
       let setting;
       let source;
-      let isSet = this.prefs_.exceptions[contentType].some(originPrefs => {
+      const isSet = this.prefs_.exceptions[contentType].some(originPrefs => {
         if (originPrefs.origin == origin) {
           setting = originPrefs.setting;
           source = originPrefs.source;
@@ -458,6 +480,11 @@ class TestSiteSettingsPrefsBrowserProxy extends TestBrowserProxy {
   /** @override */
   clearEtldPlus1DataAndCookies() {
     this.methodCalled('clearEtldPlus1DataAndCookies');
+  }
+
+  /** @override */
+  clearOriginDataAndCookies() {
+    this.methodCalled('clearOriginDataAndCookies');
   }
 
   /** @override */

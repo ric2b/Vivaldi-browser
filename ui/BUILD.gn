@@ -1,7 +1,8 @@
 import("//build/config/jumbo.gni")
 
-jumbo_static_library("ui") {
+static_library("ui") {
   sources = [
+    "vivaldi_browser_window.h",
     "views/vivaldi_pin_shortcut.cpp",
     "views/vivaldi_pin_shortcut.h",
     "webgui/notes_ui.cpp",
@@ -16,12 +17,18 @@ jumbo_static_library("ui") {
     ]
   }
   public_configs = [ "//third_party/protobuf:using_proto" ]
+  public_deps = [
+    "//components/renderer_context_menu",
+  ]
   deps = [
     "//base:base",
+    "//chrome/browser/devtools",
+    "//chrome/common:buildflags",
+    "//components/keyed_service/content",
     "//components/translate/content/browser",
     "//content/public/browser",
-    "//vivaldi/prefs:prefs_files_generator",
     "//skia",
+    "//vivaldi/prefs:prefs_files_generator",
   ]
   if (!is_android) {
     sources += [
@@ -36,7 +43,11 @@ jumbo_static_library("ui") {
     ]
     deps += [
       "//chrome/browser/extensions:extensions",
-      "//vivaldi/extensions/schema"
+      "//chrome/browser/web_applications/components",
+      "//components/web_modal",
+      "//extensions/browser",
+      "//ui/views",
+      "//vivaldi/extensions/schema",
     ]
   }
   if (is_mac) {

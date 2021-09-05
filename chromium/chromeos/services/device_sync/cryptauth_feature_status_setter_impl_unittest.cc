@@ -16,6 +16,7 @@
 #include "chromeos/services/device_sync/cryptauth_client.h"
 #include "chromeos/services/device_sync/cryptauth_key_bundle.h"
 #include "chromeos/services/device_sync/fake_cryptauth_gcm_manager.h"
+#include "chromeos/services/device_sync/feature_status_change.h"
 #include "chromeos/services/device_sync/mock_cryptauth_client.h"
 #include "chromeos/services/device_sync/network_request_error.h"
 #include "chromeos/services/device_sync/proto/cryptauth_client_app_metadata.pb.h"
@@ -135,10 +136,9 @@ class DeviceSyncCryptAuthFeatureStatusSetterImplTest
     auto mock_timer = std::make_unique<base::MockOneShotTimer>();
     mock_timer_ = mock_timer.get();
 
-    feature_status_setter_ =
-        CryptAuthFeatureStatusSetterImpl::Factory::Get()->BuildInstance(
-            &fake_client_app_metadata_provider_, &mock_client_factory_,
-            &fake_gcm_manager_, std::move(mock_timer));
+    feature_status_setter_ = CryptAuthFeatureStatusSetterImpl::Factory::Create(
+        &fake_client_app_metadata_provider_, &mock_client_factory_,
+        &fake_gcm_manager_, std::move(mock_timer));
   }
 
   // MockCryptAuthClientFactory::Observer:
@@ -153,10 +153,9 @@ class DeviceSyncCryptAuthFeatureStatusSetterImplTest
         .WillByDefault(testing::Return(kAccessTokenUsed));
   }
 
-  void SetFeatureStatus(
-      const std::string& device_id,
-      multidevice::SoftwareFeature feature,
-      CryptAuthFeatureStatusSetter::FeatureStatusChange status_change) {
+  void SetFeatureStatus(const std::string& device_id,
+                        multidevice::SoftwareFeature feature,
+                        FeatureStatusChange status_change) {
     feature_status_setter_->SetFeatureStatus(
         device_id, feature, status_change,
         base::BindOnce(&DeviceSyncCryptAuthFeatureStatusSetterImplTest::
@@ -198,27 +197,35 @@ class DeviceSyncCryptAuthFeatureStatusSetterImplTest
       RequestAction request_action,
       base::Optional<NetworkRequestError> error = base::nullopt) {
     ASSERT_TRUE(!batch_set_feature_statuses_requests_.empty());
+
+    cryptauthv2::BatchSetFeatureStatusesRequest current_request =
+        std::move(batch_set_feature_statuses_requests_.front());
+    batch_set_feature_statuses_requests_.pop();
+
+    CryptAuthClient::BatchSetFeatureStatusesCallback current_success_callback =
+        std::move(batch_set_feature_statuses_success_callbacks_.front());
+    batch_set_feature_statuses_success_callbacks_.pop();
+
+    CryptAuthClient::ErrorCallback current_failure_callback =
+        std::move(batch_set_feature_statuses_failure_callbacks_.front());
+    batch_set_feature_statuses_failure_callbacks_.pop();
+
     EXPECT_EQ(expected_request.SerializeAsString(),
-              batch_set_feature_statuses_requests_.front().SerializeAsString());
+              current_request.SerializeAsString());
 
     switch (request_action) {
       case RequestAction::kSucceed:
-        std::move(batch_set_feature_statuses_success_callbacks_.front())
+        std::move(current_success_callback)
             .Run(cryptauthv2::BatchSetFeatureStatusesResponse());
         break;
       case RequestAction::kFail:
         ASSERT_TRUE(error);
-        std::move(batch_set_feature_statuses_failure_callbacks_.front())
-            .Run(*error);
+        std::move(current_failure_callback).Run(*error);
         break;
       case RequestAction::kTimeout:
         mock_timer_->Fire();
         break;
     }
-
-    batch_set_feature_statuses_requests_.pop();
-    batch_set_feature_statuses_success_callbacks_.pop();
-    batch_set_feature_statuses_failure_callbacks_.pop();
   }
 
   void VerifyNumberOfClientAppMetadataFetchAttempts(size_t num_attempts) {
@@ -278,22 +285,21 @@ TEST_F(DeviceSyncCryptAuthFeatureStatusSetterImplTest, Test) {
   // sequentially.
   SetFeatureStatus("device_id_1",
                    multidevice::SoftwareFeature::kSmartLockClient,
-                   CryptAuthFeatureStatusSetter::FeatureStatusChange::kDisable);
-  SetFeatureStatus(
-      "device_id_2", multidevice::SoftwareFeature::kInstantTetheringHost,
-      CryptAuthFeatureStatusSetter::FeatureStatusChange::kEnableNonExclusively);
-  SetFeatureStatus(
-      "device_id_3", multidevice::SoftwareFeature::kSmartLockHost,
-      CryptAuthFeatureStatusSetter::FeatureStatusChange::kEnableExclusively);
+                   FeatureStatusChange::kDisable);
+  SetFeatureStatus("device_id_2",
+                   multidevice::SoftwareFeature::kInstantTetheringHost,
+                   FeatureStatusChange::kEnableNonExclusively);
+  SetFeatureStatus("device_id_3", multidevice::SoftwareFeature::kSmartLockHost,
+                   FeatureStatusChange::kEnableExclusively);
   SetFeatureStatus("device_id_4",
                    multidevice::SoftwareFeature::kInstantTetheringClient,
-                   CryptAuthFeatureStatusSetter::FeatureStatusChange::kDisable);
+                   FeatureStatusChange::kDisable);
   SetFeatureStatus("device_id_5",
                    multidevice::SoftwareFeature::kInstantTetheringClient,
-                   CryptAuthFeatureStatusSetter::FeatureStatusChange::kDisable);
-  SetFeatureStatus(
-      "device_id_6", multidevice::SoftwareFeature::kBetterTogetherHost,
-      CryptAuthFeatureStatusSetter::FeatureStatusChange::kEnableNonExclusively);
+                   FeatureStatusChange::kDisable);
+  SetFeatureStatus("device_id_6",
+                   multidevice::SoftwareFeature::kBetterTogetherHost,
+                   FeatureStatusChange::kEnableNonExclusively);
 
   // base::nullopt indicates a success.
   std::vector<base::Optional<NetworkRequestError>> expected_results;

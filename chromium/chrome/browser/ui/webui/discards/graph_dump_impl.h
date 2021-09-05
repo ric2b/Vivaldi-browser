@@ -15,6 +15,7 @@
 #include "components/performance_manager/public/graph/graph.h"
 #include "components/performance_manager/public/graph/page_node.h"
 #include "components/performance_manager/public/graph/process_node.h"
+#include "components/performance_manager/public/graph/worker_node.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
@@ -25,7 +26,8 @@ class DiscardsGraphDumpImpl : public discards::mojom::GraphDump,
                               public performance_manager::GraphOwned,
                               public performance_manager::FrameNodeObserver,
                               public performance_manager::PageNodeObserver,
-                              public performance_manager::ProcessNodeObserver {
+                              public performance_manager::ProcessNodeObserver,
+                              public performance_manager::WorkerNodeObserver {
  public:
   DiscardsGraphDumpImpl();
   ~DiscardsGraphDumpImpl() override;
@@ -85,6 +87,10 @@ class DiscardsGraphDumpImpl : public discards::mojom::GraphDump,
       const performance_manager::FrameNode* frame_node) override {}
   // Ignored.
   void OnPriorityAndReasonChanged(
+      const performance_manager::FrameNode* frame_node,
+      const PriorityAndReason& previous_value) override {}
+  // Ignored.
+  void OnHadFormInteractionChanged(
       const performance_manager::FrameNode* frame_node) override {}
 
   // PageNodeObserver implementation:
@@ -114,9 +120,9 @@ class DiscardsGraphDumpImpl : public discards::mojom::GraphDump,
   void OnMainFrameUrlChanged(
       const performance_manager::PageNode* page_node) override;
   // Ignored.
-  void OnPageAlmostIdleChanged(
-      const performance_manager::PageNode* page_node) override {}
   void OnMainFrameDocumentChanged(
+      const performance_manager::PageNode* page_node) override {}
+  void OnHadFormInteractionChanged(
       const performance_manager::PageNode* page_node) override {}
   void OnTitleUpdated(const performance_manager::PageNode* page_node) override {
   }  // Ignored.
@@ -139,6 +145,28 @@ class DiscardsGraphDumpImpl : public discards::mojom::GraphDump,
   // Ignored.
   void OnAllFramesInProcessFrozen(
       const performance_manager::ProcessNode* process_node) override {}
+  void OnPriorityChanged(const performance_manager::ProcessNode* process_node,
+                         base::TaskPriority previous_value) override {}
+
+  // performance_manager::WorkerNodeObserver implementation:
+  void OnWorkerNodeAdded(
+      const performance_manager::WorkerNode* worker_node) override;
+  void OnBeforeWorkerNodeRemoved(
+      const performance_manager::WorkerNode* worker_node) override;
+  void OnFinalResponseURLDetermined(
+      const performance_manager::WorkerNode* worker_node) override;
+  void OnClientFrameAdded(
+      const performance_manager::WorkerNode* worker_node,
+      const performance_manager::FrameNode* client_frame_node) override;
+  void OnBeforeClientFrameRemoved(
+      const performance_manager::WorkerNode* worker_node,
+      const performance_manager::FrameNode* client_frame_node) override;
+  void OnClientWorkerAdded(
+      const performance_manager::WorkerNode* worker_node,
+      const performance_manager::WorkerNode* client_worker_node) override;
+  void OnBeforeClientWorkerRemoved(
+      const performance_manager::WorkerNode* worker_node,
+      const performance_manager::WorkerNode* client_worker_node) override;
 
  private:
   // The favicon requests happen on the UI thread. This helper class
@@ -157,6 +185,8 @@ class DiscardsGraphDumpImpl : public discards::mojom::GraphDump,
                             bool created);
   void SendProcessNotification(const performance_manager::ProcessNode* process,
                                bool created);
+  void SendWorkerNotification(const performance_manager::WorkerNode* worker,
+                              bool created);
   void SendDeletionNotification(const performance_manager::Node* node);
   void SendFaviconNotification(
       int64_t serialization_id,

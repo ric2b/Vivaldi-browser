@@ -22,8 +22,11 @@ class COMPONENT_EXPORT(MEDIA_LEARNING_MOJO) MojoLearningTaskControllerService
     : public mojom::LearningTaskController {
  public:
   // |impl| is the underlying controller that we'll send requests to.
+  // |source_id| will be used for all observations, since we don't trust the
+  // client to provide the right one.
   explicit MojoLearningTaskControllerService(
       const LearningTask& task,
+      ukm::SourceId source_id,
       std::unique_ptr<::media::learning::LearningTaskController> impl);
   ~MojoLearningTaskControllerService() override;
 
@@ -35,9 +38,16 @@ class COMPONENT_EXPORT(MEDIA_LEARNING_MOJO) MojoLearningTaskControllerService
   void CompleteObservation(const base::UnguessableToken& id,
                            const ObservationCompletion& completion) override;
   void CancelObservation(const base::UnguessableToken& id) override;
+  void UpdateDefaultTarget(
+      const base::UnguessableToken& id,
+      const base::Optional<TargetValue>& default_target) override;
+  void PredictDistribution(const FeatureVector& features,
+                           PredictDistributionCallback callback) override;
 
  protected:
   const LearningTask task_;
+
+  ukm::SourceId source_id_;
 
   // Underlying controller to which we proxy calls.
   std::unique_ptr<::media::learning::LearningTaskController> impl_;

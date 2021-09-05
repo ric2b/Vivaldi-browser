@@ -5,6 +5,7 @@
 #include "pdf/pdfium/pdfium_engine.h"
 
 #include "pdf/document_layout.h"
+#include "pdf/document_metadata.h"
 #include "pdf/pdfium/pdfium_page.h"
 #include "pdf/pdfium/pdfium_test_base.h"
 #include "pdf/test/test_client.h"
@@ -17,10 +18,16 @@ namespace chrome_pdf {
 namespace {
 
 using ::testing::InSequence;
+using ::testing::IsEmpty;
 using ::testing::NiceMock;
+using ::testing::Return;
 
 MATCHER_P2(LayoutWithSize, width, height, "") {
   return arg.size() == pp::Size(width, height);
+}
+
+MATCHER_P(LayoutWithOptions, options, "") {
+  return arg.options() == options;
 }
 
 class MockTestClient : public TestClient {
@@ -34,6 +41,7 @@ class MockTestClient : public TestClient {
 
   // TODO(crbug.com/989095): MOCK_METHOD() triggers static_assert on Windows.
   MOCK_METHOD1(ProposeDocumentLayout, void(const DocumentLayout& layout));
+  MOCK_METHOD1(ScrollToPage, void(int page));
 };
 
 class PDFiumEngineTest : public PDFiumTestBase {
@@ -49,7 +57,15 @@ class PDFiumEngineTest : public PDFiumTestBase {
 
 TEST_F(PDFiumEngineTest, InitializeWithRectanglesMultiPagesPdf) {
   NiceMock<MockTestClient> client;
-  EXPECT_CALL(client, ProposeDocumentLayout(LayoutWithSize(343, 1664)));
+
+  // ProposeDocumentLayout() gets called twice during loading because
+  // PDFiumEngine::ContinueLoadingDocument() calls LoadBody() (which eventually
+  // triggers a layout proposal), and then calls FinishLoadingDocument() (since
+  // the document is complete), which calls LoadBody() again. Coalescing these
+  // proposals is not correct unless we address the issue covered by
+  // PDFiumEngineTest.ProposeDocumentLayoutWithOverlap.
+  EXPECT_CALL(client, ProposeDocumentLayout(LayoutWithSize(343, 1664)))
+      .Times(2);
 
   std::unique_ptr<PDFiumEngine> engine = InitializeEngine(
       &client, FILE_PATH_LITERAL("rectangles_multi_pages.pdf"));
@@ -63,11 +79,35 @@ TEST_F(PDFiumEngineTest, InitializeWithRectanglesMultiPagesPdf) {
   ExpectPageRect(engine.get(), 4, {38, 1324, 266, 333});
 }
 
+TEST_F(PDFiumEngineTest, InitializeWithRectanglesMultiPagesPdfInTwoUpView) {
+  NiceMock<MockTestClient> client;
+  std::unique_ptr<PDFiumEngine> engine = InitializeEngine(
+      &client, FILE_PATH_LITERAL("rectangles_multi_pages.pdf"));
+  ASSERT_TRUE(engine);
+
+  DocumentLayout::Options options;
+  options.set_two_up_view_enabled(true);
+  EXPECT_CALL(client, ProposeDocumentLayout(LayoutWithOptions(options)))
+      .WillOnce(Return());
+  engine->SetTwoUpView(true);
+
+  engine->ApplyDocumentLayout(options);
+
+  ASSERT_EQ(5, engine->GetNumberOfPages());
+
+  ExpectPageRect(engine.get(), 0, {72, 3, 266, 333});
+  ExpectPageRect(engine.get(), 1, {340, 3, 333, 266});
+  ExpectPageRect(engine.get(), 2, {72, 346, 266, 333});
+  ExpectPageRect(engine.get(), 3, {340, 346, 266, 333});
+  ExpectPageRect(engine.get(), 4, {68, 689, 266, 333});
+}
+
 TEST_F(PDFiumEngineTest, AppendBlankPagesWithFewerPages) {
   NiceMock<MockTestClient> client;
   {
     InSequence normal_then_append;
-    EXPECT_CALL(client, ProposeDocumentLayout(LayoutWithSize(343, 1664)));
+    EXPECT_CALL(client, ProposeDocumentLayout(LayoutWithSize(343, 1664)))
+        .Times(2);
     EXPECT_CALL(client, ProposeDocumentLayout(LayoutWithSize(276, 1037)));
   }
 
@@ -87,7 +127,8 @@ TEST_F(PDFiumEngineTest, AppendBlankPagesWithMorePages) {
   NiceMock<MockTestClient> client;
   {
     InSequence normal_then_append;
-    EXPECT_CALL(client, ProposeDocumentLayout(LayoutWithSize(343, 1664)));
+    EXPECT_CALL(client, ProposeDocumentLayout(LayoutWithSize(343, 1664)))
+        .Times(2);
     EXPECT_CALL(client, ProposeDocumentLayout(LayoutWithSize(276, 2425)));
   }
 
@@ -105,6 +146,79 @@ TEST_F(PDFiumEngineTest, AppendBlankPagesWithMorePages) {
   ExpectPageRect(engine.get(), 4, {5, 1391, 266, 333});
   ExpectPageRect(engine.get(), 5, {5, 1738, 266, 333});
   ExpectPageRect(engine.get(), 6, {5, 2085, 266, 333});
+}
+
+TEST_F(PDFiumEngineTest, ProposeDocumentLayoutWithOverlap) {
+  NiceMock<MockTestClient> client;
+  std::unique_ptr<PDFiumEngine> engine = InitializeEngine(
+      &client, FILE_PATH_LITERAL("rectangles_multi_pages.pdf"));
+  ASSERT_TRUE(engine);
+
+  EXPECT_CALL(client, ProposeDocumentLayout(LayoutWithSize(343, 1463)))
+      .WillOnce(Return());
+  engine->RotateClockwise();
+
+  EXPECT_CALL(client, ProposeDocumentLayout(LayoutWithSize(343, 1664)))
+      .WillOnce(Return());
+  engine->RotateCounterclockwise();
+}
+
+TEST_F(PDFiumEngineTest, ApplyDocumentLayoutAvoidsInfiniteLoop) {
+  NiceMock<MockTestClient> client;
+  std::unique_ptr<PDFiumEngine> engine = InitializeEngine(
+      &client, FILE_PATH_LITERAL("rectangles_multi_pages.pdf"));
+  ASSERT_TRUE(engine);
+
+  DocumentLayout::Options options;
+  EXPECT_CALL(client, ScrollToPage(-1)).Times(0);
+  CompareSize({343, 1664}, engine->ApplyDocumentLayout(options));
+
+  options.RotatePagesClockwise();
+  EXPECT_CALL(client, ScrollToPage(-1)).Times(1);
+  CompareSize({343, 1463}, engine->ApplyDocumentLayout(options));
+  CompareSize({343, 1463}, engine->ApplyDocumentLayout(options));
+}
+
+TEST_F(PDFiumEngineTest, GetDocumentMetadata) {
+  NiceMock<MockTestClient> client;
+  std::unique_ptr<PDFiumEngine> engine =
+      InitializeEngine(&client, FILE_PATH_LITERAL("document_info.pdf"));
+  ASSERT_TRUE(engine);
+
+  const DocumentMetadata& doc_metadata = engine->GetDocumentMetadata();
+
+  EXPECT_EQ(PdfVersion::k1_7, doc_metadata.version);
+  EXPECT_EQ("Sample PDF Document Info", doc_metadata.title);
+  EXPECT_EQ("Chromium Authors", doc_metadata.author);
+  EXPECT_EQ("Testing", doc_metadata.subject);
+  EXPECT_EQ("Your Preferred Text Editor", doc_metadata.creator);
+  EXPECT_EQ("fixup_pdf_template.py", doc_metadata.producer);
+}
+
+TEST_F(PDFiumEngineTest, GetEmptyDocumentMetadata) {
+  NiceMock<MockTestClient> client;
+  std::unique_ptr<PDFiumEngine> engine =
+      InitializeEngine(&client, FILE_PATH_LITERAL("hello_world2.pdf"));
+  ASSERT_TRUE(engine);
+
+  const DocumentMetadata& doc_metadata = engine->GetDocumentMetadata();
+
+  EXPECT_EQ(PdfVersion::k1_7, doc_metadata.version);
+  EXPECT_THAT(doc_metadata.title, IsEmpty());
+  EXPECT_THAT(doc_metadata.author, IsEmpty());
+  EXPECT_THAT(doc_metadata.subject, IsEmpty());
+  EXPECT_THAT(doc_metadata.creator, IsEmpty());
+  EXPECT_THAT(doc_metadata.producer, IsEmpty());
+}
+
+TEST_F(PDFiumEngineTest, GetBadPdfVersion) {
+  NiceMock<MockTestClient> client;
+  std::unique_ptr<PDFiumEngine> engine =
+      InitializeEngine(&client, FILE_PATH_LITERAL("bad_version.pdf"));
+  ASSERT_TRUE(engine);
+
+  const DocumentMetadata& doc_metadata = engine->GetDocumentMetadata();
+  EXPECT_EQ(PdfVersion::kUnknown, doc_metadata.version);
 }
 
 }  // namespace

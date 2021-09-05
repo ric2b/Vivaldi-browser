@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import io
 import itertools
 import optparse
 import re
@@ -16,7 +17,7 @@ def EscapeName(name):
   return name
 
 def ParseTable(input_path):
-  input_file = open(input_path, "r")
+  input_file = io.open(input_path, "r", encoding="ascii", errors="ignore")
   input = input_file.read().split("\n")
   input_file.close()
 

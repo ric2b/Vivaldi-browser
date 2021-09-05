@@ -10,6 +10,7 @@ const char kEventCreateSearch[] = "webViewPrivate.onCreateSearch";
 const char kEventPasteAndGo[] = "webViewPrivate.onPasteAndGo";
 const char kEventSimpleAction[] = "webViewPrivate.onSimpleAction";
 const char kEventOnFullscreen[] = "webViewPrivate.onFullscreen";
+const char kEventContentAllowed[] = "webViewPrivate.onContentAllowed";
 const char kEventContentBlocked[] = "webViewPrivate.onContentBlocked";
 const char kEventWebContentsCreated[] = "webViewPrivate.onWebcontentsCreated";
 

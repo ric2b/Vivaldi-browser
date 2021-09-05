@@ -24,9 +24,6 @@ namespace device {
 mojom::XRFrameDataPtr XRDeviceAbstraction::GetNextFrameData() {
   return nullptr;
 }
-mojom::XRGamepadDataPtr XRDeviceAbstraction::GetNextGamepadData() {
-  return nullptr;
-}
 void XRDeviceAbstraction::OnSessionStart() {}
 void XRDeviceAbstraction::HandleDeviceLost() {}
 bool XRDeviceAbstraction::PreComposite() {
@@ -55,6 +52,10 @@ XRCompositorCommon::~XRCompositorCommon() {
 }
 
 void XRCompositorCommon::ClearPendingFrame() {
+  // Notify the derived class first so it can clear its pending frame before
+  // potentially starting a new frame with delayed_get_frame_data_callback_.
+  ClearPendingFrameInternal();
+
   pending_frame_.reset();
   // Send frame data to outstanding requests.
   if (delayed_get_frame_data_callback_ &&
@@ -92,7 +93,7 @@ void XRCompositorCommon::SubmitFrameDrawnIntoTexture(
 
 void XRCompositorCommon::SubmitFrameWithTextureHandle(
     int16_t frame_index,
-    mojo::ScopedHandle texture_handle) {
+    mojo::PlatformHandle texture_handle) {
   TRACE_EVENT1("xr", "SubmitFrameWithTextureHandle", "frameIndex", frame_index);
   webxr_has_pose_ = false;
   // Tell the browser that WebXR has submitted a frame.
@@ -114,17 +115,9 @@ void XRCompositorCommon::SubmitFrameWithTextureHandle(
   pending_frame_->submit_frame_time_ = base::TimeTicks::Now();
 
 #if defined(OS_WIN)
-  MojoPlatformHandle platform_handle;
-  platform_handle.struct_size = sizeof(platform_handle);
-  MojoResult result = MojoUnwrapPlatformHandle(texture_handle.release().value(),
-                                               nullptr, &platform_handle);
-  if (result == MOJO_RESULT_OK) {
-    texture_helper_.SetSourceTexture(
-        base::win::ScopedHandle(
-            reinterpret_cast<HANDLE>(platform_handle.value)),
-        left_webxr_bounds_, right_webxr_bounds_);
-    pending_frame_->webxr_submitted_ = true;
-  }
+  texture_helper_.SetSourceTexture(texture_handle.TakeHandle(),
+                                   left_webxr_bounds_, right_webxr_bounds_);
+  pending_frame_->webxr_submitted_ = true;
 
   // Regardless of success - try to composite what we have.
   MaybeCompositeAndSubmit();
@@ -136,16 +129,9 @@ void XRCompositorCommon::CleanUp() {
   webxr_has_pose_ = false;
   presentation_receiver_.reset();
   frame_data_receiver_.reset();
-  gamepad_provider_receiver_.reset();
   overlay_receiver_.reset();
   input_event_listener_.reset();
   StopRuntime();
-}
-
-void XRCompositorCommon::RequestGamepadProvider(
-    mojo::PendingReceiver<mojom::IsolatedXRGamepadProvider> receiver) {
-  gamepad_provider_receiver_.reset();
-  gamepad_provider_receiver_.Bind(std::move(receiver));
 }
 
 void XRCompositorCommon::RequestOverlay(
@@ -192,7 +178,7 @@ void XRCompositorCommon::RequestSession(
         on_visibility_state_changed,
     mojom::XRRuntimeSessionOptionsPtr options,
     RequestSessionCallback callback) {
-  DCHECK(options->immersive);
+  DCHECK_EQ(options->mode, mojom::XRSessionMode::kImmersiveVr);
   webxr_has_pose_ = false;
   presentation_receiver_.reset();
   frame_data_receiver_.reset();
@@ -265,9 +251,6 @@ void XRCompositorCommon::ExitPresent() {
   // Reset webxr_visible_ for subsequent presentations.
   webxr_visible_ = true;
 
-  // Push out one more controller update so we don't have stale controllers.
-  UpdateControllerState();
-
   // Kill outstanding overlays:
   overlay_visible_ = false;
   overlay_receiver_.reset();
@@ -289,31 +272,6 @@ void XRCompositorCommon::SetVisibilityState(
           FROM_HERE,
           base::BindOnce(on_visibility_state_changed_, visibility_state));
     }
-  }
-}
-
-void XRCompositorCommon::UpdateControllerState() {
-  if (!gamepad_callback_) {
-    // Nobody is listening to updates, so bail early.
-    return;
-  }
-
-  if (!is_presenting_ || !webxr_visible_) {
-    std::move(gamepad_callback_).Run(nullptr);
-    return;
-  }
-
-  std::move(gamepad_callback_).Run(GetNextGamepadData());
-}
-
-void XRCompositorCommon::RequestUpdate(
-    mojom::IsolatedXRGamepadProvider::RequestUpdateCallback callback) {
-  // Save the callback to resolve next time we update (typically on vsync).
-  gamepad_callback_ = std::move(callback);
-
-  // If we aren't presenting, reply now saying that we have no controllers.
-  if (!is_presenting_) {
-    UpdateControllerState();
   }
 }
 
@@ -370,9 +328,8 @@ void XRCompositorCommon::GetFrameData(
   // have been sent during WaitGetPoses.
   task_runner()->PostTask(
       FROM_HERE,
-      base::BindOnce(&XRCompositorCommon::GetControllerDataAndSendFrameData,
-                     base::Unretained(this), std::move(callback),
-                     pending_frame_->frame_data_.Clone()));
+      base::BindOnce(&XRCompositorCommon::SendFrameData, base::Unretained(this),
+                     std::move(callback), pending_frame_->frame_data_.Clone()));
 
   next_frame_id_ += 1;
   if (next_frame_id_ < 0) {
@@ -388,12 +345,10 @@ void XRCompositorCommon::SetInputSourceButtonListener(
   input_event_listener_.Bind(std::move(input_listener_remote));
 }
 
-void XRCompositorCommon::GetControllerDataAndSendFrameData(
+void XRCompositorCommon::SendFrameData(
     XRFrameDataProvider::GetFrameDataCallback callback,
     mojom::XRFrameDataPtr frame_data) {
-  TRACE_EVENT0("xr", "GetControllerDataAndSendFrameData");
-  // Update gamepad controllers.
-  UpdateControllerState();
+  TRACE_EVENT0("xr", "SendFrameData");
 
   // This method represents a call from the renderer process. If our visibility
   // state is hidden, we should avoid handing "sensitive" information, like the
@@ -421,7 +376,7 @@ void XRCompositorCommon::GetEnvironmentIntegrationProvider(
 
 void XRCompositorCommon::SubmitOverlayTexture(
     int16_t frame_id,
-    mojo::ScopedHandle texture_handle,
+    mojo::PlatformHandle texture_handle,
     const gfx::RectF& left_bounds,
     const gfx::RectF& right_bounds,
     SubmitOverlayTextureCallback overlay_submit_callback) {
@@ -440,19 +395,9 @@ void XRCompositorCommon::SubmitOverlayTexture(
   pending_frame_->waiting_for_overlay_ = false;
 
 #if defined(OS_WIN)
-  MojoPlatformHandle platform_handle;
-  platform_handle.struct_size = sizeof(platform_handle);
-  MojoResult result = MojoUnwrapPlatformHandle(texture_handle.release().value(),
-                                               nullptr, &platform_handle);
-  if (result == MOJO_RESULT_OK) {
-    texture_helper_.SetOverlayTexture(
-        base::win::ScopedHandle(
-            reinterpret_cast<HANDLE>(platform_handle.value)),
-        left_bounds, right_bounds);
-    pending_frame_->overlay_submitted_ = true;
-  } else {
-    std::move(overlay_submit_callback_).Run(false);
-  }
+  texture_helper_.SetOverlayTexture(texture_handle.TakeHandle(), left_bounds,
+                                    right_bounds);
+  pending_frame_->overlay_submitted_ = true;
 
   // Regardless of success - try to composite what we have.
   MaybeCompositeAndSubmit();

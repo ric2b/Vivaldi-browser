@@ -6,15 +6,12 @@ package org.chromium.chrome.browser.toolbar;
 
 import android.content.Context;
 
-import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.ThemeColorProvider;
 import org.chromium.chrome.browser.compositor.layouts.EmptyOverviewModeObserver;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior.OverviewModeObserver;
-import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.toolbar.IncognitoStateProvider.IncognitoStateObserver;
-import org.chromium.chrome.browser.util.ColorUtils;
-import org.chromium.chrome.browser.util.FeatureUtilities;
+import org.chromium.components.browser_ui.styles.ChromeColors;
 
 /** A ThemeColorProvider for the app theme (incognito or standard theming). */
 public class AppThemeColorProvider extends ThemeColorProvider implements IncognitoStateObserver {
@@ -46,8 +43,8 @@ public class AppThemeColorProvider extends ThemeColorProvider implements Incogni
         super(context);
 
         mActivityContext = context;
-        mStandardPrimaryColor = ColorUtils.getDefaultThemeColor(context.getResources(), false);
-        mIncognitoPrimaryColor = ColorUtils.getDefaultThemeColor(context.getResources(), true);
+        mStandardPrimaryColor = ChromeColors.getDefaultThemeColor(context.getResources(), false);
+        mIncognitoPrimaryColor = ChromeColors.getDefaultThemeColor(context.getResources(), true);
 
         mOverviewModeObserver = new EmptyOverviewModeObserver() {
             @Override
@@ -81,13 +78,9 @@ public class AppThemeColorProvider extends ThemeColorProvider implements Incogni
     }
 
     private void updateTheme() {
-        final boolean isAccessibilityEnabled = DeviceClassManager.enableAccessibilityLayout();
-        final boolean isHorizontalTabSwitcherEnabled =
-                ChromeFeatureList.isEnabled(ChromeFeatureList.HORIZONTAL_TAB_SWITCHER_ANDROID);
-        final boolean isTabGridEnabled = FeatureUtilities.isGridTabSwitcherEnabled();
         final boolean shouldUseIncognitoBackground = mIsIncognito
-                && (isAccessibilityEnabled || isHorizontalTabSwitcherEnabled || isTabGridEnabled
-                        || !mIsOverviewVisible);
+                && (!mIsOverviewVisible
+                        || ToolbarColors.canUseIncognitoToolbarThemeColorInOverview());
 
         updatePrimaryColor(
                 shouldUseIncognitoBackground ? mIncognitoPrimaryColor : mStandardPrimaryColor,

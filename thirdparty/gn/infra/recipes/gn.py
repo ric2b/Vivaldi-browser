@@ -54,7 +54,8 @@ def RunSteps(api, repository):
     pkgs = api.cipd.EnsureFile()
     pkgs.add_package('infra/ninja/${platform}', 'version:1.8.2')
     if api.platform.is_linux or api.platform.is_mac:
-      pkgs.add_package('fuchsia/clang/${platform}', 'goma')
+      pkgs.add_package('fuchsia/clang/${platform}',
+                       'git_revision:b920a7f65b13237dc4d5b2b836b29a954fff440a')
     if api.platform.is_linux:
       pkgs.add_package('fuchsia/sysroot/${platform}',
                        'git_revision:a28dfa20af063e5ca00634024c85732e20220419',
@@ -90,15 +91,13 @@ def RunSteps(api, repository):
           step_test_data=
           lambda: api.raw_io.test_api.stream_output('/some/xcode/path')
       ).stdout.strip()
-      stdlib = '%s %s %s' % (cipd_dir.join('lib', 'libc++.a'),
-                             cipd_dir.join('lib', 'libc++abi.a'),
-                             cipd_dir.join('lib', 'libunwind.a'))
+      stdlib = '-nostdlib++ %s' % cipd_dir.join('lib', 'libc++.a')
       env = {
           'CC': cipd_dir.join('bin', 'clang'),
           'CXX': cipd_dir.join('bin', 'clang++'),
           'AR': cipd_dir.join('bin', 'llvm-ar'),
           'CFLAGS': sysroot,
-          'LDFLAGS': '%s -nostdlib++ %s' % (sysroot, stdlib),
+          'LDFLAGS': '%s %s' % (sysroot, stdlib),
       }
     else:
       env = {}
@@ -157,35 +156,32 @@ def RunSteps(api, repository):
 
 
 def GenTests(api):
-  REVISION = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
-
   for platform in ('linux', 'mac', 'win'):
     yield (api.test('ci_' + platform) + api.platform.name(platform) +
            api.buildbucket.ci_build(
+               project='gn',
                git_repo='gn.googlesource.com/gn',
-               revision=REVISION,
            ))
 
     yield (api.test('cq_' + platform) + api.platform.name(platform) +
            api.buildbucket.try_build(
-               gerrit_host='gn-review.googlesource.com',
-               change_number=1000,
-               patch_set=1,
+               project='gn',
+               git_repo='gn.googlesource.com/gn',
            ))
 
   yield (api.test('cipd_exists') + api.buildbucket.ci_build(
       project='infra-internal',
       git_repo='gn.googlesource.com/gn',
-      revision=REVISION,
-  ) + api.step_data('rev-parse', api.raw_io.stream_output(REVISION)) +
-         api.step_data('cipd search gn/gn/${platform} git_revision:' + REVISION,
+      revision='a' * 40,
+  ) + api.step_data('rev-parse', api.raw_io.stream_output('a' * 40)) +
+         api.step_data('cipd search gn/gn/${platform} git_revision:' + 'a' * 40,
                        api.cipd.example_search('gn/gn/linux-amd64',
-                                               ['git_revision:' + REVISION])))
+                                               ['git_revision:' + 'a' * 40])))
 
   yield (api.test('cipd_register') + api.buildbucket.ci_build(
       project='infra-internal',
       git_repo='gn.googlesource.com/gn',
-      revision=REVISION,
-  ) + api.step_data('rev-parse', api.raw_io.stream_output(REVISION)) +
-         api.step_data('cipd search gn/gn/${platform} git_revision:' + REVISION,
+      revision='a' * 40,
+  ) + api.step_data('rev-parse', api.raw_io.stream_output('a' * 40)) +
+         api.step_data('cipd search gn/gn/${platform} git_revision:' + 'a' * 40,
                        api.cipd.example_search('gn/gn/linux-amd64', [])))

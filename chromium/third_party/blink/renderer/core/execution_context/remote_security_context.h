@@ -12,19 +12,13 @@
 
 namespace blink {
 
-class CORE_EXPORT RemoteSecurityContext
-    : public GarbageCollected<RemoteSecurityContext>,
-      public SecurityContext {
-  USING_GARBAGE_COLLECTED_MIXIN(RemoteSecurityContext);
-
+class CORE_EXPORT RemoteSecurityContext final : public SecurityContext {
  public:
   RemoteSecurityContext();
 
-  void Trace(blink::Visitor*) override;
-
   void SetReplicatedOrigin(scoped_refptr<SecurityOrigin>);
   void ResetReplicatedContentSecurityPolicy();
-  void ResetAndEnforceSandboxFlags(WebSandboxFlags flags);
+  void ResetAndEnforceSandboxFlags(mojom::blink::WebSandboxFlags flags);
 
   // Constructs the enforcement FeaturePolicy struct for this security context.
   // The resulting FeaturePolicy is a combination of:

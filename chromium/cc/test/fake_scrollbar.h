@@ -14,74 +14,75 @@ namespace cc {
 class FakeScrollbar : public Scrollbar {
  public:
   FakeScrollbar();
-  FakeScrollbar(bool paint, bool has_thumb, bool is_overlay);
-  FakeScrollbar(bool paint,
-                bool has_thumb,
-                ScrollbarOrientation orientation,
-                bool is_left_side_vertical_scrollbar,
-                bool is_overlay);
-  FakeScrollbar(const FakeScrollbar&) = delete;
-  ~FakeScrollbar() override;
 
+  FakeScrollbar(const FakeScrollbar&) = delete;
   FakeScrollbar& operator=(const FakeScrollbar&) = delete;
 
   // Scrollbar implementation.
   ScrollbarOrientation Orientation() const override;
   bool IsLeftSideVerticalScrollbar() const override;
-  gfx::Point Location() const override;
+  bool IsSolidColor() const override;
   bool IsOverlay() const override;
   bool HasThumb() const override;
-  int ThumbThickness() const override;
+  gfx::Rect ThumbRect() const override;
   gfx::Rect BackButtonRect() const override;
   gfx::Rect ForwardButtonRect() const override;
   bool SupportsDragSnapBack() const override;
-  int ThumbLength() const override;
   gfx::Rect TrackRect() const override;
-  float ThumbOpacity() const override;
-  bool NeedsPaintPart(ScrollbarPart part) const override;
+  float Opacity() const override;
+  bool NeedsRepaintPart(ScrollbarPart part) const override;
   bool HasTickmarks() const override;
-  void PaintPart(PaintCanvas* canvas, ScrollbarPart part) override;
+  void PaintPart(PaintCanvas* canvas,
+                 ScrollbarPart part,
+                 const gfx::Rect& rect) override;
   bool UsesNinePatchThumbResource() const override;
   gfx::Size NinePatchThumbCanvasSize() const override;
   gfx::Rect NinePatchThumbAperture() const override;
 
-  void set_location(const gfx::Point& location) { location_ = location; }
-  void set_track_rect(const gfx::Rect& track_rect) { track_rect_ = track_rect; }
-  void set_thumb_thickness(int thumb_thickness) {
-      thumb_thickness_ = thumb_thickness;
+  void set_should_paint(bool b) { should_paint_ = b; }
+  void set_has_thumb(bool b) { has_thumb_ = b; }
+  void set_has_tickmarks(bool b) { has_tickmarks_ = b; }
+  void set_orientation(ScrollbarOrientation o) { orientation_ = o; }
+  void set_is_left_side_vertical_scrollbar(bool b) {
+    is_left_side_vertical_scrollbar_ = b;
   }
-  void set_thumb_length(int thumb_length) { thumb_length_ = thumb_length; }
-  void set_has_thumb(bool has_thumb) { has_thumb_ = has_thumb; }
+  void set_is_solid_color(bool b) { is_solid_color_ = b; }
+  void set_is_overlay(bool b) { is_overlay_ = b; }
+  void set_uses_nine_patch_thumb_resource(bool b) {
+    uses_nine_patch_thumb_resource_ = b;
+  }
+  void set_track_rect(const gfx::Rect& track_rect) { track_rect_ = track_rect; }
+  void set_thumb_size(const gfx::Size& thumb_size) { thumb_size_ = thumb_size; }
   SkColor paint_fill_color() const { return SK_ColorBLACK | fill_color_; }
 
   void set_thumb_opacity(float opacity) { thumb_opacity_ = opacity; }
-  void set_needs_paint_thumb(bool needs_paint) {
-    needs_paint_thumb_ = needs_paint;
+  void set_needs_repaint_thumb(bool needs_repaint) {
+    needs_repaint_thumb_ = needs_repaint;
   }
-  void set_needs_paint_track(bool needs_paint) {
-    needs_paint_track_ = needs_paint;
+  void set_needs_repaint_track(bool needs_repaint) {
+    needs_repaint_track_ = needs_repaint;
   }
-  void set_has_tickmarks(bool has_tickmarks) { has_tickmarks_ = has_tickmarks; }
 
-  gfx::Rect GetPartRect(ScrollbarPart part) const;
+ protected:
+  ~FakeScrollbar() override;
 
  private:
-  bool paint_;
-  bool has_thumb_;
-  ScrollbarOrientation orientation_;
-  bool is_left_side_vertical_scrollbar_;
-  bool is_overlay_;
-  int thumb_thickness_;
-  int thumb_length_;
-  float thumb_opacity_;
-  bool needs_paint_thumb_;
-  bool needs_paint_track_;
-  bool has_tickmarks_;
-  gfx::Point location_;
-  gfx::Rect track_rect_;
+  bool should_paint_ = false;
+  bool has_thumb_ = false;
+  bool has_tickmarks_ = false;
+  ScrollbarOrientation orientation_ = HORIZONTAL;
+  bool is_left_side_vertical_scrollbar_ = false;
+  bool is_solid_color_ = false;
+  bool is_overlay_ = false;
+  bool uses_nine_patch_thumb_resource_ = false;
+  gfx::Size thumb_size_{5, 10};
+  float thumb_opacity_ = 1;
+  bool needs_repaint_thumb_ = true;
+  bool needs_repaint_track_ = true;
+  gfx::Rect track_rect_{0, 0, 100, 10};
   gfx::Rect back_button_rect_;
   gfx::Rect forward_button_rect_;
-  SkColor fill_color_;
+  SkColor fill_color_ = SK_ColorGREEN;
 };
 
 }  // namespace cc

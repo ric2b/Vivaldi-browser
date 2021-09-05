@@ -20,3 +20,6 @@
 "ecosia.org",
 "qwant.com",
 "startpage.com",
+
+// VB-64209: Videos on ted.com fail if we use the chrome user agent.
+"ted.com",

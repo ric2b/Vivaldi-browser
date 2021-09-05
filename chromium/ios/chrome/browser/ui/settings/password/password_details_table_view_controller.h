@@ -12,10 +12,6 @@ namespace autofill {
 struct PasswordForm;
 }  // namespace autofill
 
-// The accessibility identifier of the password details table view.
-extern NSString* _Nonnull const kPasswordDetailsTableViewId;
-extern NSString* _Nonnull const kPasswordDetailsDeletionAlertViewId;
-
 @protocol ReauthenticationProtocol;
 
 // Displays details of a password item, including URL of the site, username and
@@ -34,9 +30,7 @@ extern NSString* _Nonnull const kPasswordDetailsDeletionAlertViewId;
         (nonnull id<ReauthenticationProtocol>)reauthenticationModule
     NS_DESIGNATED_INITIALIZER;
 
-- (nullable instancetype)initWithTableViewStyle:(UITableViewStyle)style
-                                    appBarStyle:(ChromeTableViewControllerStyle)
-                                                    appBarStyle NS_UNAVAILABLE;
+- (nullable instancetype)initWithStyle:(UITableViewStyle)style NS_UNAVAILABLE;
 
 @end
 

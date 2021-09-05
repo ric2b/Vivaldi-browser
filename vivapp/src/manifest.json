@@ -43,6 +43,7 @@
     "browsingData",
     "calendar",
     "contacts",
+    "contentBlocking",
     "chrome://favicon/",
     "chrome://theme/",
     "chrome://vivaldi-data/",
@@ -71,10 +72,12 @@
     "languageSettingsPrivate",
     "management",
     "mailPrivate",
+    "menuContent",
     "menubar",
     "menubarMenu",
     "notes",
     "notifications",
+    "pipPrivate",
     "prefs",
     "privacy",
     "runtimePrivate",
@@ -93,18 +96,17 @@
     "videoCapture",
     "vivaldiAccount",
     "webview",
-    "webRequest",
-    "webRequestBlocking",
+    "webNavigation",
     "windowPrivate",
     "zoom",
     {"fileSystem": ["write", "directory"]},
     {"socket": ["tcp-connect:*:*"]}
   ],
-  "webview" : {
-    "partitions" : [
+  "webview": {
+    "partitions": [
       {
-        "name" : "storage",
-        "accessible_resources" : [
+        "name": "storage",
+        "accessible_resources": [
           "browser.html",
           "components/thumbnail/capture.html",
           "components/settings/settings.html",
@@ -117,7 +119,23 @@
           "defaultsPlatformSpecific.js",
           "defaults.js",
           "bundle.js",
-          "devtools.html"
+          "devtools.html",
+          "window.html"
+        ]
+      },
+      {
+        "name": "markdowneditor",
+        "accessible_resources": [
+          "components/notes/markdowneditor/markdowneditor.html",
+          "markdowneditor-bundle.js"
+        ]
+      },
+      {
+        "name": "richtexteditor",
+        "accessible_resources": [
+          "components/notes/richtexteditor/richtexteditor.html",
+          "richtexteditor-bundle.js",
+          "md.css"
         ]
       }
     ]

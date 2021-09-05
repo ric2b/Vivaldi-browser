@@ -16,6 +16,7 @@ import org.chromium.content_public.app.ChildProcessServiceFactory;
 import org.chromium.weblayer_private.interfaces.IChildProcessService;
 import org.chromium.weblayer_private.interfaces.IObjectWrapper;
 import org.chromium.weblayer_private.interfaces.ObjectWrapper;
+import org.chromium.weblayer_private.interfaces.StrictModeWorkaround;
 
 /**
  * Implementation of IChildProcessService.
@@ -24,8 +25,15 @@ import org.chromium.weblayer_private.interfaces.ObjectWrapper;
 public final class ChildProcessServiceImpl extends IChildProcessService.Stub {
     private ChildProcessService mService;
 
+    // This should only be called in M80 or below.
     @UsedByReflection("WebLayer")
     public static IBinder create(Service service, Context appContext) {
+        return create(service, appContext, WebLayerImpl.createRemoteContextV80(appContext));
+    }
+
+    @UsedByReflection("WebLayer")
+    public static IBinder create(Service service, Context appContext, Context remoteContext) {
+        ClassLoaderContextWrapperFactory.setResourceOverrideContext(remoteContext);
         // Wrap the app context so that it can be used to load WebLayer implementation classes.
         appContext = ClassLoaderContextWrapperFactory.get(appContext);
         return new ChildProcessServiceImpl(service, appContext);
@@ -33,17 +41,20 @@ public final class ChildProcessServiceImpl extends IChildProcessService.Stub {
 
     @Override
     public void onCreate() {
+        StrictModeWorkaround.apply();
         mService.onCreate();
     }
 
     @Override
     public void onDestroy() {
+        StrictModeWorkaround.apply();
         mService.onDestroy();
         mService = null;
     }
 
     @Override
     public IObjectWrapper onBind(IObjectWrapper intent) {
+        StrictModeWorkaround.apply();
         return ObjectWrapper.wrap(mService.onBind(ObjectWrapper.unwrap(intent, Intent.class)));
     }
 

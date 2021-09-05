@@ -37,14 +37,13 @@
 #include "third_party/blink/renderer/core/loader/http_equiv.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/page.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_to_number.h"
 
 namespace blink {
 
-using namespace html_names;
-
 HTMLMetaElement::HTMLMetaElement(Document& document)
-    : HTMLElement(kMetaTag, document) {}
+    : HTMLElement(html_names::kMetaTag, document) {}
 
 static bool IsInvalidSeparator(UChar c) {
   return c == ';';
@@ -127,9 +126,9 @@ void HTMLMetaElement::ParseContentAttribute(
     String message =
         "Error parsing a meta element's content: ';' is not a valid key-value "
         "pair separator. Please use ',' instead.";
-    document->AddConsoleMessage(
-        ConsoleMessage::Create(mojom::ConsoleMessageSource::kRendering,
-                               mojom::ConsoleMessageLevel::kWarning, message));
+    document->AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
+        mojom::ConsoleMessageSource::kRendering,
+        mojom::ConsoleMessageLevel::kWarning, message));
   }
 }
 
@@ -432,9 +431,9 @@ void HTMLMetaElement::ReportViewportWarning(Document* document,
 
   // FIXME: This message should be moved off the console once a solution to
   // https://bugs.webkit.org/show_bug.cgi?id=103274 exists.
-  document->AddConsoleMessage(
-      ConsoleMessage::Create(mojom::ConsoleMessageSource::kRendering,
-                             ViewportErrorMessageLevel(error_code), message));
+  document->AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
+      mojom::ConsoleMessageSource::kRendering,
+      ViewportErrorMessageLevel(error_code), message));
 }
 
 void HTMLMetaElement::GetViewportDescriptionFromContentAttribute(
@@ -476,12 +475,13 @@ void HTMLMetaElement::ProcessViewportContentAttribute(
 }
 
 void HTMLMetaElement::NameRemoved(const AtomicString& name_value) {
-  const AtomicString& content_value = FastGetAttribute(kContentAttr);
+  const AtomicString& content_value =
+      FastGetAttribute(html_names::kContentAttr);
   if (content_value.IsNull())
     return;
   if (EqualIgnoringASCIICase(name_value, "theme-color") &&
       GetDocument().GetFrame()) {
-    GetDocument().GetFrame()->Client()->DispatchDidChangeThemeColor();
+    GetDocument().GetFrame()->DidChangeThemeColor();
   } else if (EqualIgnoringASCIICase(name_value, "color-scheme")) {
     GetDocument().ColorSchemeMetaChanged();
   }
@@ -489,14 +489,14 @@ void HTMLMetaElement::NameRemoved(const AtomicString& name_value) {
 
 void HTMLMetaElement::ParseAttribute(
     const AttributeModificationParams& params) {
-  if (params.name == kNameAttr) {
+  if (params.name == html_names::kNameAttr) {
     if (IsInDocumentTree())
       NameRemoved(params.old_value);
     ProcessContent();
-  } else if (params.name == kContentAttr) {
+  } else if (params.name == html_names::kContentAttr) {
     ProcessContent();
     ProcessHttpEquiv();
-  } else if (params.name == kHttpEquivAttr) {
+  } else if (params.name == html_names::kHttpEquivAttr) {
     ProcessHttpEquiv();
   } else {
     HTMLElement::ParseAttribute(params);
@@ -518,7 +518,7 @@ void HTMLMetaElement::RemovedFrom(ContainerNode& insertion_point) {
   HTMLElement::RemovedFrom(insertion_point);
   if (!insertion_point.IsInDocumentTree())
     return;
-  const AtomicString& name_value = FastGetAttribute(kNameAttr);
+  const AtomicString& name_value = FastGetAttribute(html_names::kNameAttr);
   if (!name_value.IsEmpty())
     NameRemoved(name_value);
 }
@@ -533,10 +533,12 @@ static bool InDocumentHead(HTMLMetaElement* element) {
 void HTMLMetaElement::ProcessHttpEquiv() {
   if (!IsInDocumentTree())
     return;
-  const AtomicString& content_value = FastGetAttribute(kContentAttr);
+  const AtomicString& content_value =
+      FastGetAttribute(html_names::kContentAttr);
   if (content_value.IsNull())
     return;
-  const AtomicString& http_equiv_value = FastGetAttribute(kHttpEquivAttr);
+  const AtomicString& http_equiv_value =
+      FastGetAttribute(html_names::kHttpEquivAttr);
   if (http_equiv_value.IsEmpty())
     return;
   HttpEquiv::Process(GetDocument(), http_equiv_value, content_value,
@@ -547,15 +549,16 @@ void HTMLMetaElement::ProcessContent() {
   if (!IsInDocumentTree())
     return;
 
-  const AtomicString& name_value = FastGetAttribute(kNameAttr);
+  const AtomicString& name_value = FastGetAttribute(html_names::kNameAttr);
   if (name_value.IsEmpty())
     return;
 
-  const AtomicString& content_value = FastGetAttribute(kContentAttr);
+  const AtomicString& content_value =
+      FastGetAttribute(html_names::kContentAttr);
 
   if (EqualIgnoringASCIICase(name_value, "theme-color") &&
       GetDocument().GetFrame()) {
-    GetDocument().GetFrame()->Client()->DispatchDidChangeThemeColor();
+    GetDocument().GetFrame()->DidChangeThemeColor();
     return;
   }
   if (EqualIgnoringASCIICase(name_value, "color-scheme")) {
@@ -572,8 +575,10 @@ void HTMLMetaElement::ProcessContent() {
     ProcessViewportContentAttribute(content_value,
                                     ViewportDescription::kViewportMeta);
   } else if (EqualIgnoringASCIICase(name_value, "referrer")) {
-    GetDocument().ParseAndSetReferrerPolicy(content_value,
-                                            true /* support legacy keywords */);
+    UseCounter::Count(&GetDocument(),
+                      WebFeature::kHTMLMetaElementReferrerPolicy);
+    GetExecutionContext()->ParseAndSetReferrerPolicy(
+        content_value, true /* support legacy keywords */);
   } else if (EqualIgnoringASCIICase(name_value, "handheldfriendly") &&
              EqualIgnoringASCIICase(content_value, "true")) {
     ProcessViewportContentAttribute("width=device-width",
@@ -581,6 +586,14 @@ void HTMLMetaElement::ProcessContent() {
   } else if (EqualIgnoringASCIICase(name_value, "mobileoptimized")) {
     ProcessViewportContentAttribute("width=device-width, initial-scale=1",
                                     ViewportDescription::kMobileOptimizedMeta);
+  } else if (EqualIgnoringASCIICase(name_value, "monetization")) {
+    // TODO(1031476): The Web Monetization specification is an unofficial draft,
+    // available at https://webmonetization.org/specification.html
+    // For now, only use counters are implemented in Blink.
+    if (!GetDocument().ParentDocument()) {
+      UseCounter::Count(&GetDocument(),
+                        WebFeature::kHTMLMetaElementMonetization);
+    }
   }
 }
 
@@ -593,14 +606,14 @@ WTF::TextEncoding HTMLMetaElement::ComputeEncoding() const {
 }
 
 const AtomicString& HTMLMetaElement::Content() const {
-  return getAttribute(kContentAttr);
+  return FastGetAttribute(html_names::kContentAttr);
 }
 
 const AtomicString& HTMLMetaElement::HttpEquiv() const {
-  return getAttribute(kHttpEquivAttr);
+  return FastGetAttribute(html_names::kHttpEquivAttr);
 }
 
 const AtomicString& HTMLMetaElement::GetName() const {
-  return GetNameAttribute();
+  return FastGetAttribute(html_names::kNameAttr);
 }
 }

@@ -17,6 +17,7 @@
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
 #include "ios/chrome/browser/ui/location_bar/location_bar_model_delegate_ios.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_text_field_ios.h"
+#import "ios/chrome/browser/ui/toolbar/adaptive_toolbar_view_controller.h"
 #import "ios/chrome/browser/ui/toolbar/primary_toolbar_coordinator.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_coordinator_delegate.h"
 #import "ios/chrome/browser/ui/util/named_guide.h"
@@ -112,13 +113,9 @@ class OmniboxPerfTest : public PerfTest {
     [[[toolbarDelegate stub] andReturnValue:OCMOCK_VALUE(model_for_mock)]
         locationBarModel];
 
-    CommandDispatcher* dispatcher = [[CommandDispatcher alloc] init];
-
     coordinator_ =
         [[PrimaryToolbarCoordinator alloc] initWithBrowser:browser_.get()];
     coordinator_.delegate = toolbarDelegate;
-    coordinator_.webStateList = web_state_list_.get();
-    coordinator_.commandDispatcher = dispatcher;
     [coordinator_ start];
 
     UIView* toolbarView = coordinator_.viewController.view;

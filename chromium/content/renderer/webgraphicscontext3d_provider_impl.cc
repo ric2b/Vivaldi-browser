@@ -9,9 +9,9 @@
 #include "build/build_config.h"
 #include "cc/paint/paint_image.h"
 #include "cc/tiles/gpu_image_decode_cache.h"
-#include "components/viz/common/gl_helper.h"
 #include "content/public/common/content_switches.h"
 #include "gpu/command_buffer/client/context_support.h"
+#include "gpu/command_buffer/client/gl_helper.h"
 #include "gpu/config/gpu_feature_info.h"
 #include "media/renderers/paint_canvas_video_renderer.h"
 #include "services/viz/public/cpp/gpu/context_provider_command_buffer.h"
@@ -36,8 +36,23 @@ bool WebGraphicsContext3DProviderImpl::BindToCurrentThread() {
   return provider_->BindToCurrentThread() == gpu::ContextResult::kSuccess;
 }
 
+gpu::InterfaceBase* WebGraphicsContext3DProviderImpl::InterfaceBase() {
+  if (ContextGL())
+    return ContextGL();
+  if (RasterInterface())
+    return RasterInterface();
+  if (WebGPUInterface())
+    return WebGPUInterface();
+  return nullptr;
+}
+
 gpu::gles2::GLES2Interface* WebGraphicsContext3DProviderImpl::ContextGL() {
   return provider_->ContextGL();
+}
+
+gpu::raster::RasterInterface*
+WebGraphicsContext3DProviderImpl::RasterInterface() {
+  return provider_->RasterInterface();
 }
 
 gpu::webgpu::WebGPUInterface*
@@ -69,9 +84,11 @@ WebGraphicsContext3DProviderImpl::GetWebglPreferences() const {
         base::CommandLine::ForCurrentProcess();
     auto gpu_feature_info = GetGpuFeatureInfo();
 
-    if (gpu_feature_info.IsWorkaroundEnabled(MAX_MSAA_SAMPLE_COUNT_4)) {
+    if (gpu_feature_info.IsWorkaroundEnabled(MAX_MSAA_SAMPLE_COUNT_2))
+      prefs.msaa_sample_count = 2;
+    else if (gpu_feature_info.IsWorkaroundEnabled(MAX_MSAA_SAMPLE_COUNT_4))
       prefs.msaa_sample_count = 4;
-    }
+
     if (command_line->HasSwitch(switches::kWebglMSAASampleCount)) {
       std::string sample_count =
           command_line->GetSwitchValueASCII(switches::kWebglMSAASampleCount);
@@ -90,9 +107,6 @@ WebGraphicsContext3DProviderImpl::GetWebglPreferences() const {
         prefs.anti_aliasing_mode = blink::kAntialiasingModeMSAAExplicitResolve;
       } else if (mode == "implicit") {
         prefs.anti_aliasing_mode = blink::kAntialiasingModeMSAAImplicitResolve;
-      } else if (mode == "screenspace") {
-        prefs.anti_aliasing_mode =
-            blink::kAntialiasingModeScreenSpaceAntialiasing;
       } else {
         prefs.anti_aliasing_mode = blink::kAntialiasingModeUnspecified;
       }
@@ -122,9 +136,9 @@ WebGraphicsContext3DProviderImpl::GetWebglPreferences() const {
   return prefs;
 }
 
-viz::GLHelper* WebGraphicsContext3DProviderImpl::GetGLHelper() {
+gpu::GLHelper* WebGraphicsContext3DProviderImpl::GetGLHelper() {
   if (!gl_helper_) {
-    gl_helper_ = std::make_unique<viz::GLHelper>(provider_->ContextGL(),
+    gl_helper_ = std::make_unique<gpu::GLHelper>(provider_->ContextGL(),
                                                  provider_->ContextSupport());
   }
   return gl_helper_.get();
@@ -147,7 +161,8 @@ void WebGraphicsContext3DProviderImpl::OnContextLost() {
 
 cc::ImageDecodeCache* WebGraphicsContext3DProviderImpl::ImageDecodeCache(
     SkColorType color_type) {
-  DCHECK(GetGrContext()->colorTypeSupportedAsImage(color_type));
+  DCHECK(GetCapabilities().supports_oop_raster ||
+         GetGrContext()->colorTypeSupportedAsImage(color_type));
   auto cache_iterator = image_decode_cache_map_.find(color_type);
   if (cache_iterator != image_decode_cache_map_.end())
     return cache_iterator->second.get();
@@ -158,7 +173,7 @@ cc::ImageDecodeCache* WebGraphicsContext3DProviderImpl::ImageDecodeCache(
   static const size_t kMaxWorkingSetBytes = 64 * 1024 * 1024;
 
   // TransferCache is used only with OOP raster.
-  const bool use_transfer_cache = false;
+  const bool use_transfer_cache = GetCapabilities().supports_oop_raster;
 
   auto insertion_result = image_decode_cache_map_.emplace(
       color_type,

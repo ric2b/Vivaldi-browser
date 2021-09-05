@@ -105,6 +105,7 @@ TEST_F(ManifestParserTest, ValidNoContentParses) {
   ASSERT_FALSE(manifest->has_background_color);
   ASSERT_TRUE(manifest->gcm_sender_id.IsNull());
   ASSERT_EQ(DefaultDocumentUrl().BaseAsString(), manifest->scope.GetString());
+  ASSERT_TRUE(manifest->shortcuts.IsEmpty());
 }
 
 TEST_F(ManifestParserTest, MultipleErrorsReporting) {
@@ -112,10 +113,10 @@ TEST_F(ManifestParserTest, MultipleErrorsReporting) {
       "{ \"name\": 42, \"short_name\": 4,"
       "\"orientation\": {}, \"display\": \"foo\","
       "\"start_url\": null, \"icons\": {}, \"theme_color\": 42,"
-      "\"background_color\": 42 }");
+      "\"background_color\": 42, \"shortcuts\": {} }");
   ASSERT_FALSE(IsManifestEmpty(manifest));
 
-  EXPECT_EQ(8u, GetErrorCount());
+  EXPECT_EQ(9u, GetErrorCount());
 
   EXPECT_EQ("property 'name' ignored, type string expected.", errors()[0]);
   EXPECT_EQ("property 'short_name' ignored, type string expected.",
@@ -129,6 +130,7 @@ TEST_F(ManifestParserTest, MultipleErrorsReporting) {
             errors()[6]);
   EXPECT_EQ("property 'background_color' ignored, type string expected.",
             errors()[7]);
+  EXPECT_EQ("property 'shortcuts' ignored, type array expected.", errors()[8]);
 }
 
 TEST_F(ManifestParserTest, NameParseRules) {
@@ -827,8 +829,8 @@ TEST_F(ManifestParserTest, IconSizesParseRules) {
     EXPECT_FALSE(manifest->icons.IsEmpty());
 
     auto& icons = manifest->icons;
-    EXPECT_EQ(icons[0]->sizes[0], WebSize(42, 42));
-    EXPECT_EQ(icons[0]->sizes[1], WebSize(48, 48));
+    EXPECT_EQ(icons[0]->sizes[0], gfx::Size(42, 42));
+    EXPECT_EQ(icons[0]->sizes[1], gfx::Size(48, 48));
     EXPECT_EQ(0u, GetErrorCount());
   }
 
@@ -840,8 +842,8 @@ TEST_F(ManifestParserTest, IconSizesParseRules) {
     EXPECT_FALSE(manifest->icons.IsEmpty());
 
     auto& icons = manifest->icons;
-    EXPECT_EQ(icons[0]->sizes[0], WebSize(42, 42));
-    EXPECT_EQ(icons[0]->sizes[1], WebSize(48, 48));
+    EXPECT_EQ(icons[0]->sizes[0], gfx::Size(42, 42));
+    EXPECT_EQ(icons[0]->sizes[1], gfx::Size(48, 48));
     EXPECT_EQ(0u, GetErrorCount());
   }
 
@@ -853,8 +855,8 @@ TEST_F(ManifestParserTest, IconSizesParseRules) {
     EXPECT_FALSE(manifest->icons.IsEmpty());
 
     auto& icons = manifest->icons;
-    EXPECT_EQ(icons[0]->sizes[0], WebSize(42, 42));
-    EXPECT_EQ(icons[0]->sizes[1], WebSize(42, 42));
+    EXPECT_EQ(icons[0]->sizes[0], gfx::Size(42, 42));
+    EXPECT_EQ(icons[0]->sizes[1], gfx::Size(42, 42));
     EXPECT_EQ(0u, GetErrorCount());
   }
 
@@ -880,12 +882,12 @@ TEST_F(ManifestParserTest, IconSizesParseRules) {
     EXPECT_EQ("found icon with no valid size.", errors()[0]);
   }
 
-  // 'any' is correctly parsed and transformed to WebSize(0,0).
+  // 'any' is correctly parsed and transformed to gfx::Size(0,0).
   {
     auto& manifest = ParseManifest(
         "{ \"icons\": [ {\"src\": \"\","
         "\"sizes\": \"any AnY ANY aNy\" } ] }");
-    WebSize any = WebSize(0, 0);
+    gfx::Size any = gfx::Size(0, 0);
     EXPECT_FALSE(manifest->icons.IsEmpty());
 
     auto& icons = manifest->icons;
@@ -1074,183 +1076,794 @@ TEST_F(ManifestParserTest, IconPurposeParseRules) {
   }
 }
 
-TEST_F(ManifestParserTest, FileHandlerParseRules) {
-  // Does not contain file_handler field.
+TEST_F(ManifestParserTest, ShortcutsParseRules) {
+  // Smoke test: if no shortcut, no value.
   {
-    auto& manifest = ParseManifest("{ }");
-    EXPECT_FALSE(manifest->file_handler.get());
+    auto& manifest = ParseManifest("{ \"shortcuts\": [] }");
+    EXPECT_TRUE(manifest->shortcuts.IsEmpty());
     EXPECT_EQ(0u, GetErrorCount());
   }
 
-  // Contains empty file_handler field.
+  // Smoke test: if empty shortcut, no value.
   {
-    auto& manifest = ParseManifest("{ \"file_handler\": { } }");
-    EXPECT_FALSE(manifest->file_handler.get());
+    auto& manifest = ParseManifest("{ \"shortcuts\": [ {} ] }");
+    EXPECT_TRUE(manifest->icons.IsEmpty());
     EXPECT_EQ(1u, GetErrorCount());
-    EXPECT_EQ("property 'file_handler' ignored. Property 'action' is invalid.",
-              errors()[0]);
+    EXPECT_EQ("property 'url' of 'shortcut' not present.", errors()[0]);
   }
 
-  // Contains file_handler field but no file handlers.
+  // Smoke test: shortcut with invalid name and url, it will not be present in
+  // the list.
   {
     auto& manifest =
-        ParseManifest("{ \"file_handler\": { \"action\": \"/files\" } }");
-    EXPECT_FALSE(manifest->file_handler.get());
-
+        ParseManifest("{ \"shortcuts\": [ { \"shortcuts\": [] } ] }");
+    EXPECT_TRUE(manifest->icons.IsEmpty());
     EXPECT_EQ(1u, GetErrorCount());
-    EXPECT_EQ("no file handlers were specified.", errors()[0]);
+    EXPECT_EQ("property 'url' of 'shortcut' not present.", errors()[0]);
   }
 
-  // Contains file_handler field but files list is empty.
+  // Smoke test: shortcut with no name, it will not be present in the list.
   {
-    auto& manifest = ParseManifest(
-        "{ \"file_handler\": { \"action\": \"/files\", \"files\": [] } }");
-    EXPECT_FALSE(manifest->file_handler.get());
+    auto& manifest = ParseManifest("{ \"shortcuts\": [ { \"url\": \"\" } ] }");
+    EXPECT_TRUE(manifest->shortcuts.IsEmpty());
     EXPECT_EQ(1u, GetErrorCount());
-    EXPECT_EQ("no file handlers were specified.", errors()[0]);
+    EXPECT_EQ("property 'name' of 'shortcut' not present.", errors()[0]);
   }
 
-  // Invalid action causes parsing to fail.
+  // Smoke test: shortcut with no url, it will not be present in the list.
+  {
+    auto& manifest = ParseManifest("{ \"shortcuts\": [ { \"name\": \"\" } ] }");
+    EXPECT_TRUE(manifest->shortcuts.IsEmpty());
+    EXPECT_EQ(1u, GetErrorCount());
+    EXPECT_EQ("property 'url' of 'shortcut' not present.", errors()[0]);
+  }
+
+  // Smoke test: shortcut with empty name, and empty src, will not be present in
+  // the list.
   {
     auto& manifest = ParseManifest(
-        "{"
-        "  \"file_handler\": {"
-        "    \"files\": ["
-        "      {"
-        "        \"name\": \"name\", "
-        "        \"accept\": \"image/png\""
-        "      }"
-        "    ]"
-        "  }"
+        "{ \"shortcuts\": [ { \"name\": \"\", \"url\": \"\" } ] }");
+    EXPECT_TRUE(manifest->shortcuts.IsEmpty());
+    EXPECT_EQ(1u, GetErrorCount());
+    EXPECT_EQ("property 'name' of 'shortcut' is an empty string.", errors()[0]);
+  }
+
+  // Smoke test: shortcut with valid (non-empty) name and src, will be present
+  // in the list.
+  {
+    auto& manifest = ParseManifest(
+        "{ \"shortcuts\": [{ \"name\": \"New Post\", \"url\": \"compose\" }] "
         "}");
-    manifest->scope = KURL("http://frobnicate.notatld");
-    EXPECT_FALSE(manifest->file_handler.get());
+    EXPECT_FALSE(manifest->shortcuts.IsEmpty());
+
+    auto& shortcuts = manifest->shortcuts;
+    EXPECT_EQ(shortcuts.size(), 1u);
+    EXPECT_EQ(shortcuts[0]->name, "New Post");
+    EXPECT_EQ(shortcuts[0]->url.GetString(), "http://foo.com/compose");
+    EXPECT_FALSE(IsManifestEmpty(manifest));
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+}
+
+TEST_F(ManifestParserTest, ShortcutNameParseRules) {
+  // Smoke test.
+  {
+    auto& manifest = ParseManifest(
+        "{ \"shortcuts\": [ {\"name\": \"foo\", \"url\": \"NameParseTest\" } ] "
+        "}");
+    EXPECT_FALSE(manifest->shortcuts.IsEmpty());
+    EXPECT_EQ(manifest->shortcuts[0]->name, "foo");
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+
+  // Trim whitespaces.
+  {
+    auto& manifest = ParseManifest(
+        "{ \"shortcuts\": [ {\"name\": \"  foo  \", \"url\": \"NameParseTest\" "
+        "} ] }");
+    ASSERT_EQ(manifest->shortcuts[0]->name, "foo");
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+
+  // Don't parse if shortcut->name isn't present.
+  {
+    auto& manifest =
+        ParseManifest("{ \"shortcuts\": [ {\"url\": \"NameParseTest\" } ] }");
+    EXPECT_TRUE(manifest->shortcuts.IsEmpty());
     EXPECT_EQ(1u, GetErrorCount());
-    EXPECT_EQ("property 'file_handler' ignored. Property 'action' is invalid.",
+    EXPECT_EQ("property 'name' of 'shortcut' not present.", errors()[0]);
+  }
+
+  // Don't parse if shortcut->name isn't a string.
+  {
+    auto& manifest = ParseManifest(
+        "{ \"shortcuts\": [ {\"name\": {}, \"url\": \"NameParseTest\" } ] }");
+    EXPECT_TRUE(manifest->shortcuts.IsEmpty());
+    EXPECT_EQ(1u, GetErrorCount());
+    EXPECT_EQ("property 'name' of 'shortcut' ignored, type string expected.",
               errors()[0]);
   }
 
-  // Single accept value can be parsed from string.
+  // Don't parse if shortcut->name isn't a string.
   {
     auto& manifest = ParseManifest(
-        "{"
-        "  \"file_handler\": {"
-        "    \"files\": ["
-        "      {"
-        "        \"name\": \"name\", "
-        "        \"accept\": \"image/png\""
-        "      }"
-        "    ], "
-        "    \"action\": \"/files\""
-        "  }"
-        "}");
-    EXPECT_TRUE(manifest->file_handler.get());
+        "{ \"shortcuts\": [ {\"name\": 42, \"url\": \"NameParseTest\" } ] }");
+    EXPECT_TRUE(manifest->shortcuts.IsEmpty());
+    EXPECT_EQ(1u, GetErrorCount());
+    EXPECT_EQ("property 'name' of 'shortcut' ignored, type string expected.",
+              errors()[0]);
+  }
 
-    auto& file_handler = manifest->file_handler;
-    EXPECT_EQ(file_handler->action, KURL("http://foo.com/files"));
-    EXPECT_EQ(file_handler->files.size(), 1u);
-    EXPECT_EQ(file_handler->files[0]->name, "name");
-    EXPECT_EQ(file_handler->files[0]->accept.size(), 1u);
-    EXPECT_EQ(file_handler->files[0]->accept[0], "image/png");
+  // Don't parse if shortcut->name is an empty string.
+  {
+    auto& manifest = ParseManifest(
+        "{ \"shortcuts\": [ {\"name\": \"\", \"url\": \"NameParseTest\" } ] }");
+    EXPECT_TRUE(manifest->shortcuts.IsEmpty());
+    EXPECT_EQ(1u, GetErrorCount());
+    EXPECT_EQ("property 'name' of 'shortcut' is an empty string.", errors()[0]);
+  }
+}
 
+TEST_F(ManifestParserTest, ShortcutShortNameParseRules) {
+  // Smoke test.
+  {
+    auto& manifest = ParseManifest(
+        "{ \"shortcuts\": [ {\"name\": \"ShortNameParseTest\", \"short_name\": "
+        "\"foo\", \"url\": \"ShortNameParseTest\" } ] }");
+    ASSERT_EQ(manifest->shortcuts[0]->short_name, "foo");
+    ASSERT_FALSE(IsManifestEmpty(manifest));
     EXPECT_EQ(0u, GetErrorCount());
   }
 
-  // Single accept value can be parsed from list.
+  // Shortcut member is parsed when no short_name is present
   {
     auto& manifest = ParseManifest(
-        "{"
-        "  \"file_handler\": {"
-        "    \"action\": \"/files\", "
-        "    \"files\": ["
-        "      {"
-        "        \"name\": \"name\", "
-        "        \"accept\": ["
-        "          \"image/png\""
-        "        ]"
-        "      }"
-        "    ]"
-        "  }"
-        "}");
-    EXPECT_TRUE(manifest->file_handler.get());
-
-    auto& file_handler = manifest->file_handler;
-    EXPECT_EQ(file_handler->action, KURL("http://foo.com/files"));
-    EXPECT_EQ(file_handler->files.size(), 1u);
-    EXPECT_EQ(file_handler->files[0]->name, "name");
-    EXPECT_EQ(file_handler->files[0]->accept.size(), 1u);
-    EXPECT_EQ(file_handler->files[0]->accept[0], "image/png");
-
+        "{ \"shortcuts\": [ {\"name\": \"ShortNameParseTest\", \"url\": "
+        "\"ShortNameParseTest\" } ] }");
+    ASSERT_TRUE(manifest->shortcuts[0]->short_name.IsNull());
+    ASSERT_FALSE(IsManifestEmpty(manifest));
     EXPECT_EQ(0u, GetErrorCount());
   }
 
-  // Multiple accept values can be parsed.
+  // Trim whitespaces.
+  {
+    auto& manifest = ParseManifest(
+        "{ \"shortcuts\": [ {\"name\": \"ShortNameParseTest\", \"short_name\": "
+        "\"  foo  \", \"url\": \"ShortNameParseTest\" } ] }");
+    ASSERT_EQ(manifest->shortcuts[0]->short_name, "foo");
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+
+  // Don't parse short_name if it isn't a string.
+  {
+    auto& manifest = ParseManifest(
+        "{ \"shortcuts\": [ {\"name\": \"ShortNameParseTest\", \"short_name\": "
+        "{}, \"url\": \"ShortNameParseTest\" } ] }");
+    ASSERT_TRUE(manifest->shortcuts[0]->short_name.IsNull());
+    EXPECT_EQ(1u, GetErrorCount());
+    EXPECT_EQ(
+        "property 'short_name' of 'shortcut' ignored, type string expected.",
+        errors()[0]);
+  }
+
+  // Don't parse short_name if it isn't a string.
+  {
+    auto& manifest = ParseManifest(
+        "{ \"shortcuts\": [ {\"name\": \"ShortNameParseTest\", \"short_name\": "
+        "42, \"url\": \"ShortNameParseTest\" } ] }");
+    ASSERT_TRUE(manifest->shortcuts[0]->short_name.IsNull());
+    EXPECT_EQ(1u, GetErrorCount());
+    EXPECT_EQ(
+        "property 'short_name' of 'shortcut' ignored, type string expected.",
+        errors()[0]);
+  }
+}
+
+TEST_F(ManifestParserTest, ShortcutDescriptionParseRules) {
+  // Smoke test.
+  {
+    auto& manifest = ParseManifest(
+        "{ \"shortcuts\": [ {\"name\": \"DescriptionParseTest\", "
+        "\"description\": "
+        "\"foo\", \"url\": \"DescriptionParseTest\" } ] }");
+    ASSERT_EQ(manifest->shortcuts[0]->description, "foo");
+    ASSERT_FALSE(IsManifestEmpty(manifest));
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+
+  // Shortcut member is parsed when no description is present
+  {
+    auto& manifest = ParseManifest(
+        "{ \"shortcuts\": [ {\"name\": \"DescriptionParseTest\", \"url\": "
+        "\"DescriptionParseTest\" } ] }");
+    ASSERT_TRUE(manifest->shortcuts[0]->description.IsNull());
+    ASSERT_FALSE(IsManifestEmpty(manifest));
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+
+  // Trim whitespaces.
+  {
+    auto& manifest = ParseManifest(
+        "{ \"shortcuts\": [ {\"name\": \"DescriptionParseTest\", "
+        "\"description\": "
+        "\"  foo  \", \"url\": \"DescriptionParseTest\" } ] }");
+    ASSERT_EQ(manifest->shortcuts[0]->description, "foo");
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+
+  // Don't parse description if it isn't a string.
+  {
+    auto& manifest = ParseManifest(
+        "{ \"shortcuts\": [ {\"name\": \"DescriptionParseTest\", "
+        "\"description\": "
+        "{}, \"url\": \"DescriptionParseTest\" } ] }");
+    ASSERT_TRUE(manifest->shortcuts[0]->description.IsNull());
+    EXPECT_EQ(1u, GetErrorCount());
+    EXPECT_EQ(
+        "property 'description' of 'shortcut' ignored, type string expected.",
+        errors()[0]);
+  }
+
+  // Don't parse description if it isn't a string.
+  {
+    auto& manifest = ParseManifest(
+        "{ \"shortcuts\": [ {\"name\": \"DescriptionParseTest\", "
+        "\"description\": "
+        "42, \"url\": \"DescriptionParseTest\" } ] }");
+    ASSERT_TRUE(manifest->shortcuts[0]->description.IsNull());
+    EXPECT_EQ(1u, GetErrorCount());
+    EXPECT_EQ(
+        "property 'description' of 'shortcut' ignored, type string expected.",
+        errors()[0]);
+  }
+}
+
+TEST_F(ManifestParserTest, ShortcutUrlParseRules) {
+  // Smoke test.
+  {
+    auto& manifest = ParseManifest(
+        "{ \"shortcuts\": [ {\"name\": \"UrlParseTest\", \"url\": \"foo\" } ] "
+        "}");
+    EXPECT_FALSE(manifest->shortcuts.IsEmpty());
+    EXPECT_EQ(manifest->shortcuts[0]->url, KURL(DefaultDocumentUrl(), "foo"));
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+
+  // Smoke test. Don't parse (with an error) when url is not present.
+  {
+    auto& manifest = ParseManifest("{ \"shortcuts\": [ { \"name\": \"\" } ] }");
+    EXPECT_TRUE(manifest->shortcuts.IsEmpty());
+    EXPECT_EQ(1u, GetErrorCount());
+    EXPECT_EQ("property 'url' of 'shortcut' not present.", errors()[0]);
+  }
+
+  // Whitespaces.
+  {
+    auto& manifest = ParseManifest(
+        "{ \"shortcuts\": [ {\"name\": \"UrlParseTest\", \"url\": \"   foo   "
+        "\" } ] }");
+    EXPECT_FALSE(manifest->shortcuts.IsEmpty());
+    EXPECT_EQ(manifest->shortcuts[0]->url, KURL(DefaultDocumentUrl(), "foo"));
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+
+  // Don't parse if url isn't a string.
+  {
+    auto& manifest = ParseManifest(
+        "{ \"shortcuts\": [ {\"name\": \"UrlParseTest\", \"url\": {} } ] }");
+    EXPECT_TRUE(manifest->shortcuts.IsEmpty());
+    EXPECT_EQ(2u, GetErrorCount());
+    EXPECT_EQ("property 'url' ignored, type string expected.", errors()[0]);
+    EXPECT_EQ("property 'url' of 'shortcut' not present.", errors()[1]);
+  }
+
+  // Don't parse if url isn't a string.
+  {
+    auto& manifest = ParseManifest(
+        "{ \"shortcuts\": [ {\"name\": \"UrlParseTest\", \"url\": 42 } ] }");
+    EXPECT_TRUE(manifest->shortcuts.IsEmpty());
+    EXPECT_EQ(2u, GetErrorCount());
+    EXPECT_EQ("property 'url' ignored, type string expected.", errors()[0]);
+    EXPECT_EQ("property 'url' of 'shortcut' not present.", errors()[1]);
+  }
+
+  // Resolving has to happen based on the manifest_url.
+  {
+    auto& manifest = ParseManifestWithURLs(
+        "{ \"shortcuts\": [ {\"name\": \"UrlParseTest\", \"url\": \"foo\" } ] "
+        "}",
+        KURL("http://foo.com/landing/manifest.json"), DefaultDocumentUrl());
+    EXPECT_FALSE(manifest->shortcuts.IsEmpty());
+    EXPECT_EQ(manifest->shortcuts[0]->url.GetString(),
+              "http://foo.com/landing/foo");
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+
+  // Shortcut url should have same origin as the document url.
+  {
+    auto& manifest = ParseManifestWithURLs(
+        "{ \"shortcuts\": [ {\"name\": \"UrlParseTest\", \"url\": "
+        "\"http://bar.com/landing\" } ] "
+        "}",
+        KURL("http://foo.com/landing/manifest.json"), DefaultDocumentUrl());
+    EXPECT_TRUE(manifest->shortcuts.IsEmpty());
+    EXPECT_EQ(2u, GetErrorCount());
+    EXPECT_EQ("property 'url' ignored, should be same origin as document.",
+              errors()[0]);
+    EXPECT_EQ("property 'url' of 'shortcut' not present.", errors()[1]);
+  }
+
+  // Shortcut url should be within the manifest scope.
+  // The scope will be http://foo.com/landing.
+  // The shortcut_url will be http://foo.com/shortcut which is in not in scope.
+  {
+    auto& manifest = ParseManifestWithURLs(
+        "{ \"scope\": \"http://foo.com/landing\", \"shortcuts\": [ {\"name\": "
+        "\"UrlParseTest\", \"url\": \"shortcut\" } ] }",
+        KURL("http://foo.com/manifest.json"),
+        KURL("http://foo.com/landing/index.html"));
+    EXPECT_TRUE(manifest->shortcuts.IsEmpty());
+    ASSERT_EQ(manifest->scope.GetString(), "http://foo.com/landing");
+    EXPECT_EQ(1u, GetErrorCount());
+    EXPECT_EQ(
+        "property 'url' of 'shortcut' ignored. url should be within scope of "
+        "the manifest.",
+        errors()[0]);
+  }
+
+  // Shortcut url should be within the manifest scope.
+  // The scope will be http://foo.com/land.
+  // The shortcut_url will be http://foo.com/land/shortcut which is in scope.
+  {
+    auto& manifest = ParseManifestWithURLs(
+        "{ \"scope\": \"http://foo.com/land\", \"start_url\": "
+        "\"http://foo.com/land/landing.html\", \"shortcuts\": [ {\"name\": "
+        "\"UrlParseTest\", \"url\": \"shortcut\" } ] }",
+        KURL("http://foo.com/land/manifest.json"),
+        KURL("http://foo.com/index.html"));
+    EXPECT_FALSE(manifest->shortcuts.IsEmpty());
+    ASSERT_EQ(manifest->scope.GetString(), "http://foo.com/land");
+    EXPECT_EQ(manifest->shortcuts[0]->url.GetString(),
+              "http://foo.com/land/shortcut");
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+}
+
+TEST_F(ManifestParserTest, ShortcutIconsParseRules) {
+  // Smoke test: if no icons, shortcut->icons has no value.
+  {
+    auto& manifest = ParseManifest(
+        "{ \"shortcuts\": [ {\"name\": \"IconParseTest\", \"url\": \"foo\", "
+        "\"icons\": [] } ] }");
+    EXPECT_FALSE(IsManifestEmpty(manifest));
+    EXPECT_FALSE(manifest->shortcuts.IsEmpty());
+    EXPECT_TRUE(manifest->shortcuts[0]->icons.IsEmpty());
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+
+  // Smoke test: if empty icon, shortcut->icons has no value.
+  {
+    auto& manifest = ParseManifest(
+        "{ \"shortcuts\": [ {\"name\": \"IconParseTest\", \"url\": \"foo\", "
+        "\"icons\": [{}] } ] }");
+    EXPECT_FALSE(IsManifestEmpty(manifest));
+    EXPECT_FALSE(manifest->shortcuts.IsEmpty());
+    EXPECT_TRUE(manifest->shortcuts[0]->icons.IsEmpty());
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+
+  // Smoke test: icon with invalid src, shortcut->icons has no value.
+  {
+    auto& manifest = ParseManifest(
+        "{ \"shortcuts\": [ {\"name\": \"IconParseTest\", \"url\": \"foo\", "
+        "\"icons\": [{ \"icons\": [] }] } ] }");
+    EXPECT_FALSE(IsManifestEmpty(manifest));
+    EXPECT_FALSE(manifest->shortcuts.IsEmpty());
+    EXPECT_TRUE(manifest->shortcuts[0]->icons.IsEmpty());
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+
+  // Smoke test: if icon with empty src, it will be present in shortcut->icons.
+  {
+    auto& manifest = ParseManifest(
+        "{ \"shortcuts\": [ {\"name\": \"IconParseTest\", \"url\": \"foo\", "
+        "\"icons\": [ { \"src\": \"\" } ] } ] }");
+    EXPECT_FALSE(IsManifestEmpty(manifest));
+    EXPECT_FALSE(manifest->shortcuts.IsEmpty());
+    EXPECT_FALSE(manifest->shortcuts[0]->icons.IsEmpty());
+
+    auto& icons = manifest->shortcuts[0]->icons;
+    EXPECT_EQ(icons.size(), 1u);
+    EXPECT_EQ(icons[0]->src.GetString(), "http://foo.com/manifest.json");
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+
+  // Smoke test: if one icon with valid src, it will be present in
+  // shortcut->icons.
+  {
+    auto& manifest = ParseManifest(
+        "{ \"shortcuts\": [ {\"name\": \"IconParseTest\", \"url\": \"foo\", "
+        "\"icons\": [ { \"src\": \"foo.jpg\" } ] } ] }");
+    EXPECT_FALSE(IsManifestEmpty(manifest));
+    EXPECT_FALSE(manifest->shortcuts.IsEmpty());
+    EXPECT_FALSE(manifest->shortcuts[0]->icons.IsEmpty());
+    auto& icons = manifest->shortcuts[0]->icons;
+    EXPECT_EQ(icons.size(), 1u);
+    EXPECT_EQ(icons[0]->src.GetString(), "http://foo.com/foo.jpg");
+    EXPECT_EQ(0u, GetErrorCount());
+  }
+}
+TEST_F(ManifestParserTest, FileHandlerParseRules) {
+  // Does not contain file_handlers field.
+  {
+    auto& manifest = ParseManifest("{ }");
+    ASSERT_EQ(0u, GetErrorCount());
+    EXPECT_EQ(0u, manifest->file_handlers.size());
+  }
+
+  // file_handlers is not an array.
+  {
+    auto& manifest = ParseManifest("{ \"file_handlers\": { } }");
+    ASSERT_EQ(1u, GetErrorCount());
+    EXPECT_EQ("property 'file_handlers' ignored, type array expected.",
+              errors()[0]);
+    EXPECT_EQ(0u, manifest->file_handlers.size());
+  }
+
+  // Contains file_handlers field but no file handlers.
+  {
+    auto& manifest = ParseManifest("{ \"file_handlers\": [ ] }");
+    ASSERT_EQ(0u, GetErrorCount());
+    EXPECT_EQ(0u, manifest->file_handlers.size());
+  }
+
+  // Entries must be objects
   {
     auto& manifest = ParseManifest(
         "{"
-        "  \"file_handler\": {"
-        "    \"action\": \"/files\", "
-        "    \"files\": ["
-        "      {"
-        "        \"name\": \"name\", "
-        "        \"accept\": ["
-        "          \"image/png\", "
+        "  \"file_handlers\": ["
+        "    \"hello world\""
+        "  ]"
+        "}");
+    ASSERT_EQ(1u, GetErrorCount());
+    EXPECT_EQ("FileHandler ignored, type object expected.", errors()[0]);
+    EXPECT_EQ(0u, manifest->file_handlers.size());
+  }
+
+  // Entry without an action is invalid.
+  {
+    auto& manifest = ParseManifest(
+        "{"
+        "  \"file_handlers\": ["
+        "    {"
+        "      \"name\": \"name\","
+        "      \"accept\": {"
+        "        \"image/png\": ["
         "          \".png\""
         "        ]"
         "      }"
-        "    ]"
-        "  }"
+        "    }"
+        "  ]"
         "}");
-    EXPECT_TRUE(manifest->file_handler.get());
-
-    auto& file_handler = manifest->file_handler;
-    EXPECT_EQ(file_handler->action, KURL("http://foo.com/files"));
-    EXPECT_EQ(file_handler->files.size(), 1u);
-    EXPECT_EQ(file_handler->files[0]->name, "name");
-    EXPECT_EQ(file_handler->files[0]->accept.size(), 2u);
-    EXPECT_EQ(file_handler->files[0]->accept[0], "image/png");
-    EXPECT_EQ(file_handler->files[0]->accept[1], ".png");
-    EXPECT_EQ(0u, GetErrorCount());
+    ASSERT_EQ(1u, GetErrorCount());
+    EXPECT_EQ("FileHandler ignored. Property 'action' is invalid.",
+              errors()[0]);
+    EXPECT_EQ(0u, manifest->file_handlers.size());
   }
 
-  // Multiple file handlers can be parsed.
+  // Entry with an action on a different origin is invalid.
   {
     auto& manifest = ParseManifest(
         "{"
-        "  \"file_handler\": {"
-        "    \"action\": \"/files\", "
-        "    \"files\": ["
-        "      {"
-        "        \"name\": \"name\", "
-        "        \"accept\": ["
-        "          \"image/png\", "
+        "  \"file_handlers\": ["
+        "    {"
+        "      \"name\": \"name\","
+        "      \"action\": \"https://example.com/files\","
+        "      \"accept\": {"
+        "        \"image/png\": ["
         "          \".png\""
         "        ]"
-        "      }, "
-        "      {"
-        "        \"name\": \"svgish\", "
-        "        \"accept\": ["
+        "      }"
+        "    }"
+        "  ]"
+        "}");
+    ASSERT_EQ(2u, GetErrorCount());
+    EXPECT_EQ("property 'action' ignored, should be same origin as document.",
+              errors()[0]);
+    EXPECT_EQ("FileHandler ignored. Property 'action' is invalid.",
+              errors()[1]);
+    EXPECT_EQ(0u, manifest->file_handlers.size());
+  }
+
+  // Entry without a name is valid.
+  {
+    auto& manifest = ParseManifest(
+        "{"
+        "  \"file_handlers\": ["
+        "    {"
+        "      \"action\": \"/files\","
+        "      \"accept\": {"
+        "        \"image/png\": ["
+        "          \".png\""
+        "        ]"
+        "      }"
+        "    }"
+        "  ]"
+        "}");
+    ASSERT_EQ(0u, GetErrorCount());
+    EXPECT_EQ(1u, manifest->file_handlers.size());
+  }
+
+  // Entry without an accept is invalid.
+  {
+    auto& manifest = ParseManifest(
+        "{"
+        "  \"file_handlers\": ["
+        "    {"
+        "      \"name\": \"name\","
+        "      \"action\": \"/files\""
+        "    }"
+        "  ]"
+        "}");
+    ASSERT_EQ(1u, GetErrorCount());
+    EXPECT_EQ("FileHandler ignored. Property 'accept' is invalid.",
+              errors()[0]);
+    EXPECT_EQ(0u, manifest->file_handlers.size());
+  }
+
+  // Entry where accept is not an object is invalid.
+  {
+    auto& manifest = ParseManifest(
+        "{"
+        "  \"file_handlers\": ["
+        "    {"
+        "      \"name\": \"name\","
+        "      \"action\": \"/files\","
+        "      \"accept\": \"image/png\""
+        "    }"
+        "  ]"
+        "}");
+    ASSERT_EQ(1u, GetErrorCount());
+    EXPECT_EQ("FileHandler ignored. Property 'accept' is invalid.",
+              errors()[0]);
+    EXPECT_EQ(0u, manifest->file_handlers.size());
+  }
+
+  // Entry where accept extensions are not an array or string is invalid.
+  {
+    auto& manifest = ParseManifest(
+        "{"
+        "  \"file_handlers\": ["
+        "    {"
+        "      \"name\": \"name\","
+        "      \"action\": \"/files\","
+        "      \"accept\": {"
+        "        \"image/png\": {}"
+        "      }"
+        "    }"
+        "  ]"
+        "}");
+    ASSERT_EQ(2u, GetErrorCount());
+    EXPECT_EQ(
+        "property 'accept' type ignored. File extensions must be type array or "
+        "type string.",
+        errors()[0]);
+    EXPECT_EQ("FileHandler ignored. Property 'accept' is invalid.",
+              errors()[1]);
+    EXPECT_EQ(0u, manifest->file_handlers.size());
+  }
+
+  // Entry where accept extensions are not an array or string is invalid.
+  {
+    auto& manifest = ParseManifest(
+        "{"
+        "  \"file_handlers\": ["
+        "    {"
+        "      \"name\": \"name\","
+        "      \"action\": \"/files\","
+        "      \"accept\": {"
+        "        \"image/png\": ["
+        "          {}"
+        "        ]"
+        "      }"
+        "    }"
+        "  ]"
+        "}");
+    ASSERT_EQ(1u, GetErrorCount());
+    EXPECT_EQ("property 'accept' file extension ignored, type string expected.",
+              errors()[0]);
+    EXPECT_EQ(1u, manifest->file_handlers.size());
+  }
+
+  // Entry with an empty list of extensions is valid.
+  {
+    auto& manifest = ParseManifest(
+        "{"
+        "  \"file_handlers\": ["
+        "    {"
+        "      \"name\": \"name\","
+        "      \"action\": \"/files\","
+        "      \"accept\": {"
+        "        \"image/png\": []"
+        "      }"
+        "    }"
+        "  ]"
+        "}");
+    auto& file_handlers = manifest->file_handlers;
+
+    ASSERT_EQ(0u, GetErrorCount());
+    ASSERT_EQ(1u, file_handlers.size());
+
+    EXPECT_EQ("name", file_handlers[0]->name);
+    EXPECT_EQ(KURL("http://foo.com/files"), file_handlers[0]->action);
+    ASSERT_TRUE(file_handlers[0]->accept.Contains("image/png"));
+    EXPECT_EQ(0u, file_handlers[0]->accept.find("image/png")->value.size());
+  }
+
+  // Extensions that do not start with a '.' are invalid.
+  {
+    auto& manifest = ParseManifest(
+        "{"
+        "  \"file_handlers\": ["
+        "    {"
+        "      \"name\": \"name\","
+        "      \"action\": \"/files\","
+        "      \"accept\": {"
+        "        \"image/png\": ["
+        "          \"png\""
+        "        ]"
+        "      }"
+        "    }"
+        "  ]"
+        "}");
+    auto& file_handlers = manifest->file_handlers;
+
+    ASSERT_EQ(1u, GetErrorCount());
+    EXPECT_EQ(
+        "property 'accept' file extension ignored, must start with a '.'.",
+        errors()[0]);
+    ASSERT_EQ(1u, file_handlers.size());
+
+    EXPECT_EQ("name", file_handlers[0]->name);
+    EXPECT_EQ(KURL("http://foo.com/files"), file_handlers[0]->action);
+    ASSERT_TRUE(file_handlers[0]->accept.Contains("image/png"));
+    EXPECT_EQ(0u, file_handlers[0]->accept.find("image/png")->value.size());
+  }
+
+  // Extensions specified as a single string is valid.
+  {
+    auto& manifest = ParseManifest(
+        "{"
+        "  \"file_handlers\": ["
+        "    {"
+        "      \"name\": \"name\","
+        "      \"action\": \"/files\","
+        "      \"accept\": {"
+        "        \"image/png\": \".png\""
+        "      }"
+        "    }"
+        "  ]"
+        "}");
+    auto& file_handlers = manifest->file_handlers;
+
+    ASSERT_EQ(0u, GetErrorCount());
+    ASSERT_EQ(1u, file_handlers.size());
+
+    EXPECT_EQ("name", file_handlers[0]->name);
+    EXPECT_EQ(KURL("http://foo.com/files"), file_handlers[0]->action);
+    ASSERT_TRUE(file_handlers[0]->accept.Contains("image/png"));
+    ASSERT_EQ(1u, file_handlers[0]->accept.find("image/png")->value.size());
+    EXPECT_EQ(".png", file_handlers[0]->accept.find("image/png")->value[0]);
+  }
+
+  // An array of extensions is valid.
+  {
+    auto& manifest = ParseManifest(
+        "{"
+        "  \"file_handlers\": ["
+        "    {"
+        "      \"name\": \"name\","
+        "      \"action\": \"/files\","
+        "      \"accept\": {"
+        "        \"image/jpg\": ["
+        "          \".jpg\","
+        "          \".jpeg\""
+        "        ]"
+        "      }"
+        "    }"
+        "  ]"
+        "}");
+    auto& file_handlers = manifest->file_handlers;
+
+    ASSERT_EQ(0u, GetErrorCount());
+    ASSERT_EQ(1u, file_handlers.size());
+
+    EXPECT_EQ("name", file_handlers[0]->name);
+    EXPECT_EQ(KURL("http://foo.com/files"), file_handlers[0]->action);
+    ASSERT_TRUE(file_handlers[0]->accept.Contains("image/jpg"));
+    ASSERT_EQ(2u, file_handlers[0]->accept.find("image/jpg")->value.size());
+    EXPECT_EQ(".jpg", file_handlers[0]->accept.find("image/jpg")->value[0]);
+    EXPECT_EQ(".jpeg", file_handlers[0]->accept.find("image/jpg")->value[1]);
+  }
+
+  // Multiple mime types are valid.
+  {
+    auto& manifest = ParseManifest(
+        "{"
+        "  \"file_handlers\": ["
+        "    {"
+        "      \"name\": \"Image\","
+        "      \"action\": \"/files\","
+        "      \"accept\": {"
+        "        \"image/png\": \".png\","
+        "        \"image/jpg\": ["
+        "          \".jpg\","
+        "          \".jpeg\""
+        "        ]"
+        "      }"
+        "    }"
+        "  ]"
+        "}");
+    auto& file_handlers = manifest->file_handlers;
+
+    ASSERT_EQ(0u, GetErrorCount());
+    ASSERT_EQ(1u, file_handlers.size());
+
+    EXPECT_EQ("Image", file_handlers[0]->name);
+    EXPECT_EQ(KURL("http://foo.com/files"), file_handlers[0]->action);
+
+    ASSERT_TRUE(file_handlers[0]->accept.Contains("image/jpg"));
+    ASSERT_EQ(2u, file_handlers[0]->accept.find("image/jpg")->value.size());
+    EXPECT_EQ(".jpg", file_handlers[0]->accept.find("image/jpg")->value[0]);
+    EXPECT_EQ(".jpeg", file_handlers[0]->accept.find("image/jpg")->value[1]);
+
+    ASSERT_TRUE(file_handlers[0]->accept.Contains("image/png"));
+    ASSERT_EQ(1u, file_handlers[0]->accept.find("image/png")->value.size());
+    EXPECT_EQ(".png", file_handlers[0]->accept.find("image/png")->value[0]);
+  }
+
+  // file_handlers with multiple entries is valid.
+  {
+    auto& manifest = ParseManifest(
+        "{"
+        "  \"file_handlers\": ["
+        "    {"
+        "      \"name\": \"Graph\","
+        "      \"action\": \"/graph\","
+        "      \"accept\": {"
+        "        \"text/svg+xml\": ["
         "          \".svg\","
-        "          \"xml/svg\""
+        "          \".graph\""
         "        ]"
         "      }"
-        "    ]"
-        "  }"
+        "    },"
+        "    {"
+        "      \"name\": \"Raw\","
+        "      \"action\": \"/raw\","
+        "      \"accept\": {"
+        "        \"text/csv\": \".csv\""
+        "      }"
+        "    }"
+        "  ]"
         "}");
-    EXPECT_TRUE(manifest->file_handler.get());
+    auto& file_handlers = manifest->file_handlers;
 
-    auto& file_handler = manifest->file_handler;
-    EXPECT_EQ(file_handler->action, KURL("http://foo.com/files"));
-    EXPECT_EQ(file_handler->files.size(), 2u);
-    EXPECT_EQ(file_handler->files[0]->name, "name");
-    EXPECT_EQ(file_handler->files[0]->accept.size(), 2u);
-    EXPECT_EQ(file_handler->files[0]->accept[0], "image/png");
-    EXPECT_EQ(file_handler->files[0]->accept[1], ".png");
-    EXPECT_EQ(file_handler->files[1]->name, "svgish");
-    EXPECT_EQ(file_handler->files[1]->accept.size(), 2u);
-    EXPECT_EQ(file_handler->files[1]->accept[0], ".svg");
-    EXPECT_EQ(file_handler->files[1]->accept[1], "xml/svg");
-    EXPECT_EQ(0u, GetErrorCount());
+    ASSERT_EQ(0u, GetErrorCount());
+    ASSERT_EQ(2u, file_handlers.size());
+
+    EXPECT_EQ("Graph", file_handlers[0]->name);
+    EXPECT_EQ(KURL("http://foo.com/graph"), file_handlers[0]->action);
+    ASSERT_TRUE(file_handlers[0]->accept.Contains("text/svg+xml"));
+    ASSERT_EQ(2u, file_handlers[0]->accept.find("text/svg+xml")->value.size());
+    EXPECT_EQ(".svg", file_handlers[0]->accept.find("text/svg+xml")->value[0]);
+    EXPECT_EQ(".graph",
+              file_handlers[0]->accept.find("text/svg+xml")->value[1]);
+
+    EXPECT_EQ("Raw", file_handlers[1]->name);
+    EXPECT_EQ(KURL("http://foo.com/raw"), file_handlers[1]->action);
+    ASSERT_TRUE(file_handlers[1]->accept.Contains("text/csv"));
+    ASSERT_EQ(1u, file_handlers[1]->accept.find("text/csv")->value.size());
+    EXPECT_EQ(".csv", file_handlers[1]->accept.find("text/csv")->value[0]);
   }
 }
 

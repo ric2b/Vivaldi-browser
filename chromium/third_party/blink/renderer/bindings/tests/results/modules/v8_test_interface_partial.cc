@@ -171,7 +171,7 @@ static void PromiseMethodPartialOverload3Method(const v8::FunctionCallbackInfo<v
   Document* document;
   document = V8Document::ToImplWithTypeCheck(info.GetIsolate(), info[0]);
   if (!document) {
-    exception_state.ThrowTypeError("parameter 1 is not of type 'Document'.");
+    exception_state.ThrowTypeError(ExceptionMessages::ArgumentNotOfType(0, "Document"));
     return;
   }
 
@@ -257,7 +257,7 @@ static void Partial2VoidMethod3Method(const v8::FunctionCallbackInfo<v8::Value>&
   Node* node;
   node = V8Node::ToImplWithTypeCheck(info.GetIsolate(), info[0]);
   if (!node) {
-    V8ThrowException::ThrowTypeError(info.GetIsolate(), ExceptionMessages::FailedToExecute("partial2VoidMethod", "TestInterface", "parameter 1 is not of type 'Node'."));
+    V8ThrowException::ThrowTypeError(info.GetIsolate(), ExceptionMessages::FailedToExecute("partial2VoidMethod", "TestInterface", ExceptionMessages::ArgumentNotOfType(0, "Node")));
     return;
   }
 
@@ -425,36 +425,42 @@ void V8TestInterfacePartial::Partial4StaticLongAttributeAttributeSetterCallback(
 }
 
 void V8TestInterfacePartial::PartialVoidTestEnumModulesArgMethodMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  BLINK_BINDINGS_TRACE_EVENT("TestInterface.partialVoidTestEnumModulesArgMethod");
   RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterfaceImplementation_partialVoidTestEnumModulesArgMethod");
 
   test_interface_implementation_partial_v8_internal::PartialVoidTestEnumModulesArgMethodMethod(info);
 }
 
 void V8TestInterfacePartial::Partial2VoidTestEnumModulesRecordMethodMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  BLINK_BINDINGS_TRACE_EVENT("TestInterface.partial2VoidTestEnumModulesRecordMethod");
   RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterfaceImplementation_partial2VoidTestEnumModulesRecordMethod");
 
   test_interface_implementation_partial_v8_internal::Partial2VoidTestEnumModulesRecordMethodMethod(info);
 }
 
 void V8TestInterfacePartial::UnscopableVoidMethodMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  BLINK_BINDINGS_TRACE_EVENT("TestInterface.unscopableVoidMethod");
   RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterfaceImplementation_unscopableVoidMethod");
 
   test_interface_implementation_partial_v8_internal::UnscopableVoidMethodMethod(info);
 }
 
 void V8TestInterfacePartial::UnionWithTypedefMethodMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  BLINK_BINDINGS_TRACE_EVENT("TestInterface.unionWithTypedefMethod");
   RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterfaceImplementation_unionWithTypedefMethod");
 
   test_interface_implementation_partial_v8_internal::UnionWithTypedefMethodMethod(info);
 }
 
 void V8TestInterfacePartial::Partial4VoidMethodMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  BLINK_BINDINGS_TRACE_EVENT("TestInterface.partial4VoidMethod");
   RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterfaceImplementation_partial4VoidMethod");
 
   test_interface_implementation_partial_v8_internal::Partial4VoidMethodMethod(info);
 }
 
 void V8TestInterfacePartial::Partial4StaticVoidMethodMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  BLINK_BINDINGS_TRACE_EVENT("TestInterface.partial4StaticVoidMethod");
   RUNTIME_CALL_TIMER_SCOPE_DISABLED_BY_DEFAULT(info.GetIsolate(), "Blink_TestInterfaceImplementation_partial4StaticVoidMethod");
 
   test_interface_implementation_partial_v8_internal::Partial4StaticVoidMethodMethod(info);

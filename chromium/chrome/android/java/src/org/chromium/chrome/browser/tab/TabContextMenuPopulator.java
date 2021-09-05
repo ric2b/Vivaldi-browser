@@ -13,8 +13,8 @@ import androidx.annotation.Nullable;
 import org.chromium.base.ObserverList.RewindableIterator;
 import org.chromium.chrome.browser.contextmenu.ContextMenuHelper;
 import org.chromium.chrome.browser.contextmenu.ContextMenuItem;
-import org.chromium.chrome.browser.contextmenu.ContextMenuParams;
 import org.chromium.chrome.browser.contextmenu.ContextMenuPopulator;
+import org.chromium.components.embedder_support.contextmenu.ContextMenuParams;
 
 import java.util.List;
 
@@ -24,7 +24,7 @@ import java.util.List;
 public class TabContextMenuPopulator implements ContextMenuPopulator {
     @Nullable
     private final ContextMenuPopulator mPopulator;
-    private final Tab mTab;
+    private final TabImpl mTab;
 
     /**
      * Constructs an instance of a {@link ContextMenuPopulator} and delegate calls to
@@ -34,7 +34,7 @@ public class TabContextMenuPopulator implements ContextMenuPopulator {
      */
     public TabContextMenuPopulator(ContextMenuPopulator populator, Tab tab) {
         mPopulator = populator;
-        mTab = tab;
+        mTab = (TabImpl) tab;
     }
 
     @Override
@@ -60,4 +60,7 @@ public class TabContextMenuPopulator implements ContextMenuPopulator {
     public boolean onItemSelected(ContextMenuHelper helper, ContextMenuParams params, int itemId) {
         return mPopulator.onItemSelected(helper, params, itemId);
     }
+
+    @Override
+    public void onMenuClosed() {}
 }

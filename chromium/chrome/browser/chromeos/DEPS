@@ -1,10 +1,12 @@
 include_rules = [
+  "+chrome/browser/image_decoder",
   # TODO(ananta): Remove this when we move files which display UI in
   # chrome/browser/chromeos to chrome/browser/ui/views/chromeos
   # crbug.com/728877
   "+chrome/browser/ui/views/chrome_layout_provider.h",
 
   "+chrome/services/app_service/public",
+  "+chrome/services/keymaster/public",
   "+chrome/services/wilco_dtc_supportd/public",
   "+components/guest_os",
   "+cros",

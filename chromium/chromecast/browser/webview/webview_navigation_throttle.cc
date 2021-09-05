@@ -13,17 +13,17 @@ namespace chromecast {
 
 WebviewNavigationThrottle::WebviewNavigationThrottle(
     content::NavigationHandle* handle,
-    WebviewController* controller)
-    : NavigationThrottle(handle),
-      url_(handle->GetURL()),
-      is_in_main_frame_(handle->IsInMainFrame()),
-      controller_(controller) {}
+    base::WeakPtr<WebviewController> controller)
+    : NavigationThrottle(handle), controller_(std::move(controller)) {}
 
-WebviewNavigationThrottle::~WebviewNavigationThrottle() = default;
+WebviewNavigationThrottle::~WebviewNavigationThrottle() {
+  if (controller_)
+    controller_->OnNavigationThrottleDestroyed(this);
+}
 
 content::NavigationThrottle::ThrottleCheckResult
 WebviewNavigationThrottle::WillStartRequest() {
-  controller_->SendNavigationEvent(this, url_, is_in_main_frame_);
+  controller_->SendNavigationEvent(this, navigation_handle());
 
   return content::NavigationThrottle::DEFER;
 }
@@ -31,10 +31,10 @@ WebviewNavigationThrottle::WillStartRequest() {
 void WebviewNavigationThrottle::ProcessNavigationDecision(
     webview::NavigationDecision decision) {
   if (decision != webview::PREVENT) {
-    this->Resume();
+    Resume();
     return;
   }
-  this->CancelDeferredNavigation(content::NavigationThrottle::CANCEL);
+  CancelDeferredNavigation(content::NavigationThrottle::CANCEL);
 }
 
 const char* WebviewNavigationThrottle::GetNameForLogging() {

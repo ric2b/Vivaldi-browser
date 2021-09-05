@@ -9,7 +9,6 @@
 
 #include "base/bind.h"
 #include "base/json/json_reader.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/test/test_timeouts.h"
 #include "build/build_config.h"
@@ -84,46 +83,17 @@ class TracingRenderWidgetHost : public RenderWidgetHostImpl {
                              process,
                              routing_id,
                              std::move(widget),
-                             hidden) {
-    ui::LatencyTracker::SetLatencyInfoProcessorForTesting(base::BindRepeating(
-        &TracingRenderWidgetHost::HandleLatencyInfoAfterGpuSwap,
-        base::Unretained(this)));
-  }
-
-  void HandleLatencyInfoAfterGpuSwap(
-      const std::vector<ui::LatencyInfo>& latency_infos) {
-    for (const auto& latency_info : latency_infos) {
-      if (latency_info.terminated())
-        RunClosureIfNecessary(latency_info);
-    }
+                             hidden,
+                             std::make_unique<FrameTokenMessageQueue>()) {
   }
 
   void OnMouseEventAck(const MouseEventWithLatencyInfo& event,
                        InputEventAckSource ack_source,
                        InputEventAckState ack_result) override {
     RenderWidgetHostImpl::OnMouseEventAck(event, ack_source, ack_result);
-    if (event.latency.terminated())
-      RunClosureIfNecessary(event.latency);
-  }
-
-  void WaitFor(const std::string& trace_name) {
-    trace_waiting_name_ = trace_name;
-    base::RunLoop run_loop;
-    closure_ = run_loop.QuitClosure();
-    run_loop.Run();
   }
 
  private:
-  void RunClosureIfNecessary(const ui::LatencyInfo& latency_info) {
-    if (!trace_waiting_name_.empty() && closure_ &&
-        latency_info.trace_name() == trace_waiting_name_) {
-      trace_waiting_name_.clear();
-      std::move(closure_).Run();
-    }
-  }
-
-  std::string trace_waiting_name_;
-  base::OnceClosure closure_;
 };
 
 class TracingRenderWidgetHostFactory : public RenderWidgetHostFactory {

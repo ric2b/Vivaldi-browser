@@ -134,7 +134,6 @@ bool ChromiumImporter::ReadAndParseSignons(
 
     form.submit_element = base::UTF8ToUTF16(s2.ColumnString(6));
     form.signon_realm = s2.ColumnString(7);
-    form.preferred = s2.ColumnBool(8);
 
     forms->push_back(form);
   }

@@ -131,8 +131,7 @@ TextPaintStyle TextPainterBase::TextPaintingStyle(const Document& document,
     text_style.shadow = style.TextShadow();
 
     // Adjust text color when printing with a white background.
-    DCHECK(document.Printing() == is_printing ||
-           RuntimeEnabledFeatures::PrintBrowserEnabled());
+    DCHECK_EQ(document.Printing(), is_printing);
     bool force_background_to_white =
         BoxPainterBase::ShouldForceWhiteBackgroundForPrintEconomy(document,
                                                                   style);
@@ -179,6 +178,9 @@ void TextPainterBase::DecorationsStripeIntercepts(
     // pixel makes sure we're always covering. This should only be done on the
     // clipping rectangle, not when computing the glyph intersects.
     clip_rect.InflateY(1.0);
+
+    if (!clip_rect.IsFinite())
+      continue;
     graphics_context_.ClipOut(clip_rect);
   }
 }

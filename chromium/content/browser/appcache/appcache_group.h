@@ -29,6 +29,12 @@ FORWARD_DECLARE_TEST(AppCacheUpdateJobTest, AlreadyChecking);
 FORWARD_DECLARE_TEST(AppCacheUpdateJobTest, AlreadyDownloading);
 }  // namespace appcache_update_job_unittest
 
+namespace appcache_cache_helper_unittest {
+class AppCacheCacheHelperTest;
+FORWARD_DECLARE_TEST(AppCacheCacheHelperTest,
+                     IfModifiedSinceUpgradeParserVersion0);
+}  // namespace appcache_cache_helper_unittest
+
 FORWARD_DECLARE_TEST(AppCacheGroupTest, StartUpdate);
 FORWARD_DECLARE_TEST(AppCacheGroupTest, CancelUpdate);
 FORWARD_DECLARE_TEST(AppCacheGroupTest, QueueUpdate);
@@ -95,21 +101,21 @@ class CONTENT_EXPORT AppCacheGroup
   void set_first_evictable_error_time(base::Time time) {
     first_evictable_error_time_ = time;
   }
+  base::Time token_expires() const { return token_expires_; }
+  void set_token_expires(base::Time expires) { token_expires_ = expires; }
 
   AppCache* newest_complete_cache() const { return newest_complete_cache_; }
 
   void AddCache(AppCache* complete_cache);
   void RemoveCache(AppCache* cache);
-  bool HasCache() const { return newest_complete_cache_ != NULL; }
+  bool HasCache() const { return newest_complete_cache_ != nullptr; }
 
   void AddNewlyDeletableResponseIds(std::vector<int64_t>* response_ids);
 
   UpdateAppCacheStatus update_status() const { return update_status_; }
 
   // Starts an update via update() javascript API.
-  void StartUpdate() {
-    StartUpdateWithHost(NULL);
-  }
+  void StartUpdate() { StartUpdateWithHost(nullptr); }
 
   // Starts an update for a doc loaded from an application cache.
   void StartUpdateWithHost(AppCacheHost* host)  {
@@ -173,6 +179,10 @@ class CONTENT_EXPORT AppCacheGroup
   // value is reset after a successful update or update check.
   base::Time first_evictable_error_time_;
 
+  // Origin Trial expiration time for this group.
+  // This is base::Time() if this was never updated with an OT token.
+  base::Time token_expires_;
+
   // Old complete app caches.
   std::vector<AppCache*> old_caches_;
 
@@ -206,6 +216,9 @@ class CONTENT_EXPORT AppCacheGroup
   FRIEND_TEST_ALL_PREFIXES(
       content::appcache_update_job_unittest::AppCacheUpdateJobTest,
       AlreadyDownloading);
+  FRIEND_TEST_ALL_PREFIXES(
+      content::appcache_cache_helper_unittest::AppCacheCacheHelperTest,
+      IfModifiedSinceUpgradeParserVersion0);
 
   DISALLOW_COPY_AND_ASSIGN(AppCacheGroup);
 };

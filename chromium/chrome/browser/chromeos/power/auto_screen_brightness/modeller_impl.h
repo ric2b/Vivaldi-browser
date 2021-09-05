@@ -127,7 +127,8 @@ class ModellerImpl : public Modeller,
   // Returns ModelSavingSpec used to store models. It also creates intermediate
   // directories if they do not exist. The returned paths will be empty on
   // failures.
-  static ModelSavingSpec GetModelSavingSpecFromProfile(const Profile* profile);
+  static ModelSavingSpec GetModelSavingSpecFromProfilePath(
+      const base::FilePath& profile_path);
 
  private:
   // ModellerImpl has weak dependencies on all parameters except |trainer|.
@@ -140,6 +141,10 @@ class ModellerImpl : public Modeller,
                scoped_refptr<base::SequencedTaskRunner> task_runner,
                const base::TickClock* tick_clock,
                bool is_testing = false);
+
+  // Called after we've attempted to read model saving spec from the user
+  // profile.
+  void OnModelSavingSpecReadFromProfile(const ModelSavingSpec& spec);
 
   // Called to handle a status change in one of the dependencies (ALS,
   // brightness monitor, model config loader) of the modeller. If all
@@ -247,7 +252,7 @@ class ModellerImpl : public Modeller,
   // |OnModelLoadedFromDisk|.
   base::Optional<bool> is_modeller_enabled_;
 
-  ModelSavingSpec model_saving_spec_;
+  base::Optional<ModelSavingSpec> model_saving_spec_;
 
   // Whether the initial global curve is reset to the one constructed from
   // model config. It is true if there is no saved model loaded from the disk

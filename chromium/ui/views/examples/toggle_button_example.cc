@@ -4,10 +4,14 @@
 
 #include "ui/views/examples/toggle_button_example.h"
 
+#include <memory>
+#include <utility>
+
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/views/controls/button/toggle_button.h"
+#include "ui/views/examples/examples_window.h"
 #include "ui/views/layout/box_layout.h"
 
 namespace views {

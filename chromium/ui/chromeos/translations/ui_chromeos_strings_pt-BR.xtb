@@ -29,6 +29,7 @@
 <translation id="1243314992276662751">Fazer upload</translation>
 <translation id="1249250836236328755">Gênero</translation>
 <translation id="1278813325885878377">Teclado QWERTY húngaro</translation>
+<translation id="1293556467332435079">Arquivos</translation>
 <translation id="1297922636971898492">O Google Drive não está disponível no momento. O upload será reiniciado automaticamente assim que o Google Drive estiver de volta.</translation>
 <translation id="1307931752636661898">Não é possível ver os arquivos do Linux</translation>
 <translation id="1310751437842832374">Transliteração (mausam → ନମସ୍ତେ)</translation>
@@ -80,6 +81,7 @@
 <translation id="1847880352285315359">Salvo</translation>
 <translation id="1864756863218646478">O arquivo não foi encontrado.</translation>
 <translation id="1921986354447415460">Teclado padrão F em turco</translation>
+<translation id="1924372192547904021"><ph name="DRIVE_NAME" /> formatado</translation>
 <translation id="1931134289871235022">Eslovaco</translation>
 <translation id="1933345018156373194">Falha ao mover, erro inesperado: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="1936717151811561466">Finlandês</translation>
@@ -163,6 +165,7 @@
 <translation id="2942290791863759244">Teclado alemão NEO 2</translation>
 <translation id="2943400156390503548">Apresentações</translation>
 <translation id="2943503720238418293">Use um nome mais curto</translation>
+<translation id="2949781154072577687">Formatando <ph name="DRIVE_NAME" />…</translation>
 <translation id="2951236788251446349">Água-viva</translation>
 <translation id="2963783323012015985">Teclado turco</translation>
 <translation id="2966459079597787514">Teclado sueco</translation>
@@ -275,6 +278,7 @@
 <translation id="4336032328163998280">Falha na operação de cópia. <ph name="ERROR_MESSAGE" /></translation>
 <translation id="4364327530094270451">Melão</translation>
 <translation id="4372884569765913867">1x1</translation>
+<translation id="4394214039309501350">Link externo</translation>
 <translation id="4425149324548788773">Meu Drive</translation>
 <translation id="4465830120256509958">Teclado brasileiro</translation>
 <translation id="4470564870223067757">Conjunto de letras coreanas (Hangul 2)</translation>
@@ -354,7 +358,7 @@
        A remoção do dispositivo enquanto ele está em uso pode causar perda de dados. Espere até que a operação esteja terminada e remova o dispositivo usando o aplicativo Arquivos.</translation>
 <translation id="5163869187418756376">Falha no compartilhamento. Verifique sua conexão e tente novamente mais tarde.</translation>
 <translation id="516592729076796170">Programmer Dvorak americano</translation>
-<translation id="5167131699331641907">Teclado da Holanda</translation>
+<translation id="5167131699331641907">Teclado dos Países Baixos</translation>
 <translation id="5170477580121653719">Espaço restante no Google Drive: <ph name="SPACE_AVAILABLE" />.</translation>
 <translation id="5177526793333269655">Visualização em miniatura</translation>
 <translation id="5194713942430106590">Clique para classificar a coluna em ordem crescente.</translation>
@@ -505,6 +509,7 @@
 <translation id="6878261347041253038">Teclado devanágari (fonético)</translation>
 <translation id="6885780034956018177">Caracol</translation>
 <translation id="6896758677409633944">Copiar</translation>
+<translation id="6898028766943174120">Mais subpastas…</translation>
 <translation id="691516599546977041">Não é possível salvar em <ph name="FOLDER_NAME" />. As imagens editadas serão salvas na pasta Downloads.</translation>
 <translation id="6915678159055240887">Chromebox</translation>
 <translation id="6918340160281024199">Workman dos EUA</translation>
@@ -517,6 +522,7 @@
 <translation id="696203921837389374">Ativar a sincronização de dados móveis</translation>
 <translation id="6965382102122355670">OK</translation>
 <translation id="6970230597523682626">Búlgaro</translation>
+<translation id="6973630695168034713">Pastas</translation>
 <translation id="6978611942794658017">Este arquivo foi projetado para um computador que utilize o software Windows. Ele não é compatível com seu dispositivo, que executa o Chrome OS. Procure na Chrome Web Store por um app substituto adequado.</translation>
 <translation id="6979158407327259162">Google Drive</translation>
 <translation id="6990081529015358884">Não há espaço suficiente</translation>
@@ -564,9 +570,11 @@
 <translation id="7589661784326793847">Aguarde um segundo</translation>
 <translation id="7603724359189955920">Grades</translation>
 <translation id="7627790789328695202">O item <ph name="FILE_NAME" /> já existe. Renomeie-o e tente novamente.</translation>
+<translation id="7628656427739290098"><ph name="PERCENT" />% concluído.</translation>
 <translation id="7649070708921625228">Ajuda</translation>
 <translation id="7654209398114106148">Movendo <ph name="NUMBER_OF_ITEMS" /> itens…</translation>
 <translation id="7658239707568436148">Cancelar</translation>
+<translation id="7695430100978772476">Não foi possível formatar <ph name="DRIVE_NAME" />.</translation>
 <translation id="770015031906360009">Grego</translation>
 <translation id="7706319470528945664">Teclado português</translation>
 <translation id="7711920809702896782">Informações sobre a imagem</translation>

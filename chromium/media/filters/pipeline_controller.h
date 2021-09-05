@@ -8,6 +8,7 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "base/threading/thread_checker.h"
 #include "base/time/time.h"
 #include "media/base/media_export.h"
@@ -41,29 +42,25 @@ class MEDIA_EXPORT PipelineController {
     RESUMING,
   };
 
-  using RendererFactoryCB = base::Callback<std::unique_ptr<Renderer>(void)>;
-  using SeekedCB = base::Callback<void(bool time_updated)>;
-  using SuspendedCB = base::Callback<void()>;
-  using BeforeResumeCB = base::Callback<void()>;
-  using ResumedCB = base::Callback<void()>;
+  using SeekedCB = base::RepeatingCallback<void(bool time_updated)>;
+  using SuspendedCB = base::RepeatingClosure;
+  using BeforeResumeCB = base::RepeatingClosure;
+  using ResumedCB = base::RepeatingClosure;
 
   // Construct a PipelineController wrapping |pipeline_|.
   // The callbacks are:
-  //   - |renderer_factory_cb| is called by PipelineController to create new
-  //     renderers when starting and resuming.
-  //   - |seeked_cb| is called upon reaching a stable state if a seek occured.
+  //   - |seeked_cb| is called upon reaching a stable state if a seek occurred.
   //   - |suspended_cb| is called immediately after suspending.
   //   - |before_resume_cb| is called immediately before resuming.
   //   - |resumed_cb| is called immediately after resuming.
   //   - |error_cb| is called if any operation on |pipeline_| does not result
   //     in PIPELINE_OK or its error callback is called.
   PipelineController(std::unique_ptr<Pipeline> pipeline,
-                     const RendererFactoryCB& renderer_factory_cb,
-                     const SeekedCB& seeked_cb,
-                     const SuspendedCB& suspended_cb,
-                     const BeforeResumeCB& before_resume_cb,
-                     const ResumedCB& resumed_cb,
-                     const PipelineStatusCB& error_cb);
+                     SeekedCB seeked_cb,
+                     SuspendedCB suspended_cb,
+                     BeforeResumeCB before_resume_cb,
+                     ResumedCB resumed_cb,
+                     PipelineStatusCB error_cb);
   ~PipelineController();
 
   // Start |pipeline_|. |demuxer| will be retained and StartWaitingForSeek()/
@@ -132,12 +129,13 @@ class MEDIA_EXPORT PipelineController {
   void SetPlaybackRate(double playback_rate);
   float GetVolume() const;
   void SetVolume(float volume);
+  void SetLatencyHint(base::Optional<base::TimeDelta> latency_hint);
   base::TimeDelta GetMediaTime() const;
   Ranges<base::TimeDelta> GetBufferedTimeRanges() const;
   base::TimeDelta GetMediaDuration() const;
   bool DidLoadingProgress();
   PipelineStatistics GetStatistics() const;
-  void SetCdm(CdmContext* cdm_context, const CdmAttachedCB& cdm_attached_cb);
+  void SetCdm(CdmContext* cdm_context, CdmAttachedCB cdm_attached_cb);
   void OnEnabledAudioTracksChanged(
       const std::vector<MediaTrack::Id>& enabled_track_ids);
   void OnSelectedVideoTrackChanged(
@@ -159,25 +157,22 @@ class MEDIA_EXPORT PipelineController {
   // The Pipeline we are managing state for.
   std::unique_ptr<Pipeline> pipeline_;
 
-  // Factory for Renderers, used for Start() and Resume().
-  RendererFactoryCB renderer_factory_cb_;
-
   // Called after seeks (which includes Start()) upon reaching a stable state.
   // Multiple seeks result in only one callback if no stable state occurs
   // between them.
-  SeekedCB seeked_cb_;
+  const SeekedCB seeked_cb_;
 
   // Called immediately when |pipeline_| completes a suspend operation.
-  SuspendedCB suspended_cb_;
+  const SuspendedCB suspended_cb_;
 
   // Called immediately before |pipeline_| starts a resume operation.
-  ResumedCB before_resume_cb_;
+  const BeforeResumeCB before_resume_cb_;
 
   // Called immediately when |pipeline_| completes a resume operation.
-  ResumedCB resumed_cb_;
+  const ResumedCB resumed_cb_;
 
   // Called immediately when any operation on |pipeline_| results in an error.
-  PipelineStatusCB error_cb_;
+  const PipelineStatusCB error_cb_;
 
   // State for handling StartWaitingForSeek()/CancelPendingSeek().
   Demuxer* demuxer_ = nullptr;

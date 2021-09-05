@@ -17,9 +17,11 @@
 #include "components/autofill/core/common/password_form.h"
 #include "components/autofill_assistant/browser/actions/action.h"
 #include "components/autofill_assistant/browser/user_data.h"
+#include "components/autofill_assistant/browser/user_model.h"
 #include "components/autofill_assistant/browser/website_login_fetcher.h"
 
 namespace autofill_assistant {
+class UserModel;
 
 // Shows a UI to collect user data required for subsequent actions.
 class CollectUserDataAction : public Action,
@@ -34,7 +36,22 @@ class CollectUserDataAction : public Action,
 
   static bool IsUserDataComplete(
       const UserData& user_data,
+      const UserModel& user_model,
       const CollectUserDataOptions& collect_user_data_options);
+
+  // Ensures that |end| is > |start| by modifying either |start| or |end|,
+  // depending on |change_start|. Returns true if changes were performed.
+  static bool SanitizeDateTimeRange(
+      base::Optional<DateProto>* start_date,
+      base::Optional<int>* start_timeslot,
+      base::Optional<DateProto>* end_date,
+      base::Optional<int>* end_timeslot,
+      const CollectUserDataOptions& collect_user_data_options,
+      bool change_start);
+
+  // Comparison function for |DateProto|.
+  // Returns 0 if equal, < 0 if |first| < |second|, > 0 if |second| > |first|.
+  static int CompareDates(const DateProto& first, const DateProto& second);
 
  private:
   struct LoginDetails {
@@ -54,30 +71,42 @@ class CollectUserDataAction : public Action,
   void EndAction(const ClientStatus& status);
 
   void OnGetUserData(const CollectUserDataProto& collect_user_data,
-                     std::unique_ptr<UserData> user_data);
+                     UserData* user_data,
+                     const UserModel* user_model);
   void OnAdditionalActionTriggered(int index);
   void OnTermsAndConditionsLinkClicked(int link);
 
   void OnGetLogins(
       const LoginDetailsProto::LoginOptionProto& login_option,
-      std::unique_ptr<CollectUserDataOptions> collect_user_data_options,
       std::vector<WebsiteLoginFetcher::Login> logins);
-  void ShowToUser(
-      std::unique_ptr<CollectUserDataOptions> collect_user_data_options);
+  void ShowToUser();
+  void OnShowToUser(UserData* user_data, UserData::FieldChange* field_change);
 
   // Creates a new instance of |CollectUserDataOptions| from |proto_|.
-  std::unique_ptr<CollectUserDataOptions> CreateOptionsFromProto();
+  bool CreateOptionsFromProto();
 
   // Will update |initial_card_has_billing_postal_code_|.
   bool CheckInitialAutofillDataComplete(
-      autofill::PersonalDataManager* personal_data_manager,
-      const CollectUserDataOptions& collect_user_data_options);
+      autofill::PersonalDataManager* personal_data_manager);
+
+  // Update user data with the new state from personal data manager.
+  void UpdatePersonalDataManagerProfiles(
+      UserData* user_data,
+      UserData::FieldChange* field_change = nullptr);
+  void UpdatePersonalDataManagerCards(
+      UserData* user_data,
+      UserData::FieldChange* field_change = nullptr);
+  void UpdateDateTimeRangeStart(UserData* user_data,
+                                UserData::FieldChange* field_change = nullptr);
+  void UpdateDateTimeRangeEnd(UserData* user_data,
+                              UserData::FieldChange* field_change = nullptr);
 
   bool shown_to_user_ = false;
   bool initially_prefilled = false;
   bool personal_data_changed_ = false;
   bool action_successful_ = false;
   bool initial_card_has_billing_postal_code_ = false;
+  std::unique_ptr<CollectUserDataOptions> collect_user_data_options_;
   ProcessActionCallback callback_;
 
   // Maps login choice identifiers to the corresponding login details.

@@ -7,6 +7,7 @@
 #include "chrome/browser/web_applications/test/test_install_finalizer.h"
 
 #include "base/callback.h"
+#include "base/logging.h"
 #include "base/test/bind_test_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
@@ -21,7 +22,7 @@ AppId TestInstallFinalizer::GetAppIdForUrl(const GURL& url) {
   return GenerateAppIdFromURL(url);
 }
 
-TestInstallFinalizer::TestInstallFinalizer() {}
+TestInstallFinalizer::TestInstallFinalizer() = default;
 
 TestInstallFinalizer::~TestInstallFinalizer() = default;
 
@@ -41,8 +42,30 @@ void TestInstallFinalizer::FinalizeUpdate(
            std::move(callback));
 }
 
+void TestInstallFinalizer::FinalizeFallbackInstallAfterSync(
+    const AppId& app_id,
+    InstallFinalizedCallback callback) {
+  NOTREACHED();
+}
+
+void TestInstallFinalizer::FinalizeUninstallAfterSync(
+    const AppId& app_id,
+    UninstallWebAppCallback callback) {
+  NOTREACHED();
+}
+
 void TestInstallFinalizer::UninstallExternalWebApp(
+    const AppId& app_id,
+    ExternalInstallSource external_install_source,
+    UninstallWebAppCallback callback) {
+  user_uninstalled_external_apps_.erase(app_id);
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(std::move(callback), /*uninstalled=*/true));
+}
+
+void TestInstallFinalizer::UninstallExternalWebAppByUrl(
     const GURL& app_url,
+    ExternalInstallSource external_install_source,
     UninstallWebAppCallback callback) {
   DCHECK(base::Contains(next_uninstall_external_web_app_results_, app_url));
   uninstall_external_web_app_urls_.push_back(app_url);
@@ -57,21 +80,31 @@ void TestInstallFinalizer::UninstallExternalWebApp(
                      }));
 }
 
-void TestInstallFinalizer::UninstallWebApp(const AppId& app_url,
-                                           UninstallWebAppCallback callback) {}
-
-bool TestInstallFinalizer::CanCreateOsShortcuts() const {
-  return true;
+bool TestInstallFinalizer::CanUserUninstallFromSync(const AppId& app_id) const {
+  NOTIMPLEMENTED();
+  return false;
 }
 
-void TestInstallFinalizer::CreateOsShortcuts(
-    const AppId& app_id,
-    bool add_to_desktop,
-    CreateOsShortcutsCallback callback) {
-  ++num_create_os_shortcuts_calls_;
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::BindOnce(std::move(callback), true /* shortcuts_created */));
+void TestInstallFinalizer::UninstallWebAppFromSyncByUser(
+    const AppId& app_url,
+    UninstallWebAppCallback callback) {
+  NOTIMPLEMENTED();
+}
+
+bool TestInstallFinalizer::CanUserUninstallExternalApp(
+    const AppId& app_id) const {
+  NOTIMPLEMENTED();
+  return false;
+}
+
+void TestInstallFinalizer::UninstallExternalAppByUser(const AppId& app_id,
+                                                      UninstallWebAppCallback) {
+  NOTIMPLEMENTED();
+}
+
+bool TestInstallFinalizer::WasExternalAppUninstalledByUser(
+    const AppId& app_id) const {
+  return base::Contains(user_uninstalled_external_apps_, app_id);
 }
 
 bool TestInstallFinalizer::CanAddAppToQuickLaunchBar() const {
@@ -101,11 +134,6 @@ void TestInstallFinalizer::RevealAppShim(const AppId& app_id) {
   ++num_reveal_appshim_calls_;
 }
 
-bool TestInstallFinalizer::CanUserUninstallFromSync(const AppId& app_id) const {
-  NOTIMPLEMENTED();
-  return false;
-}
-
 void TestInstallFinalizer::SetNextFinalizeInstallResult(
     const AppId& app_id,
     InstallResultCode code) {
@@ -118,6 +146,12 @@ void TestInstallFinalizer::SetNextUninstallExternalWebAppResult(
     bool uninstalled) {
   DCHECK(!base::Contains(next_uninstall_external_web_app_results_, app_url));
   next_uninstall_external_web_app_results_[app_url] = uninstalled;
+}
+
+void TestInstallFinalizer::SimulateExternalAppUninstalledByUser(
+    const AppId& app_id) {
+  DCHECK(!base::Contains(user_uninstalled_external_apps_, app_id));
+  user_uninstalled_external_apps_.insert(app_id);
 }
 
 void TestInstallFinalizer::Finalize(const WebApplicationInfo& web_app_info,

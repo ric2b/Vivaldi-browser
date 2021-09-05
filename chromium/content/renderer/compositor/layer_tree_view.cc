@@ -17,6 +17,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
+#include "base/task/thread_pool.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/time/time.h"
 #include "base/values.h"
@@ -85,10 +86,10 @@ void LayerTreeView::Initialize(
     // The image worker thread needs to allow waiting since it makes discardable
     // shared memory allocations which need to make synchronous calls to the
     // IO thread.
-    params.image_worker_task_runner = base::CreateSequencedTaskRunner(
-        {base::ThreadPool(), base::WithBaseSyncPrimitives(),
-         base::TaskPriority::USER_VISIBLE,
-         base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN});
+    params.image_worker_task_runner =
+        base::ThreadPool::CreateSequencedTaskRunner(
+            {base::WithBaseSyncPrimitives(), base::TaskPriority::USER_VISIBLE,
+             base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN});
   }
   if (!is_threaded) {
     // Single-threaded web tests, and unit tests.
@@ -118,11 +119,17 @@ void LayerTreeView::SetVisible(bool visible) {
 }
 
 void LayerTreeView::SetLayerTreeFrameSink(
-    std::unique_ptr<cc::LayerTreeFrameSink> layer_tree_frame_sink) {
+    std::unique_ptr<cc::LayerTreeFrameSink> layer_tree_frame_sink,
+    std::unique_ptr<cc::RenderFrameMetadataObserver>
+        render_frame_metadata_observer) {
   DCHECK(delegate_);
   if (!layer_tree_frame_sink) {
     DidFailToInitializeLayerTreeFrameSink();
     return;
+  }
+  if (render_frame_metadata_observer) {
+    layer_tree_host_->SetRenderFrameObserver(
+        std::move(render_frame_metadata_observer));
   }
   layer_tree_host_->SetLayerTreeFrameSink(std::move(layer_tree_frame_sink));
 }
@@ -228,26 +235,10 @@ void LayerTreeView::RequestNewLayerTreeFrameSink() {
   if (!delegate_)
     return;
   // When the compositor is not visible it would not request a
-  // LayerTreeFrameSink so this is a race where it requested one then became
-  // not-visible. In that case, we can wait for it to become visible again
-  // before replying.
-  //
-  // This deals with an insidious race when the RenderWidget is swapped-out
-  // after this task was posted from the compositor. When swapped-out the
-  // compositor is stopped by making it not visible, and the RenderWidget (our
-  // delegate) is a zombie which can not be used (https://crbug.com/894899).
-  // Eventually the RenderWidget/LayerTreeView will not exist at all in this
-  // case (https://crbug.com/419087). So this handles the case for now since the
-  // compositor is not visible, and we can avoid using the RenderWidget until
-  // it marks the compositor visible again, indicating that it is valid to use
-  // the RenderWidget again.
-  //
-  // If there is no compositor thread, then this is a test-only path where
-  // composite is controlled directly by blink, and visibility is not
-  // considered. We don't expect blink to ever try composite on a swapped-out
-  // RenderWidget, which would be a bug, but the race condition can't happen
-  // in the single-thread case since this isn't a posted task.
-  if (!layer_tree_host_->IsVisible() && !!compositor_thread_) {
+  // LayerTreeFrameSink so this is a race where it requested one on the
+  // compositor thread while becoming non-visible on the main thread. In that
+  // case, we can wait for it to become visible again before replying.
+  if (!layer_tree_host_->IsVisible()) {
     layer_tree_frame_sink_request_failed_while_invisible_ = true;
     return;
   }
@@ -261,6 +252,10 @@ void LayerTreeView::DidInitializeLayerTreeFrameSink() {}
 void LayerTreeView::DidFailToInitializeLayerTreeFrameSink() {
   if (!delegate_)
     return;
+  // When the RenderWidget is made hidden while an async request for a
+  // LayerTreeFrameSink is being processed, then if it fails we would arrive
+  // here. Since the compositor does not request a LayerTreeFrameSink while not
+  // visible, we can delay trying again until becoming visible again.
   if (!layer_tree_host_->IsVisible()) {
     layer_tree_frame_sink_request_failed_while_invisible_ = true;
     return;
@@ -277,10 +272,10 @@ void LayerTreeView::WillCommit() {
   delegate_->WillCommitCompositorFrame();
 }
 
-void LayerTreeView::DidCommit() {
+void LayerTreeView::DidCommit(base::TimeTicks commit_start_time) {
   if (!delegate_)
     return;
-  delegate_->DidCommitCompositorFrame();
+  delegate_->DidCommitCompositorFrame(commit_start_time);
   web_main_thread_scheduler_->DidCommitFrameToCompositor();
 }
 
@@ -320,10 +315,12 @@ void LayerTreeView::RecordStartOfFrameMetrics() {
   delegate_->RecordStartOfFrameMetrics();
 }
 
-void LayerTreeView::RecordEndOfFrameMetrics(base::TimeTicks frame_begin_time) {
+void LayerTreeView::RecordEndOfFrameMetrics(
+    base::TimeTicks frame_begin_time,
+    cc::ActiveFrameSequenceTrackers trackers) {
   if (!delegate_)
     return;
-  delegate_->RecordEndOfFrameMetrics(frame_begin_time);
+  delegate_->RecordEndOfFrameMetrics(frame_begin_time, trackers);
 }
 
 std::unique_ptr<cc::BeginMainFrameMetrics>

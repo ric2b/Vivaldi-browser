@@ -4,8 +4,10 @@
 
 #include "chrome/credential_provider/gaiacp/gcp_utils.h"
 
+#include <iphlpapi.h>
 #include <wincred.h>  // For <ntsecapi.h>
 #include <windows.h>
+#include <winsock2.h>
 #include <winternl.h>
 
 #define _NTDEF_  // Prevent redefition errors, must come after <winternl.h>
@@ -25,11 +27,14 @@
 #include <iomanip>
 #include <memory>
 
+#include "base/base64.h"
 #include "base/command_line.h"
 #include "base/files/file.h"
 #include "base/files/file_enumerator.h"
+#include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
+#include "base/json/json_writer.h"
 #include "base/macros.h"
 #include "base/no_destructor.h"
 #include "base/path_service.h"
@@ -39,18 +44,40 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/win/current_module.h"
 #include "base/win/embedded_i18n/language_selector.h"
+#include "base/win/win_util.h"
+#include "base/win/wmi.h"
 #include "build/branding_buildflags.h"
 #include "chrome/common/chrome_version.h"
 #include "chrome/credential_provider/common/gcp_strings.h"
 #include "chrome/credential_provider/gaiacp/gaia_resources.h"
 #include "chrome/credential_provider/gaiacp/logging.h"
+#include "chrome/credential_provider/gaiacp/mdm_utils.h"
 #include "chrome/credential_provider/gaiacp/reg_utils.h"
+#include "chrome/installer/launcher_support/chrome_launcher_support.h"
+#include "google_apis/gaia/gaia_auth_util.h"
+#include "google_apis/gaia/gaia_switches.h"
+#include "google_apis/gaia/gaia_urls.h"
 
 namespace credential_provider {
 
 const wchar_t kDefaultProfilePictureFileExtension[] = L".jpg";
 
+// Overridden in tests to fake serial number extraction.
+bool g_use_test_serial_number = false;
+base::string16 g_test_serial_number = L"";
+
+// Overridden in tests to fake mac address extraction.
+bool g_use_test_mac_addresses = false;
+std::vector<std::string> g_test_mac_addresses;
+
+// Overridden in tests to fake installed chrome path.
+bool g_use_test_chrome_path = false;
+base::FilePath g_test_chrome_path(L"");
+
 namespace {
+
+// Minimum supported version of Chrome for GCPW.
+constexpr char kMinimumSupportedChromeVersionStr[] = "77.0.3865.65";
 
 constexpr char kSentinelFilename[] = "gcpw_startup.sentinel";
 constexpr base::FilePath::CharType kCredentialProviderFolder[] =
@@ -64,7 +91,7 @@ constexpr base::win::i18n::LanguageSelector::LangToOffset
 #undef HANDLE_LANGUAGE
 };
 
-base::FilePath GetStartupSentinelLocation() {
+base::FilePath GetStartupSentinelLocation(const base::string16& version) {
   base::FilePath sentienal_path;
   if (!base::PathService::Get(base::DIR_COMMON_APP_DATA, &sentienal_path)) {
     HRESULT hr = HRESULT_FROM_WIN32(::GetLastError());
@@ -75,8 +102,7 @@ base::FilePath GetStartupSentinelLocation() {
   sentienal_path = sentienal_path.Append(GetInstallParentDirectoryName())
                        .Append(kCredentialProviderFolder);
 
-  return sentienal_path.Append(TEXT(CHROME_VERSION_STRING))
-      .AppendASCII(kSentinelFilename);
+  return sentienal_path.Append(version).AppendASCII(kSentinelFilename);
 }
 
 const base::win::i18n::LanguageSelector& GetLanguageSelector() {
@@ -132,11 +158,55 @@ void DeleteVersionDirectory(const base::FilePath& version_path) {
   // Release the locks, actually deleting the files.  It is now possible to
   // delete the version path.
   locks.clear();
-  if (all_deletes_succeeded && !base::DeleteFile(version_path, true))
+  if (all_deletes_succeeded && !base::DeleteFileRecursively(version_path))
     LOGFN(ERROR) << "Could not delete version " << version_path.BaseName();
 }
 
 }  // namespace
+
+// GoogleRegistrationDataForTesting //////////////////////////////////////////
+
+GoogleRegistrationDataForTesting::GoogleRegistrationDataForTesting(
+    base::string16 serial_number) {
+  g_use_test_serial_number = true;
+  g_test_serial_number = serial_number;
+}
+
+GoogleRegistrationDataForTesting::~GoogleRegistrationDataForTesting() {
+  g_use_test_serial_number = false;
+  g_test_serial_number = L"";
+}
+
+// GoogleRegistrationDataForTesting //////////////////////////////////////////
+
+// GemDeviceDetailsForTesting //////////////////////////////////////////
+
+GemDeviceDetailsForTesting::GemDeviceDetailsForTesting(
+    std::vector<std::string>& mac_addresses) {
+  g_use_test_mac_addresses = true;
+  g_test_mac_addresses = mac_addresses;
+}
+
+GemDeviceDetailsForTesting::~GemDeviceDetailsForTesting() {
+  g_use_test_mac_addresses = false;
+}
+
+// GemDeviceDetailsForTesting //////////////////////////////////////////
+
+// GoogleChromePathForTesting ////////////////////////////////////////////////
+
+GoogleChromePathForTesting::GoogleChromePathForTesting(
+    base::FilePath file_path) {
+  g_use_test_chrome_path = true;
+  g_test_chrome_path = file_path;
+}
+
+GoogleChromePathForTesting::~GoogleChromePathForTesting() {
+  g_use_test_chrome_path = false;
+  g_test_chrome_path = base::FilePath(L"");
+}
+
+// GoogleChromePathForTesting /////////////////////////////////////////////////
 
 base::FilePath GetInstallDirectory() {
   base::FilePath dest_path;
@@ -168,6 +238,7 @@ void DeleteVersionsExcept(const base::FilePath& gcp_path,
     // best effort only.  If any errors occurred they are logged by
     // DeleteVersionDirectory().
     DeleteVersionDirectory(gcp_path.Append(basename));
+    DeleteStartupSentinelForVersion(basename.value());
   }
 }
 
@@ -255,7 +326,7 @@ HRESULT WaitForProcess(base::win::ScopedHandle::Handle process_handle,
                        DWORD* exit_code,
                        char* output_buffer,
                        int buffer_size) {
-  LOGFN(INFO);
+  LOGFN(VERBOSE);
   DCHECK(exit_code);
   DCHECK_GT(buffer_size, 0);
 
@@ -274,24 +345,24 @@ HRESULT WaitForProcess(base::win::ScopedHandle::Handle process_handle,
     switch (ret) {
       case WAIT_OBJECT_0: {
         int index = ret - WAIT_OBJECT_0;
-        LOGFN(INFO) << "WAIT_OBJECT_" << index;
+        LOGFN(VERBOSE) << "WAIT_OBJECT_" << index;
         if (!::ReadFile(output_handle, buffer, length, &length, nullptr)) {
           hr = HRESULT_FROM_WIN32(::GetLastError());
           if (hr != HRESULT_FROM_WIN32(ERROR_BROKEN_PIPE))
             LOGFN(ERROR) << "ReadFile(" << index << ") hr=" << putHR(hr);
         } else {
-          LOGFN(INFO) << "ReadFile(" << index << ") length=" << length;
+          LOGFN(VERBOSE) << "ReadFile(" << index << ") length=" << length;
           buffer[length] = 0;
         }
         break;
       }
       case WAIT_IO_COMPLETION:
         // This is normal.  Just ignore.
-        LOGFN(INFO) << "WaitForMultipleObjectsEx WAIT_IO_COMPLETION";
+        LOGFN(VERBOSE) << "WaitForMultipleObjectsEx WAIT_IO_COMPLETION";
         break;
       case WAIT_TIMEOUT: {
         // User took too long to log in, so kill UI process.
-        LOGFN(INFO) << "WaitForMultipleObjectsEx WAIT_TIMEOUT, killing UI";
+        LOGFN(VERBOSE) << "WaitForMultipleObjectsEx WAIT_TIMEOUT, killing UI";
         ::TerminateProcess(process_handle, kUiecTimeout);
         is_done = true;
         break;
@@ -308,7 +379,7 @@ HRESULT WaitForProcess(base::win::ScopedHandle::Handle process_handle,
     // Copy the read buffer to the output buffer. If the pipe was broken,
     // we can break our loop and wait for the process to die.
     if (hr == HRESULT_FROM_WIN32(ERROR_BROKEN_PIPE)) {
-      LOGFN(INFO) << "Stop waiting for output buffer";
+      LOGFN(VERBOSE) << "Stop waiting for output buffer";
       break;
     } else {
       strcat_s(output_buffer, buffer_size, buffer);
@@ -321,13 +392,13 @@ HRESULT WaitForProcess(base::win::ScopedHandle::Handle process_handle,
   DWORD ret = ::WaitForSingleObject(process_handle, 10000);
   if (ret == 0) {
     if (::GetExitCodeProcess(process_handle, exit_code)) {
-      LOGFN(INFO) << "Process terminated with exit code " << *exit_code;
+      LOGFN(VERBOSE) << "Process terminated with exit code " << *exit_code;
     } else {
-      LOGFN(INFO) << "Process terminated without exit code";
+      LOGFN(WARNING) << "Process terminated without exit code";
       *exit_code = kUiecAbort;
     }
   } else {
-    LOGFN(INFO) << "UI did not terminiate within 10 seconds, killing now";
+    LOGFN(WARNING) << "UI did not terminiate within 10 seconds, killing now";
     ::TerminateProcess(process_handle, kUiecKilled);
     *exit_code = kUiecKilled;
   }
@@ -368,7 +439,7 @@ HRESULT CreateLogonToken(const wchar_t* domain,
 }
 
 HRESULT CreateJobForSignin(base::win::ScopedHandle* job) {
-  LOGFN(INFO);
+  LOGFN(VERBOSE);
   DCHECK(job);
 
   job->Set(::CreateJobObject(nullptr, nullptr));
@@ -448,7 +519,7 @@ HRESULT InitializeStdHandles(CommDirection direction,
                              StdHandlesToCreate to_create,
                              ScopedStartupInfo* startupinfo,
                              StdParentHandles* parent_handles) {
-  LOGFN(INFO);
+  LOGFN(VERBOSE);
   DCHECK(startupinfo);
   DCHECK(parent_handles);
 
@@ -529,8 +600,9 @@ HRESULT GetEntryPointArgumentForRunDll(HINSTANCE dll_handle,
 
   // rundll32 expects the first command line argument to be the path to the
   // DLL, followed by a comma and the name of the function to call.  There can
-  // be no spaces around the comma.  There can be no spaces in the path.  It
-  // is recommended to use the short path name of the DLL.
+  // be no spaces around the comma. The dll path is quoted because short names
+  // may be disabled in the system and path can not have space otherwise. It is
+  // recommended to use the short path name of the DLL.
   base::FilePath path_to_dll;
   HRESULT hr = GetPathToDllFromHandle(dll_handle, &path_to_dll);
   if (FAILED(hr))
@@ -546,8 +618,8 @@ HRESULT GetEntryPointArgumentForRunDll(HINSTANCE dll_handle,
     return hr;
   }
 
-  *entrypoint_arg =
-      base::string16(base::StringPrintf(L"%ls,%ls", short_path, entrypoint));
+  *entrypoint_arg = base::string16(
+      base::StringPrintf(L"\"%ls\",%ls", short_path, entrypoint));
 
   // In tests, the current module is the unittest exe, not the real dll.
   // The unittest exe does not expose entrypoints, so return S_FALSE as a hint
@@ -637,12 +709,19 @@ HRESULT LookupLocalizedNameForWellKnownSid(WELL_KNOWN_SID_TYPE sid_type,
   return LookupLocalizedNameBySid(well_known_sid, localized_name);
 }
 
-bool VerifyStartupSentinel() {
+bool WriteToStartupSentinel() {
   // Always try to write to the startup sentinel file. If writing or opening
   // fails for any reason (file locked, no access etc) consider this a failure.
   // If no sentinel file path can be found this probably means that we are
   // running in a unit test so just let the verification pass in this case.
-  base::FilePath startup_sentinel_path = GetStartupSentinelLocation();
+  // Each process will only write once to startup sentinel file.
+
+  static volatile long sentinel_initialized = 0;
+  if (::InterlockedCompareExchange(&sentinel_initialized, 1, 0))
+    return true;
+
+  base::FilePath startup_sentinel_path =
+      GetStartupSentinelLocation(TEXT(CHROME_VERSION_STRING));
   if (!startup_sentinel_path.empty()) {
     base::FilePath startup_sentinel_directory = startup_sentinel_path.DirName();
     if (!base::DirectoryExists(startup_sentinel_directory)) {
@@ -661,8 +740,15 @@ bool VerifyStartupSentinel() {
     // Keep writing to the sentinel file until we have reached
     // |kMaxConsecutiveCrashCount| at which point it is assumed that GCPW
     // is crashing continuously and should be disabled.
-    if (!startup_sentinel.IsValid() ||
-        startup_sentinel.GetLength() >= kMaxConsecutiveCrashCount) {
+    if (!startup_sentinel.IsValid()) {
+      LOGFN(ERROR) << "Could not open the sentinel path "
+                   << startup_sentinel_path.value();
+      return false;
+    }
+
+    if (startup_sentinel.GetLength() >= kMaxConsecutiveCrashCount) {
+      LOGFN(ERROR) << "Sentinel file length indicates "
+                   << startup_sentinel.GetLength() << " possible crashes";
       return false;
     }
 
@@ -673,7 +759,11 @@ bool VerifyStartupSentinel() {
 }
 
 void DeleteStartupSentinel() {
-  base::FilePath startup_sentinel_path = GetStartupSentinelLocation();
+  DeleteStartupSentinelForVersion(TEXT(CHROME_VERSION_STRING));
+}
+
+void DeleteStartupSentinelForVersion(const base::string16& version) {
+  base::FilePath startup_sentinel_path = GetStartupSentinelLocation(version);
   if (base::PathExists(startup_sentinel_path) &&
       !base::DeleteFile(startup_sentinel_path, false)) {
     LOGFN(ERROR) << "Failed to delete sentinel file: " << startup_sentinel_path;
@@ -693,6 +783,15 @@ base::string16 GetStringResource(int base_message_id) {
   }
 
   return localized_string;
+}
+
+base::string16 GetStringResource(int base_message_id,
+                                 const std::vector<base::string16>& subst) {
+  base::string16 format_string = GetStringResource(base_message_id);
+  base::string16 formatted =
+      base::ReplaceStringPlaceholders(format_string, subst, nullptr);
+
+  return formatted;
 }
 
 base::string16 GetSelectedLanguage() {
@@ -766,6 +865,34 @@ std::string GetDictStringUTF8(const base::Value& dict, const char* name) {
   return value && value->is_string() ? value->GetString() : std::string();
 }
 
+HRESULT SearchForListInStringDictUTF8(
+    const std::string& list_key,
+    const std::string& json_string,
+    const std::initializer_list<base::StringPiece>& path,
+    std::vector<std::string>* output) {
+  DCHECK(path.size() > 0);
+
+  base::Optional<base::Value> json_obj =
+      base::JSONReader::Read(json_string, base::JSON_ALLOW_TRAILING_COMMAS);
+  if (!json_obj || !json_obj->is_dict()) {
+    LOGFN(ERROR) << "base::JSONReader::Read failed to translate to JSON";
+    return E_FAIL;
+  }
+
+  auto* value = json_obj->FindListPath(base::JoinString(path, "."));
+  if (value && value->is_list()) {
+    for (const base::Value& entry : value->GetList()) {
+      if (entry.FindKey(list_key) && entry.FindKey(list_key)->is_string()) {
+        std::string value = entry.FindKey(list_key)->GetString();
+        output->push_back(value);
+      } else {
+        return E_FAIL;
+      }
+    }
+  }
+  return S_OK;
+}
+
 std::string GetDictStringUTF8(const std::unique_ptr<base::Value>& dict,
                               const char* name) {
   return GetDictStringUTF8(*dict, name);
@@ -789,6 +916,169 @@ base::string16 GetWindowsVersion() {
     return release_id;
 
   return L"Unknown";
+}
+
+base::Version GetMinimumSupportedChromeVersion() {
+  return base::Version(kMinimumSupportedChromeVersionStr);
+}
+
+bool ExtractKeysFromDict(
+    const base::Value& dict,
+    const std::vector<std::pair<std::string, std::string*>>& needed_outputs) {
+  if (!dict.is_dict())
+    return false;
+
+  for (const std::pair<std::string, std::string*>& output : needed_outputs) {
+    const std::string* output_value = dict.FindStringKey(output.first);
+    if (!output_value) {
+      LOGFN(ERROR) << "Could not extract value '" << output.first
+                   << "' from server response";
+      return false;
+    }
+    DCHECK(output.second);
+    *output.second = *output_value;
+  }
+  return true;
+}
+
+base::string16 GetSerialNumber() {
+  if (g_use_test_serial_number)
+    return g_test_serial_number;
+  return base::win::WmiComputerSystemInfo::Get().serial_number();
+}
+
+// This approach was inspired by:
+// https://msdn.microsoft.com/en-us/library/windows/desktop/aa365917(v=vs.85).aspx
+std::vector<std::string> GetMacAddresses() {
+  // Used for unit tests.
+  if (g_use_test_mac_addresses)
+    return g_test_mac_addresses;
+
+  PIP_ADAPTER_INFO pAdapter;
+  ULONG ulOutBufLen = sizeof(IP_ADAPTER_INFO);
+  IP_ADAPTER_INFO* pAdapterInfo =
+      new IP_ADAPTER_INFO[ulOutBufLen / sizeof(IP_ADAPTER_INFO)];
+  // Get the right buffer size in case of overflow.
+  if (GetAdaptersInfo(pAdapterInfo, &ulOutBufLen) == ERROR_BUFFER_OVERFLOW) {
+    delete[] pAdapterInfo;
+    pAdapterInfo =
+        new IP_ADAPTER_INFO[ulOutBufLen / sizeof(IP_ADAPTER_INFO) + 1];
+  }
+  std::vector<std::string> mac_addresses;
+  if (GetAdaptersInfo(pAdapterInfo, &ulOutBufLen) == ERROR_SUCCESS) {
+    pAdapter = pAdapterInfo;
+    while (pAdapter) {
+      if (pAdapter->AddressLength == 6) {
+        char mac_address[17 + 1];
+        snprintf(mac_address, sizeof(mac_address),
+                 "%02X-%02X-%02X-%02X-%02X-%02X",
+                 static_cast<unsigned int>(pAdapter->Address[0]),
+                 static_cast<unsigned int>(pAdapter->Address[1]),
+                 static_cast<unsigned int>(pAdapter->Address[2]),
+                 static_cast<unsigned int>(pAdapter->Address[3]),
+                 static_cast<unsigned int>(pAdapter->Address[4]),
+                 static_cast<unsigned int>(pAdapter->Address[5]));
+        mac_addresses.push_back(mac_address);
+      }
+      pAdapter = pAdapter->Next;
+    }
+  }
+  delete[] pAdapterInfo;
+  return mac_addresses;
+}
+
+HRESULT GenerateDeviceId(std::string* device_id) {
+  // Build the json data encapsulating different device ids.
+  base::Value device_ids_dict(base::Value::Type::DICTIONARY);
+
+  // Add the serial number to the dictionary.
+  base::string16 serial_number = GetSerialNumber();
+  if (!serial_number.empty())
+    device_ids_dict.SetStringKey("serial_number", serial_number);
+
+  // Add machine_guid to the dictionary.
+  base::string16 machine_guid;
+  HRESULT hr = GetMachineGuid(&machine_guid);
+  if (SUCCEEDED(hr) && !machine_guid.empty())
+    device_ids_dict.SetStringKey("machine_guid", machine_guid);
+
+  std::string device_id_str;
+  bool json_write_result =
+      base::JSONWriter::Write(device_ids_dict, &device_id_str);
+  if (!json_write_result) {
+    LOGFN(ERROR) << "JSONWriter::Write(device_ids_dict)";
+    return E_FAIL;
+  }
+
+  // Store the base64encoded device id json blob in the output.
+  base::Base64Encode(device_id_str, device_id);
+  return S_OK;
+}
+
+HRESULT SetGaiaEndpointCommandLineIfNeeded(const wchar_t* override_registry_key,
+                                           const std::string& default_endpoint,
+                                           bool provide_deviceid,
+                                           bool show_tos,
+                                           base::CommandLine* command_line) {
+  // Registry specified endpoint.
+  wchar_t endpoint_url_setting[256];
+  ULONG endpoint_url_length = base::size(endpoint_url_setting);
+  HRESULT hr = GetGlobalFlag(override_registry_key, endpoint_url_setting,
+                             &endpoint_url_length);
+  if (SUCCEEDED(hr) && endpoint_url_setting[0]) {
+    GURL endpoint_url(endpoint_url_setting);
+    if (endpoint_url.is_valid()) {
+      command_line->AppendSwitchASCII(switches::kGaiaUrl,
+                                      endpoint_url.GetWithEmptyPath().spec());
+      command_line->AppendSwitchASCII(kGcpwEndpointPathSwitch,
+                                      endpoint_url.path().substr(1));
+    }
+    return S_OK;
+  }
+
+  if (provide_deviceid || show_tos) {
+    std::string device_id;
+    hr = GenerateDeviceId(&device_id);
+    if (SUCCEEDED(hr)) {
+      command_line->AppendSwitchASCII(
+          kGcpwEndpointPathSwitch,
+          base::StringPrintf("%s?device_id=%s&show_tos=%d",
+                             default_endpoint.c_str(), device_id.c_str(),
+                             show_tos ? 1 : 0));
+    } else if (show_tos) {
+      command_line->AppendSwitchASCII(
+          kGcpwEndpointPathSwitch,
+          base::StringPrintf("%s?show_tos=1", default_endpoint.c_str()));
+    }
+  }
+  return S_OK;
+}
+
+base::FilePath GetChromePath() {
+  base::FilePath gls_path = GetSystemChromePath();
+
+  wchar_t custom_gls_path_value[MAX_PATH];
+  ULONG path_len = base::size(custom_gls_path_value);
+  HRESULT hr = GetGlobalFlag(kRegGlsPath, custom_gls_path_value, &path_len);
+  if (SUCCEEDED(hr)) {
+    base::FilePath custom_gls_path(custom_gls_path_value);
+    if (base::PathExists(custom_gls_path)) {
+      gls_path = custom_gls_path;
+    } else {
+      LOGFN(ERROR) << "Specified gls path ('" << custom_gls_path.value()
+                   << "') does not exist, using default gls path.";
+    }
+  }
+
+  return gls_path;
+}
+
+base::FilePath GetSystemChromePath() {
+  if (g_use_test_chrome_path)
+    return g_test_chrome_path;
+
+  return chrome_launcher_support::GetChromePathForInstallationLevel(
+      chrome_launcher_support::SYSTEM_LEVEL_INSTALLATION, false);
 }
 
 FakesForTesting::FakesForTesting() {}

@@ -30,8 +30,9 @@ class DevtoolsClient;
 class ElementFinder : public WebControllerWorker {
  public:
   struct Result {
-    Result() = default;
-    ~Result() = default;
+    Result();
+    ~Result();
+    Result(const Result& to_copy);
 
     // The render frame host contains the element.
     content::RenderFrameHost* container_frame_host;
@@ -47,6 +48,8 @@ class ElementFinder : public WebControllerWorker {
 
     // The id of the frame the element's node is in.
     std::string node_frame_id;
+
+    std::vector<Result> frame_stack;
   };
 
   // |web_contents| and |devtools_client| must be valid for the lifetime of the
@@ -90,9 +93,6 @@ class ElementFinder : public WebControllerWorker {
 
   content::RenderFrameHost* FindCorrespondingRenderFrameHost(
       std::string frame_id);
-  content::RenderFrameHost* FindCorrespondingRenderFrameHost(
-      std::string name,
-      std::string document_url);
 
   content::WebContents* const web_contents_;
   DevtoolsClient* const devtools_client_;

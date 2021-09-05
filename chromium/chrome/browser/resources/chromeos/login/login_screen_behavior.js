@@ -7,6 +7,8 @@
  * 'LoginScreenBehavior' is login.Screen API implementation for Polymer objects.
  */
 
+const CALLBACK_USER_ACTED = 'userActed';
+
 /** @polymerBehavior */
 var LoginScreenBehavior = {
   // List of methods exported to login.screenName.<method> API.
@@ -20,7 +22,7 @@ var LoginScreenBehavior = {
    * @param {string} screenName Name of created class (external api prefix).
    * @param {DisplayManagerScreenAttributes} attributes
    */
-  initializeLoginScreen: function(screenName, attributes) {
+  initializeLoginScreen(screenName, attributes) {
     let api = {};
 
     if (this.EXTERNAL_API.length != 0) {
@@ -34,10 +36,21 @@ var LoginScreenBehavior = {
         api[methodName] = this[methodName].bind(this);
       }
     }
+    this.sendPrefix_ = 'login.' + screenName + '.';
     this.registerScreenApi_(screenName, api);
     Oobe.getInstance().registerScreen(this, attributes);
   },
 
+
+  sendPrefix_: undefined,
+
+  userActed(action_id) {
+    if (this.sendPrefix_ === undefined) {
+      console.error('LoginScreenBehavior: send prefix is not defined');
+      return;
+    }
+    chrome.send(this.sendPrefix_ + CALLBACK_USER_ACTED, [action_id]);
+  },
 
   /* ******************  Default screen API below.  ********************** */
 
@@ -63,8 +76,17 @@ var LoginScreenBehavior = {
    * returns current screen size.
    * @return {{width: number, height: number}}
    */
-  getPreferredSize: function() {
+  getPreferredSize() {
     return {width: this.offsetWidth, height: this.offsetHeight};
+  },
+
+  /**
+   * Returns UI state to be used when showing this screen. Default
+   * implementation returns OOBE_UI_STATE.HIDDEN.
+   * @return number} The state (see OOBE_UI_STATE) of the OOBE UI.
+   */
+  getOobeUIInitialState() {
+    return OOBE_UI_STATE.HIDDEN;
   },
 
   /**
@@ -104,7 +126,7 @@ var LoginScreenBehavior = {
    * Register external screen API with login object.
    * Example:
    *    this.registerScreenApi_('ScreenName', {
-   *         foo: function() { console.log('foo'); },
+   *         foo() { console.log('foo'); },
    *     });
    *     login.ScreenName.foo(); // valid
    *
@@ -112,7 +134,7 @@ var LoginScreenBehavior = {
    * @param {Object} api Screen API.
    * @private
    */
-  registerScreenApi_: function(name, api) {
+  registerScreenApi_(name, api) {
     // Closure compiler incorrectly parses this, so we use cr.define.call(...).
     cr.define.call(cr.define, 'login', function() {
       var result = {};

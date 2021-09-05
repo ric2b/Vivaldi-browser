@@ -59,11 +59,11 @@ std::string CoreAudioDemuxer::GetDisplayName() const {
 }
 
 void CoreAudioDemuxer::Initialize(DemuxerHost* host,
-                                  const PipelineStatusCB& status_cb) {
+                                  PipelineStatusCallback status_cb) {
   host_ = host;
 
   CHECK(blocking_thread_.Start());
-  ReadAudioFormatInfo(status_cb);
+  ReadAudioFormatInfo(std::move(status_cb));
 }
 
 CoreAudioDemuxerStream* CoreAudioDemuxer::CreateAudioDemuxerStream() {
@@ -95,14 +95,14 @@ void CoreAudioDemuxer::CancelPendingSeek(base::TimeDelta seek_time) {
 }
 
 void CoreAudioDemuxer::Seek(base::TimeDelta time,
-                            const PipelineStatusCB& status_cb) {
+                            PipelineStatusCallback status_cb) {
   if (audio_stream_->Seek(time)) {
-    status_cb.Run(PipelineStatus::PIPELINE_OK);
+    std::move(status_cb).Run(PipelineStatus::PIPELINE_OK);
     return;
   }
   LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
              << ": PIPELINE_ERROR_ABORT";
-  status_cb.Run(PipelineStatus::PIPELINE_ERROR_ABORT);
+  std::move(status_cb).Run(PipelineStatus::PIPELINE_ERROR_ABORT);
 }
 
 void CoreAudioDemuxer::Stop() {
@@ -198,35 +198,35 @@ void CoreAudioDemuxer::SetAudioDuration(int64_t duration) {
 }
 
 void CoreAudioDemuxer::ReadDataSourceWithCallback(
-    const DataSource::ReadCB& read_cb) {
+    DataSource::ReadCB read_cb) {
   base::PostTaskAndReplyWithResult(
       blocking_thread_.task_runner().get(),
       FROM_HERE,
-      base::Bind(&CoreAudioDemuxer::ReadDataSource, base::Unretained(this)),
-      read_cb);
+      base::BindOnce(&CoreAudioDemuxer::ReadDataSource, base::Unretained(this)),
+      base::BindOnce(std::move(read_cb)));
 }
 
-void CoreAudioDemuxer::ReadAudioFormatInfo(const PipelineStatusCB& status_cb) {
+void CoreAudioDemuxer::ReadAudioFormatInfo(PipelineStatusCallback status_cb) {
   ReadDataSourceWithCallback(
       base::Bind(&CoreAudioDemuxer::OnReadAudioFormatInfoDone,
                  weak_factory_.GetWeakPtr(),
-                 status_cb));
+                 base::Passed(std::move(status_cb))));
 }
 
 void CoreAudioDemuxer::OnReadAudioFormatInfoDone(
-    const PipelineStatusCB& status_cb,
+    PipelineStatusCallback status_cb,
     int read_size) {
   if (!blocking_thread_.IsRunning()) {
     LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                << ": PIPELINE_ERROR_ABORT";
-    status_cb.Run(PipelineStatus::PIPELINE_ERROR_ABORT);
+    std::move(status_cb).Run(PipelineStatus::PIPELINE_ERROR_ABORT);
     return;
   }
 
   if (read_size <= 0) {
     LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                << ": DEMUXER_ERROR_COULD_NOT_OPEN";
-    status_cb.Run(PipelineStatus::DEMUXER_ERROR_COULD_NOT_OPEN);
+    std::move(status_cb).Run(PipelineStatus::DEMUXER_ERROR_COULD_NOT_OPEN);
     return;
   }
 
@@ -243,7 +243,7 @@ void CoreAudioDemuxer::OnReadAudioFormatInfoDone(
     // If audio format is not known yet, demuxer must read more data to figure
     // it out.
     if (!input_format_found_) {
-      ReadAudioFormatInfo(status_cb);
+      ReadAudioFormatInfo(std::move(status_cb));
       return;
     }
   }
@@ -251,7 +251,8 @@ void CoreAudioDemuxer::OnReadAudioFormatInfoDone(
   if (err != noErr) {
     LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                << ": PIPELINE_ERROR_ABORT";
-    status_cb.Run(PipelineStatus::PIPELINE_ERROR_ABORT);
+    std::move(status_cb).Run(PipelineStatus::PIPELINE_ERROR_ABORT);
+    return;
   }
 
   if (input_format_found_) {
@@ -260,13 +261,13 @@ void CoreAudioDemuxer::OnReadAudioFormatInfoDone(
       audio_stream_.reset();
       LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                  << ": DEMUXER_ERROR_NO_SUPPORTED_STREAMS";
-      status_cb.Run(PipelineStatus::DEMUXER_ERROR_NO_SUPPORTED_STREAMS);
+      std::move(status_cb).Run(PipelineStatus::DEMUXER_ERROR_NO_SUPPORTED_STREAMS);
       return;
     }
 
     // Reset read offset to the beginning.
     ResetDataSourceOffset();
-    status_cb.Run(PipelineStatus::PIPELINE_OK);
+    std::move(status_cb).Run(PipelineStatus::PIPELINE_OK);
   }
 }
 

@@ -4,14 +4,22 @@
 
 // <include src="post_message_channel.js">
 // <include src="webview_event_manager.js">
-// <include src="../chromeos/login/saml_password_attributes.js">
+// <include src="saml_password_attributes.js">
+
+// clang-format off
+// #import {Channel} from './channel.m.js';
+// #import {PostMessageChannel} from './post_message_channel.m.js';
+// #import {WebviewEventManager} from './webview_event_manager.m.js';
+// #import {NativeEventTarget as EventTarget} from 'chrome://resources/js/cr/event_target.m.js'
+// #import {PasswordAttributes, readPasswordAttributes} from './saml_password_attributes.m.js';
+// clang-format on
 
 /**
  * @fileoverview Saml support for webview based auth.
  */
 
 cr.define('cr.login', function() {
-  'use strict';
+  /* #ignore */ 'use strict';
 
   /**
    * The lowest version of the credentials passing API supported.
@@ -37,6 +45,12 @@ cr.define('cr.login', function() {
   const SAML_HEADER = 'google-accounts-saml';
 
   /** @const */
+  const SAML_VERIFIED_ACCESS_CHALLENGE_HEADER = 'x-verified-access-challenge';
+  /** @const */
+  const SAML_VERIFIED_ACCESS_RESPONSE_HEADER =
+      'x-verified-access-challenge-response';
+
+  /** @const */
   const injectedScriptName = 'samlInjected';
 
   /**
@@ -46,6 +60,47 @@ cr.define('cr.login', function() {
   const injectedJs = String.raw`
       // <include src="webview_saml_injected.js">
   `;
+
+  /**
+   * @typedef {{
+   *   method: string,
+   *   requestedVersion: number,
+   *   keyType: string,
+   *   token: string,
+   *   passwordBytes: string
+   * }}
+   */
+  let ApiCallMessageCall;
+
+  /**
+   * @typedef {{
+   *   name: string,
+   *   call: ApiCallMessageCall
+   * }}
+   */
+  let ApiCallMessage;
+
+  /**
+   * Details about the request.
+   * @typedef {{
+   *   method: string,
+   *   requestBody: Object,
+   *   url: string
+   * }}
+   * @see https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/webRequest/onBeforeRequest#details
+   */
+  /* #export */ let OnBeforeRequestDetails;
+
+  /**
+   * Details of the request.
+   * @typedef {{
+   *   responseHeaders: Array<HttpHeader>,
+   *   statusCode: number,
+   *   url: string,
+   * }}
+   * @see https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/webRequest/onHeadersReceived#details
+   */
+  /* #export */ let OnHeadersReceivedDetails;
 
   /**
    * Creates a new URL by striping all query parameters.
@@ -71,9 +126,9 @@ cr.define('cr.login', function() {
    * A handler to provide saml support for the given webview that hosts the
    * auth IdP pages.
    */
-  class SamlHandler extends cr.EventTarget {
+  /* #export */ class SamlHandler extends cr.EventTarget {
     /**
-     * @param {webview} webview
+     * @param {!WebView} webview
      * @param {boolean} startsOnSamlPage - whether initial URL is already SAML
      *                  page
      * */
@@ -81,26 +136,47 @@ cr.define('cr.login', function() {
       super();
 
       /**
+       * Device attestation flow stages.
+       * @enum {number}
+       * @private
+       */
+      SamlHandler.DeviceAttestationStage = {
+        // No device attestation in progress.
+        NONE: 1,
+        // A Redirect was received with a HTTP header that contained a device
+        // attestation challenge.
+        CHALLENGE_RECEIVED: 2,
+        // The Redirect has been canceled and a device attestation challenge
+        // response is being computed.
+        ORIGINAL_REDIRECT_CANCELED: 3,
+        // The device attestation challenge response is available and the
+        // original Redirect is being followed with the response included in a
+        // HTTP header.
+        NAVIGATING_TO_REDIRECT_PAGE: 4,
+      };
+
+      /**
        * The webview that serves IdP pages.
-       * @type {webview}
+       * @private {!WebView}
        */
       this.webview_ = webview;
 
       /**
        * Whether a Saml page is in the webview from the start.
+       * @private {boolean}
        */
       this.startsOnSamlPage_ = startsOnSamlPage;
 
       /**
        * Whether a Saml IdP page is display in the webview.
-       * @type {boolean}
+       * @private {boolean}
        */
       this.isSamlPage_ = this.startsOnSamlPage_;
 
       /**
        * Pending Saml IdP page flag that is set when a SAML_HEADER is received
        * and is copied to |isSamlPage_| in loadcommit.
-       * @type {boolean}
+       * @private {boolean}
        */
       this.pendingIsSamlPage_ = this.startsOnSamlPage_;
 
@@ -108,7 +184,7 @@ cr.define('cr.login', function() {
        * The last aborted top level url. It is recorded in loadabort event and
        * used to skip injection into Chrome's error page in the following
        * loadcommit event.
-       * @type {string}
+       * @private {?string}
        */
       this.abortedTopLevelUrl_ = null;
 
@@ -120,34 +196,40 @@ cr.define('cr.login', function() {
 
       /**
        * Scraped password stored in an id to password field value map.
-       * @type {Object<string, string>}
-       * @private
+       * @private {!Object<string, string>}
        */
       this.passwordStore_ = {};
 
       /**
        * Whether Saml API is initialized.
-       * @type {boolean}
+       * @private {boolean}
        */
       this.apiInitialized_ = false;
 
       /**
        * Saml API version to use.
-       * @type {number}
+       * @private {number}
        */
       this.apiVersion_ = 0;
 
       /**
-       * Saml API token received.
-       * @type {string}
+       * Saml API tokens received.
+       * @private {!Object}
        */
-      this.apiToken_ = null;
+      this.apiTokenStore_ = {};
 
       /**
-       * Saml API password bytes.
-       * @type {string}
+       * Saml API confirmation token. Set by last 'confirm' call.
+       * @private {?string}
        */
-      this.apiPasswordBytes_ = null;
+      this.confirmToken_ = null;
+
+      /**
+       * Saml API password bytes set by last 'add' call. Needed to not break
+       * existing behavior.
+       * @private {?string}
+       */
+      this.lastApiPasswordBytes_ = null;
 
       /**
        * Whether to abort the authentication flow and show an error message
@@ -158,15 +240,33 @@ cr.define('cr.login', function() {
 
       /**
        * Whether to attempt to extract password attributes from the SAMLResponse
-       * XML. See ../chromeos/login/saml_password_attributes.js
+       * XML. See saml_password_attributes.js
        * @type {boolean}
        */
       this.extractSamlPasswordAttributes = false;
 
       /**
+       * Current stage of device attestation flow.
+       * @private {!SamlHandler.DeviceAttestationStage}
+       */
+      this.deviceAttestationStage_ = SamlHandler.DeviceAttestationStage.NONE;
+
+      /**
+       * Challenge from IdP to perform device attestation.
+       * @private {?string}
+       */
+      this.verifiedAccessChallenge_ = null;
+
+      /**
+       * Response for a device attestation challenge.
+       * @private {?string}
+       */
+      this.verifiedAccessChallengeResponse_ = null;
+
+      /**
        * The password-attributes that were extracted from the SAMLResponse, if
        * any. (Doesn't contain the password itself).
-       * @type {PasswordAttributes}
+       * @private {!PasswordAttributes}
        */
       this.passwordAttributes_ =
           samlPasswordAttributes.PasswordAttributes.EMPTY;
@@ -197,6 +297,18 @@ cr.define('cr.login', function() {
             this.webview_, 'loadcommit', this.onLoadCommit_.bind(this));
 
         this.webviewEventManager_.addWebRequestEventListener(
+            this.webview_.request.onBeforeRequest,
+            this.onBeforeRequest_.bind(this),
+            {urls: ['<all_urls>'], types: ['main_frame', 'xmlhttprequest']},
+            ['blocking']);
+
+        this.webviewEventManager_.addWebRequestEventListener(
+            this.webview_.request.onBeforeSendHeaders,
+            this.onBeforeSendHeaders_.bind(this),
+            {urls: ['<all_urls>'], types: ['main_frame', 'xmlhttprequest']},
+            ['blocking', 'requestHeaders']);
+
+        this.webviewEventManager_.addWebRequestEventListener(
             this.webview_.request.onHeadersReceived,
             this.onHeadersReceived_.bind(this),
             {urls: ['<all_urls>'], types: ['main_frame', 'xmlhttprequest']},
@@ -219,15 +331,21 @@ cr.define('cr.login', function() {
      * @return {boolean}
      */
     get samlApiUsed() {
-      return !!this.apiPasswordBytes_;
+      return !!this.lastApiPasswordBytes_;
     }
 
     /**
      * Returns the Saml API password bytes.
-     * @return {string}
+     * @return {?string}
      */
     get apiPasswordBytes() {
-      return this.apiPasswordBytes_;
+      if (this.confirmToken_ != null &&
+          typeof (this.apiTokenStore_[this.confirmToken_]) == 'object' &&
+          typeof (this.apiTokenStore_[this.confirmToken_]['passwordBytes']) ==
+              'string') {
+        return this.apiTokenStore_[this.confirmToken_]['passwordBytes'];
+      }
+      return this.lastApiPasswordBytes_;
     }
 
     /**
@@ -248,12 +366,16 @@ cr.define('cr.login', function() {
     }
 
     /**
-     * Gets the list of passwords which were scpared exactly |times| times.
+     * Gets the list of passwords which have matching passwordProperty and
+     * are scraped exactly |times| times.
      * @return {Array<string>}
      */
-    getPasswordsScrapedTimes(times) {
+    getPasswordsWithPropertyScrapedTimes(times, passwordProperty) {
       const passwords = {};
       for (const property in this.passwordStore_) {
+        if (passwordProperty && !property.match(passwordProperty)) {
+          continue;
+        }
         const key = this.passwordStore_[property];
         passwords[key] = (passwords[key] + 1) || 1;
       }
@@ -275,7 +397,7 @@ cr.define('cr.login', function() {
 
     /**
      * Gets the password attributes extracted from SAML Response.
-     * @return {PasswordAttributes}
+     * @return {Object}
      */
     get passwordAttributes() {
       return this.passwordAttributes_;
@@ -308,10 +430,15 @@ cr.define('cr.login', function() {
       this.pendingIsSamlPage_ = this.startsOnSamlPage_;
       this.passwordStore_ = {};
 
+      this.deviceAttestationStage_ = SamlHandler.DeviceAttestationStage.NONE;
+      this.verifiedAccessChallenge_ = null;
+      this.verifiedAccessChallengeResponse_ = null;
+
       this.apiInitialized_ = false;
       this.apiVersion_ = 0;
-      this.apiToken_ = null;
-      this.apiPasswordBytes_ = null;
+      this.apiTokenStore_ = {};
+      this.confirmToken_ = null;
+      this.lastApiPasswordBytes_ = null;
       this.passwordAttributes_ =
           samlPasswordAttributes.PasswordAttributes.EMPTY;
     }
@@ -322,6 +449,16 @@ cr.define('cr.login', function() {
      */
     verifyConfirmedPassword(password) {
       return this.getConsolidatedScrapedPasswords_().indexOf(password) >= 0;
+    }
+
+    /**
+     * Check that last navigation was aborted intentionally. It will be
+     * continued later, so the abort event can be ignored.
+     * @return {boolean}
+     */
+    isIntentionalAbort() {
+      return this.deviceAttestationStage_ ==
+          SamlHandler.DeviceAttestationStage.ORIGINAL_REDIRECT_CANCELED;
     }
 
     /**
@@ -343,6 +480,10 @@ cr.define('cr.login', function() {
      * @private
      */
     onLoadAbort_(e) {
+      if (this.isIntentionalAbort()) {
+        return;
+      }
+
       if (e.isTopLevel) {
         this.abortedTopLevelUrl_ = e.url;
       }
@@ -389,18 +530,24 @@ cr.define('cr.login', function() {
      * Handler for webRequest.onBeforeRequest that looks for the Base64
      * encoded SAMLResponse in the POST-ed formdata sent from the SAML page.
      * Non-blocking.
-     * @param {Object} details The web-request details.
+     * @param {OnBeforeRequestDetails} details The web-request details.
      */
     onMainFrameWebRequest(details) {
-      if (!this.extractSamlPasswordAttributes) return;
-      if (!this.isSamlPage_ || details.method != 'POST') return;
+      if (!this.extractSamlPasswordAttributes) {
+        return;
+      }
+      if (!this.isSamlPage_ || details.method != 'POST') {
+        return;
+      }
 
       const formData = details.requestBody.formData;
       let samlResponse = (formData && formData.SAMLResponse);
       if (!samlResponse) {
         samlResponse = new URL(details.url).searchParams.get('SAMLResponse');
       }
-      if (!samlResponse) return;
+      if (!samlResponse) {
+        return;
+      }
 
       try {
         // atob means asciiToBinary, which actually means base64Decode:
@@ -412,6 +559,126 @@ cr.define('cr.login', function() {
 
       this.passwordAttributes_ =
           samlPasswordAttributes.readPasswordAttributes(samlResponse);
+    }
+
+    /**
+     * Receives a response for a device attestation challenge and navigates to
+     * saved redirect page.
+     * @param {string} url Url from canceled redirect.
+     * @param {{success: boolean, response: string}} challengeResponse Response
+     *     for device attestation challenge. If |success| is true, |response|
+     *     contains challenge response. Otherwise |response| contains empty
+     *     string.
+     * @private
+     */
+    continueDelayedRedirect_(url, challengeResponse) {
+      if (this.deviceAttestationStage_ !=
+          SamlHandler.DeviceAttestationStage.ORIGINAL_REDIRECT_CANCELED) {
+        console.error(
+            'SamlHandler.continueDelayedRedirect_: incorrect attestation stage');
+        return;
+      }
+
+      // Save response only if it is successful.
+      if (challengeResponse.success) {
+        this.verifiedAccessChallengeResponse_ = challengeResponse.response;
+      }
+
+      // Navigate to the saved destination from the canceled redirect.
+      this.deviceAttestationStage_ =
+          SamlHandler.DeviceAttestationStage.NAVIGATING_TO_REDIRECT_PAGE;
+      this.webview_.src = url;
+    }
+
+    /**
+     * Invoked before sending a web request. If a challenge for the remote
+     * attestation was found in a previous request, cancel the current one. It
+     * will be continued (reinitiated) later when a challenge response is ready.
+     * @param {Object} details The web-request details.
+     * @return {BlockingResponse} Allows the event handler to modify network
+     *     requests.
+     * @private
+     */
+    onBeforeRequest_(details) {
+      // Default case without Verified Access.
+      if (this.deviceAttestationStage_ ==
+          SamlHandler.DeviceAttestationStage.NONE) {
+        return {};
+      }
+
+      if (this.deviceAttestationStage_ ==
+          SamlHandler.DeviceAttestationStage.NAVIGATING_TO_REDIRECT_PAGE) {
+        return {};
+      }
+
+      if ((this.deviceAttestationStage_ ==
+           SamlHandler.DeviceAttestationStage.CHALLENGE_RECEIVED) &&
+          (this.verifiedAccessChallenge_ !== null)) {
+        // Ask backend to compute response for device attestation challenge.
+        this.dispatchEvent(new CustomEvent('challengeMachineKeyRequired', {
+          detail: {
+            url: details.url,
+            challenge: this.verifiedAccessChallenge_,
+            callback: this.continueDelayedRedirect_.bind(this, details.url)
+          }
+        }));
+
+        this.verifiedAccessChallenge_ = null;
+
+        // Cancel redirect by changing destination to javascript:void(0).
+        // That will produce 'loadabort' event that should be ignored.
+        this.deviceAttestationStage_ =
+            SamlHandler.DeviceAttestationStage.ORIGINAL_REDIRECT_CANCELED;
+        return {redirectUrl: 'javascript:void(0)'};
+      }
+
+      // Reset state in case of unexpected requests during device attestation.
+      this.deviceAttestationStage_ = SamlHandler.DeviceAttestationStage.NONE;
+      console.error(
+          'SamlHandler.onBeforeRequest_: incorrect attestation stage');
+      return {};
+    }
+
+    /**
+     * Attaches challenge response during device attestation flow.
+     * @param {Object} details The web-request details.
+     * @return {BlockingResponse} Allows the event handler to modify network
+     *     requests.
+     * @private
+     */
+    onBeforeSendHeaders_(details) {
+      // Default case without Verified Access.
+      if (this.deviceAttestationStage_ ==
+          SamlHandler.DeviceAttestationStage.NONE) {
+        return {};
+      }
+
+      if (this.deviceAttestationStage_ ==
+          SamlHandler.DeviceAttestationStage.NAVIGATING_TO_REDIRECT_PAGE) {
+        // Send extra header only if no error was encountered during challenge
+        // key procedure.
+        if (this.verifiedAccessChallengeResponse_ === null) {
+          this.deviceAttestationStage_ =
+              SamlHandler.DeviceAttestationStage.NONE;
+          return {};
+        }
+
+        details.requestHeaders.push({
+          'name': SAML_VERIFIED_ACCESS_RESPONSE_HEADER,
+          'value': this.verifiedAccessChallengeResponse_
+        });
+
+        this.verifiedAccessChallengeResponse_ = null;
+        this.deviceAttestationStage_ = SamlHandler.DeviceAttestationStage.NONE;
+
+        return {requestHeaders: details.requestHeaders};
+      }
+
+      // Reset state in case of unexpected navigation during device attestation.
+      this.deviceAttestationStage_ = SamlHandler.DeviceAttestationStage.NONE;
+      console.error(
+          'SamlHandler.onBeforeSendHeaders_: incorrect attestation stage');
+      return {};
     }
 
     /**
@@ -434,6 +701,18 @@ cr.define('cr.login', function() {
           } else if (action == 'end') {
             this.pendingIsSamlPage_ = false;
           }
+        }
+
+        // If true, IdP tries to perform a device attestation.
+        // 300 <= .. <= 399 means it is a redirect to a page that will verify
+        // device response. HTTP header with
+        // |SAML_VERIFIED_ACCESS_CHALLENGE_HEADER| name contains challenge from
+        // Verified Access Web API.
+        if ((details.statusCode >= 300) && (details.statusCode <= 399) &&
+            (headerName == SAML_VERIFIED_ACCESS_CHALLENGE_HEADER)) {
+          this.deviceAttestationStage_ =
+              SamlHandler.DeviceAttestationStage.CHALLENGE_RECEIVED;
+          this.verifiedAccessChallenge_ = header.value;
         }
       }
 
@@ -458,6 +737,8 @@ cr.define('cr.login', function() {
           'pageLoaded', this.onPageLoaded_.bind(this, channel));
       channel.registerMessage(
           'getSAMLFlag', this.onGetSAMLFlag_.bind(this, channel));
+      channel.registerMessage(
+          'scrollInfo', this.onScrollInfo_.bind(this, channel));
     }
 
     sendInitializationSuccess_(channel) {
@@ -479,7 +760,7 @@ cr.define('cr.login', function() {
     /**
      * Handlers for channel messages.
      * @param {Channel} channel A channel to send back response.
-     * @param {Object} msg Received message.
+     * @param {ApiCallMessage} msg Received message.
      * @private
      */
     onAPICall_(channel, msg) {
@@ -505,13 +786,15 @@ cr.define('cr.login', function() {
         }
         // Not setting |email_| and |gaiaId_| because this API call will
         // eventually be followed by onCompleteLogin_() which does set it.
-        this.apiToken_ = call.token;
-        this.apiPasswordBytes_ = call.passwordBytes;
+        this.apiTokenStore_[call.token] = call;
+        this.lastApiPasswordBytes_ = call.passwordBytes;
 
         this.dispatchEvent(new CustomEvent('apiPasswordAdded'));
       } else if (call.method == 'confirm') {
-        if (call.token != this.apiToken_) {
+        if (!(call.token in this.apiTokenStore_)) {
           console.error('SamlHandler.onAPICall_: token mismatch');
+        } else {
+          this.confirmToken_ = call.token;
         }
       } else {
         console.error('SamlHandler.onAPICall_: unknown message');
@@ -535,6 +818,22 @@ cr.define('cr.login', function() {
       }));
     }
 
+    onScrollInfo_(channel, msg) {
+      const scrollTop = msg.scrollTop;
+      const scrollHeight = msg.scrollHeight;
+      const clientHeight = this.webview_.clientHeight;
+
+      if (scrollTop === undefined || scrollHeight === undefined) {
+        return;
+      }
+
+      this.webview_.classList.toggle('can-scroll', clientHeight < scrollHeight);
+      this.webview_.classList.toggle('is-scrolled', scrollTop > 0);
+      const scrolledToBottom = (scrollTop > 0) /*is-scrolled*/ &&
+          (Math.ceil(scrollTop + clientHeight) >= scrollHeight);
+      this.webview_.classList.toggle('scrolled-to-bottom', scrolledToBottom);
+    }
+
     onPermissionRequest_(permissionEvent) {
       if (permissionEvent.permission === 'media') {
         // The actual permission check happens in
@@ -549,5 +848,6 @@ cr.define('cr.login', function() {
     }
   }
 
+  // #cr_define_end
   return {SamlHandler: SamlHandler};
 });

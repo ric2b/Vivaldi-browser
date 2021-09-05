@@ -13,7 +13,7 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/system/data_pipe_utils.h"
-#include "services/network/public/cpp/resource_response.h"
+#include "services/network/public/mojom/url_response_head.mojom.h"
 #include "services/network/test/test_url_loader_client.h"
 #include "services/network/test/test_url_loader_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -99,23 +99,22 @@ class MockDelegate : public blink::URLLoaderThrottle::Delegate {
   void PauseReadingBodyFromNet() override { NOTIMPLEMENTED(); }
   void ResumeReadingBodyFromNet() override { NOTIMPLEMENTED(); }
   void InterceptResponse(
-      network::mojom::URLLoaderPtr new_loader,
-      network::mojom::URLLoaderClientRequest new_client_request,
-      network::mojom::URLLoaderPtr* original_loader,
-      network::mojom::URLLoaderClientRequest* original_client_request)
-      override {
+      mojo::PendingRemote<network::mojom::URLLoader> new_loader,
+      mojo::PendingReceiver<network::mojom::URLLoaderClient>
+          new_client_receiver,
+      mojo::PendingRemote<network::mojom::URLLoader>* original_loader,
+      mojo::PendingReceiver<network::mojom::URLLoaderClient>*
+          original_client_receiver) override {
     is_intercepted_ = true;
 
-    destination_loader_ptr_ = std::move(new_loader);
-    ASSERT_TRUE(mojo::FuseInterface(
-        std::move(new_client_request),
-        destination_loader_client_.CreateInterfacePtr().PassInterface()));
+    destination_loader_remote_.Bind(std::move(new_loader));
+    ASSERT_TRUE(
+        mojo::FusePipes(std::move(new_client_receiver),
+                        mojo::PendingRemote<network::mojom::URLLoaderClient>(
+                            destination_loader_client_.CreateRemote())));
+    pending_receiver_ = original_loader->InitWithNewPipeAndPassReceiver();
 
-    mojo::PendingRemote<network::mojom::URLLoader> pending_remote;
-    pending_receiver_ = pending_remote.InitWithNewPipeAndPassReceiver();
-    original_loader->Bind(std::move(pending_remote));
-
-    *original_client_request =
+    *original_client_receiver =
         source_loader_client_remote_.BindNewPipeAndPassReceiver();
   }
 
@@ -178,7 +177,7 @@ class MockDelegate : public blink::URLLoaderThrottle::Delegate {
   network::mojom::URLResponseHeadPtr updated_response_head_;
 
   // A pair of a loader and a loader client for destination of the response.
-  network::mojom::URLLoaderPtr destination_loader_ptr_;
+  mojo::Remote<network::mojom::URLLoader> destination_loader_remote_;
   network::TestURLLoaderClient destination_loader_client_;
 
   // A pair of a receiver and a remote for source of the response.
@@ -202,10 +201,10 @@ TEST_F(MimeSniffingThrottleTest, NoMimeTypeWithSniffableScheme) {
   auto delegate = std::make_unique<MockDelegate>();
   throttle->set_delegate(delegate.get());
 
-  network::ResourceResponseHead response_head;
+  auto response_head = network::mojom::URLResponseHead::New();
   bool defer = false;
-  throttle->WillProcessResponse(GURL("https://example.com"), &response_head,
-                                &defer);
+  throttle->WillProcessResponse(GURL("https://example.com"),
+                                response_head.get(), &defer);
   EXPECT_TRUE(defer);
   EXPECT_TRUE(delegate->is_intercepted());
 }
@@ -216,11 +215,11 @@ TEST_F(MimeSniffingThrottleTest, SniffableMimeTypeWithSniffableScheme) {
   auto delegate = std::make_unique<MockDelegate>();
   throttle->set_delegate(delegate.get());
 
-  network::ResourceResponseHead response_head;
-  response_head.mime_type = "text/plain";
+  auto response_head = network::mojom::URLResponseHead::New();
+  response_head->mime_type = "text/plain";
   bool defer = false;
-  throttle->WillProcessResponse(GURL("https://example.com"), &response_head,
-                                &defer);
+  throttle->WillProcessResponse(GURL("https://example.com"),
+                                response_head.get(), &defer);
   EXPECT_TRUE(defer);
   EXPECT_TRUE(delegate->is_intercepted());
 }
@@ -231,11 +230,11 @@ TEST_F(MimeSniffingThrottleTest, NotSniffableMimeTypeWithSniffableScheme) {
   auto delegate = std::make_unique<MockDelegate>();
   throttle->set_delegate(delegate.get());
 
-  network::ResourceResponseHead response_head;
-  response_head.mime_type = "text/javascript";
+  auto response_head = network::mojom::URLResponseHead::New();
+  response_head->mime_type = "text/javascript";
   bool defer = false;
-  throttle->WillProcessResponse(GURL("https://example.com"), &response_head,
-                                &defer);
+  throttle->WillProcessResponse(GURL("https://example.com"),
+                                response_head.get(), &defer);
   EXPECT_FALSE(defer);
   EXPECT_FALSE(delegate->is_intercepted());
 }
@@ -246,9 +245,9 @@ TEST_F(MimeSniffingThrottleTest, NoMimeTypeWithNotSniffableScheme) {
   auto delegate = std::make_unique<MockDelegate>();
   throttle->set_delegate(delegate.get());
 
-  network::ResourceResponseHead response_head;
+  auto response_head = network::mojom::URLResponseHead::New();
   bool defer = false;
-  throttle->WillProcessResponse(GURL("wss://example.com"), &response_head,
+  throttle->WillProcessResponse(GURL("wss://example.com"), response_head.get(),
                                 &defer);
   EXPECT_FALSE(defer);
   EXPECT_FALSE(delegate->is_intercepted());
@@ -260,10 +259,10 @@ TEST_F(MimeSniffingThrottleTest, SniffableMimeTypeWithNotSniffableScheme) {
   auto delegate = std::make_unique<MockDelegate>();
   throttle->set_delegate(delegate.get());
 
-  network::ResourceResponseHead response_head;
-  response_head.mime_type = "text/plain";
+  auto response_head = network::mojom::URLResponseHead::New();
+  response_head->mime_type = "text/plain";
   bool defer = false;
-  throttle->WillProcessResponse(GURL("wss://example.com"), &response_head,
+  throttle->WillProcessResponse(GURL("wss://example.com"), response_head.get(),
                                 &defer);
   EXPECT_FALSE(defer);
   EXPECT_FALSE(delegate->is_intercepted());
@@ -275,10 +274,10 @@ TEST_F(MimeSniffingThrottleTest, NotSniffableMimeTypeWithNotSniffableScheme) {
   auto delegate = std::make_unique<MockDelegate>();
   throttle->set_delegate(delegate.get());
 
-  network::ResourceResponseHead response_head;
-  response_head.mime_type = "text/javascript";
+  auto response_head = network::mojom::URLResponseHead::New();
+  response_head->mime_type = "text/javascript";
   bool defer = false;
-  throttle->WillProcessResponse(GURL("wss://example.com"), &response_head,
+  throttle->WillProcessResponse(GURL("wss://example.com"), response_head.get(),
                                 &defer);
   EXPECT_FALSE(defer);
   EXPECT_FALSE(delegate->is_intercepted());
@@ -290,12 +289,12 @@ TEST_F(MimeSniffingThrottleTest, SniffableButAlreadySniffed) {
   auto delegate = std::make_unique<MockDelegate>();
   throttle->set_delegate(delegate.get());
 
-  network::ResourceResponseHead response_head;
-  response_head.mime_type = "text/plain";
-  response_head.did_mime_sniff = true;
+  auto response_head = network::mojom::URLResponseHead::New();
+  response_head->mime_type = "text/plain";
+  response_head->did_mime_sniff = true;
   bool defer = false;
-  throttle->WillProcessResponse(GURL("https://example.com"), &response_head,
-                                &defer);
+  throttle->WillProcessResponse(GURL("https://example.com"),
+                                response_head.get(), &defer);
   EXPECT_FALSE(defer);
   EXPECT_FALSE(delegate->is_intercepted());
 }
@@ -307,9 +306,9 @@ TEST_F(MimeSniffingThrottleTest, NoBody) {
   throttle->set_delegate(delegate.get());
 
   GURL response_url("https://example.com");
-  network::ResourceResponseHead response_head;
+  auto response_head = network::mojom::URLResponseHead::New();
   bool defer = false;
-  throttle->WillProcessResponse(response_url, &response_head, &defer);
+  throttle->WillProcessResponse(response_url, response_head.get(), &defer);
   EXPECT_TRUE(defer);
   EXPECT_TRUE(delegate->is_intercepted());
 
@@ -331,9 +330,9 @@ TEST_F(MimeSniffingThrottleTest, EmptyBody) {
   throttle->set_delegate(delegate.get());
 
   GURL response_url("https://example.com");
-  network::ResourceResponseHead response_head;
+  auto response_head = network::mojom::URLResponseHead::New();
   bool defer = false;
-  throttle->WillProcessResponse(response_url, &response_head, &defer);
+  throttle->WillProcessResponse(response_url, response_head.get(), &defer);
   EXPECT_TRUE(defer);
   EXPECT_TRUE(delegate->is_intercepted());
 
@@ -361,9 +360,9 @@ TEST_F(MimeSniffingThrottleTest, Body_PlainText) {
   throttle->set_delegate(delegate.get());
 
   GURL response_url("https://example.com");
-  network::ResourceResponseHead response_head;
+  auto response_head = network::mojom::URLResponseHead::New();
   bool defer = false;
-  throttle->WillProcessResponse(response_url, &response_head, &defer);
+  throttle->WillProcessResponse(response_url, response_head.get(), &defer);
   EXPECT_TRUE(defer);
   EXPECT_TRUE(delegate->is_intercepted());
 
@@ -385,9 +384,9 @@ TEST_F(MimeSniffingThrottleTest, Body_Docx) {
   throttle->set_delegate(delegate.get());
 
   GURL response_url("https://example.com/hogehoge.docx");
-  network::ResourceResponseHead response_head;
+  auto response_head = network::mojom::URLResponseHead::New();
   bool defer = false;
-  throttle->WillProcessResponse(response_url, &response_head, &defer);
+  throttle->WillProcessResponse(response_url, response_head.get(), &defer);
   EXPECT_TRUE(defer);
   EXPECT_TRUE(delegate->is_intercepted());
 
@@ -409,9 +408,9 @@ TEST_F(MimeSniffingThrottleTest, Body_PNG) {
   throttle->set_delegate(delegate.get());
 
   GURL response_url("https://example.com/hogehoge.docx");
-  network::ResourceResponseHead response_head;
+  auto response_head = network::mojom::URLResponseHead::New();
   bool defer = false;
-  throttle->WillProcessResponse(response_url, &response_head, &defer);
+  throttle->WillProcessResponse(response_url, response_head.get(), &defer);
   EXPECT_TRUE(defer);
   EXPECT_TRUE(delegate->is_intercepted());
 
@@ -433,9 +432,9 @@ TEST_F(MimeSniffingThrottleTest, Body_LongPlainText) {
   throttle->set_delegate(delegate.get());
 
   GURL response_url("https://example.com");
-  network::ResourceResponseHead response_head;
+  auto response_head = network::mojom::URLResponseHead::New();
   bool defer = false;
-  throttle->WillProcessResponse(response_url, &response_head, &defer);
+  throttle->WillProcessResponse(response_url, response_head.get(), &defer);
   EXPECT_TRUE(defer);
   EXPECT_TRUE(delegate->is_intercepted());
 
@@ -489,9 +488,9 @@ TEST_F(MimeSniffingThrottleTest, Abort_NoBodyPipe) {
   throttle->set_delegate(delegate.get());
 
   GURL response_url("https://example.com");
-  network::ResourceResponseHead response_head;
+  auto response_head = network::mojom::URLResponseHead::New();
   bool defer = false;
-  throttle->WillProcessResponse(response_url, &response_head, &defer);
+  throttle->WillProcessResponse(response_url, response_head.get(), &defer);
   EXPECT_TRUE(defer);
   EXPECT_TRUE(delegate->is_intercepted());
 

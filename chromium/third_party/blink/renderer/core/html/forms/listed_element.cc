@@ -45,12 +45,11 @@
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/page/validation_message_client.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/text/bidi_text_run.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 
 namespace blink {
-
-using namespace html_names;
 
 class FormAttributeTargetObserver : public IdTargetObserver {
  public:
@@ -89,7 +88,7 @@ ValidityState* ListedElement::validity() {
 }
 
 void ListedElement::DidMoveToNewDocument(Document& old_document) {
-  if (ToHTMLElement().FastHasAttribute(kFormAttr))
+  if (ToHTMLElement().FastHasAttribute(html_names::kFormAttr))
     SetFormAttributeTargetObserver(nullptr);
 }
 
@@ -107,7 +106,7 @@ void ListedElement::InsertedInto(ContainerNode& insertion_point) {
 
   HTMLElement& element = ToHTMLElement();
   if (insertion_point.isConnected()) {
-    if (element.FastHasAttribute(kFormAttr))
+    if (element.FastHasAttribute(html_names::kFormAttr))
       ResetFormAttributeTargetObserver();
   }
 
@@ -135,7 +134,8 @@ void ListedElement::RemovedFrom(ContainerNode& insertion_point) {
   UpdateWillValidateCache();
 
   HTMLElement& element = ToHTMLElement();
-  if (insertion_point.isConnected() && element.FastHasAttribute(kFormAttr)) {
+  if (insertion_point.isConnected() &&
+      element.FastHasAttribute(html_names::kFormAttr)) {
     SetFormAttributeTargetObserver(nullptr);
     ResetFormOwner();
   } else {
@@ -246,7 +246,7 @@ void ListedElement::FieldSetAncestorsSetNeedsValidityCheck(Node* node) {
 void ListedElement::ResetFormOwner() {
   form_was_set_by_parser_ = false;
   HTMLElement& element = ToHTMLElement();
-  const AtomicString& form_id(element.FastGetAttribute(kFormAttr));
+  const AtomicString& form_id(element.FastGetAttribute(html_names::kFormAttr));
   HTMLFormElement* nearest_form = element.FindFormAncestor();
   // 1. If the element's form owner is not null, and either the element is not
   // reassociateable or its form content attribute is not present, and the
@@ -315,8 +315,7 @@ void ListedElement::UpdateWillValidateCache() {
 }
 
 bool ListedElement::CustomError() const {
-  return ToHTMLElement().willValidate() &&
-         !custom_validation_message_.IsEmpty();
+  return !custom_validation_message_.IsEmpty();
 }
 
 bool ListedElement::HasBadInput() const {
@@ -372,7 +371,9 @@ void ListedElement::SetCustomValidationMessage(const String& message) {
 }
 
 String ListedElement::validationMessage() const {
-  return CustomError() ? custom_validation_message_ : String();
+  return ToHTMLElement().willValidate() && CustomError()
+             ? custom_validation_message_
+             : String();
 }
 
 String ListedElement::ValidationSubMessage() const {
@@ -494,7 +495,7 @@ bool ListedElement::reportValidity() {
   // Update layout now before calling IsFocusable(), which has
   // !LayoutObject()->NeedsLayout() assertion.
   HTMLElement& element = ToHTMLElement();
-  element.GetDocument().UpdateStyleAndLayout();
+  element.GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kForm);
   if (element.IsFocusable()) {
     ShowValidationMessage();
     return false;
@@ -504,8 +505,9 @@ bool ListedElement::reportValidity() {
         "An invalid form control with name='%name' is not focusable.");
     message.Replace("%name", GetName());
     element.GetDocument().AddConsoleMessage(
-        ConsoleMessage::Create(mojom::ConsoleMessageSource::kRendering,
-                               mojom::ConsoleMessageLevel::kError, message));
+        MakeGarbageCollected<ConsoleMessage>(
+            mojom::ConsoleMessageSource::kRendering,
+            mojom::ConsoleMessageLevel::kError, message));
   }
   return false;
 }
@@ -574,7 +576,7 @@ void ListedElement::UpdateAncestorDisabledState() const {
       last_legend_ancestor = ancestor;
       continue;
     }
-    if (!IsHTMLFieldSetElement(*ancestor))
+    if (!IsA<HTMLFieldSetElement>(*ancestor))
       continue;
     may_have_field_set_ancestor_ = true;
     if (ancestor->IsDisabledFormControl()) {
@@ -642,7 +644,7 @@ void ListedElement::SetFormAttributeTargetObserver(
 
 void ListedElement::ResetFormAttributeTargetObserver() {
   HTMLElement& element = ToHTMLElement();
-  const AtomicString& form_id(element.FastGetAttribute(kFormAttr));
+  const AtomicString& form_id(element.FastGetAttribute(html_names::kFormAttr));
   if (!form_id.IsNull() && element.isConnected()) {
     SetFormAttributeTargetObserver(
         MakeGarbageCollected<FormAttributeTargetObserver>(form_id, this));
@@ -676,7 +678,7 @@ ListedElement* ListedElement::From(Element& element) {
     return form_control_element;
   if (html_element->IsFormAssociatedCustomElement())
     return &element.EnsureElementInternals();
-  if (auto* object = ToHTMLObjectElementOrNull(html_element))
+  if (auto* object = DynamicTo<HTMLObjectElement>(html_element))
     return object;
   return nullptr;
 }

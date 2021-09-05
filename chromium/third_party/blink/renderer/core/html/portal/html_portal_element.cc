@@ -5,13 +5,15 @@
 #include "third_party/blink/renderer/core/html/portal/html_portal_element.h"
 
 #include <utility>
-#include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/blink/public/mojom/referrer.mojom-blink.h"
+#include "third_party/blink/public/mojom/web_feature/web_feature.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_event_listener.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/core/v8/serialization/post_message_helper.h"
 #include "third_party/blink/renderer/bindings/core/v8/serialization/serialized_script_value.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_portal_activate_options.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_window_post_message_options.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/dom/node.h"
@@ -21,11 +23,10 @@
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/frame/remote_frame.h"
-#include "third_party/blink/renderer/core/frame/window_post_message_options.h"
+#include "third_party/blink/renderer/core/html/html_document.h"
 #include "third_party/blink/renderer/core/html/html_unknown_element.h"
 #include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
 #include "third_party/blink/renderer/core/html/portal/document_portals.h"
-#include "third_party/blink/renderer/core/html/portal/portal_activate_options.h"
 #include "third_party/blink/renderer/core/html/portal/portal_contents.h"
 #include "third_party/blink/renderer/core/html/portal/portal_post_message_helper.h"
 #include "third_party/blink/renderer/core/html_names.h"
@@ -38,6 +39,7 @@
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
+#include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/weborigin/referrer.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
@@ -62,6 +64,8 @@ HTMLPortalElement::HTMLPortalElement(
         *this, portal_token, std::move(remote_portal),
         std::move(portal_client_receiver));
   }
+
+  UseCounter::Count(document, WebFeature::kHTMLPortalElement);
 }
 
 HTMLPortalElement::~HTMLPortalElement() {}
@@ -72,8 +76,10 @@ void HTMLPortalElement::Trace(Visitor* visitor) {
 }
 
 void HTMLPortalElement::ConsumePortal() {
-  if (PortalContents* portal = std::exchange(portal_, nullptr))
-    portal->Destroy();
+  if (portal_)
+    portal_->Destroy();
+
+  DCHECK(!portal_);
 }
 
 void HTMLPortalElement::ExpireAdoptionLifetime() {
@@ -86,11 +92,44 @@ void HTMLPortalElement::ExpireAdoptionLifetime() {
     ConsumePortal();
 }
 
+void HTMLPortalElement::PortalContentsWillBeDestroyed(PortalContents* portal) {
+  DCHECK_EQ(portal_, portal);
+  portal_ = nullptr;
+}
+
+bool HTMLPortalElement::CheckPortalsEnabledOrWarn() const {
+  Document& document = GetDocument();
+  if (RuntimeEnabledFeatures::PortalsEnabled(&document))
+    return true;
+
+  // TODO(jbroman): Consider linking to origin trial info if applicable.
+  document.AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
+      mojom::blink::ConsoleMessageSource::kRendering,
+      mojom::blink::ConsoleMessageLevel::kWarning,
+      "An operation was prevented because a <portal> was moved to a document "
+      "where it is not enabled."));
+  return false;
+}
+
+bool HTMLPortalElement::CheckPortalsEnabledOrThrow(
+    ExceptionState& exception_state) const {
+  Document& document = GetDocument();
+  if (RuntimeEnabledFeatures::PortalsEnabled(&document))
+    return true;
+
+  // TODO(jbroman): Consider linking to origin trial info if applicable.
+  exception_state.ThrowDOMException(
+      DOMExceptionCode::kNotSupportedError,
+      "An operation was prevented because a <portal> was moved to a document "
+      "where it is not enabled.");
+  return false;
+}
+
 // https://wicg.github.io/portals/#htmlportalelement-may-have-a-guest-browsing-context
 HTMLPortalElement::GuestContentsEligibility
 HTMLPortalElement::GetGuestContentsEligibility() const {
   // Non-HTML documents aren't eligible at all.
-  if (!GetDocument().IsHTMLDocument())
+  if (!IsA<HTMLDocument>(GetDocument()))
     return GuestContentsEligibility::kIneligible;
 
   LocalFrame* frame = GetDocument().GetFrame();
@@ -102,10 +141,16 @@ HTMLPortalElement::GetGuestContentsEligibility() const {
   if (!is_top_level)
     return GuestContentsEligibility::kNotTopLevel;
 
+  if (!GetDocument().Url().ProtocolIsInHTTPFamily())
+    return GuestContentsEligibility::kNotHTTPFamily;
+
   return GuestContentsEligibility::kEligible;
 }
 
 void HTMLPortalElement::Navigate() {
+  if (!CheckPortalsEnabledOrWarn())
+    return;
+
   if (portal_) {
     portal_->Navigate(GetNonEmptyURLAttribute(html_names::kSrcAttr),
                       ReferrerPolicyAttribute());
@@ -147,6 +192,8 @@ BlinkTransferableMessage ActivateDataAsMessage(
   if (exception_state.HadException())
     return {};
 
+  msg.sender_origin = execution_context->GetSecurityOrigin()->IsolatedCopy();
+
   // msg.user_activation is left out; we will probably handle user activation
   // explicitly for activate data.
   // TODO(crbug.com/936184): Answer this for good.
@@ -170,6 +217,8 @@ BlinkTransferableMessage ActivateDataAsMessage(
 ScriptPromise HTMLPortalElement::activate(ScriptState* script_state,
                                           PortalActivateOptions* options,
                                           ExceptionState& exception_state) {
+  if (!CheckPortalsEnabledOrThrow(exception_state))
+    return ScriptPromise();
   if (!portal_) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kInvalidStateError,
@@ -215,6 +264,9 @@ void HTMLPortalElement::postMessage(ScriptState* script_state,
                                     const ScriptValue& message,
                                     const WindowPostMessageOptions* options,
                                     ExceptionState& exception_state) {
+  if (!CheckPortalsEnabledOrThrow(exception_state))
+    return;
+
   if (!portal_) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kInvalidStateError,
@@ -258,24 +310,44 @@ const base::UnguessableToken& HTMLPortalElement::GetToken() const {
   return portal_->GetToken();
 }
 
-HTMLPortalElement::InsertionNotificationRequest HTMLPortalElement::InsertedInto(
+Node::InsertionNotificationRequest HTMLPortalElement::InsertedInto(
     ContainerNode& node) {
   auto result = HTMLFrameOwnerElement::InsertedInto(node);
+
+  if (!CheckPortalsEnabledOrWarn())
+    return result;
+
+  if (!SubframeLoadingDisabler::CanLoadFrame(*this))
+    return result;
 
   switch (GetGuestContentsEligibility()) {
     case GuestContentsEligibility::kIneligible:
       return result;
 
     case GuestContentsEligibility::kNotTopLevel:
-      GetDocument().AddConsoleMessage(ConsoleMessage::Create(
+      GetDocument().AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
           mojom::ConsoleMessageSource::kRendering,
           mojom::ConsoleMessageLevel::kWarning,
           "Cannot use <portal> in a nested browsing context."));
       return result;
 
+    case GuestContentsEligibility::kNotHTTPFamily:
+      GetDocument().AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
+          mojom::ConsoleMessageSource::kRendering,
+          mojom::ConsoleMessageLevel::kWarning,
+          "<portal> use is restricted to the HTTP family."));
+      return result;
+
     case GuestContentsEligibility::kEligible:
       break;
   };
+
+  // When adopting a predecessor, it is possible to insert a portal that's
+  // eligible to have a guest contents to a node that's not connected. In this
+  // case, do not create the portal frame yet.
+  if (!node.isConnected()) {
+    return result;
+  }
 
   if (portal_) {
     // The interface is already bound if the HTMLPortalElement is adopting the
@@ -309,6 +381,12 @@ void HTMLPortalElement::RemovedFrom(ContainerNode& node) {
   DCHECK(!portal_) << "This element should have previously dissociated in "
                       "DisconnectContentFrame";
   HTMLFrameOwnerElement::RemovedFrom(node);
+}
+
+void HTMLPortalElement::DefaultEventHandler(Event& event) {
+  if (HandleKeyboardActivation(event))
+    return;
+  HTMLFrameOwnerElement::DefaultEventHandler(event);
 }
 
 bool HTMLPortalElement::IsURLAttribute(const Attribute& attribute) const {
@@ -355,6 +433,10 @@ void HTMLPortalElement::ParseAttribute(
 LayoutObject* HTMLPortalElement::CreateLayoutObject(const ComputedStyle& style,
                                                     LegacyLayout) {
   return new LayoutIFrame(this);
+}
+
+bool HTMLPortalElement::SupportsFocus() const {
+  return true;
 }
 
 void HTMLPortalElement::DisconnectContentFrame() {

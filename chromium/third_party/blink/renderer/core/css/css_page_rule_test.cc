@@ -6,16 +6,14 @@
 
 #include "third_party/blink/renderer/core/css/css_rule_list.h"
 #include "third_party/blink/renderer/core/css/css_test_helpers.h"
-#include "third_party/blink/renderer/core/dom/document.h"
+#include "third_party/blink/renderer/core/testing/null_execution_context.h"
 
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace blink {
 
-using namespace css_test_helpers;
-
 TEST(CSSPageRule, Serializing) {
-  TestStyleSheet sheet;
+  css_test_helpers::TestStyleSheet sheet;
 
   const char* css_rule = "@page :left { size: auto; }";
   sheet.AddCSSRules(css_rule);
@@ -29,7 +27,7 @@ TEST(CSSPageRule, Serializing) {
 }
 
 TEST(CSSPageRule, selectorText) {
-  TestStyleSheet sheet;
+  css_test_helpers::TestStyleSheet sheet;
 
   const char* css_rule = "@page :left { size: auto; }";
   sheet.AddCSSRules(css_rule);
@@ -38,21 +36,22 @@ TEST(CSSPageRule, selectorText) {
 
   auto* page_rule = To<CSSPageRule>(sheet.CssRules()->item(0));
   EXPECT_EQ(":left", page_rule->selectorText());
+  auto* context = MakeGarbageCollected<NullExecutionContext>();
 
   // set invalid page selector.
-  page_rule->setSelectorText(&sheet.GetDocument(), ":hover");
+  page_rule->setSelectorText(context, ":hover");
   EXPECT_EQ(":left", page_rule->selectorText());
 
   // set invalid page selector.
-  page_rule->setSelectorText(&sheet.GetDocument(), "right { bla");
+  page_rule->setSelectorText(context, "right { bla");
   EXPECT_EQ(":left", page_rule->selectorText());
 
   // set page pseudo class selector.
-  page_rule->setSelectorText(&sheet.GetDocument(), ":right");
+  page_rule->setSelectorText(context, ":right");
   EXPECT_EQ(":right", page_rule->selectorText());
 
   // set page type selector.
-  page_rule->setSelectorText(&sheet.GetDocument(), "namedpage");
+  page_rule->setSelectorText(context, "namedpage");
   EXPECT_EQ("namedpage", page_rule->selectorText());
 }
 

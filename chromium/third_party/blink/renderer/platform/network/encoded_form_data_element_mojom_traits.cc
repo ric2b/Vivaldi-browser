@@ -17,7 +17,7 @@
 #include "services/network/public/mojom/data_pipe_getter.mojom-blink.h"
 #include "third_party/blink/public/mojom/blob/blob.mojom-blink.h"
 #include "third_party/blink/public/mojom/blob/blob_registry.mojom-blink.h"
-#include "third_party/blink/public/platform/interface_provider.h"
+#include "third_party/blink/public/platform/file_path_conversion.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/platform/network/wrapped_data_pipe_getter.h"
 
@@ -100,7 +100,7 @@ base::Time StructTraits<blink::mojom::FetchAPIDataElementDataView,
                         blink::FormDataElement>::
     expected_modification_time(const blink::FormDataElement& data) {
   if (data.type_ == blink::FormDataElement::kEncodedFile)
-    return base::Time::FromDoubleT(data.expected_file_modification_time_);
+    return data.expected_file_modification_time_.value_or(base::Time());
   return base::Time();
 }
 
@@ -136,9 +136,11 @@ bool StructTraits<blink::mojom::FetchAPIDataElementDataView,
           !data.ReadExpectedModificationTime(&expected_time)) {
         return false;
       }
-      out->expected_file_modification_time_ = expected_time.ToDoubleT();
-      out->filename_ =
-          WTF::String(file_path.value().data(), file_path.value().size());
+      if (expected_time.is_null())
+        out->expected_file_modification_time_ = base::nullopt;
+      else
+        out->expected_file_modification_time_ = expected_time;
+      out->filename_ = blink::FilePathToString(file_path);
       break;
     }
     case network::mojom::DataElementType::kDataPipe: {

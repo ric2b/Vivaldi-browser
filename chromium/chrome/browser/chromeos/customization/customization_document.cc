@@ -24,6 +24,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
@@ -39,6 +40,7 @@
 #include "chrome/browser/ui/app_list/app_list_syncable_service_factory.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/pref_names.h"
+#include "chromeos/constants/chromeos_paths.h"
 #include "chromeos/system/statistics_provider.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -72,10 +74,6 @@ const char kDefaultAppsFolderName[] = "default_apps_folder_name";
 const char kIdAttr[] = "id";
 
 const char kAcceptedManifestVersion[] = "1.0";
-
-// Path to OEM partner startup customization manifest.
-const char kStartupCustomizationManifestPath[] =
-    "/opt/oem/etc/startup_manifest.json";
 
 // This is subdirectory relative to PathService(DIR_CHROMEOS_CUSTOM_WALLPAPERS),
 // where downloaded (and resized) wallpaper is stored.
@@ -287,7 +285,10 @@ StartupCustomizationDocument::StartupCustomizationDocument()
     // Loading manifest causes us to do blocking IO on UI thread.
     // Temporarily allow it until we fix http://crosbug.com/11103
     base::ThreadRestrictions::ScopedAllowIO allow_io;
-    LoadManifestFromFile(base::FilePath(kStartupCustomizationManifestPath));
+    base::FilePath startup_customization_manifest;
+    base::PathService::Get(chromeos::FILE_STARTUP_CUSTOMIZATION_MANIFEST,
+                           &startup_customization_manifest);
+    LoadManifestFromFile(startup_customization_manifest);
   }
   Init(system::StatisticsProvider::GetInstance());
 }
@@ -550,10 +551,8 @@ void ServicesCustomizationDocument::StartFetching() {
   if (url_.is_valid()) {
     load_started_ = true;
     if (url_.SchemeIsFile()) {
-      base::PostTaskAndReplyWithResult(
-          FROM_HERE,
-          {base::ThreadPool(), base::TaskPriority::BEST_EFFORT,
-           base::MayBlock()},
+      base::ThreadPool::PostTaskAndReplyWithResult(
+          FROM_HERE, {base::TaskPriority::BEST_EFFORT, base::MayBlock()},
           base::BindOnce(&ReadFileInBackground, base::FilePath(url_.path())),
           base::BindOnce(&ServicesCustomizationDocument::OnManifestRead,
                          weak_ptr_factory_.GetWeakPtr()));
@@ -874,11 +873,9 @@ void ServicesCustomizationDocument::CheckAndApplyWallpaper() {
       base::Unretained(exists.get()));
   base::OnceClosure on_checked_closure = base::BindOnce(
       &ServicesCustomizationDocument::OnCheckedWallpaperCacheExists,
-      weak_ptr_factory_.GetWeakPtr(), base::Passed(std::move(exists)),
-      std::move(applying));
-  base::PostTaskAndReply(
-      FROM_HERE,
-      {base::ThreadPool(), base::MayBlock(), base::TaskPriority::BEST_EFFORT},
+      weak_ptr_factory_.GetWeakPtr(), std::move(exists), std::move(applying));
+  base::ThreadPool::PostTaskAndReply(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       std::move(check_file_exists), std::move(on_checked_closure));
 }
 

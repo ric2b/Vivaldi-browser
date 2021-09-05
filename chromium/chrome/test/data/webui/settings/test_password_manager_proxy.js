@@ -4,28 +4,48 @@
 
 /** @fileoverview Test implementation of PasswordManagerProxy. */
 
+// clang-format off
+// #import {TestBrowserProxy} from 'chrome://test/test_browser_proxy.m.js';
+// #import {makePasswordCheckStatus, PasswordManagerExpectations} from 'chrome://test/settings/passwords_and_autofill_fake_data.m.js';
+// clang-format on
+
 /**
  * Test implementation
  * @implements {PasswordManagerProxy}
  * @constructor
  */
-class TestPasswordManagerProxy extends TestBrowserProxy {
+/* #export */ class TestPasswordManagerProxy extends TestBrowserProxy {
   constructor() {
-    super(['getPlaintextPassword']);
+    super([
+      'requestPlaintextPassword',
+      'startBulkPasswordCheck',
+      'stopBulkPasswordCheck',
+      'getCompromisedCredentials',
+      'getPasswordCheckStatus',
+      'getPlaintextCompromisedPassword',
+      'changeCompromisedCredential',
+      'removeCompromisedCredential',
+      'recordPasswordCheckInteraction',
+      'recordPasswordCheckReferrer',
+    ]);
 
-    this.actual_ = new PasswordManagerExpectations();
+    this.actual_ = new autofill_test_util.PasswordManagerExpectations();
 
     // Set these to have non-empty data.
     this.data = {
       passwords: [],
       exceptions: [],
+      leakedCredentials: [],
+      checkStatus: autofill_test_util.makePasswordCheckStatus(),
     };
 
     // Holds the last callbacks so they can be called when needed/
     this.lastCallback = {
+      addPasswordCheckStatusListener: null,
       addSavedPasswordListChangedListener: null,
       addExceptionListChangedListener: null,
-      getPlaintextPassword: null,
+      requestPlaintextPassword: null,
+      addCompromisedCredentialsListener: null,
     };
 
     this.plaintextPassword_ = '';
@@ -87,13 +107,30 @@ class TestPasswordManagerProxy extends TestBrowserProxy {
   }
 
   /** @override */
-  getPlaintextPassword(id) {
-    this.methodCalled('getPlaintextPassword', id);
+  requestPlaintextPassword(id, reason) {
+    this.methodCalled('requestPlaintextPassword', {id, reason});
     return Promise.resolve(this.plaintextPassword_);
   }
 
   setPlaintextPassword(plaintextPassword) {
     this.plaintextPassword_ = plaintextPassword;
+  }
+
+  /** @override */
+  addAccountStorageOptInStateListener(listener) {
+    this.actual_.listening.accountStorageOptInState++;
+    this.lastCallback.addAccountStorageOptInStateListener = listener;
+  }
+
+  /** @override */
+  removeAccountStorageOptInStateListener(listener) {
+    this.actual_.listening.accountStorageOptInState--;
+  }
+
+  /** @override */
+  isOptedInForAccountStorage() {
+    this.actual_.requested.accountStorageOptInState++;
+    return Promise.resolve(false);
   }
 
   /**
@@ -108,11 +145,88 @@ class TestPasswordManagerProxy extends TestBrowserProxy {
     assertEquals(
         expected.requested.plaintextPassword,
         actual.requested.plaintextPassword);
+    assertEquals(
+        expected.requested.accountStorageOptInState,
+        actual.requested.accountStorageOptInState);
 
     assertEquals(expected.removed.passwords, actual.removed.passwords);
     assertEquals(expected.removed.exceptions, actual.removed.exceptions);
 
     assertEquals(expected.listening.passwords, actual.listening.passwords);
     assertEquals(expected.listening.exceptions, actual.listening.exceptions);
+    assertEquals(
+        expected.listening.accountStorageOptInState,
+        actual.listening.accountStorageOptInState);
+  }
+
+  /** @override */
+  startBulkPasswordCheck() {
+    this.methodCalled('startBulkPasswordCheck');
+  }
+
+  /** @override */
+  stopBulkPasswordCheck() {
+    this.methodCalled('stopBulkPasswordCheck');
+  }
+
+  /** @override */
+  getCompromisedCredentials() {
+    this.methodCalled('getCompromisedCredentials');
+    return Promise.resolve(this.data.leakedCredentials);
+  }
+
+  /** @override */
+  getPasswordCheckStatus() {
+    this.methodCalled('getPasswordCheckStatus');
+    return Promise.resolve(this.data.checkStatus);
+  }
+
+  /** @override */
+  addCompromisedCredentialsListener(listener) {
+    this.lastCallback.addCompromisedCredentialsListener = listener;
+  }
+
+  /** @override */
+  removeCompromisedCredentialsListener(listener) {}
+
+  /** @override */
+  addPasswordCheckStatusListener(listener) {
+    this.lastCallback.addPasswordCheckStatusListener = listener;
+  }
+
+  /** @override */
+  removePasswordCheckStatusListener(listener) {}
+
+  /** @override */
+  getPlaintextCompromisedPassword(credential, reason) {
+    this.methodCalled('getPlaintextCompromisedPassword', {credential, reason});
+    if (!this.plaintextPassword_) {
+      return Promise.reject('Could not obtain plaintext password');
+    }
+
+    const newCredential = Object.assign({}, credential);
+    newCredential.password = this.plaintextPassword_;
+    return Promise.resolve(newCredential);
+  }
+
+  /** @override */
+  changeCompromisedCredential(credential, newPassword) {
+    this.methodCalled('changeCompromisedCredential', {credential, newPassword});
+    return Promise.resolve();
+  }
+
+  /** @override */
+  removeCompromisedCredential(compromisedCredential) {
+    this.methodCalled('removeCompromisedCredential', compromisedCredential);
+  }
+
+  /** override */
+  recordPasswordCheckInteraction(interaction) {
+    this.methodCalled('recordPasswordCheckInteraction', interaction);
+  }
+
+  /** override */
+  recordPasswordCheckReferrer(referrer) {
+    this.methodCalled('recordPasswordCheckReferrer', referrer);
   }
 }

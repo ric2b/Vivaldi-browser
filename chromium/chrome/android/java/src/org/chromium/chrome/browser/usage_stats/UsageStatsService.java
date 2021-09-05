@@ -6,13 +6,14 @@ package org.chromium.chrome.browser.usage_stats;
 
 import android.app.Activity;
 
+import androidx.annotation.VisibleForTesting;
+
 import org.chromium.base.BuildInfo;
 import org.chromium.base.Log;
 import org.chromium.base.Promise;
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.browser.AppHooks;
-import org.chromium.chrome.browser.ChromeFeatureList;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -61,7 +62,7 @@ public class UsageStatsService {
 
     @VisibleForTesting
     UsageStatsService() {
-        Profile profile = Profile.getLastUsedProfile().getOriginalProfile();
+        Profile profile = Profile.getLastUsedRegularProfile();
         mBridge = new UsageStatsBridge(profile, this);
         mEventTracker = new EventTracker(mBridge);
         mNotificationSuspender = new NotificationSuspender(profile);

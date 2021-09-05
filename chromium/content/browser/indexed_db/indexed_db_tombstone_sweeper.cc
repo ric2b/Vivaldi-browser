@@ -12,6 +12,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/tick_clock.h"
+#include "components/services/storage/indexed_db/scopes/varint_coding.h"
 #include "content/browser/indexed_db/indexed_db_backing_store.h"
 #include "third_party/blink/public/common/indexeddb/indexeddb_key.h"
 #include "third_party/blink/public/common/indexeddb/indexeddb_metadata.h"
@@ -71,9 +72,9 @@ const typename T::value_type& WrappingIterator<T>::Value() const {
 IndexedDBTombstoneSweeper::IndexedDBTombstoneSweeper(int round_iterations,
                                                      int max_iterations,
                                                      leveldb::DB* database)
-    : max_round_iterations_(round_iterations),
-      max_iterations_(max_iterations),
-      database_(database) {
+    : IndexedDBPreCloseTaskQueue::PreCloseTask(database),
+      max_round_iterations_(round_iterations),
+      max_iterations_(max_iterations) {
   sweep_state_.start_database_seed = static_cast<size_t>(base::RandUint64());
   sweep_state_.start_object_store_seed =
       static_cast<size_t>(base::RandUint64());
@@ -82,8 +83,12 @@ IndexedDBTombstoneSweeper::IndexedDBTombstoneSweeper(int round_iterations,
 
 IndexedDBTombstoneSweeper::~IndexedDBTombstoneSweeper() {}
 
+bool IndexedDBTombstoneSweeper::RequiresMetadata() const {
+  return true;
+}
+
 void IndexedDBTombstoneSweeper::SetMetadata(
-    std::vector<IndexedDBDatabaseMetadata> const* metadata) {
+    const std::vector<IndexedDBDatabaseMetadata>* metadata) {
   database_metadata_ = metadata;
   total_indices_ = 0;
   for (const auto& db : *metadata) {
@@ -235,7 +240,7 @@ leveldb::Status IndexedDBTombstoneSweeper::FlushDeletions() {
   base::TimeTicks start = base::TimeTicks::Now();
 
   leveldb::Status status =
-      database_->Write(leveldb::WriteOptions(), &round_deletion_batch_);
+      database()->Write(leveldb::WriteOptions(), &round_deletion_batch_);
   round_deletion_batch_.Clear();
   has_writes_ = false;
 
@@ -290,7 +295,7 @@ IndexedDBTombstoneSweeper::Status IndexedDBTombstoneSweeper::DoSweep(
     leveldb::ReadOptions iterator_options;
     iterator_options.fill_cache = false;
     iterator_options.verify_checksums = true;
-    iterator_.reset(database_->NewIterator(iterator_options));
+    iterator_.reset(database()->NewIterator(iterator_options));
   }
 
   if (!sweep_state_.database_it) {
@@ -411,7 +416,7 @@ bool IndexedDBTombstoneSweeper::IterateIndex(
 
     std::string exists_value;
     leveldb::Status s =
-        database_->Get(leveldb::ReadOptions(), exists_key, &exists_value);
+        database()->Get(leveldb::ReadOptions(), exists_key, &exists_value);
     if (!s.ok()) {
       ++metrics_.num_errors_reading_exists_table;
       iterator_->Next();

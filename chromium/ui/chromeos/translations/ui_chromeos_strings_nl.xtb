@@ -29,6 +29,7 @@
 <translation id="1243314992276662751">Uploaden</translation>
 <translation id="1249250836236328755">Genre</translation>
 <translation id="1278813325885878377">Hongaars QWERTY-toetsenbord</translation>
+<translation id="1293556467332435079">Bestanden</translation>
 <translation id="1297922636971898492">Google Drive is momenteel niet beschikbaar. Het uploaden wordt automatisch gestart zodra Google Drive weer beschikbaar is.</translation>
 <translation id="1307931752636661898">Kan Linux-bestanden niet weergeven</translation>
 <translation id="1310751437842832374">Transliteratie (mausam → ନମସ୍ତେ)</translation>
@@ -80,6 +81,7 @@
 <translation id="1847880352285315359">Opgeslagen</translation>
 <translation id="1864756863218646478">Het bestand kan niet worden gevonden.</translation>
 <translation id="1921986354447415460">Turks-F-toetsenbord</translation>
+<translation id="1924372192547904021"><ph name="DRIVE_NAME" /> is geformatteerd</translation>
 <translation id="1931134289871235022">Slowaaks</translation>
 <translation id="1933345018156373194">Verplaatsen mislukt. Onverwachte fout: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="1936717151811561466">Fins</translation>
@@ -163,6 +165,7 @@
 <translation id="2942290791863759244">Duits NEO 2-toetsenbord</translation>
 <translation id="2943400156390503548">Presentaties</translation>
 <translation id="2943503720238418293">Gebruik een kortere naam</translation>
+<translation id="2949781154072577687"><ph name="DRIVE_NAME" /> formatteren…</translation>
 <translation id="2951236788251446349">Kwal</translation>
 <translation id="2963783323012015985">Turks toetsenbord</translation>
 <translation id="2966459079597787514">Zweeds toetsenbord</translation>
@@ -275,6 +278,7 @@
 <translation id="4336032328163998280">Kopiëren mislukt. <ph name="ERROR_MESSAGE" /></translation>
 <translation id="4364327530094270451">Meloen</translation>
 <translation id="4372884569765913867">1x1</translation>
+<translation id="4394214039309501350">Externe link</translation>
 <translation id="4425149324548788773">Mijn Drive</translation>
 <translation id="4465830120256509958">Braziliaans toetsenbord</translation>
 <translation id="4470564870223067757">Hangul 2 Set</translation>
@@ -506,6 +510,7 @@
 <translation id="6878261347041253038">Devanagari toetsenbord (fonetisch)</translation>
 <translation id="6885780034956018177">Slak</translation>
 <translation id="6896758677409633944">Kopieer</translation>
+<translation id="6898028766943174120">Meer submappen…</translation>
 <translation id="691516599546977041">Kan niet opslaan in <ph name="FOLDER_NAME" />. Bewerkte afbeeldingen worden opgeslagen in de map Downloads.</translation>
 <translation id="6915678159055240887">Chromebox</translation>
 <translation id="6918340160281024199">Amerikaans Workman</translation>
@@ -518,6 +523,7 @@
 <translation id="696203921837389374">Synchroniseren via mobiele data inschakelen</translation>
 <translation id="6965382102122355670">OK</translation>
 <translation id="6970230597523682626">Bulgaars</translation>
+<translation id="6973630695168034713">Mappen</translation>
 <translation id="6978611942794658017">Dit bestand is bedoeld voor een pc met Windows-software. Dit is niet compatibel met je apparaat dat Chrome OS gebruikt. Zoek in de Chrome Web Store naar een geschikte vervangende app.</translation>
 <translation id="6979158407327259162">Google Drive</translation>
 <translation id="6990081529015358884">Er is onvoldoende ruimte beschikbaar</translation>
@@ -565,9 +571,11 @@
 <translation id="7589661784326793847">Een ogenblik geduld</translation>
 <translation id="7603724359189955920">Rasters</translation>
 <translation id="7627790789328695202"><ph name="FILE_NAME" /> bestaat al. Geef een nieuwe naam op en probeer het opnieuw.</translation>
+<translation id="7628656427739290098"><ph name="PERCENT" />% voltooid.</translation>
 <translation id="7649070708921625228">Hulp</translation>
 <translation id="7654209398114106148"><ph name="NUMBER_OF_ITEMS" /> items verplaatsen...</translation>
 <translation id="7658239707568436148">Annuleren</translation>
+<translation id="7695430100978772476">Formatteren van <ph name="DRIVE_NAME" /> is mislukt</translation>
 <translation id="770015031906360009">Grieks</translation>
 <translation id="7706319470528945664">Portugees toetsenbord</translation>
 <translation id="7711920809702896782">Afbeeldingsgegevens</translation>
@@ -710,7 +718,7 @@
 <translation id="939736085109172342">Nieuwe map</translation>
 <translation id="942954117721265519">Geen afbeeldingen in deze directory.</translation>
 <translation id="943972244133411984">Aangepast door</translation>
-<translation id="945522503751344254">Feedback verzenden</translation>
+<translation id="945522503751344254">Feedback sturen</translation>
 <translation id="947144732524271678">Een bereik van <ph name="ENTRY_COUNT" /> items van <ph name="FROM_ENTRY_NAME" /> tot <ph name="TO_ENTRY_NAME" /> is geselecteerd.</translation>
 <translation id="981121421437150478">Offline</translation>
 <translation id="988685240266037636">Er bestaat al een bestand met de naam '<ph name="FILE_NAME" />'. Wil je dit bestand vervangen?</translation>

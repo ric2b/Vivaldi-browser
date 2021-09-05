@@ -58,7 +58,7 @@ XMLHttpRequestOrString::XMLHttpRequestOrString(const XMLHttpRequestOrString&) = 
 XMLHttpRequestOrString::~XMLHttpRequestOrString() = default;
 XMLHttpRequestOrString& XMLHttpRequestOrString::operator=(const XMLHttpRequestOrString&) = default;
 
-void XMLHttpRequestOrString::Trace(blink::Visitor* visitor) {
+void XMLHttpRequestOrString::Trace(Visitor* visitor) {
   visitor->Trace(xml_http_request_);
 }
 
@@ -111,3 +111,4 @@ XMLHttpRequestOrString NativeValueTraits<XMLHttpRequestOrString>::NativeValue(
 }
 
 }  // namespace blink
+

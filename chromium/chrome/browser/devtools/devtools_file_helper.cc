@@ -15,6 +15,7 @@
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/value_conversions.h"
 #include "chrome/browser/browser_process.h"
@@ -35,9 +36,9 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/url_constants.h"
-#include "storage/browser/fileapi/file_system_url.h"
-#include "storage/browser/fileapi/isolated_context.h"
-#include "storage/common/fileapi/file_system_util.h"
+#include "storage/browser/file_system/file_system_url.h"
+#include "storage/browser/file_system/isolated_context.h"
+#include "storage/common/file_system/file_system_util.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/shell_dialogs/select_file_dialog.h"
 
@@ -54,6 +55,7 @@ namespace {
 
 static const char kRootName[] = "<root>";
 static const char kPermissionDenied[] = "<permission denied>";
+static const char kSelectionCancelled[] = "<selection cancelled>";
 
 base::LazyInstance<base::FilePath>::Leaky
     g_last_save_path = LAZY_INSTANCE_INITIALIZER;
@@ -219,8 +221,8 @@ DevToolsFileHelper::DevToolsFileHelper(WebContents* web_contents,
     : web_contents_(web_contents),
       profile_(profile),
       delegate_(delegate),
-      file_task_runner_(base::CreateSequencedTaskRunner(
-          {base::ThreadPool(), base::MayBlock()})) {
+      file_task_runner_(
+          base::ThreadPool::CreateSequencedTaskRunner({base::MayBlock()})) {
   pref_change_registrar_.Init(profile_->GetPrefs());
 }
 
@@ -312,7 +314,7 @@ void DevToolsFileHelper::AddFileSystem(
       Bind(&DevToolsFileHelper::InnerAddFileSystem, weak_factory_.GetWeakPtr(),
            show_info_bar_callback, type),
       Bind(&DevToolsFileHelper::FailedToAddFileSystem,
-           weak_factory_.GetWeakPtr(), kPermissionDenied),
+           weak_factory_.GetWeakPtr(), kSelectionCancelled),
       web_contents_);
   select_file_dialog->Show(ui::SelectFileDialog::SELECT_FOLDER,
                            base::FilePath());

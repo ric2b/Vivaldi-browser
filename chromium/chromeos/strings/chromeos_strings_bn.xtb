@@ -1,17 +1,23 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="bn">
+<translation id="1195447618553298278">অজানা ত্রুটি৷</translation>
+<translation id="1468664791493211953">অফার</translation>
 <translation id="1482734542997480527"><ph name="ENROLLMENT_DOMAIN" /> এই ডিভাইস ম্যানেজ করে এবং এটি আপনার অ্যাক্টিভিটি মনিটর করতে পারে।</translation>
+<translation id="150962533380566081">ভুল PUK।</translation>
 <translation id="1510238584712386396">লঞ্চার</translation>
+<translation id="159973520823200404">Discover</translation>
 <translation id="1734367976349034509">এই ডিভাইসটি এন্টারপ্রাইজ পরিচালিত</translation>
+<translation id="1905710495812624430">সর্বোচ্চ অনুমোদিত প্রচেষ্টা ছাড়িয়ে গেছে।</translation>
 <translation id="1930797645656624981">Chrome OS ইনপুট পদ্ধতি পরিষেবা</translation>
 <translation id="1979103255016296513">পাসওয়ার্ড পরিবর্তন করার সময় পেরিয়ে গেছে</translation>
 <translation id="2049639323467105390">এই ডিভাইস <ph name="DOMAIN" /> দ্বারা পরিচালিত হয়৷</translation>
-<translation id="2083960536266308407">স্ক্রিনে কিছুই পাওয়া যায়নি</translation>
 <translation id="2338501278241028356">আশেপাশের ডিভাইস খুঁজে পেতে ব্লুটুথ চালু করুন</translation>
+<translation id="2375079107209812402">আর <ph name="ATTEMPTS_LEFT" /> বার চেষ্টা করতে পারবেন</translation>
 <translation id="2805756323405976993">অ্যাপ্স</translation>
 <translation id="2872961005593481000">বন্ধ করুন</translation>
 <translation id="3008341117444806826">রিফ্রেশ করুন</translation>
+<translation id="3820172043799983114">ভুল পিন।</translation>
 <translation id="3838338534323494292">নতুন পাসওয়ার্ড</translation>
 <translation id="4003259559679196451"><ph name="ENROLLMENT_DOMAIN" /> এই ডিভাইস ম্যানেজ করে এবং ব্যবহারকারী দেখেছেন এমন ওয়েবসাইট, পাসওয়ার্ড ও ইমেলে সহ তার সব অ্যাক্টিভিটি সংক্রান্ত ডেটা অ্যাক্সেস করতে পারে।</translation>
 <translation id="4227825898293920515">পাসওয়ার্ডের মেয়াদ <ph name="TIME" />-এ শেষ হবে</translation>
@@ -34,7 +40,9 @@
 <translation id="7658239707568436148">বাতিল</translation>
 <translation id="7690294790491645610">নতুন পাসওয়ার্ড নিশ্চিত করুন</translation>
 <translation id="808894953321890993">পাসওয়ার্ড পরিবর্তন করুন</translation>
+<translation id="8208861521865154048">বিশেষ সুবিধা</translation>
 <translation id="8747900814994928677">পরিবর্তন কনফার্ম করুন</translation>
+<translation id="89415009803968170"><ph name="ERROR_MESSAGE" /> আর <ph name="ATTEMPTS_LEFT" /> বার চেষ্টা করতে পারবেন</translation>
 <translation id="910415269708673980"><ph name="PRINCIPAL_NAME" />-এর টিকিট রিফ্রেশ করুন</translation>
 <translation id="9111102763498581341">আনলক</translation>
 </translationbundle>

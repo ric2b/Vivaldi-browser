@@ -256,9 +256,7 @@ class MockSettingGetter : public ProxyConfigServiceLinux::SettingGetter {
 
   bool BypassListIsReversed() override { return false; }
 
-  ProxyBypassRules::ParseFormat GetBypassListFormat() override {
-    return ProxyBypassRules::ParseFormat::kDefault;
-  }
+  bool UseSuffixMatching() override { return false; }
 
   // Intentionally public, for convenience when setting up a test.
   GSettingsValues values;
@@ -435,7 +433,7 @@ class ProxyConfigServiceLinuxTest : public PlatformTest,
 
   void TearDown() override {
     // Delete the temporary KDE home directory.
-    base::DeleteFile(user_home_, true);
+    base::DeleteFileRecursively(user_home_);
     PlatformTest::TearDown();
   }
 

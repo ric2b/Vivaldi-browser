@@ -29,8 +29,8 @@ const char kCertData[] = {
 
 class FuzzerDelegate : public net::SpdyStream::Delegate {
  public:
-  explicit FuzzerDelegate(const base::Closure& done_closure)
-      : done_closure_(done_closure) {}
+  explicit FuzzerDelegate(base::OnceClosure done_closure)
+      : done_closure_(std::move(done_closure)) {}
 
   void OnHeadersSent() override {}
   void OnHeadersReceived(
@@ -39,15 +39,15 @@ class FuzzerDelegate : public net::SpdyStream::Delegate {
   void OnDataReceived(std::unique_ptr<net::SpdyBuffer> buffer) override {}
   void OnDataSent() override {}
   void OnTrailers(const spdy::SpdyHeaderBlock& trailers) override {}
-
-  void OnClose(int status) override { done_closure_.Run(); }
+  void OnClose(int status) override { std::move(done_closure_).Run(); }
+  bool CanGreaseFrameType() const override { return false; }
 
   net::NetLogSource source_dependency() const override {
     return net::NetLogSource();
   }
 
  private:
-  base::Closure done_closure_;
+  base::OnceClosure done_closure_;
   DISALLOW_COPY_AND_ASSIGN(FuzzerDelegate);
 };
 
@@ -102,7 +102,7 @@ FuzzedSocketFactoryWithMockSSLData::CreateSSLClientSocket(
 //
 // |data| is used to create a FuzzedServerSocket.
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
-  net::BoundTestNetLog bound_test_net_log;
+  net::RecordingBoundTestNetLog bound_test_net_log;
   FuzzedDataProvider data_provider(data, size);
   net::FuzzedSocketFactoryWithMockSSLData socket_factory(&data_provider);
   socket_factory.set_fuzz_connect_result(false);

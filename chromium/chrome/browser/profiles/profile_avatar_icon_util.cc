@@ -21,6 +21,7 @@
 #include "cc/paint/paint_flags.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/profiles/avatar_menu.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
@@ -315,8 +316,10 @@ constexpr size_t kVivaldiAvatarsOnCreate = 15;
 #else
 constexpr char kDefaultUrlPrefix[] = "chrome://theme/IDR_PROFILE_AVATAR_";
 #endif  // VIVALDI_BUILD
-constexpr char kGAIAPictureFileName[] = "Google Profile Picture.png";
-constexpr char kHighResAvatarFolderName[] = "Avatars";
+constexpr base::FilePath::CharType kGAIAPictureFileName[] =
+    FILE_PATH_LITERAL("Google Profile Picture.png");
+constexpr base::FilePath::CharType kHighResAvatarFolderName[] =
+    FILE_PATH_LITERAL("Avatars");
 
 // The size of the function-static kDefaultAvatarIconResources array below.
 #if defined(OS_ANDROID)
@@ -400,6 +403,24 @@ gfx::Image GetAvatarIconForTitleBar(const gfx::Image& image,
 
   return gfx::Image(gfx::ImageSkia(std::move(source), dst_size));
 }
+
+#if defined(OS_MACOSX)
+gfx::Image GetAvatarIconForNSMenu(const base::FilePath& profile_path) {
+  // Always use the low-res, small default avatars in the menu.
+  gfx::Image icon;
+  AvatarMenu::GetImageForMenuButton(profile_path, &icon);
+
+  // The image might be too large and need to be resized, e.g. if this is a
+  // signed-in user using the GAIA profile photo.
+  constexpr int kMenuAvatarIconSize = 38;
+  if (icon.Width() > kMenuAvatarIconSize ||
+      icon.Height() > kMenuAvatarIconSize) {
+    icon = profiles::GetSizedAvatarIcon(
+        icon, /*is_rectangle=*/true, kMenuAvatarIconSize, kMenuAvatarIconSize);
+  }
+  return icon;
+}
+#endif
 
 SkBitmap GetAvatarIconAsSquare(const SkBitmap& source_bitmap,
                                int scale_factor) {
@@ -674,8 +695,7 @@ base::FilePath GetPathOfHighResAvatarAtIndex(size_t index) {
   const char* file_name = GetDefaultAvatarIconFileNameAtIndex(index);
   base::FilePath user_data_dir;
   CHECK(base::PathService::Get(chrome::DIR_USER_DATA, &user_data_dir));
-  return user_data_dir.AppendASCII(
-      kHighResAvatarFolderName).AppendASCII(file_name);
+  return user_data_dir.Append(kHighResAvatarFolderName).AppendASCII(file_name);
 }
 
 std::string GetDefaultAvatarIconUrl(size_t index) {

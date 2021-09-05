@@ -87,12 +87,14 @@ BubbleFrameView::BubbleFrameView(const gfx::Insets& title_margins,
   default_title_->SetVisible(false);
   AddChildView(default_title_);
 
-  auto close = CreateCloseButton(this, GetNativeTheme()->ShouldUseDarkColors());
+  auto close = CreateCloseButton(this);
   close->SetVisible(false);
 #if defined(OS_WIN)
   // Windows will automatically create a tooltip for the close button based on
   // the HTCLOSE result from NonClientHitTest().
   close->SetTooltipText(base::string16());
+  // Specify accessible name instead for screen readers.
+  close->SetAccessibleName(l10n_util::GetStringUTF16(IDS_APP_CLOSE));
 #endif
   close_ = AddChildView(std::move(close));
 
@@ -117,23 +119,15 @@ std::unique_ptr<Label> BubbleFrameView::CreateDefaultTitleLabel(
 
 // static
 std::unique_ptr<Button> BubbleFrameView::CreateCloseButton(
-    ButtonListener* listener,
-    bool should_use_dark_colors) {
-  auto close_button = CreateVectorImageButton(listener);
-  SetImageFromVectorIconWithColor(
-      close_button.get(), vector_icons::kCloseRoundedIcon,
-      should_use_dark_colors ? SkColorSetA(SK_ColorWHITE, 0xDD)
-                             : gfx::kGoogleGrey700);
+    ButtonListener* listener) {
+  auto close_button = CreateVectorImageButtonWithNativeTheme(
+      listener, vector_icons::kCloseRoundedIcon);
   close_button->SetTooltipText(l10n_util::GetStringUTF16(IDS_APP_CLOSE));
   close_button->SizeToPreferredSize();
+  close_button->SetFocusForPlatform();
 
   InstallCircleHighlightPathGenerator(close_button.get());
 
-  // Remove the close button from tab traversal on all platforms. Note this does
-  // not affect screen readers' ability to focus the close button. Keyboard
-  // access to the close button when not using a screen reader is done via the
-  // ESC key handler in DialogClientView.
-  close_button->SetFocusBehavior(View::FocusBehavior::NEVER);
   return close_button;
 }
 
@@ -160,8 +154,8 @@ gfx::Rect BubbleFrameView::GetWindowBoundsForClientBounds(
 bool BubbleFrameView::GetClientMask(const gfx::Size& size, SkPath* path) const {
   // NonClientView calls this after setting the client view size from the return
   // of GetBoundsForClientView(); feeding it back in |size|.
-  DCHECK(GetBoundsForClientView().size() == size);
-  DCHECK(GetWidget()->client_view()->size() == size);
+  DCHECK_EQ(GetBoundsForClientView().size(), size);
+  DCHECK_EQ(GetWidget()->client_view()->size(), size);
 
   const int radius = bubble_border_->corner_radius();
   const gfx::Insets insets =
@@ -173,8 +167,19 @@ bool BubbleFrameView::GetClientMask(const gfx::Size& size, SkPath* path) const {
     return false;
   }
 
+  // We want to clip the client view to a rounded rect that's consistent with
+  // the bubble's rounded border. However, if there is a header, the top of the
+  // client view should be straight and flush with that. Likewise, if there is
+  // a footer, the client view should be straight and flush with that. Therefore
+  // we set the corner radii separately for top and bottom.
   const SkRect rect = SkRect::MakeIWH(size.width(), size.height());
-  path->addRoundRect(rect, radius, radius);
+  const SkScalar top_radius = header_view_ ? 0.0f : radius;
+  const SkScalar bottom_radius = footnote_container_ ? 0.0f : radius;
+  // Format is upper-left x, upper-left y, upper-right x, and so forth,
+  // clockwise around the boundary.
+  SkScalar radii[]{top_radius,    top_radius,    top_radius,    top_radius,
+                   bottom_radius, bottom_radius, bottom_radius, bottom_radius};
+  path->addRoundRect(rect, radii);
   return true;
 }
 
@@ -404,6 +409,7 @@ void BubbleFrameView::Layout() {
 }
 
 void BubbleFrameView::OnThemeChanged() {
+  NonClientFrameView::OnThemeChanged();
   UpdateWindowTitle();
   ResetWindowControls();
   UpdateWindowIcon();
@@ -487,12 +493,20 @@ void BubbleFrameView::SetFootnoteView(std::unique_ptr<View> view) {
   // Remove the old footnote container.
   delete footnote_container_;
   footnote_container_ = nullptr;
-  if (!view)
-    return;
+  if (view) {
+    int radius = bubble_border_ ? bubble_border_->corner_radius() : 0;
+    footnote_container_ = AddChildView(std::make_unique<FootnoteContainerView>(
+        footnote_margins_, std::move(view), radius));
+  }
+  InvalidateLayout();
+}
 
-  int radius = bubble_border_ ? bubble_border_->corner_radius() : 0;
-  footnote_container_ = AddChildView(std::make_unique<FootnoteContainerView>(
-      footnote_margins_, std::move(view), radius));
+View* BubbleFrameView::GetFootnoteView() const {
+  if (!footnote_container_)
+    return nullptr;
+
+  DCHECK_EQ(1u, footnote_container_->children().size());
+  return footnote_container_->children()[0];
 }
 
 void BubbleFrameView::SetCornerRadius(int radius) {
@@ -601,9 +615,9 @@ void BubbleFrameView::MirrorArrowIfOutOfBounds(
   if (GetOverflowLength(available_bounds, window_bounds, vertical) > 0) {
     BubbleBorder::Arrow arrow = bubble_border_->arrow();
     // Mirror the arrow and get the new bounds.
-    bubble_border_->set_arrow(
-        vertical ? BubbleBorder::vertical_mirror(arrow) :
-                   BubbleBorder::horizontal_mirror(arrow));
+    bubble_border_->set_arrow(vertical
+                                  ? BubbleBorder::vertical_mirror(arrow)
+                                  : BubbleBorder::horizontal_mirror(arrow));
     gfx::Rect mirror_bounds =
         bubble_border_->GetBounds(anchor_rect, client_size);
     // Restore the original arrow if mirroring doesn't show more of the bubble.

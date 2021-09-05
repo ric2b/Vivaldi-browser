@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/ash/assistant/assistant_service_connection.h"
 
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace {
@@ -14,9 +16,16 @@ constexpr const char kConnectionKey[] = "assistant_service_connection";
 
 AssistantServiceConnection::AssistantServiceConnection(Profile* profile)
     : service_(remote_.BindNewPipeAndPassReceiver(),
-               profile->GetURLLoaderFactory()->Clone()) {}
+               profile->GetURLLoaderFactory()->Clone(),
+               IdentityManagerFactory::GetForProfile(profile),
+               profile->GetPrefs()),
+      profile_(profile) {
+  profile_->AddObserver(this);
+}
 
-AssistantServiceConnection::~AssistantServiceConnection() = default;
+AssistantServiceConnection::~AssistantServiceConnection() {
+  profile_->RemoveObserver(this);
+}
 
 // static
 AssistantServiceConnection* AssistantServiceConnection::GetForProfile(
@@ -29,4 +38,10 @@ AssistantServiceConnection* AssistantServiceConnection::GetForProfile(
     profile->SetUserData(kConnectionKey, std::move(new_connection));
   }
   return connection;
+}
+
+void AssistantServiceConnection::OnProfileWillBeDestroyed(Profile* profile) {
+  // Clean up connection before the profile's PrefService is destroyed.
+  profile->RemoveUserData(kConnectionKey);
+  // |this| is deleted.
 }

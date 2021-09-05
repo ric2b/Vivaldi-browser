@@ -116,6 +116,9 @@ class TabStyle {
   // Hides the hover animation.
   virtual void HideHover(HideHoverStyle style) = 0;
 
+  // Opacity of the active tab background painted over inactive selected tabs.
+  static constexpr float kSelectedTabOpacity = 0.75f;
+
   // Returns the preferred width of a single Tab, assuming space is
   // available.
   static int GetStandardWidth();
@@ -143,12 +146,12 @@ class TabStyle {
   // or og:image images, etc.
   static gfx::Size GetPreviewImageSize();
 
+  // Returns the radius of the outer corners of the tab shape.
+  static int GetCornerRadius();
+
  protected:
   // Avoid implicitly-deleted constructor.
   TabStyle() = default;
-
-  // Returns the radius of the outer corners of the tab shape.
-  static int GetCornerRadius();
 
   // Returns how far from the leading and trailing edges of a tab the contents
   // should actually be laid out.

@@ -31,7 +31,6 @@
 <translation id="2148892889047469596">Cast tab</translation>
 <translation id="2150139952286079145">Telusuri tujuan</translation>
 <translation id="2177950615300672361">Tab Penyamaran: <ph name="TAB_NAME" /></translation>
-<translation id="218070003709087997">Gunakan angka untuk mengindikasikan jumlah salinan yang akan di cetak (1 sampai 999).</translation>
 <translation id="219008588003277019">Modul Klien Asli: <ph name="NEXE_NAME" /></translation>
 <translation id="2249605167705922988">misal: 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Izinkan pengidentifikasi untuk konten terlindungi (komputer mungkin butuh untuk di-restart)</translation>
@@ -42,7 +41,6 @@
 <translation id="2318143611928805047">Ukuran kertas</translation>
 <translation id="2322193970951063277">Header dan footer</translation>
 <translation id="2327492829706409234">Aktifkan aplikasi</translation>
-<translation id="2344028582131185878">Download Otomatis</translation>
 <translation id="2348176352564285430">Aplikasi: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">Pilih direktori ekstensi.</translation>
 <translation id="2379281330731083556">Cetak menggunakan dialog sistem... <ph name="SHORTCUT_KEY" /></translation>
@@ -55,7 +53,6 @@
 <translation id="2476578072172137802">Pengaturan Situs</translation>
 <translation id="2482878487686419369">Notifikasi</translation>
 <translation id="2509495747794740764">Jumlah skala harus berupa angka antara 10 dan 200.</translation>
-<translation id="2580924999637585241">Total: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Aktifkan ulang</translation>
 <translation id="2809586584051668049">dan <ph name="NUMBER_ADDITIONAL_DISABLED" /> lainnya</translation>
@@ -67,7 +64,6 @@
 <translation id="2932883381142163287">Laporkan penyalahgunaan</translation>
 <translation id="2941112035454246133">Rendah</translation>
 <translation id="2972581237482394796">&amp;Ulang</translation>
-<translation id="299483336428448530">Di pasang oleh orang tua anda.</translation>
 <translation id="3012631534724231212">(iframe)</translation>
 <translation id="3013291976881901233">Perangkat MIDI</translation>
 <translation id="3080207940057008665">Program lain di komputer anda menambahkan tema yang dapat mengubah cara kerja Vivaldi.</translation>

@@ -80,13 +80,14 @@ static bool VerifyCustomHandlerURL(const Document& document,
     return false;
   }
 
-  // Although not enforced in the spec the spec gives freedom to do additional
-  // security checks. Bugs have arisen from allowing non-http/https URLs, e.g.
+  // Although not required by the spec, the spec allows additional security
+  // checks. Bugs have arisen from allowing non-http/https URLs, e.g.
   // https://crbug.com/971917 and it doesn't make a lot of sense to support
-  // them. We also need to allow extensions to continue using the API.
+  // them. We do need to allow extensions to continue using the API.
   if (!kurl.ProtocolIsInHTTPFamily() && !kurl.ProtocolIs("chrome-extension")) {
     exception_state.ThrowSecurityError(
-        "The scheme of the url provided must be the 'http' or 'https'.");
+        "The scheme of the url provided must be 'https' or "
+        "'chrome-extension'.");
     return false;
   }
 
@@ -101,22 +102,38 @@ static bool VerifyCustomHandlerURL(const Document& document,
   return true;
 }
 
+// HTML5 requires that schemes with the |web+| prefix contain one or more
+// ASCII alphas after that prefix.
+static bool IsValidWebSchemeName(const String& protocol) {
+  if (protocol.length() < 5)
+    return false;
+
+  unsigned protocol_length = protocol.length();
+  for (unsigned i = 4; i < protocol_length; i++) {
+    char c = protocol[i];
+    if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))) {
+      return false;
+    }
+  }
+  return true;
+}
+
 static bool VerifyCustomHandlerScheme(const String& scheme,
                                       ExceptionState& exception_state) {
   if (!IsValidProtocol(scheme)) {
-    exception_state.ThrowSecurityError("The scheme '" + scheme +
-                                       "' is not valid protocol");
+    exception_state.ThrowSecurityError(
+        "The scheme name '" + scheme +
+        "' is not allowed by URI syntax (RFC3986).");
     return false;
   }
 
   if (scheme.StartsWith("web+")) {
-    // The specification requires that the length of scheme is at least five
-    // characteres (including 'web+' prefix).
-    if (scheme.length() >= 5)
+    if (IsValidWebSchemeName(scheme))
       return true;
-
-    exception_state.ThrowSecurityError("The scheme '" + scheme +
-                                       "' is less than five characters long.");
+    exception_state.ThrowSecurityError(
+        "The scheme name '" + scheme +
+        "' is not allowed. Schemes starting with 'web+' must be followed by "
+        "one or more ASCII letters.");
     return false;
   }
 
@@ -125,8 +142,8 @@ static bool VerifyCustomHandlerScheme(const String& scheme,
 
   exception_state.ThrowSecurityError(
       "The scheme '" + scheme +
-      "' doesn't belong to the scheme whitelist. "
-      "Please prefix non-whitelisted schemes "
+      "' doesn't belong to the scheme allowlist. "
+      "Please prefix non-allowlisted schemes "
       "with the string 'web+'.");
   return false;
 }
@@ -136,10 +153,8 @@ NavigatorContentUtils& NavigatorContentUtils::From(Navigator& navigator,
   NavigatorContentUtils* navigator_content_utils =
       Supplement<Navigator>::From<NavigatorContentUtils>(navigator);
   if (!navigator_content_utils) {
-    WebLocalFrameImpl* web_frame = WebLocalFrameImpl::FromFrame(&frame);
     navigator_content_utils = MakeGarbageCollected<NavigatorContentUtils>(
-        navigator,
-        MakeGarbageCollected<NavigatorContentUtilsClient>(web_frame));
+        navigator, MakeGarbageCollected<NavigatorContentUtilsClient>(&frame));
     ProvideTo(navigator, navigator_content_utils);
   }
   return *navigator_content_utils;
@@ -159,13 +174,22 @@ void NavigatorContentUtils::registerProtocolHandler(
   Document* document = frame->GetDocument();
   DCHECK(document);
 
-  if (!VerifyCustomHandlerURL(*document, url, exception_state))
-    return;
-
+  // Per the HTML specification, exceptions for arguments must be surfaced in
+  // the order of the arguments.
   if (!VerifyCustomHandlerScheme(scheme, exception_state))
     return;
 
-  // Count usage; perhaps we can lock this to secure contexts.
+  if (!VerifyCustomHandlerURL(*document, url, exception_state))
+    return;
+
+  // Count usage; perhaps we can forbid this from cross-origin subframes as
+  // proposed in https://crbug.com/977083.
+  UseCounter::Count(
+      *document, frame->IsCrossOriginToMainFrame()
+                     ? WebFeature::kRegisterProtocolHandlerCrossOriginSubframe
+                     : WebFeature::kRegisterProtocolHandlerSameOriginAsTop);
+  // Count usage. Context should now always be secure due to the same-origin
+  // check and the requirement that the calling context be secure.
   UseCounter::Count(*document,
                     document->IsSecureContext()
                         ? WebFeature::kRegisterProtocolHandlerSecureOrigin
@@ -187,10 +211,10 @@ void NavigatorContentUtils::unregisterProtocolHandler(
   Document* document = frame->GetDocument();
   DCHECK(document);
 
-  if (!VerifyCustomHandlerURL(*document, url, exception_state))
+  if (!VerifyCustomHandlerScheme(scheme, exception_state))
     return;
 
-  if (!VerifyCustomHandlerScheme(scheme, exception_state))
+  if (!VerifyCustomHandlerURL(*document, url, exception_state))
     return;
 
   NavigatorContentUtils::From(navigator, *frame)
@@ -198,7 +222,7 @@ void NavigatorContentUtils::unregisterProtocolHandler(
       ->UnregisterProtocolHandler(scheme, document->CompleteURL(url));
 }
 
-void NavigatorContentUtils::Trace(blink::Visitor* visitor) {
+void NavigatorContentUtils::Trace(Visitor* visitor) {
   visitor->Trace(client_);
   Supplement<Navigator>::Trace(visitor);
 }

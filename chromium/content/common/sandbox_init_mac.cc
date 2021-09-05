@@ -36,7 +36,7 @@ namespace {
 base::OnceClosure MaybeWrapWithGPUSandboxHook(
     service_manager::SandboxType sandbox_type,
     base::OnceClosure original) {
-  if (sandbox_type == service_manager::SANDBOX_TYPE_GPU) {
+  if (sandbox_type == service_manager::SandboxType::kGpu) {
     return base::BindOnce(
       [](base::OnceClosure arg) {
         // We need to gather GPUInfo and compute GpuFeatureInfo here, so we can
@@ -81,7 +81,7 @@ base::OnceClosure MaybeWrapWithGPUSandboxHook(
           std::move(arg).Run();
       },
       std::move(original));
-    } else if (sandbox_type == service_manager::SANDBOX_TYPE_RENDERER) {
+    } else if (sandbox_type == service_manager::SandboxType::kRenderer) {
       return base::BindOnce([](base::OnceClosure arg) {
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
@@ -115,7 +115,7 @@ bool GetSandboxTypeFromCommandLine(service_manager::SandboxType* sandbox_type) {
     return false;
   }
 
-  return *sandbox_type != service_manager::SANDBOX_TYPE_INVALID;
+  return *sandbox_type != service_manager::SandboxType::kInvalid;
 }
 
 }  // namespace
@@ -128,7 +128,7 @@ bool InitializeSandbox(service_manager::SandboxType sandbox_type) {
 
 bool InitializeSandbox(base::OnceClosure post_warmup_hook) {
   service_manager::SandboxType sandbox_type =
-      service_manager::SANDBOX_TYPE_INVALID;
+      service_manager::SandboxType::kInvalid;
   return !GetSandboxTypeFromCommandLine(&sandbox_type) ||
          service_manager::Sandbox::Initialize(
              sandbox_type, MaybeWrapWithGPUSandboxHook(

@@ -30,7 +30,10 @@ void PrintValue(std::stringstream* result,
 
 AssistantStateBase::AssistantStateBase() = default;
 
-AssistantStateBase::~AssistantStateBase() = default;
+AssistantStateBase::~AssistantStateBase() {
+  for (auto& observer : observers_)
+    observer.OnAssistantStateDestroyed();
+}
 
 std::string AssistantStateBase::ToString() const {
   std::stringstream result;
@@ -100,6 +103,12 @@ void AssistantStateBase::RegisterPrefChanges(PrefService* pref_service) {
   UpdateHotwordEnabled();
   UpdateLaunchWithMicOpen();
   UpdateNotificationEnabled();
+}
+
+bool AssistantStateBase::IsScreenContextAllowed() const {
+  return allowed_state() == ash::mojom::AssistantAllowedState::ALLOWED &&
+         settings_enabled().value_or(false) &&
+         context_enabled().value_or(false);
 }
 
 void AssistantStateBase::InitializeObserver(AssistantStateObserver* observer) {

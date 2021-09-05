@@ -14,8 +14,8 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/threading/scoped_blocking_call.h"
-#include "chrome/browser/plugins/plugin_prefs.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/strings/grit/components_strings.h"
@@ -23,7 +23,6 @@
 #include "components/version_ui/version_handler_helper.h"
 #include "components/version_ui/version_ui_constants.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/plugin_service.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_message_handler.h"
@@ -31,6 +30,11 @@
 #include "ppapi/buildflags/buildflags.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
+
+#if BUILDFLAG(ENABLE_PLUGINS)
+#include "chrome/browser/plugins/plugin_prefs.h"
+#include "content/public/browser/plugin_service.h"
+#endif
 
 namespace {
 
@@ -139,9 +143,8 @@ void VersionHandler::HandleRequestPathInfo(const base::ListValue* args) {
   // OnGotFilePaths.
   base::string16* exec_path_buffer = new base::string16;
   base::string16* profile_path_buffer = new base::string16;
-  base::PostTaskAndReply(
-      FROM_HERE,
-      {base::ThreadPool(), base::TaskPriority::USER_VISIBLE, base::MayBlock()},
+  base::ThreadPool::PostTaskAndReply(
+      FROM_HERE, {base::TaskPriority::USER_VISIBLE, base::MayBlock()},
       base::BindOnce(&GetFilePaths, Profile::FromWebUI(web_ui())->GetPath(),
                      base::Unretained(exec_path_buffer),
                      base::Unretained(profile_path_buffer)),

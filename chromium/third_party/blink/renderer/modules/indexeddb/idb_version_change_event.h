@@ -30,10 +30,10 @@
 #include "third_party/blink/public/common/indexeddb/web_idb_types.h"
 #include "third_party/blink/public/mojom/indexeddb/indexeddb.mojom-blink-forward.h"
 #include "third_party/blink/renderer/bindings/core/v8/serialization/serialized_script_value.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_idb_version_change_event_init.h"
 #include "third_party/blink/renderer/modules/event_modules.h"
 #include "third_party/blink/renderer/modules/indexeddb/idb_any.h"
 #include "third_party/blink/renderer/modules/indexeddb/idb_request.h"
-#include "third_party/blink/renderer/modules/indexeddb/idb_version_change_event_init.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
 namespace blink {
@@ -47,15 +47,6 @@ class IDBVersionChangeEvent final : public Event {
   }
   static IDBVersionChangeEvent* Create(
       const AtomicString& event_type,
-      uint64_t old_version,
-      const base::Optional<uint64_t>& new_version,
-      mojom::IDBDataLoss data_loss = mojom::IDBDataLoss::None,
-      const String& data_loss_message = String()) {
-    return MakeGarbageCollected<IDBVersionChangeEvent>(
-        event_type, old_version, new_version, data_loss, data_loss_message);
-  }
-  static IDBVersionChangeEvent* Create(
-      const AtomicString& event_type,
       const IDBVersionChangeEventInit* initializer) {
     return MakeGarbageCollected<IDBVersionChangeEvent>(event_type, initializer);
   }
@@ -64,20 +55,22 @@ class IDBVersionChangeEvent final : public Event {
   IDBVersionChangeEvent(const AtomicString& event_type,
                         uint64_t old_version,
                         const base::Optional<uint64_t>& new_version,
-                        mojom::IDBDataLoss,
-                        const String& data_loss);
+                        mojom::IDBDataLoss data_loss = mojom::IDBDataLoss::None,
+                        const String& data_loss_message = String());
   IDBVersionChangeEvent(const AtomicString& event_type,
                         const IDBVersionChangeEventInit*);
 
   uint64_t oldVersion() const { return old_version_; }
-  uint64_t newVersion(bool& is_null) const;
+  base::Optional<uint64_t> newVersion() const { return new_version_; }
+  // TODO(crbug.com/1060971): Remove |is_null| version.
+  uint64_t newVersion(bool& is_null) const;  // DEPRECATED
 
   const AtomicString& dataLoss() const;
   const String& dataLossMessage() const { return data_loss_message_; }
 
   const AtomicString& InterfaceName() const override;
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
  private:
   uint64_t old_version_;

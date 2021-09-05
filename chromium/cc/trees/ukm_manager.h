@@ -6,6 +6,8 @@
 #define CC_TREES_UKM_MANAGER_H_
 
 #include "cc/cc_export.h"
+#include "cc/metrics/compositor_frame_reporter.h"
+#include "cc/metrics/frame_sequence_tracker.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "url/gurl.h"
 
@@ -15,6 +17,8 @@ class UkmRecorder;
 
 namespace cc {
 
+enum class AggregationType;
+
 class CC_EXPORT UkmRecorderFactory {
  public:
   virtual ~UkmRecorderFactory() {}
@@ -22,6 +26,7 @@ class CC_EXPORT UkmRecorderFactory {
   virtual std::unique_ptr<ukm::UkmRecorder> CreateRecorder() = 0;
 };
 
+// TODO(xidachen): rename the class to CompositorUkmManager.
 class CC_EXPORT UkmManager {
  public:
   explicit UkmManager(std::unique_ptr<ukm::UkmRecorder> recorder);
@@ -37,6 +42,17 @@ class CC_EXPORT UkmManager {
 
   // These metrics are recorded until the source URL changes.
   void AddCheckerboardedImages(int num_of_checkerboarded_images);
+
+  void RecordThroughputUKM(FrameSequenceTrackerType tracker_type,
+                           FrameSequenceMetrics::ThreadType thread_type,
+                           int64_t throughput) const;
+  void RecordAggregateThroughput(AggregationType aggregation_type,
+                                 int64_t throughput_percent) const;
+  void RecordLatencyUKM(
+      CompositorFrameReporter::FrameReportType report_type,
+      const std::vector<CompositorFrameReporter::StageData>& stage_history,
+      const base::flat_set<FrameSequenceTrackerType>* active_trackers,
+      const viz::FrameTimingDetails& viz_breakdown) const;
 
   ukm::UkmRecorder* recorder_for_testing() { return recorder_.get(); }
 

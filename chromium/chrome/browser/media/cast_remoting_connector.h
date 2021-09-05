@@ -78,8 +78,8 @@ class MediaRouter;
 // reference for how CastRemotingConnector and a MediaRemoter interact to
 // start/execute/stop remoting sessions.
 //
-// TODO(xjz): Remove media::mojom::MirrorServiceRemotingSource interface and
-// implementation after Mirroring Service is launched.
+// TODO(crbug.com/1015486): Remove media::mojom::MirrorServiceRemotingSource
+// interface and implementation after Mirroring Service is launched.
 class CastRemotingConnector : public base::SupportsUserData::Data,
                               public media::mojom::MirrorServiceRemotingSource,
                               public media::mojom::RemotingSource {
@@ -93,9 +93,10 @@ class CastRemotingConnector : public base::SupportsUserData::Data,
 
   // Used by ChromeContentBrowserClient to request a binding to a new
   // Remoter for each new source in a render frame.
-  static void CreateMediaRemoter(content::RenderFrameHost* render_frame_host,
-                                 media::mojom::RemotingSourcePtr source,
-                                 media::mojom::RemoterRequest request);
+  static void CreateMediaRemoter(
+      content::RenderFrameHost* render_frame_host,
+      mojo::PendingRemote<media::mojom::RemotingSource> source,
+      mojo::PendingReceiver<media::mojom::Remoter> receiver);
 
   // Called when a MediaRemoter is created and started in the Cast MRP. This
   // call connects the CastRemotingConnector with the MediaRemoter. Remoting
@@ -140,9 +141,9 @@ class CastRemotingConnector : public base::SupportsUserData::Data,
                         PermissionRequestCallback request_callback);
 
   // Creates a RemotingBridge that implements the requested Remoter service, and
-  // binds it to the interface |request|.
-  void CreateBridge(media::mojom::RemotingSourcePtr source,
-                    media::mojom::RemoterRequest request);
+  // binds it to the interface |receiver|.
+  void CreateBridge(mojo::PendingRemote<media::mojom::RemotingSource> source,
+                    mojo::PendingReceiver<media::mojom::Remoter> receiver);
 
   // Called by the RemotingBridge constructor/destructor to register/deregister
   // an instance. This allows this connector to broadcast notifications to all
@@ -175,9 +176,9 @@ class CastRemotingConnector : public base::SupportsUserData::Data,
       mojo::ScopedDataPipeConsumerHandle audio_pipe,
       mojo::ScopedDataPipeConsumerHandle video_pipe,
       mojo::PendingReceiver<media::mojom::RemotingDataStreamSender>
-          audio_sender_receiver,
+          audio_sender,
       mojo::PendingReceiver<media::mojom::RemotingDataStreamSender>
-          video_sender_receiver);
+          video_sender);
   void StopRemoting(RemotingBridge* bridge,
                     media::mojom::RemotingStopReason reason,
                     bool is_initiated_by_source);
@@ -194,8 +195,10 @@ class CastRemotingConnector : public base::SupportsUserData::Data,
   void OnDataStreamsStarted(
       mojo::ScopedDataPipeConsumerHandle audio_pipe,
       mojo::ScopedDataPipeConsumerHandle video_pipe,
-      media::mojom::RemotingDataStreamSenderRequest audio_sender_request,
-      media::mojom::RemotingDataStreamSenderRequest video_sender_request,
+      mojo::PendingReceiver<media::mojom::RemotingDataStreamSender>
+          audio_sender,
+      mojo::PendingReceiver<media::mojom::RemotingDataStreamSender>
+          video_sender,
       int32_t audio_stream_id,
       int32_t video_stream_id);
 
@@ -235,7 +238,7 @@ class CastRemotingConnector : public base::SupportsUserData::Data,
   // pointing to the RemotingBridge being used to communicate with the source.
   RemotingBridge* active_bridge_;
 
-  // TODO(xjz): Remove these after Mirroring Service is launched.
+  // TODO(crbug.com/1015486): Remove these after Mirroring Service is launched.
   mojo::Receiver<media::mojom::MirrorServiceRemotingSource>
       deprecated_receiver_{this};
   mojo::Remote<media::mojom::MirrorServiceRemoter> deprecated_remoter_;

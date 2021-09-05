@@ -32,9 +32,7 @@ WebAppMenuButton::WebAppMenuButton(BrowserView* browser_view)
 
   SetInkDropMode(InkDropMode::ON);
   SetFocusBehavior(FocusBehavior::ALWAYS);
-  // Avoid the native theme border, which would crop the icon (see
-  // https://crbug.com/831968).
-  SetBorder(nullptr);
+
   // This name is guaranteed not to change during the lifetime of this button.
   // Get the app name only, aka "Google Docs" instead of "My Doc - Google Docs",
   // because the menu applies to the entire app.
@@ -44,16 +42,7 @@ WebAppMenuButton::WebAppMenuButton(BrowserView* browser_view)
   SetTooltipText(
       l10n_util::GetStringFUTF16(IDS_WEB_APP_MENU_BUTTON_TOOLTIP, app_name));
 
-  constexpr int focus_mode_app_menu_button_size = 34;
-  bool is_focus_mode = browser_view->browser()->is_focus_mode();
-  int size = is_focus_mode ? focus_mode_app_menu_button_size
-                           : GetLayoutConstant(WEB_APP_MENU_BUTTON_SIZE);
-  SetMinSize(gfx::Size(size, size));
   SetHorizontalAlignment(gfx::ALIGN_CENTER);
-  if (!is_focus_mode) {
-    constexpr gfx::Insets kInkDropInsets(2);
-    SetProperty(views::kInternalPaddingKey, kInkDropInsets);
-  }
 }
 
 WebAppMenuButton::~WebAppMenuButton() {}
@@ -76,14 +65,12 @@ void WebAppMenuButton::StartHighlightAnimation() {
                              this, &WebAppMenuButton::FadeHighlightOff);
 }
 
-void WebAppMenuButton::OnMenuButtonClicked(views::Button* source,
-                                           const gfx::Point& point,
-                                           const ui::Event* event) {
+void WebAppMenuButton::ButtonPressed(views::Button* source,
+                                     const ui::Event& event) {
   Browser* browser = browser_view_->browser();
   RunMenu(std::make_unique<WebAppMenuModel>(browser_view_, browser), browser,
-          event && event->IsKeyEvent()
-              ? views::MenuRunner::SHOULD_SHOW_MNEMONICS
-              : views::MenuRunner::NO_FLAGS,
+          event.IsKeyEvent() ? views::MenuRunner::SHOULD_SHOW_MNEMONICS
+                             : views::MenuRunner::NO_FLAGS,
           false);
 
   // Add UMA for how many times the web app menu button are clicked.

@@ -67,6 +67,13 @@ class FakeIntentHelperInstance : public mojom::IntentHelperInstance {
 
   void AddPreferredPackage(const std::string& package_name) override;
 
+  void AddPreferredApp(const std::string& package_name,
+                       IntentFilter intent_filter,
+                       mojom::IntentInfoPtr intent) override;
+
+  void ResetVerifiedLinks(
+      const std::vector<std::string>& package_names) override;
+
   void GetFileSizeDeprecated(const std::string& url,
                              GetFileSizeDeprecatedCallback callback) override;
 

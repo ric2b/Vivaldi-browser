@@ -11,6 +11,7 @@
 #include "ash/frame/header_view.h"
 #include "ash/wm/overview/overview_observer.h"
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/views/window/non_client_view.h"
@@ -22,9 +23,7 @@ class Widget;
 namespace ash {
 
 class FrameCaptionButtonContainerView;
-class HeaderView;
 class ImmersiveFullscreenController;
-class ImmersiveFullscreenControllerDelegate;
 class NonClientFrameViewAshImmersiveHelper;
 
 // A NonClientFrameView used for packaged apps, dialogs and other non-browser
@@ -42,8 +41,6 @@ class ASH_EXPORT NonClientFrameViewAsh : public views::NonClientFrameView {
   // created for the NonClientFrameViewAsh; if true and a WindowStateDelegate
   // has not been set on the WindowState associated with |frame|, then an
   // ImmersiveFullscreenController is created.
-  // If ImmersiveFullscreenControllerDelegate is not supplied, HeaderView is
-  // used as the ImmersiveFullscreenControllerDelegate.
   explicit NonClientFrameViewAsh(views::Widget* frame);
   ~NonClientFrameViewAsh() override;
 
@@ -95,6 +92,9 @@ class ASH_EXPORT NonClientFrameViewAsh : public views::NonClientFrameView {
   // header of v2 and ARC apps.
   virtual void SetShouldPaintHeader(bool paint);
 
+  // Height from top of window to top of client area.
+  int NonClientTopBorderHeight() const;
+
   const views::View* GetAvatarIconViewForTest() const;
 
   SkColor GetActiveFrameColorForTest() const;
@@ -120,9 +120,6 @@ class ASH_EXPORT NonClientFrameViewAsh : public views::NonClientFrameView {
   // held by the HeaderView. Used in testing.
   FrameCaptionButtonContainerView* GetFrameCaptionButtonContainerViewForTest();
 
-  // Height from top of window to top of client area.
-  int NonClientTopBorderHeight() const;
-
   // Not owned.
   views::Widget* frame_;
 
@@ -132,6 +129,8 @@ class ASH_EXPORT NonClientFrameViewAsh : public views::NonClientFrameView {
   OverlayView* overlay_view_ = nullptr;
 
   std::unique_ptr<NonClientFrameViewAshImmersiveHelper> immersive_helper_;
+
+  base::WeakPtrFactory<NonClientFrameViewAsh> weak_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(NonClientFrameViewAsh);
 };

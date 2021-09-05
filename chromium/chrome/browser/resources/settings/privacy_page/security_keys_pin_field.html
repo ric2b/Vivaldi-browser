@@ -17,13 +17,14 @@
       }
     </style>
 
-    <cr-input id="pin" value="{{value}}" minLength="4"
+    <p>$i18n{securityKeysPINPrompt}</p>
+    <cr-input id="pin" value="{{value_}}" minLength="4"
         maxLength="255" spellcheck="false"
         on-input="onPINInput_"
-        invalid="[[isNonEmpty_(error)]]"
-        label="[[label]]" tabindex="0"
+        invalid="[[isNonEmpty_(error_)]]"
+        label="$i18n{securityKeysPIN}" tabindex="0"
         type$="[[inputType_(inputVisible_)]]"
-        error-message="[[error]]">
+        error-message="[[error_]]">
       <cr-icon-button slot="suffix" id="showButton"
           class$="[[showButtonClass_(inputVisible_)]]"
           title="[[showButtonTitle_(inputVisible_)]]"

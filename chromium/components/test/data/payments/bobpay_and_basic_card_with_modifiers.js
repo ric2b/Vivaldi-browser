@@ -10,7 +10,7 @@
  * Launches the PaymentRequest UI with Bob Pay and basic-card as payment
  * methods and a modifier for basic-card.
  */
-function buy() {  // eslint-disable-line no-unused-vars
+function buy() { // eslint-disable-line no-unused-vars
   try {
     new PaymentRequest(
         [
@@ -54,7 +54,7 @@ function buy() {  // eslint-disable-line no-unused-vars
  * Launches the PaymentRequest UI with Bob Pay and basic-card as payment
  * methods and a modifier for Bob Pay.
  */
-function buyWithBobPayDiscount() {  // eslint-disable-line no-unused-vars
+function buyWithBobPayDiscount() { // eslint-disable-line no-unused-vars
   try {
     new PaymentRequest(
         [
@@ -96,9 +96,9 @@ function buyWithBobPayDiscount() {  // eslint-disable-line no-unused-vars
 
 /**
  * Launches the PaymentRequest UI with Bob Pay and basic-card as payment
- * methods and a modifier for basic-card with "credit" type
+ * methods and a modifier for basic-card with "visa" network
  */
-function creditSupportedType() {  // eslint-disable-line no-unused-vars
+function visaSupportedNetwork() { // eslint-disable-line no-unused-vars
   try {
     new PaymentRequest(
         [
@@ -119,101 +119,6 @@ function creditSupportedType() {  // eslint-disable-line no-unused-vars
             }],
             data: {
               discountProgramParticipantId: '86328764873265',
-              supportedTypes: ['credit'],
-            },
-          }],
-        })
-        .show()
-        .then(function(resp) {
-          resp.complete('success')
-              .then(function() {
-                print(JSON.stringify(resp, undefined, 2));
-              })
-              .catch(function(error) {
-                print(error.message);
-              });
-        })
-        .catch(function(error) {
-          print(error.message);
-        });
-  } catch (error) {
-    print(error.message);
-  }
-}
-
-/**
- * Launches the PaymentRequest UI with Bob Pay and basic-card as payment
- * methods and a modifier for basic-card with "debit" type
- */
-function debitSupportedType() {  // eslint-disable-line no-unused-vars
-  try {
-    new PaymentRequest(
-        [
-          {supportedMethods: 'https://bobpay.com'},
-          {supportedMethods: 'basic-card'},
-        ],
-        {
-          total: {label: 'Total', amount: {currency: 'USD', value: '5.00'}},
-          modifiers: [{
-            supportedMethods: 'basic-card',
-            total: {
-              label: 'Total',
-              amount: {currency: 'USD', value: '4.00'},
-            },
-            additionalDisplayItems: [{
-              label: 'basic-card discount',
-              amount: {currency: 'USD', value: '-1.00'},
-            }],
-            data: {
-              discountProgramParticipantId: '86328764873265',
-              supportedTypes: ['debit'],
-            },
-          }],
-        })
-        .show()
-        .then(function(resp) {
-          resp.complete('success')
-              .then(function() {
-                print(JSON.stringify(resp, undefined, 2));
-              })
-              .catch(function(error) {
-                print(error.message);
-              });
-        })
-        .catch(function(error) {
-          print(error.message);
-        });
-  } catch (error) {
-    print(error.message);
-  }
-}
-
-/**
- * Launches the PaymentRequest UI with Bob Pay and basic-card as payment
- * methods and a modifier for basic-card with "credit" type and "visa" network
- */
-function visaSupportedNetwork() {  // eslint-disable-line no-unused-vars
-  try {
-    new PaymentRequest(
-        [
-          {supportedMethods: 'https://bobpay.com'},
-          {supportedMethods: 'basic-card'},
-        ],
-        {
-          total: {label: 'Total', amount: {currency: 'USD', value: '5.00'}},
-          modifiers: [{
-            supportedMethods: 'basic-card',
-            total: {
-              label: 'Total',
-              amount: {currency: 'USD', value: '4.00'},
-            },
-            additionalDisplayItems: [{
-              label: 'basic-card discount',
-              amount: {currency: 'USD', value: '-1.00'},
-            }],
-            data: {
-              discountProgramParticipantId: '86328764873265',
-              supportedTypes: ['credit'],
               supportedNetworks: ['visa'],
             },
           }],
@@ -238,10 +143,9 @@ function visaSupportedNetwork() {  // eslint-disable-line no-unused-vars
 
 /**
  * Launches the PaymentRequest UI with Bob Pay and basic-card as payment
- * methods and a modifier for basic-card with "credit" type and " mastercard"
- * network
+ * methods and a modifier for basic-card with "mastercard" network
  */
-function mastercardSupportedNetwork() {  // eslint-disable-line no-unused-vars
+function mastercardSupportedNetwork() { // eslint-disable-line no-unused-vars
   try {
     new PaymentRequest(
         [
@@ -262,7 +166,6 @@ function mastercardSupportedNetwork() {  // eslint-disable-line no-unused-vars
             }],
             data: {
               discountProgramParticipantId: '86328764873265',
-              supportedTypes: ['credit'],
               supportedNetworks: ['mastercard'],
             },
           }],
@@ -289,7 +192,7 @@ function mastercardSupportedNetwork() {  // eslint-disable-line no-unused-vars
  * Launches the PaymentRequest UI with Bob Pay and basic-card as payment
  * methods and a modifier for basic-card with "mastercard" network.
  */
-function mastercardAnySupportedType() {  // eslint-disable-line no-unused-vars
+function mastercardAnySupportedType() { // eslint-disable-line no-unused-vars
   try {
     new PaymentRequest(
         [
@@ -337,7 +240,7 @@ function mastercardAnySupportedType() {  // eslint-disable-line no-unused-vars
  * modifier for basic-card with "mastercard" network, but the modifier does not
  * have a total specified.
  */
-function noTotal() {  // eslint-disable-line no-unused-vars
+function noTotal() { // eslint-disable-line no-unused-vars
   try {
     new PaymentRequest([{supportedMethods: 'basic-card'}], {
       total: {label: 'Total', amount: {currency: 'USD', value: '5.00'}},

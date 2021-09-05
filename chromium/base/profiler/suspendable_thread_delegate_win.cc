@@ -72,7 +72,7 @@ const TEB* GetThreadEnvironmentBlock(HANDLE thread_handle) {
   using NtQueryInformationThreadFunction =
       NTSTATUS(WINAPI*)(HANDLE, THREAD_INFORMATION_CLASS, PVOID, ULONG, PULONG);
 
-  const auto nt_query_information_thread =
+  static const auto nt_query_information_thread =
       reinterpret_cast<NtQueryInformationThreadFunction>(::GetProcAddress(
           ::GetModuleHandle(L"ntdll.dll"), "NtQueryInformationThread"));
   if (!nt_query_information_thread)
@@ -172,8 +172,9 @@ bool SuspendableThreadDelegateWin::ScopedSuspendThread::WasSuccessful() const {
 // ----------------------------------------------------------
 
 SuspendableThreadDelegateWin::SuspendableThreadDelegateWin(
-    PlatformThreadId thread_id)
-    : thread_handle_(GetThreadHandle(thread_id)),
+    SamplingProfilerThreadToken thread_token)
+    : thread_id_(thread_token.id),
+      thread_handle_(GetThreadHandle(thread_token.id)),
       thread_stack_base_address_(reinterpret_cast<uintptr_t>(
           GetThreadEnvironmentBlock(thread_handle_.Get())->Tib.StackBase)) {}
 
@@ -182,6 +183,10 @@ SuspendableThreadDelegateWin::~SuspendableThreadDelegateWin() = default;
 std::unique_ptr<SuspendableThreadDelegate::ScopedSuspendThread>
 SuspendableThreadDelegateWin::CreateScopedSuspendThread() {
   return std::make_unique<ScopedSuspendThread>(thread_handle_.Get());
+}
+
+PlatformThreadId SuspendableThreadDelegateWin::GetThreadId() const {
+  return thread_id_;
 }
 
 // NO HEAP ALLOCATIONS.

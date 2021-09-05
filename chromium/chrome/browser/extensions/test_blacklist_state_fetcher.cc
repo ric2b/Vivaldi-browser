@@ -6,8 +6,9 @@
 
 #include "base/stl_util.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "components/safe_browsing/db/v4_test_util.h"
+#include "components/safe_browsing/core/db/v4_test_util.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/mojom/url_loader.mojom.h"
 
@@ -19,14 +20,15 @@ class DummySharedURLLoaderFactory : public network::SharedURLLoaderFactory {
   DummySharedURLLoaderFactory() {}
 
   // network::URLLoaderFactory implementation:
-  void CreateLoaderAndStart(network::mojom::URLLoaderRequest loader,
-                            int32_t routing_id,
-                            int32_t request_id,
-                            uint32_t options,
-                            const network::ResourceRequest& request,
-                            network::mojom::URLLoaderClientPtr client,
-                            const net::MutableNetworkTrafficAnnotationTag&
-                                traffic_annotation) override {
+  void CreateLoaderAndStart(
+      mojo::PendingReceiver<network::mojom::URLLoader> loader,
+      int32_t routing_id,
+      int32_t request_id,
+      uint32_t options,
+      const network::ResourceRequest& request,
+      mojo::PendingRemote<network::mojom::URLLoaderClient> client,
+      const net::MutableNetworkTrafficAnnotationTag& traffic_annotation)
+      override {
     // Ensure the client pipe doesn't get closed to avoid SimpleURLLoader seeing
     // a connection error.
     clients_.push_back(std::move(client));
@@ -37,8 +39,8 @@ class DummySharedURLLoaderFactory : public network::SharedURLLoaderFactory {
     NOTREACHED();
   }
 
-  // network::SharedURLLoaderFactoryInfo implementation
-  std::unique_ptr<network::SharedURLLoaderFactoryInfo> Clone() override {
+  // network::PendingSharedURLLoaderFactory implementation
+  std::unique_ptr<network::PendingSharedURLLoaderFactory> Clone() override {
     NOTREACHED();
     return nullptr;
   }
@@ -47,7 +49,7 @@ class DummySharedURLLoaderFactory : public network::SharedURLLoaderFactory {
   friend class base::RefCounted<DummySharedURLLoaderFactory>;
   ~DummySharedURLLoaderFactory() override = default;
 
-  std::vector<network::mojom::URLLoaderClientPtr> clients_;
+  std::vector<mojo::PendingRemote<network::mojom::URLLoaderClient>> clients_;
 };
 
 }  // namespace

@@ -4,6 +4,7 @@
 
 #include <string>
 
+#include "ash/public/cpp/accessibility_controller.h"
 #include "ash/public/cpp/ash_pref_names.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -125,6 +126,11 @@ void LoginScreenAccessibilityPolicyBrowsertest::SetUpOnMainThread() {
   ASSERT_TRUE(magnification_manager);
   magnification_manager->SetProfileForTest(
       chromeos::ProfileHelper::GetSigninProfile());
+
+  // Disable PolicyRecommendationRestorer. See https://crbug.com/1015763#c13 for
+  // details.
+  ash::AccessibilityController::Get()
+      ->DisablePolicyRecommendationRestorerForTesting();
 }
 
 void LoginScreenAccessibilityPolicyBrowsertest::
@@ -967,15 +973,14 @@ IN_PROC_BROWSER_TEST_F(LoginScreenAccessibilityPolicyBrowsertest,
       ash::prefs::kAccessibilityScreenMagnifierEnabled);
 
   // Verify that the pref which controls the full-screen magnifier mode in the
-  // login profile is managed by the policy.
+  // login profile is set to the recommended value specified in the policy.
   EXPECT_FALSE(IsPrefManaged(ash::prefs::kAccessibilityScreenMagnifierEnabled));
   EXPECT_EQ(base::Value(true),
             GetPrefValue(ash::prefs::kAccessibilityScreenMagnifierEnabled));
 
-  // Verify that the full-screen magnifier mode cannot be enabled manually
-  // anymore.
+  // Verify that the full-screen magnifier mode can be disabled manually.
   prefs->SetBoolean(ash::prefs::kAccessibilityScreenMagnifierEnabled, false);
-  EXPECT_TRUE(
+  EXPECT_FALSE(
       prefs->GetBoolean(ash::prefs::kAccessibilityScreenMagnifierEnabled));
 }
 
@@ -1028,5 +1033,91 @@ IN_PROC_BROWSER_TEST_F(LoginScreenAccessibilityPolicyBrowsertest,
   // Verify that the docked magnifier mode can be enabled manually again.
   magnification_manager->SetDockedMagnifierEnabled(false);
   EXPECT_FALSE(magnification_manager->IsDockedMagnifierEnabled());
+}
+
+IN_PROC_BROWSER_TEST_F(LoginScreenAccessibilityPolicyBrowsertest,
+                       DeviceLoginScreenShowOptionsInSystemTrayMenu) {
+  // Verifies that the visibility of the accessibility options on the login
+  // screen can be controlled through device policy.
+  PrefService* prefs = login_profile_->GetPrefs();
+  ASSERT_TRUE(prefs);
+  EXPECT_FALSE(
+      prefs->GetBoolean(ash::prefs::kShouldAlwaysShowAccessibilityMenu));
+
+  // Manually show the accessibility options in tray menu.
+  prefs->SetBoolean(ash::prefs::kShouldAlwaysShowAccessibilityMenu, true);
+  EXPECT_TRUE(
+      prefs->GetBoolean(ash::prefs::kShouldAlwaysShowAccessibilityMenu));
+
+  // Hide the accessibility options in tray menu through device policy and wait
+  // for the change to take effect.
+  em::ChromeDeviceSettingsProto& proto(device_policy()->payload());
+  proto.mutable_accessibility_settings()
+      ->set_login_screen_show_options_in_system_tray_menu_enabled(false);
+  RefreshDevicePolicyAndWaitForPrefChange(
+      ash::prefs::kShouldAlwaysShowAccessibilityMenu);
+
+  // Verify that the pref which controls the visibility of the accessibility
+  // options tray menu in the login profile is managed by the policy.
+  EXPECT_TRUE(IsPrefManaged(ash::prefs::kShouldAlwaysShowAccessibilityMenu));
+  EXPECT_EQ(base::Value(false),
+            GetPrefValue(ash::prefs::kShouldAlwaysShowAccessibilityMenu));
+
+  // Verify that its not possible to change the visibility of the accessibility
+  // options in tray menu, manually anymore.
+  prefs->SetBoolean(ash::prefs::kShouldAlwaysShowAccessibilityMenu, true);
+  EXPECT_FALSE(
+      prefs->GetBoolean(ash::prefs::kShouldAlwaysShowAccessibilityMenu));
+
+  // Show the accessibility options in tray menu through device policy as a
+  // recommended value and wait for the change to take effect.
+  proto.mutable_accessibility_settings()
+      ->set_login_screen_show_options_in_system_tray_menu_enabled(true);
+  proto.mutable_accessibility_settings()
+      ->mutable_login_screen_show_options_in_system_tray_menu_enabled_options()
+      ->set_mode(em::PolicyOptions::RECOMMENDED);
+  RefreshDevicePolicyAndWaitForPrefChange(
+      ash::prefs::kShouldAlwaysShowAccessibilityMenu);
+
+  // Verify that the pref which controls the visibility of the accessibility
+  // options in tray menu in the login profile is being applied as recommended
+  // by the policy.
+  EXPECT_FALSE(IsPrefManaged(ash::prefs::kShouldAlwaysShowAccessibilityMenu));
+  EXPECT_EQ(base::Value(true),
+            GetPrefValue(ash::prefs::kShouldAlwaysShowAccessibilityMenu));
+
+  // Verify that the visibility of the accessibility options in tray menu can be
+  // enabled manually again.
+  prefs->SetBoolean(ash::prefs::kShouldAlwaysShowAccessibilityMenu, false);
+  EXPECT_FALSE(
+      prefs->GetBoolean(ash::prefs::kShouldAlwaysShowAccessibilityMenu));
+}
+
+IN_PROC_BROWSER_TEST_F(LoginScreenAccessibilityPolicyBrowsertest,
+                       DeviceLoginScreenAccessibilityShortcutsEnabled) {
+  // Verifies that the state of accessibility shortcuts on the login screen, can
+  // be controlled using a device policy.
+  PrefService* prefs = login_profile_->GetPrefs();
+  ASSERT_TRUE(prefs);
+  EXPECT_TRUE(prefs->GetBoolean(ash::prefs::kAccessibilityShortcutsEnabled));
+
+  // Disable the accessibility shortcuts on login screen through device policy
+  // and wait for the change to take effect.
+  em::ChromeDeviceSettingsProto& proto(device_policy()->payload());
+  proto.mutable_accessibility_settings()->set_login_screen_shortcuts_enabled(
+      false);
+  RefreshDevicePolicyAndWaitForPrefChange(
+      ash::prefs::kAccessibilityShortcutsEnabled);
+
+  // Verify that the pref which controls whether the accessibiilty shortcuts
+  // been enabled or not on the login profile is managed by the policy.
+  EXPECT_TRUE(IsPrefManaged(ash::prefs::kAccessibilityShortcutsEnabled));
+  EXPECT_EQ(base::Value(false),
+            GetPrefValue(ash::prefs::kAccessibilityShortcutsEnabled));
+
+  // Verify that its not possible to enable the accessibiilty shortcuts pref
+  // manually.
+  prefs->SetBoolean(ash::prefs::kAccessibilityShortcutsEnabled, true);
+  EXPECT_FALSE(prefs->GetBoolean(ash::prefs::kAccessibilityShortcutsEnabled));
 }
 }  // namespace policy

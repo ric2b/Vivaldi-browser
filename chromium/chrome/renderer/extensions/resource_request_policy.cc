@@ -99,10 +99,7 @@ bool ResourceRequestPolicy::CanRequestResource(
     return true;
   }
 
-  // TODO(gisli@vivaldi.com):  Added allow if trans is Forward/back so it
-  // possible to go back and forth between normal pages and internal pages.
-  if ((transition_type & ui::PAGE_TRANSITION_FORWARD_BACK) != 0 ||
-      !ui::PageTransitionIsWebTriggerable(transition_type))
+  if (!ui::PageTransitionIsWebTriggerable(transition_type))
     return true;
 
   // Unreachable web page error page (to allow showing the icon of the

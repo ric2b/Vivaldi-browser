@@ -14,44 +14,49 @@ import android.provider.ContactsContract;
 import androidx.browser.customtabs.CustomTabsIntent;
 
 import org.chromium.base.ContextUtils;
+import org.chromium.base.IntentUtils;
 import org.chromium.base.PackageManagerUtils;
 import org.chromium.base.metrics.RecordUserAction;
-import org.chromium.chrome.browser.ChromeFeatureList;
+import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.DefaultBrowserInfo;
 import org.chromium.chrome.browser.IntentHandler;
+import org.chromium.chrome.browser.compositor.bottombar.ephemeraltab.EphemeralTabCoordinator;
 import org.chromium.chrome.browser.contextmenu.ContextMenuItemDelegate;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.download.ChromeDownloadDelegate;
+import org.chromium.chrome.browser.incognito.IncognitoUtils;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
-import org.chromium.chrome.browser.preferences.PrefServiceBridge;
-import org.chromium.chrome.browser.tabmodel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.document.TabDelegate;
-import org.chromium.chrome.browser.util.IntentUtils;
-import org.chromium.chrome.browser.util.UrlConstants;
-import org.chromium.chrome.browser.util.UrlUtilities;
+import org.chromium.components.embedder_support.util.UrlConstants;
+import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.content_public.browser.LoadUrlParams;
+import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.common.Referrer;
 import org.chromium.ui.base.Clipboard;
 import org.chromium.ui.base.PageTransition;
+import org.chromium.url.URI;
 
-import java.net.URI;
 import java.util.Locale;
 
 /**
  * A default {@link ContextMenuItemDelegate} that supports the context menu functionality in Tab.
  */
 public class TabContextMenuItemDelegate implements ContextMenuItemDelegate {
-    private final Tab mTab;
+    private final TabImpl mTab;
     private boolean mLoadOriginalImageRequestedForPageLoad;
     private EmptyTabObserver mDataReductionProxyContextMenuTabObserver;
+    private final Supplier<EphemeralTabCoordinator> mEphemeralTabCoordinatorSupplier;
 
     /**
      * Builds a {@link TabContextMenuItemDelegate} instance.
      */
-    public TabContextMenuItemDelegate(Tab tab) {
-        mTab = tab;
+    public TabContextMenuItemDelegate(
+            Tab tab, Supplier<EphemeralTabCoordinator> ephemeralTabCoordinatorSupplier) {
+        mTab = (TabImpl) tab;
+        mEphemeralTabCoordinatorSupplier = ephemeralTabCoordinatorSupplier;
+
         mDataReductionProxyContextMenuTabObserver = new EmptyTabObserver() {
             @Override
             public void onPageLoadStarted(Tab tab, String url) {
@@ -67,13 +72,18 @@ public class TabContextMenuItemDelegate implements ContextMenuItemDelegate {
     }
 
     @Override
+    public WebContents getWebContents() {
+        return mTab.getWebContents();
+    }
+
+    @Override
     public boolean isIncognito() {
         return mTab.isIncognito();
     }
 
     @Override
     public boolean isIncognitoSupported() {
-        return PrefServiceBridge.getInstance().isIncognitoModeEnabled();
+        return IncognitoUtils.isIncognitoModeEnabled();
     }
 
     @Override
@@ -95,6 +105,11 @@ public class TabContextMenuItemDelegate implements ContextMenuItemDelegate {
     @Override
     public void onSaveToClipboard(String text, int clipboardType) {
         Clipboard.getInstance().setText(text);
+    }
+
+    @Override
+    public void onSaveImageToClipboard(Uri uri) {
+        Clipboard.getInstance().setImageUri(uri);
     }
 
     @Override
@@ -200,7 +215,7 @@ public class TabContextMenuItemDelegate implements ContextMenuItemDelegate {
 
     @Override
     public String getPageUrl() {
-        return mTab.getUrl();
+        return mTab.getUrlString();
     }
 
     @Override
@@ -220,19 +235,17 @@ public class TabContextMenuItemDelegate implements ContextMenuItemDelegate {
                                   .getDataReductionProxyPassThroughHeader()
                         : null);
         loadUrlParams.setReferrer(referrer);
-        mTab.getActivity().getTabModelSelector().openNewTab(loadUrlParams,
-                TabLaunchType.FROM_LONGPRESS_BACKGROUND, mTab, isIncognito());
+        mTab.getActivity().getTabModelSelector().openNewTab(
+                loadUrlParams, TabLaunchType.FROM_LONGPRESS_BACKGROUND, mTab, isIncognito());
     }
 
     @Override
     public void onOpenInEphemeralTab(String url, String title) {
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.EPHEMERAL_TAB_USING_BOTTOM_SHEET)) {
-            mTab.getActivity().getEphemeralTabCoordinator().requestOpenSheet(
-                    url, title, mTab.isIncognito());
-        } else {
-            mTab.getActivity().getEphemeralTabPanel().requestOpenPanel(
-                    url, title, mTab.isIncognito());
+        if (mEphemeralTabCoordinatorSupplier == null
+                || mEphemeralTabCoordinatorSupplier.get() == null) {
+            return;
         }
+        mEphemeralTabCoordinatorSupplier.get().requestOpenSheet(url, title, mTab.isIncognito());
     }
 
     @Override
@@ -277,11 +290,11 @@ public class TabContextMenuItemDelegate implements ContextMenuItemDelegate {
     public void onOpenInNewChromeTabFromCCT(String linkUrl, boolean isIncognito) {
         Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(linkUrl));
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        intent.setClass(mTab.getApplicationContext(), ChromeLauncherActivity.class);
+        intent.setClass(ContextUtils.getApplicationContext(), ChromeLauncherActivity.class);
         if (isIncognito) {
             intent.putExtra(IntentHandler.EXTRA_OPEN_NEW_INCOGNITO_TAB, true);
-            intent.putExtra(
-                    Browser.EXTRA_APPLICATION_ID, mTab.getApplicationContext().getPackageName());
+            intent.putExtra(Browser.EXTRA_APPLICATION_ID,
+                    ContextUtils.getApplicationContext().getPackageName());
             IntentHandler.addTrustedIntentExtras(intent);
             IntentHandler.setTabLaunchType(intent, TabLaunchType.FROM_EXTERNAL_APP);
         }
@@ -315,4 +328,11 @@ public class TabContextMenuItemDelegate implements ContextMenuItemDelegate {
         return false;
     }
 
+    @Override
+    public void onOpenInNewTabForeground(String url, Referrer referrer) {
+        LoadUrlParams loadUrlParams = new LoadUrlParams(url);
+        loadUrlParams.setReferrer(referrer);
+        TabModelSelector.from(mTab).openNewTab(
+                loadUrlParams, TabLaunchType.FROM_LONGPRESS_FOREGROUND, mTab, isIncognito());
+    }
 }

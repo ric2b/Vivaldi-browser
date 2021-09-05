@@ -1,0 +1,41 @@
+// Copyright 2018 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#include "sync/note_sync_service_factory.h"
+
+#include "chrome/browser/profiles/incognito_helpers.h"
+#include "chrome/browser/profiles/profile.h"
+#include "components/keyed_service/content/browser_context_dependency_manager.h"
+#include "sync/notes/note_sync_service.h"
+
+namespace vivaldi {
+// static
+sync_notes::NoteSyncService* NoteSyncServiceFactory::GetForProfile(
+    Profile* profile) {
+  return static_cast<sync_notes::NoteSyncService*>(
+      GetInstance()->GetServiceForBrowserContext(profile, true));
+}
+
+// static
+NoteSyncServiceFactory* NoteSyncServiceFactory::GetInstance() {
+  return base::Singleton<NoteSyncServiceFactory>::get();
+}
+
+NoteSyncServiceFactory::NoteSyncServiceFactory()
+    : BrowserContextKeyedServiceFactory(
+          "NoteSyncServiceFactory",
+          BrowserContextDependencyManager::GetInstance()) {}
+
+NoteSyncServiceFactory::~NoteSyncServiceFactory() {}
+
+KeyedService* NoteSyncServiceFactory::BuildServiceInstanceFor(
+    content::BrowserContext* context) const {
+  return new sync_notes::NoteSyncService();
+}
+
+content::BrowserContext* NoteSyncServiceFactory::GetBrowserContextToUse(
+    content::BrowserContext* context) const {
+  return chrome::GetBrowserContextRedirectedInIncognito(context);
+}
+}  // namespace vivaldi

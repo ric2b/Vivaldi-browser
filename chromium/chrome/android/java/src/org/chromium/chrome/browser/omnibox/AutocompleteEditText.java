@@ -18,19 +18,19 @@ import android.view.inputmethod.InputConnection;
 import android.widget.EditText;
 
 import androidx.annotation.CallSuper;
+import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Log;
 import org.chromium.base.StrictModeContext;
-import org.chromium.base.VisibleForTesting;
-import org.chromium.chrome.browser.ChromeFeatureList;
-import org.chromium.chrome.browser.ui.widget.text.VerticallyFixedEditText;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.components.browser_ui.widget.text.VerticallyFixedEditText;
 
 /**
  * An {@link EditText} that shows autocomplete text at the end.
  */
 public class AutocompleteEditText
         extends VerticallyFixedEditText implements AutocompleteEditTextModelBase.Delegate {
-    private static final String TAG = "cr_AutocompleteEdit";
+    private static final String TAG = "AutocompleteEdit";
 
     private static final boolean DEBUG = false;
 

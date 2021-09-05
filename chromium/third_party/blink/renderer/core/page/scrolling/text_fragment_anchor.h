@@ -49,16 +49,14 @@ class CORE_EXPORT TextFragmentAnchor final : public FragmentAnchor,
 
   void Installed() override;
 
-  void DidScroll(ScrollType type) override;
+  void DidScroll(mojom::blink::ScrollType type) override;
 
   void PerformPreRafActions() override;
-
-  void DidCompleteLoad() override;
 
   // Removes text match highlights if any highlight is in view.
   bool Dismiss() override;
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
   // TextFragmentFinder::Client interface
   void DidFindMatch(const EphemeralRangeInFlatTree& range) override;
@@ -68,6 +66,8 @@ class CORE_EXPORT TextFragmentAnchor final : public FragmentAnchor,
   // Called when the search is finished. Reports metrics and activates the
   // element fragment anchor if we didn't find a match.
   void DidFinishSearch();
+
+  void ApplyTargetToCommonAncestor(const EphemeralRangeInFlatTree& range);
 
   Vector<TextFragmentFinder> text_fragment_finders_;
 

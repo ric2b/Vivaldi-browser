@@ -13,7 +13,7 @@ namespace internal {
 
 namespace {
 
-ALWAYS_INLINE void PartitionDirectUnmap(PartitionPage* page) {
+ALWAYS_INLINE DeferredUnmap PartitionDirectUnmap(PartitionPage* page) {
   PartitionRootBase* root = PartitionRootBase::FromPage(page);
   const PartitionDirectMapExtent* extent =
       PartitionDirectMapExtent::FromPage(page);
@@ -46,8 +46,7 @@ ALWAYS_INLINE void PartitionDirectUnmap(PartitionPage* page) {
   // Account for the mapping starting a partition page before the actual
   // allocation address.
   ptr -= kPartitionPageSize;
-
-  FreePages(ptr, unmap_size);
+  return {ptr, unmap_size};
 }
 
 ALWAYS_INLINE void PartitionRegisterEmptyPage(PartitionPage* page) {
@@ -90,13 +89,12 @@ PartitionPage* PartitionPage::get_sentinel_page() {
   return &sentinel_page_;
 }
 
-void PartitionPage::FreeSlowPath() {
+DeferredUnmap PartitionPage::FreeSlowPath() {
   DCHECK(this != get_sentinel_page());
-  if (LIKELY(this->num_allocated_slots == 0)) {
+  if (LIKELY(num_allocated_slots == 0)) {
     // Page became fully unused.
     if (UNLIKELY(bucket->is_direct_mapped())) {
-      PartitionDirectUnmap(this);
-      return;
+      return PartitionDirectUnmap(this);
     }
     // If it's the current active page, change it. We bounce the page to
     // the empty list as a force towards defragmentation.
@@ -112,26 +110,27 @@ void PartitionPage::FreeSlowPath() {
     DCHECK(!bucket->is_direct_mapped());
     // Ensure that the page is full. That's the only valid case if we
     // arrive here.
-    DCHECK(this->num_allocated_slots < 0);
+    DCHECK(num_allocated_slots < 0);
     // A transition of num_allocated_slots from 0 to -1 is not legal, and
     // likely indicates a double-free.
-    CHECK(this->num_allocated_slots != -1);
-    this->num_allocated_slots = -this->num_allocated_slots - 2;
-    DCHECK(this->num_allocated_slots == bucket->get_slots_per_span() - 1);
+    CHECK(num_allocated_slots != -1);
+    num_allocated_slots = -num_allocated_slots - 2;
+    DCHECK(num_allocated_slots == bucket->get_slots_per_span() - 1);
     // Fully used page became partially used. It must be put back on the
     // non-full page list. Also make it the current page to increase the
     // chances of it being filled up again. The old current page will be
     // the next page.
-    DCHECK(!this->next_page);
+    DCHECK(!next_page);
     if (LIKELY(bucket->active_pages_head != get_sentinel_page()))
-      this->next_page = bucket->active_pages_head;
+      next_page = bucket->active_pages_head;
     bucket->active_pages_head = this;
     --bucket->num_full_pages;
     // Special case: for a partition page with just a single slot, it may
     // now be empty and we want to run it through the empty logic.
-    if (UNLIKELY(this->num_allocated_slots == 0))
-      FreeSlowPath();
+    if (UNLIKELY(num_allocated_slots == 0))
+      return FreeSlowPath();
   }
+  return {};
 }
 
 void PartitionPage::Decommit(PartitionRootBase* root) {
@@ -158,6 +157,10 @@ void PartitionPage::DecommitIfPossible(PartitionRootBase* root) {
   empty_cache_index = -1;
   if (is_empty())
     Decommit(root);
+}
+
+void DeferredUnmap::Unmap() {
+  FreePages(ptr, size);
 }
 
 }  // namespace internal

@@ -461,10 +461,6 @@ void WebSettingsImpl::SetEditingBehavior(EditingBehavior behavior) {
   settings_->SetEditingBehaviorType(static_cast<EditingBehaviorType>(behavior));
 }
 
-void WebSettingsImpl::SetMockScrollbarsEnabled(bool enabled) {
-  settings_->SetMockScrollbarsEnabled(enabled);
-}
-
 void WebSettingsImpl::SetHideScrollbars(bool enabled) {
   dev_tools_emulator_->SetHideScrollbars(enabled);
 }
@@ -658,10 +654,6 @@ void WebSettingsImpl::SetSelectionStrategy(SelectionStrategyType strategy) {
 
 void WebSettingsImpl::SetSmartInsertDeleteEnabled(bool enabled) {
   settings_->SetSmartInsertDeleteEnabled(enabled);
-}
-
-void WebSettingsImpl::SetUseSolidColorScrollbars(bool enabled) {
-  settings_->SetUseSolidColorScrollbars(enabled);
 }
 
 void WebSettingsImpl::SetMainFrameResizesAreOrientationChanges(bool enabled) {

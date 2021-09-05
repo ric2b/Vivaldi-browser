@@ -22,10 +22,10 @@ import org.mockito.MockitoAnnotations;
 import org.robolectric.annotation.Config;
 
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.chrome.browser.browserservices.Origin;
 import org.chromium.chrome.browser.notifications.NotificationChannelStatus;
 import org.chromium.chrome.browser.notifications.channels.ChannelDefinitions;
 import org.chromium.chrome.browser.notifications.channels.SiteChannelsManager;
+import org.chromium.components.embedder_support.util.Origin;
 
 /**
  * Tests for {@link NotificationChannelPreserverTest}.
@@ -33,9 +33,9 @@ import org.chromium.chrome.browser.notifications.channels.SiteChannelsManager;
 @RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE, sdk = Build.VERSION_CODES.O )
 public class NotificationChannelPreserverTest {
-    private final static Origin ORIGIN_WITH_CHANNEL = new Origin("https://www.red.com");
-    private final static String CHANNEL_ID = "red-channel-id";
-    private final static Origin ORIGIN_WITHOUT_CHANNEL = new Origin("https://www.blue.com");
+    private static final Origin ORIGIN_WITH_CHANNEL = Origin.create("https://www.red.com");
+    private static final String CHANNEL_ID = "red-channel-id";
+    private static final Origin ORIGIN_WITHOUT_CHANNEL = Origin.create("https://www.blue.com");
 
     @Mock TrustedWebActivityPermissionStore mStore;
     @Mock SiteChannelsManager mSiteChannelsManager;

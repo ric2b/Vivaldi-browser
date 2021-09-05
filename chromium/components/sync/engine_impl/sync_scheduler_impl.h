@@ -46,7 +46,7 @@ class SyncSchedulerImpl : public SyncScheduler {
   ~SyncSchedulerImpl() override;
 
   void Start(Mode mode, base::Time last_poll_time) override;
-  void ScheduleConfiguration(const ConfigurationParams& params) override;
+  void ScheduleConfiguration(ConfigurationParams params) override;
   void Stop() override;
   void ScheduleLocalNudge(ModelTypeSet types,
                           const base::Location& nudge_location) override;
@@ -61,6 +61,7 @@ class SyncSchedulerImpl : public SyncScheduler {
   void SetNotificationsEnabled(bool notifications_enabled) override;
 
   void OnCredentialsUpdated() override;
+  void OnCredentialsInvalidated() override;
   void OnConnectionStatusChange(network::mojom::ConnectionType type) override;
 
   // SyncCycle::Delegate implementation.
@@ -280,6 +281,11 @@ class SyncSchedulerImpl : public SyncScheduler {
 
   // Used to prevent changing nudge delays by the server in integration tests.
   bool force_short_nudge_delay_for_test_ = false;
+
+  // Indicates whether corresponding histograms already recorded.
+  // TODO(crbug.com/1041871): remove these members once Nigori metrics
+  // descrepancy investigation completed.
+  bool nigori_configuration_with_invalidated_credentials_recorded = false;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

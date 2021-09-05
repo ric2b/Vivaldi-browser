@@ -321,8 +321,8 @@ void FaviconCache::StopSyncing(syncer::ModelType type) {
   page_task_map_.clear();
 }
 
-syncer::SyncDataList FaviconCache::GetAllSyncData(syncer::ModelType type)
-    const {
+syncer::SyncDataList FaviconCache::GetAllSyncDataForTesting(
+    syncer::ModelType type) const {
   syncer::SyncDataList data_list;
   for (auto iter = synced_favicons_.begin(); iter != synced_favicons_.end();
        ++iter) {
@@ -446,8 +446,8 @@ void FaviconCache::OnPageFaviconUpdated(const GURL& page_url,
   base::CancelableTaskTracker::TaskId id =
       favicon_service_->GetFaviconForPageURL(
           page_url, SupportedFaviconTypes(), kMaxFaviconResolution,
-          base::Bind(&FaviconCache::OnFaviconDataAvailable,
-                     weak_ptr_factory_.GetWeakPtr(), page_url, mtime),
+          base::BindOnce(&FaviconCache::OnFaviconDataAvailable,
+                         weak_ptr_factory_.GetWeakPtr(), page_url, mtime),
           &cancelable_task_tracker_);
   page_task_map_[page_url] = id;
 }

@@ -9,11 +9,15 @@
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 
 #include "app/vivaldi_apptools.h"
+#include "app/vivaldi_constants.h"
 #include "browser/vivaldi_browser_finder.h"
+#include "chrome/browser/content_settings/mixed_content_settings_tab_helper.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/extensions/api/web_navigation/web_navigation_api.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
+#include "chrome/browser/picture_in_picture/picture_in_picture_window_manager.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/repost_form_warning_controller.h"
 #include "chrome/browser/ssl/security_state_tab_helper.h"
 #include "chrome/browser/tab_contents/tab_util.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -22,59 +26,41 @@
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tab_dialogs.h"
+#include "chrome/browser/ui/tab_modal_confirm_dialog.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_utils.h"
 #include "chrome/browser/ui/webui/site_settings_helper.h"
-#include "chrome/common/content_settings_renderer.mojom.h"
+#include "chrome/common/content_settings_agent.mojom.h"
+#include "chrome/common/chrome_render_frame.mojom.h"
 #include "chrome/common/render_messages.h"
 #include "components/guest_view/browser/guest_view_event.h"
 #include "components/guest_view/browser/guest_view_manager.h"
 #include "components/security_state/content/content_utils.h"
 #include "components/security_state/core/security_state.h"
 #include "components/web_cache/browser/web_cache_manager.h"
-#include "content/browser/browser_plugin/browser_plugin_guest.h"
-#include "content/browser/web_contents/web_contents_impl.h"
+#include "content/browser/browser_plugin/browser_plugin_guest.h" // nogncheck
+#include "content/browser/web_contents/web_contents_impl.h" // nogncheck
 #include "content/public/browser/devtools_agent_host.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/origin_util.h"
 #include "extensions/api/extension_action_utils/extension_action_utils_api.h"
+#include "extensions/api/guest_view/vivaldi_web_view_constants.h"
 #include "extensions/browser/guest_view/web_view/web_view_constants.h"
 #include "extensions/browser/process_manager.h"
 #include "extensions/browser/view_type_utils.h"
 #include "extensions/common/manifest_handlers/incognito_info.h"
 #include "extensions/helper/vivaldi_init_helpers.h"
 #include "net/cert/x509_certificate.h"
+#include "prefs/vivaldi_gen_prefs.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
-#include "ui/base/l10n/l10n_util.h"
-
-#include "chrome/browser/extensions/extension_tab_util.h"
-#include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/repost_form_warning_controller.h"
-#include "chrome/browser/ui/browser_finder.h"
-#include "chrome/browser/ui/browser_navigator_params.h"
-#include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/tab_modal_confirm_dialog.h"
-#include "chrome/browser/ui/tabs/tab_utils.h"
-#include "content/browser/browser_plugin/browser_plugin_guest.h"
-#include "extensions/api/extension_action_utils/extension_action_utils_api.h"
-#include "prefs/vivaldi_gen_prefs.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/vivaldi_browser_window.h"
 
 #if defined(USE_AURA)
 #include "ui/aura/window.h"
 #endif
-
-#include "browser/vivaldi_browser_finder.h"
-#include "chrome/browser/content_settings/mixed_content_settings_tab_helper.h"
-#include "chrome/browser/picture_in_picture/picture_in_picture_window_manager.h"
-#include "chrome/common/chrome_render_frame.mojom.h"
-#include "content/public/browser/render_frame_host.h"
-#include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
-
-// Vivaldi constants
-#include "extensions/api/guest_view/vivaldi_web_view_constants.h"
 
 using content::WebContents;
 using guest_view::GuestViewEvent;
@@ -87,7 +73,7 @@ namespace extensions {
 namespace {
 
 void SetAllowRunningInsecureContent(content::RenderFrameHost* frame) {
-  mojo::AssociatedRemote<chrome::mojom::ContentSettingsRenderer> renderer;
+  mojo::AssociatedRemote<chrome::mojom::ContentSettingsAgent> renderer;
   frame->GetRemoteAssociatedInterfaces()->GetInterface(&renderer);
   renderer->SetAllowRunningInsecureContent();
 }
@@ -127,29 +113,29 @@ static std::string ContentSettingsTypeToString(
   // ContentSettingSimpleBubbleModel. Also note that some of these will be moved
   // elsewhere soon, based on comments in Chromium-code.
   switch (content_type) {
-    case CONTENT_SETTINGS_TYPE_COOKIES:
+    case ContentSettingsType::COOKIES:
       return "cookies";
-    case CONTENT_SETTINGS_TYPE_IMAGES:
+    case ContentSettingsType::IMAGES:
       return "images";
-    case CONTENT_SETTINGS_TYPE_JAVASCRIPT:
+    case ContentSettingsType::JAVASCRIPT:
       return "javascript";
-    case CONTENT_SETTINGS_TYPE_PLUGINS:
+    case ContentSettingsType::PLUGINS:
       return "plugins";
-    case CONTENT_SETTINGS_TYPE_POPUPS:
+    case ContentSettingsType::POPUPS:
       return "popups";
-    case CONTENT_SETTINGS_TYPE_GEOLOCATION:
+    case ContentSettingsType::GEOLOCATION:
       return "location";
-    case CONTENT_SETTINGS_TYPE_MIXEDSCRIPT:
+    case ContentSettingsType::MIXEDSCRIPT:
       return "mixed-script";
-    case CONTENT_SETTINGS_TYPE_PROTOCOL_HANDLERS:
+    case ContentSettingsType::PROTOCOL_HANDLERS:
       return "register-protocol-handler";
-    case CONTENT_SETTINGS_TYPE_PPAPI_BROKER:
+    case ContentSettingsType::PPAPI_BROKER:
       return "ppapi-broker";
-    case CONTENT_SETTINGS_TYPE_AUTOMATIC_DOWNLOADS:
+    case ContentSettingsType::AUTOMATIC_DOWNLOADS:
       return "multiple-automatic-downloads";
-    case CONTENT_SETTINGS_TYPE_MIDI_SYSEX:
+    case ContentSettingsType::MIDI_SYSEX:
       return "midi-sysex";
-    case CONTENT_SETTINGS_TYPE_ADS:
+    case ContentSettingsType::ADS:
       return "ads";
     default:
       // fallthrough
@@ -204,8 +190,7 @@ WebContents::CreateParams WebViewGuest::GetWebContentsCreateParams(
   return params;
 }
 
-void WebViewGuest::ExtendedLoadProgressChanged(WebContents* source,
-                                               double progress,
+void WebViewGuest::ExtendedLoadProgressChanged(double progress,
                                                double loaded_bytes,
                                                int loaded_elements,
                                                int total_elements) {
@@ -227,11 +212,6 @@ void WebViewGuest::ToggleFullscreenModeForTab(
     return;
   is_fullscreen_ = enter_fullscreen;
 
-  std::unique_ptr<base::DictionaryValue> args(new base::DictionaryValue());
-  args->SetBoolean("enterFullscreen", enter_fullscreen);
-  DispatchEventToView(base::WrapUnique(
-      new GuestViewEvent(webview::kEventOnFullscreen, std::move(args))));
-
   Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
   if (!browser)
     return;
@@ -251,8 +231,17 @@ void WebViewGuest::ToggleFullscreenModeForTab(
   }
 #endif  // USE_AURA
 
-  if (skip_window_state)
+  std::unique_ptr<base::DictionaryValue> args(new base::DictionaryValue());
+  args->SetInteger("windowId", browser->session_id().id());
+  args->SetBoolean("enterFullscreen", enter_fullscreen);
+  DispatchEventToView(base::WrapUnique(
+    new GuestViewEvent(webview::kEventOnFullscreen, std::move(args))));
+
+  bool is_tab_casting = web_contents->IsBeingCaptured();
+  // Avoid bringing the window to fullscreen if we are tab-casting.
+  if (skip_window_state || is_tab_casting) {
     return;
+  }
 
   VivaldiBrowserWindow* app_win =
       static_cast<VivaldiBrowserWindow*>(browser->window());
@@ -300,30 +289,6 @@ bool WebViewGuest::IsVivaldiWebPanel() {
   return name_.compare("vivaldi-webpanel") == 0;
 }
 
-void WebViewGuest::SetVisible(bool is_visible) {
-  is_visible_ = is_visible;
-  content::RenderWidgetHostView* widgethostview =
-      web_contents()->GetRenderWidgetHostView();
-  if (widgethostview) {
-    if (is_visible && !widgethostview->IsShowing()) {
-      widgethostview->Show();
-      // This is called from CoreTabHelper::WasShown, and must be called because
-      // the activity must be updated so that the render-state is updated. This
-      // will make sure that the memory usage is on-par with what Chrome use.
-      // See VB-671 for more information and comments.
-      web_cache::WebCacheManager::GetInstance()->ObserveActivity(
-          web_contents()->GetMainFrame()->GetProcess()->GetID());
-    }
-    if (!is_visible && widgethostview->IsShowing()) {
-      widgethostview->Hide();
-    }
-  }
-}
-
-bool WebViewGuest::IsVisible() {
-  return is_visible_;
-}
-
 void WebViewGuest::ShowPageInfo(gfx::Point pos) {
   content::NavigationController& controller = web_contents()->GetController();
   const content::NavigationEntry* activeEntry = controller.GetActiveEntry();
@@ -342,12 +307,8 @@ void WebViewGuest::ShowPageInfo(gfx::Point pos) {
   }
 
   if (browser->window()) {
-    SecurityStateTabHelper* helper =
-      SecurityStateTabHelper::FromWebContents(web_contents());
-    DCHECK(helper);
     browser->window()->VivaldiShowWebsiteSettingsAt(
-        profile, web_contents(), url, helper->GetSecurityLevel(),
-        *helper->GetVisibleSecurityState(), pos);
+        profile, web_contents(), url, pos);
   }
 }
 
@@ -555,6 +516,8 @@ void WebViewGuest::AddGuestToTabStripModel(WebViewGuest* guest,
   }
 
   TabStripModel* tab_strip = browser->tab_strip_model();
+  content::WebContents* existing_tab =
+      tab_strip->count() == 1 ? tab_strip->GetWebContentsAt(0) : nullptr;
 
   // Default to foreground for the new tab. The presence of 'active' property
   // will override this default.
@@ -595,6 +558,17 @@ void WebViewGuest::AddGuestToTabStripModel(WebViewGuest* guest,
     host->GetRemoteAssociatedInterfaces()->GetInterface(&client);
     client->SetWindowFeatures(blink::mojom::WindowFeatures().Clone());
   }
+  if (existing_tab) {
+    // We had a single tab open, check if it's speed dial.
+    GURL url = existing_tab->GetURL();
+    if (url == GURL(::vivaldi::kVivaldiNewTabURL)) {
+      // If it's Speed Dial, close it immediately. New windows always
+      // get a Speed Dial tab initially as some extensions expect it.
+      tab_strip->CloseWebContentsAt(
+          tab_strip->GetIndexOfWebContents(existing_tab), 0);
+    }
+  }
+
 }
 
 blink::SecurityStyle WebViewGuest::GetSecurityStyle(
@@ -608,16 +582,19 @@ blink::SecurityStyle WebViewGuest::GetSecurityStyle(
   }
 }
 
-void WebViewGuest::OnContentBlocked(ContentSettingsType settings_type,
-                                    const base::string16& details) {
-  std::unique_ptr<base::DictionaryValue> args(new base::DictionaryValue());
-
-  args->SetString("blockedType", ContentSettingsTypeToString(settings_type));
-
-  DispatchEventToView(base::WrapUnique(
-      new GuestViewEvent(webview::kEventContentBlocked, std::move(args))));
+void WebViewGuest::OnContentAllowed(ContentSettingsType settings_type) {
+  auto args = std::make_unique<base::DictionaryValue>();
+  args->SetString("allowedType", ContentSettingsTypeToString(settings_type));
+  DispatchEventToView(std::make_unique<GuestViewEvent>(
+      webview::kEventContentAllowed, std::move(args)));
 }
 
+void WebViewGuest::OnContentBlocked(ContentSettingsType settings_type) {
+  std::unique_ptr<base::DictionaryValue> args(new base::DictionaryValue());
+  args->SetString("blockedType", ContentSettingsTypeToString(settings_type));
+  DispatchEventToView(base::WrapUnique(
+    new GuestViewEvent(webview::kEventContentBlocked, std::move(args))));
+}
 
 void WebViewGuest::AllowRunningInsecureContent() {
 
@@ -700,21 +677,47 @@ void WebViewGuest::LoadTabContentsIfNecessary() {
   }
   web_contents()->SetUserData(::vivaldi::kVivaldiStartupTabUserDataKey,
                               nullptr);
+
+  // Make sure security state is updated.
+  VisibleSecurityStateChanged(web_contents());
 }
 
-WebViewGuest::NewWindowInfo::NewWindowInfo(const GURL& url, const std::string& name)
-  : name(name),
-  url(url),
-  url_changed_via_open_url(false),
-  did_start_navigating_away_from_initial_url(false) {}
-
-WebViewGuest::NewWindowInfo::NewWindowInfo(const WebViewGuest::NewWindowInfo&) =
-    default;
-
-WebViewGuest::NewWindowInfo::~NewWindowInfo() {
-  delete referrer;
-  delete params;
+content::WebContentsDelegate* WebViewGuest::GetDevToolsConnector() {
+  if (::vivaldi::IsVivaldiRunning() && connector_item_)
+    return connector_item_.get();
+  return this;
 }
+
+content::KeyboardEventProcessingResult WebViewGuest::PreHandleKeyboardEvent(
+  content::WebContents* source,
+  const content::NativeWebKeyboardEvent& event) {
+  // We need override this at an early stage since |KeyboardEventManager| will
+  // block the delegate(WebViewGuest::HandleKeyboardEvent) if the page does
+  // event.preventDefault
+  if (event.windows_key_code == ui::VKEY_ESCAPE) {
+    // Go out of fullscreen or mouse-lock and pass the event as
+    // handled if any of these modes are ended.
+    Browser* browser = chrome::FindBrowserWithWebContents(web_contents());
+    if (browser && browser->is_vivaldi()) {
+      VivaldiBrowserWindow* app_win =
+          static_cast<VivaldiBrowserWindow*>(browser->window());
+      // unlock mouse first
+      content::RenderWidgetHostView* rwhv =
+          web_contents()->GetMainFrame()->GetView();
+      if (rwhv->IsMouseLocked()) {
+        rwhv->UnlockMouse();
+        return content::KeyboardEventProcessingResult::HANDLED;
+      } else if (GuestMadeEmbedderFullscreen()) {
+        // Go out of fullscreen if this was a webpage caused fullscreen.
+        ExitFullscreenModeForTab(web_contents());
+        app_win->SetFullscreen(false);
+        return content::KeyboardEventProcessingResult::HANDLED;
+      }
+    }
+  }
+  return content::KeyboardEventProcessingResult::NOT_HANDLED;
+}
+
 
 }  // namespace extensions
 

@@ -26,21 +26,20 @@ namespace cc {
 std::unique_ptr<LayerImpl> PaintedOverlayScrollbarLayer::CreateLayerImpl(
     LayerTreeImpl* tree_impl) {
   return PaintedOverlayScrollbarLayerImpl::Create(
-      tree_impl, id(), scrollbar_->Orientation(),
-      scrollbar_->IsLeftSideVerticalScrollbar());
+      tree_impl, id(), orientation(), is_left_side_vertical_scrollbar());
 }
 
 scoped_refptr<PaintedOverlayScrollbarLayer>
-PaintedOverlayScrollbarLayer::Create(std::unique_ptr<Scrollbar> scrollbar) {
+PaintedOverlayScrollbarLayer::Create(scoped_refptr<Scrollbar> scrollbar) {
   return base::WrapRefCounted(
       new PaintedOverlayScrollbarLayer(std::move(scrollbar)));
 }
 
 PaintedOverlayScrollbarLayer::PaintedOverlayScrollbarLayer(
-    std::unique_ptr<Scrollbar> scrollbar)
-    : scrollbar_(std::move(scrollbar)),
-      thumb_thickness_(scrollbar_->ThumbThickness()),
-      thumb_length_(scrollbar_->ThumbLength()) {
+    scoped_refptr<Scrollbar> scrollbar)
+    : ScrollbarLayerBase(scrollbar->Orientation(),
+                         scrollbar->IsLeftSideVerticalScrollbar()),
+      scrollbar_(std::move(scrollbar)) {
   DCHECK(scrollbar_->HasThumb());
   DCHECK(scrollbar_->IsOverlay());
   DCHECK(scrollbar_->UsesNinePatchThumbResource());
@@ -49,7 +48,7 @@ PaintedOverlayScrollbarLayer::PaintedOverlayScrollbarLayer(
 PaintedOverlayScrollbarLayer::~PaintedOverlayScrollbarLayer() = default;
 
 bool PaintedOverlayScrollbarLayer::OpacityCanAnimateOnImplThread() const {
-  return scrollbar_->IsOverlay();
+  return true;
 }
 
 void PaintedOverlayScrollbarLayer::PushPropertiesTo(LayerImpl* layer) {
@@ -58,12 +57,14 @@ void PaintedOverlayScrollbarLayer::PushPropertiesTo(LayerImpl* layer) {
   PaintedOverlayScrollbarLayerImpl* scrollbar_layer =
       static_cast<PaintedOverlayScrollbarLayerImpl*>(layer);
 
-  scrollbar_layer->SetThumbThickness(thumb_thickness_);
-  scrollbar_layer->SetThumbLength(thumb_length_);
-  if (scrollbar_->Orientation() == HORIZONTAL) {
+  if (orientation() == HORIZONTAL) {
+    scrollbar_layer->SetThumbThickness(thumb_size_.height());
+    scrollbar_layer->SetThumbLength(thumb_size_.width());
     scrollbar_layer->SetTrackStart(track_rect_.x());
     scrollbar_layer->SetTrackLength(track_rect_.width());
   } else {
+    scrollbar_layer->SetThumbThickness(thumb_size_.width());
+    scrollbar_layer->SetThumbLength(thumb_size_.height());
     scrollbar_layer->SetTrackStart(track_rect_.y());
     scrollbar_layer->SetTrackLength(track_rect_.height());
   }
@@ -97,18 +98,22 @@ void PaintedOverlayScrollbarLayer::SetLayerTreeHost(LayerTreeHost* host) {
   ScrollbarLayerBase::SetLayerTreeHost(host);
 }
 
-gfx::Rect PaintedOverlayScrollbarLayer::OriginThumbRectForPainting() const {
-  return gfx::Rect(gfx::Point(), scrollbar_->NinePatchThumbCanvasSize());
-}
-
 bool PaintedOverlayScrollbarLayer::Update() {
+  // These properties should never change.
+  DCHECK_EQ(orientation(), scrollbar_->Orientation());
+  DCHECK_EQ(is_left_side_vertical_scrollbar(),
+            scrollbar_->IsLeftSideVerticalScrollbar());
+  DCHECK(scrollbar_->HasThumb());
+  DCHECK(scrollbar_->IsOverlay());
+  DCHECK(scrollbar_->UsesNinePatchThumbResource());
+
   bool updated = false;
   updated |= Layer::Update();
 
   updated |= UpdateProperty(scrollbar_->TrackRect(), &track_rect_);
-  updated |= UpdateProperty(scrollbar_->Location(), &location_);
-  updated |= UpdateProperty(scrollbar_->ThumbThickness(), &thumb_thickness_);
-  updated |= UpdateProperty(scrollbar_->ThumbLength(), &thumb_length_);
+  // Ignore ThumbRect's location because the PaintedOverlayScrollbarLayerImpl
+  // will compute it from scroll offset.
+  updated |= UpdateProperty(scrollbar_->ThumbRect().size(), &thumb_size_);
   updated |= PaintThumbIfNeeded();
   updated |= PaintTickmarks();
 
@@ -116,21 +121,19 @@ bool PaintedOverlayScrollbarLayer::Update() {
 }
 
 bool PaintedOverlayScrollbarLayer::PaintThumbIfNeeded() {
-  if (!scrollbar_->NeedsPaintPart(THUMB) && thumb_resource_)
+  if (!scrollbar_->NeedsRepaintPart(THUMB) && thumb_resource_)
     return false;
 
-  gfx::Rect paint_rect = OriginThumbRectForPainting();
+  gfx::Size paint_size = scrollbar_->NinePatchThumbCanvasSize();
+  DCHECK(!paint_size.IsEmpty());
   aperture_ = scrollbar_->NinePatchThumbAperture();
 
-  DCHECK(!paint_rect.size().IsEmpty());
-  DCHECK(paint_rect.origin().IsOrigin());
-
   SkBitmap skbitmap;
-  skbitmap.allocN32Pixels(paint_rect.width(), paint_rect.height());
+  skbitmap.allocN32Pixels(paint_size.width(), paint_size.height());
   SkiaPaintCanvas canvas(skbitmap);
   canvas.clear(SK_ColorTRANSPARENT);
 
-  scrollbar_->PaintPart(&canvas, THUMB);
+  scrollbar_->PaintPart(&canvas, THUMB, gfx::Rect(paint_size));
   // Make sure that the pixels are no longer mutable to unavoid unnecessary
   // allocation and copying.
   skbitmap.setImmutable();
@@ -155,16 +158,16 @@ bool PaintedOverlayScrollbarLayer::PaintTickmarks() {
     }
   }
 
-  gfx::Rect paint_rect = gfx::Rect(gfx::Point(), track_rect_.size());
-
-  DCHECK(!paint_rect.size().IsEmpty());
+  gfx::Size paint_size = track_rect_.size();
+  DCHECK(!paint_size.IsEmpty());
 
   SkBitmap skbitmap;
-  skbitmap.allocN32Pixels(paint_rect.width(), paint_rect.height());
+  skbitmap.allocN32Pixels(paint_size.width(), paint_size.height());
   SkiaPaintCanvas canvas(skbitmap);
   canvas.clear(SK_ColorTRANSPARENT);
 
-  scrollbar_->PaintPart(&canvas, TICKMARKS);
+  scrollbar_->PaintPart(&canvas, TRACK_BUTTONS_TICKMARKS,
+                        gfx::Rect(paint_size));
   // Make sure that the pixels are no longer mutable to unavoid unnecessary
   // allocation and copying.
   skbitmap.setImmutable();
@@ -174,6 +177,11 @@ bool PaintedOverlayScrollbarLayer::PaintTickmarks() {
 
   SetNeedsPushProperties();
   return true;
+}
+
+ScrollbarLayerBase::ScrollbarLayerType
+PaintedOverlayScrollbarLayer::ScrollbarLayerTypeForTesting() const {
+  return kPaintedOverlay;
 }
 
 }  // namespace cc

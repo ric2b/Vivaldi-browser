@@ -16,6 +16,8 @@ enum class InfobarType {
   kInfobarTypePasswordUpdate = 2,
   // Message Infobar for Saving a Credit Card.
   kInfobarTypeSaveCard = 3,
+  // Message Infobar for Translating a page.
+  kInfobarTypeTranslate = 4,
 };
 
 // Message "Confirm Infobars" types, these are the generic kInfobarTypeConfirm

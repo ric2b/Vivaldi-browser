@@ -123,11 +123,14 @@ bool LocalExtensionCache::ShouldRetryDownload(
   if (state_ != kReady)
     return false;
 
+  // Should retry download only if in the previous attempt the extension was
+  // present in the cache and the installer process failed. After the removal,
+  // the extension is freshly downloaded.
   CacheMap::iterator it = FindExtension(cached_extensions_, id, expected_hash);
   if (it == cached_extensions_.end())
     return false;
 
-  return (!expected_hash.empty() && it->second.expected_hash.empty());
+  return true;
 }
 
 // static
@@ -372,7 +375,7 @@ LocalExtensionCache::CacheMap::iterator LocalExtensionCache::InsertCacheEntry(
     it = cache.insert(std::make_pair(id, info));
   } else {
     if (delete_files) {
-      base::DeleteFile(info.file_path, true /* recursive */);
+      base::DeleteFileRecursively(info.file_path);
       VLOG(1) << "Remove older version " << info.version << " for extension id "
               << id;
     }
@@ -409,7 +412,7 @@ void LocalExtensionCache::BackendCheckCacheContentsInternal(
 
     if (info.IsDirectory() || base::IsLink(info.GetName())) {
       LOG(ERROR) << "Erasing bad file in cache directory: " << basename;
-      base::DeleteFile(path, true /* recursive */);
+      base::DeleteFileRecursively(path);
       continue;
     }
 
@@ -452,7 +455,7 @@ void LocalExtensionCache::BackendCheckCacheContentsInternal(
 
     if (id.empty() || version.empty()) {
       LOG(ERROR) << "Invalid file in cache, erasing: " << basename;
-      base::DeleteFile(path, true /* recursive */);
+      base::DeleteFileRecursively(path);
       continue;
     }
 

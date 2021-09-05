@@ -18,6 +18,7 @@
 #include "components/gcm_driver/gcm_buildflags.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/version_info/version_info.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "services/network/public/mojom/proxy_resolving_socket.mojom.h"
 
 class PrefService;
@@ -44,20 +45,19 @@ class GCMDriver;
 class GCMProfileService : public KeyedService {
  public:
   using GetProxyResolvingFactoryCallback = base::RepeatingCallback<void(
-      network::mojom::ProxyResolvingSocketFactoryRequest)>;
+      mojo::PendingReceiver<network::mojom::ProxyResolvingSocketFactory>)>;
 
 #if BUILDFLAG(USE_GCM_FROM_PLATFORM)
   GCMProfileService(
       base::FilePath path,
-      scoped_refptr<base::SequencedTaskRunner>& blocking_task_runner,
-      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory);
+      scoped_refptr<base::SequencedTaskRunner>& blocking_task_runner);
 #else
   GCMProfileService(
       PrefService* prefs,
       base::FilePath path,
-      base::RepeatingCallback<
-          void(base::WeakPtr<GCMProfileService>,
-               network::mojom::ProxyResolvingSocketFactoryRequest)>
+      base::RepeatingCallback<void(
+          base::WeakPtr<GCMProfileService>,
+          mojo::PendingReceiver<network::mojom::ProxyResolvingSocketFactory>)>
           get_socket_factory_callback,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       network::NetworkConnectionTracker* network_connection_tracker,
@@ -70,9 +70,6 @@ class GCMProfileService : public KeyedService {
       scoped_refptr<base::SequencedTaskRunner>& blocking_task_runner);
 #endif
   ~GCMProfileService() override;
-
-  // Returns whether GCM is enabled.
-  static bool IsGCMEnabled(PrefService* prefs);
 
   // KeyedService:
   void Shutdown() override;

@@ -10,6 +10,8 @@
 // clang-format off
 #include "third_party/blink/renderer/bindings/tests/results/modules/test_dictionary_2.h"
 
+#include "third_party/blink/renderer/bindings/tests/idls/core/test_dictionary.h"
+
 namespace blink {
 
 TestDictionary2::TestDictionary2() {
@@ -27,7 +29,7 @@ void TestDictionary2::setDefaultEmptyDictionaryForUnion(const TestDictionaryOrLo
   default_empty_dictionary_for_union_ = value;
 }
 
-void TestDictionary2::Trace(blink::Visitor* visitor) {
+void TestDictionary2::Trace(Visitor* visitor) {
   visitor->Trace(default_empty_dictionary_);
   visitor->Trace(default_empty_dictionary_for_union_);
   IDLDictionaryBase::Trace(visitor);

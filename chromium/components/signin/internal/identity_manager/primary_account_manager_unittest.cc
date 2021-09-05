@@ -154,13 +154,16 @@ TEST_F(PrimaryAccountManagerTest, SignOut) {
   EXPECT_FALSE(manager_->IsAuthenticated());
   EXPECT_TRUE(manager_->GetAuthenticatedAccountInfo().email.empty());
   EXPECT_TRUE(manager_->GetAuthenticatedAccountId().empty());
+  EXPECT_EQ(main_account_id,
+            manager_->GetUnconsentedPrimaryAccountInfo().account_id);
   // Should not be persisted anymore
   ShutDownManager();
   CreatePrimaryAccountManager();
   EXPECT_FALSE(manager_->IsAuthenticated());
   EXPECT_TRUE(manager_->GetAuthenticatedAccountInfo().email.empty());
   EXPECT_TRUE(manager_->GetAuthenticatedAccountId().empty());
-  EXPECT_EQ(CoreAccountInfo(), manager_->GetUnconsentedPrimaryAccountInfo());
+  EXPECT_EQ(main_account_id,
+            manager_->GetUnconsentedPrimaryAccountInfo().account_id);
 }
 
 TEST_F(PrimaryAccountManagerTest, SignOutRevoke) {
@@ -204,16 +207,17 @@ TEST_F(PrimaryAccountManagerTest, SignOutDiceNoRevoke) {
   std::vector<CoreAccountId> expected_tokens = {main_account_id,
                                                 other_account_id};
   EXPECT_EQ(expected_tokens, token_service_.GetAccounts());
-  EXPECT_EQ(manager_->GetUnconsentedPrimaryAccountInfo(),
-            manager_->GetAuthenticatedAccountInfo());
+  // Unconsented primary account is not reset.
+  EXPECT_EQ(main_account_id,
+            manager_->GetUnconsentedPrimaryAccountInfo().account_id);
 }
 
 TEST_F(PrimaryAccountManagerTest, SignOutDiceWithError) {
   account_consistency_ = signin::AccountConsistencyMethod::kDice;
   CreatePrimaryAccountManager();
-  std::string main_account_id =
+  CoreAccountId main_account_id =
       AddToAccountTracker("main_id", "user@gmail.com");
-  std::string other_account_id =
+  CoreAccountId other_account_id =
       AddToAccountTracker("other_id", "other@gmail.com");
   token_service_.UpdateCredentials(main_account_id, "token");
   token_service_.UpdateCredentials(other_account_id, "token");
@@ -257,19 +261,19 @@ TEST_F(PrimaryAccountManagerTest, SignOutWhileProhibited) {
 }
 
 TEST_F(PrimaryAccountManagerTest, ProhibitedAtStartup) {
-  std::string account_id = AddToAccountTracker("gaia_id", "user@gmail.com");
-  user_prefs_.SetString(prefs::kGoogleServicesAccountId, account_id);
+  CoreAccountId account_id = AddToAccountTracker("gaia_id", "user@gmail.com");
+  user_prefs_.SetString(prefs::kGoogleServicesAccountId, account_id.ToString());
   local_state_.SetString(prefs::kGoogleServicesUsernamePattern,
                          ".*@google.com");
   CreatePrimaryAccountManager();
   // Currently signed in user is prohibited by policy, so should be signed out.
   EXPECT_EQ("", manager_->GetAuthenticatedAccountInfo().email);
-  EXPECT_EQ("", manager_->GetAuthenticatedAccountId());
+  EXPECT_EQ(CoreAccountId(), manager_->GetAuthenticatedAccountId());
 }
 
 TEST_F(PrimaryAccountManagerTest, ProhibitedAfterStartup) {
-  std::string account_id = AddToAccountTracker("gaia_id", "user@gmail.com");
-  user_prefs_.SetString(prefs::kGoogleServicesAccountId, account_id);
+  CoreAccountId account_id = AddToAccountTracker("gaia_id", "user@gmail.com");
+  user_prefs_.SetString(prefs::kGoogleServicesAccountId, account_id.ToString());
   CreatePrimaryAccountManager();
   EXPECT_EQ("user@gmail.com", manager_->GetAuthenticatedAccountInfo().email);
   EXPECT_EQ(account_id, manager_->GetAuthenticatedAccountId());
@@ -277,18 +281,18 @@ TEST_F(PrimaryAccountManagerTest, ProhibitedAfterStartup) {
   local_state_.SetString(prefs::kGoogleServicesUsernamePattern,
                          ".*@google.com");
   EXPECT_EQ("", manager_->GetAuthenticatedAccountInfo().email);
-  EXPECT_EQ("", manager_->GetAuthenticatedAccountId());
+  EXPECT_EQ(CoreAccountId(), manager_->GetAuthenticatedAccountId());
 }
 #endif
 
 TEST_F(PrimaryAccountManagerTest, SignIn) {
   CreatePrimaryAccountManager();
   EXPECT_EQ("", manager_->GetAuthenticatedAccountInfo().email);
-  EXPECT_EQ("", manager_->GetAuthenticatedAccountId());
+  EXPECT_EQ(CoreAccountId(), manager_->GetAuthenticatedAccountId());
   EXPECT_EQ(0, num_successful_signins_);
   EXPECT_EQ(0, num_unconsented_account_changed_);
 
-  std::string account_id = AddToAccountTracker("gaia_id", "user@gmail.com");
+  CoreAccountId account_id = AddToAccountTracker("gaia_id", "user@gmail.com");
   manager_->SignIn("user@gmail.com");
   EXPECT_EQ(1, num_successful_signins_);
   EXPECT_EQ(1, num_unconsented_account_changed_);
@@ -302,11 +306,11 @@ TEST_F(PrimaryAccountManagerTest,
        ExternalSignIn_ReauthShouldNotSendNotification) {
   CreatePrimaryAccountManager();
   EXPECT_EQ("", manager_->GetAuthenticatedAccountInfo().email);
-  EXPECT_EQ("", manager_->GetAuthenticatedAccountId());
+  EXPECT_EQ(CoreAccountId(), manager_->GetAuthenticatedAccountId());
   EXPECT_EQ(0, num_successful_signins_);
   EXPECT_EQ(0, num_unconsented_account_changed_);
 
-  std::string account_id = AddToAccountTracker("gaia_id", "user@gmail.com");
+  CoreAccountId account_id = AddToAccountTracker("gaia_id", "user@gmail.com");
   manager_->SignIn("user@gmail.com");
   EXPECT_EQ(1, num_successful_signins_);
   EXPECT_EQ(1, num_unconsented_account_changed_);
@@ -323,13 +327,13 @@ TEST_F(PrimaryAccountManagerTest,
 #if !defined(OS_CHROMEOS)
 TEST_F(PrimaryAccountManagerTest, SigninNotAllowed) {
   std::string user("user@google.com");
-  std::string account_id = AddToAccountTracker("gaia_id", user);
-  user_prefs_.SetString(prefs::kGoogleServicesAccountId, account_id);
+  CoreAccountId account_id = AddToAccountTracker("gaia_id", user);
+  user_prefs_.SetString(prefs::kGoogleServicesAccountId, account_id.ToString());
   user_prefs_.SetBoolean(prefs::kSigninAllowed, false);
   CreatePrimaryAccountManager();
   // Currently signing in is prohibited by policy, so should be signed out.
   EXPECT_EQ("", manager_->GetAuthenticatedAccountInfo().email);
-  EXPECT_EQ("", manager_->GetAuthenticatedAccountId());
+  EXPECT_TRUE(manager_->GetAuthenticatedAccountId().empty());
 }
 #endif
 
@@ -357,7 +361,7 @@ TEST_F(PrimaryAccountManagerTest, GaiaIdMigration) {
 
     CreatePrimaryAccountManager();
 
-    EXPECT_EQ(gaia_id, manager_->GetAuthenticatedAccountId());
+    EXPECT_EQ(CoreAccountId(gaia_id), manager_->GetAuthenticatedAccountId());
     EXPECT_EQ(gaia_id, user_prefs_.GetString(prefs::kGoogleServicesAccountId));
   }
 }
@@ -385,7 +389,7 @@ TEST_F(PrimaryAccountManagerTest, GaiaIdMigrationCrashInTheMiddle) {
     client_prefs->SetString(prefs::kGoogleServicesAccountId, gaia_id);
 
     CreatePrimaryAccountManager();
-    EXPECT_EQ(gaia_id, manager_->GetAuthenticatedAccountId());
+    EXPECT_EQ(CoreAccountId(gaia_id), manager_->GetAuthenticatedAccountId());
     EXPECT_EQ(gaia_id, user_prefs_.GetString(prefs::kGoogleServicesAccountId));
 
     base::RunLoop().RunUntilIdle();
@@ -396,23 +400,23 @@ TEST_F(PrimaryAccountManagerTest, GaiaIdMigrationCrashInTheMiddle) {
 
 TEST_F(PrimaryAccountManagerTest, RestoreFromPrefsConsented) {
   CoreAccountId account_id = AddToAccountTracker("gaia_id", "user@gmail.com");
-  user_prefs_.SetString(prefs::kGoogleServicesAccountId, account_id);
+  user_prefs_.SetString(prefs::kGoogleServicesAccountId, account_id.ToString());
   user_prefs_.SetBoolean(prefs::kGoogleServicesConsentedToSync, true);
   CreatePrimaryAccountManager();
   EXPECT_EQ("user@gmail.com", manager_->GetAuthenticatedAccountInfo().email);
-  EXPECT_EQ(account_id.id, manager_->GetAuthenticatedAccountId());
+  EXPECT_EQ(account_id, manager_->GetAuthenticatedAccountId());
   EXPECT_EQ(manager_->GetUnconsentedPrimaryAccountInfo(),
             manager_->GetAuthenticatedAccountInfo());
 }
 
 TEST_F(PrimaryAccountManagerTest, RestoreFromPrefsUnconsented) {
   CoreAccountId account_id = AddToAccountTracker("gaia_id", "user@gmail.com");
-  user_prefs_.SetString(prefs::kGoogleServicesAccountId, account_id);
+  user_prefs_.SetString(prefs::kGoogleServicesAccountId, account_id.ToString());
   user_prefs_.SetBoolean(prefs::kGoogleServicesConsentedToSync, false);
   CreatePrimaryAccountManager();
   EXPECT_EQ("user@gmail.com",
             manager_->GetUnconsentedPrimaryAccountInfo().email);
-  EXPECT_EQ(account_id.id,
+  EXPECT_EQ(account_id,
             manager_->GetUnconsentedPrimaryAccountInfo().account_id);
   EXPECT_TRUE(manager_->GetAuthenticatedAccountInfo().IsEmpty());
 }
@@ -421,7 +425,7 @@ TEST_F(PrimaryAccountManagerTest, RestoreFromPrefsUnconsented) {
 // authenticated.
 TEST_F(PrimaryAccountManagerTest, RestoreFromPrefsMissingConsentPref) {
   CoreAccountId account_id = AddToAccountTracker("gaia_id", "user@gmail.com");
-  user_prefs_.SetString(prefs::kGoogleServicesAccountId, account_id);
+  user_prefs_.SetString(prefs::kGoogleServicesAccountId, account_id.ToString());
 
   const PrefService::Preference* consented_pref =
       user_prefs_.FindPreference(prefs::kGoogleServicesConsentedToSync);
@@ -431,7 +435,7 @@ TEST_F(PrimaryAccountManagerTest, RestoreFromPrefsMissingConsentPref) {
   CreatePrimaryAccountManager();
   EXPECT_TRUE(user_prefs_.GetBoolean(prefs::kGoogleServicesConsentedToSync));
   EXPECT_EQ("user@gmail.com", manager_->GetAuthenticatedAccountInfo().email);
-  EXPECT_EQ(account_id.id, manager_->GetAuthenticatedAccountId());
+  EXPECT_EQ(account_id, manager_->GetAuthenticatedAccountId());
   EXPECT_EQ(manager_->GetUnconsentedPrimaryAccountInfo(),
             manager_->GetAuthenticatedAccountInfo());
 }
@@ -476,3 +480,18 @@ TEST_F(PrimaryAccountManagerTest, SetUnconsentedPrimaryAccountInfo) {
   EXPECT_EQ(CoreAccountInfo(), manager_->GetUnconsentedPrimaryAccountInfo());
   EXPECT_EQ(CoreAccountInfo(), manager_->GetAuthenticatedAccountInfo());
 }
+
+#if defined(OS_CHROMEOS)
+TEST_F(PrimaryAccountManagerTest, RevokeSyncConsent) {
+  CreatePrimaryAccountManager();
+  CoreAccountId account_id = AddToAccountTracker("gaia_id", "user@gmail.com");
+  manager_->SignIn("user@gmail.com");
+  EXPECT_TRUE(manager_->IsAuthenticated());
+
+  manager_->RevokeSyncConsent();
+  EXPECT_FALSE(manager_->IsAuthenticated());
+  EXPECT_TRUE(manager_->HasUnconsentedPrimaryAccount());
+  EXPECT_EQ(account_id,
+            manager_->GetUnconsentedPrimaryAccountInfo().account_id);
+}
+#endif  // defined(OS_CHROMEOS)

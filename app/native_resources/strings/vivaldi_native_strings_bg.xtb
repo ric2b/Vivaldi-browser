@@ -6,7 +6,7 @@
 <translation id="1158503667684816647">Повече не показвай потвърждението</translation>
 <translation id="1276145862619442150">Номератори</translation>
 <translation id="1281950884873973195">Животно 6</translation>
-<translation id="1411638389238344450">Изпрати препратката по пощата</translation>
+<translation id="1411638389238344450">Изпрати препратката по е-поща</translation>
 <translation id="1454726940098520109">Повече не показвай потвърждението</translation>
 <translation id="1462666970065907900">Наистина ли затваряте прозореца?</translation>
 <translation id="1657174850639146440">Чудовище 9</translation>
@@ -45,7 +45,6 @@
 <translation id="3542768452570884558">Отвори препратката в нов прозорец</translation>
 <translation id="3588820906588687999">Отвори картината в нов раздел</translation>
 <translation id="3601066750251199488">Чудовище 3</translation>
-<translation id="366643050267431920">Добави като събитие</translation>
 <translation id="3732157130969736834">Отметни препратката</translation>
 <translation id="3732388226447288666">Животно 2</translation>
 <translation id="3732439195215136813">Животно 5</translation>
@@ -65,10 +64,9 @@
 <translation id="4515472507709384008">Opera версия 15+</translation>
 <translation id="4548358047305717967">Отвори картината във фонов раздел</translation>
 <translation id="4582480609585453144">Отвори препратката във фонов раздел</translation>
-<translation id="4636708767492582204">Изпрати по пощата</translation>
+<translation id="4636708767492582204">Изпрати по е-поща</translation>
 <translation id="4677434526832593569">Животно 8</translation>
 <translation id="4881695831933465202">Отвори</translation>
-<translation id="4973311370126107785">Изпълнението на JavaScript през AppleScript е изключено. За да го включите от лентата с менюта, преминете към Инструменти &gt; Позволи JavaScript от Apple Events.</translation>
 <translation id="5014281392052865061">Внесен номератор</translation>
 <translation id="5092656712000637858">Добави страницата като панел</translation>
 <translation id="5177818338935286353">Чудовище 7</translation>
@@ -89,6 +87,7 @@
 <translation id="6229528619562190452">Щракнете за обновяване на Vivaldi</translation>
 <translation id="6234173136417926046">Ползвай картината за фон на решетката</translation>
 <translation id="630690498669249215">Файл на Opera с отметки</translation>
+<translation id="6339818817272922368">Локален профил</translation>
 <translation id="6438786710866753178">Пейзаж 4</translation>
 <translation id="6477028720702061455">Изберете папка с профил на Opera за внасяне.</translation>
 <translation id="6510706699590490869">&amp;Обнови Vivaldi</translation>
@@ -103,6 +102,7 @@
 <translation id="7496505986576158197">Vivaldi се създава благодарение на проекта с отворен код <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> и друг <ph name="BEGIN_LINK_OSS" />софтуер с отворен код<ph name="END_LINK_OSS" />.</translation>
 <translation id="7715497554424665066">&amp;Подмини обновяването</translation>
 <translation id="7724603315864178912">Изрежи</translation>
+<translation id="7793738202466490491">Добави като събитие</translation>
 <translation id="7865983598101744945">Потвърждение при изход</translation>
 <translation id="7957213167373139414">Личен</translation>
 <translation id="8027581147000338959">Отвори в нов прозорец</translation>
@@ -112,6 +112,7 @@
 <translation id="8331671104904436324">Отвори във фонов раздел</translation>
 <translation id="8373293945112511707">Пейзаж 1</translation>
 <translation id="8427094907586191051">Пейзаж 17</translation>
+<translation id="8446668873108041390">Изпълнението на JavaScript през AppleScript е изключено. В Настройки &gt; Поверителност &gt; Събития Apple Events има настройка, която позволява JavaScript от Apple Events.</translation>
 <translation id="8539196077526389150">Пейзаж 13</translation>
 <translation id="8624587806981488221">Пре&amp;зареди картината</translation>
 <translation id="864444594187862076">Opera версия 15+ (Разработка)</translation>

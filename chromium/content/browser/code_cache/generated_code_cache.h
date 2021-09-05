@@ -67,7 +67,7 @@ class CONTENT_EXPORT GeneratedCodeCache {
 
   // Returns the resource URL from the key. The key has the format prefix +
   // resource URL + separator + requesting origin. This function extracts and
-  // returns resource URL from the key.
+  // returns resource URL from the key, or the empty string if key is invalid.
   static std::string GetResourceURLFromKey(const std::string& key);
 
   // Creates a GeneratedCodeCache with the specified path and the maximum size.
@@ -119,7 +119,14 @@ class CONTENT_EXPORT GeneratedCodeCache {
   enum BackendState { kInitializing, kInitialized, kFailed };
 
   // The operation requested.
-  enum Operation { kFetch, kWrite, kDelete, kGetBackend };
+  enum Operation {
+    kFetch,
+    kFetchWithSHAKey,
+    kWrite,
+    kWriteWithSHAKey,
+    kDelete,
+    kGetBackend
+  };
 
   // Data streams corresponding to each entry.
   enum { kSmallDataStream = 0, kLargeDataStream = 1 };
@@ -129,6 +136,9 @@ class CONTENT_EXPORT GeneratedCodeCache {
   void DidCreateBackend(
       scoped_refptr<base::RefCountedData<ScopedBackendPtr>> backend_ptr,
       int rv);
+
+  // Adds operation to the appropriate queue.
+  void EnqueueOperation(std::unique_ptr<PendingOperation> op);
 
   // Issues ops that were received while the backend was being initialized.
   void IssuePendingOperations();

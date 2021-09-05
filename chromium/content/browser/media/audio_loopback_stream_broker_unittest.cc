@@ -12,6 +12,8 @@
 #include "content/public/test/browser_task_environment.h"
 #include "media/mojo/mojom/audio_input_stream.mojom.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/system/platform_handle.h"
@@ -70,15 +72,16 @@ class MockRendererAudioInputStreamFactoryClient
   MOCK_METHOD0(OnStreamCreated, void());
 
   void StreamCreated(
-      media::mojom::AudioInputStreamPtr input_stream,
-      media::mojom::AudioInputStreamClientRequest client_request,
+      mojo::PendingRemote<media::mojom::AudioInputStream> input_stream,
+      mojo::PendingReceiver<media::mojom::AudioInputStreamClient>
+          client_receiver,
       media::mojom::ReadOnlyAudioDataPipePtr data_pipe,
       bool initially_muted,
       const base::Optional<base::UnguessableToken>& stream_id) override {
     // Loopback streams have no stream ids.
     EXPECT_FALSE(stream_id.has_value());
-    input_stream_ = std::move(input_stream);
-    client_request_ = std::move(client_request);
+    input_stream_.Bind(std::move(input_stream));
+    client_receiver_ = std::move(client_receiver);
     OnStreamCreated();
   }
 
@@ -86,8 +89,8 @@ class MockRendererAudioInputStreamFactoryClient
 
  private:
   mojo::Receiver<mojom::RendererAudioInputStreamFactoryClient> receiver_{this};
-  media::mojom::AudioInputStreamPtr input_stream_;
-  media::mojom::AudioInputStreamClientRequest client_request_;
+  mojo::Remote<media::mojom::AudioInputStream> input_stream_;
+  mojo::PendingReceiver<media::mojom::AudioInputStreamClient> client_receiver_;
 };
 
 class MockStreamFactory : public audio::FakeStreamFactory {
@@ -104,9 +107,9 @@ class MockStreamFactory : public audio::FakeStreamFactory {
         : params(params), group_id(group_id) {}
 
     bool requested = false;
-    media::mojom::AudioInputStreamRequest stream_request;
-    media::mojom::AudioInputStreamClientPtr client;
-    media::mojom::AudioInputStreamObserverPtr observer;
+    mojo::PendingReceiver<media::mojom::AudioInputStream> stream_receiver;
+    mojo::Remote<media::mojom::AudioInputStreamClient> client;
+    mojo::Remote<media::mojom::AudioInputStreamObserver> observer;
     const media::AudioParameters params;
     uint32_t shared_memory_count;
     base::UnguessableToken group_id;
@@ -135,7 +138,7 @@ class MockStreamFactory : public audio::FakeStreamFactory {
     EXPECT_EQ(stream_request_data_->group_id, group_id);
     EXPECT_TRUE(stream_request_data_->params.Equals(params));
     stream_request_data_->requested = true;
-    stream_request_data_->stream_request = std::move(receiver);
+    stream_request_data_->stream_receiver = std::move(receiver);
     stream_request_data_->client.Bind(std::move(client));
     stream_request_data_->observer.Bind(std::move(observer));
     stream_request_data_->shared_memory_count = shared_memory_count;
@@ -219,7 +222,7 @@ TEST(AudioLoopbackStreamBrokerTest, StreamCreationSuccess_Propagates) {
   std::move(stream_request_data.created_callback)
       .Run({base::in_place,
             base::ReadOnlySharedMemoryRegion::Create(shmem_size).region,
-            mojo::WrapPlatformFile(socket1.Release())});
+            mojo::PlatformHandle(socket1.Take())});
 
   EXPECT_CALL(env.renderer_factory_client, OnStreamCreated());
 
@@ -249,7 +252,7 @@ TEST(AudioLoopbackStreamBrokerTest, MutedStreamCreation_Mutes) {
   std::move(stream_request_data.created_callback)
       .Run({base::in_place,
             base::ReadOnlySharedMemoryRegion::Create(shmem_size).region,
-            mojo::WrapPlatformFile(socket1.Release())});
+            mojo::PlatformHandle(socket1.Take())});
 
   EXPECT_CALL(env.renderer_factory_client, OnStreamCreated());
 
@@ -279,7 +282,7 @@ TEST(AudioLoopbackStreamBrokerTest, SourceGone_CallsDeleter) {
   std::move(stream_request_data.created_callback)
       .Run({base::in_place,
             base::ReadOnlySharedMemoryRegion::Create(shmem_size).region,
-            mojo::WrapPlatformFile(socket1.Release())});
+            mojo::PlatformHandle(socket1.Take())});
 
   EXPECT_CALL(env.renderer_factory_client, OnStreamCreated());
 
@@ -336,7 +339,7 @@ TEST(AudioLoopbackStreamBrokerTest,
   env.RunUntilIdle();
   Mock::VerifyAndClear(&env.deleter);
 
-  env.stream_factory.CloseBinding();
+  env.stream_factory.ResetReceiver();
   env.RunUntilIdle();
 }
 
@@ -358,7 +361,7 @@ TEST(AudioLoopbackStreamBrokerTest, ObserverDisconnect_CallsDeleter) {
   env.RunUntilIdle();
   Mock::VerifyAndClear(&env.deleter);
 
-  env.stream_factory.CloseBinding();
+  env.stream_factory.ResetReceiver();
   env.RunUntilIdle();
 }
 
@@ -366,7 +369,7 @@ TEST(AudioLoopbackStreamBrokerTest,
      FactoryDisconnectDuringConstruction_CallsDeleter) {
   TestEnvironment env(base::UnguessableToken::Create(), !kMuteSource);
   env.broker->CreateStream(env.factory_ptr.get());
-  env.stream_factory.CloseBinding();
+  env.stream_factory.ResetReceiver();
 
   EXPECT_CALL(env.deleter, Run(env.broker.release()))
       .WillOnce(testing::DeleteArg<0>());

@@ -15,12 +15,17 @@
 
 #include "absl/flags/internal/commandlineflag.h"
 
+#include <memory>
+#include <string>
+
 #include "gtest/gtest.h"
 #include "absl/flags/flag.h"
 #include "absl/flags/internal/registry.h"
+#include "absl/flags/usage_config.h"
 #include "absl/memory/memory.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/string_view.h"
 
 ABSL_FLAG(int, int_flag, 201, "int_flag help");
 ABSL_FLAG(std::string, string_flag, "dflt",
@@ -33,10 +38,26 @@ namespace flags = absl::flags_internal;
 
 class CommandLineFlagTest : public testing::Test {
  protected:
+  static void SetUpTestSuite() {
+    // Install a function to normalize filenames before this test is run.
+    absl::FlagsUsageConfig default_config;
+    default_config.normalize_filename = &CommandLineFlagTest::NormalizeFileName;
+    absl::SetFlagsUsageConfig(default_config);
+  }
+
   void SetUp() override { flag_saver_ = absl::make_unique<flags::FlagSaver>(); }
   void TearDown() override { flag_saver_.reset(); }
 
  private:
+  static std::string NormalizeFileName(absl::string_view fname) {
+#ifdef _WIN32
+    std::string normalized(fname);
+    std::replace(normalized.begin(), normalized.end(), '\\', '/');
+    fname = normalized;
+#endif
+    return std::string(fname);
+  }
+
   std::unique_ptr<flags::FlagSaver> flag_saver_;
 };
 
@@ -49,9 +70,10 @@ TEST_F(CommandLineFlagTest, TestAttributesAccessMethods) {
   EXPECT_EQ(flag_01->Typename(), "");
   EXPECT_TRUE(!flag_01->IsRetired());
   EXPECT_TRUE(flag_01->IsOfType<int>());
-  EXPECT_TRUE(absl::EndsWith(
-      flag_01->Filename(),
-      "absl/flags/internal/commandlineflag_test.cc"));
+  EXPECT_TRUE(
+      absl::EndsWith(flag_01->Filename(),
+                     "absl/flags/internal/commandlineflag_test.cc"))
+      << flag_01->Filename();
 
   auto* flag_02 = flags::FindCommandLineFlag("string_flag");
 
@@ -61,9 +83,10 @@ TEST_F(CommandLineFlagTest, TestAttributesAccessMethods) {
   EXPECT_EQ(flag_02->Typename(), "");
   EXPECT_TRUE(!flag_02->IsRetired());
   EXPECT_TRUE(flag_02->IsOfType<std::string>());
-  EXPECT_TRUE(absl::EndsWith(
-      flag_02->Filename(),
-      "absl/flags/internal/commandlineflag_test.cc"));
+  EXPECT_TRUE(
+      absl::EndsWith(flag_02->Filename(),
+                     "absl/flags/internal/commandlineflag_test.cc"))
+      << flag_02->Filename();
 
   auto* flag_03 = flags::FindRetiredFlag("bool_retired_flag");
 
@@ -96,99 +119,99 @@ TEST_F(CommandLineFlagTest, TestValueAccessMethods) {
 
 // --------------------------------------------------------------------
 
-TEST_F(CommandLineFlagTest, TestSetFromStringCurrentValue) {
+TEST_F(CommandLineFlagTest, TestParseFromCurrentValue) {
   std::string err;
 
   auto* flag_01 = flags::FindCommandLineFlag("int_flag");
   EXPECT_FALSE(flag_01->IsSpecifiedOnCommandLine());
 
-  EXPECT_TRUE(flag_01->SetFromString("11", flags::SET_FLAGS_VALUE,
-                                     flags::kProgrammaticChange, &err));
+  EXPECT_TRUE(flag_01->ParseFrom("11", flags::SET_FLAGS_VALUE,
+                                 flags::kProgrammaticChange, &err));
   EXPECT_EQ(absl::GetFlag(FLAGS_int_flag), 11);
   EXPECT_FALSE(flag_01->IsSpecifiedOnCommandLine());
 
-  EXPECT_TRUE(flag_01->SetFromString("-123", flags::SET_FLAGS_VALUE,
-                                     flags::kProgrammaticChange, &err));
+  EXPECT_TRUE(flag_01->ParseFrom("-123", flags::SET_FLAGS_VALUE,
+                                 flags::kProgrammaticChange, &err));
   EXPECT_EQ(absl::GetFlag(FLAGS_int_flag), -123);
   EXPECT_FALSE(flag_01->IsSpecifiedOnCommandLine());
 
-  EXPECT_TRUE(!flag_01->SetFromString("xyz", flags::SET_FLAGS_VALUE,
-                                      flags::kProgrammaticChange, &err));
+  EXPECT_TRUE(!flag_01->ParseFrom("xyz", flags::SET_FLAGS_VALUE,
+                                  flags::kProgrammaticChange, &err));
   EXPECT_EQ(absl::GetFlag(FLAGS_int_flag), -123);
   EXPECT_EQ(err, "Illegal value 'xyz' specified for flag 'int_flag'");
   EXPECT_FALSE(flag_01->IsSpecifiedOnCommandLine());
 
-  EXPECT_TRUE(!flag_01->SetFromString("A1", flags::SET_FLAGS_VALUE,
-                                      flags::kProgrammaticChange, &err));
+  EXPECT_TRUE(!flag_01->ParseFrom("A1", flags::SET_FLAGS_VALUE,
+                                  flags::kProgrammaticChange, &err));
   EXPECT_EQ(absl::GetFlag(FLAGS_int_flag), -123);
   EXPECT_EQ(err, "Illegal value 'A1' specified for flag 'int_flag'");
   EXPECT_FALSE(flag_01->IsSpecifiedOnCommandLine());
 
-  EXPECT_TRUE(flag_01->SetFromString("0x10", flags::SET_FLAGS_VALUE,
-                                     flags::kProgrammaticChange, &err));
+  EXPECT_TRUE(flag_01->ParseFrom("0x10", flags::SET_FLAGS_VALUE,
+                                 flags::kProgrammaticChange, &err));
   EXPECT_EQ(absl::GetFlag(FLAGS_int_flag), 16);
   EXPECT_FALSE(flag_01->IsSpecifiedOnCommandLine());
 
-  EXPECT_TRUE(flag_01->SetFromString("011", flags::SET_FLAGS_VALUE,
-                                     flags::kCommandLine, &err));
+  EXPECT_TRUE(flag_01->ParseFrom("011", flags::SET_FLAGS_VALUE,
+                                 flags::kCommandLine, &err));
   EXPECT_EQ(absl::GetFlag(FLAGS_int_flag), 11);
   EXPECT_TRUE(flag_01->IsSpecifiedOnCommandLine());
 
-  EXPECT_TRUE(!flag_01->SetFromString("", flags::SET_FLAGS_VALUE,
-                                      flags::kProgrammaticChange, &err));
+  EXPECT_TRUE(!flag_01->ParseFrom("", flags::SET_FLAGS_VALUE,
+                                  flags::kProgrammaticChange, &err));
   EXPECT_EQ(err, "Illegal value '' specified for flag 'int_flag'");
 
   auto* flag_02 = flags::FindCommandLineFlag("string_flag");
-  EXPECT_TRUE(flag_02->SetFromString("xyz", flags::SET_FLAGS_VALUE,
-                                     flags::kProgrammaticChange, &err));
+  EXPECT_TRUE(flag_02->ParseFrom("xyz", flags::SET_FLAGS_VALUE,
+                                 flags::kProgrammaticChange, &err));
   EXPECT_EQ(absl::GetFlag(FLAGS_string_flag), "xyz");
 
-  EXPECT_TRUE(flag_02->SetFromString("", flags::SET_FLAGS_VALUE,
-                                     flags::kProgrammaticChange, &err));
+  EXPECT_TRUE(flag_02->ParseFrom("", flags::SET_FLAGS_VALUE,
+                                 flags::kProgrammaticChange, &err));
   EXPECT_EQ(absl::GetFlag(FLAGS_string_flag), "");
 }
 
 // --------------------------------------------------------------------
 
-TEST_F(CommandLineFlagTest, TestSetFromStringDefaultValue) {
+TEST_F(CommandLineFlagTest, TestParseFromDefaultValue) {
   std::string err;
 
   auto* flag_01 = flags::FindCommandLineFlag("int_flag");
 
-  EXPECT_TRUE(flag_01->SetFromString("111", flags::SET_FLAGS_DEFAULT,
-                                     flags::kProgrammaticChange, &err));
+  EXPECT_TRUE(flag_01->ParseFrom("111", flags::SET_FLAGS_DEFAULT,
+                                 flags::kProgrammaticChange, &err));
   EXPECT_EQ(flag_01->DefaultValue(), "111");
 
   auto* flag_02 = flags::FindCommandLineFlag("string_flag");
 
-  EXPECT_TRUE(flag_02->SetFromString("abc", flags::SET_FLAGS_DEFAULT,
-                                     flags::kProgrammaticChange, &err));
+  EXPECT_TRUE(flag_02->ParseFrom("abc", flags::SET_FLAGS_DEFAULT,
+                                 flags::kProgrammaticChange, &err));
   EXPECT_EQ(flag_02->DefaultValue(), "abc");
 }
 
 // --------------------------------------------------------------------
 
-TEST_F(CommandLineFlagTest, TestSetFromStringIfDefault) {
+TEST_F(CommandLineFlagTest, TestParseFromIfDefault) {
   std::string err;
 
   auto* flag_01 = flags::FindCommandLineFlag("int_flag");
 
-  EXPECT_TRUE(flag_01->SetFromString("22", flags::SET_FLAG_IF_DEFAULT,
-                                     flags::kProgrammaticChange, &err))
+  EXPECT_TRUE(flag_01->ParseFrom("22", flags::SET_FLAG_IF_DEFAULT,
+                                 flags::kProgrammaticChange, &err))
       << err;
   EXPECT_EQ(absl::GetFlag(FLAGS_int_flag), 22);
 
-  EXPECT_TRUE(flag_01->SetFromString("33", flags::SET_FLAG_IF_DEFAULT,
-                                     flags::kProgrammaticChange, &err));
+  EXPECT_TRUE(flag_01->ParseFrom("33", flags::SET_FLAG_IF_DEFAULT,
+                                 flags::kProgrammaticChange, &err));
   EXPECT_EQ(absl::GetFlag(FLAGS_int_flag), 22);
   // EXPECT_EQ(err, "ERROR: int_flag is already set to 22");
 
   // Reset back to default value
-  EXPECT_TRUE(flag_01->SetFromString("201", flags::SET_FLAGS_VALUE,
-                                     flags::kProgrammaticChange, &err));
+  EXPECT_TRUE(flag_01->ParseFrom("201", flags::SET_FLAGS_VALUE,
+                                 flags::kProgrammaticChange, &err));
 
-  EXPECT_TRUE(flag_01->SetFromString("33", flags::SET_FLAG_IF_DEFAULT,
-                                     flags::kProgrammaticChange, &err));
+  EXPECT_TRUE(flag_01->ParseFrom("33", flags::SET_FLAG_IF_DEFAULT,
+                                 flags::kProgrammaticChange, &err));
   EXPECT_EQ(absl::GetFlag(FLAGS_int_flag), 201);
   // EXPECT_EQ(err, "ERROR: int_flag is already set to 201");
 }

@@ -7,6 +7,7 @@
 // language to another.
 // It should be included in the page before the Translate Element script.
 
+// eslint-disable-next-line no-var
 var cr = cr || {};
 
 /**
@@ -18,20 +19,20 @@ cr.googleTranslate = (function() {
    * The Translate Element library's instance.
    * @type {object}
    */
-  var lib;
+  let lib;
 
   /**
    * A flag representing if the Translate Element library is initialized.
    * @type {boolean}
    */
-  var libReady = false;
+  let libReady = false;
 
   /**
    * Error definitions for |errorCode|. See chrome/common/translate_errors.h
    * to modify the definition.
    * @const
    */
-  var ERROR = {
+  const ERROR = {
     'NONE': 0,
     'INITIALIZATION_ERROR': 2,
     'UNSUPPORTED_LANGUAGE': 4,
@@ -47,7 +48,7 @@ cr.googleTranslate = (function() {
    * See also go/dom_translator.js in google3.
    * @const
    */
-  var TRANSLATE_ERROR_TO_ERROR_CODE_MAP = {
+  const TRANSLATE_ERROR_TO_ERROR_CODE_MAP = {
     0: ERROR['NONE'],
     1: ERROR['TRANSLATION_ERROR'],
     2: ERROR['UNSUPPORTED_LANGUAGE']
@@ -56,51 +57,51 @@ cr.googleTranslate = (function() {
   /**
    * An error code happened in translate.js and the Translate Element library.
    */
-  var errorCode = ERROR['NONE'];
+  let errorCode = ERROR['NONE'];
 
   /**
    * A flag representing if the Translate Element has finished a translation.
    * @type {boolean}
    */
-  var finished = false;
+  let finished = false;
 
   /**
    * Counts how many times the checkLibReady function is called. The function
    * is called in every 100 msec and counted up to 6.
    * @type {number}
    */
-  var checkReadyCount = 0;
+  let checkReadyCount = 0;
 
   /**
    * Time in msec when this script is injected.
    * @type {number}
    */
-  var injectedTime = performance.now();
+  const injectedTime = performance.now();
 
   /**
    * Time in msec when the Translate Element library is loaded completely.
    * @type {number}
    */
-  var loadedTime = 0.0;
+  let loadedTime = 0.0;
 
   /**
    * Time in msec when the Translate Element library is initialized and ready
    * for performing translation.
    * @type {number}
    */
-  var readyTime = 0.0;
+  let readyTime = 0.0;
 
   /**
    * Time in msec when the Translate Element library starts a translation.
    * @type {number}
    */
-  var startTime = 0.0;
+  let startTime = 0.0;
 
   /**
    * Time in msec when the Translate Element library ends a translation.
    * @type {number}
    */
-  var endTime = 0.0;
+  let endTime = 0.0;
 
   /**
    * Callback invoked when Translate Element's ready state is known.
@@ -109,7 +110,7 @@ cr.googleTranslate = (function() {
    * Only used on iOS.
    * @type {function}
    */
-  var readyCallback;
+  let readyCallback;
 
   /**
    * Callback invoked when Translate Element's translation result is known.
@@ -118,14 +119,14 @@ cr.googleTranslate = (function() {
    * Only used on iOS.
    * @type {function}
    */
-  var resultCallback;
+  let resultCallback;
 
   /**
    * Callback invoked when Translate Element requests load of javascript files.
    * Currently main.js and element_main.js are expected to be loaded.
    * @type {function(string)}
    */
-  var loadJavascriptCallback;
+  let loadJavascriptCallback;
 
   function checkLibReady() {
     if (lib.isAvailable()) {
@@ -145,13 +146,13 @@ cr.googleTranslate = (function() {
   function onTranslateProgress(progress, opt_finished, opt_error) {
     finished = opt_finished;
     // opt_error can be 'undefined'.
-    if (typeof opt_error == 'boolean' && opt_error) {
+    if (typeof opt_error === 'boolean' && opt_error) {
       // TODO(toyoshim): Remove boolean case once a server is updated.
       errorCode = ERROR['TRANSLATION_ERROR'];
       // We failed to translate, restore so the page is in a consistent state.
       lib.restore();
       invokeResultCallback();
-    } else if (typeof opt_error == 'number' && opt_error != 0) {
+    } else if (typeof opt_error === 'number' && opt_error !== 0) {
       errorCode = TRANSLATE_ERROR_TO_ERROR_CODE_MAP[opt_error];
       lib.restore();
       invokeResultCallback();
@@ -240,7 +241,7 @@ cr.googleTranslate = (function() {
      * @type {boolean}
      */
     get error() {
-      return errorCode != ERROR['NONE'];
+      return errorCode !== ERROR['NONE'];
     },
 
     /**
@@ -260,10 +261,12 @@ cr.googleTranslate = (function() {
      * @type {boolean}
      */
     get sourceLang() {
-      if (!libReady || !finished || errorCode != ERROR['NONE'])
+      if (!libReady || !finished || errorCode !== ERROR['NONE']) {
         return '';
-      if (!lib.getDetectedLanguage)
-        return 'und'; // Defined as translate::kUnknownLanguageCode in C++.
+      }
+      if (!lib.getDetectedLanguage) {
+        return 'und';
+      }  // Defined as translate::kUnknownLanguageCode in C++.
       return lib.getDetectedLanguage();
     },
 
@@ -273,8 +276,9 @@ cr.googleTranslate = (function() {
      * @type {number}
      */
     get loadTime() {
-      if (loadedTime == 0)
+      if (loadedTime === 0) {
         return 0;
+      }
       return loadedTime - injectedTime;
     },
 
@@ -284,8 +288,9 @@ cr.googleTranslate = (function() {
      * @type {number}
      */
     get readyTime() {
-      if (!libReady)
+      if (!libReady) {
         return 0;
+      }
       return readyTime - injectedTime;
     },
 
@@ -294,8 +299,9 @@ cr.googleTranslate = (function() {
      * @type {number}
      */
     get translationTime() {
-      if (!finished)
+      if (!finished) {
         return 0;
+      }
       return endTime - startTime;
     },
 
@@ -308,11 +314,12 @@ cr.googleTranslate = (function() {
      * @return {boolean} False if the translate library was not ready, in which
      *                   case the translation is not started.  True otherwise.
      */
-    translate: function(originalLang, targetLang) {
+    translate(originalLang, targetLang) {
       finished = false;
       errorCode = ERROR['NONE'];
-      if (!libReady)
+      if (!libReady) {
         return false;
+      }
       startTime = performance.now();
       try {
         lib.translatePage(originalLang, targetLang, onTranslateProgress);
@@ -329,7 +336,7 @@ cr.googleTranslate = (function() {
      * Reverts the page contents to its original value, effectively reverting
      * any performed translation.  Does nothing if the page was not translated.
      */
-    revert: function() {
+    revert() {
       lib.restore();
     },
 
@@ -337,7 +344,7 @@ cr.googleTranslate = (function() {
      * Called when an error is caught while executing script fetched in
      * translate_script.cc.
      */
-    onTranslateElementError: function(error) {
+    onTranslateElementError(error) {
       errorCode = ERROR['UNEXPECTED_SCRIPT_ERROR'];
       invokeReadyCallback();
     },
@@ -346,7 +353,7 @@ cr.googleTranslate = (function() {
      * Entry point called by the Translate Element once it has been injected in
      * the page.
      */
-    onTranslateElementLoad: function() {
+    onTranslateElementLoad() {
       loadedTime = performance.now();
       try {
         lib = google.translate.TranslateService({
@@ -377,8 +384,8 @@ cr.googleTranslate = (function() {
      * external CSS resource into the page.
      * @param {string} url URL of an external CSS resource to load.
      */
-    onLoadCSS: function(url) {
-      var element = document.createElement('link');
+    onLoadCSS(url) {
+      const element = document.createElement('link');
       element.type = 'text/css';
       element.rel = 'stylesheet';
       element.charset = 'UTF-8';
@@ -391,7 +398,7 @@ cr.googleTranslate = (function() {
      * an external JavaScript on the page.
      * @param {string} url URL of an external JavaScript to load.
      */
-    onLoadJavascript: function(url) {
+    onLoadJavascript(url) {
       // securityOrigin is predefined by translate_script.cc.
       if (!url.startsWith(securityOrigin)) {
         console.error('Translate: ' + url + ' is not allowed to load.');
@@ -404,17 +411,18 @@ cr.googleTranslate = (function() {
         return;
       }
 
-      var xhr = new XMLHttpRequest();
+      const xhr = new XMLHttpRequest();
       xhr.open('GET', url, true);
       xhr.onreadystatechange = function() {
-        if (this.readyState != this.DONE)
+        if (this.readyState !== this.DONE) {
           return;
-        if (this.status != 200) {
+        }
+        if (this.status !== 200) {
           errorCode = ERROR['SCRIPT_LOAD_ERROR'];
           return;
         }
         eval(this.responseText);
-      }
+      };
       xhr.send();
     }
   };

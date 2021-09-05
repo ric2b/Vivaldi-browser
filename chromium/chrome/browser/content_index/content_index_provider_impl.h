@@ -26,6 +26,7 @@ class OfflineContentAggregator;
 }  // namespace offline_items_collection
 
 class Profile;
+class SiteEngagementService;
 
 class ContentIndexProviderImpl
     : public KeyedService,
@@ -47,7 +48,7 @@ class ContentIndexProviderImpl
                         const std::string& description_id) override;
 
   // OfflineContentProvider implementation.
-  void OpenItem(offline_items_collection::LaunchLocation location,
+  void OpenItem(const offline_items_collection::OpenParams& open_params,
                 const offline_items_collection::ContentId& id) override;
   void RemoveItem(const offline_items_collection::ContentId& id) override;
   void CancelDownload(const offline_items_collection::ContentId& id) override;
@@ -73,16 +74,28 @@ class ContentIndexProviderImpl
   }
 
  private:
+  void DidGetItem(SingleItemCallback callback,
+                  base::Optional<content::ContentIndexEntry> entry);
+  void DidGetAllEntriesAcrossStorageParitions(
+      std::unique_ptr<OfflineItemList> item_list,
+      MultipleItemCallback callback);
+  void DidGetAllEntries(base::OnceClosure done_closure,
+                        OfflineItemList* item_list,
+                        blink::mojom::ContentIndexError error,
+                        std::vector<content::ContentIndexEntry> entries);
   void DidGetIcons(const offline_items_collection::ContentId& id,
                    VisualsCallback callback,
                    std::vector<SkBitmap> icons);
   void DidGetEntryToOpen(base::Optional<content::ContentIndexEntry> entry);
   void DidOpenTab(content::ContentIndexEntry entry,
                   content::WebContents* web_contents);
+  offline_items_collection::OfflineItem EntryToOfflineItem(
+      const content::ContentIndexEntry& entry);
 
   Profile* profile_;
   ContentIndexMetrics metrics_;
   offline_items_collection::OfflineContentAggregator* aggregator_;
+  SiteEngagementService* site_engagement_service_;
   base::ObserverList<Observer>::Unchecked observers_;
   base::Optional<std::vector<gfx::Size>> icon_sizes_for_testing_;
   base::WeakPtrFactory<ContentIndexProviderImpl> weak_ptr_factory_{this};

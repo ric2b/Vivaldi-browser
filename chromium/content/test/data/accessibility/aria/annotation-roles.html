@@ -2,15 +2,17 @@
 @MAC-ALLOW:AXRole*
 @MAC-ALLOW:AXSubrole*
 @WIN-ALLOW:xml-roles:*
+@WIN-DENY:level*
 @AURALINUX-ALLOW:xml-roles*
+@UIA-WIN-ALLOW:LocalizedControlType*
+@UIA-WIN-DENY:LocalizedControlType='text'
+@BLINK-DENY:hierarchicalLevel*
 -->
 <!DOCTYPE html>
 <html>
 <body>
-  <div role="annotation-attribution" aria-label="annotation-attribution"></div>
-  <div role="annotation-commentary" aria-label="annotation-commentary"></div>
-  <div role="annotation-presence" aria-label="annotation-presence"></div>
-  <div role="annotation-revision" aria-label="annotation-revision"></div>
-  <div role="annotation-suggestion" aria-label="annotation-suggestion"></div>
+  <div role="comment" aria-label="comment"></div>
+  <div role="suggestion" aria-label="suggestion"></div>
+  <p>This is <span role="mark">highlighted</span>.</p>
 </body>
 </html>

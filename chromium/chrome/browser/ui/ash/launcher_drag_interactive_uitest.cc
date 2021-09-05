@@ -4,52 +4,49 @@
 
 #include "ash/public/cpp/app_list/app_list_config.h"
 #include "ash/public/cpp/app_list/app_list_types.h"
+#include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/shelf_config.h"
 #include "ash/public/cpp/test/shell_test_api.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
-#include "base/task/post_task.h"
+#include "base/test/scoped_feature_list.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/ui/app_list/test/chrome_app_list_test_support.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/test/base/perf/drag_event_generator.h"
 #include "chrome/test/base/perf/performance_test.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/constants/chromeos_switches.h"
 #include "ui/base/test/ui_controls.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 
 // Test launcher drag performance in clamshell mode.
-// TODO(oshima): Add test for tablet mode.
-class LauncherDragTest : public UIPerformanceTest,
-                         public ::testing::WithParamInterface<bool> {
+class LauncherDragClamshellModeTest : public UIPerformanceTest {
  public:
-  LauncherDragTest() = default;
-  ~LauncherDragTest() override = default;
+  LauncherDragClamshellModeTest() = default;
+  ~LauncherDragClamshellModeTest() override = default;
 
   // UIPerformanceTest:
   void SetUpOnMainThread() override {
-    tablet_mode_ = GetParam();
     UIPerformanceTest::SetUpOnMainThread();
 
     test::PopulateDummyAppListItems(100);
-    if (tablet_mode_)
-      ash::ShellTestApi().SetTabletModeEnabledForTest(true);
     // Ash may not be ready to receive events right away.
     int warmup_seconds = base::SysInfo::IsRunningOnChromeOS() ? 5 : 1;
     base::RunLoop run_loop;
-    base::PostDelayedTask(FROM_HERE, run_loop.QuitClosure(),
-                          base::TimeDelta::FromSeconds(warmup_seconds));
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+        FROM_HERE, run_loop.QuitClosure(),
+        base::TimeDelta::FromSeconds(warmup_seconds));
     run_loop.Run();
   }
 
   // UIPerformanceTest:
   std::vector<std::string> GetUMAHistogramNames() const override {
-    return {
-        base::StringPrintf("Apps.StateTransition.Drag.PresentationTime.%s",
-                           tablet_mode_ ? "TabletMode" : "ClamshellMode"),
-    };
+    return {base::StringPrintf(
+        "Apps.StateTransition.Drag.PresentationTime.ClamshellMode")};
   }
 
   static gfx::Rect GetDisplayBounds(aura::Window* window) {
@@ -59,13 +56,12 @@ class LauncherDragTest : public UIPerformanceTest,
   }
 
  private:
-  bool tablet_mode_ = false;
-
-  DISALLOW_COPY_AND_ASSIGN(LauncherDragTest);
+  DISALLOW_COPY_AND_ASSIGN(LauncherDragClamshellModeTest);
 };
 
-// Drag to open the launcher from shelf.
-IN_PROC_BROWSER_TEST_P(LauncherDragTest, Open) {
+// Drag to open the launcher from shelf. In tablet mode, swiping up from shelf
+// no longer drags up launcher, so we only need to test it in clamshell mode.
+IN_PROC_BROWSER_TEST_F(LauncherDragClamshellModeTest, Open) {
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
   aura::Window* browser_window = browser_view->GetWidget()->GetNativeWindow();
   ash::ShellTestApi shell_test_api;
@@ -81,19 +77,49 @@ IN_PROC_BROWSER_TEST_P(LauncherDragTest, Open) {
           start_point, end_point, base::TimeDelta::FromMilliseconds(1000)));
   generator->Wait();
 
-  const bool is_tablet_mode = GetParam();
-  if (is_tablet_mode && chromeos::switches::ShouldShowShelfHotseat()) {
-    // The first swipe should show the hotseat, a second swipe is required to
-    // show the applist.
-    auto generator = ui_test_utils::DragEventGenerator::CreateForTouch(
-        std::make_unique<ui_test_utils::InterpolatedProducer>(
-            start_point, end_point, base::TimeDelta::FromMilliseconds(1000)));
-    generator->Wait();
-  }
-
   shell_test_api.WaitForLauncherAnimationState(
       ash::AppListViewState::kFullscreenAllApps);
 }
+
+// Test launcher drag performace in both clamshell mode and tablet mode.
+class LauncherDragTest : public LauncherDragClamshellModeTest,
+                         public ::testing::WithParamInterface<bool> {
+ public:
+  LauncherDragTest() {
+    tablet_mode_ = GetParam();
+
+    // Drag from top to close app list in tablet mode is disabled if
+    // kDragFromShelfToHomeOrOverview feature is enabled.
+    if (tablet_mode_) {
+      scoped_features_.InitWithFeatures(
+          {}, {ash::features::kDragFromShelfToHomeOrOverview,
+               chromeos::features::kShelfHotseat});
+    }
+  }
+  ~LauncherDragTest() override = default;
+
+  // UIPerformanceTest:
+  void SetUpOnMainThread() override {
+    if (tablet_mode_)
+      ash::ShellTestApi().SetTabletModeEnabledForTest(true);
+
+    LauncherDragClamshellModeTest::SetUpOnMainThread();
+  }
+
+  // UIPerformanceTest:
+  std::vector<std::string> GetUMAHistogramNames() const override {
+    return {
+        base::StringPrintf("Apps.StateTransition.Drag.PresentationTime.%s",
+                           tablet_mode_ ? "TabletMode" : "ClamshellMode"),
+    };
+  }
+
+ private:
+  bool tablet_mode_ = false;
+  base::test::ScopedFeatureList scoped_features_;
+
+  DISALLOW_COPY_AND_ASSIGN(LauncherDragTest);
+};
 
 IN_PROC_BROWSER_TEST_P(LauncherDragTest, Close) {
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
@@ -120,6 +146,6 @@ IN_PROC_BROWSER_TEST_P(LauncherDragTest, Close) {
   shell_test_api.WaitForLauncherAnimationState(ash::AppListViewState::kClosed);
 }
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          LauncherDragTest,
                          /*tablet_mode=*/::testing::Bool());

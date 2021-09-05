@@ -1,0 +1,24 @@
+// Copyright (c) 2020 Vivaldi Technologies AS. All rights reserved
+[
+  {
+    "namespace": "pipPrivate",
+    "compiler_options": {
+      "implemented_in": "extensions/api/pip_private/pip_private_api.h"
+    },
+    "description": "Use the <code>vivaldi.pipPrivate</code> API to interact with PIP.",
+    "events": [
+      {
+        "name": "onVideoElementCreated",
+        "type": "function",
+        "description": "Fired when a video element has been created.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "tabId",
+            "description": "Tab id for the video element created event."
+          }
+        ]
+      }
+    ]
+  }
+]

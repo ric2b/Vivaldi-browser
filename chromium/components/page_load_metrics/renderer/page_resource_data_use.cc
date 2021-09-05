@@ -6,9 +6,9 @@
 
 #include "base/stl_util.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_headers.h"
-#include "services/network/public/cpp/resource_response.h"
 #include "services/network/public/cpp/url_loader_completion_status.h"
-#include "third_party/blink/public/platform/web_url.h"
+#include "services/network/public/mojom/url_response_head.mojom.h"
+#include "third_party/blink/public/common/loader/resource_type_util.h"
 #include "url/gurl.h"
 
 namespace page_load_metrics {
@@ -16,17 +16,18 @@ namespace page_load_metrics {
 namespace {
 
 // Returns true when the image is a placeholder for lazy load.
-bool IsPartialImageRequest(content::ResourceType resource_type,
-                           content::PreviewsState previews_state) {
-  if (resource_type != content::ResourceType::kImage)
+bool IsPartialImageRequest(
+    network::mojom::RequestDestination request_destination,
+    content::PreviewsState previews_state) {
+  if (request_destination != network::mojom::RequestDestination::kImage)
     return false;
   return previews_state & content::PreviewsTypes::LAZY_IMAGE_LOAD_DEFERRED;
 }
 
 // Returns true if this resource was previously fetched as a placeholder.
-bool IsImageAutoReload(content::ResourceType resource_type,
+bool IsImageAutoReload(network::mojom::RequestDestination request_destination,
                        content::PreviewsState previews_state) {
-  if (resource_type != content::ResourceType::kImage)
+  if (request_destination != network::mojom::RequestDestination::kImage)
     return false;
   return previews_state & content::PreviewsTypes::LAZY_IMAGE_AUTO_RELOAD;
 }
@@ -34,7 +35,7 @@ bool IsImageAutoReload(content::ResourceType resource_type,
 // Returns the ratio of original data size (without applying interventions) to
 // actual data use for a placeholder.
 double EstimatePartialImageRequestSavings(
-    const network::ResourceResponseHead& response_head) {
+    const network::mojom::URLResponseHead& response_head) {
   if (!response_head.headers)
     return 1.0;
 
@@ -57,7 +58,7 @@ double EstimatePartialImageRequestSavings(
 // that this request was previously fetched as a placeholder, and therefore
 // recorded savings earlier.
 double EstimateAutoReloadImageRequestSavings(
-    const network::ResourceResponseHead& response_head) {
+    const network::mojom::URLResponseHead& response_head) {
   static const double kPlageholderContentInCache = 2048;
 
   // Count the new network usage. For a reloaded placeholder image, 2KB will be
@@ -89,15 +90,15 @@ PageResourceDataUse::~PageResourceDataUse() = default;
 void PageResourceDataUse::DidStartResponse(
     const GURL& response_url,
     int resource_id,
-    const network::ResourceResponseHead& response_head,
-    content::ResourceType resource_type,
+    const network::mojom::URLResponseHead& response_head,
+    network::mojom::RequestDestination request_destination,
     content::PreviewsState previews_state) {
   resource_id_ = resource_id;
 
-  if (IsPartialImageRequest(resource_type, previews_state)) {
+  if (IsPartialImageRequest(request_destination, previews_state)) {
     data_reduction_proxy_compression_ratio_estimate_ =
         EstimatePartialImageRequestSavings(response_head);
-  } else if (IsImageAutoReload(resource_type, previews_state)) {
+  } else if (IsImageAutoReload(request_destination, previews_state)) {
     data_reduction_proxy_compression_ratio_estimate_ =
         EstimateAutoReloadImageRequestSavings(response_head);
   } else {
@@ -112,8 +113,7 @@ void PageResourceDataUse::DidStartResponse(
     cache_type_ = mojom::CacheType::kHttp;
   is_secure_scheme_ = response_url.SchemeIsCryptographic();
   is_primary_frame_resource_ =
-      resource_type == content::ResourceType::kMainFrame ||
-      resource_type == content::ResourceType::kSubFrame;
+      blink::IsRequestDestinationFrame(request_destination);
   origin_ = url::Origin::Create(response_url);
 }
 
@@ -127,6 +127,7 @@ void PageResourceDataUse::DidCompleteResponse(
   // Report the difference in received bytes.
   is_complete_ = true;
   encoded_body_length_ = status.encoded_body_length;
+  decoded_body_length_ = status.decoded_body_length;
   int64_t delta_bytes = status.encoded_data_length - total_received_bytes_;
   if (delta_bytes > 0) {
     total_received_bytes_ += delta_bytes;
@@ -193,6 +194,7 @@ mojom::ResourceDataUpdatePtr PageResourceDataUse::GetResourceDataUpdate() {
   resource_data_update->is_main_frame_resource = is_main_frame_resource_;
   resource_data_update->mime_type = mime_type_;
   resource_data_update->encoded_body_length = encoded_body_length_;
+  resource_data_update->decoded_body_length = decoded_body_length_;
   resource_data_update->cache_type = cache_type_;
   resource_data_update->is_secure_scheme = is_secure_scheme_;
   resource_data_update->proxy_used = proxy_used_;

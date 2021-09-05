@@ -5,11 +5,11 @@
 #ifndef CHROME_BROWSER_UI_WEBUI_PRINT_PREVIEW_PRINT_PREVIEW_HANDLER_H_
 #define CHROME_BROWSER_UI_WEBUI_PRINT_PREVIEW_PRINT_PREVIEW_HANDLER_H_
 
-#include <map>
 #include <memory>
-#include <set>
 #include <string>
 
+#include "base/containers/flat_map.h"
+#include "base/containers/flat_set.h"
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
@@ -18,10 +18,13 @@
 #include "base/timer/timer.h"
 #include "chrome/common/buildflags.h"
 #include "components/prefs/pref_service.h"
+#include "components/printing/common/print.mojom.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "content/public/browser/web_ui_message_handler.h"
+#include "mojo/public/cpp/bindings/associated_remote.h"
 #include "printing/backend/print_backend.h"
 #include "printing/buildflags/buildflags.h"
+#include "printing/print_job_constants.h"
 
 namespace base {
 class DictionaryValue;
@@ -135,7 +138,10 @@ class PrintPreviewHandler : public content::WebUIMessageHandler,
                            MANUAL_DummyTest);
   friend class PrintPreviewHandlerTest;
   FRIEND_TEST_ALL_PREFIXES(PrintPreviewHandlerTest, GetPrinters);
+  FRIEND_TEST_ALL_PREFIXES(PrintPreviewHandlerTest, GetNoDenyListPrinters);
   FRIEND_TEST_ALL_PREFIXES(PrintPreviewHandlerTest, GetPrinterCapabilities);
+  FRIEND_TEST_ALL_PREFIXES(PrintPreviewHandlerTest,
+                           GetNoDenyListPrinterCapabilities);
   FRIEND_TEST_ALL_PREFIXES(PrintPreviewHandlerTest, Print);
   FRIEND_TEST_ALL_PREFIXES(PrintPreviewHandlerTest, GetPreview);
   FRIEND_TEST_ALL_PREFIXES(PrintPreviewHandlerTest, SendPreviewUpdates);
@@ -152,6 +158,10 @@ class PrintPreviewHandler : public content::WebUIMessageHandler,
   PrintPreviewUI* print_preview_ui() const;
 
   PrefService* GetPrefs() const;
+
+  // Checks policy preferences for a deny list of printer types and initializes
+  // the set that stores them.
+  void ReadPrinterTypeDenyListFromPrefs();
 
   // Whether the the handler should be receiving messages from the renderer to
   // forward to the Print Preview JS in response to preview request with id
@@ -230,6 +240,9 @@ class PrintPreviewHandler : public content::WebUIMessageHandler,
 #if defined(OS_CHROMEOS)
   // Opens printer settings in the Chrome OS Settings App.
   void HandleOpenPrinterSettings(const base::ListValue* args);
+
+  // Gets the EULA URL.
+  void HandleGetEulaUrl(const base::ListValue* args);
 #endif
 
   void SendInitialSettings(const std::string& callback_id,
@@ -239,6 +252,9 @@ class PrintPreviewHandler : public content::WebUIMessageHandler,
   // Send OAuth2 access token.
   void SendAccessToken(const std::string& callback_id,
                        const std::string& access_token);
+
+  // Send the EULA URL;
+  void SendEulaUrl(const std::string& callback_id, const std::string& eula_url);
 #endif
 
   // Sends the printer capabilities to the Web UI. |settings_info| contains
@@ -345,10 +361,16 @@ class PrintPreviewHandler : public content::WebUIMessageHandler,
   std::unique_ptr<PrinterHandler> local_printer_handler_;
 
   // Maps preview request ids to callbacks.
-  std::map<int, std::string> preview_callbacks_;
+  base::flat_map<int, std::string> preview_callbacks_;
 
   // Set of preview request ids for failed previews.
-  std::set<int> preview_failures_;
+  base::flat_set<int> preview_failures_;
+
+  // Set of printer types on the deny list.
+  base::flat_set<PrinterType> printer_type_deny_list_;
+
+  // Used to transmit mojo interface method calls to the associated receiver.
+  mojo::AssociatedRemote<mojom::PrintRenderFrame> print_render_frame_;
 
   base::WeakPtrFactory<PrintPreviewHandler> weak_factory_{this};
 

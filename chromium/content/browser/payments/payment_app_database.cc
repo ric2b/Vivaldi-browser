@@ -225,7 +225,9 @@ void PaymentAppDatabase::WritePaymentInstrument(
   if (instrument->icons.size() > 0) {
     std::vector<blink::Manifest::ImageResource> icons(instrument->icons);
     PaymentInstrumentIconFetcher::Start(
-        scope, service_worker_context_->GetProviderHostIds(scope.GetOrigin()),
+        scope,
+        service_worker_context_->GetWindowClientFrameRoutingIds(
+            scope.GetOrigin()),
         icons,
         base::BindOnce(&PaymentAppDatabase::DidFetchedPaymentInstrumentIcon,
                        weak_ptr_factory_.GetWeakPtr(), scope, instrument_key,
@@ -712,9 +714,6 @@ void PaymentAppDatabase::DidReadAllPaymentInstruments(
       apps[id]->capabilities.back().supported_card_networks.emplace_back(
           network);
     }
-    for (const auto& type : instrument_proto.supported_card_types()) {
-      apps[id]->capabilities.back().supported_card_types.emplace_back(type);
-    }
   }
 
   std::move(callback).Run(std::move(apps));
@@ -906,9 +905,6 @@ void PaymentAppDatabase::DidFindRegistrationToWritePaymentInstrument(
       instrument->stringified_capabilities);
   for (const auto& network : instrument->supported_networks) {
     instrument_proto.add_supported_card_networks(static_cast<int32_t>(network));
-  }
-  for (const auto& type : instrument->supported_types) {
-    instrument_proto.add_supported_card_types(static_cast<int32_t>(type));
   }
 
   std::string serialized_instrument;

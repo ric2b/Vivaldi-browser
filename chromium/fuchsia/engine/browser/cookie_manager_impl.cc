@@ -211,7 +211,7 @@ void CookieManagerImpl::GetCookieList(
       net::CookieOptions options;
       options.set_include_httponly();
       options.set_same_site_cookie_context(
-          net::CookieOptions::SameSiteCookieContext::SAME_SITE_STRICT);
+          net::CookieOptions::SameSiteCookieContext::MakeInclusive());
 
       cookie_manager_->GetCookieList(
           GURL(*url), options,
@@ -234,5 +234,7 @@ void CookieManagerImpl::EnsureCookieManager() {
 
 void CookieManagerImpl::OnMojoDisconnect() {
   LOG(ERROR) << "NetworkService disconnected CookieManager.";
+  if (on_mojo_disconnected_for_test_)
+    std::move(on_mojo_disconnected_for_test_).Run();
   cookie_manager_.reset();
 }

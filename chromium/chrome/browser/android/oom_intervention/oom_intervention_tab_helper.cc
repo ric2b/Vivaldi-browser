@@ -12,6 +12,7 @@
 #include "chrome/browser/android/oom_intervention/oom_intervention_config.h"
 #include "chrome/browser/android/oom_intervention/oom_intervention_decider.h"
 #include "chrome/browser/ui/android/infobars/near_oom_reduction_infobar.h"
+#include "content/public/browser/back_forward_cache.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
@@ -35,29 +36,9 @@ void SetLastVisibleWebContents(content::WebContents* web_contents) {
   g_last_visible_web_contents = web_contents;
 }
 
-// These enums are associated with UMA. Values must be kept in sync with
-// enums.xml and must not be renumbered/reused.
-enum class NearOomDetectionEndReason {
-  OOM_PROTECTED_CRASH = 0,
-  RENDERER_GONE = 1,
-  NAVIGATION = 2,
-  COUNT,
-};
-
-void RecordNearOomDetectionEndReason(NearOomDetectionEndReason reason) {
-  UMA_HISTOGRAM_ENUMERATION(
-      "Memory.Experimental.OomIntervention.NearOomDetectionEndReason", reason,
-      NearOomDetectionEndReason::COUNT);
-}
-
 void RecordInterventionUserDecision(bool accepted) {
   UMA_HISTOGRAM_BOOLEAN("Memory.Experimental.OomIntervention.UserDecision",
                         accepted);
-}
-
-void RecordInterventionStateOnCrash(bool accepted) {
-  UMA_HISTOGRAM_BOOLEAN(
-      "Memory.Experimental.OomIntervention.InterventionStateOnCrash", accepted);
 }
 
 }  // namespace
@@ -159,8 +140,6 @@ void OomInterventionTabHelper::RenderProcessGone(
         "RendererGoneAfterDetectionTime",
         elapsed_time);
     ResetInterventionState();
-  } else {
-    RecordNearOomDetectionEndReason(NearOomDetectionEndReason::RENDERER_GONE);
   }
 }
 
@@ -200,9 +179,6 @@ void OomInterventionTabHelper::DidStartNavigation(
         "NavigationAfterDetectionTime",
         elapsed_time);
     ResetInterventionState();
-  } else {
-    // Monitoring but near-OOM hasn't been detected.
-    RecordNearOomDetectionEndReason(NearOomDetectionEndReason::NAVIGATION);
   }
 }
 
@@ -243,16 +219,7 @@ void OomInterventionTabHelper::OnCrashDumpProcessed(
         "OomProtectedCrashAfterDetectionTime",
         elapsed_time);
 
-    if (intervention_state_ != InterventionState::NOT_TRIGGERED) {
-      // Consider UI_SHOWN as ACCEPTED because we already triggered the
-      // intervention and the user didn't decline.
-      bool accepted = intervention_state_ != InterventionState::DECLINED;
-      RecordInterventionStateOnCrash(accepted);
-    }
     ResetInterventionState();
-  } else {
-    RecordNearOomDetectionEndReason(
-        NearOomDetectionEndReason::OOM_PROTECTED_CRASH);
   }
 
   base::TimeDelta time_since_last_navigation;
@@ -325,6 +292,12 @@ void OomInterventionTabHelper::StartDetectionInRenderer() {
 
   content::RenderFrameHost* main_frame = web_contents()->GetMainFrame();
   DCHECK(main_frame);
+
+  // Connections to the renderer will not be recreated when coming out of the
+  // cache so prevent us from getting in there in the first place.
+  content::BackForwardCache::DisableForRenderFrameHost(
+      main_frame, "OomInterventionTabHelper");
+
   content::RenderProcessHost* render_process_host = main_frame->GetProcess();
   DCHECK(render_process_host);
   render_process_host->BindReceiver(intervention_.BindNewPipeAndPassReceiver());

@@ -56,12 +56,12 @@ class TransportConnectJobTest : public WithTaskEnvironment,
 
   static scoped_refptr<TransportSocketParams> DefaultParams() {
     return base::MakeRefCounted<TransportSocketParams>(
-        HostPortPair(kHostName, 80), false /* disable_secure_dns */,
-        OnHostResolutionCallback());
+        HostPortPair(kHostName, 80), NetworkIsolationKey(),
+        false /* disable_secure_dns */, OnHostResolutionCallback());
   }
 
  protected:
-  TestNetLog net_log_;
+  RecordingTestNetLog net_log_;
   MockHostResolver host_resolver_;
   MockTransportClientSocketFactory client_socket_factory_;
   const CommonConnectJobParams common_connect_job_params_;
@@ -137,7 +137,7 @@ TEST_F(TransportConnectJobTest, MakeAddrListStartWithIPv4) {
 }
 
 TEST_F(TransportConnectJobTest, HostResolutionFailure) {
-  host_resolver_.rules()->AddSimulatedFailure(kHostName);
+  host_resolver_.rules()->AddSimulatedTimeoutFailure(kHostName);
 
   //  Check sync and async failures.
   for (bool host_resolution_synchronous : {false, true}) {
@@ -149,6 +149,8 @@ TEST_F(TransportConnectJobTest, HostResolutionFailure) {
     test_delegate.StartJobExpectingResult(&transport_connect_job,
                                           ERR_NAME_NOT_RESOLVED,
                                           host_resolution_synchronous);
+    EXPECT_THAT(transport_connect_job.GetResolveErrorInfo().error,
+                test::IsError(ERR_DNS_TIMED_OUT));
   }
 }
 
@@ -262,9 +264,9 @@ TEST_F(TransportConnectJobTest, DisableSecureDns) {
     TestConnectJobDelegate test_delegate;
     TransportConnectJob transport_connect_job(
         DEFAULT_PRIORITY, SocketTag(), &common_connect_job_params_,
-        base::MakeRefCounted<TransportSocketParams>(HostPortPair(kHostName, 80),
-                                                    disable_secure_dns,
-                                                    OnHostResolutionCallback()),
+        base::MakeRefCounted<TransportSocketParams>(
+            HostPortPair(kHostName, 80), NetworkIsolationKey(),
+            disable_secure_dns, OnHostResolutionCallback()),
         &test_delegate, nullptr /* net_log */);
     test_delegate.StartJobExpectingResult(&transport_connect_job, OK,
                                           false /* expect_sync_result */);

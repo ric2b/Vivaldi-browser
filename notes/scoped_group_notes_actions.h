@@ -10,16 +10,16 @@
 
 namespace vivaldi {
 
-class Notes_Model;
+class NotesModel;
 
 // Scopes the grouping of a set of changes into one undoable action.
 class ScopedGroupNotesActions {
  public:
-  explicit ScopedGroupNotesActions(Notes_Model* model);
+  explicit ScopedGroupNotesActions(NotesModel* model);
   ~ScopedGroupNotesActions();
 
  private:
-  Notes_Model* model_;
+  NotesModel* model_;
 
   DISALLOW_COPY_AND_ASSIGN(ScopedGroupNotesActions);
 };

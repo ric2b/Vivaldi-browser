@@ -67,22 +67,15 @@ FileReaderLoader::FileReaderLoader(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner)
     : read_type_(read_type),
       client_(client),
-      // TODO(https://crbug.com/957651): task_runner should never be null, but
-      // if it is make sure SimpleWatcher doesn't crash and just use a default
-      // task runner instead for now.
-      handle_watcher_(
-          FROM_HERE,
-          mojo::SimpleWatcher::ArmingPolicy::AUTOMATIC,
-          task_runner ? task_runner : base::SequencedTaskRunnerHandle::Get()),
+      handle_watcher_(FROM_HERE,
+                      mojo::SimpleWatcher::ArmingPolicy::AUTOMATIC,
+                      task_runner),
       task_runner_(std::move(task_runner)) {
-  // TODO(https://crbug.com/957651): Change this into a DCHECK once we figured
-  // out where code is passing in a null task runner,
-  CHECK(task_runner_);
+  DCHECK(task_runner_);
 }
 
 FileReaderLoader::~FileReaderLoader() {
   Cleanup();
-  UnadjustReportedMemoryUsageToV8();
 }
 
 void FileReaderLoader::Start(scoped_refptr<BlobDataHandle> blob_data) {
@@ -140,19 +133,17 @@ DOMArrayBuffer* FileReaderLoader::ArrayBufferResult() {
     return array_buffer_result_;
 
   // If the loading is not started or an error occurs, return an empty result.
-  if (!raw_data_ || error_code_ != FileErrorCode::kOK)
+  if (!raw_data_.IsValid() || error_code_ != FileErrorCode::kOK)
     return nullptr;
 
   if (!finished_loading_) {
-    return DOMArrayBuffer::Create(ArrayBuffer::Create(
-        raw_data_.Data(), static_cast<unsigned>(bytes_loaded_)));
+    return DOMArrayBuffer::Create(raw_data_.Data(),
+                                  SafeCast<size_t>(bytes_loaded_));
   }
 
-  WTF::ArrayBufferContents contents(std::move(raw_data_),
-                                    WTF::ArrayBufferContents::kNotShared);
-  array_buffer_result_ = DOMArrayBuffer::Create(contents);
-  AdjustReportedMemoryUsageToV8(-1 * static_cast<int64_t>(bytes_loaded_));
-  raw_data_.reset();
+  array_buffer_result_ = DOMArrayBuffer::Create(std::move(raw_data_));
+  DCHECK_EQ(raw_data_.DataLength(), 0u);
+  raw_data_.Reset();
   return array_buffer_result_;
 }
 
@@ -160,7 +151,7 @@ String FileReaderLoader::StringResult() {
   DCHECK_NE(read_type_, kReadAsArrayBuffer);
   DCHECK_NE(read_type_, kReadByClient);
 
-  if (!raw_data_ || (error_code_ != FileErrorCode::kOK) ||
+  if (!raw_data_.IsValid() || (error_code_ != FileErrorCode::kOK) ||
       is_raw_data_converted_) {
     return string_result_;
   }
@@ -187,21 +178,18 @@ String FileReaderLoader::StringResult() {
 
   if (finished_loading_) {
     DCHECK(is_raw_data_converted_);
-    AdjustReportedMemoryUsageToV8(-1 * static_cast<int64_t>(bytes_loaded_));
-    raw_data_.reset();
+    raw_data_.Reset();
   }
   return string_result_;
 }
 
-WTF::ArrayBufferContents::DataHandle FileReaderLoader::TakeDataHandle() {
-  if (!raw_data_ || error_code_ != FileErrorCode::kOK)
-    return WTF::ArrayBufferContents::DataHandle();
+ArrayBufferContents FileReaderLoader::TakeContents() {
+  if (!raw_data_.IsValid() || error_code_ != FileErrorCode::kOK)
+    return ArrayBufferContents();
 
   DCHECK(finished_loading_);
-  WTF::ArrayBufferContents::DataHandle handle = std::move(raw_data_);
-  AdjustReportedMemoryUsageToV8(-1 * static_cast<int64_t>(bytes_loaded_));
-  raw_data_.reset();
-  return handle;
+  ArrayBufferContents contents = std::move(raw_data_);
+  return contents;
 }
 
 void FileReaderLoader::SetEncoding(const String& encoding) {
@@ -215,12 +203,11 @@ void FileReaderLoader::Cleanup() {
 
   // If we get any error, we do not need to keep a buffer around.
   if (error_code_ != FileErrorCode::kOK) {
-    raw_data_.reset();
+    raw_data_.Reset();
     string_result_ = "";
     is_raw_data_converted_ = true;
     decoder_.reset();
     array_buffer_result_ = nullptr;
-    UnadjustReportedMemoryUsageToV8();
   }
 }
 
@@ -241,7 +228,7 @@ void FileReaderLoader::Failed(FileErrorCode error_code, FailureType type) {
 void FileReaderLoader::OnStartLoading(uint64_t total_bytes) {
   total_bytes_ = total_bytes;
 
-  DCHECK(!raw_data_);
+  DCHECK(!raw_data_.IsValid());
 
   if (read_type_ != kReadByClient) {
     // Check that we can cast to unsigned since we have to do
@@ -252,10 +239,10 @@ void FileReaderLoader::OnStartLoading(uint64_t total_bytes) {
       return;
     }
 
-    raw_data_ = WTF::ArrayBufferContents::CreateDataHandle(
-        static_cast<unsigned>(total_bytes),
-        WTF::ArrayBufferContents::kDontInitialize);
-    if (!raw_data_) {
+    raw_data_ = ArrayBufferContents(static_cast<unsigned>(total_bytes), 1,
+                                    ArrayBufferContents::kNotShared,
+                                    ArrayBufferContents::kDontInitialize);
+    if (!raw_data_.IsValid()) {
       Failed(FileErrorCode::kNotReadableErr,
              FailureType::kArrayBufferBuilderCreation);
       return;
@@ -288,7 +275,7 @@ void FileReaderLoader::OnReceivedData(const char* data, unsigned data_length) {
   // validate anything received. So return an error if we received too much
   // data.
   if (bytes_loaded_ + data_length > raw_data_.DataLength()) {
-    raw_data_.reset();
+    raw_data_.Reset();
     bytes_loaded_ = 0;
     Failed(FileErrorCode::kNotReadableErr,
            FailureType::kArrayBufferBuilderAppend);
@@ -298,14 +285,13 @@ void FileReaderLoader::OnReceivedData(const char* data, unsigned data_length) {
          data_length);
   bytes_loaded_ += data_length;
   is_raw_data_converted_ = false;
-  AdjustReportedMemoryUsageToV8(data_length);
 
   if (client_)
     client_->DidReceiveData();
 }
 
 void FileReaderLoader::OnFinishLoading() {
-  if (read_type_ != kReadByClient && raw_data_) {
+  if (read_type_ != kReadByClient && raw_data_.IsValid()) {
     DCHECK_EQ(bytes_loaded_, raw_data_.DataLength());
     is_raw_data_converted_ = false;
   }
@@ -418,22 +404,6 @@ void FileReaderLoader::OnDataPipeReadable(MojoResult result) {
   }
 }
 
-void FileReaderLoader::AdjustReportedMemoryUsageToV8(int64_t usage) {
-  if (!usage)
-    return;
-  memory_usage_reported_to_v8_ += usage;
-  v8::Isolate::GetCurrent()->AdjustAmountOfExternalAllocatedMemory(usage);
-  DCHECK_GE(memory_usage_reported_to_v8_, 0);
-}
-
-void FileReaderLoader::UnadjustReportedMemoryUsageToV8() {
-  if (!memory_usage_reported_to_v8_)
-    return;
-  v8::Isolate::GetCurrent()->AdjustAmountOfExternalAllocatedMemory(
-      -memory_usage_reported_to_v8_);
-  memory_usage_reported_to_v8_ = 0;
-}
-
 String FileReaderLoader::ConvertToText() {
   if (!bytes_loaded_)
     return "";
@@ -485,11 +455,8 @@ String FileReaderLoader::ConvertToDataURL() {
 }
 
 void FileReaderLoader::SetStringResult(const String& result) {
-  AdjustReportedMemoryUsageToV8(
-      -1 * static_cast<int64_t>(string_result_.CharactersSizeInBytes()));
   is_raw_data_converted_ = true;
   string_result_ = result;
-  AdjustReportedMemoryUsageToV8(string_result_.CharactersSizeInBytes());
 }
 
 }  // namespace blink

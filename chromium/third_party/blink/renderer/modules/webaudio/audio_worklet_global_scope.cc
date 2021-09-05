@@ -24,7 +24,6 @@
 #include "third_party/blink/renderer/core/workers/global_scope_creation_params.h"
 #include "third_party/blink/renderer/core/workers/worker_thread.h"
 #include "third_party/blink/renderer/modules/webaudio/audio_buffer.h"
-#include "third_party/blink/renderer/modules/webaudio/audio_param_descriptor.h"
 #include "third_party/blink/renderer/modules/webaudio/audio_worklet_processor.h"
 #include "third_party/blink/renderer/modules/webaudio/audio_worklet_processor_definition.h"
 #include "third_party/blink/renderer/modules/webaudio/audio_worklet_processor_error_state.h"
@@ -40,7 +39,13 @@ AudioWorkletGlobalScope::AudioWorkletGlobalScope(
     WorkerThread* thread)
     : WorkletGlobalScope(std::move(creation_params),
                          thread->GetWorkerReportingProxy(),
-                         thread) {}
+                         thread) {
+  // Audio is prone to jank introduced by e.g. the garbage collector. Workers
+  // are generally put in a background mode (as they are non-visible). Audio is
+  // an exception here, requiring low-latency behavior similar to any visible
+  // state.
+  GetIsolate()->IsolateInForegroundNotification();
+}
 
 AudioWorkletGlobalScope::~AudioWorkletGlobalScope() = default;
 
@@ -174,7 +179,7 @@ AudioWorkletProcessor* AudioWorkletGlobalScope::CreateProcessor(
 
 bool AudioWorkletGlobalScope::Process(
     AudioWorkletProcessor* processor,
-    Vector<AudioBus*>* input_buses,
+    Vector<scoped_refptr<AudioBus>>* input_buses,
     Vector<AudioBus*>* output_buses,
     HashMap<String, std::unique_ptr<AudioFloatArray>>* param_value_map) {
   CHECK_GE(input_buses->size(), 0u);
@@ -200,7 +205,7 @@ bool AudioWorkletGlobalScope::Process(
   // 1st arg of JS callback: inputs
   v8::Local<v8::Array> inputs = v8::Array::New(isolate, input_buses->size());
   uint32_t input_bus_index = 0;
-  for (auto* const input_bus : *input_buses) {
+  for (auto input_bus : *input_buses) {
     // If |input_bus| is null, then the input is not connected, and
     // the array for that input should have one channel and a length
     // of 0.
@@ -387,7 +392,7 @@ double AudioWorkletGlobalScope::currentTime() const {
         : 0.0;
 }
 
-void AudioWorkletGlobalScope::Trace(blink::Visitor* visitor) {
+void AudioWorkletGlobalScope::Trace(Visitor* visitor) {
   visitor->Trace(processor_definition_map_);
   visitor->Trace(processor_instances_);
   WorkletGlobalScope::Trace(visitor);

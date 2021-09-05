@@ -29,6 +29,10 @@ bool StructTraits<blink::mojom::UserAgentMetadataDataView,
     return false;
   out->platform = string;
 
+  if (!data.ReadPlatformVersion(&string))
+    return false;
+  out->platform_version = string;
+
   if (!data.ReadArchitecture(&string))
     return false;
   out->architecture = string;
@@ -37,6 +41,17 @@ bool StructTraits<blink::mojom::UserAgentMetadataDataView,
     return false;
   out->model = string;
 
+  return true;
+}
+
+bool StructTraits<blink::mojom::UserAgentOverrideDataView,
+                  ::blink::UserAgentOverride>::
+    Read(blink::mojom::UserAgentOverrideDataView data,
+         ::blink::UserAgentOverride* out) {
+  if (!data.ReadUaStringOverride(&out->ua_string_override) ||
+      !data.ReadUaMetadataOverride(&out->ua_metadata_override)) {
+    return false;
+  }
   return true;
 }
 

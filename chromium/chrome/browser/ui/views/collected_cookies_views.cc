@@ -13,7 +13,6 @@
 #include "chrome/browser/browsing_data/browsing_data_database_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_file_system_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_indexed_db_helper.h"
-#include "chrome/browser/browsing_data/browsing_data_local_storage_helper.h"
 #include "chrome/browser/browsing_data/cookies_tree_model.h"
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
 #include "chrome/browser/content_settings/local_shared_objects_container.h"
@@ -26,6 +25,7 @@
 #include "chrome/browser/ui/views/chrome_typography.h"
 #include "chrome/browser/ui/views/cookie_info_view.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/browsing_data/content/local_storage_helper.h"
 #include "components/constrained_window/constrained_window_views.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/strings/grit/components_strings.h"
@@ -161,19 +161,31 @@ class InfobarView : public views::View {
     info_image_->SetImage(gfx::CreateVectorIcon(vector_icons::kInfoOutlineIcon,
                                                 16, gfx::kChromeIconGrey));
     label_ = AddChildView(std::make_unique<views::Label>());
+
+    const int vertical_distance =
+        ChromeLayoutProvider::Get()->GetDistanceMetric(
+            DISTANCE_UNRELATED_CONTROL_VERTICAL_LARGE);
+    const int horizontal_spacing =
+        ChromeLayoutProvider::Get()->GetDistanceMetric(
+            DISTANCE_RELATED_CONTROL_HORIZONTAL_SMALL);
+
+    // The containing dialog content view has no margins so that its
+    // TabbedPane can span the full width of the dialog, but because of
+    // that, InfobarView needs to impose its own horizontal margin.
+    gfx::Insets insets =
+        ChromeLayoutProvider::Get()->GetInsetsMetric(views::INSETS_DIALOG);
+    insets.set_top(vertical_distance);
+    insets.set_bottom(vertical_distance);
+    SetLayoutManager(std::make_unique<views::BoxLayout>(
+        views::BoxLayout::Orientation::kHorizontal, insets,
+        horizontal_spacing));
+    SetVisible(false);
   }
   ~InfobarView() override {}
 
-  // Update the visibility of the infobar. If |is_visible| is true, a rule for
-  // |setting| on |domain_name| was created.
-  void UpdateVisibility(bool is_visible,
-                        ContentSetting setting,
-                        const base::string16& domain_name) {
-    if (!is_visible) {
-      SetVisible(false);
-      return;
-    }
-
+  // Set the InfobarView label text based on content |setting| and
+  // |domain_name|. Ensure InfobarView is visible.
+  void SetLabelText(ContentSetting setting, const base::string16& domain_name) {
     base::string16 label;
     switch (setting) {
       case CONTENT_SETTING_BLOCK:
@@ -199,34 +211,6 @@ class InfobarView : public views::View {
   }
 
  private:
-  // Initialize contents and layout.
-  void Init() {
-    const int vertical_distance =
-        ChromeLayoutProvider::Get()->GetDistanceMetric(
-            DISTANCE_UNRELATED_CONTROL_VERTICAL_LARGE);
-    const int horizontal_spacing =
-        ChromeLayoutProvider::Get()->GetDistanceMetric(
-            DISTANCE_RELATED_CONTROL_HORIZONTAL_SMALL);
-
-    // The containing dialog content view has no margins so that its
-    // TabbedPane can span the full width of the dialog, but because of
-    // that, InfobarView needs to impose its own horizontal margin.
-    gfx::Insets insets =
-        ChromeLayoutProvider::Get()->GetInsetsMetric(views::INSETS_DIALOG);
-    insets.set_top(vertical_distance);
-    insets.set_bottom(vertical_distance);
-    SetLayoutManager(std::make_unique<views::BoxLayout>(
-        views::BoxLayout::Orientation::kHorizontal, insets,
-        horizontal_spacing));
-    UpdateVisibility(false, CONTENT_SETTING_BLOCK, base::string16());
-  }
-
-  void ViewHierarchyChanged(
-      const views::ViewHierarchyChangedDetails& details) override {
-    if (details.is_add && details.child == this)
-      Init();
-  }
-
   // Info icon image.
   views::ImageView* info_image_;
   // The label responsible for rendering the text.
@@ -280,10 +264,6 @@ base::string16 CollectedCookiesViews::GetWindowTitle() const {
   return l10n_util::GetStringUTF16(IDS_COLLECTED_COOKIES_DIALOG_TITLE);
 }
 
-int CollectedCookiesViews::GetDialogButtons() const {
-  return ui::DIALOG_BUTTON_OK;
-}
-
 bool CollectedCookiesViews::Accept() {
   // If the user closes our parent tab while we're still open, this method will
   // (eventually) be called in response to a WebContentsDestroyed() call from
@@ -313,13 +293,6 @@ void CollectedCookiesViews::DeleteDelegate() {
     destroying_ = true;
     web_contents_->RemoveUserData(UserDataKey());
   }
-}
-
-std::unique_ptr<views::View> CollectedCookiesViews::CreateExtraView() {
-  // The code in |Init|, which runs before this does, needs the button pane to
-  // already exist, so it is created there and this class holds ownership until
-  // this method is called.
-  return std::move(buttons_pane_);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -367,26 +340,14 @@ gfx::Size CollectedCookiesViews::GetMinimumSize() const {
   return gfx::Size(0, View::GetMinimumSize().height());
 }
 
-void CollectedCookiesViews::ViewHierarchyChanged(
-    const views::ViewHierarchyChangedDetails& details) {
-  views::DialogDelegateView::ViewHierarchyChanged(details);
-  if (details.is_add && details.child == this)
-    Init();
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 // CollectedCookiesViews, private:
 
 CollectedCookiesViews::CollectedCookiesViews(content::WebContents* web_contents)
     : web_contents_(web_contents) {
-  constrained_window::ShowWebModalDialogViews(this, web_contents);
-  chrome::RecordDialogCreation(chrome::DialogIdentifier::COLLECTED_COOKIES);
-
-  DialogDelegate::set_button_label(ui::DIALOG_BUTTON_OK,
+  DialogDelegate::SetButtons(ui::DIALOG_BUTTON_OK);
+  DialogDelegate::SetButtonLabel(ui::DIALOG_BUTTON_OK,
                                    l10n_util::GetStringUTF16(IDS_DONE));
-}
-
-void CollectedCookiesViews::Init() {
   views::GridLayout* layout =
       SetLayoutManager(std::make_unique<views::GridLayout>());
   ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
@@ -429,7 +390,10 @@ void CollectedCookiesViews::Init() {
   layout->StartRow(views::GridLayout::kFixedSize, single_column_layout_id);
   infobar_ = layout->AddView(std::make_unique<InfobarView>());
 
-  buttons_pane_ = CreateButtonsPane();
+  DialogDelegate::SetExtraView(CreateButtonsPane());
+
+  constrained_window::ShowWebModalDialogViews(this, web_contents);
+  chrome::RecordDialogCreation(chrome::DialogIdentifier::COLLECTED_COOKIES);
 
   EnableControls();
   ShowCookieInfo();
@@ -668,7 +632,7 @@ void CollectedCookiesViews::AddContentException(views::TreeView* tree_view,
       Profile::FromBrowserContext(web_contents_->GetBrowserContext());
   host_node->CreateContentException(
       CookieSettingsFactory::GetForProfile(profile).get(), setting);
-  infobar_->UpdateVisibility(true, setting, host_node->GetTitle());
+  infobar_->SetLabelText(setting, host_node->GetTitle());
   status_changed_ = true;
 
   CookiesTreeViewDrawingProvider* provider =

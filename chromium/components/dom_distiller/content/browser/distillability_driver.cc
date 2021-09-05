@@ -25,7 +25,7 @@ class DistillabilityServiceImpl : public mojom::DistillabilityService {
       base::WeakPtr<DistillabilityDriver> distillability_driver)
       : distillability_driver_(distillability_driver) {}
 
-  ~DistillabilityServiceImpl() override {}
+  ~DistillabilityServiceImpl() override = default;
 
   void NotifyIsDistillable(bool is_distillable,
                            bool is_last_update,
@@ -46,18 +46,12 @@ class DistillabilityServiceImpl : public mojom::DistillabilityService {
 };
 
 DistillabilityDriver::DistillabilityDriver(content::WebContents* web_contents)
-    : content::WebContentsObserver(web_contents),
-      latest_result_(base::nullopt) {
+    : latest_result_(base::nullopt), web_contents_(web_contents) {
   if (!web_contents)
     return;
-  frame_interfaces_.AddInterface(
-      base::BindRepeating(&DistillabilityDriver::CreateDistillabilityService,
-                          base::Unretained(this)));
 }
 
-DistillabilityDriver::~DistillabilityDriver() {
-  content::WebContentsObserver::Observe(nullptr);
-}
+DistillabilityDriver::~DistillabilityDriver() = default;
 
 void DistillabilityDriver::CreateDistillabilityService(
     mojo::PendingReceiver<mojom::DistillabilityService> receiver) {
@@ -66,24 +60,28 @@ void DistillabilityDriver::CreateDistillabilityService(
       std::move(receiver));
 }
 
-void DistillabilityDriver::AddObserver(DistillabilityObserver* observer) {
-  if (!observers_.HasObserver(observer)) {
-    observers_.AddObserver(observer);
-  }
+void DistillabilityDriver::SetIsDangerousCallback(
+    base::RepeatingCallback<bool(content::WebContents*)> is_dangerous_check) {
+  is_dangerous_check_ = std::move(is_dangerous_check);
 }
 
 void DistillabilityDriver::OnDistillability(
     const DistillabilityResult& result) {
+  if (result.is_distillable) {
+    if (!is_dangerous_check_ || !is_dangerous_check_.Run(web_contents_)) {
+      DistillabilityResult not_distillable;
+      not_distillable.is_distillable = false;
+      not_distillable.is_last = result.is_last;
+      not_distillable.is_mobile_friendly = result.is_mobile_friendly;
+      latest_result_ = not_distillable;
+      for (auto& observer : observers_)
+        observer.OnResult(not_distillable);
+      return;
+    }
+  }
   latest_result_ = result;
   for (auto& observer : observers_)
     observer.OnResult(result);
-}
-
-void DistillabilityDriver::OnInterfaceRequestFromFrame(
-    content::RenderFrameHost* render_frame_host,
-    const std::string& interface_name,
-    mojo::ScopedMessagePipeHandle* interface_pipe) {
-  frame_interfaces_.TryBindInterface(interface_name, interface_pipe);
 }
 
 WEB_CONTENTS_USER_DATA_KEY_IMPL(DistillabilityDriver)

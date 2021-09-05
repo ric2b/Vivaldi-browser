@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/memory/weak_ptr.h"
 #include "chromeos/dbus/upstart/fake_upstart_client.h"
 #include "dbus/bus.h"
@@ -42,10 +43,10 @@ class UpstartClientImpl : public UpstartClient {
         arc::kArcServiceName, dbus::ObjectPath(arc::kArcServicePath));
     arc_proxy->ConnectToSignal(
         arc::kArcInterfaceName, arc::kArcStopped,
-        base::Bind(&UpstartClientImpl::ArcStoppedReceived,
-                   weak_ptr_factory_.GetWeakPtr()),
-        base::Bind(&UpstartClientImpl::SignalConnected,
-                   weak_ptr_factory_.GetWeakPtr()));
+        base::BindRepeating(&UpstartClientImpl::ArcStoppedReceived,
+                            weak_ptr_factory_.GetWeakPtr()),
+        base::BindOnce(&UpstartClientImpl::SignalConnected,
+                       weak_ptr_factory_.GetWeakPtr()));
   }
 
   ~UpstartClientImpl() override = default;
@@ -72,12 +73,11 @@ class UpstartClientImpl : public UpstartClient {
   }
 
   void StartAuthPolicyService() override {
-    StartJob(kAuthPolicyJob, {}, EmptyVoidDBusMethodCallback());
+    StartJob(kAuthPolicyJob, {}, base::DoNothing());
   }
 
   void RestartAuthPolicyService() override {
-    CallJobMethod(kAuthPolicyJob, kRestartMethod, {},
-                  EmptyVoidDBusMethodCallback());
+    CallJobMethod(kAuthPolicyJob, kRestartMethod, {}, base::DoNothing());
   }
 
   void StartMediaAnalytics(const std::vector<std::string>& upstart_env,
@@ -92,7 +92,7 @@ class UpstartClientImpl : public UpstartClient {
   using UpstartClient::StopJob;
 
   void StopMediaAnalytics() override {
-    StopJob(kMediaAnalyticsJob, {}, EmptyVoidDBusMethodCallback());
+    StopJob(kMediaAnalyticsJob, {}, base::DoNothing());
   }
 
   void StopMediaAnalytics(VoidDBusMethodCallback callback) override {

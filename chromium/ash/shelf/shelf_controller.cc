@@ -53,7 +53,7 @@ void SetShelfAutoHideFromPrefs() {
     auto value = GetShelfAutoHideBehaviorPref(prefs, display.id());
     // Don't show the shelf in app mode.
     if (session_controller->IsRunningInAppMode())
-      value = SHELF_AUTO_HIDE_ALWAYS_HIDDEN;
+      value = ShelfAutoHideBehavior::kAlwaysHidden;
     if (Shelf* shelf = GetShelfForDisplay(display.id()))
       shelf->SetAutoHideBehavior(value);
   }
@@ -128,16 +128,14 @@ void ShelfController::RegisterProfilePrefs(PrefRegistrySimple* registry) {
   // per-display behaviors.
   registry->RegisterStringPref(
       prefs::kShelfAutoHideBehavior, kShelfAutoHideBehaviorNever,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF | PrefRegistry::PUBLIC);
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
   registry->RegisterStringPref(prefs::kShelfAutoHideBehaviorLocal,
-                               std::string(), PrefRegistry::PUBLIC);
+                               std::string());
   registry->RegisterStringPref(
       prefs::kShelfAlignment, kShelfAlignmentBottom,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF | PrefRegistry::PUBLIC);
-  registry->RegisterStringPref(prefs::kShelfAlignmentLocal, std::string(),
-                               PrefRegistry::PUBLIC);
-  registry->RegisterDictionaryPref(prefs::kShelfPreferences,
-                                   PrefRegistry::PUBLIC);
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
+  registry->RegisterStringPref(prefs::kShelfAlignmentLocal, std::string());
+  registry->RegisterDictionaryPref(prefs::kShelfPreferences);
 }
 
 void ShelfController::OnActiveUserPrefServiceChanged(
@@ -165,7 +163,7 @@ void ShelfController::OnTabletModeStarted() {
       // Only animate into tablet mode if the shelf alignment will not change.
       if (shelf->IsHorizontalAlignment())
         shelf->set_is_tablet_mode_animation_running(true);
-      shelf->SetAlignment(SHELF_ALIGNMENT_BOTTOM);
+      shelf->SetAlignment(ShelfAlignment::kBottom);
       shelf->shelf_widget()->OnTabletModeChanged();
     }
   }

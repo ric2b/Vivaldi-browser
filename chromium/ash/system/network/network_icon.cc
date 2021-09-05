@@ -245,7 +245,7 @@ int StrengthIndex(int strength) {
     return kNumNetworkImages - 1;
 
   // Return an index in the range [1, kNumNetworkImages - 1].
-  // This logic is equivalent to cr_network_icon.js:strengthToIndex_().
+  // This logic is equivalent to network_icon.js:strengthToIndex_().
   int zero_based_index = (strength - 1) * (kNumNetworkImages - 1) / 100;
   return zero_based_index + 1;
 }
@@ -448,11 +448,24 @@ NetworkIconImpl* FindAndUpdateImageImpl(const NetworkStateProperties* network,
 // Public interface
 
 SkColor GetDefaultColorForIconType(IconType icon_type) {
-  const bool light_icon = icon_type == network_icon::ICON_TYPE_TRAY_OOBE;
-  return AshColorProvider::Get()->GetContentLayerColor(
-      AshColorProvider::ContentLayerType::kIconPrimary,
-      light_icon ? AshColorProvider::AshColorMode::kLight
-                 : AshColorProvider::AshColorMode::kDark);
+  switch (icon_type) {
+    case ICON_TYPE_TRAY_OOBE:
+      return AshColorProvider::Get()->GetContentLayerColor(
+          AshColorProvider::ContentLayerType::kIconPrimary,
+          AshColorProvider::AshColorMode::kLight);
+    case ICON_TYPE_FEATURE_POD:
+      return AshColorProvider::Get()->GetContentLayerColor(
+          AshColorProvider::ContentLayerType::kIconSystemMenu,
+          AshColorProvider::AshColorMode::kDark);
+    case ICON_TYPE_FEATURE_POD_TOGGLED:
+      return AshColorProvider::Get()->GetContentLayerColor(
+          AshColorProvider::ContentLayerType::kIconSystemMenuToggled,
+          AshColorProvider::AshColorMode::kDark);
+    default:
+      return AshColorProvider::Get()->GetContentLayerColor(
+          AshColorProvider::ContentLayerType::kIconPrimary,
+          AshColorProvider::AshColorMode::kDark);
+  }
 }
 
 const gfx::ImageSkia GetBasicImage(IconType icon_type,

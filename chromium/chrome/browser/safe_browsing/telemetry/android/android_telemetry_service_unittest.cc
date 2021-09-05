@@ -16,8 +16,8 @@
 #include "chrome/test/base/testing_profile.h"
 #include "components/download/public/common/mock_download_item.h"
 #include "components/prefs/pref_service.h"
-#include "components/safe_browsing/common/safe_browsing_prefs.h"
-#include "components/safe_browsing/features.h"
+#include "components/safe_browsing/core/common/safe_browsing_prefs.h"
+#include "components/safe_browsing/core/features.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/download_item_utils.h"
@@ -69,6 +69,9 @@ class AndroidTelemetryServiceTest : public testing::Test {
 
     telemetry_service_ =
         std::make_unique<AndroidTelemetryService>(sb_service_.get(), profile());
+
+    scoped_feature_list_.InitAndEnableFeature(
+        safe_browsing::kEnhancedProtection);
   }
 
   void TearDown() override {
@@ -76,6 +79,7 @@ class AndroidTelemetryServiceTest : public testing::Test {
     // before the NetworkService object..
     browser_process_->safe_browsing_service()->ShutDown();
     browser_process_->SetSafeBrowsingService(nullptr);
+    safe_browsing::SafeBrowsingServiceInterface::RegisterFactory(nullptr);
     base::RunLoop().RunUntilIdle();
   }
 
@@ -165,10 +169,12 @@ TEST_F(AndroidTelemetryServiceTest, CantSendPing_IncognitoMode) {
   ResetProfile();
 }
 
-TEST_F(AndroidTelemetryServiceTest, CantSendPing_SBERDisabled) {
+TEST_F(AndroidTelemetryServiceTest,
+       CantSendPing_SBEREnhancedProtectionDisabled) {
   // Disable Scout Reporting.
   profile()->GetPrefs()->SetBoolean(prefs::kSafeBrowsingScoutReportingEnabled,
                                     false);
+  profile()->GetPrefs()->SetBoolean(prefs::kSafeBrowsingEnhanced, false);
 
   // Enable Safe Browsing.
   profile()->GetPrefs()->SetBoolean(prefs::kSafeBrowsingEnabled, true);
@@ -182,7 +188,7 @@ TEST_F(AndroidTelemetryServiceTest, CantSendPing_SBERDisabled) {
   get_histograms()->ExpectTotalCount(kApkDownloadTelemetryOutcomeMetric, 1);
   get_histograms()->ExpectBucketCount(
       kApkDownloadTelemetryOutcomeMetric,
-      ApkDownloadTelemetryOutcome::NOT_SENT_EXTENDED_REPORTING_DISABLED, 1);
+      ApkDownloadTelemetryOutcome::NOT_SENT_UNCONSENTED, 1);
 }
 
 TEST_F(AndroidTelemetryServiceTest, CanSendPing_AllConditionsMet) {

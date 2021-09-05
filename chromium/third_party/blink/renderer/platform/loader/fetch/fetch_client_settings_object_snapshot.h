@@ -6,6 +6,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_LOADER_FETCH_FETCH_CLIENT_SETTINGS_OBJECT_SNAPSHOT_H_
 
 #include "services/network/public/mojom/referrer_policy.mojom-blink.h"
+#include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom-blink-forward.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_client_settings_object.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
@@ -37,10 +38,9 @@ struct CrossThreadFetchClientSettingsObjectData {
       HttpsState https_state,
       AllowedByNosniff::MimeTypeCheck mime_type_check_for_classic_worker_script,
       network::mojom::IPAddressSpace address_space,
-      WebInsecureRequestPolicy insecure_requests_policy,
+      mojom::blink::InsecureRequestPolicy insecure_requests_policy,
       FetchClientSettingsObject::InsecureNavigationsSet
-          insecure_navigations_set,
-      bool mixed_autoupgrade_opt_out)
+          insecure_navigations_set)
       : global_object_url(std::move(global_object_url)),
         base_url(std::move(base_url)),
         security_origin(std::move(security_origin)),
@@ -51,8 +51,7 @@ struct CrossThreadFetchClientSettingsObjectData {
             mime_type_check_for_classic_worker_script),
         address_space(address_space),
         insecure_requests_policy(insecure_requests_policy),
-        insecure_navigations_set(std::move(insecure_navigations_set)),
-        mixed_autoupgrade_opt_out(mixed_autoupgrade_opt_out) {}
+        insecure_navigations_set(std::move(insecure_navigations_set)) {}
 
   const KURL global_object_url;
   const KURL base_url;
@@ -63,10 +62,9 @@ struct CrossThreadFetchClientSettingsObjectData {
   const AllowedByNosniff::MimeTypeCheck
       mime_type_check_for_classic_worker_script;
   const network::mojom::IPAddressSpace address_space;
-  const WebInsecureRequestPolicy insecure_requests_policy;
+  const mojom::blink::InsecureRequestPolicy insecure_requests_policy;
   const FetchClientSettingsObject::InsecureNavigationsSet
       insecure_navigations_set;
-  const bool mixed_autoupgrade_opt_out;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(CrossThreadFetchClientSettingsObjectData);
@@ -97,9 +95,8 @@ class PLATFORM_EXPORT FetchClientSettingsObjectSnapshot final
       HttpsState https_state,
       AllowedByNosniff::MimeTypeCheck,
       network::mojom::IPAddressSpace,
-      WebInsecureRequestPolicy,
-      InsecureNavigationsSet,
-      bool mixed_autoupgrade_opt_out);
+      mojom::blink::InsecureRequestPolicy,
+      InsecureNavigationsSet);
 
   ~FetchClientSettingsObjectSnapshot() override = default;
 
@@ -120,17 +117,14 @@ class PLATFORM_EXPORT FetchClientSettingsObjectSnapshot final
     return address_space_;
   }
 
-  WebInsecureRequestPolicy GetInsecureRequestsPolicy() const override {
+  mojom::blink::InsecureRequestPolicy GetInsecureRequestsPolicy()
+      const override {
     return insecure_requests_policy_;
   }
 
   const InsecureNavigationsSet& GetUpgradeInsecureNavigationsSet()
       const override {
     return insecure_navigations_set_;
-  }
-
-  bool GetMixedAutoUpgradeOptOut() const override {
-    return mixed_autoupgrade_opt_out_;
   }
 
   AllowedByNosniff::MimeTypeCheck MimeTypeCheckForClassicWorkerScript()
@@ -145,8 +139,7 @@ class PLATFORM_EXPORT FetchClientSettingsObjectSnapshot final
         security_origin_->IsolatedCopy(), referrer_policy_,
         outgoing_referrer_.IsolatedCopy(), https_state_,
         mime_type_check_for_classic_worker_script_, address_space_,
-        insecure_requests_policy_, insecure_navigations_set_,
-        mixed_autoupgrade_opt_out_);
+        insecure_requests_policy_, insecure_navigations_set_);
   }
 
  private:
@@ -160,9 +153,8 @@ class PLATFORM_EXPORT FetchClientSettingsObjectSnapshot final
       mime_type_check_for_classic_worker_script_;
   const network::mojom::IPAddressSpace address_space_;
 
-  const WebInsecureRequestPolicy insecure_requests_policy_;
+  const mojom::blink::InsecureRequestPolicy insecure_requests_policy_;
   const InsecureNavigationsSet insecure_navigations_set_;
-  const bool mixed_autoupgrade_opt_out_;
 };
 
 }  // namespace blink

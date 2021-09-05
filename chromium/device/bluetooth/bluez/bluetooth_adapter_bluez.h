@@ -119,6 +119,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterBlueZ final
                        const ErrorCallback& error_callback) override;
   uint32_t GetDiscoverableTimeout() const;
   bool IsDiscovering() const override;
+  bool IsDiscoveringForTesting() const;
   std::unordered_map<device::BluetoothDevice*, device::BluetoothDevice::UUIDSet>
   RetrieveGattConnectedDevicesWithDiscoveryFilter(
       const device::BluetoothDiscoveryFilter& discovery_filter) override;
@@ -231,13 +232,13 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterBlueZ final
   void RegisterGattService(
       BluetoothLocalGattServiceBlueZ* service,
       const base::Closure& callback,
-      const device::BluetoothGattService::ErrorCallback& error_callback);
+      device::BluetoothGattService::ErrorCallback error_callback);
 
   // Unregister a GATT service. The service must already be registered.
   void UnregisterGattService(
       BluetoothLocalGattServiceBlueZ* service,
       const base::Closure& callback,
-      const device::BluetoothGattService::ErrorCallback& error_callback);
+      device::BluetoothGattService::ErrorCallback error_callback);
 
   // Returns if a given service is currently registered.
   bool IsGattServiceRegistered(BluetoothLocalGattServiceBlueZ* service);
@@ -350,6 +351,10 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterBlueZ final
 #if defined(OS_CHROMEOS)
   // Set the adapter name to one chosen from the system information.
   void SetStandardChromeOSAdapterName();
+
+  // Set the kernel suspend notifier property based off value of chrome://flags.
+  void SetChromeOSKernelSuspendNotifier(
+      bluez::BluetoothAdapterClient::Properties* properties);
 #endif
 
   // Remove the currently tracked adapter. IsPresent() will return false after
@@ -437,19 +442,19 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterBlueZ final
   void UpdateRegisteredApplication(
       bool ignore_unregister_failure,
       const base::Closure& callback,
-      const device::BluetoothGattService::ErrorCallback& error_callback);
+      device::BluetoothGattService::ErrorCallback error_callback);
 
   // Make the call to GattManager1 to register the services currently
   // registered.
   void RegisterApplication(
       const base::Closure& callback,
-      const device::BluetoothGattService::ErrorCallback& error_callback);
+      device::BluetoothGattService::ErrorCallback error_callback);
 
   // Register application, ignoring the given errors. Used to register a GATT
   // application even if a previous unregister application call fails.
   void RegisterApplicationOnError(
       const base::Closure& callback,
-      const device::BluetoothGattService::ErrorCallback& error_callback,
+      device::BluetoothGattService::ErrorCallback error_callback,
       const std::string& error_name,
       const std::string& error_message);
 
@@ -460,16 +465,6 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterBlueZ final
       const ServiceRecordErrorCallback& error_callback,
       const std::string& error_name,
       const std::string& error_message);
-
-#if defined(OS_CHROMEOS)
-  // Inform DBus of the current list of long term keys.
-  void SetLongTermKeys();
-
-  // Called by dbus:: on an error while trying to set long term keys, see
-  // SetLongTermKeys().
-  void SetLongTermKeysError(const std::string& error_name,
-                            const std::string& error_message);
-#endif
 
   InitCallback init_callback_;
 

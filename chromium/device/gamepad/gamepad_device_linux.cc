@@ -11,6 +11,7 @@
 #include <linux/joystick.h>
 #include <sys/ioctl.h>
 
+#include "base/callback_helpers.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -555,7 +556,8 @@ void GamepadDeviceLinux::InitializeHidraw(base::ScopedFD fd) {
 
   if (is_dualshock4 && !dualshock4_) {
     dualshock4_ = std::make_unique<Dualshock4Controller>(
-        bus_type_, std::make_unique<HidWriterLinux>(hidraw_fd_));
+        vendor_id, product_id, bus_type_,
+        std::make_unique<HidWriterLinux>(hidraw_fd_));
   }
 
   if (is_xbox_hid && !xbox_hid_) {

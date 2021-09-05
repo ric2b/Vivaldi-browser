@@ -19,9 +19,9 @@ namespace ash {
 namespace {
 
 gfx::Insets GetInsetsForAlignment(int distance, ShelfAlignment alignment) {
-  if (alignment == SHELF_ALIGNMENT_LEFT)
+  if (alignment == ShelfAlignment::kLeft)
     return gfx::Insets(0, 0, 0, distance);
-  if (alignment == SHELF_ALIGNMENT_RIGHT)
+  if (alignment == ShelfAlignment::kRight)
     return gfx::Insets(0, distance, 0, 0);
   return gfx::Insets(distance, 0, 0, 0);
 }
@@ -41,9 +41,9 @@ ShelfWindowTargeter::~ShelfWindowTargeter() {
   DCHECK(!shelf_);
 }
 
-bool ShelfWindowTargeter::ShouldUseExtendedBounds(
-    const aura::Window* window) const {
-  return true;
+bool ShelfWindowTargeter::ShouldUseExtendedBounds(const aura::Window* w) const {
+  // Use extended bounds only for direct child of the container.
+  return window() == w->parent();
 }
 
 bool ShelfWindowTargeter::GetHitTestRects(
@@ -54,7 +54,9 @@ bool ShelfWindowTargeter::GetHitTestRects(
   // currently in an active session (or unknown session state) and change only
   // the behavior of the login shelf. On secondary displays, the login shelf
   // will not be visible.
-  if (target->id() == kShellWindowId_ShelfContainer && shelf_->IsVisible() &&
+  bool target_is_shelf_widget =
+      target == shelf_->shelf_widget()->GetNativeWindow();
+  if (target_is_shelf_widget &&
       Shell::Get()->session_controller()->GetSessionState() !=
           session_manager::SessionState::ACTIVE &&
       Shell::Get()->session_controller()->GetSessionState() !=
@@ -64,9 +66,20 @@ bool ShelfWindowTargeter::GetHitTestRects(
     return shelf_->shelf_widget()->GetHitTestRects(target, hit_test_rect_mouse,
                                                    hit_test_rect_touch);
   }
-  // Otherwise, fall back to what our superclass does.
-  return EasyResizeWindowTargeter::GetHitTestRects(target, hit_test_rect_mouse,
-                                                   hit_test_rect_touch);
+  *hit_test_rect_mouse = *hit_test_rect_touch = target->bounds();
+
+  if (ShouldUseExtendedBounds(target)) {
+    hit_test_rect_mouse->Inset(mouse_extend());
+
+    // Whether the touch hit area should be extended beyond the window top when
+    // the shelf is in auto-hide state (to make targeting hidden shelf easier).
+    // This should be applied for shelf widget  only, to prevent other widgets
+    // positioned below display bounds (e.g. hidden hotseat widget) from
+    // handling touch events instead of the shelf.
+    if (target_is_shelf_widget)
+      hit_test_rect_touch->Inset(touch_extend());
+  }
+  return true;
 }
 
 void ShelfWindowTargeter::OnWindowDestroying(aura::Window* window) {
@@ -77,15 +90,18 @@ void ShelfWindowTargeter::OnWindowDestroying(aura::Window* window) {
 
 void ShelfWindowTargeter::WillChangeVisibilityState(
     ShelfVisibilityState new_state) {
+  // Do not use |new_state| as it can be a shelf on other displays.
+  auto visibility_state = shelf_->GetVisibilityState();
+
   gfx::Insets mouse_insets;
   gfx::Insets touch_insets;
-  if (new_state == SHELF_VISIBLE) {
+  if (visibility_state == SHELF_VISIBLE) {
     // Let clicks at the very top of the shelf through so windows can be
     // resized with the bottom-right corner and bottom edge.
     mouse_insets = GetInsetsForAlignment(
         ShelfConfig::Get()->workspace_area_visible_inset(),
         shelf_->alignment());
-  } else if (new_state == SHELF_AUTO_HIDE) {
+  } else if (visibility_state == SHELF_AUTO_HIDE) {
     // Extend the touch hit target out a bit to allow users to drag shelf out
     // while hidden.
     touch_insets = GetInsetsForAlignment(
@@ -93,6 +109,7 @@ void ShelfWindowTargeter::WillChangeVisibilityState(
         shelf_->alignment());
   }
 
+  // Remember the insets. See GetHitTestsRects when they're actually used.
   SetInsets(mouse_insets, touch_insets);
 }
 

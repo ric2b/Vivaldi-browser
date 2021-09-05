@@ -18,7 +18,6 @@
 #include "components/download/public/common/download_interrupt_reasons.h"
 #include "components/download/public/common/download_save_info.h"
 #include "components/download/public/common/download_source.h"
-#include "net/base/network_isolation_key.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_request.h"
 #include "services/network/public/cpp/resource_request_body.h"
@@ -256,11 +255,6 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadUrlParameters {
     require_safety_checks_ = require_safety_checks;
   }
 
-  void set_network_isolation_key(
-      const net::NetworkIsolationKey& network_isolation_key) {
-    network_isolation_key_ = network_isolation_key;
-  }
-
   OnStartedCallback& callback() { return callback_; }
   bool content_initiated() const { return content_initiated_; }
   const std::string& last_modified() const { return last_modified_; }
@@ -305,6 +299,7 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadUrlParameters {
   }
   bool prompt() const { return save_info_.prompt_for_save_location; }
   const GURL& url() const { return url_; }
+  void set_url(GURL url) { url_ = std::move(url); }
   bool do_not_prompt_for_login() const { return do_not_prompt_for_login_; }
   network::mojom::RedirectMode cross_origin_redirects() const {
     return cross_origin_redirects_;
@@ -313,9 +308,6 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadUrlParameters {
   bool is_transient() const { return transient_; }
   std::string guid() const { return guid_; }
   bool require_safety_checks() const { return require_safety_checks_; }
-  const net::NetworkIsolationKey& network_isolation_key() const {
-    return network_isolation_key_;
-  }
 
   // STATE CHANGING: All save_info_ sub-objects will be in an indeterminate
   // state following this call.
@@ -363,7 +355,6 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadUrlParameters {
   DownloadSource download_source_;
   UploadProgressCallback upload_callback_;
   bool require_safety_checks_;
-  net::NetworkIsolationKey network_isolation_key_;
 
   DISALLOW_COPY_AND_ASSIGN(DownloadUrlParameters);
 };

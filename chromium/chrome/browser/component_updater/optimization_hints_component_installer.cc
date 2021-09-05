@@ -50,7 +50,7 @@ OptimizationHintsComponentInstallerPolicy::
 }
 
 OptimizationHintsComponentInstallerPolicy::
-    ~OptimizationHintsComponentInstallerPolicy() {}
+    ~OptimizationHintsComponentInstallerPolicy() = default;
 
 bool OptimizationHintsComponentInstallerPolicy::
     SupportsGroupPolicyEnabledComponentUpdates() const {
@@ -136,13 +136,14 @@ OptimizationHintsComponentInstallerPolicy::GetMimeTypes() const {
 }
 
 void RegisterOptimizationHintsComponent(ComponentUpdateService* cus,
+                                        bool is_off_the_record_profile,
                                         PrefService* profile_prefs) {
   if (!optimization_guide::features::IsOptimizationHintsEnabled()) {
     return;
   }
 
   if (!data_reduction_proxy::DataReductionProxySettings::
-          IsDataSaverEnabledByUser(profile_prefs)) {
+          IsDataSaverEnabledByUser(is_off_the_record_profile, profile_prefs)) {
     return;
   }
   auto installer = base::MakeRefCounted<ComponentInstaller>(

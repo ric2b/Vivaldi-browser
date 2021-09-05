@@ -5,6 +5,7 @@
 #import <TestLib/EarlGreyImpl/EarlGrey.h>
 #import <UIKit/UIKit.h>
 
+#include "ios/chrome/browser/pref_names.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/earl_grey/chrome_actions.h"
@@ -151,8 +152,8 @@
   GREYAssertTrue(![ChromeEarlGrey isAutofillProfilePresentWithGUID:fakeGUID
                                                autofillProfileName:profileName],
                  @"Autofill profile should not be present.");
-  [ChromeEarlGrey injectAutofillProfileOnFakeSyncServerWithGUID:fakeGUID
-                                            autofillProfileName:profileName];
+  [ChromeEarlGrey addAutofillProfileToFakeSyncServerWithGUID:fakeGUID
+                                         autofillProfileName:profileName];
 }
 
 // Tests waitForSufficientlyVisibleElementWithMatcher in chrome_earl_grey.h
@@ -196,18 +197,113 @@
 // ensureAppLaunchedWithFeaturesEnabled]
 - (void)testAppLaunchManagerLaunchWithFeatures {
   [[AppLaunchManager sharedManager]
-      ensureAppLaunchedWithFeaturesEnabled:
-          {kNewOmniboxPopupLayout, web::features::kSlimNavigationManager}
+      ensureAppLaunchedWithFeaturesEnabled:{kTestFeature}
                                   disabled:{}
-                              forceRestart:NO];
+                            relaunchPolicy:NoForceRelaunchAndResetState];
 
-  GREYAssertTrue([ChromeEarlGrey isNewOmniboxPopupLayoutEnabled],
-                 @"NewOmniboxPopupLayout should be enabled");
-  GREYAssertTrue([ChromeEarlGrey isSlimNavigationManagerEnabled],
-                 @"SlimNavigationManager should be enabled");
+  GREYAssertTrue([ChromeEarlGrey isTestFeatureEnabled],
+                 @"kTestFeature should be enabled");
 
   GREYAssertEqual([ChromeEarlGrey mainTabCount], 1U,
                   @"Exactly one new tab should be opened.");
+}
+
+// Tests enabling variations and trigger variations through [AppLaunchManager
+// ensureAppLaunchedWithLaunchConfiguration:]
+- (void)testAppLaunchManagerLaunchWithVariations {
+  AppLaunchConfiguration config;
+  config.variations_enabled = {111111, 222222};
+  config.trigger_variations_enabled = {999999, 777777};
+  [[AppLaunchManager sharedManager] ensureAppLaunchedWithConfiguration:config];
+
+  GREYAssertTrue([ChromeEarlGrey isTriggerVariationEnabled:999999],
+                 @"Trigger variation 123456 should be enabled");
+  GREYAssertTrue([ChromeEarlGrey isTriggerVariationEnabled:777777],
+                 @"Trigger variation 123456 should be enabled");
+  GREYAssertTrue([ChromeEarlGrey isVariationEnabled:111111],
+                 @"Variation 987654 should be enabled");
+  GREYAssertTrue([ChromeEarlGrey isVariationEnabled:222222],
+                 @"Variation 987654 should be enabled");
+
+  GREYAssertEqual([ChromeEarlGrey mainTabCount], 1U,
+                  @"Exactly one new tab should be opened.");
+}
+
+// Tests AppLaunchManager can pass an arbitrary arg to host app.
+- (void)testAppLaunchManagerLaunchWithArbitraryArgs {
+  AppLaunchConfiguration config;
+  config.additional_args = {"-switch1", "--switch2", "--switch3=somevalue"};
+  config.relaunch_policy = ForceRelaunchByKilling;
+
+  [[AppLaunchManager sharedManager] ensureAppLaunchedWithConfiguration:config];
+
+  GREYAssertTrue([ChromeEarlGrey appHasLaunchSwitch:"switch1"],
+                 @"switch1 should be in app launch switches.");
+  GREYAssertTrue([ChromeEarlGrey appHasLaunchSwitch:"switch2"],
+                 @"switch2 should be in app launch switches.");
+  GREYAssertTrue([ChromeEarlGrey appHasLaunchSwitch:"switch3"],
+                 @"switch3 should be in app launch switches.");
+
+  GREYAssertFalse([ChromeEarlGrey appHasLaunchSwitch:"switch4"],
+                  @"switch4 should not be in app launch switches.");
+}
+
+// Tests gracefully kill through AppLaunchManager.
+- (void)testAppLaunchManagerForceRelaunchByCleanShutdown {
+  [ChromeEarlGrey openNewTab];
+  [[AppLaunchManager sharedManager] ensureAppLaunchedWithFeaturesEnabled:{}
+      disabled:{}
+      relaunchPolicy:ForceRelaunchByCleanShutdown];
+  [[EarlGrey selectElementWithMatcher:grey_text(@"Restore")]
+      assertWithMatcher:grey_notVisible()];
+}
+
+// Tests hard kill(crash) through AppLaunchManager.
+- (void)testAppLaunchManagerForceRelaunchByKilling {
+  [ChromeEarlGrey openNewTab];
+  [[AppLaunchManager sharedManager] ensureAppLaunchedWithFeaturesEnabled:{}
+      disabled:{}
+      relaunchPolicy:ForceRelaunchByKilling];
+  [[EarlGrey selectElementWithMatcher:grey_text(@"Restore")]
+      assertWithMatcher:grey_sufficientlyVisible()];
+  [ChromeEarlGrey waitForMainTabCount:1];
+}
+
+// Tests running resets after relaunch through AppLaunchManager.
+- (void)testAppLaunchManagerNoForceRelaunchAndResetState {
+  [self stopHTTPServer];
+  [self disableMockAuthentication];
+  [ChromeEarlGrey openNewTab];
+  [[AppLaunchManager sharedManager]
+      ensureAppLaunchedWithFeaturesEnabled:{kTestFeature}
+                                  disabled:{}
+                            relaunchPolicy:NoForceRelaunchAndResetState];
+  [ChromeEarlGrey waitForMainTabCount:1];
+  // |stopHTTPServer| and |disableMockAuthentication| DCHECK the flags are in
+  // correct states, which can serve as assertion that proper resets are run.
+  [self stopHTTPServer];
+  [self disableMockAuthentication];
+}
+
+// Tests no force relaunch.
+- (void)testAppLaunchManagerNoForceRelaunchAndKeepState {
+  [self stopHTTPServer];
+  [self disableMockAuthentication];
+  [ChromeEarlGrey openNewTab];
+  // No relauch when feature list isn't changed.
+  [[AppLaunchManager sharedManager] ensureAppLaunchedWithFeaturesEnabled:{}
+      disabled:{}
+      relaunchPolicy:NoForceRelaunchAndKeepState];
+  [ChromeEarlGrey waitForMainTabCount:2];
+  [[EarlGrey selectElementWithMatcher:grey_text(@"Restore")]
+      assertWithMatcher:grey_notVisible()];
+}
+
+// Tests backgrounding app and moving app back through AppLaunchManager.
+- (void)testAppLaunchManagerBackgroundAndForegroundApp {
+  [ChromeEarlGrey openNewTab];
+  [[AppLaunchManager sharedManager] backgroundAndForegroundApp];
+  [ChromeEarlGrey waitForMainTabCount:2];
 }
 
 // Tests isCompactWidth method in chrome_earl_grey.h.
@@ -219,6 +315,19 @@
   GREYAssertTrue([ChromeEarlGrey isCompactWidth] == expectedIsCompactWidth,
                  @"isCompactWidth should return %@",
                  expectedIsCompactWidth ? @"YES" : @"NO");
+}
+
+// Tests helpers that retrieve prefs and local state values.
+- (void)testGetPrefs {
+  // The actual pref names and values below are irrelevant, but the calls
+  // themselves should return data without crashing or asserting.
+  [ChromeEarlGrey localStateBooleanPref:prefs::kLastSessionExitedCleanly];
+  [ChromeEarlGrey localStateIntegerPref:prefs::kBrowserStatesNumCreated];
+  [ChromeEarlGrey localStateStringPref:prefs::kBrowserStateLastUsed];
+
+  [ChromeEarlGrey userBooleanPref:prefs::kIosBookmarkPromoAlreadySeen];
+  [ChromeEarlGrey userIntegerPref:prefs::kIosBookmarkCachedTopMostRow];
+  [ChromeEarlGrey userStringPref:prefs::kDefaultCharset];
 }
 
 @end

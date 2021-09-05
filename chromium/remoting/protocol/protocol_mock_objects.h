@@ -53,7 +53,7 @@ class MockAuthenticator : public Authenticator {
   MOCK_CONST_METHOD0(CreateChannelAuthenticatorPtr, ChannelAuthenticator*());
   MOCK_METHOD2(ProcessMessage,
                void(const jingle_xmpp::XmlElement* message,
-                    const base::Closure& resume_callback));
+                    base::OnceClosure resume_callback));
   MOCK_METHOD0(GetNextMessagePtr, jingle_xmpp::XmlElement*());
 
   std::unique_ptr<ChannelAuthenticator> CreateChannelAuthenticator()
@@ -158,6 +158,9 @@ class MockClientStub : public ClientStub {
 
   // CursorShapeStub mock implementation.
   MOCK_METHOD1(SetCursorShape, void(const CursorShapeInfo& cursor_shape));
+
+  // KeyboardLayoutStub mock implementation.
+  MOCK_METHOD1(SetKeyboardLayout, void(const KeyboardLayout& layout));
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockClientStub);
@@ -264,7 +267,7 @@ class SynchronousPairingRegistry : public PairingRegistry {
   // Runs tasks synchronously instead of posting them to |task_runner|.
   void PostTask(const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
                 const base::Location& from_here,
-                const base::Closure& task) override;
+                base::OnceClosure task) override;
 };
 
 }  // namespace protocol

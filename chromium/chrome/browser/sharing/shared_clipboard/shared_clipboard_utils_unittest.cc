@@ -8,10 +8,13 @@
 
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
+#include "chrome/browser/sharing/mock_sharing_service.h"
 #include "chrome/browser/sharing/shared_clipboard/feature_flags.h"
 #include "chrome/browser/sharing/shared_clipboard/shared_clipboard_utils.h"
+#include "chrome/browser/sharing/sharing_device_source.h"
 #include "chrome/browser/sharing/sharing_fcm_handler.h"
 #include "chrome/browser/sharing/sharing_fcm_sender.h"
+#include "chrome/browser/sharing/sharing_handler_registry.h"
 #include "chrome/browser/sharing/sharing_service.h"
 #include "chrome/browser/sharing/sharing_service_factory.h"
 #include "chrome/browser/sharing/sharing_sync_preference.h"
@@ -36,11 +39,12 @@ const char kText[] = "Some text to copy to phone device.";
 
 class MockSharingDeviceRegistration : public SharingDeviceRegistration {
  public:
-  explicit MockSharingDeviceRegistration()
-      : SharingDeviceRegistration(/* pref_service_= */ nullptr,
-                                  /* sharing_sync_preference_= */ nullptr,
-                                  /* instance_id_driver_= */ nullptr,
-                                  /* vapid_key_manager_= */ nullptr) {}
+  MockSharingDeviceRegistration()
+      : SharingDeviceRegistration(/*pref_service=*/nullptr,
+                                  /*sharing_sync_preference=*/nullptr,
+                                  /*vapid_key_manager=*/nullptr,
+                                  /*instance_id_driver=*/nullptr,
+                                  /*sync_service=*/nullptr) {}
 
   ~MockSharingDeviceRegistration() override = default;
 
@@ -48,28 +52,6 @@ class MockSharingDeviceRegistration : public SharingDeviceRegistration {
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockSharingDeviceRegistration);
-};
-
-class MockSharingService : public SharingService {
- public:
-  explicit MockSharingService(std::unique_ptr<SharingFCMHandler> fcm_handler)
-      : SharingService(/* sync_prefs= */ nullptr,
-                       /* vapid_key_manager= */ nullptr,
-                       std::make_unique<MockSharingDeviceRegistration>(),
-                       /* fcm_sender= */ nullptr,
-                       std::move(fcm_handler),
-                       /* gcm_driver= */ nullptr,
-                       /* device_info_tracker= */ nullptr,
-                       /* local_device_info_provider= */ nullptr,
-                       /* sync_service */ nullptr,
-                       /* notification_display_service= */ nullptr) {}
-
-  ~MockSharingService() override = default;
-
-  MOCK_CONST_METHOD0(GetState, State());
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MockSharingService);
 };
 
 class SharedClipboardUtilsTest : public testing::Test {
@@ -87,11 +69,7 @@ class SharedClipboardUtilsTest : public testing::Test {
  protected:
   std::unique_ptr<KeyedService> CreateService(
       content::BrowserContext* context) {
-    if (!create_service_)
-      return nullptr;
-
-    return std::make_unique<NiceMock<MockSharingService>>(
-        std::make_unique<SharingFCMHandler>(nullptr, nullptr, nullptr));
+    return create_service_ ? std::make_unique<MockSharingService>() : nullptr;
   }
 
   base::test::ScopedFeatureList scoped_feature_list_;

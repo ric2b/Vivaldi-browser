@@ -40,7 +40,7 @@ Polymer({
      */
     availableIcons: {
       type: Array,
-      value: function() {
+      value() {
         return [];
       },
     },
@@ -55,18 +55,30 @@ Polymer({
      * True if the profile shortcuts feature is enabled.
      */
     isProfileShortcutSettingVisible_: Boolean,
+
+    /**
+     * TODO(dpapad): Move this back to the HTML file when the Polymer2 version
+     * of the code is deleted. Because of "\" being a special character in a JS
+     * string, can't satisfy both Polymer2 and Polymer3 at the same time from
+     * the HTML file.
+     * @private
+     */
+    pattern_: {
+      type: String,
+      value: '.*\\S.*',
+    },
   },
 
   /** @private {?settings.ManageProfileBrowserProxy} */
   browserProxy_: null,
 
   /** @override */
-  created: function() {
+  created() {
     this.browserProxy_ = settings.ManageProfileBrowserProxyImpl.getInstance();
   },
 
   /** @override */
-  attached: function() {
+  attached() {
     const setIcons = icons => {
       this.availableIcons = icons;
     };
@@ -76,21 +88,23 @@ Polymer({
   },
 
   /** @protected */
-  currentRouteChanged: function() {
-    if (settings.getCurrentRoute() == settings.routes.MANAGE_PROFILE) {
+  currentRouteChanged() {
+    if (settings.Router.getInstance().getCurrentRoute() ==
+        settings.routes.MANAGE_PROFILE) {
       if (this.profileName) {
         this.$.name.value = this.profileName;
       }
       if (loadTimeData.getBoolean('profileShortcutsEnabled')) {
         this.browserProxy_.getProfileShortcutStatus().then(status => {
-          if (status == ProfileShortcutStatus.PROFILE_SHORTCUT_SETTING_HIDDEN) {
+          if (status ==
+              settings.ProfileShortcutStatus.PROFILE_SHORTCUT_SETTING_HIDDEN) {
             this.isProfileShortcutSettingVisible_ = false;
             return;
           }
 
           this.isProfileShortcutSettingVisible_ = true;
           this.hasProfileShortcut_ =
-              status == ProfileShortcutStatus.PROFILE_SHORTCUT_FOUND;
+              status == settings.ProfileShortcutStatus.PROFILE_SHORTCUT_FOUND;
         });
       }
     }
@@ -101,7 +115,7 @@ Polymer({
    * @param {!Event} event
    * @private
    */
-  onProfileNameChanged_: function(event) {
+  onProfileNameChanged_(event) {
     if (event.target.invalid) {
       return;
     }
@@ -114,7 +128,7 @@ Polymer({
    * @param {!Event} event
    * @private
    */
-  onProfileNameKeydown_: function(event) {
+  onProfileNameKeydown_(event) {
     if (event.key == 'Escape') {
       event.target.value = this.profileName;
       event.target.blur();
@@ -125,7 +139,7 @@ Polymer({
    * Handler for when the profile avatar is changed by the user.
    * @private
    */
-  profileAvatarChanged_: function() {
+  profileAvatarChanged_() {
     if (this.profileAvatar_.isGaiaAvatar) {
       this.browserProxy_.setProfileIconToGaiaAvatar();
     } else {
@@ -138,7 +152,7 @@ Polymer({
    * @return {boolean} Whether the profile name field is disabled.
    * @private
    */
-  isProfileNameDisabled_: function(syncStatus) {
+  isProfileNameDisabled_(syncStatus) {
     return !!syncStatus.supervisedUser && !syncStatus.childUser;
   },
 
@@ -147,7 +161,7 @@ Polymer({
    * @param {!Event} event
    * @private
    */
-  onHasProfileShortcutChange_: function(event) {
+  onHasProfileShortcutChange_(event) {
     if (this.hasProfileShortcut_) {
       this.browserProxy_.addProfileShortcut();
     } else {

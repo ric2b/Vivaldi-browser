@@ -40,13 +40,12 @@ class CONTENT_EXPORT PushMessagingService {
   using UnregisterCallback =
       base::OnceCallback<void(blink::mojom::PushUnregistrationStatus)>;
   using SubscriptionInfoCallback =
-      base::Callback<void(bool is_valid,
-                          const GURL& endpoint,
-                          const std::vector<uint8_t>& p256dh,
-                          const std::vector<uint8_t>& auth)>;
-  using StringCallback = base::Callback<void(const std::string& data,
-                                             bool success,
-                                             bool not_found)>;
+      base::OnceCallback<void(bool is_valid,
+                              const GURL& endpoint,
+                              const std::vector<uint8_t>& p256dh,
+                              const std::vector<uint8_t>& auth)>;
+  using StringCallback = base::OnceCallback<
+      void(const std::string& data, bool success, bool not_found)>;
 
   virtual ~PushMessagingService() {}
 
@@ -58,7 +57,7 @@ class CONTENT_EXPORT PushMessagingService {
   virtual void SubscribeFromDocument(
       const GURL& requesting_origin,
       int64_t service_worker_registration_id,
-      int renderer_id,
+      int render_process_id,
       int render_frame_id,
       blink::mojom::PushSubscriptionOptionsPtr options,
       bool user_gesture,
@@ -81,12 +80,11 @@ class CONTENT_EXPORT PushMessagingService {
   // information to the callback. |sender_id| is also required since an
   // InstanceID might have multiple tokens associated with different senders,
   // though in practice Push doesn't yet use that.
-  virtual void GetSubscriptionInfo(
-      const GURL& origin,
-      int64_t service_worker_registration_id,
-      const std::string& sender_id,
-      const std::string& subscription_id,
-      const SubscriptionInfoCallback& callback) = 0;
+  virtual void GetSubscriptionInfo(const GURL& origin,
+                                   int64_t service_worker_registration_id,
+                                   const std::string& sender_id,
+                                   const std::string& subscription_id,
+                                   SubscriptionInfoCallback callback) = 0;
 
   // Unsubscribe the given |sender_id| from the push messaging service. Locally
   // deactivates the subscription, then runs |callback|, then asynchronously
@@ -116,7 +114,7 @@ class CONTENT_EXPORT PushMessagingService {
   static void GetSenderId(BrowserContext* browser_context,
                           const GURL& origin,
                           int64_t service_worker_registration_id,
-                          const StringCallback& callback);
+                          StringCallback callback);
 
   // Clear the push subscription id stored in the service worker with the given
   // |service_worker_registration_id| for the given |origin|.
@@ -133,7 +131,7 @@ class CONTENT_EXPORT PushMessagingService {
       int64_t service_worker_registration_id,
       const std::string& subscription_id,
       const std::string& sender_id,
-      const base::Closure& callback);
+      base::OnceClosure callback);
 };
 
 }  // namespace content

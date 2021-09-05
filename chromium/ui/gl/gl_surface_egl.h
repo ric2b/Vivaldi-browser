@@ -19,7 +19,6 @@
 #include "base/macros.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "ui/events/platform/platform_event_dispatcher.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/vsync_provider.h"
 #include "ui/gl/egl_timestamps.h"
@@ -28,12 +27,35 @@
 #include "ui/gl/gl_surface.h"
 #include "ui/gl/gl_surface_overlay.h"
 
+#if defined(USE_X11)
+#include "ui/events/platform/x11/x11_event_source.h"  // nogncheck
+#endif
+
 namespace gl {
+
+class EGLDisplayPlatform {
+ public:
+  constexpr EGLDisplayPlatform()
+      : display_(EGL_DEFAULT_DISPLAY), platform_(0), valid_(false) {}
+  explicit constexpr EGLDisplayPlatform(EGLNativeDisplayType display,
+                                        int platform = 0)
+      : display_(display), platform_(platform), valid_(true) {}
+
+  bool Valid() const { return valid_; }
+  int GetPlatform() const { return platform_; }
+  EGLNativeDisplayType GetDisplay() const { return display_; }
+
+ private:
+  EGLNativeDisplayType display_;
+  // 0 for default, or EGL_PLATFORM_* enum.
+  int platform_;
+  bool valid_;
+};
 
 class GLSurfacePresentationHelper;
 
 // If adding a new type, also add it to EGLDisplayType in
-// tools/metrics/histograms/histograms.xml. Don't remove or reorder entries.
+// tools/metrics/histograms/enums.xml. Don't remove or reorder entries.
 enum DisplayType {
   DEFAULT = 0,
   SWIFT_SHADER = 1,
@@ -49,13 +71,18 @@ enum DisplayType {
   ANGLE_VULKAN = 11,
   ANGLE_VULKAN_NULL = 12,
   ANGLE_D3D11on12 = 13,
-  DISPLAY_TYPE_MAX = 14,
+  ANGLE_SWIFTSHADER = 14,
+  ANGLE_OPENGL_EGL = 15,
+  ANGLE_OPENGLES_EGL = 16,
+  DISPLAY_TYPE_MAX = 17,
 };
 
 GL_EXPORT void GetEGLInitDisplays(bool supports_angle_d3d,
                                   bool supports_angle_opengl,
                                   bool supports_angle_null,
                                   bool supports_angle_vulkan,
+                                  bool supports_angle_swiftshader,
+                                  bool supports_angle_egl,
                                   const base::CommandLine* command_line,
                                   std::vector<DisplayType>* init_displays);
 
@@ -69,12 +96,12 @@ class GL_EXPORT GLSurfaceEGL : public GLSurface {
   EGLConfig GetConfig() override;
   GLSurfaceFormat GetFormat() override;
 
-  static bool InitializeOneOff(EGLNativeDisplayType native_display);
+  static bool InitializeOneOff(EGLDisplayPlatform native_display);
   static bool InitializeOneOffForTesting();
   static bool InitializeExtensionSettingsOneOff();
   static void ShutdownOneOff();
   static EGLDisplay GetHardwareDisplay();
-  static EGLDisplay InitializeDisplay(EGLNativeDisplayType native_display);
+  static EGLDisplay InitializeDisplay(EGLDisplayPlatform native_display);
   static EGLNativeDisplayType GetNativeDisplay();
 
   // These aren't particularly tied to surfaces, but since we already
@@ -109,8 +136,10 @@ class GL_EXPORT GLSurfaceEGL : public GLSurface {
 
 // Encapsulates an EGL surface bound to a view.
 class GL_EXPORT NativeViewGLSurfaceEGL : public GLSurfaceEGL,
-                                         public EGLTimestampClient,
-                                         public ui::PlatformEventDispatcher {
+#if defined(USE_X11)
+                                         public ui::XEventDispatcher,
+#endif
+                                         public EGLTimestampClient {
  public:
   NativeViewGLSurfaceEGL(EGLNativeWindowType window,
                          std::unique_ptr<gfx::VSyncProvider> vsync_provider);
@@ -122,7 +151,7 @@ class GL_EXPORT NativeViewGLSurfaceEGL : public GLSurfaceEGL,
   void Destroy() override;
   bool Resize(const gfx::Size& size,
               float scale_factor,
-              ColorSpace color_space,
+              const gfx::ColorSpace& color_space,
               bool has_alpha) override;
   bool Recreate() override;
   bool IsOffscreen() override;
@@ -147,7 +176,7 @@ class GL_EXPORT NativeViewGLSurfaceEGL : public GLSurfaceEGL,
                             const gfx::RectF& crop_rect,
                             bool enable_blend,
                             std::unique_ptr<gfx::GpuFence> gpu_fence) override;
-  bool FlipsVertically() const override;
+  gfx::SurfaceOrigin GetOrigin() const override;
   EGLTimestampClient* GetEGLTimestampClient() override;
 
   // EGLTimestampClient implementation.
@@ -184,14 +213,15 @@ class GL_EXPORT NativeViewGLSurfaceEGL : public GLSurfaceEGL,
   void UpdateSwapEvents(EGLuint64KHR newFrameId, bool newFrameIdIsValid);
   void TraceSwapEvents(EGLuint64KHR oldFrameId);
 
-  // PlatformEventDispatcher implementation.
-  bool CanDispatchEvent(const ui::PlatformEvent& event) override;
-  uint32_t DispatchEvent(const ui::PlatformEvent& event) override;
+#if defined(USE_X11)
+  // XEventDispatcher:
+  bool DispatchXEvent(XEvent* xev) override;
+#endif
 
   EGLSurface surface_ = nullptr;
   bool supports_post_sub_buffer_ = false;
   bool supports_swap_buffer_with_damage_ = false;
-  bool flips_vertically_ = false;
+  gfx::SurfaceOrigin surface_origin_ = gfx::SurfaceOrigin::kBottomLeft;
 
 #if defined(USE_X11)
   bool has_swapped_buffers_ = false;
@@ -234,7 +264,7 @@ class GL_EXPORT PbufferGLSurfaceEGL : public GLSurfaceEGL {
   gfx::Size GetSize() override;
   bool Resize(const gfx::Size& size,
               float scale_factor,
-              ColorSpace color_space,
+              const gfx::ColorSpace& color_space,
               bool has_alpha) override;
   EGLSurface GetHandle() override;
   void* GetShareHandle() override;
@@ -265,7 +295,7 @@ class GL_EXPORT SurfacelessEGL : public GLSurfaceEGL {
   gfx::Size GetSize() override;
   bool Resize(const gfx::Size& size,
               float scale_factor,
-              ColorSpace color_space,
+              const gfx::ColorSpace& color_space,
               bool has_alpha) override;
   EGLSurface GetHandle() override;
   void* GetShareHandle() override;

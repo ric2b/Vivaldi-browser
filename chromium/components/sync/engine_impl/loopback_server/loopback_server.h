@@ -14,8 +14,9 @@
 
 #include "base/callback.h"
 #include "base/files/file_path.h"
+#include "base/files/important_file_writer.h"
 #include "base/optional.h"
-#include "base/threading/thread_checker.h"
+#include "base/sequence_checker.h"
 #include "base/values.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/engine_impl/loopback_server/loopback_server_entity.h"
@@ -30,7 +31,7 @@ class FakeServer;
 namespace syncer {
 
 // A loopback version of the Sync server used for local profile serialization.
-class LoopbackServer {
+class LoopbackServer : public base::ImportantFileWriter::DataSerializer {
  public:
   class ObserverForTests {
    public:
@@ -48,12 +49,13 @@ class LoopbackServer {
   };
 
   explicit LoopbackServer(const base::FilePath& persistent_file);
-  virtual ~LoopbackServer();
+  ~LoopbackServer() override;
 
-  // Handles a /command POST (with the given |request|) to the server.
-  // |*response| must not be null.
-  net::HttpStatusCode HandleCommand(const std::string& request,
-                                    std::string* response);
+  // Handles a /command POST (with the given |message|) to the server.
+  // |response| must not be null.
+  net::HttpStatusCode HandleCommand(
+      const sync_pb::ClientToServerMessage& message,
+      sync_pb::ClientToServerResponse* response);
 
   // Enables strong consistency model (i.e. server detects conflicts).
   void EnableStrongConsistencyWithConflictDetectionModel();
@@ -73,9 +75,11 @@ class LoopbackServer {
     }
   }
 
-  const std::vector<std::string>& GetKeystoreKeysForTesting() const {
+  const std::vector<std::vector<uint8_t>>& GetKeystoreKeysForTesting() const {
     return keystore_keys_;
   }
+
+  void AddNewKeystoreKeyForTesting();
 
  private:
   // Allow the FakeServer decorator to inspect the internals of this class.
@@ -87,6 +91,9 @@ class LoopbackServer {
   using ResponseTypeProvider =
       base::RepeatingCallback<sync_pb::CommitResponse::ResponseType(
           const LoopbackServerEntity& entity)>;
+
+  // ImportantFileWriter::DataSerializer:
+  bool SerializeData(std::string* data) override;
 
   // Gets LoopbackServer ready for syncing.
   void Init();
@@ -118,7 +125,8 @@ class LoopbackServer {
   // was created.
   std::string GetTopLevelPermanentItemId(syncer::ModelType model_type);
 
-  std::string GenerateNewKeystoreKey() const;
+  // Returns generated key which may contain any bytes (not necessarily UTF-8).
+  std::vector<uint8_t> GenerateNewKeystoreKey() const;
 
   // Saves a |entity| to |entities_|.
   void SaveEntity(std::unique_ptr<LoopbackServerEntity> entity);
@@ -206,11 +214,14 @@ class LoopbackServer {
   // Populates the server state from |proto|. Returns true iff successful.
   bool DeSerializeState(const sync_pb::LoopbackServerProto& proto);
 
-  // Saves all entities and server state to a protobuf file in |filename|.
-  bool SaveStateToFile(const base::FilePath& filename) const;
+  // Schedules committing state to disk at some later time. Repeat calls are
+  // batched together. Outstanding scheduled writes are committed at shutdown.
+  // Returns true on success.
+  bool ScheduleSaveStateToFile();
 
-  // Loads all entities and server state from a protobuf file in |filename|.
-  bool LoadStateFromFile(const base::FilePath& filename);
+  // Loads all entities and server state from a protobuf file. Returns true on
+  // success.
+  bool LoadStateFromFile();
 
   void set_observer_for_tests(ObserverForTests* observer) {
     observer_for_tests_ = observer;
@@ -232,13 +243,16 @@ class LoopbackServer {
 
   EntityMap entities_;
   std::map<ModelType, std::string> top_level_permanent_item_ids_;
-  std::vector<std::string> keystore_keys_;
+  std::vector<std::vector<uint8_t>> keystore_keys_;
 
   // The file used to store the local sync data.
   base::FilePath persistent_file_;
 
-  // Used to verify that LoopbackServer is only used from one thread.
-  base::ThreadChecker thread_checker_;
+  // Used to limit the rate of file rewrites due to updates.
+  base::ImportantFileWriter writer_;
+
+  // Used to verify that LoopbackServer is only used from one sequence.
+  SEQUENCE_CHECKER(sequence_checker_);
 
   // Used to observe the completion of commit messages for the sake of testing.
   ObserverForTests* observer_for_tests_;

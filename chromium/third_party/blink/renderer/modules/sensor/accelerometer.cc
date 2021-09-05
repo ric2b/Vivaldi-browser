@@ -13,8 +13,8 @@ namespace blink {
 Accelerometer* Accelerometer::Create(ExecutionContext* execution_context,
                                      const SpatialSensorOptions* options,
                                      ExceptionState& exception_state) {
-  const Vector<mojom::FeaturePolicyFeature> features(
-      {mojom::FeaturePolicyFeature::kAccelerometer});
+  const Vector<mojom::blink::FeaturePolicyFeature> features(
+      {mojom::blink::FeaturePolicyFeature::kAccelerometer});
   return MakeGarbageCollected<Accelerometer>(
       execution_context, options, exception_state, SensorType::ACCELEROMETER,
       features);
@@ -32,12 +32,30 @@ Accelerometer::Accelerometer(
     const SpatialSensorOptions* options,
     ExceptionState& exception_state,
     SensorType sensor_type,
-    const Vector<mojom::FeaturePolicyFeature>& features)
+    const Vector<mojom::blink::FeaturePolicyFeature>& features)
     : Sensor(execution_context,
              options,
              exception_state,
              sensor_type,
              features) {}
+
+base::Optional<double> Accelerometer::x() const {
+  if (hasReading())
+    return GetReading().accel.x;
+  return base::nullopt;
+}
+
+base::Optional<double> Accelerometer::y() const {
+  if (hasReading())
+    return GetReading().accel.y;
+  return base::nullopt;
+}
+
+base::Optional<double> Accelerometer::z() const {
+  if (hasReading())
+    return GetReading().accel.z;
+  return base::nullopt;
+}
 
 double Accelerometer::x(bool& is_null) const {
   INIT_IS_NULL_AND_RETURN(is_null, 0.0);
@@ -54,7 +72,7 @@ double Accelerometer::z(bool& is_null) const {
   return GetReading().accel.z;
 }
 
-void Accelerometer::Trace(blink::Visitor* visitor) {
+void Accelerometer::Trace(Visitor* visitor) {
   Sensor::Trace(visitor);
 }
 

@@ -5,10 +5,11 @@
 #include "content/browser/accessibility/browser_accessibility_manager_auralinux.h"
 
 #include <atk/atk.h>
+
+#include <set>
 #include <vector>
 
 #include "content/browser/accessibility/browser_accessibility_auralinux.h"
-#include "content/common/accessibility_messages.h"
 #include "ui/accessibility/platform/ax_platform_node_auralinux.h"
 
 namespace content {
@@ -106,7 +107,14 @@ void BrowserAccessibilityManagerAuraLinux::FireBlinkEvent(
     ax::mojom::Event event_type,
     BrowserAccessibility* node) {
   BrowserAccessibilityManager::FireBlinkEvent(event_type, node);
-  // Need to implement.
+
+  switch (event_type) {
+    case ax::mojom::Event::kScrolledToAnchor:
+      ToBrowserAccessibilityAuraLinux(node)->GetNode()->OnScrolledToAnchor();
+      break;
+    default:
+      break;
+  }
 }
 
 void BrowserAccessibilityManagerAuraLinux::FireNameChangedEvent(
@@ -154,18 +162,6 @@ void BrowserAccessibilityManagerAuraLinux::FireGeneratedEvent(
     case ui::AXEventGenerator::Event::EXPANDED:
       FireExpandedEvent(node, true);
       break;
-    case ui::AXEventGenerator::Event::IGNORED_CHANGED:
-      // Since AuraLinux needs to send the children-changed::add event with the
-      // index in parent, the event must be fired after the node is unignored.
-      // children-changed:remove is handled in |OnStateChanged|
-      if (!node->IsIgnored()) {
-        if (node->IsNative() && node->GetParent()) {
-          g_signal_emit_by_name(node->GetParent(), "children-changed::add",
-                                node->GetIndexInParent(),
-                                node->GetNativeViewAccessible());
-        }
-      }
-      break;
     case ui::AXEventGenerator::Event::LOAD_COMPLETE:
       FireLoadingEvent(node, false);
       FireEvent(node, ax::mojom::Event::kLoadComplete);
@@ -210,11 +206,10 @@ void BrowserAccessibilityManagerAuraLinux::OnNodeDataWillChange(
   // Since AuraLinux needs to send the children-changed::remove event with the
   // index in parent, the event must be fired before the node becomes ignored.
   // children-changed:add is handled with the generated Event::IGNORED_CHANGED.
-  if (!old_node_data.HasState(ax::mojom::State::kIgnored) &&
-      new_node_data.HasState(ax::mojom::State::kIgnored)) {
+  if (!old_node_data.IsIgnored() && new_node_data.IsIgnored()) {
     BrowserAccessibility* obj = GetFromID(old_node_data.id);
     if (obj && obj->IsNative() && obj->GetParent()) {
-      DCHECK(!obj->HasState(ax::mojom::State::kIgnored));
+      DCHECK(!obj->IsIgnored());
       g_signal_emit_by_name(obj->GetParent(), "children-changed::remove",
                             obj->GetIndexInParent(),
                             obj->GetNativeViewAccessible());
@@ -241,15 +236,11 @@ void BrowserAccessibilityManagerAuraLinux::OnAtomicUpdateFinished(
   BrowserAccessibilityManager::OnAtomicUpdateFinished(tree, root_changed,
                                                       changes);
 
-  // This is the second step in what will be a three step process mirroring that
-  // used in BrowserAccessibilityManagerWin.
-  for (const auto& change : changes) {
-    const ui::AXNode* changed_node = change.node;
-    DCHECK(changed_node);
-    BrowserAccessibility* obj = GetFromAXNode(changed_node);
-    if (obj && obj->IsNative())
-      ToBrowserAccessibilityAuraLinux(obj)->GetNode()->UpdateHypertext();
-  }
+  std::set<ui::AXPlatformNode*> objs_to_update;
+  CollectChangedNodesAndParentsForAtomicUpdate(tree, changes, &objs_to_update);
+
+  for (auto* node : objs_to_update)
+    static_cast<ui::AXPlatformNodeAuraLinux*>(node)->UpdateHypertext();
 }
 
 void BrowserAccessibilityManagerAuraLinux::OnFindInPageResult(int request_id,

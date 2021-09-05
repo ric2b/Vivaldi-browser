@@ -17,7 +17,6 @@
 #include "content/common/input/input_event.h"
 #include "content/common/input/input_event_ack.h"
 #include "content/common/input/input_event_dispatch_type.h"
-#include "content/common/input/input_param_traits.h"
 #include "content/common/input/synthetic_gesture_params.h"
 #include "content/common/input/synthetic_pinch_gesture_params.h"
 #include "content/common/input/synthetic_pointer_action_list_params.h"
@@ -28,9 +27,10 @@
 #include "content/public/common/input_event_ack_source.h"
 #include "content/public/common/input_event_ack_state.h"
 #include "ipc/ipc_message_macros.h"
-#include "third_party/blink/public/platform/web_input_event.h"
-#include "third_party/blink/public/platform/web_pointer_properties.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
+#include "third_party/blink/public/common/input/web_pointer_properties.h"
 #include "ui/events/blink/did_overscroll_params.h"
+#include "ui/events/ipc/ui_events_param_traits_macros.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/vector2d_f.h"
@@ -41,12 +41,6 @@
 
 #undef IPC_MESSAGE_EXPORT
 #define IPC_MESSAGE_EXPORT CONTENT_EXPORT
-
-#ifdef IPC_MESSAGE_START
-#error IPC_MESSAGE_START
-#endif
-
-#define IPC_MESSAGE_START InputMsgStart
 
 IPC_ENUM_TRAITS_MAX_VALUE(content::InputEventAckSource,
                           content::InputEventAckSource::MAX_FROM_RENDERER)
@@ -67,9 +61,9 @@ IPC_ENUM_TRAITS_MAX_VALUE(content::InputEventDispatchType,
                           content::InputEventDispatchType::DISPATCH_TYPE_MAX)
 IPC_ENUM_TRAITS_MIN_MAX_VALUE(blink::WebPointerProperties::Button,
                               blink::WebPointerProperties::Button::kNoButton,
-                              blink::WebPointerProperties::Button::kLastEntry)
+                              blink::WebPointerProperties::Button::kMaxValue)
 IPC_ENUM_TRAITS_MAX_VALUE(blink::WebPointerProperties::PointerType,
-                          blink::WebPointerProperties::PointerType::kLastEntry)
+                          blink::WebPointerProperties::PointerType::kMaxValue)
 IPC_ENUM_TRAITS_MAX_VALUE(blink::WebGestureDevice,
                           blink::WebGestureDevice::kMaxValue)
 IPC_ENUM_TRAITS_MAX_VALUE(blink::WebInputEvent::DispatchType,
@@ -153,9 +147,5 @@ IPC_STRUCT_TRAITS_BEGIN(content::SyntheticPointerActionListParams)
   IPC_STRUCT_TRAITS_PARENT(content::SyntheticGestureParams)
   IPC_STRUCT_TRAITS_MEMBER(params)
 IPC_STRUCT_TRAITS_END()
-
-// TODO(dtapuska): Remove this as only OOPIF uses this
-IPC_MESSAGE_ROUTED1(InputMsg_SetFocus,
-                    bool /* enable */)
 
 #endif  // CONTENT_COMMON_INPUT_MESSAGES_H_

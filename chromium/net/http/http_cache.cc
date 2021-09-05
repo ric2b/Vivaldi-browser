@@ -62,11 +62,13 @@ const char HttpCache::kDoubleKeySeparator[] = " ";
 HttpCache::DefaultBackend::DefaultBackend(CacheType type,
                                           BackendType backend_type,
                                           const base::FilePath& path,
-                                          int max_bytes)
+                                          int max_bytes,
+                                          bool hard_reset)
     : type_(type),
       backend_type_(backend_type),
       path_(path),
-      max_bytes_(max_bytes) {}
+      max_bytes_(max_bytes),
+      hard_reset_(hard_reset) {}
 
 HttpCache::DefaultBackend::~DefaultBackend() = default;
 
@@ -74,7 +76,7 @@ HttpCache::DefaultBackend::~DefaultBackend() = default;
 std::unique_ptr<HttpCache::BackendFactory> HttpCache::DefaultBackend::InMemory(
     int max_bytes) {
   return std::make_unique<DefaultBackend>(MEMORY_CACHE, CACHE_BACKEND_DEFAULT,
-                                          base::FilePath(), max_bytes);
+                                          base::FilePath(), max_bytes, false);
 }
 
 int HttpCache::DefaultBackend::CreateBackend(
@@ -82,15 +84,19 @@ int HttpCache::DefaultBackend::CreateBackend(
     std::unique_ptr<disk_cache::Backend>* backend,
     CompletionOnceCallback callback) {
   DCHECK_GE(max_bytes_, 0);
+  disk_cache::ResetHandling reset_handling =
+      hard_reset_ ? disk_cache::ResetHandling::kReset
+                  : disk_cache::ResetHandling::kResetOnError;
+  UMA_HISTOGRAM_BOOLEAN("HttpCache.HardReset", hard_reset_);
 #if defined(OS_ANDROID)
   if (app_status_listener_) {
     return disk_cache::CreateCacheBackend(
-        type_, backend_type_, path_, max_bytes_, true, net_log, backend,
-        std::move(callback), app_status_listener_);
+        type_, backend_type_, path_, max_bytes_, reset_handling, net_log,
+        backend, std::move(callback), app_status_listener_);
   }
 #endif
   return disk_cache::CreateCacheBackend(type_, backend_type_, path_, max_bytes_,
-                                        true, net_log, backend,
+                                        reset_handling, net_log, backend,
                                         std::move(callback));
 }
 
@@ -338,16 +344,17 @@ bool HttpCache::ParseResponseInfo(const char* data, int len,
   return response_info->InitFromPickle(pickle, response_truncated);
 }
 
-void HttpCache::CloseAllConnections() {
+void HttpCache::CloseAllConnections(int net_error,
+                                    const char* net_log_reason_utf8) {
   HttpNetworkSession* session = GetSession();
   if (session)
-    session->CloseAllConnections();
+    session->CloseAllConnections(net_error, net_log_reason_utf8);
 }
 
-void HttpCache::CloseIdleConnections() {
+void HttpCache::CloseIdleConnections(const char* net_log_reason_utf8) {
   HttpNetworkSession* session = GetSession();
   if (session)
-    session->CloseIdleConnections();
+    session->CloseIdleConnections(net_log_reason_utf8);
 }
 
 void HttpCache::OnExternalCacheHit(
@@ -444,6 +451,7 @@ std::string HttpCache::GetResourceURLFromHttpCacheKey(const std::string& key) {
   return key;
 }
 
+// static
 std::string HttpCache::GenerateCacheKeyForTest(const HttpRequestInfo* request) {
   return GenerateCacheKey(request);
 }
@@ -520,6 +528,7 @@ int HttpCache::GetBackendForTransaction(Transaction* transaction) {
   return ERR_IO_PENDING;
 }
 
+// static
 // Generate a key that can be used inside the cache.
 std::string HttpCache::GenerateCacheKey(const HttpRequestInfo* request) {
   std::string isolation_key;
@@ -540,7 +549,6 @@ std::string HttpCache::GenerateCacheKey(const HttpRequestInfo* request) {
   // concatenate with the network isolation key if we are splitting the cache.
   std::string url = isolation_key + HttpUtil::SpecForRequest(request->url);
 
-  DCHECK_NE(DISABLE, mode_);
   // No valid URL can begin with numerals, so we should not have to worry
   // about collisions with normal URLs.
   if (request->upload_data_stream &&

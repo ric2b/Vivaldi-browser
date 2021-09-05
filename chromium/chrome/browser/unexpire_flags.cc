@@ -4,13 +4,39 @@
 
 #include "chrome/browser/unexpire_flags.h"
 
+#include "base/no_destructor.h"
 #include "chrome/browser/expired_flags_list.h"
 
 namespace flags {
 
-const base::Feature kUnexpireFlagsM76{"TemporaryUnexpireFlagsM76",
-                                      base::FEATURE_DISABLED_BY_DEFAULT};
+namespace {
+
+class FlagPredicateSingleton {
+ public:
+  FlagPredicateSingleton() = default;
+  ~FlagPredicateSingleton() = default;
+
+  static const testing::FlagPredicate& GetPredicate() {
+    return GetInstance()->predicate_;
+  }
+  static void SetPredicate(testing::FlagPredicate predicate) {
+    GetInstance()->predicate_ = predicate;
+  }
+
+ private:
+  static FlagPredicateSingleton* GetInstance() {
+    static base::NoDestructor<FlagPredicateSingleton> instance;
+    return instance.get();
+  }
+
+  testing::FlagPredicate predicate_;
+};
+
+}  // namespace
+
 const base::Feature kUnexpireFlagsM78{"TemporaryUnexpireFlagsM78",
+                                      base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kUnexpireFlagsM80{"TemporaryUnexpireFlagsM80",
                                       base::FEATURE_DISABLED_BY_DEFAULT};
 
 bool ExpiryEnabledForMstone(int mstone) {
@@ -30,16 +56,19 @@ bool ExpiryEnabledForMstone(int mstone) {
   // In M80 and later, this will expire any flags whose expiration is <= the
   // current mstone, and this block comment will go away along with these
   // special cases.
-  if (mstone < 76)
+  if (mstone <= 76)
     return true;
-  if (mstone == 76)
-    return !base::FeatureList::IsEnabled(kUnexpireFlagsM76);
   if (mstone == 77 || mstone == 78)
     return !base::FeatureList::IsEnabled(kUnexpireFlagsM78);
+  if (mstone == 79 || mstone == 80)
+    return !base::FeatureList::IsEnabled(kUnexpireFlagsM80);
   return false;
 }
 
 bool IsFlagExpired(const char* internal_name) {
+  if (FlagPredicateSingleton::GetPredicate())
+    return FlagPredicateSingleton::GetPredicate().Run(internal_name);
+
   for (int i = 0; kExpiredFlags[i].name; ++i) {
     const ExpiredFlag* f = &kExpiredFlags[i];
     if (!strcmp(f->name, internal_name) && ExpiryEnabledForMstone(f->mstone))
@@ -47,5 +76,13 @@ bool IsFlagExpired(const char* internal_name) {
   }
   return false;
 }
+
+namespace testing {
+
+void SetFlagExpiredPredicate(FlagPredicate predicate) {
+  FlagPredicateSingleton::SetPredicate(predicate);
+}
+
+}  // namespace testing
 
 }  // namespace flags

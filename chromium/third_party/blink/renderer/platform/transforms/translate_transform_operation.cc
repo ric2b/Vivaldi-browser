@@ -22,8 +22,53 @@
 #include "third_party/blink/renderer/platform/transforms/translate_transform_operation.h"
 
 #include "third_party/blink/renderer/platform/geometry/blend.h"
+#include "third_party/blink/renderer/platform/geometry/calculation_value.h"
 
 namespace blink {
+
+namespace {
+Length AddLengths(const Length& lhs, const Length& rhs) {
+  PixelsAndPercent lhs_pap = lhs.GetPixelsAndPercent();
+  PixelsAndPercent rhs_pap = rhs.GetPixelsAndPercent();
+
+  PixelsAndPercent result = PixelsAndPercent(lhs_pap.pixels + rhs_pap.pixels,
+                                             lhs_pap.percent + rhs_pap.percent);
+  if (result.percent == 0)
+    return Length(result.pixels, Length::kFixed);
+  if (result.pixels == 0)
+    return Length(result.percent, Length::kPercent);
+  return Length(CalculationValue::Create(result, kValueRangeAll));
+}
+
+TransformOperation::OperationType GetTypeForTranslate(const Length& x,
+                                                      const Length& y,
+                                                      double z) {
+  bool x_zero = x.IsZero();
+  bool y_zero = x.IsZero();
+  bool z_zero = !z;
+  if (y_zero && z_zero)
+    return TransformOperation::kTranslateX;
+  if (x_zero && z_zero)
+    return TransformOperation::kTranslateY;
+  if (x_zero && y_zero)
+    return TransformOperation::kTranslateZ;
+  if (z_zero)
+    return TransformOperation::kTranslate;
+  return TransformOperation::kTranslate3D;
+}
+}  // namespace
+
+scoped_refptr<TransformOperation> TranslateTransformOperation::Accumulate(
+    const TransformOperation& other) {
+  DCHECK(other.CanBlendWith(*this));
+
+  const auto& other_op = To<TranslateTransformOperation>(other);
+  Length new_x = AddLengths(x_, other_op.x_);
+  Length new_y = AddLengths(y_, other_op.y_);
+  double new_z = z_ + other_op.z_;
+  return TranslateTransformOperation::Create(
+      new_x, new_y, new_z, GetTypeForTranslate(new_x, new_y, new_z));
+}
 
 scoped_refptr<TransformOperation> TranslateTransformOperation::Blend(
     const TransformOperation* from,
@@ -40,14 +85,16 @@ scoped_refptr<TransformOperation> TranslateTransformOperation::Blend(
         blink::Blend(z_, 0., progress), type_);
   }
 
-  const auto* from_op = ToTranslateTransformOperation(from);
+  const auto* from_op = To<TranslateTransformOperation>(from);
   const Length& from_x = from_op ? from_op->x_ : zero_length;
   const Length& from_y = from_op ? from_op->y_ : zero_length;
   double from_z = from_op ? from_op->z_ : 0;
+
+  bool is_3d = Is3DOperation() || (from && from->Is3DOperation());
   return TranslateTransformOperation::Create(
       x_.Blend(from_x, progress, kValueRangeAll),
       y_.Blend(from_y, progress, kValueRangeAll),
-      blink::Blend(from_z, z_, progress), type_);
+      blink::Blend(from_z, z_, progress), is_3d ? kTranslate3D : kTranslate);
 }
 
 bool TranslateTransformOperation::CanBlendWith(

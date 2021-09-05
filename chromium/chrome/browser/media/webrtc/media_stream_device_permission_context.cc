@@ -16,38 +16,38 @@ namespace {
 
 blink::mojom::FeaturePolicyFeature GetFeaturePolicyFeature(
     ContentSettingsType type) {
-  if (type == CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC)
+  if (type == ContentSettingsType::MEDIASTREAM_MIC)
     return blink::mojom::FeaturePolicyFeature::kMicrophone;
 
-  DCHECK_EQ(CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA, type);
+  DCHECK_EQ(ContentSettingsType::MEDIASTREAM_CAMERA, type);
   return blink::mojom::FeaturePolicyFeature::kCamera;
 }
 
 }  // namespace
 
 MediaStreamDevicePermissionContext::MediaStreamDevicePermissionContext(
-    Profile* profile,
+    content::BrowserContext* browser_context,
     const ContentSettingsType content_settings_type)
-    : PermissionContextBase(profile,
+    : PermissionContextBase(browser_context,
                             content_settings_type,
                             GetFeaturePolicyFeature(content_settings_type)),
       content_settings_type_(content_settings_type) {
-  DCHECK(content_settings_type_ == CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC ||
-         content_settings_type_ == CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA);
+  DCHECK(content_settings_type_ == ContentSettingsType::MEDIASTREAM_MIC ||
+         content_settings_type_ == ContentSettingsType::MEDIASTREAM_CAMERA);
 }
 
 MediaStreamDevicePermissionContext::~MediaStreamDevicePermissionContext() {}
 
 void MediaStreamDevicePermissionContext::DecidePermission(
     content::WebContents* web_contents,
-    const PermissionRequestID& id,
+    const permissions::PermissionRequestID& id,
     const GURL& requesting_origin,
     const GURL& embedding_origin,
     bool user_gesture,
-    BrowserPermissionCallback callback) {
-  PermissionContextBase::DecidePermission(web_contents, id, requesting_origin,
-                                          embedding_origin, user_gesture,
-                                          std::move(callback));
+    permissions::BrowserPermissionCallback callback) {
+  permissions::PermissionContextBase::DecidePermission(
+      web_contents, id, requesting_origin, embedding_origin, user_gesture,
+      std::move(callback));
 }
 
 ContentSetting MediaStreamDevicePermissionContext::GetPermissionStatusInternal(
@@ -58,17 +58,18 @@ ContentSetting MediaStreamDevicePermissionContext::GetPermissionStatusInternal(
   // crbug.com/244389.
   const char* policy_name = nullptr;
   const char* urls_policy_name = nullptr;
-  if (content_settings_type_ == CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC) {
+  if (content_settings_type_ == ContentSettingsType::MEDIASTREAM_MIC) {
     policy_name = prefs::kAudioCaptureAllowed;
     urls_policy_name = prefs::kAudioCaptureAllowedUrls;
   } else {
-    DCHECK(content_settings_type_ == CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA);
+    DCHECK(content_settings_type_ == ContentSettingsType::MEDIASTREAM_CAMERA);
     policy_name = prefs::kVideoCaptureAllowed;
     urls_policy_name = prefs::kVideoCaptureAllowedUrls;
   }
 
-  MediaStreamDevicePolicy policy = GetDevicePolicy(
-      profile(), requesting_origin, policy_name, urls_policy_name);
+  MediaStreamDevicePolicy policy =
+      GetDevicePolicy(Profile::FromBrowserContext(browser_context()),
+                      requesting_origin, policy_name, urls_policy_name);
 
   switch (policy) {
     case ALWAYS_DENY:
@@ -81,8 +82,9 @@ ContentSetting MediaStreamDevicePermissionContext::GetPermissionStatusInternal(
 
   // Check the content setting. TODO(raymes): currently mic/camera permission
   // doesn't consider the embedder.
-  ContentSetting setting = PermissionContextBase::GetPermissionStatusInternal(
-      render_frame_host, requesting_origin, requesting_origin);
+  ContentSetting setting =
+      permissions::PermissionContextBase::GetPermissionStatusInternal(
+          render_frame_host, requesting_origin, requesting_origin);
 
   if (setting == CONTENT_SETTING_DEFAULT)
     setting = CONTENT_SETTING_ASK;

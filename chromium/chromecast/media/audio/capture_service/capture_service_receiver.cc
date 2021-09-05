@@ -12,24 +12,15 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/message_loop/message_pump_type.h"
+#include "base/synchronization/waitable_event.h"
 #include "base/threading/sequenced_task_runner_handle.h"
-#include "chromecast/media/audio/audio_buildflags.h"
 #include "chromecast/media/audio/capture_service/constants.h"
-#include "chromecast/media/audio/capture_service/message_parsing_util.h"
+#include "chromecast/media/audio/capture_service/message_parsing_utils.h"
+#include "chromecast/media/audio/mixer_service/audio_socket_service.h"
 #include "chromecast/net/small_message_socket.h"
 #include "media/base/limits.h"
 #include "net/base/io_buffer.h"
 #include "net/socket/stream_socket.h"
-
-#if BUILDFLAG(USE_UNIX_SOCKETS)
-#include "net/socket/unix_domain_client_socket_posix.h"
-#else
-#include "net/base/address_list.h"
-#include "net/base/ip_address.h"
-#include "net/base/ip_endpoint.h"
-#include "net/log/net_log_source.h"
-#include "net/socket/tcp_client_socket.h"
-#endif  // BUILDFLAG(USE_UNIX_SOCKETS)
 
 // Helper macro to post tasks to the io thread. It is safe to use unretained
 // |this|, since |this| owns the thread.
@@ -44,47 +35,88 @@
 namespace chromecast {
 namespace media {
 
-class CaptureServiceReceiver::Socket : public SmallMessageSocket {
+class CaptureServiceReceiver::Socket : public SmallMessageSocket::Delegate {
  public:
-  Socket(std::unique_ptr<net::StreamSocket> socket, int channels);
+  Socket(std::unique_ptr<net::StreamSocket> socket,
+         capture_service::StreamType stream_type,
+         int sample_rate,
+         int channels,
+         int frames_per_buffer,
+         ::media::AudioInputStream::AudioInputCallback* input_callback);
   ~Socket() override;
 
-  void Start(::media::AudioInputStream::AudioInputCallback* input_callback);
-
  private:
-  // SmallMessageSocket implementation:
+  // SmallMessageSocket::Delegate implementation:
+  void OnSendUnblocked() override;
   void OnError(int error) override;
   void OnEndOfStream() override;
-  bool OnMessage(char* data, int size) override;
+  bool OnMessage(char* data, size_t size) override;
 
+  bool SendRequest();
   void OnInactivityTimeout();
-  bool HandleAudio(std::unique_ptr<::media::AudioBus> audio, int64_t timestamp);
+  bool HandleAudio(int64_t timestamp);
   void ReportErrorAndStop();
 
-  // Number of audio capture channels that audio manager defines.
-  const int channels_;
+  SmallMessageSocket socket_;
+
+  const capture_service::StreamType stream_type_;
+  const int sample_rate_;
+  const std::unique_ptr<::media::AudioBus> audio_bus_;
 
   ::media::AudioInputStream::AudioInputCallback* input_callback_;
+
+  scoped_refptr<net::IOBufferWithSize> buffer_;
 
   DISALLOW_COPY_AND_ASSIGN(Socket);
 };
 
 CaptureServiceReceiver::Socket::Socket(
     std::unique_ptr<net::StreamSocket> socket,
-    int channels)
-    : SmallMessageSocket(std::move(socket)),
-      channels_(channels),
-      input_callback_(nullptr) {
-  DCHECK_GT(channels_, 0);
-  DCHECK_LE(channels_, ::media::limits::kMaxChannels);
+    capture_service::StreamType stream_type,
+    int sample_rate,
+    int channels,
+    int frames_per_buffer,
+    ::media::AudioInputStream::AudioInputCallback* input_callback)
+    : socket_(this, std::move(socket)),
+      stream_type_(stream_type),
+      sample_rate_(sample_rate),
+      audio_bus_(::media::AudioBus::Create(channels, frames_per_buffer)),
+      input_callback_(input_callback) {
+  DCHECK(input_callback_);
+  if (!SendRequest()) {
+    ReportErrorAndStop();
+    return;
+  }
+  socket_.ReceiveMessages();
 }
 
 CaptureServiceReceiver::Socket::~Socket() = default;
 
-void CaptureServiceReceiver::Socket::Start(
-    ::media::AudioInputStream::AudioInputCallback* input_callback) {
-  input_callback_ = input_callback;
-  ReceiveMessages();
+bool CaptureServiceReceiver::Socket::SendRequest() {
+  capture_service::PacketInfo info;
+  info.message_type = capture_service::MessageType::kAck;
+  info.stream_info.stream_type = stream_type_;
+  info.stream_info.sample_rate = sample_rate_;
+  info.stream_info.num_channels = audio_bus_->channels();
+  info.stream_info.frames_per_buffer = audio_bus_->frames();
+  // Format and timestamp doesn't matter in the request.
+  info.stream_info.sample_format = capture_service::SampleFormat::LAST_FORMAT;
+  info.timestamp_us = 0;
+  buffer_ =
+      capture_service::MakeMessage(info, nullptr /* data */, 0 /* data_size */);
+  if (!buffer_) {
+    return false;
+  }
+  if (socket_.SendBuffer(buffer_.get(), buffer_->size())) {
+    buffer_ = nullptr;
+  }
+  return true;
+}
+
+void CaptureServiceReceiver::Socket::OnSendUnblocked() {
+  if (buffer_ && socket_.SendBuffer(buffer_.get(), buffer_->size())) {
+    buffer_ = nullptr;
+  }
 }
 
 void CaptureServiceReceiver::Socket::ReportErrorAndStop() {
@@ -104,31 +136,33 @@ void CaptureServiceReceiver::Socket::OnEndOfStream() {
   ReportErrorAndStop();
 }
 
-bool CaptureServiceReceiver::Socket::OnMessage(char* data, int size) {
-  // TODO(https://crbug.com/982014): Remove the DCHECK once using unsigned
-  // |size|.
-  DCHECK_GT(size, 0);
-  int64_t timestamp = 0;
-  auto audio = capture_service::ReadDataToAudioBus(data, size, &timestamp);
-  if (!audio.has_value()) {
+bool CaptureServiceReceiver::Socket::OnMessage(char* data, size_t size) {
+  capture_service::PacketInfo info;
+  if (!capture_service::ReadHeader(data, size, &info)) {
     ReportErrorAndStop();
     return false;
   }
-  return HandleAudio(std::move(audio.value()), timestamp);
+  if (info.message_type != capture_service::MessageType::kAudio) {
+    LOG(WARNING) << "Received non-audio message, ignored.";
+    return true;
+  }
+  DCHECK_EQ(info.stream_info.stream_type, stream_type_);
+  if (!capture_service::ReadDataToAudioBus(info.stream_info, data, size,
+                                           audio_bus_.get())) {
+    ReportErrorAndStop();
+    return false;
+  }
+  return HandleAudio(info.timestamp_us);
 }
 
-bool CaptureServiceReceiver::Socket::HandleAudio(
-    std::unique_ptr<::media::AudioBus> audio,
-    int64_t timestamp) {
+bool CaptureServiceReceiver::Socket::HandleAudio(int64_t timestamp) {
   if (!input_callback_) {
     LOG(INFO) << "Received audio before stream metadata; ignoring";
     return false;
   }
 
-  DCHECK(audio);
-  DCHECK_EQ(channels_, audio->channels());
   input_callback_->OnData(
-      audio.get(),
+      audio_bus_.get(),
       base::TimeTicks() + base::TimeDelta::FromMicroseconds(timestamp),
       /* volume =*/1.0);
   return true;
@@ -138,8 +172,15 @@ bool CaptureServiceReceiver::Socket::HandleAudio(
 constexpr base::TimeDelta CaptureServiceReceiver::kConnectTimeout;
 
 CaptureServiceReceiver::CaptureServiceReceiver(
-    const ::media::AudioParameters& audio_params)
-    : audio_params_(audio_params), io_thread_(__func__) {
+    capture_service::StreamType stream_type,
+    int sample_rate,
+    int channels,
+    int frames_per_buffer)
+    : stream_type_(stream_type),
+      sample_rate_(sample_rate),
+      channels_(channels),
+      frames_per_buffer_(frames_per_buffer),
+      io_thread_(__func__) {
   base::Thread::Options options;
   options.message_pump_type = base::MessagePumpType::IO;
   // TODO(b/137106361): Tweak the thread priority once the thread priority for
@@ -159,20 +200,10 @@ void CaptureServiceReceiver::Start(
     ::media::AudioInputStream::AudioInputCallback* input_callback) {
   ENSURE_ON_IO_THREAD(Start, input_callback);
 
-#if BUILDFLAG(USE_UNIX_SOCKETS)
   std::string path = capture_service::kDefaultUnixDomainSocketPath;
-  std::unique_ptr<net::StreamSocket> connecting_socket =
-      std::make_unique<net::UnixDomainClientSocket>(
-          path, true /* use_abstract_namespace */);
-#else   // BUILDFLAG(USE_UNIX_SOCKETS)
   int port = capture_service::kDefaultTcpPort;
-  net::IPEndPoint endpoint(net::IPAddress::IPv4Localhost(), port);
-  std::unique_ptr<net::StreamSocket> connecting_socket =
-      std::make_unique<net::TCPClientSocket>(
-          net::AddressList(endpoint), nullptr, nullptr, net::NetLogSource());
-#endif  // BUILDFLAG(USE_UNIX_SOCKETS)
 
-  StartWithSocket(input_callback, std::move(connecting_socket));
+  StartWithSocket(input_callback, AudioSocketService::Connect(path, port));
 }
 
 void CaptureServiceReceiver::StartWithSocket(
@@ -213,8 +244,8 @@ void CaptureServiceReceiver::OnConnected(
 
   if (result == net::OK) {
     socket_ = std::make_unique<Socket>(std::move(connecting_socket_),
-                                       audio_params_.channels());
-    socket_->Start(input_callback);
+                                       stream_type_, sample_rate_, channels_,
+                                       frames_per_buffer_, input_callback);
   } else {
     LOG(INFO) << "Connecting failed: " << net::ErrorToString(result);
     input_callback->OnError();
@@ -234,9 +265,16 @@ void CaptureServiceReceiver::OnConnectTimeout(
 }
 
 void CaptureServiceReceiver::Stop() {
-  ENSURE_ON_IO_THREAD(Stop);
+  base::WaitableEvent finished;
+  StopOnTaskRunner(&finished);
+  finished.Wait();
+}
+
+void CaptureServiceReceiver::StopOnTaskRunner(base::WaitableEvent* finished) {
+  ENSURE_ON_IO_THREAD(StopOnTaskRunner, finished);
   connecting_socket_.reset();
   socket_.reset();
+  finished->Signal();
 }
 
 void CaptureServiceReceiver::SetTaskRunnerForTest(

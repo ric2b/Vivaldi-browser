@@ -26,7 +26,7 @@ class SuggestionsSourceWrapper : public web::URLDataSourceIOS {
   std::string GetSource() const override;
   void StartDataRequest(
       const std::string& path,
-      const web::URLDataSourceIOS::GotDataCallback& callback) override;
+      web::URLDataSourceIOS::GotDataCallback callback) override;
   std::string GetMimeType(const std::string& path) const override;
 
  private:
@@ -49,8 +49,8 @@ std::string SuggestionsSourceWrapper::GetSource() const {
 
 void SuggestionsSourceWrapper::StartDataRequest(
     const std::string& path,
-    const web::URLDataSourceIOS::GotDataCallback& callback) {
-  suggestions_source_.StartDataRequest(path, callback);
+    web::URLDataSourceIOS::GotDataCallback callback) {
+  suggestions_source_.StartDataRequest(path, std::move(callback));
 }
 
 std::string SuggestionsSourceWrapper::GetMimeType(
@@ -62,8 +62,7 @@ std::string SuggestionsSourceWrapper::GetMimeType(
 
 SuggestionsUI::SuggestionsUI(web::WebUIIOS* web_ui)
     : web::WebUIIOSController(web_ui) {
-  ios::ChromeBrowserState* browser_state =
-      ios::ChromeBrowserState::FromWebUIIOS(web_ui);
+  ChromeBrowserState* browser_state = ChromeBrowserState::FromWebUIIOS(web_ui);
   web::URLDataSourceIOS::Add(
       browser_state,
       new SuggestionsSourceWrapper(

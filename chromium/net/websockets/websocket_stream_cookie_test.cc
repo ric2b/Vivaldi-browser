@@ -37,7 +37,8 @@ class TestBase : public WebSocketStreamCreateTestBase {
  public:
   void CreateAndConnect(const GURL& url,
                         const url::Origin& origin,
-                        const GURL& site_for_cookies,
+                        const SiteForCookies& site_for_cookies,
+                        const net::NetworkIsolationKey& network_isolation_key,
                         const std::string& cookie_header,
                         const std::string& response_body) {
     // We assume cookie_header ends with CRLF if not empty, as
@@ -52,7 +53,8 @@ class TestBase : public WebSocketStreamCreateTestBase {
                                             std::string()),
         response_body);
     CreateAndConnectStream(url, NoSubProtocols(), origin, site_for_cookies,
-                           HttpRequestHeaders(), nullptr);
+                           network_isolation_key, HttpRequestHeaders(),
+                           nullptr);
   }
 
   std::string AddCRLFIfNotEmpty(const std::string& s) {
@@ -140,7 +142,8 @@ TEST_P(WebSocketStreamClientUseCookieTest, ClientUseCookie) {
   const GURL cookie_url(GetParam().cookie_url);
   const url::Origin origin =
       url::Origin::Create(GURL("http://www.example.com"));
-  const GURL site_for_cookies("http://www.example.com/");
+  const SiteForCookies site_for_cookies = SiteForCookies::FromOrigin(origin);
+  const net::NetworkIsolationKey network_isolation_key(origin, origin);
   const std::string cookie_line(GetParam().cookie_line);
   const std::string cookie_header(AddCRLFIfNotEmpty(GetParam().cookie_header));
 
@@ -154,7 +157,8 @@ TEST_P(WebSocketStreamClientUseCookieTest, ClientUseCookie) {
       CanonicalCookie::Create(cookie_url, cookie_line, base::Time::Now(),
                               base::nullopt /* server_time */);
   store->SetCanonicalCookieAsync(
-      std::move(cookie), cookie_url.scheme(), CookieOptions(),
+      std::move(cookie), cookie_url.scheme(),
+      net::CookieOptions::MakeAllInclusive(),
       base::BindOnce(&SetCookieHelperFunction, run_loop.QuitClosure(),
                      weak_is_called.GetWeakPtr(),
                      weak_set_cookie_result.GetWeakPtr()));
@@ -162,8 +166,8 @@ TEST_P(WebSocketStreamClientUseCookieTest, ClientUseCookie) {
   ASSERT_TRUE(is_called);
   ASSERT_TRUE(set_cookie_result);
 
-  CreateAndConnect(url, origin, site_for_cookies, cookie_header,
-                   WebSocketStandardResponse(""));
+  CreateAndConnect(url, origin, site_for_cookies, network_isolation_key,
+                   cookie_header, WebSocketStandardResponse(""));
   WaitUntilConnectDone();
   EXPECT_FALSE(has_failed());
 }
@@ -177,7 +181,8 @@ TEST_P(WebSocketStreamServerSetCookieTest, ServerSetCookie) {
   const GURL cookie_url(GetParam().cookie_url);
   const url::Origin origin =
       url::Origin::Create(GURL("http://www.example.com"));
-  const GURL site_for_cookies("http://www.example.com/");
+  const SiteForCookies site_for_cookies = SiteForCookies::FromOrigin(origin);
+  const net::NetworkIsolationKey network_isolation_key(origin, origin);
   const std::string cookie_line(GetParam().cookie_line);
   const std::string cookie_header(AddCRLFIfNotEmpty(GetParam().cookie_header));
 
@@ -193,7 +198,8 @@ TEST_P(WebSocketStreamServerSetCookieTest, ServerSetCookie) {
   CookieStore* store =
       url_request_context_host_.GetURLRequestContext()->cookie_store();
 
-  CreateAndConnect(url, origin, site_for_cookies, "", response);
+  CreateAndConnect(url, origin, site_for_cookies, network_isolation_key, "",
+                   response);
   WaitUntilConnectDone();
   EXPECT_FALSE(has_failed());
 
@@ -204,7 +210,7 @@ TEST_P(WebSocketStreamServerSetCookieTest, ServerSetCookie) {
       &get_cookie_list_result);
   base::RunLoop run_loop;
   store->GetCookieListWithOptionsAsync(
-      cookie_url, CookieOptions(),
+      cookie_url, net::CookieOptions::MakeAllInclusive(),
       base::BindOnce(&GetCookieListHelperFunction, run_loop.QuitClosure(),
                      weak_is_called.GetWeakPtr(),
                      weak_get_cookie_list_result.GetWeakPtr()));

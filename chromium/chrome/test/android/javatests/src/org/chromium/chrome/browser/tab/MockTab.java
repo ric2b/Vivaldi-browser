@@ -6,21 +6,19 @@ package org.chromium.chrome.browser.tab;
 
 import androidx.annotation.Nullable;
 
-import org.chromium.chrome.browser.tab.TabUma.TabCreationState;
-import org.chromium.chrome.browser.tabmodel.TabLaunchType;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.WebContents;
 
 /**
  * Tab used for various testing purposes.
  */
-public class MockTab extends Tab {
+public class MockTab extends TabImpl {
     /**
      * Create a new Tab for testing and initializes Tab UserData objects.
      */
     public static Tab createAndInitialize(int id, boolean incognito) {
-        Tab tab = new MockTab(id, incognito);
-        tab.initialize(null, null, null, null, null, false, null, false);
+        TabImpl tab = new MockTab(id, incognito);
+        tab.initialize(null, null, null, null, null, false, null);
         return tab;
     }
 
@@ -40,7 +38,7 @@ public class MockTab extends Tab {
     public void initialize(Tab parent, @Nullable @TabCreationState Integer creationState,
             LoadUrlParams loadUrlParams, WebContents webContents,
             @Nullable TabDelegateFactory delegateFactory, boolean initiallyHidden,
-            TabState tabState, boolean unfreeze) {
-        TabHelpers.initTabHelpers(this, parent, creationState);
+            TabState tabState) {
+        TabHelpers.initTabHelpers(this, parent);
     }
 }

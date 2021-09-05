@@ -19,6 +19,7 @@
 #include "third_party/blink/renderer/modules/manifest/manifest_parser.h"
 #include "third_party/blink/renderer/modules/manifest/manifest_type_converters.h"
 #include "third_party/blink/renderer/modules/manifest/manifest_uma_util.h"
+#include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_response.h"
 
 namespace blink {
@@ -49,9 +50,10 @@ void ManifestManager::ProvideTo(LocalFrame& frame) {
 
 ManifestManager::ManifestManager(LocalFrame& frame)
     : Supplement<LocalFrame>(frame),
-      ContextLifecycleObserver(frame.GetDocument()),
+      ExecutionContextLifecycleObserver(frame.GetDocument()),
       may_have_manifest_(false),
-      manifest_dirty_(true) {
+      manifest_dirty_(true),
+      receivers_(GetExecutionContext()) {
   if (frame.IsMainFrame()) {
     manifest_change_notifier_ =
         MakeGarbageCollected<ManifestChangeNotifier>(frame);
@@ -81,6 +83,9 @@ void ManifestManager::RequestManifestDebugInfo(
          const mojom::blink::ManifestPtr& manifest,
          const mojom::blink::ManifestDebugInfo* debug_info) {
         std::move(callback).Run(manifest_url,
+                                manifest.is_null()
+                                    ? mojom::blink::Manifest::New()
+                                    : manifest->Clone(),
                                 debug_info ? debug_info->Clone() : nullptr);
       },
       std::move(callback)));
@@ -100,7 +105,7 @@ void ManifestManager::RequestManifestForTesting(
 bool ManifestManager::CanFetchManifest() {
   if (!GetSupplementable())
     return false;
-  // Do not fetch the manifest if we are on an opqaue origin.
+  // Do not fetch the manifest if we are on an opaque origin.
   return !GetSupplementable()->GetDocument()->GetSecurityOrigin()->IsOpaque();
 }
 
@@ -149,7 +154,7 @@ void ManifestManager::DidCommitLoad() {
 
 void ManifestManager::FetchManifest() {
   if (!CanFetchManifest()) {
-    ManifestUmaUtil::FetchFailed(ManifestUmaUtil::FETCH_FROM_UNIQUE_ORIGIN);
+    ManifestUmaUtil::FetchFailed(ManifestUmaUtil::FETCH_FROM_OPAQUE_ORIGIN);
     ResolveCallbacks(ResolveStateFailure);
     return;
   }
@@ -191,11 +196,12 @@ void ManifestManager::OnManifestFetchComplete(const KURL& document_url,
     auto location = std::make_unique<SourceLocation>(
         ManifestURL().GetString(), error->line, error->column, nullptr, 0);
 
-    GetSupplementable()->Console().AddMessage(ConsoleMessage::Create(
-        mojom::ConsoleMessageSource::kOther,
-        error->critical ? mojom::ConsoleMessageLevel::kError
-                        : mojom::ConsoleMessageLevel::kWarning,
-        "Manifest: " + error->message, std::move(location)));
+    GetSupplementable()->Console().AddMessage(
+        MakeGarbageCollected<ConsoleMessage>(
+            mojom::ConsoleMessageSource::kOther,
+            error->critical ? mojom::ConsoleMessageLevel::kError
+                            : mojom::ConsoleMessageLevel::kWarning,
+            "Manifest: " + error->message, std::move(location)));
   }
 
   // Having errors while parsing the manifest doesn't mean the manifest parsing
@@ -251,10 +257,13 @@ bool ManifestManager::ManifestUseCredentials() const {
 
 void ManifestManager::BindReceiver(
     mojo::PendingReceiver<mojom::blink::ManifestManager> receiver) {
-  receivers_.Add(this, std::move(receiver));
+  receivers_.Add(
+      this, std::move(receiver),
+      GetSupplementable()->GetDocument()->ToExecutionContext()->GetTaskRunner(
+          TaskType::kNetworking));
 }
 
-void ManifestManager::ContextDestroyed(ExecutionContext*) {
+void ManifestManager::ContextDestroyed() {
   if (fetcher_)
     fetcher_->Cancel();
 
@@ -262,19 +271,14 @@ void ManifestManager::ContextDestroyed(ExecutionContext*) {
   // will be aware of the RenderFrame dying and should act on that. Consumers
   // in the renderer process should be correctly notified.
   ResolveCallbacks(ResolveStateFailure);
-
-  receivers_.Clear();
 }
 
-void ManifestManager::Prefinalize() {
-  receivers_.Clear();
-}
-
-void ManifestManager::Trace(blink::Visitor* visitor) {
+void ManifestManager::Trace(Visitor* visitor) {
   visitor->Trace(fetcher_);
   visitor->Trace(manifest_change_notifier_);
+  visitor->Trace(receivers_);
   Supplement<LocalFrame>::Trace(visitor);
-  ContextLifecycleObserver::Trace(visitor);
+  ExecutionContextLifecycleObserver::Trace(visitor);
 }
 
 }  // namespace blink

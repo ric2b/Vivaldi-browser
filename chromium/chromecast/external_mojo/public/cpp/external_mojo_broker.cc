@@ -22,7 +22,6 @@
 #include "base/token.h"
 #include "chromecast/external_mojo/public/cpp/common.h"
 #include "chromecast/external_mojo/public/mojom/connector.mojom.h"
-#include "mojo/public/cpp/bindings/binding_set.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -120,8 +119,9 @@ class ExternalMojoBroker::ConnectorImpl : public mojom::ExternalConnector {
       DCHECK(connector_);
     }
 
-    void AddBinding(service_manager::mojom::ConnectorRequest request) {
-      bindings_.AddBinding(this, std::move(request));
+    void AddReceiver(
+        mojo::PendingReceiver<service_manager::mojom::Connector> receiver) {
+      receivers_.Add(this, std::move(receiver));
     }
 
    private:
@@ -158,21 +158,14 @@ class ExternalMojoBroker::ConnectorImpl : public mojom::ExternalConnector {
       NOTIMPLEMENTED();
     }
 
-    void Clone(service_manager::mojom::ConnectorRequest request) override {
-      AddBinding(std::move(request));
-    }
-
-    void FilterInterfaces(
-        const std::string& spec,
-        const ::service_manager::Identity& source,
-        ::service_manager::mojom::InterfaceProviderRequest source_request,
-        ::service_manager::mojom::InterfaceProviderPtr target) override {
-      NOTREACHED() << "Call to deprecated FilterInterfaces";
+    void Clone(mojo::PendingReceiver<service_manager::mojom::Connector>
+                   receiver) override {
+      AddReceiver(std::move(receiver));
     }
 
     ExternalMojoBroker::ConnectorImpl* const connector_;
 
-    mojo::BindingSet<service_manager::mojom::Connector> bindings_;
+    mojo::ReceiverSet<service_manager::mojom::Connector> receivers_;
   };
 
   struct PendingBindRequest {
@@ -282,13 +275,15 @@ class ExternalMojoBroker::ConnectorImpl : public mojom::ExternalConnector {
   void BindChromiumConnector(
       mojo::ScopedMessagePipeHandle interface_pipe) override {
     if (!connector_) {
-      connector_facade_.AddBinding(
-          service_manager::mojom::ConnectorRequest(std::move(interface_pipe)));
+      connector_facade_.AddReceiver(
+          mojo::PendingReceiver<service_manager::mojom::Connector>(
+              std::move(interface_pipe)));
       return;
     }
 
-    connector_->BindConnectorRequest(
-        service_manager::mojom::ConnectorRequest(std::move(interface_pipe)));
+    connector_->BindConnectorReceiver(
+        mojo::PendingReceiver<service_manager::mojom::Connector>(
+            std::move(interface_pipe)));
   }
 
   void QueryServiceList(QueryServiceListCallback callback) override {

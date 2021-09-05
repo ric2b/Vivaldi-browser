@@ -18,7 +18,7 @@ namespace content {
 
 FlingingRenderer::FlingingRenderer(
     std::unique_ptr<media::FlingingController> controller,
-    ClientExtensionPtr client_extension)
+    mojo::PendingRemote<ClientExtension> client_extension)
     : client_extension_(std::move(client_extension)),
       controller_(std::move(controller)) {
   controller_->AddMediaStatusObserver(this);
@@ -32,7 +32,7 @@ FlingingRenderer::~FlingingRenderer() {
 std::unique_ptr<FlingingRenderer> FlingingRenderer::Create(
     RenderFrameHost* render_frame_host,
     const std::string& presentation_id,
-    ClientExtensionPtr client_extension) {
+    mojo::PendingRemote<ClientExtension> client_extension) {
   DVLOG(1) << __func__;
 
   ContentClient* content_client = GetContentClient();
@@ -66,22 +66,25 @@ std::unique_ptr<FlingingRenderer> FlingingRenderer::Create(
 // media::Renderer implementation
 void FlingingRenderer::Initialize(media::MediaResource* media_resource,
                                   media::RendererClient* client,
-                                  const media::PipelineStatusCB& init_cb) {
+                                  media::PipelineStatusCallback init_cb) {
   DVLOG(2) << __func__;
   client_ = client;
-  init_cb.Run(media::PIPELINE_OK);
+  std::move(init_cb).Run(media::PIPELINE_OK);
 }
 
 void FlingingRenderer::SetCdm(media::CdmContext* cdm_context,
-                              const media::CdmAttachedCB& cdm_attached_cb) {
+                              media::CdmAttachedCB cdm_attached_cb) {
   // The flinging renderer does not support playing encrypted content.
   NOTREACHED();
 }
 
-void FlingingRenderer::Flush(const base::Closure& flush_cb) {
+void FlingingRenderer::SetLatencyHint(
+    base::Optional<base::TimeDelta> latency_hint) {}
+
+void FlingingRenderer::Flush(base::OnceClosure flush_cb) {
   DVLOG(2) << __func__;
   // There is nothing to reset, we can no-op the call.
-  flush_cb.Run();
+  std::move(flush_cb).Run();
 }
 
 void FlingingRenderer::StartPlayingFrom(base::TimeDelta time) {

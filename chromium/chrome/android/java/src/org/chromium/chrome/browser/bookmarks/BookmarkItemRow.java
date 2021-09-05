@@ -11,14 +11,13 @@ import android.util.AttributeSet;
 
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkItem;
-import org.chromium.chrome.browser.favicon.FaviconUtils;
-import org.chromium.chrome.browser.favicon.IconType;
-import org.chromium.chrome.browser.favicon.LargeIconBridge.LargeIconCallback;
-import org.chromium.chrome.browser.ui.widget.RoundedIconGenerator;
+import org.chromium.chrome.browser.ui.favicon.FaviconUtils;
+import org.chromium.chrome.browser.ui.favicon.IconType;
+import org.chromium.chrome.browser.ui.favicon.LargeIconBridge.LargeIconCallback;
+import org.chromium.chrome.browser.ui.favicon.RoundedIconGenerator;
 import org.chromium.components.bookmarks.BookmarkId;
 
 import org.chromium.chrome.browser.ChromeApplication;
-import org.vivaldi.browser.common.VivaldiUtils;
 
 /**
  * A row view that shows bookmark info in the bookmarks UI.
@@ -44,13 +43,9 @@ public class BookmarkItemRow extends BookmarkRow implements LargeIconCallback {
 
     @Override
     public void onClick() {
-        int launchLocation = -1;
         switch (mDelegate.getCurrentState()) {
             case BookmarkUIState.STATE_FOLDER:
-                launchLocation = BookmarkLaunchLocation.FOLDER;
-                break;
             case BookmarkUIState.STATE_SEARCHING:
-                launchLocation = BookmarkLaunchLocation.SEARCH;
                 break;
             case BookmarkUIState.STATE_LOADING:
                 assert false :
@@ -60,17 +55,17 @@ public class BookmarkItemRow extends BookmarkRow implements LargeIconCallback {
                 assert false : "State not valid";
                 break;
         }
-        mDelegate.openBookmark(mBookmarkId, launchLocation);
+        mDelegate.openBookmark(mBookmarkId);
     }
 
     @Override
     BookmarkItem setBookmarkId(BookmarkId bookmarkId) {
         BookmarkItem item = super.setBookmarkId(bookmarkId);
         mUrl = item.getUrl();
-        mIconView.setImageDrawable(null);
+        mStartIconView.setImageDrawable(null);
         mTitleView.setText(item.getTitle());
         mDescriptionView.setText(item.getUrlForDisplay());
-        mDelegate.getLargeIconBridge().getLargeIconForUrl(mUrl, mMinIconSize, this);
+        mDelegate.getLargeIconBridge().getLargeIconForStringUrl(mUrl, mMinIconSize, this);
         return item;
     }
 
@@ -85,7 +80,7 @@ public class BookmarkItemRow extends BookmarkRow implements LargeIconCallback {
         }
         Drawable iconDrawable = FaviconUtils.getIconDrawableWithoutFilter(
                 icon, mUrl, fallbackColor, mIconGenerator, getResources(), mDisplayedIconSize);
-        setIconDrawable(iconDrawable);
+        setStartIconDrawable(iconDrawable);
     }
 
     // Vivaldi
@@ -95,7 +90,7 @@ public class BookmarkItemRow extends BookmarkRow implements LargeIconCallback {
                 getResources().getDimensionPixelSize(R.dimen.panels_favicon_size);
         Drawable iconDrawable = FaviconUtils.getIconDrawableWithoutFilter(
                 icon, mUrl, fallbackColor, mIconGenerator, getResources(), vivaldiIconSize);
-        setIconDrawable(iconDrawable);
+        setStartIconDrawable(iconDrawable);
     }
 
 }

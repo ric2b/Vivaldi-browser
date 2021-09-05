@@ -58,17 +58,9 @@ void StandaloneConnectorImpl::RegisterServiceInstance(
   std::move(callback).Run(mojom::ConnectResult::INVALID_ARGUMENT);
 }
 
-void StandaloneConnectorImpl::Clone(mojom::ConnectorRequest request) {
-  receivers_.Add(this, std::move(request));
-}
-
-void StandaloneConnectorImpl::FilterInterfaces(
-    const std::string& spec,
-    const Identity& source,
-    mojom::InterfaceProviderRequest source_request,
-    mojom::InterfaceProviderPtr target) {
-  NOTIMPLEMENTED()
-      << "FilterInterfaces is not supported by StandaloneConnectorImpl.";
+void StandaloneConnectorImpl::Clone(
+    mojo::PendingReceiver<mojom::Connector> receiver) {
+  receivers_.Add(this, std::move(receiver));
 }
 
 }  // namespace service_manager

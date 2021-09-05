@@ -15,8 +15,10 @@
 #include "base/files/file_util.h"
 #include "base/guid.h"
 #include "base/macros.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
+#include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/task_runner_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/sync_file_system/file_change.h"
@@ -26,11 +28,11 @@
 #include "chrome/browser/sync_file_system/syncable_file_system_util.h"
 #include "storage/browser/blob/blob_storage_context.h"
 #include "storage/browser/blob/shareable_file_reference.h"
-#include "storage/browser/fileapi/external_mount_points.h"
-#include "storage/browser/fileapi/file_system_backend.h"
-#include "storage/browser/fileapi/file_system_context.h"
-#include "storage/browser/fileapi/file_system_operation_context.h"
-#include "storage/browser/fileapi/file_system_operation_runner.h"
+#include "storage/browser/file_system/external_mount_points.h"
+#include "storage/browser/file_system/file_system_backend.h"
+#include "storage/browser/file_system/file_system_context.h"
+#include "storage/browser/file_system/file_system_operation_context.h"
+#include "storage/browser/file_system/file_system_operation_runner.h"
 #include "storage/browser/quota/quota_manager.h"
 #include "storage/browser/test/mock_blob_util.h"
 #include "storage/browser/test/mock_special_storage_policy.h"
@@ -161,7 +163,7 @@ class WriteHelper {
                                       base::GenerateGUID(),
                                       blob_data)) {}
 
-  ~WriteHelper() {}
+  ~WriteHelper() = default;
 
   ScopedTextBlob* scoped_text_blob() const { return blob_data_.get(); }
 
@@ -223,14 +225,14 @@ CannedSyncableFileSystem::CannedSyncableFileSystem(
       is_filesystem_opened_(false),
       sync_status_observers_(new ObserverList) {}
 
-CannedSyncableFileSystem::~CannedSyncableFileSystem() {}
+CannedSyncableFileSystem::~CannedSyncableFileSystem() = default;
 
 void CannedSyncableFileSystem::SetUp(QuotaMode quota_mode) {
   ASSERT_FALSE(is_filesystem_set_up_);
   ASSERT_TRUE(data_dir_.CreateUniqueTempDir());
 
-  scoped_refptr<storage::SpecialStoragePolicy> storage_policy =
-      new content::MockSpecialStoragePolicy();
+  auto storage_policy =
+      base::MakeRefCounted<storage::MockSpecialStoragePolicy>();
 
   if (quota_mode == QUOTA_ENABLED) {
     quota_manager_ = new QuotaManager(
@@ -266,6 +268,7 @@ void CannedSyncableFileSystem::TearDown() {
   // Make sure we give some more time to finish tasks on other threads.
   EnsureLastTaskRuns(io_task_runner_.get());
   EnsureLastTaskRuns(file_task_runner_.get());
+  base::ThreadPoolInstance::Get()->FlushForTesting();
 }
 
 FileSystemURL CannedSyncableFileSystem::URL(const std::string& path) const {
@@ -452,7 +455,7 @@ File::Error CannedSyncableFileSystem::DeleteFileSystem() {
   return RunOnThread<File::Error>(
       io_task_runner_.get(), FROM_HERE,
       base::BindOnce(&FileSystemContext::DeleteFileSystem, file_system_context_,
-                     origin_, type_));
+                     url::Origin::Create(origin_), type_));
 }
 
 blink::mojom::QuotaStatusCode CannedSyncableFileSystem::GetUsageAndQuota(
@@ -512,8 +515,8 @@ void CannedSyncableFileSystem::DoOpenFileSystem(
   EXPECT_TRUE(io_task_runner_->RunsTasksInCurrentSequence());
   EXPECT_FALSE(is_filesystem_opened_);
   file_system_context_->OpenFileSystem(
-      origin_, type_, storage::OPEN_FILE_SYSTEM_CREATE_IF_NONEXISTENT,
-      std::move(callback));
+      url::Origin::Create(origin_), type_,
+      storage::OPEN_FILE_SYSTEM_CREATE_IF_NONEXISTENT, std::move(callback));
 }
 
 void CannedSyncableFileSystem::DoCreateDirectory(

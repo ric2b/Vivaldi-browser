@@ -10,11 +10,13 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/posix/eintr_wrapper.h"
 #include "base/sequenced_task_runner.h"
 #include "media/base/decode_status.h"
 #include "media/base/video_codecs.h"
 #include "media/base/video_frame.h"
 #include "media/gpu/accelerated_video_decoder.h"
+#include "media/gpu/chromeos/dmabuf_video_frame_pool.h"
 #include "media/gpu/macros.h"
 #include "media/gpu/v4l2/v4l2_device.h"
 #include "media/gpu/v4l2/v4l2_h264_accelerator.h"
@@ -31,7 +33,6 @@ namespace {
 constexpr size_t kTimestampCacheSize = 128;
 // Number of requests to allocate for submitting input buffers, if requests
 // are used.
-constexpr size_t kNumRequests = 16;
 
 }  // namespace
 
@@ -97,11 +98,9 @@ V4L2StatelessVideoDecoderBackend::DecodeRequest::~DecodeRequest() = default;
 V4L2StatelessVideoDecoderBackend::V4L2StatelessVideoDecoderBackend(
     Client* const client,
     scoped_refptr<V4L2Device> device,
-    DmabufVideoFramePool* const frame_pool,
     VideoCodecProfile profile,
     scoped_refptr<base::SequencedTaskRunner> task_runner)
     : V4L2VideoDecoderBackend(client, std::move(device)),
-      frame_pool_(frame_pool),
       profile_(profile),
       bitstream_id_to_timestamp_(kTimestampCacheSize),
       task_runner_(task_runner) {
@@ -118,57 +117,46 @@ V4L2StatelessVideoDecoderBackend::~V4L2StatelessVideoDecoderBackend() {
       !decode_request_queue_.empty()) {
     VLOGF(1) << "Should not destroy backend during pending decode!";
   }
-
-  if (avd_) {
-    avd_->Reset();
-    avd_ = nullptr;
-  }
-
-  if (supports_requests_) {
-    requests_ = {};
-    media_fd_.reset();
-  }
 }
 
 bool V4L2StatelessVideoDecoderBackend::Initialize() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  if (!CheckRequestAPISupport()) {
-    VPLOGF(1) << "Failed to check request api support.";
-    return false;
-  }
-
-  // Create codec-specific AcceleratedVideoDecoder.
-  // TODO(akahuang): Check the profile is supported.
-  if (profile_ >= H264PROFILE_MIN && profile_ <= H264PROFILE_MAX) {
-    if (supports_requests_) {
-      avd_.reset(new H264Decoder(
-          std::make_unique<V4L2H264Accelerator>(this, device_.get())));
-    } else {
-      avd_.reset(new H264Decoder(
-          std::make_unique<V4L2LegacyH264Accelerator>(this, device_.get())));
-    }
-  } else if (profile_ >= VP8PROFILE_MIN && profile_ <= VP8PROFILE_MAX) {
-    if (supports_requests_) {
-      avd_.reset(new VP8Decoder(
-          std::make_unique<V4L2VP8Accelerator>(this, device_.get())));
-    } else {
-      avd_.reset(new VP8Decoder(
-          std::make_unique<V4L2LegacyVP8Accelerator>(this, device_.get())));
-    }
-  } else if (profile_ >= VP9PROFILE_MIN && profile_ <= VP9PROFILE_MAX) {
-    avd_.reset(new VP9Decoder(
-        std::make_unique<V4L2VP9Accelerator>(this, device_.get())));
-  } else {
+  if (!IsSupportedProfile(profile_)) {
     VLOGF(1) << "Unsupported profile " << GetProfileName(profile_);
     return false;
   }
 
-  if (supports_requests_ && !AllocateRequests()) {
+  if (!CreateAvd())
     return false;
+
+  if (input_queue_->SupportsRequests()) {
+    requests_queue_ = device_->GetRequestsQueue();
+    if (requests_queue_ == nullptr)
+      return false;
   }
 
   return true;
+}
+
+// static
+void V4L2StatelessVideoDecoderBackend::ReuseOutputBufferThunk(
+    scoped_refptr<base::SequencedTaskRunner> task_runner,
+    base::Optional<base::WeakPtr<V4L2StatelessVideoDecoderBackend>> weak_this,
+    V4L2ReadableBufferRef buffer) {
+  DVLOGF(3);
+  DCHECK(weak_this);
+
+  if (task_runner->RunsTasksInCurrentSequence()) {
+    if (*weak_this) {
+      (*weak_this)->ReuseOutputBuffer(std::move(buffer));
+    }
+  } else {
+    task_runner->PostTask(
+        FROM_HERE,
+        base::BindOnce(&V4L2StatelessVideoDecoderBackend::ReuseOutputBuffer,
+                       *weak_this, std::move(buffer)));
+  }
 }
 
 void V4L2StatelessVideoDecoderBackend::ReuseOutputBuffer(
@@ -199,15 +187,22 @@ void V4L2StatelessVideoDecoderBackend::OnOutputBufferDequeued(
 
   surface->SetDecoded();
 
-  // Keep a reference to the V4L2 buffer until the buffer is reused. The
-  // reason for this is that the config store uses V4L2 buffer IDs to
-  // reference frames, therefore we cannot reuse the same V4L2 buffer ID for
-  // another decode operation until all references to that frame are gone.
-  // Request API does not have this limitation, so we can probably remove this
-  // after config store is gone.
-  surface->SetReleaseCallback(
-      base::BindOnce(&V4L2StatelessVideoDecoderBackend::ReuseOutputBuffer,
-                     weak_this_, std::move(dequeued_buffer)));
+  auto reuse_buffer_cb =
+      base::BindOnce(&V4L2StatelessVideoDecoderBackend::ReuseOutputBufferThunk,
+                     task_runner_, weak_this_, std::move(dequeued_buffer));
+  if (output_queue_->GetMemoryType() == V4L2_MEMORY_MMAP) {
+    // Keep a reference to the V4L2 buffer until the frame is reused, because
+    // the frame is backed up by the V4L2 buffer's memory.
+    surface->video_frame()->AddDestructionObserver(std::move(reuse_buffer_cb));
+  } else {
+    // Keep a reference to the V4L2 buffer until the buffer is reused. The
+    // reason for this is that the config store uses V4L2 buffer IDs to
+    // reference frames, therefore we cannot reuse the same V4L2 buffer ID for
+    // another decode operation until all references to that frame are gone.
+    // Request API does not have this limitation, so we can probably remove this
+    // after config store is gone.
+    surface->SetReleaseCallback(std::move(reuse_buffer_cb));
+  }
 
   PumpOutputSurfaces();
 
@@ -227,54 +222,65 @@ V4L2StatelessVideoDecoderBackend::CreateSurface() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DVLOGF(4);
 
-  // Request VideoFrame.
-  scoped_refptr<VideoFrame> frame = frame_pool_->GetFrame();
-  if (!frame) {
-    // We allocate the same number of output buffer slot in V4L2 device and the
-    // output VideoFrame. If there is free output buffer slot but no free
-    // VideoFrame, surface_it means the VideoFrame is not released at client
-    // side. Post DoDecodeWork when the pool has available frames.
-    DVLOGF(3) << "There is no available VideoFrame.";
-    frame_pool_->NotifyWhenFrameAvailable(base::BindOnce(
-        base::IgnoreResult(&base::SequencedTaskRunner::PostTask), task_runner_,
-        FROM_HERE,
-        base::BindOnce(&V4L2StatelessVideoDecoderBackend::DoDecodeWork,
-                       weak_this_)));
-    return nullptr;
-  }
-
   // Request V4L2 input and output buffers.
-  V4L2WritableBufferRef input_buf = input_queue_->GetFreeBuffer();
-  V4L2WritableBufferRef output_buf = output_queue_->GetFreeBuffer();
-  if (!input_buf.IsValid() || !output_buf.IsValid()) {
+  auto input_buf = input_queue_->GetFreeBuffer();
+  auto output_buf = output_queue_->GetFreeBuffer();
+  if (!input_buf || !output_buf) {
     DVLOGF(3) << "There is no free V4L2 buffer.";
     return nullptr;
   }
 
-  scoped_refptr<V4L2DecodeSurface> dec_surface;
-  if (supports_requests_) {
-    DCHECK(!requests_.empty());
-    base::ScopedFD request = std::move(requests_.front());
-    requests_.pop();
-    auto ret = V4L2RequestDecodeSurface::Create(
-        std::move(input_buf), std::move(output_buf), std::move(frame),
-        request.get());
-    requests_.push(std::move(request));
-    if (!ret) {
-      DVLOGF(3) << "Could not create surface.";
+  DmabufVideoFramePool* pool = client_->GetVideoFramePool();
+  scoped_refptr<VideoFrame> frame;
+  if (!pool) {
+    // Get VideoFrame from the V4L2 buffer because now we allocate from V4L2
+    // driver via MMAP. The VideoFrame received from V4L2 buffer will remain
+    // until deallocating V4L2Queue. But we need to know when the buffer is not
+    // used by the client. So we wrap the frame here.
+    scoped_refptr<VideoFrame> origin_frame = output_buf->GetVideoFrame();
+    frame = VideoFrame::WrapVideoFrame(origin_frame, origin_frame->format(),
+                                       origin_frame->visible_rect(),
+                                       origin_frame->natural_size());
+  } else {
+    // Try to get VideoFrame from the pool.
+    frame = pool->GetFrame();
+    if (!frame) {
+      // We allocate the same number of output buffer slot in V4L2 device and
+      // the output VideoFrame. If there is free output buffer slot but no free
+      // VideoFrame, it means the VideoFrame is not released at client
+      // side. Post DoDecodeWork when the pool has available frames.
+      DVLOGF(3) << "There is no available VideoFrame.";
+      pool->NotifyWhenFrameAvailable(base::BindOnce(
+          base::IgnoreResult(&base::SequencedTaskRunner::PostTask),
+          task_runner_, FROM_HERE,
+          base::BindOnce(&V4L2StatelessVideoDecoderBackend::DoDecodeWork,
+                         weak_this_)));
       return nullptr;
     }
-    dec_surface = std::move(*ret);
+  }
+
+  scoped_refptr<V4L2DecodeSurface> dec_surface;
+  if (input_queue_->SupportsRequests()) {
+    base::Optional<V4L2RequestRef> request_ref =
+        requests_queue_->GetFreeRequest();
+    if (!request_ref) {
+      DVLOGF(1) << "Could not get free request.";
+      return nullptr;
+    }
+
+    dec_surface = new V4L2RequestDecodeSurface(
+        std::move(*input_buf), std::move(*output_buf), std::move(frame),
+        std::move(*request_ref));
   } else {
     dec_surface = new V4L2ConfigStoreDecodeSurface(
-        std::move(input_buf), std::move(output_buf), std::move(frame));
+        std::move(*input_buf), std::move(*output_buf), std::move(frame));
   }
 
   return dec_surface;
 }
 
 bool V4L2StatelessVideoDecoderBackend::SubmitSlice(
-    const scoped_refptr<V4L2DecodeSurface>& dec_surface,
+    V4L2DecodeSurface* dec_surface,
     const uint8_t* data,
     size_t size) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -297,23 +303,9 @@ bool V4L2StatelessVideoDecoderBackend::SubmitSlice(
 }
 
 void V4L2StatelessVideoDecoderBackend::DecodeSurface(
-    const scoped_refptr<V4L2DecodeSurface>& dec_surface) {
+    scoped_refptr<V4L2DecodeSurface> dec_surface) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DVLOGF(3);
-
-  // Enqueue input_buf and output_buf
-  dec_surface->input_buffer().PrepareQueueBuffer(*dec_surface);
-
-  if (!std::move(dec_surface->input_buffer()).QueueMMap()) {
-    client_->OnBackendError();
-    return;
-  }
-
-  if (!std::move(dec_surface->output_buffer())
-           .QueueDMABuf(dec_surface->video_frame()->DmabufFds())) {
-    client_->OnBackendError();
-    return;
-  }
 
   if (!dec_surface->Submit()) {
     VLOGF(1) << "Error while submitting frame for decoding!";
@@ -325,7 +317,7 @@ void V4L2StatelessVideoDecoderBackend::DecodeSurface(
 }
 
 void V4L2StatelessVideoDecoderBackend::SurfaceReady(
-    const scoped_refptr<V4L2DecodeSurface>& dec_surface,
+    scoped_refptr<V4L2DecodeSurface> dec_surface,
     int32_t bitstream_id,
     const gfx::Rect& visible_rect,
     const VideoColorSpace& /* color_space */) {
@@ -384,7 +376,25 @@ bool V4L2StatelessVideoDecoderBackend::PumpDecodeTask() {
   pause_reason_ = PauseReason::kNone;
   while (true) {
     switch (avd_->Decode()) {
-      case AcceleratedVideoDecoder::kAllocateNewSurfaces:
+      case AcceleratedVideoDecoder::kConfigChange:
+        if (profile_ != avd_->GetProfile()) {
+          DVLOGF(3) << "Profile is changed: " << profile_ << " -> "
+                    << avd_->GetProfile();
+          if (!IsSupportedProfile(avd_->GetProfile())) {
+            VLOGF(2) << "Unsupported profile: " << avd_->GetProfile();
+            return false;
+          }
+
+          profile_ = avd_->GetProfile();
+        }
+
+        if (pic_size_ == avd_->GetPicSize()) {
+          // There is no need to do anything in V4L2 API when only a profile is
+          // changed.
+          DVLOGF(3) << "Only profile is changed. No need to do anything.";
+          continue;
+        }
+
         DVLOGF(3) << "Need to change resolution. Pause decoding.";
         client_->InitiateFlush();
 
@@ -396,8 +406,7 @@ bool V4L2StatelessVideoDecoderBackend::PumpDecodeTask() {
         // Current decode request is finished processing.
         if (current_decode_request_) {
           DCHECK(current_decode_request_->decode_cb);
-          client_->RunDecodeCB(std::move(current_decode_request_->decode_cb),
-                               DecodeStatus::OK);
+          std::move(current_decode_request_->decode_cb).Run(DecodeStatus::OK);
           current_decode_request_ = base::nullopt;
         }
 
@@ -469,17 +478,13 @@ void V4L2StatelessVideoDecoderBackend::PumpOutputSurfaces() {
       case OutputRequest::kFlushFence:
         DCHECK(output_request_queue_.empty());
         DVLOGF(2) << "Flush finished.";
-        client_->RunDecodeCB(std::move(flush_cb_), DecodeStatus::OK);
+        std::move(flush_cb_).Run(DecodeStatus::OK);
         resume_decode = true;
         break;
 
       case OutputRequest::kChangeResolutionFence:
         DCHECK(output_request_queue_.empty());
-        if (!ChangeResolution()) {
-          client_->OnBackendError();
-          return;
-        }
-        resume_decode = true;
+        ChangeResolution();
         break;
 
       case OutputRequest::kSurface:
@@ -501,20 +506,58 @@ void V4L2StatelessVideoDecoderBackend::PumpOutputSurfaces() {
   }
 }
 
-bool V4L2StatelessVideoDecoderBackend::ChangeResolution() {
+void V4L2StatelessVideoDecoderBackend::ChangeResolution() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // We change resolution after outputting all pending surfaces, there should
   // be no V4L2DecodeSurface left.
   DCHECK(surfaces_at_device_.empty());
   DCHECK(output_request_queue_.empty());
-  // Set output format with the new resolution.
-  gfx::Size pic_size = avd_->GetPicSize();
-  DCHECK(!pic_size.IsEmpty());
-  DVLOGF(3) << "Change resolution to " << pic_size.ToString();
 
   size_t num_output_frames = avd_->GetRequiredNumOfPictures();
   gfx::Rect visible_rect = avd_->GetVisibleRect();
-  return client_->ChangeResolution(pic_size, visible_rect, num_output_frames);
+  gfx::Size pic_size = avd_->GetPicSize();
+  // Set output format with the new resolution.
+  DCHECK(!pic_size.IsEmpty());
+  DVLOGF(3) << "Change resolution to " << pic_size.ToString();
+  client_->ChangeResolution(pic_size, visible_rect, num_output_frames);
+}
+
+bool V4L2StatelessVideoDecoderBackend::ApplyResolution(
+    const gfx::Size& pic_size,
+    const gfx::Rect& visible_rect,
+    const size_t num_output_frames) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_EQ(input_queue_->QueuedBuffersCount(), 0u);
+
+  struct v4l2_format format = {};
+
+  format.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+  if (device_->Ioctl(VIDIOC_G_FMT, &format) != 0) {
+    VPLOGF(1) << "Failed getting OUTPUT format";
+    return false;
+  }
+
+  format.fmt.pix_mp.width = pic_size.width();
+  format.fmt.pix_mp.height = pic_size.height();
+  if (device_->Ioctl(VIDIOC_S_FMT, &format) != 0) {
+    VPLOGF(1) << "Failed setting OUTPUT format";
+    return false;
+  }
+
+  return true;
+}
+
+void V4L2StatelessVideoDecoderBackend::OnChangeResolutionDone(bool success) {
+  if (!success) {
+    client_->OnBackendError();
+    return;
+  }
+
+  pic_size_ = avd_->GetPicSize();
+  client_->CompleteFlush();
+  task_runner_->PostTask(
+      FROM_HERE, base::BindOnce(&V4L2StatelessVideoDecoderBackend::DoDecodeWork,
+                                weak_this_));
 }
 
 void V4L2StatelessVideoDecoderBackend::OnStreamStopped() {
@@ -531,82 +574,88 @@ void V4L2StatelessVideoDecoderBackend::ClearPendingRequests(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DVLOGF(3);
 
-  if (avd_)
-    avd_->Reset();
+  if (avd_) {
+    // If we reset during resolution change, re-create AVD. Then the new AVD
+    // will trigger resolution change again after reset.
+    if (pic_size_ != avd_->GetPicSize()) {
+      CreateAvd();
+    } else {
+      avd_->Reset();
+    }
+  }
 
   // Clear output_request_queue_.
   while (!output_request_queue_.empty())
     output_request_queue_.pop();
 
   if (flush_cb_)
-    client_->RunDecodeCB(std::move(flush_cb_), status);
+    std::move(flush_cb_).Run(status);
 
   // Clear current_decode_request_ and decode_request_queue_.
   if (current_decode_request_) {
-    client_->RunDecodeCB(std::move(current_decode_request_->decode_cb), status);
+    std::move(current_decode_request_->decode_cb).Run(status);
     current_decode_request_ = base::nullopt;
   }
 
   while (!decode_request_queue_.empty()) {
     auto request = std::move(decode_request_queue_.front());
     decode_request_queue_.pop();
-    client_->RunDecodeCB(std::move(request.decode_cb), status);
+    std::move(request.decode_cb).Run(status);
   }
 }
 
-bool V4L2StatelessVideoDecoderBackend::CheckRequestAPISupport() {
+bool V4L2StatelessVideoDecoderBackend::IsSupportedProfile(
+    VideoCodecProfile profile) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(device_);
+  if (supported_profiles_.empty()) {
+    constexpr uint32_t kSupportedInputFourccs[] = {
+        V4L2_PIX_FMT_H264_SLICE,
+        V4L2_PIX_FMT_VP8_FRAME,
+        V4L2_PIX_FMT_VP9_FRAME,
+    };
+    scoped_refptr<V4L2Device> device = V4L2Device::Create();
+    VideoDecodeAccelerator::SupportedProfiles profiles =
+        device->GetSupportedDecodeProfiles(base::size(kSupportedInputFourccs),
+                                           kSupportedInputFourccs);
+    for (const auto& profile : profiles)
+      supported_profiles_.push_back(profile.profile);
+  }
+  return std::find(supported_profiles_.begin(), supported_profiles_.end(),
+                   profile) != supported_profiles_.end();
+}
+
+bool V4L2StatelessVideoDecoderBackend::CreateAvd() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DVLOGF(3);
 
-  struct v4l2_requestbuffers reqbufs;
-  memset(&reqbufs, 0, sizeof(reqbufs));
-  reqbufs.count = 0;
-  reqbufs.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
-  reqbufs.memory = V4L2_MEMORY_MMAP;
-  if (device_->Ioctl(VIDIOC_REQBUFS, &reqbufs) != 0) {
-    VPLOGF(1) << "VIDIOC_REQBUFS ioctl failed.";
+  pic_size_ = gfx::Size();
+
+  if (profile_ >= H264PROFILE_MIN && profile_ <= H264PROFILE_MAX) {
+    if (input_queue_->SupportsRequests()) {
+      avd_.reset(new H264Decoder(
+          std::make_unique<V4L2H264Accelerator>(this, device_.get()),
+          profile_));
+    } else {
+      avd_.reset(new H264Decoder(
+          std::make_unique<V4L2LegacyH264Accelerator>(this, device_.get()),
+          profile_));
+    }
+  } else if (profile_ >= VP8PROFILE_MIN && profile_ <= VP8PROFILE_MAX) {
+    if (input_queue_->SupportsRequests()) {
+      avd_.reset(new VP8Decoder(
+          std::make_unique<V4L2VP8Accelerator>(this, device_.get())));
+    } else {
+      avd_.reset(new VP8Decoder(
+          std::make_unique<V4L2LegacyVP8Accelerator>(this, device_.get())));
+    }
+  } else if (profile_ >= VP9PROFILE_MIN && profile_ <= VP9PROFILE_MAX) {
+    avd_.reset(new VP9Decoder(
+        std::make_unique<V4L2VP9Accelerator>(this, device_.get()), profile_));
+  } else {
+    VLOGF(1) << "Unsupported profile " << GetProfileName(profile_);
     return false;
   }
-  if (reqbufs.capabilities & V4L2_BUF_CAP_SUPPORTS_REQUESTS) {
-    supports_requests_ = true;
-    VLOGF(1) << "Using request API.";
-    DCHECK(!media_fd_.is_valid());
-    // Let's try to open the media device
-    // TODO(crbug.com/985230): remove this hardcoding, replace with V4L2Device
-    // integration.
-    int media_fd = open("/dev/media-dec0", O_RDWR, 0);
-    if (media_fd < 0) {
-      VPLOGF(1) << "Failed to open media device.";
-      return false;
-    }
-    media_fd_ = base::ScopedFD(media_fd);
-  } else {
-    VLOGF(1) << "Using config store.";
-  }
-
-  return true;
-}
-
-bool V4L2StatelessVideoDecoderBackend::AllocateRequests() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DVLOGF(3);
-
-  DCHECK(requests_.empty());
-
-  for (size_t i = 0; i < kNumRequests; i++) {
-    int request_fd;
-
-    int ret = HANDLE_EINTR(
-        ioctl(media_fd_.get(), MEDIA_IOC_REQUEST_ALLOC, &request_fd));
-    if (ret < 0) {
-      VPLOGF(1) << "Failed to create request: ";
-      return false;
-    }
-
-    requests_.push(base::ScopedFD(request_fd));
-  }
-  DCHECK_EQ(requests_.size(), kNumRequests);
-
   return true;
 }
 

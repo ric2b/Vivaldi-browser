@@ -9,7 +9,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
-#include "chromecast/media/cma/base/decoder_buffer_base.h"
+#include "chromecast/media/api/decoder_buffer_base.h"
 #include "chromecast/media/cma/test/frame_generator_for_test.h"
 #include "media/base/audio_decoder_config.h"
 #include "media/base/decoder_buffer.h"
@@ -84,15 +84,12 @@ void MockFrameProvider::DoRead(const ReadCB& read_cb) {
         ::media::VideoDecoderConfig::AlphaMode::kIsOpaque,
         ::media::VideoColorSpace(), ::media::kNoTransformation, coded_size,
         visible_rect, natural_size, ::media::EmptyExtraData(),
-        ::media::Unencrypted());
+        ::media::EncryptionScheme::kUnencrypted);
 
     audio_config = ::media::AudioDecoderConfig(
-      ::media::kCodecAAC,
-      ::media::kSampleFormatS16,
-      ::media::CHANNEL_LAYOUT_STEREO,
-      44100,
-      ::media::EmptyExtraData(),
-      ::media::Unencrypted());
+        ::media::kCodecAAC, ::media::kSampleFormatS16,
+        ::media::CHANNEL_LAYOUT_STEREO, 44100, ::media::EmptyExtraData(),
+        ::media::EncryptionScheme::kUnencrypted);
   }
 
   read_cb.Run(buffer, audio_config, video_config);

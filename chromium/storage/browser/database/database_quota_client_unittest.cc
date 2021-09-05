@@ -25,11 +25,7 @@
 #include "storage/common/database/database_identifier.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-using storage::DatabaseQuotaClient;
-using storage::DatabaseTracker;
-using storage::OriginInfo;
-
-namespace content {
+namespace storage {
 
 // Declared to shorten the line lengths.
 static const blink::mojom::StorageType kTemp =
@@ -50,8 +46,8 @@ class MockDatabaseTracker : public DatabaseTracker {
 
   bool GetOriginInfo(const std::string& origin_identifier,
                      OriginInfo* info) override {
-    auto found = mock_origin_infos_.find(
-        storage::GetOriginFromIdentifier(origin_identifier));
+    auto found =
+        mock_origin_infos_.find(GetOriginFromIdentifier(origin_identifier));
     if (found == mock_origin_infos_.end())
       return false;
     *info = OriginInfo(found->second);
@@ -90,7 +86,7 @@ class MockDatabaseTracker : public DatabaseTracker {
 
   void AddMockDatabase(const url::Origin& origin, const char* name, int size) {
     MockOriginInfo& info = mock_origin_infos_[origin];
-    info.set_origin(storage::GetIdentifierFromOrigin(origin));
+    info.set_origin(GetIdentifierFromOrigin(origin));
     info.AddMockDatabase(base::ASCIIToUTF16(name), size);
   }
 
@@ -134,7 +130,7 @@ class DatabaseQuotaClientTest : public testing::Test {
         usage_(0),
         mock_tracker_(new MockDatabaseTracker) {}
 
-  int64_t GetOriginUsage(storage::QuotaClient* client,
+  int64_t GetOriginUsage(scoped_refptr<QuotaClient> client,
                          const url::Origin& origin,
                          blink::mojom::StorageType type) {
     usage_ = 0;
@@ -148,7 +144,7 @@ class DatabaseQuotaClientTest : public testing::Test {
   }
 
   const std::set<url::Origin>& GetOriginsForType(
-      storage::QuotaClient* client,
+      scoped_refptr<QuotaClient> client,
       blink::mojom::StorageType type) {
     origins_.clear();
     client->GetOriginsForType(
@@ -159,9 +155,10 @@ class DatabaseQuotaClientTest : public testing::Test {
     return origins_;
   }
 
-  const std::set<url::Origin>& GetOriginsForHost(storage::QuotaClient* client,
-                                                 blink::mojom::StorageType type,
-                                                 const std::string& host) {
+  const std::set<url::Origin>& GetOriginsForHost(
+      scoped_refptr<QuotaClient> client,
+      blink::mojom::StorageType type,
+      const std::string& host) {
     origins_.clear();
     client->GetOriginsForHost(
         type, host,
@@ -172,7 +169,7 @@ class DatabaseQuotaClientTest : public testing::Test {
     return origins_;
   }
 
-  bool DeleteOriginData(storage::QuotaClient* client,
+  bool DeleteOriginData(scoped_refptr<QuotaClient> client,
                         blink::mojom::StorageType type,
                         const url::Origin& origin) {
     delete_status_ = blink::mojom::QuotaStatusCode::kUnknown;
@@ -207,73 +204,73 @@ class DatabaseQuotaClientTest : public testing::Test {
 };
 
 TEST_F(DatabaseQuotaClientTest, GetOriginUsage) {
-  DatabaseQuotaClient client(mock_tracker());
+  auto client = base::MakeRefCounted<DatabaseQuotaClient>(mock_tracker());
 
-  EXPECT_EQ(0, GetOriginUsage(&client, kOriginA, kTemp));
-  EXPECT_EQ(0, GetOriginUsage(&client, kOriginA, kPerm));
+  EXPECT_EQ(0, GetOriginUsage(client, kOriginA, kTemp));
+  EXPECT_EQ(0, GetOriginUsage(client, kOriginA, kPerm));
 
   mock_tracker()->AddMockDatabase(kOriginA, "fooDB", 1000);
-  EXPECT_EQ(1000, GetOriginUsage(&client, kOriginA, kTemp));
-  EXPECT_EQ(0, GetOriginUsage(&client, kOriginA, kPerm));
+  EXPECT_EQ(1000, GetOriginUsage(client, kOriginA, kTemp));
+  EXPECT_EQ(0, GetOriginUsage(client, kOriginA, kPerm));
 
-  EXPECT_EQ(0, GetOriginUsage(&client, kOriginB, kPerm));
-  EXPECT_EQ(0, GetOriginUsage(&client, kOriginB, kTemp));
+  EXPECT_EQ(0, GetOriginUsage(client, kOriginB, kPerm));
+  EXPECT_EQ(0, GetOriginUsage(client, kOriginB, kTemp));
 }
 
 TEST_F(DatabaseQuotaClientTest, GetOriginsForHost) {
-  DatabaseQuotaClient client(mock_tracker());
+  auto client = base::MakeRefCounted<DatabaseQuotaClient>(mock_tracker());
 
   EXPECT_EQ(kOriginA.host(), kOriginB.host());
   EXPECT_NE(kOriginA.host(), kOriginOther.host());
 
   std::set<url::Origin> origins =
-      GetOriginsForHost(&client, kTemp, kOriginA.host());
+      GetOriginsForHost(client, kTemp, kOriginA.host());
   EXPECT_TRUE(origins.empty());
 
   mock_tracker()->AddMockDatabase(kOriginA, "fooDB", 1000);
-  origins = GetOriginsForHost(&client, kTemp, kOriginA.host());
+  origins = GetOriginsForHost(client, kTemp, kOriginA.host());
   EXPECT_EQ(origins.size(), 1ul);
   EXPECT_TRUE(origins.find(kOriginA) != origins.end());
 
   mock_tracker()->AddMockDatabase(kOriginB, "barDB", 1000);
-  origins = GetOriginsForHost(&client, kTemp, kOriginA.host());
+  origins = GetOriginsForHost(client, kTemp, kOriginA.host());
   EXPECT_EQ(origins.size(), 2ul);
   EXPECT_TRUE(origins.find(kOriginA) != origins.end());
   EXPECT_TRUE(origins.find(kOriginB) != origins.end());
 
-  EXPECT_TRUE(GetOriginsForHost(&client, kPerm, kOriginA.host()).empty());
-  EXPECT_TRUE(GetOriginsForHost(&client, kTemp, kOriginOther.host()).empty());
+  EXPECT_TRUE(GetOriginsForHost(client, kPerm, kOriginA.host()).empty());
+  EXPECT_TRUE(GetOriginsForHost(client, kTemp, kOriginOther.host()).empty());
 }
 
 TEST_F(DatabaseQuotaClientTest, GetOriginsForType) {
-  DatabaseQuotaClient client(mock_tracker());
+  auto client = base::MakeRefCounted<DatabaseQuotaClient>(mock_tracker());
 
-  EXPECT_TRUE(GetOriginsForType(&client, kTemp).empty());
-  EXPECT_TRUE(GetOriginsForType(&client, kPerm).empty());
+  EXPECT_TRUE(GetOriginsForType(client, kTemp).empty());
+  EXPECT_TRUE(GetOriginsForType(client, kPerm).empty());
 
   mock_tracker()->AddMockDatabase(kOriginA, "fooDB", 1000);
-  std::set<url::Origin> origins = GetOriginsForType(&client, kTemp);
+  std::set<url::Origin> origins = GetOriginsForType(client, kTemp);
   EXPECT_EQ(origins.size(), 1ul);
   EXPECT_TRUE(origins.find(kOriginA) != origins.end());
 
-  EXPECT_TRUE(GetOriginsForType(&client, kPerm).empty());
+  EXPECT_TRUE(GetOriginsForType(client, kPerm).empty());
 }
 
 TEST_F(DatabaseQuotaClientTest, DeleteOriginData) {
-  DatabaseQuotaClient client(mock_tracker());
+  auto client = base::MakeRefCounted<DatabaseQuotaClient>(mock_tracker());
 
   // Perm deletions are short circuited in the Client and
   // should not reach the DatabaseTracker.
-  EXPECT_TRUE(DeleteOriginData(&client, kPerm, kOriginA));
+  EXPECT_TRUE(DeleteOriginData(client, kPerm, kOriginA));
   EXPECT_EQ(0, mock_tracker()->delete_called_count());
 
   mock_tracker()->set_async_delete(false);
-  EXPECT_TRUE(DeleteOriginData(&client, kTemp, kOriginA));
+  EXPECT_TRUE(DeleteOriginData(client, kTemp, kOriginA));
   EXPECT_EQ(1, mock_tracker()->delete_called_count());
 
   mock_tracker()->set_async_delete(true);
-  EXPECT_TRUE(DeleteOriginData(&client, kTemp, kOriginA));
+  EXPECT_TRUE(DeleteOriginData(client, kTemp, kOriginA));
   EXPECT_EQ(2, mock_tracker()->delete_called_count());
 }
 
-}  // namespace content
+}  // namespace storage

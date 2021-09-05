@@ -13,6 +13,7 @@
 #include <utility>
 
 #include "base/json/json_reader.h"
+#include "base/json/json_string_value_serializer.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/macros.h"
@@ -29,17 +30,22 @@
 #include "components/onc/onc_constants.h"
 #include "net/base/ip_address.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
+#include "third_party/cros_system_api/dbus/shill/dbus-constants.h"
 
 namespace chromeos {
 namespace onc {
 
 namespace {
 
-std::unique_ptr<base::Value> ConvertValueToString(const base::Value& value) {
+// Converts values to JSON strings. This will turn booleans into "true" or
+// "false" which is what Shill expects for VPN values (including L2TP).
+base::Value ConvertVpnValueToString(const base::Value& value) {
+  if (value.is_string())
+    return value.Clone();
   std::string str;
-  if (!value.GetAsString(&str))
-    base::JSONWriter::Write(value, &str);
-  return std::make_unique<base::Value>(str);
+  if (!base::JSONWriter::Write(value, &str))
+    NOTREACHED();
+  return base::Value(str);
 }
 
 // Sets any client cert properties when ClientCertType is PKCS11Id.
@@ -49,8 +55,10 @@ void SetClientCertProperties(client_cert::ConfigType config_type,
   std::string cert_type;
   onc_object->GetStringWithoutPathExpansion(::onc::client_cert::kClientCertType,
                                             &cert_type);
-  if (cert_type != ::onc::client_cert::kPKCS11Id)
+  if (cert_type != ::onc::client_cert::kPKCS11Id) {
+    client_cert::SetEmptyShillProperties(config_type, shill_dictionary);
     return;
+  }
 
   std::string pkcs11_id;
   onc_object->GetStringWithoutPathExpansion(
@@ -110,9 +118,9 @@ class LocalTranslator {
 
   // Adds |value| to |shill_dictionary| at the field shill_property_name given
   // by the associated signature. Takes ownership of |value|. Does nothing if
-  // |value| is NULL or the property name cannot be read from the signature.
+  // |value| is none or the property name cannot be read from the signature.
   void AddValueAccordingToSignature(const std::string& onc_field_name,
-                                    std::unique_ptr<base::Value> value);
+                                    const base::Value& value);
 
   // Translates the value |onc_value| using |table|. It is an error if no
   // matching table entry is found. Writes the result as entry at
@@ -206,21 +214,30 @@ void LocalTranslator::TranslateOpenVPN() {
   SetClientCertProperties(client_cert::CONFIG_TYPE_OPENVPN, onc_object_,
                           shill_dictionary_);
 
+  const std::string* compression_algorithm =
+      onc_object_->FindStringKey(::onc::openvpn::kCompressionAlgorithm);
+  if (compression_algorithm) {
+    TranslateWithTableAndSet(*compression_algorithm,
+                             kOpenVpnCompressionAlgorithmTable,
+                             shill::kOpenVPNCompressProperty);
+  }
+
   // Modified CopyFieldsAccordingToSignature to handle RemoteCertKU and
   // ServerCAPEMs and handle all other fields as strings.
   for (base::DictionaryValue::Iterator it(*onc_object_); !it.IsAtEnd();
        it.Advance()) {
     std::string key = it.key();
-    std::unique_ptr<base::Value> translated;
+    base::Value translated;
     if (key == ::onc::openvpn::kRemoteCertKU ||
         key == ::onc::openvpn::kServerCAPEMs ||
         key == ::onc::openvpn::kExtraHosts) {
-      translated.reset(it.value().DeepCopy());
+      translated = it.value().Clone();
     } else {
       // Shill wants all Provider/VPN fields to be strings.
-      translated = ConvertValueToString(it.value());
+      translated = ConvertVpnValueToString(it.value());
     }
-    AddValueAccordingToSignature(key, std::move(translated));
+    if (!translated.is_none())
+      AddValueAccordingToSignature(key, translated);
   }
 }
 
@@ -241,6 +258,15 @@ void LocalTranslator::TranslateL2TP() {
   // so handle it explicitly here.
   CopyFieldFromONCToShill(::onc::vpn::kSaveCredentials,
                           shill::kSaveCredentialsProperty);
+
+  const base::Value* lcp_echo_disabled =
+      onc_object_->FindKey(::onc::l2tp::kLcpEchoDisabled);
+  if (lcp_echo_disabled) {
+    base::Value lcp_echo_disabled_value =
+        ConvertVpnValueToString(*lcp_echo_disabled);
+    shill_dictionary_->SetKey(shill::kL2tpIpsecLcpEchoDisabledProperty,
+                              std::move(lcp_echo_disabled_value));
+  }
 
   CopyFieldsAccordingToSignature();
 }
@@ -332,6 +358,23 @@ void LocalTranslator::TranslateEAP() {
                               base::Value(true));
   }
 
+  // Set shill::kEapSubjectAlternativeNameMatchProperty to the serialized form
+  // of the subject alternative name match list of dictionaries.
+  const base::ListValue* subject_alternative_name_match;
+  if (onc_object_->GetList(::onc::eap::kSubjectAlternativeNameMatch,
+                           &subject_alternative_name_match)) {
+    base::Value serialized_dicts(base::Value::Type::LIST);
+    std::string serialized_dict;
+    JSONStringValueSerializer serializer(&serialized_dict);
+    for (const base::Value& v : subject_alternative_name_match->GetList()) {
+      if (serializer.Serialize(v)) {
+        serialized_dicts.Append(serialized_dict);
+      }
+    }
+    shill_dictionary_->SetKey(shill::kEapSubjectAlternativeNameMatchProperty,
+                              std::move(serialized_dicts));
+  }
+
   CopyFieldsAccordingToSignature();
 }
 
@@ -405,8 +448,7 @@ void LocalTranslator::TranslateNetworkConfiguration() {
 void LocalTranslator::CopyFieldsAccordingToSignature() {
   for (base::DictionaryValue::Iterator it(*onc_object_); !it.IsAtEnd();
        it.Advance()) {
-    AddValueAccordingToSignature(it.key(),
-                                 base::WrapUnique(it.value().DeepCopy()));
+    AddValueAccordingToSignature(it.key(), it.value());
   }
 }
 
@@ -435,19 +477,16 @@ void LocalTranslator::CopyFieldFromONCToShill(
   shill_dictionary_->SetKey(shill_property_name, value->Clone());
 }
 
-void LocalTranslator::AddValueAccordingToSignature(
-    const std::string& onc_name,
-    std::unique_ptr<base::Value> value) {
-  if (!value || !field_translation_table_)
+void LocalTranslator::AddValueAccordingToSignature(const std::string& onc_name,
+                                                   const base::Value& value) {
+  if (value.is_none() || !field_translation_table_)
     return;
   std::string shill_property_name;
   if (!GetShillPropertyName(onc_name, field_translation_table_,
                             &shill_property_name)) {
     return;
   }
-
-  shill_dictionary_->SetWithoutPathExpansion(shill_property_name,
-                                             std::move(value));
+  shill_dictionary_->SetKey(shill_property_name, value.Clone());
 }
 
 void LocalTranslator::TranslateWithTableAndSet(

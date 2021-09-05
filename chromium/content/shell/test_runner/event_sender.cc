@@ -23,6 +23,7 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "content/common/input/web_mouse_wheel_event_traits.h"
+#include "content/renderer/render_frame_impl.h"
 #include "content/renderer/render_widget.h"
 #include "content/shell/test_runner/mock_spell_check.h"
 #include "content/shell/test_runner/test_interfaces.h"
@@ -33,31 +34,30 @@
 #include "gin/object_template_builder.h"
 #include "gin/wrappable.h"
 #include "net/base/filename_util.h"
+#include "third_party/blink/public/common/input/web_gesture_event.h"
+#include "third_party/blink/public/common/input/web_keyboard_event.h"
+#include "third_party/blink/public/common/input/web_pointer_properties.h"
+#include "third_party/blink/public/common/input/web_touch_event.h"
 #include "third_party/blink/public/platform/url_conversion.h"
 #include "third_party/blink/public/platform/web_coalesced_input_event.h"
 #include "third_party/blink/public/platform/web_float_rect.h"
-#include "third_party/blink/public/platform/web_gesture_event.h"
-#include "third_party/blink/public/platform/web_keyboard_event.h"
-#include "third_party/blink/public/platform/web_pointer_properties.h"
 #include "third_party/blink/public/platform/web_string.h"
-#include "third_party/blink/public/platform/web_touch_event.h"
 #include "third_party/blink/public/platform/web_vector.h"
 #include "third_party/blink/public/web/blink.h"
 #include "third_party/blink/public/web/web_context_menu_data.h"
 #include "third_party/blink/public/web/web_frame_widget.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_page_popup.h"
-#include "third_party/blink/public/web/web_user_gesture_indicator.h"
 #include "third_party/blink/public/web/web_view.h"
 #include "ui/events/blink/blink_event_util.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
 #include "ui/events/keycodes/keyboard_codes.h"
+#include "ui/gfx/geometry/point_conversions.h"
 #include "v8/include/v8.h"
 
 using blink::WebContextMenuData;
 using blink::WebDragData;
 using blink::WebDragOperationsMask;
-using blink::WebFloatPoint;
 using blink::WebGestureEvent;
 using blink::WebInputEvent;
 using blink::WebInputEventResult;
@@ -67,7 +67,6 @@ using blink::WebMenuItemInfo;
 using blink::WebMouseEvent;
 using blink::WebMouseWheelEvent;
 using blink::WebPagePopup;
-using blink::WebPoint;
 using blink::WebPointerEvent;
 using blink::WebPointerProperties;
 using blink::WebString;
@@ -241,7 +240,7 @@ int modifiersWithButtons(int modifiers, int buttons) {
 
 void InitMouseEventGeneric(WebMouseEvent::Button b,
                            int current_buttons,
-                           const WebPoint& pos,
+                           const gfx::Point& pos,
                            int click_count,
                            WebPointerProperties::PointerType pointerType,
                            int pointerId,
@@ -250,8 +249,8 @@ void InitMouseEventGeneric(WebMouseEvent::Button b,
                            int tiltY,
                            WebMouseEvent* e) {
   e->button = b;
-  e->SetPositionInWidget(pos.x, pos.y);
-  e->SetPositionInScreen(pos.x, pos.y);
+  e->SetPositionInWidget(gfx::PointF(pos));
+  e->SetPositionInScreen(gfx::PointF(pos));
   e->pointer_type = pointerType;
   e->id = pointerId;
   e->force = pressure;
@@ -262,7 +261,7 @@ void InitMouseEventGeneric(WebMouseEvent::Button b,
 
 void InitMouseEvent(WebMouseEvent::Button b,
                     int current_buttons,
-                    const WebPoint& pos,
+                    const gfx::Point& pos,
                     int click_count,
                     WebMouseEvent* e) {
   InitMouseEventGeneric(b, current_buttons, pos, click_count,
@@ -405,8 +404,9 @@ const char kSeparatorIdentifier[] = "---------";
 const char kDisabledIdentifier[] = "#";
 const char kCheckedIdentifier[] = "*";
 
-bool OutsideMultiClickRadius(const WebPoint& a, const WebPoint& b) {
-  return ((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y)) >
+bool OutsideMultiClickRadius(const gfx::Point& a, const gfx::Point& b) {
+  return ((a.x() - b.x()) * (a.x() - b.x()) +
+          (a.y() - b.y()) * (a.y() - b.y())) >
          kMultipleClickRadiusPixels * kMultipleClickRadiusPixels;
 }
 
@@ -447,7 +447,7 @@ std::vector<std::string> MakeMenuItemStringsFor(
   // These constants are based on Safari's context menu because tests are made
   // for it.
   static const char* kNonEditableMenuStrings[] = {
-      "Back",        "Reload Page",     "Open in Dashbaord",
+      "Back",        "Reload Page",     "Open in Dashboard",
       "<separator>", "View Source",     "Save Page As",
       "Print Page",  "Inspect Element", nullptr};
   static const char* kEditableMenuStrings[] = {"Cut",
@@ -543,27 +543,26 @@ bool IsSystemKeyEvent(const WebKeyboardEvent& event) {
 #endif
 }
 
-bool GetScrollUnits(gin::Arguments* args,
-                    ui::input_types::ScrollGranularity* units) {
+bool GetScrollUnits(gin::Arguments* args, ui::ScrollGranularity* units) {
   std::string units_string;
   if (!args->PeekNext().IsEmpty()) {
     if (args->PeekNext()->IsString())
       args->GetNext(&units_string);
     if (units_string == "Page") {
-      *units = ui::input_types::ScrollGranularity::kScrollByPage;
+      *units = ui::ScrollGranularity::kScrollByPage;
       return true;
     } else if (units_string == "Pixels") {
-      *units = ui::input_types::ScrollGranularity::kScrollByPixel;
+      *units = ui::ScrollGranularity::kScrollByPixel;
       return true;
     } else if (units_string == "PrecisePixels") {
-      *units = ui::input_types::ScrollGranularity::kScrollByPrecisePixel;
+      *units = ui::ScrollGranularity::kScrollByPrecisePixel;
       return true;
     } else {
       args->ThrowError();
       return false;
     }
   } else {
-    *units = ui::input_types::ScrollGranularity::kScrollByPrecisePixel;
+    *units = ui::ScrollGranularity::kScrollByPrecisePixel;
     return true;
   }
 }
@@ -1331,12 +1330,12 @@ void EventSender::Reset() {
 #endif
 
   last_click_time_ = base::TimeTicks();
-  last_click_pos_ = WebPoint(0, 0);
+  last_click_pos_ = gfx::Point();
   last_button_type_ = WebMouseEvent::Button::kNoButton;
   touch_points_.clear();
   last_context_menu_data_.reset();
   weak_factory_.InvalidateWeakPtrs();
-  current_gesture_location_ = WebFloatPoint(0, 0);
+  current_gesture_location_ = gfx::PointF();
   mouse_event_queue_.clear();
 
   time_offset_ = base::TimeDelta();
@@ -1822,9 +1821,10 @@ void EventSender::ZoomPageIn() {
     // Only set page zoom on main frames. Any RenderViews that exist for
     // a proxy main frame will hear about the change as a side effect of
     // changing the main frame.
-    if (view_proxy->GetMainRenderFrame()) {
-      view_proxy->GetWidget()->SetZoomLevelForTesting(
-          view_proxy->webview()->ZoomLevel() + 1);
+    content::RenderFrameImpl* main_frame = view_proxy->GetMainRenderFrame();
+    if (main_frame) {
+      main_frame->GetLocalRootRenderWidget()->SetZoomLevelForTesting(
+          view_proxy->GetWebView()->ZoomLevel() + 1);
     }
   }
 }
@@ -1834,9 +1834,10 @@ void EventSender::ZoomPageOut() {
     // Only set page zoom on main frames. Any RenderViews that exist for
     // a proxy main frame will hear about the change as a side effect of
     // changing the main frame.
-    if (view_proxy->GetMainRenderFrame()) {
-      view_proxy->GetWidget()->SetZoomLevelForTesting(
-          view_proxy->webview()->ZoomLevel() - 1);
+    content::RenderFrameImpl* main_frame = view_proxy->GetMainRenderFrame();
+    if (main_frame) {
+      main_frame->GetLocalRootRenderWidget()->SetZoomLevelForTesting(
+          view_proxy->GetWebView()->ZoomLevel() - 1);
     }
   }
 }
@@ -1846,9 +1847,10 @@ void EventSender::SetPageZoomFactor(double zoom_factor) {
     // Only set page zoom on main frames. Any RenderViews that exist for
     // a proxy main frame will hear about the change as a side effect of
     // changing the main frame.
-    if (view_proxy->GetMainRenderFrame()) {
-      view_proxy->GetWidget()->SetZoomLevelForTesting(std::log(zoom_factor) /
-                                                      std::log(1.2));
+    content::RenderFrameImpl* main_frame = view_proxy->GetMainRenderFrame();
+    if (main_frame) {
+      main_frame->GetLocalRootRenderWidget()->SetZoomLevelForTesting(
+          std::log(zoom_factor) / std::log(1.2));
     }
   }
 }
@@ -1943,7 +1945,7 @@ void EventSender::DumpFilenameBeingDragged() {
 }
 
 void EventSender::GestureScrollFirstPoint(float x, float y) {
-  current_gesture_location_ = WebFloatPoint(x, y);
+  current_gesture_location_ = gfx::PointF(x, y);
 }
 
 void EventSender::TouchStart(gin::Arguments* args) {
@@ -2008,7 +2010,7 @@ void EventSender::BeginDragWithItems(
   }
   current_drag_effects_allowed_ = blink::kWebDragOperationCopy;
 
-  const WebPoint& last_pos =
+  const gfx::Point& last_pos =
       current_pointer_state_[kRawMousePointerId].last_pos_;
 
   // Compute the scale from window (dsf-independent) to blink (dsf-dependent
@@ -2017,8 +2019,8 @@ void EventSender::BeginDragWithItems(
   web_widget_test_proxy_->ConvertWindowToViewport(&rect);
   float scale_to_blink_coords = rect.width;
 
-  WebFloatPoint last_pos_for_blink(last_pos.x * scale_to_blink_coords,
-                                   last_pos.y * scale_to_blink_coords);
+  gfx::PointF last_pos_for_blink(last_pos.x() * scale_to_blink_coords,
+                                 last_pos.y() * scale_to_blink_coords);
 
   // Provide a drag source.
   mainFrameWidget()->DragTargetDragEnter(current_drag_data_, last_pos_for_blink,
@@ -2154,7 +2156,7 @@ void EventSender::MouseMoveTo(gin::Arguments* args) {
     args->ThrowError();
     return;
   }
-  WebPoint mouse_pos(static_cast<int>(x), static_cast<int>(y));
+  gfx::Point mouse_pos(x, y);
 
   int modifiers = 0;
   if (!args->PeekNext().IsEmpty()) {
@@ -2232,8 +2234,7 @@ void EventSender::ScheduleAsynchronousKeyDown(const std::string& code_str,
 }
 
 void EventSender::ConsumeUserActivation() {
-  blink::WebUserGestureIndicator::ConsumeUserGesture(
-      view()->MainFrame()->ToWebLocalFrame());
+  view()->MainFrame()->ToWebLocalFrame()->ConsumeTransientUserActivation();
 }
 
 base::TimeTicks EventSender::GetCurrentEventTime() const {
@@ -2344,14 +2345,12 @@ void EventSender::GestureEvent(WebInputEvent::Type type, gin::Arguments* args) {
       event.data.scroll_update.delta_x = static_cast<float>(x);
       event.data.scroll_update.delta_y = static_cast<float>(y);
       event.SetPositionInWidget(current_gesture_location_);
-      current_gesture_location_.x =
-          current_gesture_location_.x + event.data.scroll_update.delta_x;
-      current_gesture_location_.y =
-          current_gesture_location_.y + event.data.scroll_update.delta_y;
+      current_gesture_location_.Offset(event.data.scroll_update.delta_x,
+                                       event.data.scroll_update.delta_y);
       break;
     }
     case WebInputEvent::kGestureScrollBegin:
-      current_gesture_location_ = WebFloatPoint(x, y);
+      current_gesture_location_ = gfx::PointF(x, y);
       event.SetPositionInWidget(current_gesture_location_);
       break;
     case WebInputEvent::kGestureScrollEnd:
@@ -2383,7 +2382,7 @@ void EventSender::GestureEvent(WebInputEvent::Type type, gin::Arguments* args) {
       event.data.tap.tap_count = tap_count;
       event.data.tap.width = width;
       event.data.tap.height = height;
-      event.SetPositionInWidget(WebFloatPoint(x, y));
+      event.SetPositionInWidget(gfx::PointF(x, y));
       break;
     }
     case WebInputEvent::kGestureTapUnconfirmed:
@@ -2397,7 +2396,7 @@ void EventSender::GestureEvent(WebInputEvent::Type type, gin::Arguments* args) {
       } else {
         event.data.tap.tap_count = 1;
       }
-      event.SetPositionInWidget(WebFloatPoint(x, y));
+      event.SetPositionInWidget(gfx::PointF(x, y));
       break;
     case WebInputEvent::kGestureTapDown: {
       float width = 30;
@@ -2414,7 +2413,7 @@ void EventSender::GestureEvent(WebInputEvent::Type type, gin::Arguments* args) {
           return;
         }
       }
-      event.SetPositionInWidget(WebFloatPoint(x, y));
+      event.SetPositionInWidget(gfx::PointF(x, y));
       event.data.tap_down.width = width;
       event.data.tap_down.height = height;
       break;
@@ -2434,17 +2433,17 @@ void EventSender::GestureEvent(WebInputEvent::Type type, gin::Arguments* args) {
           }
         }
       }
-      event.SetPositionInWidget(WebFloatPoint(x, y));
+      event.SetPositionInWidget(gfx::PointF(x, y));
       event.data.show_press.width = width;
       event.data.show_press.height = height;
       break;
     }
     case WebInputEvent::kGestureTapCancel:
-      event.SetPositionInWidget(WebFloatPoint(x, y));
+      event.SetPositionInWidget(gfx::PointF(x, y));
       break;
     case WebInputEvent::kGestureLongPress:
     case WebInputEvent::kGestureLongTap:
-      event.SetPositionInWidget(WebFloatPoint(x, y));
+      event.SetPositionInWidget(gfx::PointF(x, y));
       if (!args->PeekNext().IsEmpty()) {
         float width;
         if (!args->GetNext(&width)) {
@@ -2463,7 +2462,7 @@ void EventSender::GestureEvent(WebInputEvent::Type type, gin::Arguments* args) {
       }
       break;
     case WebInputEvent::kGestureTwoFingerTap:
-      event.SetPositionInWidget(WebFloatPoint(x, y));
+      event.SetPositionInWidget(gfx::PointF(x, y));
       if (!args->PeekNext().IsEmpty()) {
         float first_finger_width;
         if (!args->GetNext(&first_finger_width)) {
@@ -2505,7 +2504,7 @@ void EventSender::GestureEvent(WebInputEvent::Type type, gin::Arguments* args) {
 
     InitMouseEvent(current_pointer_state_[kRawMousePointerId].pressed_button_,
                    current_pointer_state_[kRawMousePointerId].current_buttons_,
-                   WebPoint(x, y), click_count_, &mouse_event);
+                   gfx::Point(x, y), click_count_, &mouse_event);
 
     FinishDragAndDrop(mouse_event, blink::kWebDragOperationNone);
   }
@@ -2578,12 +2577,11 @@ WebMouseWheelEvent EventSender::GetMouseWheelEvent(gin::Arguments* args,
   event.delta_x = event.wheel_ticks_x;
   event.delta_y = event.wheel_ticks_y;
   if (paged) {
-    event.delta_units = ui::input_types::ScrollGranularity::kScrollByPage;
+    event.delta_units = ui::ScrollGranularity::kScrollByPage;
   } else if (has_precise_scrolling_deltas) {
-    event.delta_units =
-        ui::input_types::ScrollGranularity::kScrollByPrecisePixel;
+    event.delta_units = ui::ScrollGranularity::kScrollByPrecisePixel;
   } else {
-    event.delta_units = ui::input_types::ScrollGranularity::kScrollByPixel;
+    event.delta_units = ui::ScrollGranularity::kScrollByPixel;
   }
   event.phase = phase;
   if (scroll_type == MouseScrollType::PIXEL) {
@@ -2662,8 +2660,7 @@ void EventSender::FinishDragAndDrop(const WebMouseEvent& raw_event,
         current_drag_data_, event->PositionInWidget(),
         event->PositionInScreen(), event->GetModifiers());
   } else {
-    mainFrameWidget()->DragTargetDragLeave(blink::WebFloatPoint(),
-                                           blink::WebFloatPoint());
+    mainFrameWidget()->DragTargetDragLeave(gfx::PointF(), gfx::PointF());
   }
   current_drag_data_.Reset();
   mainFrameWidget()->DragSourceEndedAt(event->PositionInWidget(),
@@ -2732,7 +2729,7 @@ void EventSender::ReplaySavedEvents() {
             current_pointer_state_[kRawMousePointerId].current_buttons_, e.pos,
             click_count_, &event);
         current_pointer_state_[kRawMousePointerId].last_pos_ =
-            WebPoint(event.PositionInWidget().x, event.PositionInWidget().y);
+            gfx::ToFlooredPoint(event.PositionInWidget());
         HandleInputEventOnViewOrPopup(event);
         DoDragAfterMouseMove(event);
         break;
@@ -2792,7 +2789,7 @@ WebInputEventResult EventSender::HandleInputEventOnViewOrPopup(
   std::unique_ptr<WebInputEvent> widget_event =
       TransformScreenToWidgetCoordinates(raw_event);
   const WebInputEvent* event =
-      widget_event.get() ? static_cast<WebMouseEvent*>(widget_event.get())
+      widget_event.get() ? static_cast<WebInputEvent*>(widget_event.get())
                          : &raw_event;
   return widget()->HandleInputEvent(blink::WebCoalescedInputEvent(*event));
 }
@@ -2806,8 +2803,7 @@ void EventSender::SendGesturesForMouseWheelEvent(
   begin_event.data.scroll_begin.delta_x_hint = wheel_event.delta_x;
   begin_event.data.scroll_begin.delta_y_hint = wheel_event.delta_y;
   begin_event.data.scroll_begin.delta_hint_units = wheel_event.delta_units;
-  if (wheel_event.delta_units ==
-      ui::input_types::ScrollGranularity::kScrollByPage) {
+  if (wheel_event.delta_units == ui::ScrollGranularity::kScrollByPage) {
     if (begin_event.data.scroll_begin.delta_x_hint) {
       begin_event.data.scroll_begin.delta_x_hint =
           begin_event.data.scroll_begin.delta_x_hint > 0 ? 1 : -1;
@@ -2859,11 +2855,11 @@ WebTestDelegate* EventSender::delegate() {
 }
 
 const blink::WebView* EventSender::view() const {
-  return web_widget_test_proxy_->GetWebViewTestProxy()->webview();
+  return web_widget_test_proxy_->GetWebViewTestProxy()->GetWebView();
 }
 
 blink::WebView* EventSender::view() {
-  return web_widget_test_proxy_->GetWebViewTestProxy()->webview();
+  return web_widget_test_proxy_->GetWebViewTestProxy()->GetWebView();
 }
 
 blink::WebWidget* EventSender::widget() {
@@ -2886,8 +2882,8 @@ std::unique_ptr<WebInputEvent> EventSender::TransformScreenToWidgetCoordinates(
 }
 
 void EventSender::UpdateLifecycleToPrePaint() {
-  widget()->UpdateLifecycle(blink::WebWidget::LifecycleUpdate::kPrePaint,
-                            blink::WebWidget::LifecycleUpdateReason::kTest);
+  widget()->UpdateLifecycle(blink::WebLifecycleUpdate::kPrePaint,
+                            blink::DocumentUpdateReason::kTest);
 }
 
 }  // namespace test_runner

@@ -35,6 +35,7 @@ CORE_EXPORT extern const base::Feature kTopOfStackAdTagging;
 // The tracker is maintained per local root.
 class CORE_EXPORT AdTracker : public GarbageCollected<AdTracker> {
  public:
+  enum class StackType { kBottomOnly, kBottomAndTop };
   // Finds an AdTracker for a given ExecutionContext.
   static AdTracker* FromExecutionContext(ExecutionContext*);
 
@@ -69,10 +70,15 @@ class CORE_EXPORT AdTracker : public GarbageCollected<AdTracker> {
   void DidFinishAsyncTask(probe::AsyncTaskId* task);
 
   // Returns true if any script in the pseudo call stack has previously been
-  // identified as an ad resource.
-  bool IsAdScriptInStack();
+  // identified as an ad resource, if the current ExecutionContext is a known ad
+  // execution context, or if the script at the top of isolate's
+  // stack is ad script. Whether to look at just the bottom of the
+  // stack or the top and bottom is indicated by |stack_type|. kBottomAndTop is
+  // generally best as it catches more ads, but if you're calling very
+  // frequently then consider just the bottom of the stack for performance sake.
+  bool IsAdScriptInStack(StackType stack_type);
 
-  virtual void Trace(blink::Visitor*);
+  virtual void Trace(Visitor*);
 
   void Shutdown();
   explicit AdTracker(LocalFrame*);
@@ -80,7 +86,7 @@ class CORE_EXPORT AdTracker : public GarbageCollected<AdTracker> {
 
  protected:
   // Protected for testing.
-  virtual String ScriptAtTopOfStack(ExecutionContext*);
+  virtual String ScriptAtTopOfStack();
   virtual ExecutionContext* GetCurrentExecutionContext();
 
  private:
@@ -107,7 +113,13 @@ class CORE_EXPORT AdTracker : public GarbageCollected<AdTracker> {
   // The number of ad-related async tasks currently running in the stack.
   uint32_t running_ad_async_tasks_ = 0;
 
+  // True if the AdTracker looks not only at the current V8 stack for ad script
+  // but also at the previous asynchronous stacks that caused this current
+  // callstack to run (e.g., registered callbacks).
   const bool async_stack_enabled_;
+
+  // True if the TopOfStack experiment is running, which forces the AdTracker to
+  // ignore the bottom of stack frames when looking for ad script.
   const bool top_of_stack_only_;
 
   DISALLOW_COPY_AND_ASSIGN(AdTracker);

@@ -11,9 +11,10 @@
 #include "build/build_config.h"
 #include "components/autofill/core/common/form_data.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "net/base/network_isolation_key.h"
 
 #if !defined(OS_IOS)
-#include "third_party/blink/public/mojom/webauthn/internal_authenticator.mojom.h"
+#include "components/autofill/core/browser/payments/internal_authenticator.h"
 #endif
 
 namespace network {
@@ -53,6 +54,10 @@ class AutofillDriver {
   // Returns whether AutofillDriver instance is associated to the main frame.
   virtual bool IsInMainFrame() const = 0;
 
+  // Returns true iff a popup can be shown on the behalf of the associated
+  // frame.
+  virtual bool CanShowAutofillUi() const = 0;
+
   // Returns the ax tree id associated with this driver.
   virtual ui::AXTreeID GetAxTreeId() const = 0;
 
@@ -64,9 +69,9 @@ class AutofillDriver {
   virtual bool RendererIsAvailable() = 0;
 
 #if !defined(OS_IOS)
-  // Binds the mojom request in order to facilitate WebAuthn flows.
-  virtual void ConnectToAuthenticator(
-      mojo::PendingReceiver<blink::mojom::InternalAuthenticator> receiver) = 0;
+  // Gets or creates a pointer to an implementation of InternalAuthenticator.
+  virtual InternalAuthenticator*
+  GetOrCreateCreditCardInternalAuthenticator() = 0;
 #endif
 
   // Forwards |data| to the renderer. |query_id| is the id of the renderer's
@@ -81,6 +86,9 @@ class AutofillDriver {
   // and to the password generation manager to detect account creation forms.
   virtual void PropagateAutofillPredictions(
       const std::vector<autofill::FormStructure*>& forms) = 0;
+
+  // Forwards parsed |forms| to the embedder.
+  virtual void HandleParsedForms(const std::vector<FormStructure*>& forms) = 0;
 
   // Sends the field type predictions specified in |forms| to the renderer. This
   // method is a no-op if the renderer is not available or the appropriate
@@ -119,6 +127,8 @@ class AutofillDriver {
   // renderers cannot do this transformation themselves.
   virtual gfx::RectF TransformBoundingBoxToViewportCoordinates(
       const gfx::RectF& bounding_box) = 0;
+
+  virtual net::NetworkIsolationKey NetworkIsolationKey() = 0;
 };
 
 }  // namespace autofill

@@ -7,15 +7,24 @@
 #include "ash/shelf/shelf.h"
 #include "ash/shell.h"
 #include "ash/system/status_area_widget.h"
+#include "ash/system/status_area_widget_test_helper.h"
 #include "ash/system/unified/unified_system_tray.h"
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/login/login_wizard.h"
+#include "chrome/browser/chromeos/login/test/embedded_test_server_mixin.h"
+#include "chrome/browser/chromeos/login/test/fake_gaia_mixin.h"
 #include "chrome/browser/chromeos/login/test/guest_session_mixin.h"
 #include "chrome/browser/chromeos/login/test/login_manager_mixin.h"
 #include "chrome/browser/chromeos/login/test/offline_gaia_test_mixin.h"
+#include "chrome/browser/chromeos/login/test/oobe_base_test.h"
+#include "chrome/browser/chromeos/login/test/oobe_screen_waiter.h"
+#include "chrome/browser/chromeos/login/test/session_manager_state_waiter.h"
+#include "chrome/browser/chromeos/login/test/test_predicate_waiter.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host_webui.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/webui/chromeos/login/welcome_screen_handler.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -23,6 +32,7 @@
 #include "chromeos/constants/chromeos_switches.h"
 #include "components/user_manager/user_names.h"
 #include "content/public/test/test_utils.h"
+#include "net/dns/mock_host_resolver.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "ui/gfx/geometry/test/rect_test_util.h"
 
@@ -51,11 +61,10 @@ class LoginGuestTest : public MixinBasedInProcessBrowserTest {
   GuestSessionMixin guest_session_{&mixin_host_};
 };
 
-class LoginCursorTest : public InProcessBrowserTest {
- protected:
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    command_line->AppendSwitch(switches::kLoginManager);
-  }
+class LoginCursorTest : public OobeBaseTest {
+ public:
+  LoginCursorTest() = default;
+  ~LoginCursorTest() override = default;
 };
 
 class LoginSigninTest : public InProcessBrowserTest {
@@ -75,6 +84,11 @@ class LoginTest : public MixinBasedInProcessBrowserTest {
   LoginTest() = default;
   ~LoginTest() override {}
 
+  void SetUpOnMainThread() override {
+    host_resolver()->AddRule("*", "127.0.0.1");
+    MixinBasedInProcessBrowserTest::SetUpOnMainThread();
+  }
+
  protected:
   const LoginManagerMixin::TestUserInfo test_user_{
       AccountId::FromUserEmailGaiaId(kTestUser, kGaiaId),
@@ -82,6 +96,11 @@ class LoginTest : public MixinBasedInProcessBrowserTest {
 
   LoginManagerMixin login_manager_{&mixin_host_, {test_user_}};
   OfflineGaiaTestMixin offline_gaia_test_mixin_{&mixin_host_};
+  EmbeddedTestServerSetupMixin embedded_test_server_{&mixin_host_,
+                                                     embedded_test_server()};
+  // We need Fake gaia to avoid network errors that can be caused by
+  // attempts to load real GAIA.
+  FakeGaiaMixin fake_gaia_{&mixin_host_, embedded_test_server()};
 };
 
 // Used to make sure that the system tray is visible and within the screen
@@ -93,12 +112,28 @@ void TestSystemTrayIsVisible(bool otr) {
       shelf->GetStatusAreaWidget()->unified_system_tray();
   SCOPED_TRACE(testing::Message()
                << "ShelfVisibilityState=" << shelf->GetVisibilityState()
-               << " ShelfAutoHideBehavior=" << shelf->auto_hide_behavior());
+               << " ShelfAutoHideBehavior="
+               << static_cast<int>(shelf->auto_hide_behavior()));
+  ash::StatusAreaWidgetTestHelper::WaitForAnimationEnd(
+      shelf->GetStatusAreaWidget());
   EXPECT_TRUE(tray->GetVisible());
 
-  // This check flakes for LoginGuestTest: https://crbug.com/693106.
-  if (!otr)
-    EXPECT_TRUE(RectContains(primary_win->bounds(), tray->GetBoundsInScreen()));
+  if (otr)
+    return;
+  // Wait for the system tray be inside primary bounds.
+  chromeos::test::TestPredicateWaiter(
+      base::BindRepeating(
+          [](const aura::Window* primary_win,
+             const ash::TrayBackgroundView* tray) {
+            if (RectContains(primary_win->bounds(), tray->GetBoundsInScreen()))
+              return true;
+            LOG(WARNING) << primary_win->bounds().ToString()
+                         << " does not contain "
+                         << tray->GetBoundsInScreen().ToString();
+            return false;
+          },
+          primary_win, tray))
+      .Wait();
 }
 
 }  // namespace
@@ -128,9 +163,7 @@ IN_PROC_BROWSER_TEST_F(LoginGuestTest, GuestIsOTR) {
 
 // Verifies the cursor is hidden at startup on login screen.
 IN_PROC_BROWSER_TEST_F(LoginCursorTest, CursorHidden) {
-  // Login screen needs to be shown explicitly when running test.
-  ShowLoginWizard(OobeScreen::SCREEN_SPECIAL_LOGIN);
-
+  OobeScreenWaiter(WelcomeView::kScreenId).Wait();
   // Cursor should be hidden at startup
   EXPECT_FALSE(ash::Shell::Get()->cursor_manager()->IsCursorVisible());
 
@@ -155,7 +188,11 @@ IN_PROC_BROWSER_TEST_F(LoginTest, PRE_GaiaAuthOffline) {
 
 IN_PROC_BROWSER_TEST_F(LoginTest, GaiaAuthOffline) {
   offline_gaia_test_mixin_.GoOffline();
-  offline_gaia_test_mixin_.SignIn(test_user_.account_id, kPassword);
+  offline_gaia_test_mixin_.InitOfflineLogin(test_user_.account_id, kPassword);
+  offline_gaia_test_mixin_.CheckManagedStatus(false);
+  offline_gaia_test_mixin_.SubmitGaiaAuthOfflineForm(
+      test_user_.account_id.GetUserEmail(), kPassword,
+      true /* wait for sign-in */);
   TestSystemTrayIsVisible(false);
 }
 

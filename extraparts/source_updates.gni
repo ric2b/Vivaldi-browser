@@ -44,16 +44,27 @@ foreach(_target, _main_dll_targets) {
   }
 }
 
-update_target("//chrome/test:test_support") {
-  sources += [
-    "//vivaldi/extraparts/vivaldi_main_delegate.cpp",
-    "//vivaldi/extraparts/vivaldi_main_delegate.h",
-  ]
-  public_deps += [
-    "//vivaldi/components:adverse_adblocking",
-    "//vivaldi/components:content_adverse_adblocking",
-  ]
-  if (!is_android) {
-    public_deps += [ "//vivaldi/extensions:extensions_client" ]
+if (!is_android) {
+  update_target("//chrome/test:test_support") {
+    sources += [
+      "//vivaldi/extraparts/vivaldi_main_delegate.cpp",
+      "//vivaldi/extraparts/vivaldi_main_delegate.h",
+    ]
+    public_deps += [
+      "//vivaldi/components:adverse_adblocking",
+      "//vivaldi/components:content_adverse_adblocking",
+    ]
+    if (!is_android) {
+      public_deps += [ "//vivaldi/extensions:extensions_client" ]
+    }
+  }
+}
+
+if (is_android) {
+  update_target("//chrome:chrome_android_core") {
+    sources += [
+      "//vivaldi/extraparts/vivaldi_main_delegate.cpp",
+      "//vivaldi/extraparts/vivaldi_main_delegate.h",
+    ]
   }
 }

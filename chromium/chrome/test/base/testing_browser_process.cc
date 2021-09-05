@@ -18,6 +18,7 @@
 #include "chrome/browser/notifications/notification_platform_bridge.h"
 #include "chrome/browser/notifications/notification_ui_manager.h"
 #include "chrome/browser/notifications/system_notification_helper.h"
+#include "chrome/browser/permissions/chrome_permissions_client.h"
 #include "chrome/browser/policy/chrome_browser_policy_connector.h"
 #include "chrome/browser/printing/print_job_manager.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -28,6 +29,7 @@
 #include "chrome/test/base/testing_browser_process_platform_part.h"
 #include "components/network_time/network_time_tracker.h"
 #include "components/optimization_guide/optimization_guide_service.h"
+#include "components/permissions/permissions_client.h"
 #include "components/policy/core/browser/browser_policy_connector.h"
 #include "components/prefs/pref_service.h"
 #include "components/subresource_filter/content/browser/ruleset_service.h"
@@ -70,7 +72,12 @@ TestingBrowserProcess* TestingBrowserProcess::GetGlobal() {
 // static
 void TestingBrowserProcess::CreateInstance() {
   DCHECK(!g_browser_process);
-  g_browser_process = new TestingBrowserProcess;
+  TestingBrowserProcess* process = new TestingBrowserProcess;
+  // Set |g_browser_process| before initializing the TestingBrowserProcess
+  // because some members may depend on |g_browser_process| (in particular,
+  // ChromeExtensionsBrowserClient).
+  g_browser_process = process;
+  process->Init();
 }
 
 // static
@@ -84,28 +91,7 @@ void TestingBrowserProcess::DeleteInstance() {
 TestingBrowserProcess::TestingBrowserProcess()
     : notification_service_(content::NotificationService::Create()),
       app_locale_("en"),
-      is_shutting_down_(false),
-      local_state_(nullptr),
-      rappor_service_(nullptr),
-      platform_part_(new TestingBrowserProcessPlatformPart()),
-      test_network_connection_tracker_(
-          network::TestNetworkConnectionTracker::CreateInstance()) {
-  content::SetNetworkConnectionTrackerForTesting(
-      test_network_connection_tracker_.get());
-
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-  extensions_browser_client_.reset(
-      new extensions::ChromeExtensionsBrowserClient);
-  extensions_browser_client_->AddAPIProvider(
-      std::make_unique<chrome_apps::ChromeAppsBrowserAPIProvider>());
-  extensions::AppWindowClient::Set(ChromeAppWindowClient::GetInstance());
-  extensions::ExtensionsBrowserClient::Set(extensions_browser_client_.get());
-#endif
-
-#if !defined(OS_ANDROID)
-  KeepAliveRegistry::GetInstance()->SetIsShuttingDown(false);
-#endif
-}
+      platform_part_(new TestingBrowserProcessPlatformPart()) {}
 
 TestingBrowserProcess::~TestingBrowserProcess() {
   EXPECT_FALSE(local_state_);
@@ -120,6 +106,29 @@ TestingBrowserProcess::~TestingBrowserProcess() {
   // Destructors for some objects owned by TestingBrowserProcess will use
   // g_browser_process if it is not null, so it must be null before proceeding.
   DCHECK_EQ(static_cast<BrowserProcess*>(nullptr), g_browser_process);
+}
+
+void TestingBrowserProcess::Init() {
+  test_network_connection_tracker_ =
+      network::TestNetworkConnectionTracker::CreateInstance();
+  content::SetNetworkConnectionTrackerForTesting(
+      test_network_connection_tracker_.get());
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  extensions_browser_client_ =
+      std::make_unique<extensions::ChromeExtensionsBrowserClient>();
+  extensions_browser_client_->AddAPIProvider(
+      std::make_unique<chrome_apps::ChromeAppsBrowserAPIProvider>());
+  extensions::AppWindowClient::Set(ChromeAppWindowClient::GetInstance());
+  extensions::ExtensionsBrowserClient::Set(extensions_browser_client_.get());
+#endif
+
+  // Make sure permissions client has been set.
+  ChromePermissionsClient::GetInstance();
+
+#if !defined(OS_ANDROID)
+  KeepAliveRegistry::GetInstance()->SetIsShuttingDown(false);
+#endif
 }
 
 void TestingBrowserProcess::FlushLocalStateAndReply(base::OnceClosure reply) {
@@ -394,7 +403,9 @@ WebRtcLogUploader* TestingBrowserProcess::webrtc_log_uploader() {
 network_time::NetworkTimeTracker*
 TestingBrowserProcess::network_time_tracker() {
   if (!network_time_tracker_) {
-    DCHECK(local_state_);
+    if (!local_state_)
+      return nullptr;
+
     network_time_tracker_.reset(new network_time::NetworkTimeTracker(
         std::unique_ptr<base::Clock>(new base::DefaultClock()),
         std::unique_ptr<base::TickClock>(new base::DefaultTickClock()),
@@ -414,6 +425,14 @@ TestingBrowserProcess::resource_coordinator_parts() {
         std::make_unique<resource_coordinator::ResourceCoordinatorParts>();
   }
   return resource_coordinator_parts_.get();
+}
+
+BuildState* TestingBrowserProcess::GetBuildState() {
+#if !defined(OS_ANDROID)
+  return &build_state_;
+#else
+  return nullptr;
+#endif
 }
 
 resource_coordinator::TabManager* TestingBrowserProcess::GetTabManager() {

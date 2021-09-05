@@ -10,12 +10,14 @@
 
 #include "platform_media/common/feature_toggles.h"
 
-#include <string>
+#include "platform_media/gpu/pipeline/platform_media_pipeline.h"
 
+#include "base/mac/scoped_nsobject.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
-#include "platform_media/gpu/pipeline/platform_media_pipeline.h"
-#include "platform_media/common/platform_media_pipeline_types.h"
+#include "gpu/gpu_export.h"
+
+@class DataSourceLoader;
 
 namespace media {
 
@@ -31,35 +33,31 @@ class AVFMediaReader;
 // responses between the main thread and the AVFMediaReader thread.
 class AVFMediaReaderRunner : public PlatformMediaPipeline {
  public:
-  explicit AVFMediaReaderRunner(IPCDataSource* data_source);
+  explicit AVFMediaReaderRunner();
   ~AVFMediaReaderRunner() override;
 
   // A run-time check is required to determine usability of
   // AVFMediaReaderRunner.
   static bool IsAvailable();
 
+  static GPU_EXPORT void WarmUp();
+
   // PlatformMediaPipeline implementation.
-  void Initialize(const std::string& mime_type,
-                  const InitializeCB& initialize_cb) override;
-  void ReadAudioData(const ReadDataCB& read_audio_data_cb) override;
-  void ReadVideoData(const ReadDataCB& read_video_data_cb) override;
+  void Initialize(ipc_data_source::Reader source_reader,
+                  ipc_data_source::Info source_info,
+                  InitializeCB initialize_cb) override;
+  void ReadMediaData(IPCDecodingBuffer buffer) override;
   void WillSeek() override;
-  void Seek(base::TimeDelta time, const SeekCB& seek_cb) override;
+  void Seek(base::TimeDelta time, SeekCB seek_cb) override;
 
  private:
-  void DataReady(PlatformMediaDataType type,
-                 const ReadDataCB& read_data_cb,
-                 const scoped_refptr<DataBuffer>& data);
+  void DataReady(IPCDecodingBuffer buffer);
 
-  IPCDataSource* const data_source_;
-
+  base::scoped_nsobject<DataSourceLoader> data_source_loader_;
   dispatch_queue_t reader_queue_;
   std::unique_ptr<AVFMediaReader> reader_;
 
   bool will_seek_;
-
-  scoped_refptr<DataBuffer>
-      last_data_buffer_[PlatformMediaDataType::PLATFORM_MEDIA_DATA_TYPE_COUNT];
 
   base::ThreadChecker thread_checker_;
 

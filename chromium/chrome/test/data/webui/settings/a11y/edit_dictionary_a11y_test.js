@@ -6,7 +6,8 @@
 
 // Disable since the EDIT_DICTIONARY route does not exist on Mac.
 // TODO(crbug.com/1012370) flaky on Linux b/c assertTrue(!!languagesPage);
-GEN('#if !defined(OS_MACOSX) && !defined(OS_LINUX)');
+// TODO(crbug.com/1012370) flaky on Win the same way
+GEN('#if !defined(OS_MACOSX) && !defined(OS_LINUX) && !defined(OS_WIN)');
 
 // SettingsAccessibilityTest fixture.
 GEN_INCLUDE([
@@ -45,14 +46,6 @@ AccessibilityTest.define('EditDictionaryA11yTest', {
   /** @override */
   name: 'EDIT_DICTIONARY',
 
-  /** @override */
-  axeOptions: Object.assign({}, SettingsAccessibilityTest.axeOptions, {
-    'rules': Object.assign({}, SettingsAccessibilityTest.axeOptions.rules, {
-      // TODO(crbug.com/1012370): Disable because of timeout in CFI build.
-      'hidden-content': {enabled: false},
-    }),
-  }),
-
   /** @type {settings.FakeLanguageSettingsPrivate} */
   languageSettingsPrivate_: null,
 
@@ -81,7 +74,7 @@ AccessibilityTest.define('EditDictionaryA11yTest', {
           this.languageSettingsPrivate_;
     }
 
-    settings.navigateTo(settings.routes.EDIT_DICTIONARY);
+    settings.Router.getInstance().navigateTo(settings.routes.EDIT_DICTIONARY);
     Polymer.dom.flush();
     await test_util.flushTasks();
   },

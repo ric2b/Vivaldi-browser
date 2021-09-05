@@ -31,6 +31,7 @@
 #include "media/audio/fake_audio_manager.h"
 #include "media/audio/test_audio_thread.h"
 #include "media/base/limits.h"
+#include "media/base/media_switches.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -268,15 +269,23 @@ class AudioManagerTest : public ::testing::Test {
     chromeos::CrasAudioClient::InitializeFake();
     chromeos::FakeCrasAudioClient::Get()->SetAudioNodesForTesting(audio_nodes);
     audio_pref_handler_ = new chromeos::AudioDevicesPrefHandlerStub();
-    chromeos::CrasAudioHandler::Initialize(/*connector=*/nullptr,
-                                           audio_pref_handler_);
+    chromeos::CrasAudioHandler::Initialize(
+        /*media_controller_manager*/ mojo::NullRemote(), audio_pref_handler_);
     cras_audio_handler_ = chromeos::CrasAudioHandler::Get();
     base::RunLoop().RunUntilIdle();
   }
 #endif  // defined(USE_CRAS)
 
  protected:
-  AudioManagerTest() { CreateAudioManagerForTesting(); }
+  AudioManagerTest() {
+#if defined(OS_LINUX)
+    // Due to problems with PulseAudio failing to start, use a fake audio
+    // stream. https://crbug.com/1047655#c70
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(
+        switches::kDisableAudioOutput);
+#endif
+    CreateAudioManagerForTesting();
+  }
   ~AudioManagerTest() override { audio_manager_->Shutdown(); }
 
   // Helper method which verifies that the device list starts with a valid
@@ -746,7 +755,7 @@ class TestAudioSourceCallback : public AudioOutputStream::AudioSourceCallback {
     return 0;
   }
 
-  void OnError() override { FAIL(); }
+  void OnError(ErrorType type) override { FAIL(); }
 
  private:
   const int expected_frames_per_buffer_;

@@ -23,11 +23,8 @@
 #include "chrome/common/media_router/providers/cast/cast_media_source.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
+#include "third_party/openscreen/src/cast/common/channel/proto/cast_channel.pb.h"
 #include "url/origin.h"
-
-namespace cast_channel {
-class CastMessage;
-}
 
 namespace media_router {
 
@@ -35,7 +32,6 @@ class ActivityRecord;
 class CastActivityRecord;
 class CastActivityRecordFactoryForTest;
 class CastSession;
-class DataDecoder;
 class MediaSinkServiceBase;
 
 // Base class for CastActivityManager including only functionality needed by
@@ -66,15 +62,12 @@ class CastActivityManager : public CastActivityManagerBase,
   // |message_handler|: Used for sending and receiving messages to Cast
   // receivers.
   // |media_router|: Mojo ptr to MediaRouter.
-  // |data_decoder|: Used for parsing JSON messages from Cast SDK and Cast
-  // receivers.
   // |hash_token|: Used for hashing receiver IDs in messages sent to the Cast
   // SDK.
   CastActivityManager(MediaSinkServiceBase* media_sink_service,
                       CastSessionTracker* session_tracker,
                       cast_channel::CastMessageHandler* message_handler,
                       mojom::MediaRouter* media_router,
-                      std::unique_ptr<DataDecoder> data_decoder,
                       const std::string& hash_token);
   ~CastActivityManager() override;
 
@@ -114,10 +107,11 @@ class CastActivityManager : public CastActivityManagerBase,
 
   const MediaRoute* GetRoute(const MediaRoute::Id& route_id) const;
   std::vector<MediaRoute> GetRoutes() const;
+  CastSessionTracker* GetCastSessionTracker() const { return session_tracker_; }
 
   // cast_channel::CastMessageHandler::Observer overrides.
   void OnAppMessage(int channel_id,
-                    const cast_channel::CastMessage& message) override;
+                    const cast::channel::CastMessage& message) override;
   void OnInternalMessage(int channel_id,
                          const cast_channel::InternalMessage& message) override;
 
@@ -138,10 +132,20 @@ class CastActivityManager : public CastActivityManagerBase,
       const std::string& route_id,
       mojom::MediaRouteProvider::TerminateRouteCallback callback) override;
 
+  const MediaRoute* FindMirroringRouteForTab(int32_t tab_id);
+
+  void SendRouteMessage(const std::string& media_route_id,
+                        const std::string& message);
+
  private:
   friend class CastActivityManagerTest;
   using ActivityMap =
       base::flat_map<MediaRoute::Id, std::unique_ptr<ActivityRecord>>;
+  using CastActivityMap = base::flat_map<MediaRoute::Id, CastActivityRecord*>;
+
+  void SendRouteJsonMessage(const std::string& media_route_id,
+                            const std::string& message,
+                            data_decoder::DataDecoder::ValueOrError result);
 
   // Bundle of parameters for DoLaunchSession().
   struct DoLaunchSessionParams {
@@ -187,8 +191,8 @@ class CastActivityManager : public CastActivityManagerBase,
 
   void RemoveActivityByRouteId(const std::string& route_id);
 
-  // Removes an activity, terminating any associated connections, then notifies
-  // the media router that routes have been updated.
+  // Removes an activity, terminating any associated connections, then
+  // notifies the media router that routes have been updated.
   void RemoveActivity(
       ActivityMap::iterator activity_it,
       blink::mojom::PresentationConnectionState state,
@@ -217,13 +221,14 @@ class CastActivityManager : public CastActivityManagerBase,
       mojom::MediaRouteProvider::TerminateRouteCallback callback,
       cast_channel::Result result);
 
-  ActivityRecord* FindActivityForAutoJoin(const CastMediaSource& cast_source,
-                                          const url::Origin& origin,
-                                          int tab_id);
-  bool CanJoinSession(const ActivityRecord& activity,
+  CastActivityRecord* FindActivityForAutoJoin(
+      const CastMediaSource& cast_source,
+      const url::Origin& origin,
+      int tab_id);
+  bool CanJoinSession(const CastActivityRecord& activity,
                       const CastMediaSource& cast_source,
                       bool incognito) const;
-  ActivityRecord* FindActivityForSessionJoin(
+  CastActivityRecord* FindActivityForSessionJoin(
       const CastMediaSource& cast_source,
       const std::string& presentation_id);
 
@@ -239,22 +244,29 @@ class CastActivityManager : public CastActivityManagerBase,
   ActivityMap::iterator FindActivityByChannelId(int channel_id);
   ActivityMap::iterator FindActivityBySink(const MediaSinkInternal& sink);
 
-  ActivityRecord* AddCastActivityRecord(const MediaRoute& route,
-                                        const std::string& app_id);
+  CastActivityRecord* AddCastActivityRecord(const MediaRoute& route,
+                                            const std::string& app_id);
   ActivityRecord* AddMirroringActivityRecord(
       const MediaRoute& route,
       const std::string& app_id,
       int tab_id,
       const CastSinkExtraData& cast_data);
 
-  // Returns a sink used to convert a mirroring activity to a cast activity.  If
-  // no conversion should occur, returns base::nullopt.
+  // Returns a sink used to convert a mirroring activity to a cast activity.
+  // If no conversion should occur, returns base::nullopt.
   base::Optional<MediaSinkInternal> ConvertMirrorToCast(int tab_id);
 
   static CastActivityRecordFactoryForTest* activity_record_factory_;
 
   base::flat_set<MediaSource::Id> route_queries_;
+
+  // This map contains all activities--both Cast app acitivties and mirroring
+  // activities.
   ActivityMap activities_;
+
+  // The values of this map are the subset of those in |activites_| where
+  // there is a CastActivityRecord.
+  CastActivityMap cast_activities_;
 
   // The following raw pointer fields are assumed to outlive |this|.
   MediaSinkServiceBase* const media_sink_service_;
@@ -262,7 +274,6 @@ class CastActivityManager : public CastActivityManagerBase,
   cast_channel::CastMessageHandler* const message_handler_;
   mojom::MediaRouter* const media_router_;
 
-  const std::unique_ptr<DataDecoder> data_decoder_;
   const std::string hash_token_;
 
   SEQUENCE_CHECKER(sequence_checker_);

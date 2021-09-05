@@ -9,12 +9,10 @@
 #include <vector>
 
 #include "ash/public/cpp/keyboard/keyboard_controller.h"
-#include "ash/public/mojom/constants.mojom.h"
 #include "ash/shell.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "chrome/browser/profiles/profile.h"
-#include "services/service_manager/public/cpp/connector.h"
 
 class ChromeKeyboardControllerClientTestHelper::FakeKeyboardController
     : public ash::KeyboardController {
@@ -58,6 +56,9 @@ class ChromeKeyboardControllerClientTestHelper::FakeKeyboardController
   void SetOccludedBounds(const std::vector<gfx::Rect>& bounds) override {}
   void SetHitTestBounds(const std::vector<gfx::Rect>& bounds) override {}
   void SetDraggableArea(const gfx::Rect& bounds) override {}
+  bool SetAreaToRemainOnScreen(const gfx::Rect& bounds) override {
+    return false;
+  }
   void AddObserver(ash::KeyboardControllerObserver* observer) override {
     observers_.AddObserver(observer);
   }

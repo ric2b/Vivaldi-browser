@@ -13,19 +13,15 @@ import os
 import re
 import shutil
 import sys
+import zipfile
 
 from util import build_utils
+from util import jar_info_utils
 from util import manifest_utils
+from util import md5_check
+from util import resources_parser
 from util import resource_utils
 
-_AAPT_IGNORE_PATTERN = ':'.join([
-    'OWNERS',  # Allow OWNERS files within res/
-    '*.py',  # PRESUBMIT.py sometimes exist.
-    '*.pyc',
-    '*~',  # Some editors create these as temp files.
-    '.*',  # Never makes sense to include dot(files/dirs).
-    '*.d.stamp', # Ignore stamp files
-    ])
 
 def _ParseArgs(args):
   """Parses command line options.
@@ -36,12 +32,9 @@ def _ParseArgs(args):
   parser, input_opts, output_opts = resource_utils.ResourceArgsParser()
 
   input_opts.add_argument(
-      '--aapt-path', required=True, help='Path to the Android aapt tool')
-
-  input_opts.add_argument('--resource-dirs',
-                        default='[]',
-                        help='A list of input directories containing resources '
-                             'for this target.')
+      '--res-sources-path',
+      required=True,
+      help='Path to a list of input resources for this target.')
 
   input_opts.add_argument(
       '--shared-resources',
@@ -77,48 +70,68 @@ def _ParseArgs(args):
 
   resource_utils.HandleCommonOptions(options)
 
-  options.resource_dirs = build_utils.ParseGnList(options.resource_dirs)
+  with open(options.res_sources_path) as f:
+    options.sources = [line.strip() for line in f.readlines()]
+  options.resource_dirs = resource_utils.ExtractResourceDirsFromFileList(
+      options.sources)
 
   return options
 
 
-def _GenerateGlobs(pattern):
-  # This function processes the aapt ignore assets pattern into a list of globs
-  # to be used to exclude files on the python side. It removes the '!', which is
-  # used by aapt to mean 'not chatty' so it does not output if the file is
-  # ignored (we dont output anyways, so it is not required). This function does
-  # not handle the <dir> and <file> prefixes used by aapt and are assumed not to
-  # be included in the pattern string.
-  return pattern.replace('!', '').split(':')
+def _CheckAllFilesListed(resource_files, resource_dirs):
+  resource_files = set(resource_files)
+  missing_files = []
+  for path, _ in resource_utils.IterResourceFilesInDirectories(resource_dirs):
+    if path not in resource_files:
+      missing_files.append(path)
+
+  if False and missing_files:
+    sys.stderr.write('Error: Found files not listed in the sources list of '
+                     'the BUILD.gn target:\n')
+    for path in missing_files:
+      sys.stderr.write('{}\n'.format(path))
+    sys.exit(1)
 
 
-def _ZipResources(resource_dirs, zip_path, ignore_pattern):
-  # Python zipfile does not provide a way to replace a file (it just writes
-  # another file with the same name). So, first collect all the files to put
-  # in the zip (with proper overriding), and then zip them.
+def _ZipResources(resource_dirs, zip_path, ignore_pattern, sources=[]):
   # ignore_pattern is a string of ':' delimited list of globs used to ignore
   # files that should not be part of the final resource zip.
-  files_to_zip = dict()
-  files_to_zip_without_generated = dict()
-  globs = _GenerateGlobs(ignore_pattern)
-  for d in resource_dirs:
-    for root, _, files in os.walk(d):
-      for f in files:
-        archive_path = f
-        parent_dir = os.path.relpath(root, d)
-        if parent_dir != '.':
-          archive_path = os.path.join(parent_dir, f)
-        path = os.path.join(root, f)
-        if build_utils.MatchesGlob(archive_path, globs):
-          continue
-        # We want the original resource dirs in the .info file rather than the
-        # generated overridden path.
-        if not path.startswith('/tmp'):
-          files_to_zip_without_generated[archive_path] = path
-        files_to_zip[archive_path] = path
-  resource_utils.CreateResourceInfoFile(files_to_zip_without_generated,
-                                        zip_path)
-  build_utils.DoZip(files_to_zip.iteritems(), zip_path)
+  files_to_zip = []
+  sources = set(sources or [])
+  path_info = resource_utils.ResourceInfoFile()
+  for index, resource_dir in enumerate(resource_dirs):
+    attributed_aar = None
+    if not resource_dir.startswith('..'):
+      aar_source_info_path = os.path.join(
+          os.path.dirname(resource_dir), 'source.info')
+      if os.path.exists(aar_source_info_path):
+        attributed_aar = jar_info_utils.ReadAarSourceInfo(aar_source_info_path)
+
+    for path, archive_path in resource_utils.IterResourceFilesInDirectories(
+        [resource_dir], ignore_pattern):
+      if sources and path not in sources:
+        continue
+      attributed_path = path
+      if attributed_aar:
+        attributed_path = os.path.join(attributed_aar, 'res',
+                                       path[len(resource_dir) + 1:])
+      # Use the non-prefixed archive_path in the .info file.
+      path_info.AddMapping(archive_path, attributed_path)
+
+      resource_dir_name = os.path.basename(resource_dir)
+      archive_path = '{}_{}/{}'.format(index, resource_dir_name, archive_path)
+      files_to_zip.append((archive_path, path))
+
+  path_info.Write(zip_path + '.info')
+
+  with zipfile.ZipFile(zip_path, 'w') as z:
+    # This magic comment signals to resource_utils.ExtractDeps that this zip is
+    # not just the contents of a single res dir, without the encapsulating res/
+    # (like the outputs of android_generated_resources targets), but instead has
+    # the contents of possibly multiple res/ dirs each within an encapsulating
+    # directory within the zip.
+    z.comment = resource_utils.MULTIPLE_RES_MAGIC_STRING
+    build_utils.DoZip(files_to_zip, z)
 
 
 def _GenerateRTxt(options, dep_subdirs, gen_dir):
@@ -130,32 +143,9 @@ def _GenerateRTxt(options, dep_subdirs, gen_dir):
     gen_dir: Locates where the aapt-generated files will go. In particular
       the output file is always generated as |{gen_dir}/R.txt|.
   """
-  # NOTE: This uses aapt rather than aapt2 because 'aapt2 compile' does not
-  # support the --output-text-symbols option yet (https://crbug.com/820460).
-  package_command = [
-      options.aapt_path,
-      'package',
-      '-m',
-      '-M',
-      manifest_utils.EMPTY_ANDROID_MANIFEST_PATH,
-      '--no-crunch',
-      '--auto-add-overlay',
-      '--no-version-vectors',
-  ]
-  for j in options.include_resources:
-    package_command += ['-I', j]
-
-  ignore_pattern = _AAPT_IGNORE_PATTERN
+  ignore_pattern = resource_utils.AAPT_IGNORE_PATTERN
   if options.strip_drawables:
     ignore_pattern += ':*drawable*'
-  package_command += [
-      '--output-text-symbols',
-      gen_dir,
-      '-J',
-      gen_dir,  # Required for R.txt generation.
-      '--ignore-assets',
-      ignore_pattern
-  ]
 
   # Adding all dependencies as sources is necessary for @type/foo references
   # to symbols within dependencies to resolve. However, it has the side-effect
@@ -163,34 +153,16 @@ def _GenerateRTxt(options, dep_subdirs, gen_dir):
   # E.g.: It enables an arguably incorrect usage of
   # "mypackage.R.id.lib_symbol" where "libpackage.R.id.lib_symbol" would be
   # more correct. This is just how Android works.
-  for d in dep_subdirs:
-    package_command += ['-S', d]
+  resource_dirs = dep_subdirs + options.resource_dirs
 
-  for d in options.resource_dirs:
-    package_command += ['-S', d]
-
-  # Only creates an R.txt
-  build_utils.CheckOutput(
-      package_command, print_stdout=False, print_stderr=False)
-
-
-def _GenerateResourcesZip(output_resource_zip, input_resource_dirs,
-                          strip_drawables):
-  """Generate a .resources.zip file fron a list of input resource dirs.
-
-  Args:
-    output_resource_zip: Path to the output .resources.zip file.
-    input_resource_dirs: A list of input resource directories.
-  """
-
-  ignore_pattern = _AAPT_IGNORE_PATTERN
-  if strip_drawables:
-    ignore_pattern += ':*drawable*'
-  _ZipResources(input_resource_dirs, output_resource_zip, ignore_pattern)
+  resources_parser.RTxtGenerator(resource_dirs, ignore_pattern).WriteRTxtFile(
+      os.path.join(gen_dir, 'R.txt'))
 
 
 def _OnStaleMd5(options):
   with resource_utils.BuildContext() as build:
+    if options.sources:
+      _CheckAllFilesListed(options.sources, options.resource_dirs)
     if options.r_text_in:
       r_txt_path = options.r_text_in
     else:
@@ -201,10 +173,6 @@ def _OnStaleMd5(options):
 
       _GenerateRTxt(options, dep_subdirs, build.gen_dir)
       r_txt_path = build.r_txt_path
-
-      # 'aapt' doesn't generate any R.txt file if res/ was empty.
-      if not os.path.exists(r_txt_path):
-        build_utils.Touch(r_txt_path)
 
     if options.r_text_out:
       shutil.copyfile(r_txt_path, options.r_text_out)
@@ -237,8 +205,11 @@ def _OnStaleMd5(options):
       build_utils.ZipDir(options.srcjar_out, build.srcjar_dir)
 
     if options.resource_zip_out:
-      _GenerateResourcesZip(options.resource_zip_out, options.resource_dirs,
-                            options.strip_drawables)
+      ignore_pattern = resource_utils.AAPT_IGNORE_PATTERN
+      if options.strip_drawables:
+        ignore_pattern += ':*drawable*'
+      _ZipResources(options.resource_dirs, options.resource_zip_out,
+                    ignore_pattern, options.sources)
 
 
 def main(args):
@@ -263,7 +234,6 @@ def main(args):
   ]
 
   possible_input_paths = [
-    options.aapt_path,
     options.android_manifest,
   ]
   possible_input_paths += options.include_resources
@@ -289,7 +259,7 @@ def main(args):
   # This matters if a file is renamed but not changed (http://crbug.com/597126).
   input_strings.extend(sorted(resource_names))
 
-  build_utils.CallAndWriteDepfileIfStale(
+  md5_check.CallAndWriteDepfileIfStale(
       lambda: _OnStaleMd5(options),
       options,
       input_paths=input_paths,

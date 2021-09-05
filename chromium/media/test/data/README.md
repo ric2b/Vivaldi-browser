@@ -46,8 +46,15 @@ bear-vp8-webvtt.webm as a 'subt' handler type.
 Just the first initialization segment of bear-1280x720_av_frag.mp4, modified to
 have the mvhd version 0 32-bit duration field set to all 1's.
 
-#### media/test/data/negative-audio-timestamps.avi
-A truncated audio/video file with audio packet timestamps of -1. We need to ensure that these packets arent dropped.
+#### negative-audio-timestamps.avi
+A truncated audio/video file with audio packet timestamps of -1. We need to ensure that these packets aren't dropped.
+
+#### noise-xhe-aac.mp4
+Fragmented mp4 of noise encoded with xHE-AAC, from xHE-AAC samples in [Android
+CTS](https://android.googlesource.com/platform/cts/+/master/tests/tests/media/res/raw)
+```
+ffmpeg -i noise_2ch_48khz_aot42_19_lufs_mp4.m4a -acodec copy -t 1 noise-xhe-aac.mp4
+```
 
 ### FLAC
 
@@ -151,6 +158,27 @@ aomenc bear-320x180-10bit.y4m --lag-in-frames=0 --target-bitrate=50 \
   --fps=30000/1001 --cpu-used=8 --bit-depth=10 --test-decode=fatal \
   -o bear-av1-320x180-10bit.webm
 ```
+
+#### bear-av1-opus.mp4
+Created by combining bear-av1.mp4 and bear-opus.mp4.
+```
+ffmpeg -i bear-av1.mp4 -i bear-opus.mp4 -c copy -strict -2 \
+  -movflags frag_keyframe+empty_moov+default_base_moof \
+  bear-av1-opus.mp4
+```
+**Note**: "-strict -2" was required because the current ffmpeg version
+has support for OPUS in MP4 as experimental.
+
+#### av1-svc-L2T2.ivf
+AV1 data that has spatial and temporal layers.
+This is the same as av1-1-b8-22-svc-L2T2.ivf in
+[libaom test vectors]:https://aomedia.googlesource.com/aom/+/master/test/test_vectors.cc
+
+#### av1-show_existing_frame.ivf
+AV1 data that contains frames with `show_existing_frame=1`.
+This is the same as 00000592.ivf in
+https://people.xiph.org/~tterribe/av1/samples-all/
+
 
 ### Alpha Channel
 
@@ -450,6 +478,20 @@ packager in=bear-flac.mp4,stream=audio,output=bear-flac-cenc.mp4
          --pssh 000000327073736800000000EDEF8BA979D64ACEA3C827DCD51D21ED000000121210303132333435363738393031323334350000003470737368010000001077EFECC0B24D02ACE33C1E52E2FB4B000000013031323334353637383930313233343500000000
 ```
 
+#### bear-opus-cenc.mp4
+Encrypted version of bear-opus.mp4, encrypted by [Shaka Packager] v2.3.0 using
+key ID [1] and key [2].
+
+```
+packager in=bear-opus.mp4,stream=audio,output=bear-opus-cenc.mp4
+         --enable_raw_key_encryption
+         --protection_scheme cenc
+         --clear_lead 0
+         --segment_duration 0.5
+         --keys label=:key_id=30313233343536373839303132333435:key=ebdd62f16814d27b68ef122afce4ae3c
+         --pssh 000000327073736800000000EDEF8BA979D64ACEA3C827DCD51D21ED000000121210303132333435363738393031323334350000003470737368010000001077EFECC0B24D02ACE33C1E52E2FB4B000000013031323334353637383930313233343500000000
+```
+
 #### bear-a_enc-a.webm
 bear-320x240-audio-only.webm encrypted using key ID [1] and key [2].
 
@@ -574,20 +616,6 @@ ffmpeg -i third_party/WebKit/LayoutTests/media/content/test-25fps.mp4 \
       -vcodec copy -vbsf h264_mp4toannexb -an test-25fps.h264
 ```
 
-#### test-25fps.h264.md5
-MD5s of RGB thumbnail rendered version of test-25fps.h264 decoded with Intel
-VAAPI and V4L2VDA on various platforms.
-Written out by video_decode_accelerator_unittest.
-These differ between implementations because color space-converted frames are
-not specified to the last bit and GLES shader/texture filtering
-precision varies.
-
-#### test-25fps.h264.frames.md5:
-MD5s of frame which is decoded with Intel VAAPI and V4L2 decoders and is
-converted to I420 pixel format. Written out by
-video_decode_accelerator_unittest when input file is test-25fps.h264.
-This value must be identical on all platforms.
-
 #### test-25fps.h264.json:
 JSON file that contains all metadata related to test-25fps.h264, used by the
 video_decode_accelerator_tests. This includes the video codec, resolution and
@@ -600,16 +628,6 @@ mkvextract v5.0.1
 ffmpeg -i test-25fps.h264 -vcodec libvpx -an test-25fps.webm && \
     mkvextract tracks test-25fps.webm 1:test-25fps.vp8 && rm test-25fps.webm
 ```
-
-#### test-25fps.vp8.md5
-MD5 of RGB thumbnail rendered version of test-25fps.vp8. Written out by
-video_decode_accelerator_unittest.
-
-#### test-25fps.vp8.frames.md5:
-MD5s of frame which is decoded with Intel VAAPI and V4L2 decoders and is
-converted to I420 pixel format. Written out by
-video_decode_accelerator_unittest when input file is test-25fps.vp8.
-This value must be identical on all platforms.
 
 #### test-25fps.vp8.json:
 JSON file that contains all metadata related to test-25fps.vp8, used by the
@@ -629,16 +647,6 @@ vpxenc test-25fps_i420.yuv -o test-25fps.vp9 --codec=vp9 -w 320 -h 240 --ivf \
     --maxsection-pct=2000 --undershoot-pct=100
 ```
 
-#### test-25fps.vp9.md5
-MD5 of RGB thumbnail rendered version of test-25fps.vp9. Written out by
-video_decode_accelerator_unittest.
-
-#### test-25fps.vp9.frames.md5:
-MD5s of frame which is decoded with Intel VAAPI and V4L2 decoders and is
-converted to I420 pixel format. Written out by
-video_decode_accelerator_unittest when input file is test-25fps.vp9.
-This value must be identical on all platforms.
-
 #### test-25fps.vp9.json:
 JSON file that contains all metadata related to test-25fps.vp9, used by the
 video_decode_accelerator_tests. This includes the video codec, resolution and
@@ -648,16 +656,6 @@ md5 checksums of individual video frames when converted to the I420 format.
 Similar to test-25fps.vp9, substituting the option `--profile=0` with
 `--profile=2 --bit-depth=10` to vpxenc. (Note that vpxenc must have been
 configured with the option --enable-vp9-highbitdepth).
-
-#### test-25fps.vp9_2.md5
-MD5 of RGB thumbnail rendered version of test-25fps.vp9_2. Written out by
-video_decode_accelerator_unittest.
-
-#### test-25fps.vp9_2.frames.md5:
-MD5s of frame which is decoded with Intel VAAPI and V4L2 decoders and is
-converted to I420 pixel format. Written out by
-video_decode_accelerator_unittest when input file is test-25fps.vp9_2.
-This value must be identical on all platforms.
 
 #### test-25fps.vp9_2.json:
 JSON file that contains all metadata related to test-25fps.vp9_2, used by the
@@ -675,10 +673,6 @@ ffmpeg -i vp90_2_17_show_existing_frame.vp9 -vcodec copy -an -f ivf \
     vp90_2_17_show_existing_frame.vp9.ivf
 ```
 
-#### vp90_2_10_show_existing_frame2.vp9.ivf.md5
-MD5 of RGB thumbnail rendered version of vp90_2_10_show_existing_frame2.vp9.ivf.
-Written out by video_decode_accelerator_unittest.
-
 
 ### bear
 
@@ -689,14 +683,6 @@ bear.mp4 (https://chromiumcodereview.appspot.com/10805089):
 ffmpeg -i bear.mp4 -vcodec copy -vbsf h264_mp4toannexb -an bear.h264
 ```
 
-#### bear.h264.md5
-MD5s of RGB thumbnail rendered version of bear.h264 decoded with Intel
-VAAPI on Ivy Bridge and Sandy Bridge and V4L2VDA on Exynos.
-Written out by video_decode_accelerator_unittest.
-These differ between implementations because color space-converted frames are
-not specified to the last bit and GLES shader/texture filtering
-precision varies.
-
 ### npot-video
 
 #### npot-video.h264
@@ -706,14 +692,6 @@ npot-video.mp4 (https://codereview.chromium.org/8342021):
 ffmpeg -i npot-video.mp4 -vcodec copy -vbsf h264_mp4toannexb -an npot-video.h264
 ```
 
-#### npot-video.h264.md5
-MD5s of RGB thumbnail rendered version of npot-video.h264 decoded with Intel
-VAAPI on Ivy Bridge and Sandy Bridge and V4L2VDA on Exynos.
-Written out by video_decode_accelerator_unittest.
-These differ between implementations because color space-converted frames are
-not specified to the last bit and GLES shader/texture filtering
-precision varies.
-
 ### red-green
 
 #### red-green.h264
@@ -722,14 +700,6 @@ red-green.mp4 (https://codereview.chromium.org/8342021):
 ```
 ffmpeg -i red-green.mp4 -vcodec copy -vbsf h264_mp4toannexb -an red-green.h264
 ```
-
-#### red-green.h264.md5
-MD5s of RGB thumbnail rendered version of red-green.h264 decoded with Intel
-VAAPI on Ivy Bridge and Sandy Bridge and V4L2VDA on Exynos.
-Written out by video_decode_accelerator_unittest.
-These differ between implementations because color space-converted frames are
-not specified to the last bit and GLES shader/texture filtering
-precision varies.
 
 ## Misc Test Files
 
@@ -767,45 +737,70 @@ video_encode_accelerator_unittest. Encoded with vp9 lossless:
 
 ### ImageProcessor Test Files
 
-#### bear\_320x192.i420.yuv
+#### bear\_320x192.i420.yuv.webm
 First frame of bear\_320x192\_40frames.yuv for image\_processor_test.
+To get the uncompressed yuv, execute the following command.
+`vpxdec bear_320x192.i420.yuv.webm --rawvideo -o bear_320x192.i420.yuv`
 
 #### bear\_320x192.i420.yuv.json
 Metadata describing bear\_320x192.i420.yuv.
 
 #### bear\_320x192.nv12.yuv
-First frame of bear\_320x192\_40frames.nv12.yuv for image\_processor_test.
+First frame of bear\_320x192\_40frames.yuv for image\_processor_test and
+formatted nv12.
+To get the uncompressed yuv, execute the following command.
+`ffmpeg -s:v 320x192 -pix_fmt yuv420p -i bear_320x192.i420.yuv  -c:v rawvideo -pix_fmt nv12 bear_320x192.nv12.yuv`
 
 #### bear\_320x192.nv12.yuv.json
 Metadata describing bear\_320x192.nv12.yuv.
 
 #### bear\_320x192.yv12.yuv
-First frame of bear\_320x192\_40frames.yv12.yuv for image\_processor_test.
+First frame of bear\_320x192\_40frames.yv12.yuv for image\_processor_test and
+formatted yv12.
+To get the uncompressed yuv, execute the following command.
+`ffmpeg -s:v 320x192 -pix_fmt yuv420p -i bear_320x192.i420.yuv  -c:v rawvideo -pix_fmt yuv420p -vf shuffleplanes=0:2:1 bear_320x192.yv12.2.yuv`
 
 #### bear\_320x192.rgba
-RAW RGBA format data. This data is created from bear\_320x192.i420.yuv by the
-following command. Alpha channel is always 0xFF because of that.
+RAW RGBA format data. This data is created from bear\_320x192.i420.yuv.
+Alpha channel is always 0xFF.
+To get the uncompressed yuv, execute the following command.
 `ffmpeg -s 320x192 -pix_fmt yuv420p -i bear_320x192.i420.yuv -vcodec rawvideo -f image2 -pix_fmt rgba bear_320x192.rgba`
 
 #### bear\_320x192.bgra
-RAW BGRA format data. This data is created from bear\_320x192.i420.yuv by the
-following command. Alpha channel is always 0xFF because of that.
+RAW BGRA format data. This data is created from bear\_320x192.i420.yuv.
+Alpha channel is always 0xFF.
+To get the uncompressed yuv, execute the following command.
 `ffmpeg -s 320x192 -pix_fmt yuv420p -i bear_320x192.i420.yuv -vcodec rawvideo -f image2 -pix_fmt rgba bear_320x192.bgra`
-
 
 #### puppets-1280x720.nv12.yuv
 RAW NV12 format data. The width and height are 1280 and 720, respectively.
 This data is created from peach\_pi-1280x720.jpg by the following command.
 `ffmpeg -i peach_pi-1280x720.jpg -s 1280x720 -pix_fmt nv12 puppets-1280x720.nv12.yuv`
 
+To get the uncompressed yuv, execute the following commands.
+`vpxdec puppets-1280x720.i420.yuv.webm --rawvideo -o puppets-1280x720.i420.yuv`
+`ffmpeg -s:v 1280x720 -pix_fmt yuv420p -i puppets-1280x720.i420.yuv -c:v rawvideo -pix_fmt nv12 puppets-1280x720.nv12.yuv`
+
 #### puppets-640x360.nv12.yuv
 RAW NV12 format data. The width and height are 640 and 360, respectively.
-This data is created from puppets-1280x720.nv12.yuv by the following command.
+To get the uncompressed yuv, execute the following command.
 `ffmpeg -s:v 1280x720 -pix_fmt nv12 -i puppets-1280x720.nv12.yuv -vf scale=640x360 -c:v rawvideo -pix_fmt nv12 puppets-640x360.nv12.yuv`
+
+#### puppets-480x270.nv12.yuv
+RAW NV12 format data. The width and height are 640 and 360, respectively.
+To get the uncompressed yuv, execute the following command.
+`ffmpeg -s:v 1280x720 -pix_fmt nv12 -i puppets-1280x720.nv12.yuv -vf scale=480x270 -c:v rawvideo -pix_fmt nv12 puppets-480x270.nv12.yuv`
+
+### puppets-640x360\_in\_640x480.nv12.yuv
+RAW NV12 format data. The width and height are 640 and 480, respectively.
+The meaningful image is at the rectangle (0, 0, 640x360) in the image. The area
+outside this rectangle is black.
+To get the uncompressed yuv, execute the following command.
+`ffmpeg -s:v 640x360 -pix_fmt nv12 -i puppets-640x360.nv12.yuv -vf "scale=640:480:force_original_aspect_ratio=decrease,pad=640:480:(ow-iw)/2:(oh-ih)/2" -c:v rawvideo -pix_fmt nv12 puppets-640x360_in_640x480.nv12.yuv`
 
 #### puppets-320x180.nv12.yuv
 RAW NV12 format data. The width and height are 320 and 180, respectively.
-This data is created from puppets-1280x720.nv12.yuv by the following command.
+To get the uncompressed yuv, execute the following command.
 `ffmpeg -s:v 1280x720 -pix_fmt nv12 -i puppets-1280x720.nv12.yuv -vf scale=320x180 -c:v rawvideo -pix_fmt nv12 puppets-320x180.nv12.yuv`
 
 ###  VP9 parser test files:

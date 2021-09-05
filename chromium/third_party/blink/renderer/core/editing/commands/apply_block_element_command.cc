@@ -43,8 +43,6 @@
 
 namespace blink {
 
-using namespace html_names;
-
 ApplyBlockElementCommand::ApplyBlockElementCommand(
     Document& document,
     const QualifiedName& tag_name,
@@ -109,7 +107,7 @@ void ApplyBlockElementCommand::DoApply(EditingState* editing_state) {
   if (editing_state->IsAborted())
     return;
 
-  GetDocument().UpdateStyleAndLayout();
+  GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
 
   DCHECK_EQ(start_scope, end_scope);
   DCHECK_GE(start_index, 0);
@@ -213,7 +211,7 @@ void ApplyBlockElementCommand::FormatSelection(
         !end_of_next_paragraph.IsConnected())
       return;
 
-    GetDocument().UpdateStyleAndLayout();
+    GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
     end_of_current_paragraph = CreateVisiblePosition(end_of_next_paragraph);
   }
 }
@@ -374,7 +372,7 @@ ApplyBlockElementCommand::EndOfNextParagrahSplittingTextNodesIfNeeded(
   // pointing at this same text node, endOfNextParagraph will be shifted by one
   // paragraph. Avoid this by splitting "\n"
   SplitTextNode(end_of_next_paragraph_text, 1);
-  GetDocument().UpdateStyleAndLayout();
+  GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
   Text* const previous_text =
       DynamicTo<Text>(end_of_next_paragraph_text->previousSibling());
   if (end_of_next_paragraph_text == start.ComputeContainerNode() &&
@@ -416,7 +414,7 @@ ApplyBlockElementCommand::EndOfNextParagrahSplittingTextNodesIfNeeded(
 HTMLElement* ApplyBlockElementCommand::CreateBlockElement() const {
   HTMLElement* element = CreateHTMLElement(GetDocument(), tag_name_);
   if (inline_style_.length())
-    element->setAttribute(kStyleAttr, inline_style_);
+    element->setAttribute(html_names::kStyleAttr, inline_style_);
   return element;
 }
 

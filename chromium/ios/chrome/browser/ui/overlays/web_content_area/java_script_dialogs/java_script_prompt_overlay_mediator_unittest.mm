@@ -7,11 +7,13 @@
 #include "base/strings/sys_string_conversions.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/url_formatter/elide_url.h"
+#include "ios/chrome/browser/overlays/public/overlay_callback_manager.h"
 #import "ios/chrome/browser/overlays/public/overlay_request.h"
 #import "ios/chrome/browser/overlays/public/overlay_response.h"
 #import "ios/chrome/browser/overlays/public/web_content_area/java_script_prompt_overlay.h"
-#import "ios/chrome/browser/ui/alert_view_controller/alert_action.h"
-#import "ios/chrome/browser/ui/alert_view_controller/test/fake_alert_consumer.h"
+#import "ios/chrome/browser/ui/alert_view/alert_action.h"
+#import "ios/chrome/browser/ui/alert_view/test/fake_alert_consumer.h"
+#import "ios/chrome/browser/ui/dialogs/dialog_constants.h"
 #import "ios/chrome/browser/ui/dialogs/java_script_dialog_blocking_state.h"
 #import "ios/chrome/browser/ui/elements/text_field_configuration.h"
 #import "ios/chrome/browser/ui/overlays/common/alerts/test/alert_overlay_mediator_test.h"
@@ -75,7 +77,7 @@ class JavaScriptPromptOverlayMediatorTest : public AlertOverlayMediatorTest {
   const std::string& default_prompt_value() const {
     return default_prompt_value_;
   }
-  const OverlayRequest* request() const { return request_.get(); }
+  OverlayRequest* request() const { return request_.get(); }
   FakePromptOverlayMediatorDataSource* data_source() { return data_source_; }
 
  private:
@@ -98,7 +100,7 @@ TEST_F(JavaScriptPromptOverlayMediatorTest, PromptSetupMainFrame) {
   EXPECT_NSEQ(base::SysUTF8ToNSString(default_prompt_value()),
               consumer().textFieldConfigurations[0].text);
   EXPECT_FALSE(!!consumer().textFieldConfigurations[0].placeholder);
-  EXPECT_NSEQ(kJavaScriptPromptTextFieldAccessibiltyIdentifier,
+  EXPECT_NSEQ(kJavaScriptDialogTextFieldAccessibilityIdentifier,
               consumer().textFieldConfigurations[0].accessibilityIdentifier);
   ASSERT_EQ(2U, consumer().actions.count);
   EXPECT_EQ(UIAlertActionStyleDefault, consumer().actions[0].style);
@@ -117,7 +119,7 @@ TEST_F(JavaScriptPromptOverlayMediatorTest, PromptSetupIframe) {
   EXPECT_NSEQ(base::SysUTF8ToNSString(default_prompt_value()),
               consumer().textFieldConfigurations[0].text);
   EXPECT_FALSE(!!consumer().textFieldConfigurations[0].placeholder);
-  EXPECT_NSEQ(kJavaScriptPromptTextFieldAccessibiltyIdentifier,
+  EXPECT_NSEQ(kJavaScriptDialogTextFieldAccessibilityIdentifier,
               consumer().textFieldConfigurations[0].accessibilityIdentifier);
   ASSERT_EQ(2U, consumer().actions.count);
   EXPECT_EQ(UIAlertActionStyleDefault, consumer().actions[0].style);
@@ -138,7 +140,7 @@ TEST_F(JavaScriptPromptOverlayMediatorTest, PromptSetupWithBlockingOption) {
   EXPECT_NSEQ(base::SysUTF8ToNSString(default_prompt_value()),
               consumer().textFieldConfigurations[0].text);
   EXPECT_FALSE(!!consumer().textFieldConfigurations[0].placeholder);
-  EXPECT_NSEQ(kJavaScriptPromptTextFieldAccessibiltyIdentifier,
+  EXPECT_NSEQ(kJavaScriptDialogTextFieldAccessibilityIdentifier,
               consumer().textFieldConfigurations[0].accessibilityIdentifier);
   ASSERT_EQ(3U, consumer().actions.count);
   EXPECT_EQ(UIAlertActionStyleDefault, consumer().actions[0].style);
@@ -156,12 +158,13 @@ TEST_F(JavaScriptPromptOverlayMediatorTest, ConfirmResponse) {
   data_source().promptInput = kFakeUserInput;
   CreateMediator();
   ASSERT_EQ(2U, consumer().actions.count);
-  ASSERT_FALSE(!!request()->response());
+  ASSERT_FALSE(!!request()->GetCallbackManager()->GetCompletionResponse());
 
   // Execute the confirm action and verify the response.
   AlertAction* confirm_action = consumer().actions[0];
   confirm_action.handler(confirm_action);
-  OverlayResponse* confirm_response = request()->response();
+  OverlayResponse* confirm_response =
+      request()->GetCallbackManager()->GetCompletionResponse();
   ASSERT_TRUE(!!confirm_response);
   JavaScriptPromptOverlayResponseInfo* confirm_response_info =
       confirm_response->GetInfo<JavaScriptPromptOverlayResponseInfo>();
@@ -176,12 +179,13 @@ TEST_F(JavaScriptPromptOverlayMediatorTest, EmptyConfirmResponse) {
   data_source().promptInput = nil;
   CreateMediator();
   ASSERT_EQ(2U, consumer().actions.count);
-  ASSERT_FALSE(!!request()->response());
+  ASSERT_FALSE(!!request()->GetCallbackManager()->GetCompletionResponse());
 
   // Execute the confirm action and verify the response.
   AlertAction* confirm_action = consumer().actions[0];
   confirm_action.handler(confirm_action);
-  OverlayResponse* confirm_response = request()->response();
+  OverlayResponse* confirm_response =
+      request()->GetCallbackManager()->GetCompletionResponse();
   ASSERT_TRUE(!!confirm_response);
   JavaScriptPromptOverlayResponseInfo* confirm_response_info =
       confirm_response->GetInfo<JavaScriptPromptOverlayResponseInfo>();
@@ -195,12 +199,13 @@ TEST_F(JavaScriptPromptOverlayMediatorTest, CancelResponse) {
   data_source().promptInput = kFakeUserInput;
   CreateMediator();
   ASSERT_EQ(2U, consumer().actions.count);
-  ASSERT_FALSE(!!request()->response());
+  ASSERT_FALSE(!!request()->GetCallbackManager()->GetCompletionResponse());
 
   // Execute the cancel action and verify that there is no response for
   // cancelled prompts.
   AlertAction* cancel_action = consumer().actions[1];
   cancel_action.handler(cancel_action);
-  OverlayResponse* cancel_response = request()->response();
+  OverlayResponse* cancel_response =
+      request()->GetCallbackManager()->GetCompletionResponse();
   EXPECT_FALSE(!!cancel_response);
 }

@@ -119,22 +119,22 @@ void SetPerDisplayPref(PrefService* prefs,
 
 ShelfAlignment AlignmentFromPref(const std::string& value) {
   if (value == kShelfAlignmentLeft)
-    return SHELF_ALIGNMENT_LEFT;
+    return ShelfAlignment::kLeft;
   if (value == kShelfAlignmentRight)
-    return SHELF_ALIGNMENT_RIGHT;
+    return ShelfAlignment::kRight;
   // Default to bottom.
-  return SHELF_ALIGNMENT_BOTTOM;
+  return ShelfAlignment::kBottom;
 }
 
 const char* AlignmentToPref(ShelfAlignment alignment) {
   switch (alignment) {
-    case SHELF_ALIGNMENT_BOTTOM:
+    case ShelfAlignment::kBottom:
       return kShelfAlignmentBottom;
-    case SHELF_ALIGNMENT_LEFT:
+    case ShelfAlignment::kLeft:
       return kShelfAlignmentLeft;
-    case SHELF_ALIGNMENT_RIGHT:
+    case ShelfAlignment::kRight:
       return kShelfAlignmentRight;
-    case SHELF_ALIGNMENT_BOTTOM_LOCKED:
+    case ShelfAlignment::kBottomLocked:
       // This should not be a valid preference option for now. We only want to
       // lock the shelf during login or when adding a user.
       return nullptr;
@@ -149,17 +149,17 @@ ShelfAutoHideBehavior AutoHideBehaviorFromPref(const std::string& value) {
   // "Default" as well as "Never" and "Always", "Default" should now
   // be treated as "Never" (http://crbug.com/146773).
   if (value == kShelfAutoHideBehaviorAlways)
-    return SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS;
-  return SHELF_AUTO_HIDE_BEHAVIOR_NEVER;
+    return ShelfAutoHideBehavior::kAlways;
+  return ShelfAutoHideBehavior::kNever;
 }
 
 const char* AutoHideBehaviorToPref(ShelfAutoHideBehavior behavior) {
   switch (behavior) {
-    case SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS:
+    case ShelfAutoHideBehavior::kAlways:
       return kShelfAutoHideBehaviorAlways;
-    case SHELF_AUTO_HIDE_BEHAVIOR_NEVER:
+    case ShelfAutoHideBehavior::kNever:
       return kShelfAutoHideBehaviorNever;
-    case SHELF_AUTO_HIDE_ALWAYS_HIDDEN:
+    case ShelfAutoHideBehavior::kAlwaysHidden:
       // This should not be a valid preference option for now. We only want to
       // completely hide it when we run in app mode - or while we temporarily
       // hide the shelf (e.g. SessionAbortedDialog).

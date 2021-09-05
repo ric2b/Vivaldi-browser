@@ -22,8 +22,8 @@
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/site_instance_impl.h"
-#include "content/browser/web_package/bundled_exchanges_handle_tracker.h"
 #include "content/browser/web_package/prefetched_signed_exchange_cache.h"
+#include "content/browser/web_package/web_bundle_handle_tracker.h"
 #include "content/browser/webui/web_ui_controller_factory_registry.h"
 #include "content/browser/webui/web_ui_impl.h"
 #include "content/common/frame_messages.h"
@@ -45,37 +45,11 @@
 #include "content/public/common/navigation_policy.h"
 #include "content/public/common/url_utils.h"
 #include "net/base/net_errors.h"
-#include "services/network/public/cpp/resource_response.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "url/gurl.h"
 #include "url/url_util.h"
 
 namespace content {
-
-namespace {
-
-// A renderer-initiated navigation should be ignored iff a) there is an ongoing
-// request b) which is browser initiated and c) the renderer request is not
-// user-initiated.
-bool ShouldIgnoreIncomingRendererRequest(
-    NavigationRequest* ongoing_navigation_request,
-    bool has_user_gesture) {
-  return ongoing_navigation_request &&
-         ongoing_navigation_request->browser_initiated() && !has_user_gesture;
-}
-
-// Informs the RenderFrameImpl associated with the |frame_tree_node| that a
-// navigation it started was dropped.
-void DropNavigation(FrameTreeNode* frame_tree_node) {
-  if (!IsPerNavigationMojoInterfaceEnabled()) {
-    RenderFrameHost* current_frame_host =
-        frame_tree_node->render_manager()->current_frame_host();
-    current_frame_host->Send(
-        new FrameMsg_DroppedNavigation(current_frame_host->GetRoutingID()));
-  }
-}
-
-}  // namespace
 
 struct NavigatorImpl::NavigationMetricsData {
   NavigationMetricsData(base::TimeTicks start_time,
@@ -123,6 +97,17 @@ void NavigatorImpl::CheckWebUIRendererDoesNotDisplayNormalURL(
   }
 }
 
+// A renderer-initiated navigation should be ignored iff a) there is an ongoing
+// request b) which is browser initiated and c) the renderer request is not
+// user-initiated.
+// static
+bool NavigatorImpl::ShouldIgnoreIncomingRendererRequest(
+    const NavigationRequest* ongoing_navigation_request,
+    bool has_user_gesture) {
+  return ongoing_navigation_request &&
+         ongoing_navigation_request->browser_initiated() && !has_user_gesture;
+}
+
 NavigatorDelegate* NavigatorImpl::GetDelegate() {
   return delegate_;
 }
@@ -131,64 +116,11 @@ NavigationController* NavigatorImpl::GetController() {
   return controller_;
 }
 
-void NavigatorImpl::DidFailProvisionalLoadWithError(
-    RenderFrameHostImpl* render_frame_host,
-    const GURL& url,
-    int error_code,
-    const base::string16& error_description,
-    bool showing_repost_interstitial) {
-  VLOG(1) << "Failed Provisional Load: " << url.possibly_invalid_spec()
-          << ", error_code: " << error_code
-          << ", error_description: " << error_description
-          << ", showing_repost_interstitial: " << showing_repost_interstitial
-          << ", frame_id: " << render_frame_host->GetRoutingID();
-  GURL validated_url(url);
-  RenderProcessHost* render_process_host = render_frame_host->GetProcess();
-  render_process_host->FilterURL(false, &validated_url);
-
-  if (net::ERR_ABORTED == error_code) {
-    // EVIL HACK ALERT! Ignore failed loads when we're showing interstitials.
-    // This means that the interstitial won't be torn down properly, which is
-    // bad. But if we have an interstitial, go back to another tab type, and
-    // then load the same interstitial again, we could end up getting the first
-    // interstitial's "failed" message (as a result of the cancel) when we're on
-    // the second one. We can't tell this apart, so we think we're tearing down
-    // the current page which will cause a crash later on.
-    //
-    // http://code.google.com/p/chromium/issues/detail?id=2855
-    // Because this will not tear down the interstitial properly, if "back" is
-    // back to another tab type, the interstitial will still be somewhat alive
-    // in the previous tab type. If you navigate somewhere that activates the
-    // tab with the interstitial again, you'll see a flash before the new load
-    // commits of the interstitial page.
-    if (delegate_ && delegate_->ShowingInterstitialPage()) {
-      LOG(WARNING) << "Discarding message during interstitial.";
-      return;
-    }
-
-    // We used to cancel the pending renderer here for cross-site downloads.
-    // However, it's not safe to do that because the download logic repeatedly
-    // looks for this WebContents based on a render ID. Instead, we just
-    // leave the pending renderer around until the next navigation event
-    // (Navigate, DidNavigate, etc), which will clean it up properly.
-    //
-    // TODO(creis): Find a way to cancel any pending RFH here.
-  }
-
-  // Discard the pending navigation entry if needed.
-  NavigationRequest* request = render_frame_host->navigation_request();
-  if (request)
-    request->DropPendingEntryRef();
-}
-
-void NavigatorImpl::DidFailLoadWithError(
-    RenderFrameHostImpl* render_frame_host,
-    const GURL& url,
-    int error_code,
-    const base::string16& error_description) {
+void NavigatorImpl::DidFailLoadWithError(RenderFrameHostImpl* render_frame_host,
+                                         const GURL& url,
+                                         int error_code) {
   if (delegate_) {
-    delegate_->DidFailLoadWithError(render_frame_host, url, error_code,
-                                    error_description);
+    delegate_->DidFailLoadWithError(render_frame_host, url, error_code);
   }
 }
 
@@ -228,6 +160,12 @@ void NavigatorImpl::DidNavigate(
     }
   }
 
+  // For browser initiated navigation and same document navigation, frame policy
+  // in commit_params is nullopt and should use fallback value instead.
+  const blink::FramePolicy pending_frame_policy =
+      navigation_request->commit_params().frame_policy.value_or(
+          frame_tree_node->pending_frame_policy());
+
   // DidNavigateFrame() must be called before replicating the new origin and
   // other properties to proxies.  This is because it destroys the subframes of
   // the frame we're navigating from, which might trigger those subframes to
@@ -235,7 +173,10 @@ void NavigatorImpl::DidNavigate(
   // frame's origin.  See https://crbug.com/825283.
   frame_tree_node->render_manager()->DidNavigateFrame(
       render_frame_host, params.gesture == NavigationGestureUser,
-      is_same_document_navigation);
+      is_same_document_navigation,
+      navigation_request
+          ->require_coop_browsing_instance_swap() /* clear_proxies_on_commit */,
+      pending_frame_policy);
 
   // Save the new page's origin and other properties, and replicate them to
   // proxies, including the proxy created in DidNavigateFrame() to replace the
@@ -247,13 +188,23 @@ void NavigatorImpl::DidNavigate(
 
   // Save the activation status of the previous page here before it gets reset
   // in FrameTreeNode::ResetForNavigation.
-  bool previous_document_was_activated = frame_tree->root()->HasBeenActivated();
+  bool previous_document_was_activated =
+      frame_tree->root()->HasStickyUserActivation();
 
-  // Navigating to a new location means a new, fresh set of http headers and/or
-  // <meta> elements - we need to reset CSP and Feature Policy.
   if (!is_same_document_navigation) {
+    // Navigating to a new location means a new, fresh set of http headers
+    // and/or <meta> elements - we need to reset CSP and Feature Policy.
     render_frame_host->ResetContentSecurityPolicies();
     frame_tree_node->ResetForNavigation();
+
+    // Save the new page's embedding token and propagate to any frames that
+    // embed it.
+    // - A token will have a value if it is a cross-origin frame.
+    // - An empty token will occur for;
+    //   - main frames
+    //   - a previously out-of-process frame that navigated to be same-process
+    //     as its parent
+    frame_tree_node->SetEmbeddingToken(params.embedding_token);
   }
 
   // Update the site of the SiteInstance if it doesn't have one yet, unless
@@ -343,7 +294,10 @@ void NavigatorImpl::Navigate(std::unique_ptr<NavigationRequest> request,
       "navigation,rail", "NavigationTiming navigationStart",
       TRACE_EVENT_SCOPE_GLOBAL, request->common_params().navigation_start);
 
-  const GURL& dest_url = request->common_params().url;
+  // Save destination url, as it is needed for
+  // DidStartNavigationToPendingEntry and request could be destroyed after
+  // BeginNavigation below.
+  GURL dest_url = request->common_params().url;
   FrameTreeNode* frame_tree_node = request->frame_tree_node();
 
   navigation_data_.reset(new NavigationMetricsData(
@@ -400,8 +354,7 @@ void NavigatorImpl::RequestOpenURL(
     RenderFrameHostImpl* render_frame_host,
     const GURL& url,
     const base::Optional<url::Origin>& initiator_origin,
-    bool uses_post,
-    const scoped_refptr<network::ResourceRequestBody>& body,
+    const scoped_refptr<network::ResourceRequestBody>& post_body,
     const std::string& extra_headers,
     const Referrer& referrer,
     WindowOpenDisposition disposition,
@@ -441,8 +394,7 @@ void NavigatorImpl::RequestOpenURL(
   OpenURLParams params(url, referrer, frame_tree_node_id, disposition,
                        ui::PAGE_TRANSITION_LINK,
                        true /* is_renderer_initiated */);
-  params.uses_post = uses_post;
-  params.post_data = body;
+  params.post_data = post_body;
   params.extra_headers = extra_headers;
   if (redirect_chain.size() > 0)
     params.redirect_chain = redirect_chain;
@@ -532,9 +484,9 @@ void NavigatorImpl::NavigateFromFrameProxy(
       extra_headers, std::move(blob_url_loader_factory));
 }
 
-void NavigatorImpl::OnBeforeUnloadACK(FrameTreeNode* frame_tree_node,
-                                      bool proceed,
-                                      const base::TimeTicks& proceed_time) {
+void NavigatorImpl::BeforeUnloadCompleted(FrameTreeNode* frame_tree_node,
+                                          bool proceed,
+                                          const base::TimeTicks& proceed_time) {
   DCHECK(frame_tree_node);
 
   NavigationRequest* navigation_request = frame_tree_node->navigation_request();
@@ -551,7 +503,7 @@ void NavigatorImpl::OnBeforeUnloadACK(FrameTreeNode* frame_tree_node,
   // after the navigation started. The last user input shoud be respected, and
   // the navigation cancelled anyway.
   if (!proceed) {
-    CancelNavigation(frame_tree_node, true);
+    CancelNavigation(frame_tree_node);
     return;
   }
 
@@ -588,8 +540,7 @@ void NavigatorImpl::OnBeginNavigation(
     mojo::PendingRemote<blink::mojom::NavigationInitiator> navigation_initiator,
     scoped_refptr<PrefetchedSignedExchangeCache>
         prefetched_signed_exchange_cache,
-    std::unique_ptr<BundledExchangesHandleTracker>
-        bundled_exchanges_handle_tracker) {
+    std::unique_ptr<WebBundleHandleTracker> web_bundle_handle_tracker) {
   // TODO(clamy): the url sent by the renderer should be validated with
   // FilterURL.
   // This is a renderer-initiated navigation.
@@ -616,13 +567,12 @@ void NavigatorImpl::OnBeginNavigation(
           .is_history_navigation_in_new_child_frame) {
     // Preemptively clear this local pointer before deleting the request.
     ongoing_navigation_request = nullptr;
-    frame_tree_node->ResetNavigationRequest(false, true);
+    frame_tree_node->ResetNavigationRequest(false);
   }
 
   // Verify this navigation has precedence.
   if (ShouldIgnoreIncomingRendererRequest(ongoing_navigation_request,
                                           common_params->has_user_gesture)) {
-    DropNavigation(frame_tree_node);
     return;
   }
 
@@ -630,14 +580,6 @@ void NavigatorImpl::OnBeginNavigation(
       GetNavigationEntryForRendererInitiatedNavigation(*common_params,
                                                        frame_tree_node);
   NavigationEntryImpl* current_entry = controller_->GetLastCommittedEntry();
-  if (current_entry && common_params->url == current_entry->GetReferrer().url) {
-    // Looks like a potential client redirect loop. Turn off any preview
-    // interventions in case they are at fault. Motivated by crbug.com/987062
-    common_params->previews_state = PREVIEWS_OFF;
-    UMA_HISTOGRAM_BOOLEAN("Navigation.ClientRedirectCycle.RedirectToReferrer",
-                          true);
-  }
-
   // Only consult the delegate for override state if there is no current entry,
   // since that state should only apply to newly created tabs (and not cases
   // where the NavigationEntry recorded the state).
@@ -653,12 +595,13 @@ void NavigatorImpl::OnBeginNavigation(
           std::move(blob_url_loader_factory), std::move(navigation_client),
           std::move(navigation_initiator),
           std::move(prefetched_signed_exchange_cache),
-          std::move(bundled_exchanges_handle_tracker)));
+          std::move(web_bundle_handle_tracker)));
   NavigationRequest* navigation_request = frame_tree_node->navigation_request();
 
   // This frame has already run beforeunload before it sent this IPC.  See if
   // any of its cross-process subframes also need to run beforeunload.  If so,
-  // delay the navigation until receiving beforeunload ACKs from those frames.
+  // delay the navigation until beforeunload completion callbacks are invoked on
+  // those frames.
   DCHECK(!NavigationTypeUtils::IsSameDocument(
       navigation_request->common_params().navigation_type));
   bool should_dispatch_beforeunload =
@@ -698,24 +641,10 @@ void NavigatorImpl::RestartNavigationAsCrossDocument(
   // See https://crbug.com/770157.
 }
 
-void NavigatorImpl::OnAbortNavigation(FrameTreeNode* frame_tree_node) {
-  DCHECK(!IsPerNavigationMojoInterfaceEnabled());
-  NavigationRequest* ongoing_navigation_request =
-      frame_tree_node->navigation_request();
-  if (!ongoing_navigation_request ||
-      ongoing_navigation_request->browser_initiated()) {
-    return;
-  }
-
-  // Abort the renderer-initiated navigation request.
-  CancelNavigation(frame_tree_node, false);
-}
-
-void NavigatorImpl::CancelNavigation(FrameTreeNode* frame_tree_node,
-                                     bool inform_renderer) {
+void NavigatorImpl::CancelNavigation(FrameTreeNode* frame_tree_node) {
   if (frame_tree_node->navigation_request())
     frame_tree_node->navigation_request()->set_net_error(net::ERR_ABORTED);
-  frame_tree_node->ResetNavigationRequest(false, inform_renderer);
+  frame_tree_node->ResetNavigationRequest(false);
   if (frame_tree_node->IsMainFrame())
     navigation_data_.reset();
 }

@@ -17,6 +17,9 @@ class BookmarkNode;
 // Observer for the BookmarkModel.
 class BookmarkModelObserver {
  public:
+  BookmarkModelObserver(const BookmarkModelObserver&) = delete;
+  BookmarkModelObserver& operator=(const BookmarkModelObserver&) = delete;
+
   // Invoked when the model has finished loading. |ids_reassigned| mirrors
   // that of BookmarkLoadDetails::ids_reassigned. See it for details.
   virtual void BookmarkModelLoaded(BookmarkModel* model,
@@ -134,12 +137,9 @@ class BookmarkModelObserver {
   // ended.
   virtual void GroupedBookmarkChangesEnded(BookmarkModel* model) {}
 
-  // Vivaldi
-  // Invoked when the Speed Dial metainfo of a (folder) node changes.
-  virtual void BookmarkSpeedDialNodeChanged(BookmarkModel* model,
-                                            const BookmarkNode* node) {}
  protected:
-  virtual ~BookmarkModelObserver() {}
+  BookmarkModelObserver() = default;
+  virtual ~BookmarkModelObserver() = default;
 };
 
 }  // namespace bookmarks

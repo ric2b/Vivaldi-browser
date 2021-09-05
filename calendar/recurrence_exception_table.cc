@@ -48,7 +48,7 @@ RecurrenceExceptionID RecurrrenceExceptionTable ::CreateRecurrenceException(
       "VALUES (?, ?, ?, ?, ?, ?)"));
 
   statement.BindInt64(0, row.parent_event_id);
-  statement.BindInt(1, row.exception_event_id);
+  statement.BindInt64(1, row.exception_event_id);
   statement.BindInt64(2, row.exception_day.ToInternalValue());
   statement.BindInt(3, row.cancelled ? 1 : 0);
 
@@ -139,6 +139,21 @@ bool RecurrrenceExceptionTable ::DeleteRecurrenceException(
 
   return statement.Run();
 }
+bool RecurrrenceExceptionTable::DeleteRecurrenceExceptionsForCalendar(
+    CalendarID calendar_id) {
+  sql::Statement statement(
+      GetDB().GetCachedStatement(SQL_FROM_HERE,
+                                 "DELETE from recurring_exceptions \
+        WHERE id IN( \
+          select re.id from recurring_exceptions re \
+            inner join events e on(e.id = re.exception_event_id) \
+            where e.calendar_id = ?)"));
+
+  statement.BindInt64(0, calendar_id);
+
+  return statement.Run();
+}
+
 bool RecurrrenceExceptionTable::DeleteRecurrenceExceptions(EventID event_id) {
   sql::Statement statement(GetDB().GetCachedStatement(
       SQL_FROM_HERE,

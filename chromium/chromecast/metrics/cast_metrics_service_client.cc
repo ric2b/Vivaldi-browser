@@ -22,13 +22,11 @@
 #include "chromecast/public/cast_sys_info.h"
 #include "components/metrics/client_info.h"
 #include "components/metrics/enabled_state_provider.h"
-#include "components/metrics/gpu/gpu_metrics_provider.h"
 #include "components/metrics/metrics_log_uploader.h"
 #include "components/metrics/metrics_provider.h"
 #include "components/metrics/metrics_service.h"
 #include "components/metrics/metrics_state_manager.h"
 #include "components/metrics/net/net_metrics_log_uploader.h"
-#include "components/metrics/ui/screen_info_metrics_provider.h"
 #include "components/metrics/url_constants.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -203,17 +201,16 @@ std::string CastMetricsServiceClient::GetVersionString() {
 }
 
 void CastMetricsServiceClient::CollectFinalMetricsForLog(
-    const base::Closure& done_callback) {
+    base::OnceClosure done_callback) {
   if (collect_final_metrics_cb_)
-    collect_final_metrics_cb_.Run(done_callback);
+    collect_final_metrics_cb_.Run(std::move(done_callback));
   else
-    done_callback.Run();
+    std::move(done_callback).Run();
 }
 
 void CastMetricsServiceClient::SetCallbacks(
-    base::RepeatingCallback<void(const base::Closure&)>
-        collect_final_metrics_cb,
-    base::RepeatingCallback<void(const base::Closure&)> external_events_cb) {
+    base::RepeatingCallback<void(base::OnceClosure)> collect_final_metrics_cb,
+    base::RepeatingCallback<void(base::OnceClosure)> external_events_cb) {
   collect_final_metrics_cb_ = collect_final_metrics_cb;
   external_events_cb_ = external_events_cb;
 }
@@ -329,11 +326,11 @@ void CastMetricsServiceClient::Finalize() {
   metrics_service_->Stop();
 }
 
-void CastMetricsServiceClient::ProcessExternalEvents(const base::Closure& cb) {
+void CastMetricsServiceClient::ProcessExternalEvents(base::OnceClosure cb) {
   if (external_events_cb_)
-    external_events_cb_.Run(cb);
+    external_events_cb_.Run(std::move(cb));
   else
-    cb.Run();
+    std::move(cb).Run();
 }
 
 }  // namespace metrics

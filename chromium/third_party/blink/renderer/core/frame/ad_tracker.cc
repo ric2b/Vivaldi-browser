@@ -16,6 +16,7 @@
 #include "third_party/blink/renderer/platform/loader/fetch/resource_request.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/wtf/casting.h"
+#include "v8/include/v8.h"
 
 namespace blink {
 
@@ -23,7 +24,7 @@ namespace {
 
 bool IsKnownAdExecutionContext(ExecutionContext* execution_context) {
   // TODO(jkarlin): Do the same check for worker contexts.
-  if (auto* document = DynamicTo<Document>(execution_context)) {
+  if (auto* document = Document::DynamicFrom(execution_context)) {
     LocalFrame* frame = document->GetFrame();
     if (frame && frame->IsAdSubframe())
       return true;
@@ -37,10 +38,10 @@ namespace features {
 // Controls whether the AdTracker will look across async stacks to determine if
 // the currently running stack is ad related.
 const base::Feature kAsyncStackAdTagging{"AsyncStackAdTagging",
-                                         base::FEATURE_DISABLED_BY_DEFAULT};
+                                         base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Controls whether the AdTracker analyzes the whole pseudo-stack or just the
-// top of the stack when detecting ads.
+// Controls whether the AdTracker analyzes the bottom and top of the stack or
+// just the top of the stack when detecting ads.
 const base::Feature kTopOfStackAdTagging{"TopOfStackAdTagging",
                                          base::FEATURE_DISABLED_BY_DEFAULT};
 }  // namespace features
@@ -50,7 +51,7 @@ AdTracker* AdTracker::FromExecutionContext(
     ExecutionContext* execution_context) {
   if (!execution_context)
     return nullptr;
-  if (auto* document = DynamicTo<Document>(execution_context)) {
+  if (auto* document = Document::DynamicFrom(execution_context)) {
     LocalFrame* frame = document->GetFrame();
     if (frame) {
       return frame->GetAdTracker();
@@ -79,11 +80,24 @@ void AdTracker::Shutdown() {
   local_root_ = nullptr;
 }
 
-String AdTracker::ScriptAtTopOfStack(ExecutionContext* execution_context) {
-  std::unique_ptr<blink::SourceLocation> current_stack_trace =
-      SourceLocation::Capture(execution_context);
-  // TODO(jkarlin): Url() sometimes returns String(), why?
-  return current_stack_trace ? current_stack_trace->Url() : "";
+String AdTracker::ScriptAtTopOfStack() {
+  // CurrentStackTrace is 10x faster than CaptureStackTrace if all that you need
+  // is the url of the script at the top of the stack. See crbug.com/1057211 for
+  // more detail.
+  v8::Isolate* isolate = v8::Isolate::GetCurrent();
+  DCHECK(isolate);
+
+  v8::Local<v8::StackTrace> stack_trace =
+      v8::StackTrace::CurrentStackTrace(isolate, /*frame_limit=*/1);
+  if (stack_trace.IsEmpty() || stack_trace->GetFrameCount() < 1)
+    return String();
+
+  v8::Local<v8::StackFrame> frame = stack_trace->GetFrame(isolate, 0);
+  v8::Local<v8::String> script_name = frame->GetScriptNameOrSourceURL();
+  if (script_name.IsEmpty() || !script_name->Length())
+    return String();
+
+  return ToCoreString(script_name);
 }
 
 ExecutionContext* AdTracker::GetCurrentExecutionContext() {
@@ -156,7 +170,7 @@ bool AdTracker::CalculateIfAdSubresource(ExecutionContext* execution_context,
   // Check if the document loading the resource is an ad or if any executing
   // script is an ad.
   known_ad = known_ad || IsKnownAdExecutionContext(execution_context) ||
-             IsAdScriptInStack();
+             IsAdScriptInStack(StackType::kBottomAndTop);
 
   // If it is a script marked as an ad and it's not in an ad context, append it
   // to the known ad script set. We don't need to keep track of ad scripts in ad
@@ -175,7 +189,7 @@ void AdTracker::DidCreateAsyncTask(probe::AsyncTaskId* task) {
   if (!async_stack_enabled_)
     return;
 
-  if (IsAdScriptInStack())
+  if (IsAdScriptInStack(StackType::kBottomAndTop))
     task->SetAdTask();
 }
 
@@ -197,7 +211,7 @@ void AdTracker::DidFinishAsyncTask(probe::AsyncTaskId* task) {
     running_ad_async_tasks_ -= 1;
 }
 
-bool AdTracker::IsAdScriptInStack() {
+bool AdTracker::IsAdScriptInStack(StackType stack_type) {
   if (num_ads_in_stack_ > 0 || running_ad_async_tasks_ > 0)
     return true;
 
@@ -210,10 +224,14 @@ bool AdTracker::IsAdScriptInStack() {
   if (IsKnownAdExecutionContext(execution_context))
     return true;
 
-  // The pseudo-stack contains entry points into the stack (e.g., when v8 is
-  // executed) but not the entire stack. It's cheap to retrieve the top of the
-  // stack so scan that as well.
-  String top_script = ScriptAtTopOfStack(execution_context);
+  if (stack_type == StackType::kBottomOnly)
+    return false;
+
+  // The stack scanned by the AdTracker contains entry points into the stack
+  // (e.g., when v8 is executed) but not the entire stack. For a small cost we
+  // can also check the top of the stack (this is much cheaper than getting the
+  // full stack from v8).
+  String top_script = ScriptAtTopOfStack();
 
   if (!top_script.IsEmpty() && IsKnownAdScript(execution_context, top_script))
     return true;
@@ -243,7 +261,7 @@ void AdTracker::AppendToKnownAdScripts(ExecutionContext& execution_context,
   add_result.stored_value->value.insert(url);
 }
 
-void AdTracker::Trace(blink::Visitor* visitor) {
+void AdTracker::Trace(Visitor* visitor) {
   visitor->Trace(local_root_);
   visitor->Trace(known_ad_scripts_);
 }

@@ -16,6 +16,8 @@
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_image_object.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_payment_instrument.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/execution_context/security_context.h"
@@ -23,7 +25,6 @@
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/modules/payments/basic_card_helper.h"
-#include "third_party/blink/renderer/modules/payments/payment_instrument.h"
 #include "third_party/blink/renderer/modules/payments/payment_manager.h"
 #include "third_party/blink/renderer/modules/permissions/permission_utils.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
@@ -79,15 +80,16 @@ bool AllowedToUsePaymentFeatures(ScriptState* script_state) {
   return ExecutionContext::From(script_state)
       ->GetSecurityContext()
       .GetFeaturePolicy()
-      ->IsFeatureEnabled(mojom::FeaturePolicyFeature::kPayment);
+      ->IsFeatureEnabled(mojom::blink::FeaturePolicyFeature::kPayment);
 }
 
-ScriptPromise RejectNotAllowedToUsePaymentFeatures(ScriptState* script_state) {
-  return ScriptPromise::RejectWithDOMException(
-      script_state, MakeGarbageCollected<DOMException>(
-                        DOMExceptionCode::kSecurityError,
-                        "Must be in a top-level browsing context or an iframe "
-                        "needs to specify allow=\"payment\" explicitly"));
+ScriptPromise RejectNotAllowedToUsePaymentFeatures(
+    ScriptState* script_state,
+    ExceptionState& exception_state) {
+  exception_state.ThrowSecurityError(
+      "Must be in a top-level browsing context or an iframe needs to specify "
+      "allow=\"payment\" explicitly");
+  return ScriptPromise();
 }
 
 }  // namespace
@@ -124,7 +126,7 @@ class PaymentInstrumentParameter final
   bool has_name() const { return has_name_; }
   const String& name() const { return name_; }
 
-  void Trace(blink::Visitor* visitor) {
+  void Trace(Visitor* visitor) {
     visitor->Trace(icons_);
     visitor->Trace(capabilities_);
   }
@@ -147,15 +149,15 @@ PaymentInstruments::PaymentInstruments(
 
 ScriptPromise PaymentInstruments::deleteInstrument(
     ScriptState* script_state,
-    const String& instrument_key) {
+    const String& instrument_key,
+    ExceptionState& exception_state) {
   if (!AllowedToUsePaymentFeatures(script_state))
-    return RejectNotAllowedToUsePaymentFeatures(script_state);
+    return RejectNotAllowedToUsePaymentFeatures(script_state, exception_state);
 
   if (!manager_.is_bound()) {
-    return ScriptPromise::RejectWithDOMException(
-        script_state,
-        MakeGarbageCollected<DOMException>(DOMExceptionCode::kInvalidStateError,
-                                           kPaymentManagerUnavailable));
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      kPaymentManagerUnavailable);
+    return ScriptPromise();
   }
 
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
@@ -169,15 +171,15 @@ ScriptPromise PaymentInstruments::deleteInstrument(
 }
 
 ScriptPromise PaymentInstruments::get(ScriptState* script_state,
-                                      const String& instrument_key) {
+                                      const String& instrument_key,
+                                      ExceptionState& exception_state) {
   if (!AllowedToUsePaymentFeatures(script_state))
-    return RejectNotAllowedToUsePaymentFeatures(script_state);
+    return RejectNotAllowedToUsePaymentFeatures(script_state, exception_state);
 
   if (!manager_.is_bound()) {
-    return ScriptPromise::RejectWithDOMException(
-        script_state,
-        MakeGarbageCollected<DOMException>(DOMExceptionCode::kInvalidStateError,
-                                           kPaymentManagerUnavailable));
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      kPaymentManagerUnavailable);
+    return ScriptPromise();
   }
 
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
@@ -190,15 +192,15 @@ ScriptPromise PaymentInstruments::get(ScriptState* script_state,
   return promise;
 }
 
-ScriptPromise PaymentInstruments::keys(ScriptState* script_state) {
+ScriptPromise PaymentInstruments::keys(ScriptState* script_state,
+                                       ExceptionState& exception_state) {
   if (!AllowedToUsePaymentFeatures(script_state))
-    return RejectNotAllowedToUsePaymentFeatures(script_state);
+    return RejectNotAllowedToUsePaymentFeatures(script_state, exception_state);
 
   if (!manager_.is_bound()) {
-    return ScriptPromise::RejectWithDOMException(
-        script_state,
-        MakeGarbageCollected<DOMException>(DOMExceptionCode::kInvalidStateError,
-                                           kPaymentManagerUnavailable));
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      kPaymentManagerUnavailable);
+    return ScriptPromise();
   }
 
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
@@ -211,15 +213,15 @@ ScriptPromise PaymentInstruments::keys(ScriptState* script_state) {
 }
 
 ScriptPromise PaymentInstruments::has(ScriptState* script_state,
-                                      const String& instrument_key) {
+                                      const String& instrument_key,
+                                      ExceptionState& exception_state) {
   if (!AllowedToUsePaymentFeatures(script_state))
-    return RejectNotAllowedToUsePaymentFeatures(script_state);
+    return RejectNotAllowedToUsePaymentFeatures(script_state, exception_state);
 
   if (!manager_.is_bound()) {
-    return ScriptPromise::RejectWithDOMException(
-        script_state,
-        MakeGarbageCollected<DOMException>(DOMExceptionCode::kInvalidStateError,
-                                           kPaymentManagerUnavailable));
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      kPaymentManagerUnavailable);
+    return ScriptPromise();
   }
 
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
@@ -237,18 +239,17 @@ ScriptPromise PaymentInstruments::set(ScriptState* script_state,
                                       const PaymentInstrument* details,
                                       ExceptionState& exception_state) {
   if (!AllowedToUsePaymentFeatures(script_state))
-    return RejectNotAllowedToUsePaymentFeatures(script_state);
+    return RejectNotAllowedToUsePaymentFeatures(script_state, exception_state);
 
   if (!manager_.is_bound()) {
-    return ScriptPromise::RejectWithDOMException(
-        script_state,
-        MakeGarbageCollected<DOMException>(DOMExceptionCode::kInvalidStateError,
-                                           kPaymentManagerUnavailable));
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      kPaymentManagerUnavailable);
+    return ScriptPromise();
   }
 
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
   ExecutionContext* context = ExecutionContext::From(script_state);
-  Document* doc = DynamicTo<Document>(context);
+  Document* doc = Document::DynamicFrom(context);
 
   // Should move this permission check to browser process.
   // Please see http://crbug.com/795929
@@ -266,15 +267,15 @@ ScriptPromise PaymentInstruments::set(ScriptState* script_state,
   return resolver->Promise();
 }
 
-ScriptPromise PaymentInstruments::clear(ScriptState* script_state) {
+ScriptPromise PaymentInstruments::clear(ScriptState* script_state,
+                                        ExceptionState& exception_state) {
   if (!AllowedToUsePaymentFeatures(script_state))
-    return RejectNotAllowedToUsePaymentFeatures(script_state);
+    return RejectNotAllowedToUsePaymentFeatures(script_state, exception_state);
 
   if (!manager_.is_bound()) {
-    return ScriptPromise::RejectWithDOMException(
-        script_state,
-        MakeGarbageCollected<DOMException>(DOMExceptionCode::kInvalidStateError,
-                                           kPaymentManagerUnavailable));
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      kPaymentManagerUnavailable);
+    return ScriptPromise();
   }
 
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
@@ -363,10 +364,9 @@ void PaymentInstruments::OnRequestPermission(
       ExceptionState exception_state(resolver->GetScriptState()->GetIsolate(),
                                      ExceptionState::kSetterContext,
                                      "PaymentInstruments", "set");
-      BasicCardHelper::ParseBasiccardData(
-          details->capabilities(), instrument->supported_networks,
-          instrument->supported_types, /*has_supported_card_types=*/nullptr,
-          exception_state);
+      BasicCardHelper::ParseBasiccardData(details->capabilities(),
+                                          instrument->supported_networks,
+                                          exception_state);
       if (exception_state.HadException()) {
         resolver->Reject(exception_state);
         return;
@@ -416,7 +416,7 @@ void PaymentInstruments::onGetPaymentInstrument(
     image_object->setType(icon->type);
     String sizes = WTF::g_empty_string;
     for (const auto& size : icon->sizes) {
-      sizes = sizes + String::Format("%dx%d ", size.width, size.height);
+      sizes = sizes + String::Format("%dx%d ", size.width(), size.height());
     }
     image_object->setSizes(sizes.StripWhiteSpace());
     icons.push_back(image_object);

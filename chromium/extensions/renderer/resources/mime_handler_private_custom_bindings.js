@@ -18,8 +18,9 @@ if ((typeof mojo === 'undefined') || !mojo.bindingsLibraryInitialized) {
 loadScript('extensions/common/api/mime_handler.mojom');
 
 var servicePtr = new extensions.mimeHandler.MimeHandlerServicePtr;
-Mojo.bindInterface(extensions.mimeHandler.MimeHandlerService.name,
-                   mojo.makeRequest(servicePtr).handle);
+Mojo.bindInterface(
+    extensions.mimeHandler.MimeHandlerService.name,
+    mojo.makeRequest(servicePtr).handle);
 var beforeUnloadControlPtr =
     new extensions.mimeHandler.BeforeUnloadControlPtr;
 Mojo.bindInterface(

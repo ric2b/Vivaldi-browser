@@ -28,7 +28,7 @@ class MODULES_EXPORT ImageBitmapRenderingContextBase
                                   const CanvasContextCreationAttributesCore&);
   ~ImageBitmapRenderingContextBase() override;
 
-  void Trace(blink::Visitor*) override;
+  void Trace(Visitor*) override;
 
   // TODO(juanmihd): Remove this method crbug.com/941579
   HTMLCanvasElement* canvas() const {
@@ -40,7 +40,8 @@ class MODULES_EXPORT ImageBitmapRenderingContextBase
   bool CanCreateCanvas2dResourceProvider() const;
   void getHTMLOrOffscreenCanvas(HTMLCanvasElementOrOffscreenCanvas&) const;
 
-  void SetIsHidden(bool) override {}
+  void SetIsInHiddenPage(bool) override {}
+  void SetIsBeingDisplayed(bool) override {}
   bool isContextLost() const override { return false; }
   void SetImage(ImageBitmap*);
   // The acceleration hint here is ignored as GetImage(AccelerationHint) only

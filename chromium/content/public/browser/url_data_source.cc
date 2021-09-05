@@ -7,7 +7,7 @@
 #include <utility>
 
 #include "base/memory/ptr_util.h"
-#include "base/task/post_task.h"
+#include "base/task_runner_util.h"
 #include "content/browser/resource_context_impl.h"
 #include "content/browser/webui/url_data_manager.h"
 #include "content/browser/webui/url_data_manager_backend.h"
@@ -24,7 +24,7 @@ namespace {
 
 URLDataSource* GetSourceForURLHelper(ResourceContext* resource_context,
                                      const GURL& url) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   URLDataSourceImpl* source =
       GetURLDataManagerForResourceContext(resource_context)
@@ -46,15 +46,28 @@ void URLDataSource::GetSourceForURL(
     const GURL& url,
     base::OnceCallback<void(URLDataSource*)> callback) {
   base::PostTaskAndReplyWithResult(
-      FROM_HERE, {content::BrowserThread::IO},
+      GetIOThreadTaskRunner({}).get(), FROM_HERE,
       base::BindOnce(&GetSourceForURLHelper,
                      browser_context->GetResourceContext(), url),
       std::move(callback));
 }
 
+// static
+std::string URLDataSource::URLToRequestPath(const GURL& url) {
+  const std::string& spec = url.possibly_invalid_spec();
+  const url::Parsed& parsed = url.parsed_for_possibly_invalid_spec();
+  // + 1 to skip the slash at the beginning of the path.
+  int offset = parsed.CountCharactersBefore(url::Parsed::PATH, false) + 1;
+
+  if (offset < static_cast<int>(spec.size()))
+    return spec.substr(offset);
+
+  return std::string();
+}
+
 scoped_refptr<base::SingleThreadTaskRunner>
 URLDataSource::TaskRunnerForRequestPath(const std::string& path) {
-  return base::CreateSingleThreadTaskRunner({BrowserThread::UI});
+  return GetUIThreadTaskRunner({});
 }
 
 bool URLDataSource::ShouldReplaceExistingSource() {
@@ -95,6 +108,10 @@ std::string URLDataSource::GetContentSecurityPolicyWorkerSrc() {
   return std::string();
 }
 
+std::string URLDataSource::GetContentSecurityPolicyFrameAncestors() {
+  return "frame-ancestors 'none';";
+}
+
 bool URLDataSource::ShouldDenyXFrameOptions() {
   return true;
 }
@@ -102,7 +119,8 @@ bool URLDataSource::ShouldDenyXFrameOptions() {
 bool URLDataSource::ShouldServiceRequest(const GURL& url,
                                          ResourceContext* resource_context,
                                          int render_process_id) {
-  return url.SchemeIs(kChromeDevToolsScheme) || url.SchemeIs(kChromeUIScheme);
+  return url.SchemeIs(kChromeDevToolsScheme) || url.SchemeIs(kChromeUIScheme) ||
+         url.SchemeIs(kChromeUIUntrustedScheme);
 }
 
 bool URLDataSource::ShouldServeMimeTypeAsContentTypeHeader() {
@@ -114,11 +132,11 @@ std::string URLDataSource::GetAccessControlAllowOriginForOrigin(
   return std::string();
 }
 
-bool URLDataSource::IsGzipped(const std::string& path) {
-  return false;
-}
-
 void URLDataSource::DisablePolymer2ForHost(const std::string& host) {}
+
+const ui::TemplateReplacements* URLDataSource::GetReplacements() {
+  return nullptr;
+}
 
 bool URLDataSource::ShouldReplaceI18nInJS() {
   return false;

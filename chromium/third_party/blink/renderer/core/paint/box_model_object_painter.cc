@@ -103,7 +103,7 @@ PhysicalRect BoxModelObjectPainter::AdjustRectForScrolledContent(
 
   // Adjust the paint rect to reflect a scrolled content box with borders at
   // the ends.
-  PhysicalOffset offset(this_box.ScrolledContentOffset());
+  PhysicalOffset offset(this_box.PixelSnappedScrolledContentOffset());
   scrolled_paint_rect.Move(-offset);
   LayoutRectOutsets border = AdjustedBorderOutsets(info);
   scrolled_paint_rect.SetWidth(border.Left() + this_box.ScrollWidth() +
@@ -124,13 +124,24 @@ LayoutRectOutsets BoxModelObjectPainter::ComputePadding() const {
 BoxPainterBase::FillLayerInfo BoxModelObjectPainter::GetFillLayerInfo(
     const Color& color,
     const FillLayer& bg_layer,
-    BackgroundBleedAvoidance bleed_avoidance) const {
+    BackgroundBleedAvoidance bleed_avoidance,
+    bool is_painting_scrolling_background) const {
   return BoxPainterBase::FillLayerInfo(
       box_model_.GetDocument(), box_model_.StyleRef(),
       box_model_.HasOverflowClip(), color, bg_layer, bleed_avoidance,
+      LayoutObject::ShouldRespectImageOrientation(&box_model_),
       (flow_box_ ? flow_box_->IncludeLogicalLeftEdge() : true),
       (flow_box_ ? flow_box_->IncludeLogicalRightEdge() : true),
-      box_model_.IsInline());
+      box_model_.IsLayoutInline(), is_painting_scrolling_background);
+}
+
+bool BoxModelObjectPainter::IsPaintingScrollingBackground(
+    const PaintInfo& paint_info) const {
+  if (!box_model_.IsBox())
+    return false;
+
+  const auto& this_box = ToLayoutBox(box_model_);
+  return BoxDecorationData::IsPaintingScrollingBackground(paint_info, this_box);
 }
 
 }  // namespace blink

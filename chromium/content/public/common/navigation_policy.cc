@@ -6,6 +6,7 @@
 
 #include "base/command_line.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/system/sys_info.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "services/network/public/cpp/features.h"
@@ -23,27 +24,7 @@ void LogArbitraryPolicyPerDownload(NavigationDownloadType type) {
   UMA_HISTOGRAM_ENUMERATION(
       "Navigation.DownloadPolicy.LogArbitraryPolicyPerDownload", type);
 }
-
 }  // namespace
-
-bool IsPerNavigationMojoInterfaceEnabled() {
-  return base::FeatureList::IsEnabled(features::kPerNavigationMojoInterface);
-}
-
-bool IsBackForwardCacheEnabled() {
-  return base::FeatureList::IsEnabled(features::kBackForwardCache);
-}
-
-bool IsProactivelySwapBrowsingInstanceEnabled() {
-  return base::FeatureList::IsEnabled(
-             features::kProactivelySwapBrowsingInstance) ||
-         IsBackForwardCacheEnabled();
-}
-
-bool IsNavigationImmediateResponseBodyEnabled() {
-  return base::FeatureList::IsEnabled(
-      features::kNavigationImmediateResponseBody);
-}
 
 NavigationDownloadPolicy::NavigationDownloadPolicy() = default;
 NavigationDownloadPolicy::~NavigationDownloadPolicy() = default;
@@ -70,8 +51,6 @@ ResourceInterceptPolicy NavigationDownloadPolicy::GetResourceInterceptPolicy()
     const {
   if (disallowed_types.test(
           static_cast<size_t>(NavigationDownloadType::kSandbox)) ||
-      disallowed_types.test(
-          static_cast<size_t>(NavigationDownloadType::kSandboxNoGesture)) ||
       disallowed_types.test(
           static_cast<size_t>(NavigationDownloadType::kOpenerCrossOrigin)) ||
       disallowed_types.test(

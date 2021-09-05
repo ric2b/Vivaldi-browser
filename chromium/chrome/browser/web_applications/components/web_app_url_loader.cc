@@ -19,12 +19,27 @@ namespace web_app {
 constexpr base::TimeDelta WebAppUrlLoader::kSecondsToWaitForWebContentsLoad;
 
 namespace {
-bool EqualsIgnoringQueryAndRef(const GURL& a, const GURL& b) {
+using UrlComparison = WebAppUrlLoader::UrlComparison;
+
+bool EqualsWithComparison(const GURL& a,
+                          const GURL& b,
+                          UrlComparison url_comparison) {
+  DCHECK(a.is_valid());
+  DCHECK(b.is_valid());
   if (a == b)
     return true;
   GURL::Replacements replace;
-  replace.ClearQuery();
-  replace.ClearRef();
+  switch (url_comparison) {
+    case UrlComparison::kExact:
+      return false;
+    case UrlComparison::kSameOrigin:
+      replace.ClearPath();
+      FALLTHROUGH;
+    case UrlComparison::kIgnoreQueryParamsAndRef:
+      replace.ClearQuery();
+      replace.ClearRef();
+      break;
+  }
   return a.ReplaceComponents(replace) == b.ReplaceComponents(replace);
 }
 
@@ -35,8 +50,10 @@ class LoaderTask : public content::WebContentsObserver {
 
   void LoadUrl(const GURL& url,
                content::WebContents* web_contents,
+               UrlComparison url_comparison,
                WebAppUrlLoader::ResultCallback callback) {
     url_ = url;
+    url_comparison_ = url_comparison;
     callback_ = std::move(callback);
     Observe(web_contents);
 
@@ -65,7 +82,7 @@ class LoaderTask : public content::WebContentsObserver {
 
     timer_.Stop();
 
-    if (EqualsIgnoringQueryAndRef(validated_url, url_)) {
+    if (EqualsWithComparison(validated_url, url_, url_comparison_)) {
       PostResultTask(WebAppUrlLoader::Result::kUrlLoaded);
       return;
     }
@@ -76,8 +93,7 @@ class LoaderTask : public content::WebContentsObserver {
 
   void DidFailLoad(content::RenderFrameHost* render_frame_host,
                    const GURL& validated_url,
-                   int error_code,
-                   const base::string16& error_description) override {
+                   int error_code) override {
     // Ignore subframe loads.
     if (web_contents()->GetMainFrame() != render_frame_host) {
       return;
@@ -109,8 +125,10 @@ class LoaderTask : public content::WebContentsObserver {
         FROM_HERE, base::BindOnce(std::move(callback_), result));
   }
 
-  WebAppUrlLoader::ResultCallback callback_;
   GURL url_;
+  UrlComparison url_comparison_;
+  WebAppUrlLoader::ResultCallback callback_;
+
   base::OneShotTimer timer_;
 
   base::WeakPtrFactory<LoaderTask> weak_ptr_factory_{this};
@@ -126,11 +144,12 @@ WebAppUrlLoader::~WebAppUrlLoader() = default;
 
 void WebAppUrlLoader::LoadUrl(const GURL& url,
                               content::WebContents* web_contents,
+                              UrlComparison url_comparison,
                               ResultCallback callback) {
   auto loader_task = std::make_unique<LoaderTask>();
   auto* loader_task_ptr = loader_task.get();
   loader_task_ptr->LoadUrl(
-      url, web_contents,
+      url, web_contents, url_comparison,
       base::BindOnce(
           [](ResultCallback callback, std::unique_ptr<LoaderTask> task,
              Result result) {

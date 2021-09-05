@@ -68,6 +68,10 @@ class IndependentFlattener : public base::HistogramFlattener {
   DISALLOW_COPY_AND_ASSIGN(IndependentFlattener);
 };
 
+// Convenience function to return the given time at a resolution in seconds.
+static int64_t ToMonotonicSeconds(base::TimeTicks time_ticks) {
+  return (time_ticks - base::TimeTicks()).InSeconds();
+}
 
 }  // namespace
 
@@ -108,6 +112,9 @@ MetricsLog::MetricsLog(const std::string& client_id,
     uma_proto_.set_product(product);
 
   SystemProfileProto* system_profile = uma_proto()->mutable_system_profile();
+  // Record the unhashed the client_id to system profile. This is used to
+  // simulate field trial assignments for the client.
+  system_profile->set_client_uuid(client_id);
   RecordCoreSystemProfile(client_, system_profile);
 }
 
@@ -144,15 +151,16 @@ int64_t MetricsLog::GetBuildTime() {
 
 // static
 int64_t MetricsLog::GetCurrentTime() {
-  return (base::TimeTicks::Now() - base::TimeTicks()).InSeconds();
+  return ToMonotonicSeconds(base::TimeTicks::Now());
 }
 
-void MetricsLog::RecordUserAction(const std::string& key) {
+void MetricsLog::RecordUserAction(const std::string& key,
+                                  base::TimeTicks action_time) {
   DCHECK(!closed_);
 
   UserActionEventProto* user_action = uma_proto_.add_user_action_event();
   user_action->set_name_hash(Hash(key));
-  user_action->set_time_sec(GetCurrentTime());
+  user_action->set_time_sec(ToMonotonicSeconds(action_time));
 }
 
 // static

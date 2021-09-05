@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/strings/strcat.h"
+#include "build/build_config.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/url_constants.h"
 #include "content/public/browser/url_data_source.h"
@@ -49,15 +50,15 @@ class TestDevToolsDataSource : public DevToolsDataSource {
       const GURL& url,
       const net::NetworkTrafficAnnotationTag& traffic_annotation,
       int load_flags,
-      const GotDataCallback& callback) override {
+      GotDataCallback callback) override {
     std::string result = "url: " + url.spec();
-    callback.Run(base::RefCountedString::TakeString(&result));
+    std::move(callback).Run(base::RefCountedString::TakeString(&result));
   }
 
   void StartFileRequest(const std::string& path,
-                        const GotDataCallback& callback) override {
+                        GotDataCallback callback) override {
     std::string result = "file: " + path;
-    callback.Run(base::RefCountedString::TakeString(&result));
+    std::move(callback).Run(base::RefCountedString::TakeString(&result));
   }
 };
 
@@ -80,13 +81,14 @@ class DevToolsUIDataSourceTest : public testing::Test {
 
   std::string data() const { return data_; }
 
+  // TODO(crbug/1009127): pass in GURL instead.
   void StartRequest(const std::string& path) {
     data_received_ = false;
     data_.clear();
     std::string trimmed_path = path.substr(1);
     content::WebContents::Getter wc_getter;
     data_source()->StartDataRequest(
-        trimmed_path, std::move(wc_getter),
+        GURL("chrome://any-host/" + trimmed_path), std::move(wc_getter),
         base::BindRepeating(&DevToolsUIDataSourceTest::OnDataReceived,
                             base::Unretained(this)));
   }
@@ -127,8 +129,13 @@ TEST_F(DevToolsUIDataSourceTest, TestDevToolsBundledURLWithQueryParam) {
 }
 
 TEST_F(DevToolsUIDataSourceTest, TestDevToolsBundledURLWithSwitch) {
+#if defined(OS_WIN)
+  const char* flag_value = "file://C:/tmp/";
+#else
+  const char* flag_value = "file://tmp/";
+#endif
   base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-      switches::kCustomDevtoolsFrontend, "file://tmp/");
+      switches::kCustomDevtoolsFrontend, flag_value);
   const GURL path =
       DevToolsUrl().Resolve(DevToolsBundledPath(kDevToolsUITestFrontEndUrl));
   StartRequest(path.path());

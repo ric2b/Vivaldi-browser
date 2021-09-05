@@ -84,41 +84,32 @@ HostScannerOperation::Factory*
     HostScannerOperation::Factory::factory_instance_ = nullptr;
 
 // static
-std::unique_ptr<HostScannerOperation>
-HostScannerOperation::Factory::NewInstance(
+std::unique_ptr<HostScannerOperation> HostScannerOperation::Factory::Create(
     const multidevice::RemoteDeviceRefList& devices_to_connect,
     device_sync::DeviceSyncClient* device_sync_client,
     secure_channel::SecureChannelClient* secure_channel_client,
     HostScanDevicePrioritizer* host_scan_device_prioritizer,
     TetherHostResponseRecorder* tether_host_response_recorder,
     ConnectionPreserver* connection_preserver) {
-  if (!factory_instance_) {
-    factory_instance_ = new Factory();
+  if (factory_instance_) {
+    return factory_instance_->CreateInstance(
+        devices_to_connect, device_sync_client, secure_channel_client,
+        host_scan_device_prioritizer, tether_host_response_recorder,
+        connection_preserver);
   }
-  return factory_instance_->BuildInstance(
-      devices_to_connect, device_sync_client, secure_channel_client,
-      host_scan_device_prioritizer, tether_host_response_recorder,
-      connection_preserver);
-}
 
-// static
-void HostScannerOperation::Factory::SetInstanceForTesting(Factory* factory) {
-  factory_instance_ = factory;
-}
-
-std::unique_ptr<HostScannerOperation>
-HostScannerOperation::Factory::BuildInstance(
-    const multidevice::RemoteDeviceRefList& devices_to_connect,
-    device_sync::DeviceSyncClient* device_sync_client,
-    secure_channel::SecureChannelClient* secure_channel_client,
-    HostScanDevicePrioritizer* host_scan_device_prioritizer,
-    TetherHostResponseRecorder* tether_host_response_recorder,
-    ConnectionPreserver* connection_preserver) {
   return base::WrapUnique(new HostScannerOperation(
       devices_to_connect, device_sync_client, secure_channel_client,
       host_scan_device_prioritizer, tether_host_response_recorder,
       connection_preserver));
 }
+
+// static
+void HostScannerOperation::Factory::SetFactoryForTesting(Factory* factory) {
+  factory_instance_ = factory;
+}
+
+HostScannerOperation::Factory::~Factory() = default;
 
 HostScannerOperation::ScannedDeviceInfo::ScannedDeviceInfo(
     multidevice::RemoteDeviceRef remote_device,
@@ -199,7 +190,7 @@ void HostScannerOperation::OnMessageReceived(
       static_cast<TetherAvailabilityResponse*>(
           message_wrapper->GetProto().get());
   if (AreGmsCoreNotificationsDisabled(response)) {
-    PA_LOG(VERBOSE)
+    PA_LOG(WARNING)
         << "Received TetherAvailabilityResponse from device with ID "
         << remote_device.GetTruncatedDeviceIdForLogs() << " which "
         << "indicates that Google Play Services notifications are "
@@ -209,10 +200,11 @@ void HostScannerOperation::OnMessageReceived(
   } else if (!IsTetheringAvailableWithValidDeviceStatus(response)) {
     // If the received message is invalid or if it states that tethering is
     // unavailable, ignore it.
-    PA_LOG(VERBOSE)
+    PA_LOG(WARNING)
         << "Received TetherAvailabilityResponse from device with ID "
         << remote_device.GetTruncatedDeviceIdForLogs() << " which "
-        << "indicates that tethering is not available.";
+        << "indicates that tethering is not available. Response code: "
+        << response->response_code();
   } else {
     bool setup_required =
         response->response_code() ==

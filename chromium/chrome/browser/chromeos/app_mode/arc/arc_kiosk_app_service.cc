@@ -9,6 +9,7 @@
 #include "ash/public/cpp/app_list/app_list_config.h"
 #include "base/bind.h"
 #include "base/time/time.h"
+#include "chrome/browser/chromeos/app_mode/arc/arc_kiosk_app_manager.h"
 #include "chrome/browser/chromeos/app_mode/arc/arc_kiosk_app_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -72,7 +73,7 @@ void ArcKioskAppService::OnPackageListInitialRefreshed() {
   PreconditionsChanged();
 }
 
-void ArcKioskAppService::OnArcKioskAppsChanged() {
+void ArcKioskAppService::OnKioskAppsSettingsChanged() {
   PreconditionsChanged();
 }
 
@@ -127,8 +128,11 @@ void ArcKioskAppService::OnIconUpdated(ArcAppIcon* icon) {
     app_icon_.release();
     return;
   }
-  app_manager_->UpdateNameAndIcon(app_id_, app_info_->name,
+  AccountId account_id = multi_user_util::GetAccountIdFromProfile(profile_);
+  app_manager_->UpdateNameAndIcon(account_id, app_info_->name,
                                   app_icon_->image_skia());
+  if (delegate_)
+    delegate_->OnAppDataUpdated();
 }
 
 void ArcKioskAppService::OnArcSessionRestarting() {
@@ -216,6 +220,7 @@ void ArcKioskAppService::PreconditionsChanged() {
           << (pending_policy_app_installs_.count(app_info_->package_name)
                   ? "non-compliant"
                   : "compliant");
+  RequestNameAndIconUpdate();
   if (app_info_ && app_info_->ready && !maintenance_session_running_ &&
       compliance_report_received_ &&
       pending_policy_app_installs_.count(app_info_->package_name) == 0) {
@@ -228,7 +233,6 @@ void ArcKioskAppService::PreconditionsChanged() {
     VLOG(2) << "Kiosk app should be closed";
     arc::CloseTask(task_id_);
   }
-  RequestNameAndIconUpdate();
 }
 
 std::string ArcKioskAppService::GetAppId() {

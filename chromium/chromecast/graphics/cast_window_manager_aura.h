@@ -29,6 +29,7 @@ class CastSystemGestureEventHandler;
 class CastSystemGestureDispatcher;
 class SideSwipeDetector;
 class CastWindowTreeHostAura;
+class RoundedWindowCorners;
 
 class CastWindowManagerAura : public CastWindowManager,
                               public aura::client::WindowParentingClient {
@@ -44,7 +45,7 @@ class CastWindowManagerAura : public CastWindowManager,
   void AddWindow(gfx::NativeView window) override;
   gfx::NativeView GetRootWindow() override;
   std::vector<WindowId> GetWindowOrder() override;
-  void SetWindowId(gfx::NativeView window, WindowId window_id) override;
+  void SetZOrder(gfx::NativeView window, mojom::ZOrder z_order) override;
   void InjectEvent(ui::Event* event) override;
   void AddObserver(Observer* observer) override;
   void RemoveObserver(Observer* observer) override;
@@ -54,6 +55,8 @@ class CastWindowManagerAura : public CastWindowManager,
   void AddTouchActivityObserver(CastTouchActivityObserver* observer) override;
   void RemoveTouchActivityObserver(
       CastTouchActivityObserver* observer) override;
+  void SetEnableRoundedCorners(bool enable) override;
+  void NotifyColorInversionEnabled(bool enabled) override;
 
   // aura::client::WindowParentingClient implementation:
   aura::Window* GetDefaultParent(aura::Window* window,
@@ -65,8 +68,15 @@ class CastWindowManagerAura : public CastWindowManager,
     return capture_client_.get();
   }
 
+  // For testing.
+  bool HasRoundedWindowCorners() const;
+
  private:
   const bool enable_input_;
+
+  // true if the current app explicitly requested rounded corners
+  bool needs_rounded_corners_ = false;
+
   std::unique_ptr<CastWindowTreeHostAura> window_tree_host_;
   std::unique_ptr<aura::client::DefaultCaptureClient> capture_client_;
   std::unique_ptr<CastFocusClientAura> focus_client_;
@@ -75,6 +85,7 @@ class CastWindowManagerAura : public CastWindowManager,
   std::unique_ptr<CastSystemGestureDispatcher> system_gesture_dispatcher_;
   std::unique_ptr<CastSystemGestureEventHandler> system_gesture_event_handler_;
   std::unique_ptr<SideSwipeDetector> side_swipe_detector_;
+  std::unique_ptr<RoundedWindowCorners> rounded_window_corners_;
 
   std::vector<WindowId> window_order_;
   base::ObserverList<Observer>::Unchecked observer_list_;

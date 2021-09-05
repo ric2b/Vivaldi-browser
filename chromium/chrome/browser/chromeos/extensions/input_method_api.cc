@@ -13,6 +13,7 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/lazy_instance.h"
+#include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/chromeos/extensions/dictionary_event_router.h"
@@ -63,10 +64,12 @@ namespace OnImeMenuItemsChanged =
     extensions::api::input_method_private::OnImeMenuItemsChanged;
 namespace GetSurroundingText =
     extensions::api::input_method_private::GetSurroundingText;
-namespace GetSetting = extensions::api::input_method_private::GetSetting;
-namespace SetSetting = extensions::api::input_method_private::SetSetting;
+namespace GetSettings = extensions::api::input_method_private::GetSettings;
+namespace SetSettings = extensions::api::input_method_private::SetSettings;
 namespace SetCompositionRange =
     extensions::api::input_method_private::SetCompositionRange;
+namespace SetSelectionRange =
+    extensions::api::input_method_private::SetSelectionRange;
 namespace OnSettingsChanged =
     extensions::api::input_method_private::OnSettingsChanged;
 
@@ -77,7 +80,35 @@ namespace {
 // Prefix, which is used by XKB.
 const char kXkbPrefix[] = "xkb:";
 const char kErrorFailToShowInputView[] =
-    "Unable to show the input view window.";
+    "Unable to show the input view window because the keyboard is not enabled.";
+const char kErrorFailToHideInputView[] =
+    "Unable to hide the input view window because the keyboard is not enabled.";
+const char kErrorRouterNotAvailable[] = "The router is not available.";
+const char kErrorInvalidInputMethod[] = "Input method not found.";
+const char kErrorSpellCheckNotAvailable[] =
+    "Spellcheck service is not available.";
+const char kErrorCustomDictionaryNotLoaded[] =
+    "Custom dictionary is not loaded yet.";
+const char kErrorInvalidWord[] = "Unable to add invalid word to dictionary.";
+const char kErrorSyncServiceNotReady[] =
+    "Sync service is not ready for current profile.";
+const char kErrorInputContextHandlerNotAvailable[] =
+    "Input context handler is not available.";
+const char kErrorInvalidParametersForGetSurroundingText[] =
+    "Invalid negative parameters for GetSurroundingText.";
+
+InputMethodEngineBase* GetEngineIfActive(
+    content::BrowserContext* browser_context,
+    const std::string& extension_id,
+    std::string* error) {
+  Profile* profile = Profile::FromBrowserContext(browser_context);
+  extensions::InputImeEventRouter* event_router =
+      extensions::GetInputImeEventRouter(profile);
+  DCHECK(event_router) << kErrorRouterNotAvailable;
+  InputMethodEngineBase* engine =
+      event_router->GetEngineIfActive(extension_id, error);
+  return engine;
+}
 
 }  // namespace
 
@@ -119,7 +150,10 @@ InputMethodPrivateSetCurrentInputMethodFunction::Run() {
       return RespondNow(NoArguments());
     }
   }
-  return RespondNow(Error("Invalid input method id."));
+  return RespondNow(Error(InformativeError(
+      base::StringPrintf("%s Input Method: %s", kErrorInvalidInputMethod,
+                         params->input_method_id.c_str()),
+      function_name())));
 }
 
 ExtensionFunction::ResponseAction
@@ -149,11 +183,13 @@ InputMethodPrivateFetchAllDictionaryWordsFunction::Run() {
   SpellcheckService* spellcheck = SpellcheckServiceFactory::GetForContext(
       context_);
   if (!spellcheck) {
-    return RespondNow(Error("Spellcheck service not available."));
+    return RespondNow(
+        Error(InformativeError(kErrorSpellCheckNotAvailable, function_name())));
   }
   SpellcheckCustomDictionary* dictionary = spellcheck->GetCustomDictionary();
   if (!dictionary->IsLoaded()) {
-    return RespondNow(Error("Custom dictionary not loaded yet."));
+    return RespondNow(Error(
+        InformativeError(kErrorCustomDictionaryNotLoaded, function_name())));
   }
 
   const std::set<std::string>& words = dictionary->GetWords();
@@ -172,11 +208,13 @@ InputMethodPrivateAddWordToDictionaryFunction::Run() {
   SpellcheckService* spellcheck = SpellcheckServiceFactory::GetForContext(
       context_);
   if (!spellcheck) {
-    return RespondNow(Error("Spellcheck service not available."));
+    return RespondNow(
+        Error(InformativeError(kErrorSpellCheckNotAvailable, function_name())));
   }
   SpellcheckCustomDictionary* dictionary = spellcheck->GetCustomDictionary();
   if (!dictionary->IsLoaded()) {
-    return RespondNow(Error("Custom dictionary not loaded yet."));
+    return RespondNow(Error(
+        InformativeError(kErrorCustomDictionaryNotLoaded, function_name())));
   }
 
   if (dictionary->AddWord(params->word))
@@ -187,7 +225,10 @@ InputMethodPrivateAddWordToDictionaryFunction::Run() {
   // - Longer than 99 bytes (kMaxCustomDictionaryWordBytes).
   // - Leading/trailing whitespace.
   // - Empty.
-  return RespondNow(Error("Unable to add invalid word to dictionary."));
+  return RespondNow(Error(
+      InformativeError(base::StringPrintf("%s. Word: %s", kErrorInvalidWord,
+                                          params->word.c_str()),
+                       function_name())));
 }
 
 ExtensionFunction::ResponseAction
@@ -195,7 +236,8 @@ InputMethodPrivateGetEncryptSyncEnabledFunction::Run() {
   syncer::SyncService* sync_service = ProfileSyncServiceFactory::GetForProfile(
       Profile::FromBrowserContext(browser_context()));
   if (!sync_service)
-    return RespondNow(Error("Sync service is not ready for current profile."));
+    return RespondNow(
+        Error(InformativeError(kErrorSyncServiceNotReady, function_name())));
   std::unique_ptr<base::Value> ret(new base::Value(
       sync_service->GetUserSettings()->IsEncryptEverythingEnabled()));
   return RespondNow(OneArgument(std::move(ret)));
@@ -225,6 +267,17 @@ InputMethodPrivateShowInputViewFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction
+InputMethodPrivateHideInputViewFunction::Run() {
+  auto* keyboard_client = ChromeKeyboardControllerClient::Get();
+  if (!keyboard_client->is_keyboard_enabled()) {
+    return RespondNow(Error(kErrorFailToHideInputView));
+  }
+
+  keyboard_client->HideKeyboard(ash::HideReason::kUser);
+  return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction
 InputMethodPrivateOpenOptionsPageFunction::Run() {
   std::unique_ptr<OpenOptionsPage::Params> params(
       OpenOptionsPage::Params::Create(*args_));
@@ -234,7 +287,10 @@ InputMethodPrivateOpenOptionsPageFunction::Run() {
   const chromeos::input_method::InputMethodDescriptor* ime =
       ime_state->GetInputMethodFromId(params->input_method_id);
   if (!ime)
-    return RespondNow(Error("IME not found: *", params->input_method_id));
+    return RespondNow(Error(InformativeError(
+        base::StringPrintf("%s Input Method: %s", kErrorInvalidInputMethod,
+                           params->input_method_id.c_str()),
+        function_name())));
 
   content::WebContents* web_contents = GetSenderWebContents();
   if (web_contents) {
@@ -255,12 +311,17 @@ InputMethodPrivateGetSurroundingTextFunction::Run() {
   ui::IMEInputContextHandlerInterface* input_context =
       ui::IMEBridge::Get()->GetInputContextHandler();
   if (!input_context)
-    return RespondNow(Error("No input context handler."));
+    return RespondNow(Error(InformativeError(
+        kErrorInputContextHandlerNotAvailable, function_name())));
 
   std::unique_ptr<GetSurroundingText::Params> params(
       GetSurroundingText::Params::Create(*args_));
   if (params->before_length < 0 || params->after_length < 0)
-    return RespondNow(Error("Invalid parameters."));
+    return RespondNow(Error(InformativeError(
+        base::StringPrintf("%s before_length = %d, after_length = %d.",
+                           kErrorInvalidParametersForGetSurroundingText,
+                           params->before_length, params->after_length),
+        function_name())));
 
   uint32_t param_before_length = (uint32_t)params->before_length;
   uint32_t param_after_length = (uint32_t)params->after_length;
@@ -299,29 +360,28 @@ InputMethodPrivateGetSurroundingTextFunction::Run() {
   return RespondNow(OneArgument(std::move(ret)));
 }
 
-ExtensionFunction::ResponseAction InputMethodPrivateGetSettingFunction::Run() {
-  const auto params = GetSetting::Params::Create(*args_);
+ExtensionFunction::ResponseAction InputMethodPrivateGetSettingsFunction::Run() {
+  const auto params = GetSettings::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   const base::DictionaryValue* inputMethods =
       Profile::FromBrowserContext(browser_context())
           ->GetPrefs()
           ->GetDictionary(prefs::kLanguageInputMethodSpecificSettings);
-  const base::Value* result =
-      inputMethods->FindPath({params->engine_id, params->key});
+  const base::Value* result = inputMethods->FindPath(params->engine_id);
   return RespondNow(
       OneArgument(result ? std::make_unique<base::Value>(result->Clone())
                          : std::make_unique<base::Value>()));
 }
 
-ExtensionFunction::ResponseAction InputMethodPrivateSetSettingFunction::Run() {
-  const auto params = SetSetting::Params::Create(*args_);
+ExtensionFunction::ResponseAction InputMethodPrivateSetSettingsFunction::Run() {
+  const auto params = SetSettings::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   DictionaryPrefUpdate update(
       Profile::FromBrowserContext(browser_context())->GetPrefs(),
       prefs::kLanguageInputMethodSpecificSettings);
-  update->SetPath({params->engine_id, params->key}, params->value->Clone());
+  update->SetPath(params->engine_id, params->settings.ToValue()->Clone());
 
   // The router will only send the event to extensions that are listening.
   extensions::EventRouter* router =
@@ -330,8 +390,7 @@ ExtensionFunction::ResponseAction InputMethodPrivateSetSettingFunction::Run() {
     auto event = std::make_unique<extensions::Event>(
         extensions::events::INPUT_METHOD_PRIVATE_ON_SETTINGS_CHANGED,
         OnSettingsChanged::kEventName,
-        OnSettingsChanged::Create(params->engine_id, params->key,
-                                  params->value->Clone()),
+        OnSettingsChanged::Create(params->engine_id, params->settings),
         context_);
     router->BroadcastEvent(std::move(event));
   }
@@ -341,55 +400,89 @@ ExtensionFunction::ResponseAction InputMethodPrivateSetSettingFunction::Run() {
 
 ExtensionFunction::ResponseAction
 InputMethodPrivateSetCompositionRangeFunction::Run() {
-  InputImeEventRouter* event_router =
-      GetInputImeEventRouter(Profile::FromBrowserContext(browser_context()));
+  std::string error;
   InputMethodEngineBase* engine =
-      event_router ? event_router->GetEngineIfActive(extension_id()) : nullptr;
-  if (engine) {
-    const auto parent_params = SetCompositionRange::Params::Create(*args_);
-    const auto& params = parent_params->parameters;
-    std::vector<InputMethodEngineBase::SegmentInfo> segments;
-    if (params.segments) {
-      for (const auto& segments_arg : *params.segments) {
-        InputMethodEngineBase::SegmentInfo segment_info;
-        segment_info.start = segments_arg.start;
-        segment_info.end = segments_arg.end;
-        switch (segments_arg.style) {
-          case input_method_private::UNDERLINE_STYLE_UNDERLINE:
-            segment_info.style = InputMethodEngineBase::SEGMENT_STYLE_UNDERLINE;
-            break;
-          case input_method_private::UNDERLINE_STYLE_DOUBLEUNDERLINE:
-            segment_info.style =
-                InputMethodEngineBase::SEGMENT_STYLE_DOUBLE_UNDERLINE;
-            break;
-          case input_method_private::UNDERLINE_STYLE_NOUNDERLINE:
-            segment_info.style =
-                InputMethodEngineBase::SEGMENT_STYLE_NO_UNDERLINE;
-            break;
-          case input_method_private::UNDERLINE_STYLE_NONE:
-            EXTENSION_FUNCTION_VALIDATE(false);
-            break;
-        }
-        segments.push_back(segment_info);
-      }
-    } else {
-      // Default to a single segment that spans the entire range.
+      GetEngineIfActive(browser_context(), extension_id(), &error);
+  if (!engine)
+    return RespondNow(Error(InformativeError(error, function_name())));
+
+  const auto parent_params = SetCompositionRange::Params::Create(*args_);
+  const auto& params = parent_params->parameters;
+  std::vector<InputMethodEngineBase::SegmentInfo> segments;
+  if (params.segments) {
+    for (const auto& segments_arg : *params.segments) {
       InputMethodEngineBase::SegmentInfo segment_info;
-      segment_info.start = 0;
-      segment_info.end = params.selection_before + params.selection_after;
-      segment_info.style = InputMethodEngineBase::SEGMENT_STYLE_UNDERLINE;
+      segment_info.start = segments_arg.start;
+      segment_info.end = segments_arg.end;
+      switch (segments_arg.style) {
+        case input_method_private::UNDERLINE_STYLE_UNDERLINE:
+          segment_info.style = InputMethodEngineBase::SEGMENT_STYLE_UNDERLINE;
+          break;
+        case input_method_private::UNDERLINE_STYLE_DOUBLEUNDERLINE:
+          segment_info.style =
+              InputMethodEngineBase::SEGMENT_STYLE_DOUBLE_UNDERLINE;
+          break;
+        case input_method_private::UNDERLINE_STYLE_NOUNDERLINE:
+          segment_info.style =
+              InputMethodEngineBase::SEGMENT_STYLE_NO_UNDERLINE;
+          break;
+        case input_method_private::UNDERLINE_STYLE_NONE:
+          EXTENSION_FUNCTION_VALIDATE(false);
+          break;
+      }
       segments.push_back(segment_info);
     }
-    std::string error;
-    if (!engine->SetCompositionRange(params.context_id, params.selection_before,
-                                     params.selection_after, segments,
-                                     &error)) {
-      auto results = std::make_unique<base::ListValue>();
-      results->Append(std::make_unique<base::Value>(false));
-      return RespondNow(ErrorWithArguments(std::move(results), error));
-    }
+  } else {
+    // Default to a single segment that spans the entire range.
+    InputMethodEngineBase::SegmentInfo segment_info;
+    segment_info.start = 0;
+    segment_info.end = params.selection_before + params.selection_after;
+    segment_info.style = InputMethodEngineBase::SEGMENT_STYLE_UNDERLINE;
+    segments.push_back(segment_info);
+  }
+
+  if (!engine->SetCompositionRange(params.context_id, params.selection_before,
+                                   params.selection_after, segments, &error)) {
+    auto results = std::make_unique<base::ListValue>();
+    results->Append(std::make_unique<base::Value>(false));
+    return RespondNow(ErrorWithArguments(
+        std::move(results), InformativeError(error, function_name())));
   }
   return RespondNow(OneArgument(std::make_unique<base::Value>(true)));
+}
+
+ExtensionFunction::ResponseAction
+InputMethodPrivateSetSelectionRangeFunction::Run() {
+  std::string error;
+  InputMethodEngineBase* engine =
+      GetEngineIfActive(browser_context(), extension_id(), &error);
+  if (!engine)
+    return RespondNow(Error(InformativeError(error, function_name())));
+
+  std::unique_ptr<SetSelectionRange::Params> parent_params(
+      SetSelectionRange::Params::Create(*args_));
+  const SetSelectionRange::Params::Parameters& params =
+      parent_params->parameters;
+
+  if (!engine->SetSelectionRange(params.context_id, *params.selection_start,
+                                 *params.selection_end, &error)) {
+    auto results = std::make_unique<base::ListValue>();
+    results->Append(std::make_unique<base::Value>(false));
+    return RespondNow(ErrorWithArguments(
+        std::move(results), InformativeError(error, function_name())));
+  }
+  return RespondNow(OneArgument(std::make_unique<base::Value>(true)));
+}
+
+ExtensionFunction::ResponseAction InputMethodPrivateResetFunction::Run() {
+  std::string error;
+  InputMethodEngineBase* engine =
+      GetEngineIfActive(browser_context(), extension_id(), &error);
+  if (!engine)
+    return RespondNow(Error(InformativeError(error, function_name())));
+
+  engine->Reset();
+  return RespondNow(NoArguments());
 }
 
 InputMethodAPI::InputMethodAPI(content::BrowserContext* context)

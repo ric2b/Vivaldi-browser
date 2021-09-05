@@ -14,7 +14,6 @@
 #include "media/mojo/mojom/renderer_extensions.mojom.h"
 #include "media/mojo/services/mojo_decryptor_service.h"
 #include "media/mojo/services/mojo_media_client.h"
-#include "mojo/public/cpp/bindings/strong_binding.h"
 #include "services/service_manager/public/mojom/interface_provider.mojom.h"
 
 #if BUILDFLAG(ENABLE_MOJO_AUDIO_DECODER)
@@ -36,23 +35,22 @@
 #include "media/mojo/services/mojo_cdm_service.h"
 #endif  // BUILDFLAG(ENABLE_MOJO_CDM)
 
-#if BUILDFLAG(ENABLE_LIBRARY_CDMS)
+#if BUILDFLAG(ENABLE_CDM_PROXY)
 #include "media/mojo/services/mojo_cdm_proxy_service.h"
-#endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
+#endif  // BUILDFLAG(ENABLE_CDM_PROXY)
 
 namespace media {
 
 InterfaceFactoryImpl::InterfaceFactoryImpl(
-    service_manager::mojom::InterfaceProviderPtr host_interfaces,
-    std::unique_ptr<service_manager::ServiceKeepaliveRef> keepalive_ref,
+    mojo::PendingRemote<service_manager::mojom::InterfaceProvider>
+        host_interfaces,
     MojoMediaClient* mojo_media_client)
     : host_interfaces_(std::move(host_interfaces)),
-      keepalive_ref_(std::move(keepalive_ref)),
       mojo_media_client_(mojo_media_client) {
   DVLOG(1) << __func__;
   DCHECK(mojo_media_client_);
 
-  SetBindingConnectionErrorHandler();
+  SetReceiverDisconnectHandler();
 }
 
 InterfaceFactoryImpl::~InterfaceFactoryImpl() {
@@ -83,19 +81,18 @@ void InterfaceFactoryImpl::CreateAudioDecoder(
 }
 
 void InterfaceFactoryImpl::CreateVideoDecoder(
-    mojom::VideoDecoderRequest request) {
+    mojo::PendingReceiver<mojom::VideoDecoder> receiver) {
   DVLOG(2) << __func__;
 #if BUILDFLAG(ENABLE_MOJO_VIDEO_DECODER)
-  video_decoder_bindings_.AddBinding(
-      std::make_unique<MojoVideoDecoderService>(mojo_media_client_,
-                                                &cdm_service_context_),
-      std::move(request));
+  video_decoder_receivers_.Add(std::make_unique<MojoVideoDecoderService>(
+                                   mojo_media_client_, &cdm_service_context_),
+                               std::move(receiver));
 #endif  // BUILDFLAG(ENABLE_MOJO_VIDEO_DECODER)
 }
 
 void InterfaceFactoryImpl::CreateDefaultRenderer(
     const std::string& audio_device_id,
-    mojo::InterfaceRequest<mojom::Renderer> request) {
+    mojo::PendingReceiver<mojom::Renderer> receiver) {
   DVLOG(2) << __func__;
 #if BUILDFLAG(ENABLE_MOJO_RENDERER)
   auto renderer = mojo_media_client_->CreateRenderer(
@@ -112,22 +109,21 @@ void InterfaceFactoryImpl::CreateDefaultRenderer(
 
   MojoRendererService* mojo_renderer_service_ptr = mojo_renderer_service.get();
 
-  mojo::BindingId binding_id = renderer_bindings_.AddBinding(
-      std::move(mojo_renderer_service), std::move(request));
+  mojo::ReceiverId receiver_id = renderer_receivers_.Add(
+      std::move(mojo_renderer_service), std::move(receiver));
 
   // base::Unretained() is safe because the callback will be fired by
-  // |mojo_renderer_service|, which is owned by |renderer_bindings_|.
-  mojo_renderer_service_ptr->set_bad_message_cb(
-      base::Bind(base::IgnoreResult(
-                     &mojo::StrongBindingSet<mojom::Renderer>::RemoveBinding),
-                 base::Unretained(&renderer_bindings_), binding_id));
+  // |mojo_renderer_service|, which is owned by |renderer_receivers_|.
+  mojo_renderer_service_ptr->set_bad_message_cb(base::Bind(
+      base::IgnoreResult(&mojo::UniqueReceiverSet<mojom::Renderer>::Remove),
+      base::Unretained(&renderer_receivers_), receiver_id));
 #endif  // BUILDFLAG(ENABLE_MOJO_RENDERER)
 }
 
 #if BUILDFLAG(ENABLE_CAST_RENDERER)
 void InterfaceFactoryImpl::CreateCastRenderer(
     const base::UnguessableToken& overlay_plane_id,
-    media::mojom::RendererRequest request) {
+    mojo::PendingReceiver<media::mojom::Renderer> receiver) {
   DVLOG(2) << __func__;
   auto renderer = mojo_media_client_->CreateCastRenderer(
       host_interfaces_.get(), base::ThreadTaskRunnerHandle::Get(), &media_log_,
@@ -143,46 +139,48 @@ void InterfaceFactoryImpl::CreateCastRenderer(
 
   MojoRendererService* mojo_renderer_service_ptr = mojo_renderer_service.get();
 
-  mojo::BindingId binding_id = renderer_bindings_.AddBinding(
-      std::move(mojo_renderer_service), std::move(request));
+  mojo::ReceiverId receiver_id = renderer_receivers_.Add(
+      std::move(mojo_renderer_service), std::move(receiver));
 
   // base::Unretained() is safe because the callback will be fired by
-  // |mojo_renderer_service|, which is owned by |renderer_bindings_|.
+  // |mojo_renderer_service|, which is owned by |renderer_receivers_|.
   mojo_renderer_service_ptr->set_bad_message_cb(base::BindRepeating(
-      base::IgnoreResult(
-          &mojo::StrongBindingSet<mojom::Renderer>::RemoveBinding),
-      base::Unretained(&renderer_bindings_), binding_id));
+      base::IgnoreResult(&mojo::UniqueReceiverSet<mojom::Renderer>::Remove),
+      base::Unretained(&renderer_receivers_), receiver_id));
 }
 #endif
 
 #if defined(OS_ANDROID)
 void InterfaceFactoryImpl::CreateMediaPlayerRenderer(
-    mojom::MediaPlayerRendererClientExtensionPtr client_extension_ptr,
-    mojom::RendererRequest request,
-    mojom::MediaPlayerRendererExtensionRequest renderer_extension_request) {
+    mojo::PendingRemote<mojom::MediaPlayerRendererClientExtension>
+        client_extension_ptr,
+    mojo::PendingReceiver<mojom::Renderer> receiver,
+    mojo::PendingReceiver<mojom::MediaPlayerRendererExtension>
+        renderer_extension_receiver) {
   NOTREACHED();
 }
 
 void InterfaceFactoryImpl::CreateFlingingRenderer(
     const std::string& audio_device_id,
-    mojom::FlingingRendererClientExtensionPtr client_extension,
-    mojo::InterfaceRequest<mojom::Renderer> request) {
+    mojo::PendingRemote<mojom::FlingingRendererClientExtension>
+        client_extension,
+    mojo::PendingReceiver<mojom::Renderer> receiver) {
   NOTREACHED();
 }
 #endif  // defined(OS_ANDROID)
 
 void InterfaceFactoryImpl::CreateCdm(
     const std::string& /* key_system */,
-    mojo::InterfaceRequest<mojom::ContentDecryptionModule> request) {
+    mojo::PendingReceiver<mojom::ContentDecryptionModule> receiver) {
   DVLOG(2) << __func__;
 #if BUILDFLAG(ENABLE_MOJO_CDM)
   CdmFactory* cdm_factory = GetCdmFactory();
   if (!cdm_factory)
     return;
 
-  cdm_bindings_.AddBinding(
+  cdm_receivers_.Add(
       std::make_unique<MojoCdmService>(cdm_factory, &cdm_service_context_),
-      std::move(request));
+      std::move(receiver));
 #endif  // BUILDFLAG(ENABLE_MOJO_CDM)
 }
 
@@ -200,12 +198,11 @@ void InterfaceFactoryImpl::CreateDecryptor(
   decryptor_receivers_.Add(std::move(mojo_decryptor_service),
                            std::move(receiver));
 }
-
+#if BUILDFLAG(ENABLE_CDM_PROXY)
 void InterfaceFactoryImpl::CreateCdmProxy(
     const base::Token& cdm_guid,
     mojo::PendingReceiver<mojom::CdmProxy> receiver) {
   DVLOG(2) << __func__;
-#if BUILDFLAG(ENABLE_LIBRARY_CDMS)
   auto cdm_proxy = mojo_media_client_->CreateCdmProxy(cdm_guid);
   if (!cdm_proxy) {
     DLOG(ERROR) << "CdmProxy creation failed.";
@@ -215,8 +212,8 @@ void InterfaceFactoryImpl::CreateCdmProxy(
   cdm_proxy_receivers_.Add(std::make_unique<MojoCdmProxyService>(
                                std::move(cdm_proxy), &cdm_service_context_),
                            std::move(receiver));
-#endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
 }
+#endif  // BUILDFLAG(ENABLE_CDM_PROXY)
 
 void InterfaceFactoryImpl::OnDestroyPending(base::OnceClosure destroy_cb) {
   DVLOG(1) << __func__;
@@ -233,24 +230,24 @@ bool InterfaceFactoryImpl::IsEmpty() {
 #endif  // BUILDFLAG(ENABLE_MOJO_AUDIO_DECODER)
 
 #if BUILDFLAG(ENABLE_MOJO_VIDEO_DECODER)
-  if (!video_decoder_bindings_.empty())
+  if (!video_decoder_receivers_.empty())
     return false;
 #endif  // BUILDFLAG(ENABLE_MOJO_VIDEO_DECODER)
 
 #if BUILDFLAG(ENABLE_MOJO_RENDERER)
-  if (!renderer_bindings_.empty())
+  if (!renderer_receivers_.empty())
     return false;
 #endif  // BUILDFLAG(ENABLE_MOJO_RENDERER)
 
 #if BUILDFLAG(ENABLE_MOJO_CDM)
-  if (!cdm_bindings_.empty())
+  if (!cdm_receivers_.empty())
     return false;
 #endif  // BUILDFLAG(ENABLE_MOJO_CDM)
 
-#if BUILDFLAG(ENABLE_LIBRARY_CDMS)
+#if BUILDFLAG(ENABLE_CDM_PROXY)
   if (!cdm_proxy_receivers_.empty())
     return false;
-#endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
+#endif  // BUILDFLAG(ENABLE_CDM_PROXY)
 
   if (!decryptor_receivers_.empty())
     return false;
@@ -258,37 +255,37 @@ bool InterfaceFactoryImpl::IsEmpty() {
   return true;
 }
 
-void InterfaceFactoryImpl::SetBindingConnectionErrorHandler() {
+void InterfaceFactoryImpl::SetReceiverDisconnectHandler() {
   // base::Unretained is safe because all receivers are owned by |this|. If
   // |this| is destructed, the receivers will be destructed as well and the
-  // connection error handler should never be called.
-  auto connection_error_cb = base::BindRepeating(
-      &InterfaceFactoryImpl::OnBindingConnectionError, base::Unretained(this));
+  // disconnect handler should never be called.
+  auto disconnect_cb = base::BindRepeating(
+      &InterfaceFactoryImpl::OnReceiverDisconnect, base::Unretained(this));
 
 #if BUILDFLAG(ENABLE_MOJO_AUDIO_DECODER)
-  audio_decoder_receivers_.set_disconnect_handler(connection_error_cb);
+  audio_decoder_receivers_.set_disconnect_handler(disconnect_cb);
 #endif  // BUILDFLAG(ENABLE_MOJO_AUDIO_DECODER)
 
 #if BUILDFLAG(ENABLE_MOJO_VIDEO_DECODER)
-  video_decoder_bindings_.set_connection_error_handler(connection_error_cb);
+  video_decoder_receivers_.set_disconnect_handler(disconnect_cb);
 #endif  // BUILDFLAG(ENABLE_MOJO_VIDEO_DECODER)
 
 #if BUILDFLAG(ENABLE_MOJO_RENDERER)
-  renderer_bindings_.set_connection_error_handler(connection_error_cb);
+  renderer_receivers_.set_disconnect_handler(disconnect_cb);
 #endif  // BUILDFLAG(ENABLE_MOJO_RENDERER)
 
 #if BUILDFLAG(ENABLE_MOJO_CDM)
-  cdm_bindings_.set_connection_error_handler(connection_error_cb);
+  cdm_receivers_.set_disconnect_handler(disconnect_cb);
 #endif  // BUILDFLAG(ENABLE_MOJO_CDM)
 
-#if BUILDFLAG(ENABLE_LIBRARY_CDMS)
-  cdm_proxy_receivers_.set_disconnect_handler(connection_error_cb);
-#endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
+#if BUILDFLAG(ENABLE_CDM_PROXY)
+  cdm_proxy_receivers_.set_disconnect_handler(disconnect_cb);
+#endif  // BUILDFLAG(ENABLE_CDM_PROXY)
 
-  decryptor_receivers_.set_disconnect_handler(connection_error_cb);
+  decryptor_receivers_.set_disconnect_handler(disconnect_cb);
 }
 
-void InterfaceFactoryImpl::OnBindingConnectionError() {
+void InterfaceFactoryImpl::OnReceiverDisconnect() {
   DVLOG(2) << __func__;
   if (destroy_cb_ && IsEmpty())
     std::move(destroy_cb_).Run();

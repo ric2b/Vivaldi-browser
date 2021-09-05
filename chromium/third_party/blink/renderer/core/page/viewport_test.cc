@@ -29,6 +29,7 @@
  */
 
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/platform/web_float_rect.h"
 #include "third_party/blink/public/platform/web_url_loader_mock_factory.h"
 #include "third_party/blink/public/web/web_console_message.h"
 #include "third_party/blink/public/web/web_frame.h"
@@ -2921,7 +2922,7 @@ TEST_F(ViewportTest, viewportLimitsAdjustedForNoUserScale) {
       nullptr, nullptr, nullptr, SetViewportSettings);
 
   web_view_helper.GetWebView()->MainFrameWidget()->UpdateAllLifecyclePhases(
-      WebWidget::LifecycleUpdateReason::kTest);
+      DocumentUpdateReason::kTest);
   Page* page = web_view_helper.GetWebView()->GetPage();
   PageScaleConstraints constraints = RunViewportTest(page, 10, 10);
 
@@ -2939,7 +2940,7 @@ TEST_F(ViewportTest, viewportLimitsAdjustedForUserScale) {
       base_url_ + "viewport/viewport-limits-adjusted-for-user-scale.html",
       nullptr, nullptr, nullptr, SetViewportSettings);
   web_view_helper.GetWebView()->MainFrameWidget()->UpdateAllLifecyclePhases(
-      WebWidget::LifecycleUpdateReason::kTest);
+      DocumentUpdateReason::kTest);
   Page* page = web_view_helper.GetWebView()->GetPage();
   PageScaleConstraints constraints = RunViewportTest(page, 10, 10);
 

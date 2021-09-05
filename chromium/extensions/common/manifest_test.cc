@@ -45,8 +45,9 @@ base::Value LoadManifestFile(const base::FilePath& manifest_path,
       std::string::npos) {
     base::DictionaryValue* manifest_dictionary = nullptr;
     manifest->GetAsDictionary(&manifest_dictionary);
-    extension_l10n_util::LocalizeExtension(extension_path, manifest_dictionary,
-                                           error);
+    extension_l10n_util::LocalizeExtension(
+        extension_path, manifest_dictionary,
+        extension_l10n_util::GzippedMessagesPermission::kDisallow, error);
   }
 
   return base::Value(std::move(*manifest));
@@ -73,14 +74,6 @@ ManifestTest::ManifestData::ManifestData(base::Value manifest,
 }
 
 ManifestTest::ManifestData::ManifestData(ManifestData&& other) = default;
-
-ManifestTest::ManifestData::ManifestData(base::Value* manifest,
-                                         const char* name)
-    : ManifestData(manifest->Clone(), name) {}
-
-ManifestTest::ManifestData::ManifestData(std::unique_ptr<base::Value> manifest,
-                                         const char* name)
-    : ManifestData(base::Value(std::move(*manifest)), name) {}
 
 ManifestTest::ManifestData::~ManifestData() {
 }

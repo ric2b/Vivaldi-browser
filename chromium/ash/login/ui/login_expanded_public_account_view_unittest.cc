@@ -26,7 +26,7 @@ namespace ash {
 namespace {
 
 // Total width of the expanded view.
-constexpr int kBubbleTotalWidthDp = 600;
+constexpr int kBubbleTotalWidthDp = 628;
 // Total height of the expanded view.
 constexpr int kBubbleTotalHeightDp = 324;
 
@@ -322,7 +322,7 @@ TEST_P(LoginExpandedPublicAccountViewTest, ChangeWarningLabel) {
   EXPECT_EQ(label->GetText(), full_warning);
 }
 
-INSTANTIATE_TEST_SUITE_P(,
+INSTANTIATE_TEST_SUITE_P(All,
                          LoginExpandedPublicAccountViewTest,
                          ::testing::Values("mouse", "touch"));
 

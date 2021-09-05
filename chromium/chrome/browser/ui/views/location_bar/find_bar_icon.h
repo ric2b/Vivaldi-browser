@@ -13,18 +13,21 @@ class Browser;
 // The find icon to show when the find bar is visible.
 class FindBarIcon : public PageActionIconView {
  public:
-  FindBarIcon(Browser* browser, PageActionIconView::Delegate* delegate);
+  FindBarIcon(Browser* browser,
+              IconLabelBubbleView::Delegate* icon_label_bubble_delegate,
+              PageActionIconView::Delegate* page_action_icon_delegate);
   ~FindBarIcon() override;
 
   void SetActive(bool activate, bool should_animate);
 
  protected:
   // PageActionIconView:
-  bool Update() override;
+  void UpdateImpl() override;
   void OnExecuting(ExecuteSource execute_source) override;
   views::BubbleDialogDelegateView* GetBubble() const override;
   const gfx::VectorIcon& GetVectorIcon() const override;
   base::string16 GetTextForTooltipAndAccessibleName() const override;
+  const char* GetClassName() const override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(FindBarIcon);

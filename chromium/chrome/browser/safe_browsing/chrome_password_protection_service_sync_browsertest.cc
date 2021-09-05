@@ -27,8 +27,8 @@
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
-#include "components/safe_browsing/common/safe_browsing_prefs.h"
-#include "components/safe_browsing/password_protection/password_protection_request.h"
+#include "components/safe_browsing/content/password_protection/password_protection_request.h"
+#include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "components/security_state/core/security_state.h"
 #include "components/signin/public/base/signin_pref_names.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
@@ -69,19 +69,11 @@ class ChromePasswordProtectionServiceSyncBrowserTest : public SyncTest {
         ProfileSyncServiceFactory::GetAsProfileSyncServiceForProfile(
             browser()->profile());
 
-    sync_service->OverrideNetworkResourcesForTest(
-        std::make_unique<fake_server::FakeServerNetworkResources>(
+    sync_service->OverrideNetworkForTest(
+        fake_server::CreateFakeServerHttpPostProviderFactory(
             GetFakeServer()->AsWeakPtr()));
 
     std::string username;
-#if defined(OS_CHROMEOS)
-    // In browser tests, the profile may already by authenticated with stub
-    // account |user_manager::kStubUserEmail|.
-    CoreAccountInfo info =
-        IdentityManagerFactory::GetForProfile(browser()->profile())
-            ->GetPrimaryAccountInfo();
-    username = info.email;
-#endif
     if (username.empty()) {
       username = "user@example.com";
     }
@@ -91,10 +83,8 @@ class ChromePasswordProtectionServiceSyncBrowserTest : public SyncTest {
             browser()->profile(), username, "password",
             ProfileSyncServiceHarness::SigninType::FAKE_SIGNIN);
 
-#if !defined(OS_CHROMEOS)
     // Sign the profile in.
     ASSERT_TRUE(harness->SignInPrimaryAccount());
-#endif
 
     CoreAccountInfo current_info =
         IdentityManagerFactory::GetForProfile(browser()->profile())

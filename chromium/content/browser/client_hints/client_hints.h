@@ -12,6 +12,7 @@
 #include "net/http/http_request_headers.h"
 
 class BrowserContext;
+class FrameTreeNode;
 
 namespace content {
 
@@ -33,7 +34,9 @@ CONTENT_EXPORT void AddNavigationRequestClientHintsHeaders(
     net::HttpRequestHeaders* headers,
     BrowserContext* context,
     bool javascript_enabled,
-    ClientHintsControllerDelegate* delegate);
+    ClientHintsControllerDelegate* delegate,
+    bool is_ua_override_on,
+    FrameTreeNode*);
 
 }  // namespace content
 

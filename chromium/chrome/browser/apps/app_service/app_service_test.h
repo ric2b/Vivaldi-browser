@@ -25,6 +25,8 @@ class AppServiceTest {
 
   void SetUp(Profile* profile);
 
+  void UninstallAllApps(Profile* profile);
+
   std::string GetAppName(const std::string& app_id) const;
 
   // Allow AppService async callbacks to run.
@@ -35,6 +37,8 @@ class AppServiceTest {
 
  private:
   AppServiceProxy* app_service_proxy_ = nullptr;
+
+  Profile* profile_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(AppServiceTest);
 };

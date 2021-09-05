@@ -33,6 +33,7 @@
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/layout/box_layout.h"
+#include "ui/views/widget/widget.h"
 
 namespace ash {
 
@@ -138,6 +139,15 @@ SearchResultBaseView* SearchResultTileItemListView::GetFirstResultView() {
 }
 
 int SearchResultTileItemListView::DoUpdate() {
+  if (!GetWidget() || !GetWidget()->IsVisible() || !GetWidget()->IsActive()) {
+    for (size_t i = 0; i < max_search_result_tiles_; ++i) {
+      SearchResultBaseView* result_view = GetResultViewAt(i);
+      result_view->SetResult(nullptr);
+      result_view->SetVisible(false);
+    }
+    return 0;
+  }
+
   std::vector<SearchResult*> display_results = GetDisplayResults();
 
   std::set<std::string> result_id_removed, result_id_added;
@@ -212,6 +222,14 @@ int SearchResultTileItemListView::DoUpdate() {
         FROM_HERE,
         base::TimeDelta::FromMilliseconds(kPlayStoreImpressionDelayInMs), this,
         &SearchResultTileItemListView::OnPlayStoreImpressionTimer);
+    // Set the starting time in result view for play store results.
+    base::TimeTicks result_display_start = base::TimeTicks::Now();
+    for (size_t i = 0; i < max_search_result_tiles_; ++i) {
+      SearchResult* result = GetResultViewAt(i)->result();
+      if (result && IsPlayStoreApp(result)) {
+        GetResultViewAt(i)->set_result_display_start_time(result_display_start);
+      }
+    }
   } else if (!found_playstore_results) {
     playstore_impression_timer_.Stop();
   }
@@ -256,12 +274,15 @@ std::vector<SearchResult*> SearchResultTileItemListView::GetDisplayResults() {
 
   // We ask for |max_search_result_tiles_| policy tile results first,
   // then add them to their preferred position in the tile list if found.
+  // Note: Policy tile provides a mechanism to display the result tile at the
+  // preferred position recommended by display_index() property of the search
+  // result. This is what policy referred to. It has nothing to do with
+  // Enterprise policy.
   auto policy_tiles_filter =
       base::BindRepeating([](const SearchResult& r) -> bool {
-        return r.display_location() ==
-                   SearchResultDisplayLocation::kTileListContainer &&
-               r.display_index() != SearchResultDisplayIndex::kUndefined &&
-               r.display_type() == SearchResultDisplayType::kRecommendation;
+        return r.display_index() != SearchResultDisplayIndex::kUndefined &&
+               r.display_type() == SearchResultDisplayType::kTile &&
+               r.is_recommendation();
       });
   std::vector<SearchResult*> policy_tiles_results =
       is_app_reinstall_recommendation_enabled_ && query.empty()
@@ -269,11 +290,7 @@ std::vector<SearchResult*> SearchResultTileItemListView::GetDisplayResults() {
                 results(), policy_tiles_filter, max_search_result_tiles_)
           : std::vector<SearchResult*>();
 
-  SearchResult::DisplayType display_type =
-      app_list_features::IsZeroStateSuggestionsEnabled()
-          ? (query.empty() ? SearchResultDisplayType::kRecommendation
-                           : SearchResultDisplayType::kTile)
-          : SearchResultDisplayType::kTile;
+  SearchResult::DisplayType display_type = SearchResultDisplayType::kTile;
   size_t display_num = max_search_result_tiles_ - policy_tiles_results.size();
 
   // Do not display the repeat reinstall results or continue reading app in the

@@ -2,13 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// #import {assert, assertNotReached} from './assert.m.js';
+// #import {isMac} from './cr.m.js';
+// #import {isTextInputElement} from './util.m.js';
+// #import {KeyboardShortcutList} from './cr/ui/keyboard_shortcut_list.m.js';
+
 /**
  * @fileoverview Listens for a find keyboard shortcut (i.e. Ctrl/Cmd+f or /)
  * and keeps track of an stack of potential listeners. Only the listener at the
  * top of the stack will be notified that a find shortcut has been invoked.
  */
 
-const FindShortcutManager = (() => {
+/* #export */ const FindShortcutManager = (() => {
   /**
    * Stack of listeners. Only the top listener will handle the shortcut.
    * @type {!Array}
@@ -28,7 +33,7 @@ const FindShortcutManager = (() => {
   const shortcutSlash = new cr.ui.KeyboardShortcutList('/');
 
   window.addEventListener('keydown', e => {
-    if (e.defaultPrevented || listeners.length == 0) {
+    if (e.defaultPrevented || listeners.length === 0) {
       return;
     }
 
@@ -71,26 +76,26 @@ const FindShortcutManager = (() => {
  * Used to determine how to handle find shortcut invocations.
  * @polymerBehavior
  */
-const FindShortcutBehavior = {
+/* #export */ const FindShortcutBehavior = {
   /**
    * @type {boolean}
    * @protected
    */
   findShortcutListenOnAttach: true,
 
-  attached: function() {
+  attached() {
     if (this.findShortcutListenOnAttach) {
       this.becomeActiveFindShortcutListener();
     }
   },
 
-  detached: function() {
+  detached() {
     if (this.findShortcutListenOnAttach) {
       this.removeSelfAsFindShortcutListener();
     }
   },
 
-  becomeActiveFindShortcutListener: function() {
+  becomeActiveFindShortcutListener() {
     const listeners = FindShortcutManager.listeners;
     assert(!listeners.includes(this), 'Already listening for find shortcuts.');
     listeners.push(this);
@@ -101,11 +106,11 @@ const FindShortcutBehavior = {
    * @param {boolean} modalContextOpen
    * @return {boolean}
    */
-  handleFindShortcut: function(modalContextOpen) {
+  handleFindShortcut(modalContextOpen) {
     assertNotReached();
   },
 
-  removeSelfAsFindShortcutListener: function() {
+  removeSelfAsFindShortcutListener() {
     const listeners = FindShortcutManager.listeners;
     const index = listeners.indexOf(this);
     assert(listeners.includes(this), 'Find shortcut listener not found.');
@@ -113,7 +118,7 @@ const FindShortcutBehavior = {
   },
 
   /** @return {boolean} */
-  searchInputHasFocus: function() {
+  searchInputHasFocus() {
     assertNotReached();
   },
 };

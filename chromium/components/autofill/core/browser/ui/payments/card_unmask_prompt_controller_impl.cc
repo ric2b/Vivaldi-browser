@@ -37,7 +37,7 @@ CardUnmaskPromptControllerImpl::~CardUnmaskPromptControllerImpl() {
 }
 
 void CardUnmaskPromptControllerImpl::ShowPrompt(
-    CardUnmaskPromptView* card_unmask_view,
+    CardUnmaskPromptViewFactory card_unmask_view_factory,
     const CreditCard& card,
     AutofillClient::UnmaskCardReason reason,
     base::WeakPtr<CardUnmaskDelegate> delegate) {
@@ -47,10 +47,10 @@ void CardUnmaskPromptControllerImpl::ShowPrompt(
   new_card_link_clicked_ = false;
   shown_timestamp_ = AutofillClock::Now();
   pending_details_ = CardUnmaskDelegate::UserProvidedUnmaskDetails();
-  card_unmask_view_ = card_unmask_view;
   card_ = card;
   reason_ = reason;
   delegate_ = delegate;
+  card_unmask_view_ = std::move(card_unmask_view_factory).Run();
   card_unmask_view_->Show();
   unmasking_result_ = AutofillClient::NONE;
   unmasking_number_of_attempts_ = 0;
@@ -140,6 +140,7 @@ void CardUnmaskPromptControllerImpl::OnUnmaskPromptAccepted(
   if (base::FeatureList::IsEnabled(
           features::kAutofillCreditCardAuthentication) &&
       !CanStoreLocally()) {
+    pending_details_.enable_fido_auth = enable_fido_auth;
     pref_service_->SetBoolean(
         prefs::kAutofillCreditCardFidoAuthOfferCheckboxState, enable_fido_auth);
   }
@@ -163,7 +164,7 @@ base::string16 CardUnmaskPromptControllerImpl::GetWindowTitle() const {
       ShouldRequestExpirationDate()
           ? IDS_AUTOFILL_CARD_UNMASK_PROMPT_EXPIRED_TITLE
           : IDS_AUTOFILL_CARD_UNMASK_PROMPT_TITLE,
-      card_.NetworkOrBankNameAndLastFourDigits());
+      card_.NetworkAndLastFourDigits());
 #endif
 }
 
@@ -184,8 +185,7 @@ base::string16 CardUnmaskPromptControllerImpl::GetInstructionsMessage() const {
   }
   // The iOS UI shows the card details in the instructions text since they
   // don't fit in the title.
-  return l10n_util::GetStringFUTF16(ids,
-                                    card_.NetworkOrBankNameAndLastFourDigits());
+  return l10n_util::GetStringFUTF16(ids, card_.NetworkAndLastFourDigits());
 #else
   return l10n_util::GetStringUTF16(
       card_.record_type() == autofill::CreditCard::LOCAL_CARD
@@ -229,10 +229,16 @@ bool CardUnmaskPromptControllerImpl::GetStoreLocallyStartState() const {
       prefs::kAutofillWalletImportStorageCheckboxState);
 }
 
+#if defined(OS_ANDROID)
+bool CardUnmaskPromptControllerImpl::ShouldOfferWebauthn() const {
+  return delegate_ && delegate_->ShouldOfferFidoAuth();
+}
+
 bool CardUnmaskPromptControllerImpl::GetWebauthnOfferStartState() const {
   return pref_service_->GetBoolean(
       prefs::kAutofillCreditCardFidoAuthOfferCheckboxState);
 }
+#endif
 
 bool CardUnmaskPromptControllerImpl::InputCvcIsValid(
     const base::string16& input_text) const {
@@ -267,7 +273,7 @@ bool CardUnmaskPromptControllerImpl::InputExpirationIsValid(
 }
 
 int CardUnmaskPromptControllerImpl::GetExpectedCvcLength() const {
-  return GetCvcLengthForCardType(card_.network());
+  return GetCvcLengthForCardNetwork(card_.network());
 }
 
 base::TimeDelta CardUnmaskPromptControllerImpl::GetSuccessMessageDuration()

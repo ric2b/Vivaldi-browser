@@ -26,10 +26,11 @@
 #import "ios/chrome/browser/ui/tab_grid/tab_grid_top_toolbar.h"
 #import "ios/chrome/browser/ui/tab_grid/transitions/grid_transition_layout.h"
 #import "ios/chrome/browser/ui/table_view/chrome_table_view_styler.h"
+#include "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/util/rtl_geometry.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
-#import "ios/chrome/common/colors/semantic_color_names.h"
-#import "ios/chrome/common/ui_util/constraints_ui_util.h"
+#import "ios/chrome/common/ui/colors/semantic_color_names.h"
+#import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ios/web/public/thread/web_task_traits.h"
 #include "ios/web/public/thread/web_thread.h"
@@ -106,11 +107,10 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 
 @interface TabGridViewController () <GridViewControllerDelegate,
                                      UIScrollViewAccessibilityDelegate>
-// It is programmer error to broadcast incognito content visibility when the
-// view is not visible. Bookkeeping is based on |-viewWillAppear:| and
+// Whether the view is visible. Bookkeeping is based on |-viewWillAppear:| and
 // |-viewWillDisappear methods. Note that the |Did| methods are not reliably
 // called (e.g., edge case in multitasking).
-@property(nonatomic, assign) BOOL broadcasting;
+@property(nonatomic, assign) BOOL viewVisible;
 // Child view controllers.
 @property(nonatomic, strong) GridViewController* regularTabsViewController;
 @property(nonatomic, strong) GridViewController* incognitoTabsViewController;
@@ -182,29 +182,17 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 }
 
 - (void)viewWillAppear:(BOOL)animated {
-  self.broadcasting = YES;
-  [self.topToolbar.pageControl setSelectedPage:self.currentPage animated:YES];
-  [self configureViewControllerForCurrentSizeClassesAndPage];
-  // The toolbars should be hidden (alpha 0.0) before the tab appears, so that
-  // they can be animated in. They can't be set to 0.0 here, because if
-  // |animated| is YES, this method is being called inside the animation block.
-  if (animated && self.transitionCoordinator) {
-    [self animateToolbarsForAppearance];
-  } else {
-    [self showToolbars];
+  if (!base::FeatureList::IsEnabled(kContainedBVC)) {
+    [self contentWillAppearAnimated:animated];
   }
-  [self broadcastIncognitoContentVisibility];
   [super viewWillAppear:animated];
 }
 
 - (void)viewDidAppear:(BOOL)animated {
   [super viewDidAppear:animated];
-  self.initialFrame = self.view.frame;
-  // Modify Remote Tabs Insets when page appears and during rotation.
-  [self setInsetForRemoteTabs];
-  // Let image sources know the initial appearance is done.
-  [self.regularTabsImageDataSource clearPreloadedSnapshots];
-  [self.incognitoTabsImageDataSource clearPreloadedSnapshots];
+  if (!base::FeatureList::IsEnabled(kContainedBVC)) {
+    [self contentDidAppear];
+  }
 }
 
 - (void)viewDidLayoutSubviews {
@@ -214,16 +202,9 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 }
 
 - (void)viewWillDisappear:(BOOL)animated {
-  self.undoCloseAllAvailable = NO;
-  [self.regularTabsDelegate discardSavedClosedItems];
-  // When the view disappears, the toolbar alpha should be set to 0; either as
-  // part of the animation, or directly with -hideToolbars.
-  if (animated && self.transitionCoordinator) {
-    [self animateToolbarsForDisappearance];
-  } else {
-    [self hideToolbars];
+  if (!base::FeatureList::IsEnabled(kContainedBVC)) {
+    [self contentWillDisappearAnimated:animated];
   }
-  self.broadcasting = NO;
   [super viewWillDisappear:animated];
 }
 
@@ -331,7 +312,7 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   return l10n_util::GetNSString(stringID);
 }
 
-#pragma mark - GridTransitionStateProviding properties
+#pragma mark - GridTransitionAnimationLayoutProviding properties
 
 - (BOOL)isSelectedCellVisible {
   if (self.activePage != self.currentPage)
@@ -342,8 +323,7 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
                                    : gridViewController.selectedCellVisible;
 }
 
-- (GridTransitionLayout*)layoutForTransitionContext:
-    (id<UIViewControllerContextTransitioning>)context {
+- (GridTransitionLayout*)transitionLayout {
   GridViewController* gridViewController =
       [self gridViewControllerForPage:self.activePage];
   if (!gridViewController)
@@ -354,13 +334,11 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   return layout;
 }
 
-- (UIView*)proxyContainerForTransitionContext:
-    (id<UIViewControllerContextTransitioning>)context {
+- (UIView*)animationViewsContainer {
   return self.view;
 }
 
-- (UIView*)proxyPositionForTransitionContext:
-    (id<UIViewControllerContextTransitioning>)context {
+- (UIView*)animationViewsContainerBottomView {
   return self.scrollView;
 }
 
@@ -380,6 +358,55 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     case TabGridPageRemoteTabs:
       // Nothing to do.
       break;
+  }
+}
+
+- (void)contentWillAppearAnimated:(BOOL)animated {
+  self.viewVisible = YES;
+  [self.topToolbar.pageControl setSelectedPage:self.currentPage animated:YES];
+  [self configureViewControllerForCurrentSizeClassesAndPage];
+  // The toolbars should be hidden (alpha 0.0) before the tab appears, so that
+  // they can be animated in. They can't be set to 0.0 here, because if
+  // |animated| is YES, this method is being called inside the animation block.
+  if (animated && self.transitionCoordinator) {
+    [self animateToolbarsForAppearance];
+  } else {
+    [self showToolbars];
+  }
+  [self broadcastIncognitoContentVisibility];
+
+  if (base::FeatureList::IsEnabled(kContainedBVC)) {
+    [self.incognitoTabsViewController contentWillAppearAnimated:animated];
+    [self.regularTabsViewController contentWillAppearAnimated:animated];
+    self.remoteTabsViewController.preventUpdates = NO;
+  }
+}
+
+- (void)contentDidAppear {
+  self.initialFrame = self.view.frame;
+  // Modify Remote Tabs Insets when page appears and during rotation.
+  [self setInsetForRemoteTabs];
+  // Let image sources know the initial appearance is done.
+  [self.regularTabsImageDataSource clearPreloadedSnapshots];
+  [self.incognitoTabsImageDataSource clearPreloadedSnapshots];
+}
+
+- (void)contentWillDisappearAnimated:(BOOL)animated {
+  self.undoCloseAllAvailable = NO;
+  [self.regularTabsDelegate discardSavedClosedItems];
+  // When the view disappears, the toolbar alpha should be set to 0; either as
+  // part of the animation, or directly with -hideToolbars.
+  if (animated && self.transitionCoordinator) {
+    [self animateToolbarsForDisappearance];
+  } else {
+    [self hideToolbars];
+  }
+  self.viewVisible = NO;
+
+  if (base::FeatureList::IsEnabled(kContainedBVC)) {
+    [self.incognitoTabsViewController contentWillDisappear];
+    [self.regularTabsViewController contentWillDisappear];
+    self.remoteTabsViewController.preventUpdates = YES;
   }
 }
 
@@ -429,9 +456,7 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   }
   // The content inset of the tab grids must be modified so that the toolbars
   // do not obscure the tabs. This may change depending on orientation.
-  CGFloat bottomInset = self.configuration == TabGridConfigurationBottomToolbar
-                            ? self.bottomToolbar.intrinsicContentSize.height
-                            : 0;
+  CGFloat bottomInset = self.bottomToolbar.intrinsicContentSize.height;
   UIEdgeInsets inset = UIEdgeInsetsMake(
       self.topToolbar.intrinsicContentSize.height, 0, bottomInset, 0);
   // Left and right side could be missing correct safe area
@@ -496,36 +521,54 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   self.currentPageViewController.view.accessibilityElementsHidden = YES;
   _currentPage = currentPage;
   self.currentPageViewController.view.accessibilityElementsHidden = NO;
+  // Force VoiceOver to update its accessibility element tree immediately.
+  UIAccessibilityPostNotification(UIAccessibilityLayoutChangedNotification,
+                                  nil);
 }
 
 // Sets the value of |currentPage|, adjusting the position of the scroll view
 // to match. If |animated| is YES, the scroll view change may animate; if it is
 // NO, it will never animate.
 - (void)scrollToPage:(TabGridPage)targetPage animated:(BOOL)animated {
-  // This method should never early return if |currentPage| == |_currentPage|;
+  // This method should never early return if |targetPage| == |_currentPage|;
   // the ivar may have been set before the scroll view could be updated. Calling
   // this method should always update the scroll view's offset if possible.
+
+  // When VoiceOver is running, the animation can cause state to get out of
+  // sync. If the user swipes right during the animation, the VoiceOver cursor
+  // goes to the old page, instead of the new page. See crbug.com/978673 for
+  // more details.
+  if (UIAccessibilityIsVoiceOverRunning()) {
+    animated = NO;
+  }
 
   // If the view isn't loaded yet, just do bookkeeping on |currentPage|.
   if (!self.viewLoaded) {
     self.currentPage = targetPage;
     return;
   }
+
   CGFloat pageWidth = self.scrollView.frame.size.width;
   NSUInteger pageIndex = GetPageIndexFromPage(targetPage);
-  CGPoint offset = CGPointMake(pageIndex * pageWidth, 0);
+  CGPoint targetOffset = CGPointMake(pageIndex * pageWidth, 0);
+
   // If the view is visible and |animated| is YES, animate the change.
   // Otherwise don't.
-  if (self.view.window == nil || !animated) {
-    [self.scrollView setContentOffset:offset animated:NO];
+  if (!self.viewVisible || !animated) {
+    [self.scrollView setContentOffset:targetOffset animated:NO];
     self.currentPage = targetPage;
+    // Important updates (e.g., button configurations, incognito visibility) are
+    // made at the end of scrolling animations after |self.currentPage| is set.
+    // Since this codepath has no animations, updates must be called manually.
+    [self broadcastIncognitoContentVisibility];
+    [self configureButtonsForActiveAndCurrentPage];
   } else {
     // Only set |scrollViewAnimatingContentOffset| to YES if there's an actual
     // change in the contentOffset, as |-scrollViewDidEndScrollingAnimation:| is
     // never called if the animation does not occur.
-    if (!CGPointEqualToPoint(self.scrollView.contentOffset, offset)) {
+    if (!CGPointEqualToPoint(self.scrollView.contentOffset, targetOffset)) {
       self.scrollViewAnimatingContentOffset = YES;
-      [self.scrollView setContentOffset:offset animated:YES];
+      [self.scrollView setContentOffset:targetOffset animated:YES];
       // |self.currentPage| is set in scrollViewDidEndScrollingAnimation:
     } else {
       self.currentPage = targetPage;
@@ -832,8 +875,13 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
       gridViewController == nil ? NO : !gridViewController.gridEmpty;
   self.closeAllButton.title =
       l10n_util::GetNSString(IDS_IOS_TAB_GRID_CLOSE_ALL_BUTTON);
-  self.closeAllButton.accessibilityIdentifier =
-      kTabGridCloseAllButtonIdentifier;
+  // Setting the |accessibilityIdentifier| seems to trigger layout, which causes
+  // an infinite loop.
+  if (self.closeAllButton.accessibilityIdentifier !=
+      kTabGridCloseAllButtonIdentifier) {
+    self.closeAllButton.accessibilityIdentifier =
+        kTabGridCloseAllButtonIdentifier;
+  }
 }
 
 // Shows the two toolbars and the floating button. Suitable for use in
@@ -1023,12 +1071,14 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 
 // Broadcasts whether incognito tabs are showing.
 - (void)broadcastIncognitoContentVisibility {
-  if (!self.broadcasting)
+  // It is programmer error to broadcast incognito content visibility when the
+  // view is not visible.
+  if (!self.viewVisible)
     return;
   BOOL incognitoContentVisible =
       (self.currentPage == TabGridPageIncognitoTabs &&
        !self.incognitoTabsViewController.gridEmpty);
-  [self.dispatcher setIncognitoContentVisible:incognitoContentVisible];
+  [self.handler setIncognitoContentVisible:incognitoContentVisible];
 }
 
 // Returns the approximate number of grid cells that will be visible on this
@@ -1048,12 +1098,12 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 
 // Sets both the current page and page control's selected page to |page|.
 // Animation is used if |animated| is YES.
-- (void)setCurrentPageAndPageControlSelectedPage:(TabGridPage)page
-                                        animated:(BOOL)animated {
+- (void)setCurrentPageAndPageControl:(TabGridPage)page animated:(BOOL)animated {
   if (self.topToolbar.pageControl.selectedPage != page)
     [self.topToolbar.pageControl setSelectedPage:page animated:animated];
-  if (self.currentPage != page)
+  if (self.currentPage != page) {
     [self scrollToPage:page animated:animated];
+  }
 }
 
 #pragma mark - GridViewControllerDelegate
@@ -1118,23 +1168,30 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     // the incognito tabs.
     if (count == 0 && self.currentPage == TabGridPageIncognitoTabs) {
       // Show the regular tabs to the user if the last incognito tab is closed.
-      if (self.viewLoaded && self.view.window) {
+      self.activePage = TabGridPageRegularTabs;
+      if (self.viewLoaded && self.viewVisible) {
         // Visibly scroll to the regular tabs panel after a slight delay when
         // the user is already in the tab switcher.
+        // Per crbug.com/980844, if the user has VoiceOver enabled, don't delay
+        // and just animate immediately; delaying the scrolling will cause
+        // VoiceOver to focus the text on the Incognito page.
         __weak TabGridViewController* weakSelf = self;
-        base::PostDelayedTask(
-            FROM_HERE, {web::WebThread::UI}, base::BindOnce(^{
-              [weakSelf setCurrentPageAndPageControlSelectedPage:
-                            TabGridPageRegularTabs
-                                                        animated:YES];
-            }),
-            base::TimeDelta::FromMilliseconds(
-                kTabGridScrollAnimationDelayInMilliseconds));
+        auto scrollToRegularTabs = ^{
+          [weakSelf setCurrentPageAndPageControl:TabGridPageRegularTabs
+                                        animated:YES];
+        };
+        if (UIAccessibilityIsVoiceOverRunning()) {
+          scrollToRegularTabs();
+        } else {
+          base::TimeDelta delay = base::TimeDelta::FromMilliseconds(
+              kTabGridScrollAnimationDelayInMilliseconds);
+          base::PostDelayedTask(FROM_HERE, {web::WebThread::UI},
+                                base::BindOnce(scrollToRegularTabs), delay);
+        }
       } else {
-        // Directly show the regular tabs in tab switcher without animation if
+        // Directly show the regular tab page without animation if
         // the user was not already in tab switcher.
-        [self setCurrentPageAndPageControlSelectedPage:TabGridPageRegularTabs
-                                              animated:NO];
+        [self setCurrentPageAndPageControl:TabGridPageRegularTabs animated:NO];
       }
     }
   }

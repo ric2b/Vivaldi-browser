@@ -132,11 +132,11 @@ base::FilePath TestExtensionsBrowserClient::GetBundleResourcePath(
 
 void TestExtensionsBrowserClient::LoadResourceFromResourceBundle(
     const network::ResourceRequest& request,
-    network::mojom::URLLoaderRequest loader,
+    mojo::PendingReceiver<network::mojom::URLLoader> loader,
     const base::FilePath& resource_relative_path,
     int resource_id,
     const std::string& content_security_policy,
-    network::mojom::URLLoaderClientPtr client,
+    mojo::PendingRemote<network::mojom::URLLoaderClient> client,
     bool send_cors_header) {
   // Should not be called because GetBundleResourcePath() returned empty path.
   NOTREACHED() << "Resource is not from a bundle.";
@@ -144,7 +144,7 @@ void TestExtensionsBrowserClient::LoadResourceFromResourceBundle(
 
 bool TestExtensionsBrowserClient::AllowCrossRendererResourceLoad(
     const GURL& url,
-    content::ResourceType resource_type,
+    blink::mojom::ResourceType resource_type,
     ui::PageTransition page_transition,
     int child_id,
     bool is_incognito,
@@ -206,9 +206,9 @@ TestExtensionsBrowserClient::GetExtensionSystemFactory() {
   return extension_system_factory_;
 }
 
-void TestExtensionsBrowserClient::RegisterExtensionInterfaces(
-    service_manager::BinderRegistryWithArgs<content::RenderFrameHost*>*
-        registry,
+void TestExtensionsBrowserClient::RegisterBrowserInterfaceBindersForFrame(
+    service_manager::BinderMapWithContext<content::RenderFrameHost*>*
+        binder_map,
     content::RenderFrameHost* render_frame_host,
     const Extension* extension) const {}
 

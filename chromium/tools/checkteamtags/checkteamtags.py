@@ -11,13 +11,14 @@ import json
 import logging
 import optparse
 import os
+import posixpath
 import re
 import sys
 import urllib2
 
 from collections import defaultdict
 
-from owners_file_tags import parse
+from owners_file_tags import parse, uniform_path_format
 
 
 DEFAULT_MAPPING_URL = \
@@ -105,7 +106,9 @@ def validate_mappings(options, args):
       deleted.append(os.path.dirname(rel))
 
   # Update component mapping with current changes.
-  for rel_path, tags in affected.iteritems():
+  for rel_path_native, tags in affected.iteritems():
+    # Make the path use forward slashes always.
+    rel_path = uniform_path_format(rel_path_native)
     component = tags.get('component')
     team = tags.get('team')
     os_tag = tags.get('os')
@@ -147,8 +150,8 @@ def validate_mappings(options, args):
   warnings = ''
   for component, teams in affected_component_to_teams.iteritems():
     if len(teams) > 1:
-      warnings += '\nComponent %s will map to %s' % (
-          component, ', '.join(teams))
+      warnings += ('\nThe set of all OWNERS files with COMPONENT: %s list '
+                   "multiple TEAM's: %s") % (component, ', '.join(teams))
   if warnings:
     warnings = ('Are you sure these are correct? After landing this patch:%s'
                 % warnings)

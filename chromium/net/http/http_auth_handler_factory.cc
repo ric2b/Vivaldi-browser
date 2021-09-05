@@ -109,7 +109,7 @@ HttpAuthHandlerFactory::CreateDefault(
 #endif
 #if BUILDFLAG(USE_KERBEROS)
     ,
-    NegotiateAuthSystemFactory negotiate_auth_system_factory
+    HttpAuthMechanismFactory negotiate_auth_system_factory
 #endif
 ) {
   std::vector<std::string> auth_types(std::begin(kDefaultAuthSchemes),
@@ -137,7 +137,7 @@ HttpAuthHandlerRegistryFactory::Create(
 #endif
 #if BUILDFLAG(USE_KERBEROS)
     ,
-    NegotiateAuthSystemFactory negotiate_auth_system_factory
+    HttpAuthMechanismFactory negotiate_auth_system_factory
 #endif
 ) {
   std::set<std::string> auth_schemes_set(auth_schemes.begin(),
@@ -200,13 +200,12 @@ int HttpAuthHandlerRegistryFactory::CreateAuthHandler(
     const NetLogWithSource& net_log,
     HostResolver* host_resolver,
     std::unique_ptr<HttpAuthHandler>* handler) {
-  std::string scheme = challenge->scheme();
+  auto scheme = challenge->auth_scheme();
   if (scheme.empty()) {
     handler->reset();
     return ERR_INVALID_RESPONSE;
   }
-  std::string lower_scheme = base::ToLowerASCII(scheme);
-  auto it = factory_map_.find(lower_scheme);
+  auto it = factory_map_.find(scheme);
   if (it == factory_map_.end()) {
     handler->reset();
     return ERR_UNSUPPORTED_AUTH_SCHEME;

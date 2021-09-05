@@ -67,7 +67,7 @@ HTMLStyleElement* StyleSheetList::GetNamedItem(const AtomicString& name) const {
   // practice anyway ;)
   // FIXME: We should figure out if we should change this or fix the spec.
   Element* element = tree_scope_->getElementById(name);
-  return IsHTMLStyleElement(element) ? ToHTMLStyleElement(element) : nullptr;
+  return DynamicTo<HTMLStyleElement>(element);
 }
 
 CSSStyleSheet* StyleSheetList::AnonymousNamedGetter(const AtomicString& name) {
@@ -86,7 +86,7 @@ CSSStyleSheet* StyleSheetList::AnonymousNamedGetter(const AtomicString& name) {
   return sheet;
 }
 
-void StyleSheetList::Trace(blink::Visitor* visitor) {
+void StyleSheetList::Trace(Visitor* visitor) {
   visitor->Trace(tree_scope_);
   visitor->Trace(style_sheet_vector_);
   ScriptWrappable::Trace(visitor);

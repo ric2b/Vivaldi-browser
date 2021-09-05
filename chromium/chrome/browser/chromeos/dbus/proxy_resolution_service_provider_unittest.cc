@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "base/test/task_environment.h"
 #include "chromeos/dbus/services/service_provider_test_helper.h"
 #include "dbus/message.h"
 #include "dbus/object_path.h"
@@ -45,8 +46,12 @@ class MockNetworkContext : public network::TestNetworkContext {
   // network::mojom::NetworkContext implementation:
   void LookUpProxyForURL(
       const GURL& url,
+      const net::NetworkIsolationKey& network_isolation_key,
       mojo::PendingRemote<::network::mojom::ProxyLookupClient>
           proxy_lookup_client) override {
+    last_url_ = url;
+    last_network_isolation_key_ = network_isolation_key;
+
     mojo::Remote<::network::mojom::ProxyLookupClient>
         proxy_lookup_client_remote(std::move(proxy_lookup_client));
     if (lookup_proxy_result_.error == net::OK) {
@@ -63,7 +68,15 @@ class MockNetworkContext : public network::TestNetworkContext {
     lookup_proxy_result_ = mock_result;
   }
 
+  const GURL& last_url() const { return last_url_; }
+  const net::NetworkIsolationKey& last_network_isolation_key() const {
+    return last_network_isolation_key_;
+  }
+
  private:
+  GURL last_url_;
+  net::NetworkIsolationKey last_network_isolation_key_;
+
   LookupProxyForURLMockResult lookup_proxy_result_;
 
   DISALLOW_COPY_AND_ASSIGN(MockNetworkContext);
@@ -106,6 +119,8 @@ class ProxyResolutionServiceProviderTest : public testing::Test {
     EXPECT_TRUE(reader.PopString(&result->proxy_info));
     EXPECT_TRUE(reader.PopString(&result->error));
   }
+
+  base::test::SingleThreadTaskEnvironment task_environment_;
 
   MockNetworkContext mock_network_context_;
 
@@ -166,6 +181,21 @@ TEST_F(ProxyResolutionServiceProviderTest, NullNetworkContext) {
   // The response should contain a failure.
   EXPECT_EQ("DIRECT", result.proxy_info);
   EXPECT_EQ("No NetworkContext", result.error);
+}
+
+// Make sure requests use an opaque transient NetworkIsolationKey.
+TEST_F(ProxyResolutionServiceProviderTest,
+       UniqueTransientNetworkIsolationKeys) {
+  const GURL kUrl("https://foo.test/food");
+  const char kProxyResult[] = "PROXY proxy.test:8080";
+  mock_network_context_.SetNextProxyResult({net::OK, kProxyResult});
+
+  ResolveProxyResult result;
+  CallMethod(kUrl.spec(), &result);
+  EXPECT_EQ(kProxyResult, result.proxy_info);
+  EXPECT_EQ("", result.error);
+  EXPECT_EQ(kUrl, mock_network_context_.last_url());
+  EXPECT_TRUE(mock_network_context_.last_network_isolation_key().IsTransient());
 }
 
 }  // namespace chromeos

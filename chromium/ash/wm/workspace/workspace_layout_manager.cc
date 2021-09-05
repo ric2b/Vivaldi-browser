@@ -148,7 +148,7 @@ void WorkspaceLayoutManager::OnWindowAddedToLayout(aura::Window* child) {
   UpdateShelfVisibility();
   UpdateFullscreenState();
 
-  backdrop_controller_->OnWindowAddedToLayout();
+  backdrop_controller_->OnWindowAddedToLayout(child);
   WindowPositioner::RearrangeVisibleWindowOnShow(child);
   if (Shell::Get()->screen_pinning_controller()->IsPinned())
     WindowState::Get(child)->DisableZOrdering(nullptr);
@@ -178,7 +178,7 @@ void WorkspaceLayoutManager::OnWillRemoveWindowFromLayout(aura::Window* child) {
 void WorkspaceLayoutManager::OnWindowRemovedFromLayout(aura::Window* child) {
   UpdateShelfVisibility();
   UpdateFullscreenState();
-  backdrop_controller_->OnWindowRemovedFromLayout();
+  backdrop_controller_->OnWindowRemovedFromLayout(child);
 }
 
 void WorkspaceLayoutManager::OnChildWindowVisibilityChanged(aura::Window* child,
@@ -194,7 +194,7 @@ void WorkspaceLayoutManager::OnChildWindowVisibilityChanged(aura::Window* child,
     WindowPositioner::RearrangeVisibleWindowOnHideOrRemove(child);
   UpdateFullscreenState();
   UpdateShelfVisibility();
-  backdrop_controller_->OnChildWindowVisibilityChanged();
+  backdrop_controller_->OnChildWindowVisibilityChanged(child);
 }
 
 void WorkspaceLayoutManager::SetChildBounds(aura::Window* child,
@@ -202,15 +202,6 @@ void WorkspaceLayoutManager::SetChildBounds(aura::Window* child,
   WindowState* window_state = WindowState::Get(child);
   SetBoundsWMEvent event(requested_bounds);
   window_state->OnWMEvent(&event);
-
-  // Setting bounds shouldn't trigger UpdateShelfVisibility(), especially for
-  // PIP because it can cause an unexpected call of updatePipBounds(). So avoid
-  // calling this for PIP windows for now.
-  // TODO(takise): Remove UpdateShelfVisibility() completely, which may be
-  // obsolete now.
-  if (!window_state->IsPip()) {
-    UpdateShelfVisibility();
-  }
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -319,15 +310,16 @@ void WorkspaceLayoutManager::OnWindowPropertyChanged(aura::Window* window,
       if (window->parent() != container)
         container->AddChild(window);
     }
-  } else if (key == kBackdropWindowMode) {
-    backdrop_controller_->UpdateBackdrop();
+  } else if (key == kWindowBackdropKey) {
+    // kWindowBackdropKey is not supposed to be cleared.
+    DCHECK(window->GetProperty(kWindowBackdropKey));
   }
 }
 
 void WorkspaceLayoutManager::OnWindowStackingChanged(aura::Window* window) {
   UpdateShelfVisibility();
   UpdateFullscreenState();
-  backdrop_controller_->OnWindowStackingChanged();
+  backdrop_controller_->OnWindowStackingChanged(window);
 }
 
 void WorkspaceLayoutManager::OnWindowDestroying(aura::Window* window) {
@@ -345,8 +337,7 @@ void WorkspaceLayoutManager::OnWindowBoundsChanged(
     aura::Window* window,
     const gfx::Rect& old_bounds,
     const gfx::Rect& new_bounds,
-    ui::PropertyChangeReason reason) {
-}
+    ui::PropertyChangeReason reason) {}
 
 //////////////////////////////////////////////////////////////////////////////
 // WorkspaceLayoutManager, wm::ActivationChangeObserver implementation:
@@ -386,7 +377,7 @@ void WorkspaceLayoutManager::OnPostWindowStateTypeChange(
   }
 
   UpdateShelfVisibility();
-  backdrop_controller_->OnPostWindowStateTypeChange();
+  backdrop_controller_->OnPostWindowStateTypeChange(window_state->window());
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -466,6 +457,11 @@ void WorkspaceLayoutManager::OnPinnedStateChanged(aura::Window* pinned_window) {
 // WorkspaceLayoutManager, ShelfObserver implementation:
 void WorkspaceLayoutManager::OnAutoHideStateChanged(
     ShelfAutoHideState new_state) {
+  NotifySystemUiAreaChanged();
+}
+
+void WorkspaceLayoutManager::OnHotseatStateChanged(HotseatState old_state,
+                                                   HotseatState new_state) {
   NotifySystemUiAreaChanged();
 }
 

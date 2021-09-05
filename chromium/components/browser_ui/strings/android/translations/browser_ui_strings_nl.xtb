@@ -1,0 +1,67 @@
+<?xml version="1.0" ?>
+<!DOCTYPE translationbundle>
+<translationbundle lang="nl">
+<translation id="1124772482545689468">Gebruiker</translation>
+<translation id="1181037720776840403">Verwijderen</translation>
+<translation id="1201402288615127009">Volgende</translation>
+<translation id="1383876407941801731">Zoeken</translation>
+<translation id="2079545284768500474">Ongedaan maken</translation>
+<translation id="2148716181193084225">Vandaag</translation>
+<translation id="2359808026110333948">Doorgaan</translation>
+<translation id="2501278716633472235">Terug</translation>
+<translation id="2569468611847789653">{COOKIE_COUNT,plural, =1{1 cookie geblokkeerd}other{# cookies geblokkeerd}}</translation>
+<translation id="257931822824936280">Uitgevouwen; klik om samen te vouwen.</translation>
+<translation id="2653659639078652383">Verzenden</translation>
+<translation id="2704606927547763573">Gekopieerd</translation>
+<translation id="2968755619301702150">Certificaatviewer</translation>
+<translation id="3115898365077584848">Informatie weergeven</translation>
+<translation id="3295602654194328831">Informatie verbergen</translation>
+<translation id="3479552764303398839">Niet nu</translation>
+<translation id="385051799172605136">Vorige</translation>
+<translation id="3987993985790029246">Link kop.</translation>
+<translation id="4002066346123236978">Titel</translation>
+<translation id="4570913071927164677">Details</translation>
+<translation id="4645575059429386691">Beheerd door je ouder</translation>
+<translation id="4883854917563148705">Beheerde instellingen kunnen niet worden gereset</translation>
+<translation id="497421865427891073">Naar voren gaan</translation>
+<translation id="5100237604440890931">Samengevouwen; klik om uit te vouwen.</translation>
+<translation id="5300589172476337783">Weergeven</translation>
+<translation id="5301954838959518834">OK, begrepen</translation>
+<translation id="5317780077021120954">Opslaan</translation>
+<translation id="5391532827096253100">Je verbinding met deze site is niet beveiligd. Site-informatie</translation>
+<translation id="5556459405103347317">Opnieuw laden</translation>
+<translation id="5596627076506792578">Meer opties</translation>
+<translation id="5860033963881614850">Uit</translation>
+<translation id="5916664084637901428">Aan</translation>
+<translation id="5939518447894949180">Resetten</translation>
+<translation id="6040143037577758943">Sluiten</translation>
+<translation id="6042308850641462728">Meer</translation>
+<translation id="6165508094623778733">Meer informatie</translation>
+<translation id="6206551242102657620">De verbinding is beveiligd. Site-informatie</translation>
+<translation id="6216432067784365534">Opties voor <ph name="NAME_OF_LIST_ITEM" /></translation>
+<translation id="6527303717912515753">Delen</translation>
+<translation id="6746124502594467657">Omlaag</translation>
+<translation id="6818926723028410516">Items selecteren</translation>
+<translation id="6910211073230771657">Verwijderd</translation>
+<translation id="6945221475159498467">Selecteren</translation>
+<translation id="6963642900430330478">Deze pagina is gevaarlijk. Site-informatie</translation>
+<translation id="6965382102122355670">OK</translation>
+<translation id="7066151586745993502">{NUM_SELECTED,plural, =1{1 geselecteerd}other{# geselecteerd}}</translation>
+<translation id="7087918508125750058"><ph name="ITEM_COUNT" /> geselecteerd. Opties beschikbaar bovenaan het scherm.</translation>
+<translation id="7250468141469952378"><ph name="ITEM_COUNT" /> geselecteerd</translation>
+<translation id="7649070708921625228">Hulp</translation>
+<translation id="7658239707568436148">Annuleren</translation>
+<translation id="7781829728241885113">Gisteren</translation>
+<translation id="7791543448312431591">Toevoegen</translation>
+<translation id="780301667611848630">Nee, bedankt</translation>
+<translation id="7846076177841592234">Selectie opheffen</translation>
+<translation id="8131740175452115882">Bevestigen</translation>
+<translation id="8206354486702514201">Deze instelling wordt door je beheerder afgedwongen.</translation>
+<translation id="8249310407154411074">Bovenaan zetten</translation>
+<translation id="8261506727792406068">Verwijderen</translation>
+<translation id="8609465669617005112">Omhoog</translation>
+<translation id="8676374126336081632">Invoer wissen</translation>
+<translation id="8725066075913043281">Opnieuw proberen</translation>
+<translation id="8730621377337864115">Gereed</translation>
+<translation id="9019902583201351841">Beheerd door je ouders</translation>
+</translationbundle>

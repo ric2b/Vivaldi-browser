@@ -9,12 +9,14 @@ import android.os.Handler;
 import android.view.View;
 import android.view.View.OnClickListener;
 
+import androidx.annotation.VisibleForTesting;
+
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager.FullscreenListener;
-import org.chromium.chrome.browser.snackbar.Snackbar;
+import org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;
+import org.chromium.ui.base.WindowAndroid;
 
 /**
  * Manager for one-off snackbar showing at the top of activity.
@@ -50,7 +52,8 @@ public class TopSnackbarManager
     }
 
     @Override
-    public void onControlsOffsetChanged(int topOffset, int bottomOffset, boolean needsAnimate) {
+    public void onControlsOffsetChanged(int topOffset, int topControlsMinHeightOffset,
+            int bottomOffset, int bottomControlsMinHeightOffset, boolean needsAnimate) {
         // When the top toolbar offset changes, dismiss the top snackbar. Ideally we want to move
         // the top snackbar together with the top toolbar, but they can't be made sync because they
         // are drawn in different layers (C++ vs Android native).
@@ -58,13 +61,11 @@ public class TopSnackbarManager
     }
 
     @Override
-    public void onBottomControlsHeightChanged(int bottomControlsHeight) {}
+    public void onBottomControlsHeightChanged(
+            int bottomControlsHeight, int bottomControlsMinHeight) {}
 
     @Override
     public void onContentOffsetChanged(int offset) {}
-
-    @Override
-    public void onToggleOverlayVideoMode(boolean enabled) {}
 
     /**
      * Shows a snackbar at the top of the given activity.
@@ -78,7 +79,11 @@ public class TopSnackbarManager
         mActivity = activity;
         mSnackbar = snackbar;
 
-        mSnackbarView = new TopSnackbarView(activity, this, mSnackbar, null);
+        WindowAndroid windowAndroid = null;
+        if (activity instanceof ChromeActivity) {
+            windowAndroid = ((ChromeActivity) activity).getWindowAndroid();
+        }
+        mSnackbarView = new TopSnackbarView(activity, this, mSnackbar, windowAndroid);
         mSnackbarView.show();
         mSnackbarView.announceforAccessibility();
         mDismissSnackbarHandler.removeCallbacks(mDismissSnackbarRunnable);

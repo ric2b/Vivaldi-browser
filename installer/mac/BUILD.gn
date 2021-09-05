@@ -98,7 +98,6 @@ if (perform_signing) {
     inputs = []
     outputs = ["$root_gen_dir/signed_package.done"]
     args = [
-      "--keychain", vivaldi_signing_key,
       "--identity", vivaldi_signing_id,
       "--input", ".",
       "--output", ".",
@@ -106,7 +105,7 @@ if (perform_signing) {
     ]
 
     # hardening and notarization and disabled due to VB-58183
-    if (false && is_full_mac_signer) {
+    if (is_full_mac_signer) {
       assert(vivaldi_notarize_account != "")
       assert(vivaldi_notarize_password != "")
       args += [
@@ -131,7 +130,6 @@ if (perform_signing) {
     inputs = ["$root_build_dir/$dmg_name"]
     outputs = ["$root_gen_dir/signed_dmg.done"]
     args = [
-      "--keychain", vivaldi_signing_key,
       "--identity", vivaldi_signing_id,
     ]
 

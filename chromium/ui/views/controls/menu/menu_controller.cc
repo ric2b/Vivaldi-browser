@@ -49,6 +49,8 @@
 #include "ui/views/widget/widget.h"
 
 #if defined(OS_WIN)
+#include "ui/aura/client/screen_position_client.h"
+#include "ui/aura/window_event_dispatcher.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/win/internal_constants.h"
 #include "ui/display/win/screen_win.h"
@@ -56,10 +58,7 @@
 #endif
 
 #if defined(USE_AURA)
-#include "ui/aura/client/screen_position_client.h"
 #include "ui/aura/window.h"
-#include "ui/aura/window_event_dispatcher.h"
-#include "ui/aura/window_tree_host.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
@@ -232,7 +231,6 @@ static void RepostEventImpl(const ui::LocatedEvent* event,
   if (!native_view)
     return;
 
-#if defined(OS_WIN)
   gfx::Point screen_loc_pixels =
       display::win::ScreenWin::DIPToScreenPoint(screen_loc);
   HWND target_window = ::WindowFromPoint(screen_loc_pixels.ToPOINT());
@@ -302,9 +300,7 @@ static void RepostEventImpl(const ui::LocatedEvent* event,
     PostMessage(target_window, event_type, target, window_coords);
     return;
   }
-#endif  // defined(OS_WIN)
 
-#if defined(USE_AURA)
   if (!window)
     return;
 
@@ -324,7 +320,6 @@ static void RepostEventImpl(const ui::LocatedEvent* event,
   located_event->set_root_location(root_loc);
 
   root->GetHost()->dispatcher()->RepostEvent(located_event.get());
-#endif  // defined(USE_AURA)
 }
 #endif  // defined(OS_WIN)
 
@@ -1338,8 +1333,9 @@ void MenuController::SetSelection(MenuItemView* menu_item,
       current_path.empty() ? nullptr : current_path.front()->GetDelegate();
   for (size_t i = paths_differ_at; i < current_size; ++i) {
     if (current_delegate &&
-        (current_path[i]->GetType() == MenuItemView::SUBMENU ||
-         current_path[i]->GetType() == MenuItemView::ACTIONABLE_SUBMENU)) {
+        (current_path[i]->GetType() == MenuItemView::Type::kSubMenu ||
+         current_path[i]->GetType() ==
+             MenuItemView::Type::kActionableSubMenu)) {
       current_delegate->WillHideMenu(current_path[i]);
     }
     current_path[i]->SetSelected(false);
@@ -1349,12 +1345,13 @@ void MenuController::SetSelection(MenuItemView* menu_item,
   for (size_t i = paths_differ_at; i < new_size; ++i) {
     new_path[i]->ScrollRectToVisible(new_path[i]->GetLocalBounds());
     new_path[i]->SetSelected(true);
-    if (new_path[i]->GetType() == MenuItemView::ACTIONABLE_SUBMENU) {
+    if (new_path[i]->GetType() == MenuItemView::Type::kActionableSubMenu) {
       new_path[i]->SetSelectionOfActionableSubmenu(
           (selection_types & SELECTION_OPEN_SUBMENU) != 0);
     }
   }
-  if (menu_item && menu_item->GetType() == MenuItemView::ACTIONABLE_SUBMENU) {
+  if (menu_item &&
+      menu_item->GetType() == MenuItemView::Type::kActionableSubMenu) {
     menu_item->SetSelectionOfActionableSubmenu(
         (selection_types & SELECTION_OPEN_SUBMENU) != 0);
   }
@@ -1379,10 +1376,11 @@ void MenuController::SetSelection(MenuItemView* menu_item,
     StartShowTimer();
 
   // Notify an accessibility focus event on all menu items except for the root.
-  if (menu_item && (MenuDepth(menu_item) != 1 ||
-                    menu_item->GetType() != MenuItemView::SUBMENU ||
-                    (menu_item->GetType() == MenuItemView::ACTIONABLE_SUBMENU &&
-                     (selection_types & SELECTION_OPEN_SUBMENU) == 0))) {
+  if (menu_item &&
+      (MenuDepth(menu_item) != 1 ||
+       menu_item->GetType() != MenuItemView::Type::kSubMenu ||
+       (menu_item->GetType() == MenuItemView::Type::kActionableSubMenu &&
+        (selection_types & SELECTION_OPEN_SUBMENU) == 0))) {
     menu_item->NotifyAccessibilityEvent(ax::mojom::Event::kSelection, true);
     // Notify an accessibility selected children changed event on the parent
     // submenu.
@@ -1989,7 +1987,7 @@ bool MenuController::GetMenuPartByScreenCoordinateImpl(
     part->submenu = menu;
     part->should_submenu_show =
         part->submenu && part->menu &&
-        (part->menu->GetType() == MenuItemView::SUBMENU ||
+        (part->menu->GetType() == MenuItemView::Type::kSubMenu ||
          IsLocationOverSubmenuAreaOfActionableSubmenu(part->menu, screen_loc));
     if (!part->menu)
       part->parent = menu->GetMenuItem();
@@ -2037,7 +2035,7 @@ bool MenuController::DoesSubmenuContainLocation(SubmenuView* submenu,
 bool MenuController::IsLocationOverSubmenuAreaOfActionableSubmenu(
     MenuItemView* item,
     const gfx::Point& screen_loc) const {
-  if (!item || item->GetType() != MenuItemView::ACTIONABLE_SUBMENU)
+  if (!item || item->GetType() != MenuItemView::Type::kActionableSubMenu)
     return false;
 
   gfx::Point view_loc = screen_loc;
@@ -2185,12 +2183,9 @@ void MenuController::OpenMenuImpl(MenuItemView* item, bool show) {
         menu_open_mouse_loc_ = mouse_pos;
     }
 
-    // Menus are the only place using kGroupingPropertyKey, so any value (other
-    // than 0) is fine.
-    constexpr int kGroupingId = 1001;
     item->GetSubmenu()->GetWidget()->SetNativeWindowProperty(
         TooltipManager::kGroupingPropertyKey,
-        reinterpret_cast<void*>(kGroupingId));
+        reinterpret_cast<void*>(MenuConfig::kMenuControllerGroupingId));
 
     // Set the selection indices for this menu level based on traversal order.
     SetSelectionIndices(item);
@@ -2754,7 +2749,7 @@ void MenuController::OpenSubmenuChangeSelectionIfCan() {
   if (to_select) {
     // Selection is going from the ACTIONABLE to the SUBMENU region of the
     // ACTIONABLE_SUBMENU, so highlight the SUBMENU area.
-    if (item->type_ == MenuItemView::ACTIONABLE_SUBMENU)
+    if (item->type_ == MenuItemView::Type::kActionableSubMenu)
       item->SetSelectionOfActionableSubmenu(true);
     SetSelection(to_select, SELECTION_UPDATE_IMMEDIATELY);
     return;
@@ -3017,7 +3012,7 @@ void MenuController::SendMouseReleaseToActiveView(SubmenuView* event_source,
                                event.changed_button_flags());
   // Reset the active mouse view before sending mouse released. That way if it
   // calls back to us, we aren't in a weird state.
-  active_mouse_view_tracker_->Clear();
+  active_mouse_view_tracker_->SetView(nullptr);
   active_mouse_view->OnMouseReleased(release_event);
 }
 
@@ -3028,7 +3023,7 @@ void MenuController::SendMouseCaptureLostToActiveView() {
 
   // Reset the active mouse view before sending mouse capture lost. That way if
   // it calls back to us, we aren't in a weird state.
-  active_mouse_view_tracker_->Clear();
+  active_mouse_view_tracker_->SetView(nullptr);
   active_mouse_view->OnMouseCaptureLost();
 }
 

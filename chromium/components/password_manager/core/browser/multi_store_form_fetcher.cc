@@ -7,6 +7,7 @@
 #include "base/logging.h"
 #include "build/build_config.h"
 #include "components/autofill/core/common/save_password_progress_logger.h"
+#include "components/password_manager/core/browser/password_feature_manager.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/browser/statistics_table.h"
 
@@ -20,11 +21,17 @@ MultiStoreFormFetcher::MultiStoreFormFetcher(
     PasswordStore::FormDigest form_digest,
     const PasswordManagerClient* client,
     bool should_migrate_http_passwords)
-    : FormFetcherImpl(form_digest, client, should_migrate_http_passwords) {
-  sort_matches_by_date_last_used_ = true;
-}
+    : FormFetcherImpl(form_digest, client, should_migrate_http_passwords) {}
 
 MultiStoreFormFetcher::~MultiStoreFormFetcher() = default;
+
+bool MultiStoreFormFetcher::IsBlacklisted() const {
+  if (client_->GetPasswordFeatureManager()->GetDefaultPasswordStore() ==
+      PasswordForm::Store::kAccountStore) {
+    return is_blacklisted_in_account_store_;
+  }
+  return is_blacklisted_in_profile_store_;
+}
 
 void MultiStoreFormFetcher::Fetch() {
   if (password_manager_util::IsLoggingActive(client_)) {
@@ -82,10 +89,28 @@ void MultiStoreFormFetcher::OnGetPasswordStoreResults(
     BrowserSavePasswordProgressLogger(client_->GetLogManager())
         .LogNumber(Logger::STRING_ON_GET_STORE_RESULTS_METHOD, results.size());
   }
-
-  // TODO(crbug.com/1002000): implement password store migration.
-
   ProcessPasswordStoreResults(std::move(partial_results_));
+}
+
+void MultiStoreFormFetcher::SplitResults(
+    std::vector<std::unique_ptr<PasswordForm>> results) {
+  // Compute the |is_blacklisted_in_profile_store_| and
+  // |is_blacklisted_in_account_store_| and then delegate the rest to splitting
+  // to FormFetcherImpl::SplitResults().
+  is_blacklisted_in_profile_store_ = false;
+  is_blacklisted_in_account_store_ = false;
+  for (auto& result : results) {
+    if (!result->blacklisted_by_user)
+      continue;
+    // Ignore PSL matches for blacklisted entries.
+    if (result->is_public_suffix_match)
+      continue;
+    if (result->IsUsingAccountStore())
+      is_blacklisted_in_account_store_ = true;
+    else
+      is_blacklisted_in_profile_store_ = true;
+  }
+  FormFetcherImpl::SplitResults(std::move(results));
 }
 
 }  // namespace password_manager

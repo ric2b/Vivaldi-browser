@@ -15,6 +15,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_local.h"
+#include "base/win/windows_version.h"
 #include "crypto/capi_util.h"
 #include "crypto/scoped_capi_types.h"
 #include "crypto/sha2.h"
@@ -152,7 +153,7 @@ int MapCertChainErrorStatusToCertStatus(DWORD error_status) {
     if (error_status & CERT_TRUST_HAS_WEAK_SIGNATURE) {
       cert_status |= CERT_STATUS_WEAK_KEY;
     } else {
-      cert_status |= CERT_STATUS_INVALID;
+      cert_status |= CERT_STATUS_AUTHORITY_INVALID;
     }
   }
 
@@ -272,8 +273,10 @@ bool CertSubjectCommonNameHasNull(PCCERT_CONTEXT cert) {
 // calling this function.
 void GetCertChainInfo(PCCERT_CHAIN_CONTEXT chain_context,
                       CertVerifyResult* verify_result) {
-  if (chain_context->cChain == 0)
+  if (chain_context->cChain == 0 || chain_context->rgpChain[0]->cElement == 0) {
+    verify_result->cert_status |= CERT_STATUS_INVALID;
     return;
+  }
 
   PCERT_SIMPLE_CHAIN first_chain = chain_context->rgpChain[0];
   DWORD num_elements = first_chain->cElement;
@@ -281,6 +284,29 @@ void GetCertChainInfo(PCCERT_CHAIN_CONTEXT chain_context,
 
   PCCERT_CONTEXT verified_cert = nullptr;
   std::vector<PCCERT_CONTEXT> verified_chain;
+
+  if (base::win::GetVersion() >= base::win::Version::WIN10) {
+    // Recheck signatures in the event junk data was provided.
+    for (DWORD i = 0; i < num_elements - 1; ++i) {
+      PCCERT_CONTEXT issuer = element[i + 1]->pCertContext;
+
+      // If Issuer isn't ECC, skip this certificate.
+      if (strcmp(issuer->pCertInfo->SubjectPublicKeyInfo.Algorithm.pszObjId,
+                 szOID_ECC_PUBLIC_KEY)) {
+        continue;
+      }
+
+      PCCERT_CONTEXT cert = element[i]->pCertContext;
+      if (!CryptVerifyCertificateSignatureEx(
+              NULL, X509_ASN_ENCODING, CRYPT_VERIFY_CERT_SIGN_SUBJECT_CERT,
+              const_cast<PCERT_CONTEXT>(cert),
+              CRYPT_VERIFY_CERT_SIGN_ISSUER_CERT,
+              const_cast<PCERT_CONTEXT>(issuer), 0, NULL)) {
+        verify_result->cert_status |= CERT_STATUS_INVALID;
+        break;
+      }
+    }
+  }
 
   bool has_root_ca = num_elements > 1 &&
       !(chain_context->TrustStatus.dwErrorStatus &
@@ -851,7 +877,8 @@ int CertVerifyProcWin::VerifyInternal(
     int flags,
     CRLSet* crl_set,
     const CertificateList& additional_trust_anchors,
-    CertVerifyResult* verify_result) {
+    CertVerifyResult* verify_result,
+    const NetLogWithSource& net_log) {
   // Ensure the Revocation Provider has been installed and configured for this
   // CRLSet.
   ScopedThreadLocalCRLSet thread_local_crlset(crl_set);

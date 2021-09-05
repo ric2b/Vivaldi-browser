@@ -30,6 +30,7 @@
 
 #include "third_party/blink/renderer/bindings/core/v8/local_window_proxy.h"
 
+#include "base/debug/dump_without_crashing.h"
 #include "third_party/blink/renderer/bindings/core/v8/isolated_world_csp.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
 #include "third_party/blink/renderer/bindings/core/v8/to_v8_for_core.h"
@@ -59,8 +60,8 @@
 #include "third_party/blink/renderer/platform/bindings/v8_private_property.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
+#include "third_party/blink/renderer/platform/weborigin/reporting_disposition.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
-#include "third_party/blink/renderer/platform/weborigin/security_violation_reporting_policy.h"
 #include "third_party/blink/renderer/platform/wtf/assertions.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_operators.h"
 #include "v8/include/v8.h"
@@ -73,7 +74,7 @@ constexpr char kGlobalProxyLabel[] = "WindowProxy::global_proxy_";
 
 }  // namespace
 
-void LocalWindowProxy::Trace(blink::Visitor* visitor) {
+void LocalWindowProxy::Trace(Visitor* visitor) {
   visitor->Trace(script_state_);
   WindowProxy::Trace(visitor);
 }
@@ -149,12 +150,6 @@ void LocalWindowProxy::Initialize() {
   CHECK(!GetFrame()->IsProvisional());
 
   ScriptForbiddenScope::AllowUserAgentScript allow_script;
-  // Inspector may request V8 interruption to process DevTools protocol
-  // commands, processing can force JavaScript execution. Since JavaScript
-  // evaluation is forbiden during creating of snapshot, we should ignore any
-  // inspector interruption to avoid JavaScript execution.
-  InspectorTaskRunner::IgnoreInterruptsScope inspector_ignore_interrupts(
-      GetFrame()->GetInspectorTaskRunner());
   v8::HandleScope handle_scope(GetIsolate());
 
   CreateContext();
@@ -181,15 +176,7 @@ void LocalWindowProxy::Initialize() {
   if (evaluate_csp_for_eval) {
     ContentSecurityPolicy* csp =
         GetFrame()->GetDocument()->GetContentSecurityPolicyForWorld();
-    // CSP has two mechanisms for controlling eval, script-src and Trusted
-    // Types, and we need to check both.
-    // TODO(vogelheim): Provide a simple(e) API for this use case.
-    bool allow_code_generation =
-        csp->AllowEval(SecurityViolationReportingPolicy::kSuppressReporting,
-                       ContentSecurityPolicy::kWillNotThrowException,
-                       g_empty_string) &&
-        !csp->IsRequireTrustedTypes();
-    context->AllowCodeGenerationFromStrings(allow_code_generation);
+    context->AllowCodeGenerationFromStrings(!csp->ShouldCheckEval());
     context->SetErrorMessageForCodeGenerationFromStrings(
         V8String(GetIsolate(), csp->EvalDisabledErrorMessage()));
   }
@@ -228,7 +215,8 @@ void LocalWindowProxy::CreateContext() {
   CHECK(IsMainThread());
 
   v8::ExtensionConfiguration extension_configuration =
-      ScriptController::ExtensionsFor(GetFrame()->GetDocument());
+      ScriptController::ExtensionsFor(
+          GetFrame()->GetDocument()->ToExecutionContext());
 
   v8::Local<v8::Context> context;
   {
@@ -324,9 +312,8 @@ void LocalWindowProxy::SetupWindowPrototypeChain() {
   // The global object, aka window wrapper object.
   v8::Local<v8::Object> window_wrapper =
       global_proxy->GetPrototype().As<v8::Object>();
-  v8::Local<v8::Object> associated_wrapper =
-      AssociateWithWrapper(window, wrapper_type_info, window_wrapper);
-  DCHECK(associated_wrapper == window_wrapper);
+  V8DOMWrapper::SetNativeInfo(GetIsolate(), window_wrapper, wrapper_type_info,
+                              window);
 
   // The prototype object of Window interface.
   v8::Local<v8::Object> window_prototype =

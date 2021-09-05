@@ -19,13 +19,13 @@
 #include "media/base/bind_to_current_loop.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
-#include "storage/browser/fileapi/file_stream_reader.h"
-#include "storage/browser/fileapi/file_stream_writer.h"
-#include "storage/browser/fileapi/file_system_context.h"
-#include "storage/browser/fileapi/file_system_operation_context.h"
-#include "storage/browser/fileapi/file_system_url.h"
+#include "storage/browser/file_system/file_stream_reader.h"
+#include "storage/browser/file_system/file_stream_writer.h"
+#include "storage/browser/file_system/file_system_context.h"
+#include "storage/browser/file_system/file_system_operation_context.h"
+#include "storage/browser/file_system/file_system_url.h"
 #include "storage/browser/quota/quota_manager.h"
-#include "storage/common/fileapi/file_system_types.h"
+#include "storage/common/file_system/file_system_types.h"
 
 namespace content {
 
@@ -529,10 +529,11 @@ void CdmFileImpl::Write(const std::vector<uint8_t>& data,
       std::make_unique<storage::FileSystemOperationContext>(
           file_system_context_.get());
   operation_context->set_allowed_bytes_growth(storage::QuotaManager::kNoLimit);
-  file_util->EnsureFileExists(std::move(operation_context), url,
-                              base::Bind(&CdmFileImpl::OnEnsureTempFileExists,
-                                         weak_factory_.GetWeakPtr(),
-                                         std::move(buffer), bytes_to_write));
+  file_util->EnsureFileExists(
+      std::move(operation_context), url,
+      base::BindOnce(&CdmFileImpl::OnEnsureTempFileExists,
+                     weak_factory_.GetWeakPtr(), std::move(buffer),
+                     bytes_to_write));
 }
 
 void CdmFileImpl::OnEnsureTempFileExists(scoped_refptr<net::IOBuffer> buffer,
@@ -569,10 +570,10 @@ void CdmFileImpl::OnEnsureTempFileExists(scoped_refptr<net::IOBuffer> buffer,
       std::make_unique<storage::FileSystemOperationContext>(
           file_system_context_.get());
   operation_context->set_allowed_bytes_growth(storage::QuotaManager::kNoLimit);
-  file_util->Truncate(
-      std::move(operation_context), url, 0,
-      base::Bind(&CdmFileImpl::OnTempFileIsEmpty, weak_factory_.GetWeakPtr(),
-                 std::move(buffer), bytes_to_write));
+  file_util->Truncate(std::move(operation_context), url, 0,
+                      base::BindOnce(&CdmFileImpl::OnTempFileIsEmpty,
+                                     weak_factory_.GetWeakPtr(),
+                                     std::move(buffer), bytes_to_write));
 }
 
 void CdmFileImpl::OnTempFileIsEmpty(scoped_refptr<net::IOBuffer> buffer,

@@ -8,16 +8,18 @@ import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
-import android.support.v4.graphics.drawable.RoundedBitmapDrawable;
-import android.support.v4.graphics.drawable.RoundedBitmapDrawableFactory;
 import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.view.View;
+import android.widget.ImageView;
 import android.widget.TextView;
 
+import androidx.core.graphics.drawable.RoundedBitmapDrawable;
+import androidx.core.graphics.drawable.RoundedBitmapDrawableFactory;
+
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.widget.selection.SelectableItemView;
-import org.chromium.chrome.browser.widget.selection.SelectionDelegate;
+import org.chromium.components.browser_ui.widget.selectable_list.SelectableItemView;
+import org.chromium.components.browser_ui.widget.selectable_list.SelectionDelegate;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modaldialog.ModalDialogProperties;
 import org.chromium.ui.modelutil.PropertyModel;
@@ -44,10 +46,15 @@ public class ContactView extends SelectableItemView<ContactDetails> {
     private TextView mDisplayName;
 
     // The contact details for the contact.
+    private TextView mAddress;
+    private TextView mAddressOverflowCount;
     private TextView mEmail;
     private TextView mEmailOverflowCount;
     private TextView mPhoneNumber;
     private TextView mPhoneNumberOverflowCount;
+
+    // The UI that indicates this is the owner of the device.
+    private ImageView mStar;
 
     // The dialog manager to use to show contact details.
     private ModalDialogManager mManager;
@@ -70,11 +77,15 @@ public class ContactView extends SelectableItemView<ContactDetails> {
         super.onFinishInflate();
 
         mDisplayName = findViewById(R.id.title);
+        mAddress = findViewById(R.id.address);
+        mAddressOverflowCount = findViewById(R.id.address_overflow_count);
         mEmail = findViewById(R.id.email);
         mEmailOverflowCount = findViewById(R.id.email_overflow_count);
         mPhoneNumber = findViewById(R.id.telephone_number);
         mPhoneNumberOverflowCount = findViewById(R.id.telephone_number_overflow_count);
+        mStar = findViewById(R.id.star);
 
+        mAddressOverflowCount.setOnClickListener(this);
         mEmailOverflowCount.setOnClickListener(this);
         mPhoneNumberOverflowCount.setOnClickListener(this);
     }
@@ -82,7 +93,8 @@ public class ContactView extends SelectableItemView<ContactDetails> {
     @Override
     public void onClick(View view) {
         int id = view.getId();
-        if (id == R.id.email_overflow_count || id == R.id.telephone_number_overflow_count) {
+        if (id == R.id.address_overflow_count || id == R.id.email_overflow_count
+                || id == R.id.telephone_number_overflow_count) {
             onLongClick(this);
         } else {
             super.onClick(view);
@@ -114,12 +126,13 @@ public class ContactView extends SelectableItemView<ContactDetails> {
                          .with(ModalDialogProperties.TITLE, mContactDetails.getDisplayName())
                          .with(ModalDialogProperties.MESSAGE,
                                  mContactDetails.getContactDetailsAsString(
+                                         PickerAdapter.includesAddresses(),
                                          PickerAdapter.includesEmails(),
                                          PickerAdapter.includesTelephones()))
                          .with(ModalDialogProperties.POSITIVE_BUTTON_TEXT, mContext.getResources(),
                                  R.string.close)
                          .build();
-        mModel.set(ModalDialogProperties.TITLE_ICON, getIconDrawable());
+        mModel.set(ModalDialogProperties.TITLE_ICON, getStartIconDrawable());
         mManager.showDialog(mModel, ModalDialogManager.ModalDialogType.APP);
         return true;
     }
@@ -171,20 +184,25 @@ public class ContactView extends SelectableItemView<ContactDetails> {
 
         ContactDetails.AbbreviatedContactDetails details =
                 contactDetails.getAbbreviatedContactDetails(
+                        /*includeAddresses=*/PickerAdapter.includesAddresses(),
                         /*includeEmails=*/PickerAdapter.includesEmails(),
                         /*includeTels=*/PickerAdapter.includesTelephones(),
                         mContext.getResources());
 
+        updateTextViewVisibilityAndContent(mAddress, details.primaryAddress);
+        updateTextViewVisibilityAndContent(mAddressOverflowCount, details.overflowAddressCount);
         updateTextViewVisibilityAndContent(mEmail, details.primaryEmail);
         updateTextViewVisibilityAndContent(mEmailOverflowCount, details.overflowEmailCount);
         updateTextViewVisibilityAndContent(mPhoneNumber, details.primaryTelephoneNumber);
         updateTextViewVisibilityAndContent(
                 mPhoneNumberOverflowCount, details.overflowTelephoneNumberCount);
 
-        if (icon == null) {
+        if (contactDetails.isSelf()) mStar.setVisibility(View.VISIBLE);
+
+        if (icon == null || !PickerAdapter.includesIcons()) {
             icon = mCategoryView.getIconGenerator().generateIconForText(
                     contactDetails.getDisplayNameAbbreviation());
-            setIconDrawable(new BitmapDrawable(getResources(), icon));
+            setStartIconDrawable(new BitmapDrawable(getResources(), icon));
         } else {
             setIconBitmap(icon);
         }
@@ -198,7 +216,7 @@ public class ContactView extends SelectableItemView<ContactDetails> {
         Resources resources = mContext.getResources();
         RoundedBitmapDrawable drawable = RoundedBitmapDrawableFactory.create(resources, icon);
         drawable.setCircular(true);
-        setIconDrawable(drawable);
+        setStartIconDrawable(drawable);
     }
 
     /**
@@ -206,11 +224,14 @@ public class ContactView extends SelectableItemView<ContactDetails> {
      * re-used.
      */
     private void resetTile() {
-        setIconDrawable(null);
+        setStartIconDrawable(null);
         mDisplayName.setText("");
+        mAddress.setText("");
+        mAddressOverflowCount.setText("");
         mEmail.setText("");
         mEmailOverflowCount.setText("");
         mPhoneNumber.setText("");
         mPhoneNumberOverflowCount.setText("");
+        mStar.setVisibility(View.GONE);
     }
 }

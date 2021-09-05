@@ -9,10 +9,16 @@
 
 #include "ash/display/display_color_manager.h"
 #include "ash/display/window_tree_host_manager.h"
+#include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/ash_pref_names.h"
 #include "ash/public/cpp/ash_switches.h"
+#include "ash/public/cpp/notification_utils.h"
+#include "ash/public/cpp/system_tray_client.h"
+#include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
+#include "ash/strings/grit/ash_strings.h"
+#include "ash/system/model/system_tray_model.h"
 #include "base/bind.h"
 #include "base/i18n/time_formatting.h"
 #include "base/logging.h"
@@ -25,6 +31,7 @@
 #include "third_party/icu/source/i18n/astro.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window_tree_host.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
@@ -34,10 +41,40 @@
 #include "ui/display/types/display_snapshot.h"
 #include "ui/gfx/animation/animation_delegate.h"
 #include "ui/gfx/animation/linear_animation.h"
+#include "ui/gfx/geometry/vector3d_f.h"
+#include "ui/message_center/message_center.h"
+#include "ui/message_center/public/cpp/notification.h"
 
 namespace ash {
 
 namespace {
+
+// Defines the states of the Auto Night Light notification as a result of a
+// user's interaction with it.
+// These values are logged to UMA. Entries should not be renumbered and
+// numeric values should never be reused. Please keep in sync with
+// "AshAutoNightLightNotificationState" in
+// src/tools/metrics/histograms/enums.xml.
+enum class AutoNightLightNotificationState {
+  kClosedByUser = 0,
+  kBodyClicked = 1,
+  kButtonClickedDeprecated = 2,
+  kMaxValue = kButtonClickedDeprecated,
+};
+
+// The name of the histogram reporting the state of the user's interaction with
+// the Auto Night Light notification.
+constexpr char kAutoNightLightNotificationStateHistogram[] =
+    "Ash.NightLight.AutoNightLightNotificationState";
+
+// The name of a boolean histogram logging when the Auto Night Light
+// notification is shown.
+constexpr char kAutoNightLightNotificationShownHistogram[] =
+    "Ash.NightLight.AutoNightLightNotificationShown";
+
+// Auto Night Light notification IDs.
+constexpr char kNotifierId[] = "ash.night_light_controller_impl";
+constexpr char kNotificationId[] = "ash.auto_night_light_notify";
 
 // Default start time at 6:00 PM as an offset from 00:00.
 constexpr int kDefaultStartTimeOffsetMinutes = 18 * 60;
@@ -55,10 +92,16 @@ constexpr base::TimeDelta kManualAnimationDuration =
 // The duration of the temperature change animation for
 // AnimationDurationType::kLong.
 constexpr base::TimeDelta kAutomaticAnimationDuration =
-    base::TimeDelta::FromSeconds(20);
+    base::TimeDelta::FromSeconds(60);
 
 // The color temperature animation frames per second.
-constexpr int kNightLightAnimationFrameRate = 30;
+constexpr int kNightLightAnimationFrameRate = 15;
+
+// The following are color temperatues in Kelvin.
+// The min/max are a reasonable range we can clamp the values to.
+constexpr float kMinColorTemperatureInKelvin = 4500;
+constexpr float kNeutralColorTemperatureInKelvin = 6500;
+constexpr float kMaxColorTemperatureInKelvin = 7500;
 
 class NightLightControllerDelegateImpl
     : public NightLightControllerImpl::Delegate {
@@ -70,10 +113,14 @@ class NightLightControllerDelegateImpl
   base::Time GetNow() const override { return base::Time::Now(); }
   base::Time GetSunsetTime() const override { return GetSunRiseSet(false); }
   base::Time GetSunriseTime() const override { return GetSunRiseSet(true); }
-  void SetGeoposition(
+  bool SetGeoposition(
       const NightLightController::SimpleGeoposition& position) override {
+    if (geoposition_ && *geoposition_ == position)
+      return false;
+
     geoposition_ =
         std::make_unique<NightLightController::SimpleGeoposition>(position);
+    return true;
   }
   bool HasGeoposition() const override { return !!geoposition_; }
 
@@ -122,6 +169,8 @@ int GetTemperatureRange(float temperature) {
 }
 
 // Returns the color matrix that corresponds to the given |temperature|.
+// The matrix will be affected by the current |ambient_temperature_| if
+// GetAmbientColorEnabled() returns true.
 // If |in_linear_gamma_space| is true, the generated matrix is the one that
 // should be applied after gamma correction, and it corresponds to the
 // non-linear temperature value for the given |temperature|.
@@ -142,6 +191,21 @@ SkMatrix44 MatrixFromTemperature(float temperature,
     matrix.set(1, 1, green_scale);
     matrix.set(2, 2, blue_scale);
   }
+
+  auto* night_light_controller = Shell::Get()->night_light_controller();
+  DCHECK(night_light_controller);
+  if (night_light_controller->GetAmbientColorEnabled()) {
+    const gfx::Vector3dF& ambient_rgb_scaling_factors =
+        night_light_controller->ambient_rgb_scaling_factors();
+
+    // Multiply the two scale factors.
+    // If either night light or ambient EQ are disabled the CTM will be affected
+    // only by the enabled effect.
+    matrix.set(0, 0, ambient_rgb_scaling_factors.x());
+    matrix.set(1, 1, matrix.get(1, 1) * ambient_rgb_scaling_factors.y());
+    matrix.set(2, 2, matrix.get(2, 2) * ambient_rgb_scaling_factors.z());
+  }
+
   return matrix;
 }
 
@@ -185,6 +249,9 @@ bool AttemptSettingHardwareCtm(int64_t display_id,
 
 // Applies the given |temperature| to the display associated with the given
 // |host|. This is useful for when we have a host and not a display ID.
+// The final color transform computed from the temperature, will be affected
+// by the current |ambient_temperature_| if GetAmbientColorEnabled() returns
+// true.
 void ApplyTemperatureToHost(aura::WindowTreeHost* host, float temperature) {
   DCHECK(host);
   const int64_t display_id = host->GetDisplayId();
@@ -209,6 +276,9 @@ void ApplyTemperatureToHost(aura::WindowTreeHost* host, float temperature) {
 
 // Applies the given |temperature| value by converting it to the corresponding
 // color matrix that will be set on the output displays.
+// The final color transform computed from the temperature, will be affected
+// by the current |ambient_temperature_| if GetAmbientColorEnabled() returns
+// true.
 void ApplyTemperatureToAllDisplays(float temperature) {
   const SkMatrix44 linear_gamma_space_matrix =
       MatrixFromTemperature(temperature, true);
@@ -239,6 +309,18 @@ void ApplyTemperatureToAllDisplays(float temperature) {
   }
 }
 
+void VerifyAmbientColorCtmSupport() {
+  // TODO(dcastagna): Move this function and call it from
+  // DisplayColorManager::OnDisplayModeChanged()
+  Shell* shell = Shell::Get();
+  const DisplayColorManager::DisplayCtmSupport displays_ctm_support =
+      shell->display_color_manager()->displays_ctm_support();
+  if (displays_ctm_support != DisplayColorManager::DisplayCtmSupport::kAll) {
+    LOG(ERROR) << "When ambient color mode is enabled, all the displays must "
+                  "support CTMs.";
+  }
+}
+
 }  // namespace
 
 // Defines a linear animation type to animate the color temperature between two
@@ -253,6 +335,8 @@ class ColorTemperatureAnimation : public gfx::LinearAnimation,
                              kNightLightAnimationFrameRate,
                              this) {}
   ~ColorTemperatureAnimation() override = default;
+
+  float target_temperature() const { return target_temperature_; }
 
   // Starts a new temperature animation from the |current_temperature_| to the
   // given |new_target_temperature| in the given |duration|.
@@ -311,7 +395,9 @@ class ColorTemperatureAnimation : public gfx::LinearAnimation,
 
 NightLightControllerImpl::NightLightControllerImpl()
     : delegate_(std::make_unique<NightLightControllerDelegateImpl>()),
-      temperature_animation_(std::make_unique<ColorTemperatureAnimation>()) {
+      temperature_animation_(std::make_unique<ColorTemperatureAnimation>()),
+      ambient_temperature_(kNeutralColorTemperatureInKelvin),
+      weak_ptr_factory_(this) {
   Shell::Get()->session_controller()->AddObserver(this);
   Shell::Get()->window_tree_host_manager()->AddObserver(this);
   aura::Env::GetInstance()->AddObserver(this);
@@ -328,19 +414,21 @@ NightLightControllerImpl::~NightLightControllerImpl() {
 // static
 void NightLightControllerImpl::RegisterProfilePrefs(
     PrefRegistrySimple* registry) {
-  registry->RegisterBooleanPref(prefs::kNightLightEnabled, false,
-                                PrefRegistry::PUBLIC);
+  registry->RegisterBooleanPref(prefs::kNightLightEnabled, false);
   registry->RegisterDoublePref(prefs::kNightLightTemperature,
-                               kDefaultColorTemperature, PrefRegistry::PUBLIC);
+                               kDefaultColorTemperature);
+  const ScheduleType default_schedule_type =
+      features::IsAutoNightLightEnabled() ? ScheduleType::kSunsetToSunrise
+                                          : ScheduleType::kNone;
   registry->RegisterIntegerPref(prefs::kNightLightScheduleType,
-                                static_cast<int>(ScheduleType::kNone),
-                                PrefRegistry::PUBLIC);
+                                static_cast<int>(default_schedule_type));
   registry->RegisterIntegerPref(prefs::kNightLightCustomStartTime,
-                                kDefaultStartTimeOffsetMinutes,
-                                PrefRegistry::PUBLIC);
+                                kDefaultStartTimeOffsetMinutes);
   registry->RegisterIntegerPref(prefs::kNightLightCustomEndTime,
-                                kDefaultEndTimeOffsetMinutes,
-                                PrefRegistry::PUBLIC);
+                                kDefaultEndTimeOffsetMinutes);
+  registry->RegisterBooleanPref(prefs::kAmbientColorEnabled, true);
+  registry->RegisterBooleanPref(prefs::kAutoNightLightNotificationDismissed,
+                                false);
 
   // Non-public prefs, only meant to be used by ash.
   registry->RegisterDoublePref(prefs::kNightLightCachedLatitude, 0.0);
@@ -369,6 +457,77 @@ float NightLightControllerImpl::GetNonLinearTemperature(float temperature) {
   return std::pow(temperature, kGammaFactor);
 }
 
+// static
+float NightLightControllerImpl::RemapAmbientColorTemperature(
+    float temperature_in_kelvin) {
+  // This function maps sensor input temperatures to other values since we want
+  // to avoid extreme color temperatures (e.g: temperatures below 4500 and
+  // above 7500 are too extreme.)
+  // The following table was created with internal user studies.
+  constexpr struct {
+    int32_t input_temperature;
+    int32_t output_temperature;
+  } kTable[] = {{2700, 4500}, {3100, 5000}, {3700, 5300},
+                {4200, 5500}, {4800, 5800}, {5300, 6000},
+                {6000, 6400}, {7000, 6800}, {8000, 7500}};
+
+  constexpr size_t kTableSize = base::size(kTable);
+  // We clamp to a range defined by the minimum possible input value and the
+  // maximum. Given that the interval kTable[i].input_temperature,
+  // kTable[i+1].input_temperature exclude the upper bound, we clamp it to the
+  // last input_temperature element of the table minus 1.
+  const float temperature = base::ClampToRange<float>(
+      temperature_in_kelvin, kTable[0].input_temperature,
+      kTable[kTableSize - 1].input_temperature - 1);
+  for (size_t i = 0; i < kTableSize - 1; i++) {
+    if (temperature >= kTable[i].input_temperature &&
+        temperature < kTable[i + 1].input_temperature) {
+      // Lerp between the output_temperature values of i and i + 1;
+      const float t =
+          (static_cast<float>(temperature) - kTable[i].input_temperature) /
+          (kTable[i + 1].input_temperature - kTable[i].input_temperature);
+      return static_cast<float>(kTable[i].output_temperature) +
+             t * (kTable[i + 1].output_temperature -
+                  kTable[i].output_temperature);
+    }
+  }
+  NOTREACHED();
+  return 0;
+}
+
+// static
+gfx::Vector3dF
+NightLightControllerImpl::ColorScalesFromRemappedTemperatureInKevin(
+    float temperature_in_kelvin) {
+  DCHECK_LT(temperature_in_kelvin, kMaxColorTemperatureInKelvin);
+  DCHECK_GE(temperature_in_kelvin, kMinColorTemperatureInKelvin);
+  // This function computes the scale factors for R, G and B channel that can be
+  // used to compute a CTM matrix. For warmer temperatures we expect green and
+  // blue to be scaled down, while red will not change. For cooler temperatures
+  // we expect blue not to change while green and blue will be scaled down.
+  float red = 1.0f;
+  float green = 1.0f;
+  float blue = 1.0f;
+
+  // The following formulas are computed with a linear regression to model
+  // scalar response from temperature to RGB scale factors. The values were
+  // obtained with experiments from internal user studies.
+  if (temperature_in_kelvin > kNeutralColorTemperatureInKelvin) {
+    float temperature_increment =
+        (temperature_in_kelvin - kNeutralColorTemperatureInKelvin) /
+        (kMaxColorTemperatureInKelvin - kNeutralColorTemperatureInKelvin);
+    red = 1.f - temperature_increment * 0.0929f;
+    green = 1.f - temperature_increment * 0.0530f;
+  } else {
+    float temperature_decrement =
+        (kNeutralColorTemperatureInKelvin - temperature_in_kelvin) /
+        (kNeutralColorTemperatureInKelvin - kMinColorTemperatureInKelvin);
+    green = 1.f - temperature_decrement * 0.1211f;
+    blue = 1.f - temperature_decrement * 0.2749f;
+  }
+  return {red, green, blue};
+}
+
 bool NightLightControllerImpl::GetEnabled() const {
   return active_user_pref_service_ &&
          active_user_pref_service_->GetBoolean(prefs::kNightLightEnabled);
@@ -379,6 +538,12 @@ float NightLightControllerImpl::GetColorTemperature() const {
     return active_user_pref_service_->GetDouble(prefs::kNightLightTemperature);
 
   return kDefaultColorTemperature;
+}
+
+void NightLightControllerImpl::UpdateAmbientRgbScalingFactors() {
+  ambient_rgb_scaling_factors_ =
+      NightLightControllerImpl::ColorScalesFromRemappedTemperatureInKevin(
+          ambient_temperature_);
 }
 
 NightLightController::ScheduleType NightLightControllerImpl::GetScheduleType()
@@ -407,6 +572,22 @@ TimeOfDay NightLightControllerImpl::GetCustomEndTime() const {
   }
 
   return TimeOfDay(kDefaultEndTimeOffsetMinutes);
+}
+
+void NightLightControllerImpl::SetAmbientColorEnabled(bool enabled) {
+  if (active_user_pref_service_)
+    active_user_pref_service_->SetBoolean(prefs::kAmbientColorEnabled, enabled);
+}
+
+bool NightLightControllerImpl::GetAmbientColorEnabled() const {
+  return features::IsAllowAmbientEQEnabled() && active_user_pref_service_ &&
+         active_user_pref_service_->GetBoolean(prefs::kAmbientColorEnabled);
+}
+
+bool NightLightControllerImpl::IsNowWithinSunsetSunrise() const {
+  // The times below are all on the same calendar day.
+  const base::Time now = delegate_->GetNow();
+  return now < delegate_->GetSunriseTime() || now > delegate_->GetSunsetTime();
 }
 
 void NightLightControllerImpl::SetEnabled(bool enabled,
@@ -454,9 +635,7 @@ void NightLightControllerImpl::Toggle() {
 }
 
 void NightLightControllerImpl::OnDisplayConfigurationChanged() {
-  // When display configurations changes, we should re-apply the current
-  // temperature immediately without animation.
-  ApplyTemperatureToAllDisplays(GetEnabled() ? GetColorTemperature() : 0.0f);
+  ReapplyColorTemperatures();
 }
 
 void NightLightControllerImpl::OnHostInitialized(aura::WindowTreeHost* host) {
@@ -468,6 +647,9 @@ void NightLightControllerImpl::OnHostInitialized(aura::WindowTreeHost* host) {
 
 void NightLightControllerImpl::OnActiveUserPrefServiceChanged(
     PrefService* pref_service) {
+  if (pref_service == active_user_pref_service_)
+    return;
+
   // TODO(afakhry|yjliu): Remove this VLOG when https://crbug.com/1015474 is
   // fixed.
   auto vlog_helper = [](const PrefService* pref_service) -> std::string {
@@ -494,25 +676,177 @@ void NightLightControllerImpl::SetCurrentGeoposition(
 
   is_current_geoposition_from_cache_ = false;
   StoreCachedGeoposition(position);
-  delegate_->SetGeoposition(position);
+
+  const base::Time previous_sunset = delegate_->GetSunsetTime();
+  const base::Time previous_sunrise = delegate_->GetSunriseTime();
+
+  if (!delegate_->SetGeoposition(position)) {
+    VLOG(1) << "Not refreshing since geoposition hasn't changed";
+    return;
+  }
 
   // If the schedule type is sunset to sunrise or custom, a potential change in
   // the geoposition might mean timezone change as well as a change in the start
   // and end times. In these cases, we must trigger a refresh.
-  if (GetScheduleType() != ScheduleType::kNone)
-    Refresh(true /* did_schedule_change */);
+  if (GetScheduleType() == ScheduleType::kNone)
+    return;
+
+  // We only keep manual toggles if the change in geoposition results in an hour
+  // or more in either sunset or sunrise times. A one-hour threshold is used
+  // here as an indication of a possible timezone change, and this case, manual
+  // toggles should be ignored.
+  constexpr base::TimeDelta kOneHourDuration = base::TimeDelta::FromHours(1);
+  const bool keep_manual_toggles_during_schedules =
+      (delegate_->GetSunsetTime() - previous_sunset).magnitude() <
+          kOneHourDuration &&
+      (delegate_->GetSunriseTime() - previous_sunrise).magnitude() <
+          kOneHourDuration;
+
+  Refresh(/*did_schedule_change=*/true, keep_manual_toggles_during_schedules);
 }
 
 void NightLightControllerImpl::SuspendDone(
     const base::TimeDelta& sleep_duration) {
   // Time changes while the device is suspended. We need to refresh the schedule
   // upon device resume to know what the status should be now.
-  Refresh(true /* did_schedule_change */);
+  Refresh(/*did_schedule_change=*/true,
+          /*keep_manual_toggles_during_schedules=*/true);
+}
+
+void NightLightControllerImpl::Close(bool by_user) {
+  if (by_user) {
+    DisableShowingFutureAutoNightLightNotification();
+    UMA_HISTOGRAM_ENUMERATION(kAutoNightLightNotificationStateHistogram,
+                              AutoNightLightNotificationState::kClosedByUser);
+  }
+}
+
+void NightLightControllerImpl::Click(
+    const base::Optional<int>& button_index,
+    const base::Optional<base::string16>& reply) {
+  auto* shell = Shell::Get();
+
+  DCHECK(!button_index.has_value());
+  // Body has been clicked.
+  SystemTrayClient* tray_client = shell->system_tray_model()->client();
+  auto* session_controller = shell->session_controller();
+  if (session_controller->ShouldEnableSettings() && tray_client)
+    tray_client->ShowDisplaySettings();
+
+  UMA_HISTOGRAM_ENUMERATION(kAutoNightLightNotificationStateHistogram,
+                            AutoNightLightNotificationState::kBodyClicked);
+
+  message_center::MessageCenter::Get()->RemoveNotification(kNotificationId,
+                                                           /*by_user=*/false);
+  // Closing the notification with `by_user=false` above should end up calling
+  // NightLightControllerImpl::Close() but will not disable showing the
+  // notification any further. We must do this explicitly here.
+  DisableShowingFutureAutoNightLightNotification();
+  DCHECK(UserHasEverDismissedAutoNightLightNotification());
+}
+
+void NightLightControllerImpl::AmbientColorChanged(
+    const int32_t color_temperature) {
+  const float remapped_color_temperature =
+      RemapAmbientColorTemperature(color_temperature);
+  const float temperature_difference =
+      remapped_color_temperature - ambient_temperature_;
+  const float abs_temperature_difference = std::abs(temperature_difference);
+  // We adjust the ambient color temperature only if the difference with
+  // the last ambient temperature computed is greated than a threshold to
+  // avoid changing it too often when the powerd readings are noisy.
+  constexpr float kAmbientColorChangeThreshold = 100.0f;
+  if (abs_temperature_difference < kAmbientColorChangeThreshold)
+    return;
+
+  ambient_temperature_ +=
+      (temperature_difference / abs_temperature_difference) *
+      kAmbientColorChangeThreshold;
+
+  if (GetAmbientColorEnabled()) {
+    UpdateAmbientRgbScalingFactors();
+    ReapplyColorTemperatures();
+  }
 }
 
 void NightLightControllerImpl::SetDelegateForTesting(
     std::unique_ptr<Delegate> delegate) {
   delegate_ = std::move(delegate);
+}
+
+message_center::Notification*
+NightLightControllerImpl::GetAutoNightLightNotificationForTesting() const {
+  return message_center::MessageCenter::Get()->FindVisibleNotificationById(
+      kNotificationId);
+}
+
+bool NightLightControllerImpl::MaybeRestoreSchedule() {
+  DCHECK(active_user_pref_service_);
+  DCHECK_NE(GetScheduleType(), ScheduleType::kNone);
+
+  auto iter = per_user_schedule_target_state_.find(active_user_pref_service_);
+  if (iter == per_user_schedule_target_state_.end())
+    return false;
+
+  ScheduleTargetState& target_state = iter->second;
+  // It may be that the device was suspended for a very long time that the
+  // target time is no longer valid.
+  if (target_state.target_time <= delegate_->GetNow())
+    return false;
+
+  VLOG(1) << "Restoring a previous schedule.";
+  DCHECK_NE(GetEnabled(), target_state.target_status);
+  ScheduleNextToggle(target_state.target_time - delegate_->GetNow());
+  return true;
+}
+
+bool NightLightControllerImpl::UserHasEverChangedSchedule() const {
+  return active_user_pref_service_ &&
+         active_user_pref_service_->HasPrefPath(prefs::kNightLightScheduleType);
+}
+
+bool NightLightControllerImpl::UserHasEverDismissedAutoNightLightNotification()
+    const {
+  return active_user_pref_service_ &&
+         active_user_pref_service_->GetBoolean(
+             prefs::kAutoNightLightNotificationDismissed);
+}
+
+void NightLightControllerImpl::ShowAutoNightLightNotification() {
+  DCHECK(features::IsAutoNightLightEnabled());
+  DCHECK(GetEnabled());
+  DCHECK(!UserHasEverDismissedAutoNightLightNotification());
+  DCHECK_EQ(ScheduleType::kSunsetToSunrise, GetScheduleType());
+
+  std::unique_ptr<message_center::Notification> notification =
+      CreateSystemNotification(
+          message_center::NOTIFICATION_TYPE_SIMPLE, kNotificationId,
+          l10n_util::GetStringUTF16(IDS_ASH_AUTO_NIGHT_LIGHT_NOTIFY_TITLE),
+          l10n_util::GetStringUTF16(IDS_ASH_AUTO_NIGHT_LIGHT_NOTIFY_BODY),
+          base::string16(), GURL(),
+          message_center::NotifierId(
+              message_center::NotifierType::SYSTEM_COMPONENT, kNotifierId),
+          message_center::RichNotificationData{},
+          base::MakeRefCounted<message_center::ThunkNotificationDelegate>(
+              weak_ptr_factory_.GetWeakPtr()),
+          kUnifiedMenuNightLightIcon,
+          message_center::SystemNotificationWarningLevel::NORMAL);
+  notification->set_priority(message_center::SYSTEM_PRIORITY);
+  message_center::MessageCenter::Get()->AddNotification(
+      std::move(notification));
+
+  UMA_HISTOGRAM_BOOLEAN(kAutoNightLightNotificationShownHistogram, true);
+}
+
+void NightLightControllerImpl::
+    DisableShowingFutureAutoNightLightNotification() {
+  if (Shell::Get()->session_controller()->IsUserSessionBlocked())
+    return;
+
+  if (active_user_pref_service_) {
+    active_user_pref_service_->SetBoolean(
+        prefs::kAutoNightLightNotificationDismissed, true);
+  }
 }
 
 void NightLightControllerImpl::LoadCachedGeopositionIfNeeded() {
@@ -574,6 +908,21 @@ void NightLightControllerImpl::RefreshDisplaysTemperature(
   Shell::Get()->UpdateCursorCompositingEnabled();
 }
 
+void NightLightControllerImpl::ReapplyColorTemperatures() {
+  DCHECK(temperature_animation_);
+  const float target_temperature = GetEnabled() ? GetColorTemperature() : 0.0f;
+  if (temperature_animation_->is_animating()) {
+    // Do not interrupt an on-going animation towards the same target value.
+    if (temperature_animation_->target_temperature() == target_temperature)
+      return;
+
+    NOTREACHED();
+    temperature_animation_->Stop();
+  }
+
+  ApplyTemperatureToAllDisplays(target_temperature);
+}
+
 void NightLightControllerImpl::StartWatchingPrefsChanges() {
   DCHECK(active_user_pref_service_);
 
@@ -602,6 +951,11 @@ void NightLightControllerImpl::StartWatchingPrefsChanges() {
       base::BindRepeating(
           &NightLightControllerImpl::OnCustomSchedulePrefsChanged,
           base::Unretained(this)));
+  pref_change_registrar_->Add(
+      prefs::kAmbientColorEnabled,
+      base::BindRepeating(
+          &NightLightControllerImpl::OnAmbientColorEnabledPrefChanged,
+          base::Unretained(this)));
 
   // Note: No need to observe changes in the cached latitude/longitude since
   // they're only accessed here in ash. We only load them when the active user
@@ -611,9 +965,13 @@ void NightLightControllerImpl::StartWatchingPrefsChanges() {
 void NightLightControllerImpl::InitFromUserPrefs() {
   StartWatchingPrefsChanges();
   LoadCachedGeopositionIfNeeded();
-  Refresh(true /* did_schedule_change */);
+  if (GetAmbientColorEnabled())
+    UpdateAmbientRgbScalingFactors();
+  Refresh(/*did_schedule_change=*/true,
+          /*keep_manual_toggles_during_schedules=*/true);
   NotifyStatusChanged();
   NotifyClientWithScheduleChange();
+  is_first_user_init_ = false;
 }
 
 void NightLightControllerImpl::NotifyStatusChanged() {
@@ -627,10 +985,32 @@ void NightLightControllerImpl::NotifyClientWithScheduleChange() {
 }
 
 void NightLightControllerImpl::OnEnabledPrefChanged() {
-  VLOG(1) << "Enable state changed. New state: " << GetEnabled() << ".";
+  const bool enabled = GetEnabled();
+  VLOG(1) << "Enable state changed. New state: " << enabled << ".";
   DCHECK(active_user_pref_service_);
-  Refresh(false /* did_schedule_change */);
+
+  if (enabled && features::IsAutoNightLightEnabled() &&
+      GetScheduleType() == kSunsetToSunrise &&
+      (is_first_user_init_ ||
+       animation_duration_ == AnimationDuration::kLong) &&
+      !UserHasEverChangedSchedule() &&
+      !UserHasEverDismissedAutoNightLightNotification()) {
+    VLOG(1) << "Auto Night Light is turning on.";
+    ShowAutoNightLightNotification();
+  }
+
+  Refresh(/*did_schedule_change=*/false,
+          /*keep_manual_toggles_during_schedules=*/false);
   NotifyStatusChanged();
+}
+
+void NightLightControllerImpl::OnAmbientColorEnabledPrefChanged() {
+  DCHECK(active_user_pref_service_);
+  if (GetAmbientColorEnabled()) {
+    UpdateAmbientRgbScalingFactors();
+    VerifyAmbientColorCtmSupport();
+  }
+  ReapplyColorTemperatures();
 }
 
 void NightLightControllerImpl::OnColorTemperaturePrefChanged() {
@@ -646,44 +1026,54 @@ void NightLightControllerImpl::OnScheduleTypePrefChanged() {
   VLOG(1) << "Schedule type changed. New type: " << GetScheduleType() << ".";
   DCHECK(active_user_pref_service_);
   NotifyClientWithScheduleChange();
-  Refresh(true /* did_schedule_change */);
+  Refresh(/*did_schedule_change=*/true,
+          /*keep_manual_toggles_during_schedules=*/false);
 
   UMA_HISTOGRAM_ENUMERATION("Ash.NightLight.ScheduleType", GetScheduleType());
 }
 
 void NightLightControllerImpl::OnCustomSchedulePrefsChanged() {
   DCHECK(active_user_pref_service_);
-  Refresh(true /* did_schedule_change */);
+  Refresh(/*did_schedule_change=*/true,
+          /*keep_manual_toggles_during_schedules=*/false);
 }
 
-void NightLightControllerImpl::Refresh(bool did_schedule_change) {
-  RefreshDisplaysTemperature(GetColorTemperature());
-
-  const ScheduleType type = GetScheduleType();
-  switch (type) {
+void NightLightControllerImpl::Refresh(
+    bool did_schedule_change,
+    bool keep_manual_toggles_during_schedules) {
+  switch (GetScheduleType()) {
     case ScheduleType::kNone:
       timer_.Stop();
+      RefreshDisplaysTemperature(GetColorTemperature());
       return;
 
     case ScheduleType::kSunsetToSunrise:
       RefreshScheduleTimer(delegate_->GetSunsetTime(),
-                           delegate_->GetSunriseTime(), did_schedule_change);
+                           delegate_->GetSunriseTime(), did_schedule_change,
+                           keep_manual_toggles_during_schedules);
       return;
 
     case ScheduleType::kCustom:
-      RefreshScheduleTimer(GetCustomStartTime().ToTimeToday(),
-                           GetCustomEndTime().ToTimeToday(),
-                           did_schedule_change);
+      RefreshScheduleTimer(
+          GetCustomStartTime().ToTimeToday(), GetCustomEndTime().ToTimeToday(),
+          did_schedule_change, keep_manual_toggles_during_schedules);
       return;
   }
 }
 
-void NightLightControllerImpl::RefreshScheduleTimer(base::Time start_time,
-                                                    base::Time end_time,
-                                                    bool did_schedule_change) {
+void NightLightControllerImpl::RefreshScheduleTimer(
+    base::Time start_time,
+    base::Time end_time,
+    bool did_schedule_change,
+    bool keep_manual_toggles_during_schedules) {
   if (GetScheduleType() == ScheduleType::kNone) {
     NOTREACHED();
     timer_.Stop();
+    return;
+  }
+
+  if (keep_manual_toggles_during_schedules && MaybeRestoreSchedule()) {
+    RefreshDisplaysTemperature(GetColorTemperature());
     return;
   }
 
@@ -792,17 +1182,25 @@ void NightLightControllerImpl::RefreshScheduleTimer(base::Time start_time,
   // status to be toggled according to the time that corresponds with the
   // opposite status of the current one.
   ScheduleNextToggle(GetEnabled() ? end_time - now : start_time - now);
+  RefreshDisplaysTemperature(GetColorTemperature());
 }
 
 void NightLightControllerImpl::ScheduleNextToggle(base::TimeDelta delay) {
+  DCHECK(active_user_pref_service_);
+
   const bool new_status = !GetEnabled();
+  const base::Time target_time = delegate_->GetNow() + delay;
+
+  per_user_schedule_target_state_[active_user_pref_service_] =
+      ScheduleTargetState{target_time, new_status};
+
   VLOG(1) << "Setting Night Light to toggle to "
           << (new_status ? "enabled" : "disabled") << " at "
-          << base::TimeFormatTimeOfDay(delegate_->GetNow() + delay);
-  timer_.Start(
-      FROM_HERE, delay,
-      base::Bind(&NightLightControllerImpl::SetEnabled, base::Unretained(this),
-                 new_status, AnimationDuration::kLong));
+          << base::TimeFormatTimeOfDay(target_time);
+  timer_.Start(FROM_HERE, delay,
+               base::BindOnce(&NightLightControllerImpl::SetEnabled,
+                              base::Unretained(this), new_status,
+                              AnimationDuration::kLong));
 }
 
 }  // namespace ash

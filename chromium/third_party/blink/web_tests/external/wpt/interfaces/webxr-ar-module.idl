@@ -3,12 +3,6 @@
 // (https://github.com/tidoust/reffy-reports)
 // Source: WebXR Augmented Reality Module - Level 1 (https://immersive-web.github.io/webxr-ar-module/)
 
-enum XRSessionMode {
-  "inline",
-  "immersive-vr",
-  "immersive-ar"
-};
-
 enum XREnvironmentBlendMode {
   "opaque",
   "alpha-blend",
@@ -18,4 +12,14 @@ enum XREnvironmentBlendMode {
 partial interface XRSession {
   // Attributes
   readonly attribute XREnvironmentBlendMode environmentBlendMode;
+};
+
+enum XRInteractionMode {
+    "screen-space",
+    "world-space",
+};
+
+partial interface XRSession {
+  // Attributes
+  readonly attribute XRInteractionMode interactionMode;
 };

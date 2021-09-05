@@ -13,20 +13,22 @@
 #include "content/browser/renderer_host/media/service_launched_video_capture_device.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
-#include "media/base/media_switches.h"
+#include "media/capture/capture_switches.h"
 #include "media/capture/video/video_capture_device.h"
 #include "media/capture/video/video_frame_receiver_on_task_runner.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "services/video_capture/public/cpp/receiver_media_to_mojo_adapter.h"
+#include "services/video_capture/public/mojom/video_frame_handler.mojom.h"
 
 namespace content {
 
 namespace {
 
 void ConcludeLaunchDeviceWithSuccess(
-    video_capture::mojom::VideoSourcePtr source,
-    video_capture::mojom::PushVideoStreamSubscriptionPtr subscription,
+    mojo::Remote<video_capture::mojom::VideoSource> source,
+    mojo::Remote<video_capture::mojom::PushVideoStreamSubscription>
+        subscription,
     base::OnceClosure connection_lost_cb,
     VideoCaptureDeviceLauncher::Callbacks* callbacks,
     base::OnceClosure done_cb) {
@@ -108,27 +110,28 @@ void ServiceVideoCaptureDeviceLauncher::LaunchDeviceAsync(
   // invoked.
   done_cb_ = std::move(done_cb);
   callbacks_ = callbacks;
-  video_capture::mojom::VideoSourcePtr source;
+  mojo::Remote<video_capture::mojom::VideoSource> source;
   service_connection_->source_provider()->GetVideoSource(
-      device_id, mojo::MakeRequest(&source));
+      device_id, source.BindNewPipeAndPassReceiver());
 
   auto receiver_adapter =
       std::make_unique<video_capture::ReceiverMediaToMojoAdapter>(
           std::make_unique<media::VideoFrameReceiverOnTaskRunner>(
               std::move(receiver),
               base::CreateSingleThreadTaskRunner({BrowserThread::IO})));
-  mojo::PendingRemote<video_capture::mojom::Receiver> pending_remote_proxy;
+  mojo::PendingRemote<video_capture::mojom::VideoFrameHandler>
+      pending_remote_proxy;
   mojo::MakeSelfOwnedReceiver(
       std::move(receiver_adapter),
       pending_remote_proxy.InitWithNewPipeAndPassReceiver());
 
-  video_capture::mojom::PushVideoStreamSubscriptionPtr subscription;
+  mojo::Remote<video_capture::mojom::PushVideoStreamSubscription> subscription;
   // Create message pipe so that we can subsequently call
-  // subscription.set_connection_error_handler().
-  auto subscription_request = mojo::MakeRequest(&subscription);
+  // subscription.set_disconnect_handler().
+  auto subscription_receiver = subscription.BindNewPipeAndPassReceiver();
   // Use of Unretained(this) is safe, because |done_cb_| guarantees that |this|
   // stays alive.
-  subscription.set_connection_error_handler(
+  subscription.set_disconnect_handler(
       base::BindOnce(&ServiceVideoCaptureDeviceLauncher::
                          OnConnectionLostWhileWaitingForCallback,
                      base::Unretained(this)));
@@ -139,8 +142,7 @@ void ServiceVideoCaptureDeviceLauncher::LaunchDeviceAsync(
       media::VideoCaptureDevice::GetPowerLineFrequency(params);
 
   // GpuMemoryBuffer-based VideoCapture buffer works only on the Chrome OS
-  // VideoCaptureDevice implementation. It's not supported by
-  // FakeVideoCaptureDevice.
+  // VideoCaptureDevice implementation.
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kVideoCaptureUseGpuMemoryBuffer)) {
     new_params.buffer_type = media::VideoCaptureBufferType::kGpuMemoryBuffer;
@@ -155,7 +157,7 @@ void ServiceVideoCaptureDeviceLauncher::LaunchDeviceAsync(
   // service indicating that the device closing is complete.
   source->CreatePushSubscription(
       std::move(pending_remote_proxy), new_params,
-      true /*force_reopen_with_new_settings*/, std::move(subscription_request),
+      true /*force_reopen_with_new_settings*/, std::move(subscription_receiver),
       base::BindOnce(
           // Use of Unretained |this| is safe, because |done_cb_| guarantees
           // that |this| stays alive.
@@ -172,15 +174,16 @@ void ServiceVideoCaptureDeviceLauncher::AbortLaunch() {
 }
 
 void ServiceVideoCaptureDeviceLauncher::OnCreatePushSubscriptionCallback(
-    video_capture::mojom::VideoSourcePtr source,
-    video_capture::mojom::PushVideoStreamSubscriptionPtr subscription,
+    mojo::Remote<video_capture::mojom::VideoSource> source,
+    mojo::Remote<video_capture::mojom::PushVideoStreamSubscription>
+        subscription,
     base::OnceClosure connection_lost_cb,
     video_capture::mojom::CreatePushSubscriptionResultCode result_code,
     const media::VideoCaptureParams& params) {
   DCHECK(sequence_checker_.CalledOnValidSequence());
   DCHECK(callbacks_);
   DCHECK(done_cb_);
-  subscription.set_connection_error_handler(base::DoNothing());
+  subscription.set_disconnect_handler(base::DoNothing());
   const bool abort_requested = (state_ == State::DEVICE_START_ABORTING);
   state_ = State::READY_TO_LAUNCH;
   Callbacks* callbacks = callbacks_;

@@ -60,8 +60,6 @@
 
 namespace blink {
 
-using namespace html_names;
-
 static const int kRangeDefaultMinimum = 0;
 static const int kRangeDefaultMaximum = 100;
 static const int kRangeDefaultStep = 1;
@@ -131,22 +129,23 @@ StepRange RangeInputType::CreateStepRange(
       (kRangeDefaultStep, kRangeDefaultStepBase, kRangeStepScaleFactor));
 
   const Decimal step_base = FindStepBase(kRangeDefaultStepBase);
-  const Decimal minimum = ParseToNumber(GetElement().FastGetAttribute(kMinAttr),
-                                        kRangeDefaultMinimum);
-  const Decimal maximum =
-      EnsureMaximum(ParseToNumber(GetElement().FastGetAttribute(kMaxAttr),
-                                  kRangeDefaultMaximum),
-                    minimum);
+  const Decimal minimum =
+      ParseToNumber(GetElement().FastGetAttribute(html_names::kMinAttr),
+                    kRangeDefaultMinimum);
+  const Decimal maximum = EnsureMaximum(
+      ParseToNumber(GetElement().FastGetAttribute(html_names::kMaxAttr),
+                    kRangeDefaultMaximum),
+      minimum);
 
-  const Decimal step =
-      StepRange::ParseStep(any_step_handling, step_description,
-                           GetElement().FastGetAttribute(kStepAttr));
+  const Decimal step = StepRange::ParseStep(
+      any_step_handling, step_description,
+      GetElement().FastGetAttribute(html_names::kStepAttr));
   // Range type always has range limitations because it has default
   // minimum/maximum.
   // https://html.spec.whatwg.org/C/#range-state-(type=range):concept-input-min-default
   const bool kHasRangeLimitations = true;
-  return StepRange(step_base, minimum, maximum, kHasRangeLimitations, step,
-                   step_description);
+  return StepRange(step_base, minimum, maximum, kHasRangeLimitations,
+                   /*has_reversed_range=*/false, step, step_description);
 }
 
 bool RangeInputType::IsSteppable() const {
@@ -185,10 +184,11 @@ void RangeInputType::HandleKeydownEvent(KeyboardEvent& event) {
 
   // FIXME: We can't use stepUp() for the step value "any". So, we increase
   // or decrease the value by 1/100 of the value range. Is it reasonable?
-  const Decimal step = DeprecatedEqualIgnoringCase(
-                           GetElement().FastGetAttribute(kStepAttr), "any")
-                           ? (step_range.Maximum() - step_range.Minimum()) / 100
-                           : step_range.Step();
+  const Decimal step =
+      EqualIgnoringASCIICase(
+          GetElement().FastGetAttribute(html_names::kStepAttr), "any")
+          ? (step_range.Maximum() - step_range.Minimum()) / 100
+          : step_range.Step();
   const Decimal big_step =
       std::max((step_range.Maximum() - step_range.Minimum()) / 10, step);
 
@@ -246,11 +246,15 @@ void RangeInputType::CreateShadowSubtree() {
   Document& document = GetElement().GetDocument();
   auto* track = MakeGarbageCollected<HTMLDivElement>(document);
   track->SetShadowPseudoId(AtomicString("-webkit-slider-runnable-track"));
-  track->setAttribute(kIdAttr, shadow_element_names::SliderTrack());
+  track->setAttribute(html_names::kIdAttr, shadow_element_names::SliderTrack());
   track->AppendChild(MakeGarbageCollected<SliderThumbElement>(document));
   auto* container = MakeGarbageCollected<SliderContainerElement>(document);
   container->AppendChild(track);
   GetElement().UserAgentShadowRoot()->AppendChild(container);
+}
+
+bool RangeInputType::TypeShouldForceLegacyLayout() const {
+  return true;
 }
 
 LayoutObject* RangeInputType::CreateLayoutObject(const ComputedStyle&,
@@ -314,10 +318,7 @@ void RangeInputType::WarnIfValueIsInvalid(const String& value) const {
   if (value.IsEmpty() || !GetElement().SanitizeValue(value).IsEmpty())
     return;
   AddWarningToConsole(
-      "The specified value %s is not a valid number. The value must match to "
-      "the following regular expression: "
-      "-?(\\d+|\\d+\\.\\d+|\\.\\d+)([eE][-+]?\\d+)?",
-      value);
+      "The specified value %s cannot be parsed, or is out of range.", value);
 }
 
 void RangeInputType::DisabledAttributeChanged() {
@@ -417,6 +418,10 @@ Decimal RangeInputType::FindClosestTickMarkValue(const Decimal& value) {
 
 void RangeInputType::ValueAttributeChanged() {
   UpdateView();
+}
+
+bool RangeInputType::IsDraggedSlider() const {
+  return GetSliderThumbElement()->IsActive();
 }
 
 }  // namespace blink

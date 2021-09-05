@@ -7,17 +7,12 @@
 
 #include <stdint.h>
 
-#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "components/paint_preview/common/mojom/paint_preview_recorder.mojom.h"
 #include "components/paint_preview/common/paint_preview_tracker.h"
 #include "content/public/renderer/render_frame_observer.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
-
-namespace base {
-class ReadOnlySharedMemoryRegion;
-}  // namespace base
 
 namespace content {
 class RenderFrame;
@@ -49,18 +44,18 @@ class PaintPreviewRecorderImpl : public content::RenderFrameObserver,
   // Handles the bulk of the capture.
   void CapturePaintPreviewInternal(
       const mojom::PaintPreviewCaptureParamsPtr& params,
-      base::ReadOnlySharedMemoryRegion* region,
+      mojom::PaintPreviewCaptureResponse* region,
       mojom::PaintPreviewStatus* status);
 
   bool is_painting_preview_;
   const bool is_main_frame_;
-  const int32_t routing_id_;
   mojo::AssociatedReceiver<mojom::PaintPreviewRecorder>
       paint_preview_recorder_receiver_{this};
 
   base::WeakPtrFactory<PaintPreviewRecorderImpl> weak_ptr_factory_{this};
 
-  DISALLOW_COPY_AND_ASSIGN(PaintPreviewRecorderImpl);
+  PaintPreviewRecorderImpl(const PaintPreviewRecorderImpl&) = delete;
+  PaintPreviewRecorderImpl& operator=(const PaintPreviewRecorderImpl&) = delete;
 };
 
 }  // namespace paint_preview

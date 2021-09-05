@@ -24,6 +24,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/defaults.h"
 #include "chrome/browser/media/router/media_router_feature.h"
+#include "chrome/browser/media/router/media_router_metrics.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -54,7 +55,10 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
+#include "components/dom_distiller/content/browser/distillable_page_utils.h"
+#include "components/dom_distiller/content/browser/uma_helper.h"
 #include "components/dom_distiller/core/dom_distiller_features.h"
+#include "components/dom_distiller/core/url_utils.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/public/base/signin_metrics.h"
 #include "components/strings/grit/components_strings.h"
@@ -157,13 +161,12 @@ void ZoomMenuModel::Build() {
 
 ////////////////////////////////////////////////////////////////////////////////
 // HelpMenuModel
-
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+// Only used in branded builds.
 
 const base::Feature kIncludeBetaForumMenuItem{
     "IncludeBetaForumMenuItem", base::FEATURE_DISABLED_BY_DEFAULT};
 
-class AppMenuModel::HelpMenuModel : public ui::SimpleMenuModel {
+class HelpMenuModel : public ui::SimpleMenuModel {
  public:
   HelpMenuModel(ui::SimpleMenuModel::Delegate* delegate, Browser* browser)
       : SimpleMenuModel(delegate) {
@@ -178,10 +181,7 @@ class AppMenuModel::HelpMenuModel : public ui::SimpleMenuModel {
     int help_string_id = IDS_HELP_PAGE;
 #endif
 #if defined(OS_CHROMEOS)
-    if (base::FeatureList::IsEnabled(chromeos::features::kSplitSettings))
-      AddItem(IDC_ABOUT, l10n_util::GetStringUTF16(IDS_ABOUT));
-    else
-      AddItem(IDC_ABOUT, l10n_util::GetStringUTF16(IDS_ABOUT_OS));
+    AddItem(IDC_ABOUT, l10n_util::GetStringUTF16(IDS_ABOUT));
 #else
     AddItem(IDC_ABOUT, l10n_util::GetStringUTF16(IDS_ABOUT));
 #endif
@@ -199,8 +199,6 @@ class AppMenuModel::HelpMenuModel : public ui::SimpleMenuModel {
 
   DISALLOW_COPY_AND_ASSIGN(HelpMenuModel);
 };
-
-#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
 ////////////////////////////////////////////////////////////////////////////////
 // ToolsMenuModel
@@ -267,7 +265,7 @@ void AppMenuModel::Init() {
 
   browser_zoom_subscription_ =
       zoom::ZoomEventManager::GetForBrowserContext(browser_->profile())
-          ->AddZoomLevelChangedCallback(base::Bind(
+          ->AddZoomLevelChangedCallback(base::BindRepeating(
               &AppMenuModel::OnZoomLevelChanged, base::Unretained(this)));
 
   TabStripModel* tab_strip_model = browser_->tab_strip_model();
@@ -425,6 +423,17 @@ void AppMenuModel::LogMenuMetrics(int command_id) {
                                    delta);
       }
       LogMenuAction(MENU_ACTION_DISTILL_PAGE);
+      if (dom_distiller::url_utils::IsDistilledPage(
+              browser()
+                  ->tab_strip_model()
+                  ->GetActiveWebContents()
+                  ->GetLastCommittedURL())) {
+        dom_distiller::UMAHelper::RecordReaderModeExit(
+            dom_distiller::UMAHelper::ReaderModeEntryPoint::kMenuOption);
+      } else {
+        dom_distiller::UMAHelper::RecordReaderModeEntry(
+            dom_distiller::UMAHelper::ReaderModeEntryPoint::kMenuOption);
+      }
       break;
     case IDC_SAVE_PAGE:
       if (!uma_action_recorded_)
@@ -446,6 +455,10 @@ void AppMenuModel::LogMenuMetrics(int command_id) {
       if (!uma_action_recorded_)
         UMA_HISTOGRAM_MEDIUM_TIMES("WrenchMenu.TimeToAction.Cast", delta);
       LogMenuAction(MENU_ACTION_CAST);
+      // TODO(takumif): Look into moving this metrics logging to a single
+      // location, like MediaRouterDialogController::ShowMediaRouterDialog().
+      media_router::MediaRouterMetrics::RecordMediaRouterDialogOrigin(
+          media_router::MediaRouterDialogOpenOrigin::APP_MENU);
       break;
 
     // Edit menu.
@@ -685,12 +698,6 @@ bool AppMenuModel::IsCommandIdVisible(int command_id) const {
       return app_menu_icon_controller_->GetTypeAndSeverity().type ==
              AppMenuIconController::IconType::UPGRADE_NOTIFICATION;
     }
-#if !defined(OS_LINUX) || defined(USE_AURA)
-    case IDC_BOOKMARK_THIS_TAB:
-      return !chrome::ShouldRemoveBookmarkThisTabUI(browser_->profile());
-    case IDC_BOOKMARK_ALL_TABS:
-      return !chrome::ShouldRemoveBookmarkAllTabsUI(browser_->profile());
-#endif
     default:
       return true;
   }
@@ -754,10 +761,10 @@ void AppMenuModel::Build() {
   AddSeparator(ui::NORMAL_SEPARATOR);
 
   if (!browser_->profile()->IsOffTheRecord()) {
-    recent_tabs_sub_menu_model_ =
-        std::make_unique<RecentTabsSubMenuModel>(provider_, browser_);
+    sub_menus_.push_back(
+        std::make_unique<RecentTabsSubMenuModel>(provider_, browser_));
     AddSubMenuWithStringId(IDC_RECENT_TABS_MENU, IDS_HISTORY_MENU,
-                           recent_tabs_sub_menu_model_.get());
+                           sub_menus_.back().get());
   }
   AddItemWithStringId(IDC_SHOW_DOWNLOADS, IDS_SHOW_DOWNLOADS);
   if (!browser_->profile()->IsGuestSession()) {
@@ -781,7 +788,7 @@ void AppMenuModel::Build() {
           GetInstallPWAAppMenuItemName(browser_)) {
     AddItem(IDC_INSTALL_PWA, *name);
   } else if (base::Optional<web_app::AppId> app_id =
-                 web_app::GetPwaForSecureActiveTab(browser_)) {
+                 web_app::GetWebAppForActiveTab(browser_)) {
     auto* provider = web_app::WebAppProvider::Get(browser_->profile());
     const base::string16 short_name =
         base::UTF8ToUTF16(provider->registrar().GetAppShortName(*app_id));
@@ -791,8 +798,26 @@ void AppMenuModel::Build() {
             l10n_util::GetStringFUTF16(IDS_OPEN_IN_APP_WINDOW, truncated_name));
   }
 
-  if (dom_distiller::IsDomDistillerEnabled())
-    AddItemWithStringId(IDC_DISTILL_PAGE, IDS_DISTILL_PAGE);
+  if (dom_distiller::IsDomDistillerEnabled() &&
+      browser()->tab_strip_model()->GetActiveWebContents()) {
+    // Only show the reader mode toggle when it will do something.
+    if (dom_distiller::url_utils::IsDistilledPage(
+            browser()
+                ->tab_strip_model()
+                ->GetActiveWebContents()
+                ->GetLastCommittedURL())) {
+      // Show the menu option if we are on a distilled page.
+      AddItemWithStringId(IDC_DISTILL_PAGE, IDS_DISTILL_PAGE);
+    } else if (dom_distiller::ShowReaderModeOption(
+                   browser_->profile()->GetPrefs())) {
+      // Show the menu option if the page is distillable.
+      base::Optional<dom_distiller::DistillabilityResult> distillability =
+          dom_distiller::GetLatestResult(
+              browser()->tab_strip_model()->GetActiveWebContents());
+      if (distillability && distillability.value().is_distillable)
+        AddItemWithStringId(IDC_DISTILL_PAGE, IDS_DISTILL_PAGE);
+    }
+  }
 
 #if defined(OS_CHROMEOS)
   // Always show this option if we're in tablet mode on Chrome OS.
@@ -804,9 +829,9 @@ void AppMenuModel::Build() {
   }
 #endif
 
-  tools_menu_model_ = std::make_unique<ToolsMenuModel>(this, browser_);
+  sub_menus_.push_back(std::make_unique<ToolsMenuModel>(this, browser_));
   AddSubMenuWithStringId(IDC_MORE_TOOLS_MENU, IDS_MORE_TOOLS_MENU,
-                         tools_menu_model_.get());
+                         sub_menus_.back().get());
   AddSeparator(ui::LOWER_SEPARATOR);
   CreateCutCopyPasteMenu();
   AddSeparator(ui::UPPER_SEPARATOR);
@@ -816,14 +841,11 @@ void AppMenuModel::Build() {
 // 'About' item has been moved to this submenu, it's reinstated here for
 // Chromium builds.
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-  help_menu_model_ = std::make_unique<HelpMenuModel>(this, browser_);
-  AddSubMenuWithStringId(IDC_HELP_MENU, IDS_HELP_MENU, help_menu_model_.get());
+  sub_menus_.push_back(std::make_unique<HelpMenuModel>(this, browser_));
+  AddSubMenuWithStringId(IDC_HELP_MENU, IDS_HELP_MENU, sub_menus_.back().get());
 #else
 #if defined(OS_CHROMEOS)
-  if (base::FeatureList::IsEnabled(chromeos::features::kSplitSettings))
-    AddItem(IDC_ABOUT, l10n_util::GetStringUTF16(IDS_ABOUT));
-  else
-    AddItem(IDC_ABOUT, l10n_util::GetStringUTF16(IDS_ABOUT_OS));
+  AddItem(IDC_ABOUT, l10n_util::GetStringUTF16(IDS_ABOUT));
 #else
   AddItem(IDC_ABOUT, l10n_util::GetStringUTF16(IDS_ABOUT));
 #endif
@@ -860,10 +882,14 @@ bool AppMenuModel::CreateActionToolbarOverflowMenu() {
 
   // We only add the extensions overflow container if there are any icons that
   // aren't shown in the main container.
-  // browser_->window() can return null during startup, and
-  // GetToolbarActionsBar() can be null in testing.
-  if (browser_->window() && browser_->window()->GetToolbarActionsBar() &&
-      browser_->window()->GetToolbarActionsBar()->NeedsOverflow()) {
+  // browser_->window() can return null during startup.
+  if (!browser_->window())
+    return false;
+
+  // |toolbar_actions_bar| can be null in testing.
+  ToolbarActionsBar* const toolbar_actions_bar =
+      ToolbarActionsBar::FromBrowserWindow(browser_->window());
+  if (toolbar_actions_bar && toolbar_actions_bar->NeedsOverflow()) {
     AddItem(IDC_EXTENSIONS_OVERFLOW_MENU, base::string16());
     return true;
   }

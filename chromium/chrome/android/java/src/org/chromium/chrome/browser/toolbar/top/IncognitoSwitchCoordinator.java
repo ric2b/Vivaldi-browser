@@ -17,6 +17,7 @@ import org.chromium.chrome.browser.tabmodel.EmptyTabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
+import org.chromium.chrome.features.start_surface.StartSurfaceConfiguration;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
 
@@ -37,7 +38,22 @@ class IncognitoSwitchCoordinator {
         Switch incognitoSwitchView = (Switch) root.findViewById(R.id.incognito_switch);
         assert incognitoSwitchView != null;
 
-        initializePropertyModel();
+        mPropertyModel = new PropertyModel.Builder(IncognitoSwitchProperties.ALL_KEYS)
+                                 .with(ON_CHECKED_CHANGE_LISTENER,
+                                         new CompoundButton.OnCheckedChangeListener() {
+                                             @Override
+                                             public void onCheckedChanged(CompoundButton buttonView,
+                                                     boolean incognitoSelected) {
+                                                 setSelectedMode(incognitoSelected);
+                                             }
+                                         })
+                                 .with(IS_INCOGNITO, mTabModelSelector.isIncognitoSelected())
+                                 // TODO(crbug.com/1042997): check start surface status properly in
+                                 //  StartSurfaceToolbarMediator.
+                                 .with(IS_VISIBLE,
+                                         !StartSurfaceConfiguration
+                                                  .START_SURFACE_HIDE_INCOGNITO_SWITCH.getValue())
+                                 .build();
 
         mTabModelSelectorObserver = new EmptyTabModelSelectorObserver() {
             @Override
@@ -57,21 +73,6 @@ class IncognitoSwitchCoordinator {
      */
     public void destroy() {
         mTabModelSelector.removeObserver(mTabModelSelectorObserver);
-    }
-
-    private void initializePropertyModel() {
-        mPropertyModel = new PropertyModel(IncognitoSwitchProperties.ALL_KEYS);
-        mPropertyModel.set(
-                ON_CHECKED_CHANGE_LISTENER, new CompoundButton.OnCheckedChangeListener() {
-                    @Override
-                    public void onCheckedChanged(
-                            CompoundButton buttonView, boolean incognitoSelected) {
-                        setSelectedMode(incognitoSelected);
-                    }
-                });
-        // Set the initial state.
-        mPropertyModel.set(IS_INCOGNITO, mTabModelSelector.isIncognitoSelected());
-        mPropertyModel.set(IS_VISIBLE, true);
     }
 
     private void setSelectedMode(boolean incognitoSelected) {

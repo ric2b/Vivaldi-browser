@@ -6,7 +6,6 @@ package org.chromium.chrome.browser.vr;
 
 import android.app.Activity;
 
-import org.chromium.base.BundleUtils;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.annotations.CalledByNative;
@@ -15,21 +14,17 @@ import org.chromium.base.annotations.NativeMethods;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.infobar.InfoBarIdentifier;
 import org.chromium.chrome.browser.infobar.SimpleConfirmInfoBarBuilder;
-import org.chromium.chrome.browser.modules.ModuleInstallUi;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.components.module_installer.engine.EngineFactory;
-import org.chromium.components.module_installer.engine.InstallEngine;
+import org.chromium.chrome.browser.tab.TabUtils;
 
 /**
  * Installs AR DFM and ArCore runtimes.
  */
 @JNINamespace("vr")
-public class ArCoreInstallUtils implements ModuleInstallUi.FailureUiListener {
+public class ArCoreInstallUtils {
     private static final String TAG = "ArCoreInstallUtils";
 
     private long mNativeArCoreInstallUtils;
-
-    private Tab mTab;
 
     // Instance that requested installation of ARCore.
     // Should be non-null only if there is a pending request to install ARCore.
@@ -47,7 +42,6 @@ public class ArCoreInstallUtils implements ModuleInstallUi.FailureUiListener {
                     (ArCoreShim) Class.forName("org.chromium.chrome.browser.vr.ArCoreShimImpl")
                             .newInstance();
         } catch (ClassNotFoundException e) {
-            // shouldn't happen - we should only call this method once AR module is installed.
             throw new RuntimeException(e);
         } catch (InstantiationException e) {
             throw new RuntimeException(e);
@@ -63,81 +57,25 @@ public class ArCoreInstallUtils implements ModuleInstallUi.FailureUiListener {
         return new ArCoreInstallUtils(nativeArCoreInstallUtils);
     }
 
+    @CalledByNative
+    private void onNativeDestroy() {
+        mNativeArCoreInstallUtils = 0;
+    }
+
     private ArCoreInstallUtils(long nativeArCoreInstallUtils) {
         mNativeArCoreInstallUtils = nativeArCoreInstallUtils;
     }
 
-    @Override
-    public void onFailureUiResponse(boolean retry) {
-        if (mNativeArCoreInstallUtils == 0) return;
-        if (retry) {
-            requestInstallArModule(mTab);
-        } else {
-            ArCoreInstallUtilsJni.get().onRequestInstallArModuleResult(
-                    mNativeArCoreInstallUtils, false);
-        }
-    }
-
-    @CalledByNative
-    private boolean canRequestInstallArModule() {
-        // We can only try to install the AR module if we are in a bundle mode.
-        return BundleUtils.isBundle();
-    }
-
-    @CalledByNative
-    private boolean shouldRequestInstallArModule() {
+    private static @ArCoreShim.Availability int getArCoreInstallStatus() {
         try {
-            // Try to find class in AR module that has not been obfuscated.
-            Class.forName("com.google.ar.core.ArCoreApk");
-            return false;
-        } catch (ClassNotFoundException e) {
-            return true;
+            return getArCoreShimInstance().checkAvailability(ContextUtils.getApplicationContext());
+        } catch (RuntimeException e) {
+            return ArCoreShim.Availability.UNSUPPORTED_DEVICE_NOT_CAPABLE;
         }
     }
 
     @CalledByNative
-    private void requestInstallArModule(Tab tab) {
-        mTab = tab;
-
-        ModuleInstallUi ui = new ModuleInstallUi(mTab, R.string.ar_module_title, this);
-        InstallEngine installEngine = new EngineFactory().getEngine();
-
-        ui.showInstallStartUi();
-
-        installEngine.install("ar", success -> {
-            assert shouldRequestInstallArModule() != success;
-
-            if (success) {
-                // As per documentation, it's recommended to issue a call to
-                // ArCoreApk.checkAvailability() early in application lifecycle & ignore the result
-                // so that subsequent calls can return cached result:
-                // https://developers.google.com/ar/develop/java/enable-arcore
-                // This is as early in the app lifecycle as it gets for us - just after installing
-                // AR module.
-                getArCoreInstallStatus();
-            }
-
-            if (mNativeArCoreInstallUtils != 0) {
-                if (success) {
-                    ui.showInstallSuccessUi();
-                    ArCoreInstallUtilsJni.get().onRequestInstallArModuleResult(
-                            mNativeArCoreInstallUtils, success);
-                } else {
-                    ui.showInstallFailureUi();
-                    // early exit - user will be offered a choice to retry & install flow will
-                    // continue from onFailureUiResponse().
-                    return;
-                }
-            }
-        });
-    }
-
-    private @ArCoreShim.Availability int getArCoreInstallStatus() {
-        return getArCoreShimInstance().checkAvailability(ContextUtils.getApplicationContext());
-    }
-
-    @CalledByNative
-    private boolean shouldRequestInstallSupportedArCore() {
+    private static boolean shouldRequestInstallSupportedArCore() {
         @ArCoreShim.Availability
         int availability = getArCoreInstallStatus();
         // Skip ARCore installation if we are certain that it is already installed.
@@ -151,7 +89,7 @@ public class ArCoreInstallUtils implements ModuleInstallUi.FailureUiListener {
 
         @ArCoreShim.Availability
         int arCoreAvailability = getArCoreInstallStatus();
-        final Activity activity = tab.getActivity();
+        final Activity activity = TabUtils.getActivity(tab);
         String infobarText = null;
         String buttonText = null;
         switch (arCoreAvailability) {
@@ -264,9 +202,8 @@ public class ArCoreInstallUtils implements ModuleInstallUi.FailureUiListener {
     }
 
     @NativeMethods
-    /* package */ interface ArConsentPromptNative {
-        void onRequestInstallArModuleResult(long nativeArCoreConsentPrompt, boolean success);
-        void onRequestInstallSupportedArCoreResult(long nativeArCoreConsentPrompt, boolean success);
+    /* package */ interface ArInstallHelperNative {
+        void onRequestInstallSupportedArCoreResult(long nativeArCoreInstallHelper, boolean success);
         void installArCoreDeviceProviderFactory();
     }
 }

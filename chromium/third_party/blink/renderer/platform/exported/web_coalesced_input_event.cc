@@ -4,53 +4,13 @@
 
 #include "third_party/blink/public/platform/web_coalesced_input_event.h"
 
-#include "third_party/blink/public/platform/web_gesture_event.h"
-#include "third_party/blink/public/platform/web_keyboard_event.h"
-#include "third_party/blink/public/platform/web_mouse_wheel_event.h"
-#include "third_party/blink/public/platform/web_pointer_event.h"
-#include "third_party/blink/public/platform/web_touch_event.h"
+#include "third_party/blink/public/common/input/web_gesture_event.h"
+#include "third_party/blink/public/common/input/web_keyboard_event.h"
+#include "third_party/blink/public/common/input/web_mouse_wheel_event.h"
+#include "third_party/blink/public/common/input/web_pointer_event.h"
+#include "third_party/blink/public/common/input/web_touch_event.h"
 
 namespace blink {
-
-namespace {
-
-struct WebInputEventDelete {
-  template <class EventType>
-  bool Execute(WebInputEvent* event) const {
-    if (!event)
-      return false;
-    DCHECK_EQ(sizeof(EventType), event->size());
-    delete static_cast<EventType*>(event);
-    return true;
-  }
-};
-
-template <typename Operator, typename ArgIn>
-bool Apply(Operator op, WebInputEvent::Type type, const ArgIn& arg_in) {
-  if (WebInputEvent::IsMouseEventType(type))
-    return op.template Execute<WebMouseEvent>(arg_in);
-  if (type == WebInputEvent::kMouseWheel)
-    return op.template Execute<WebMouseWheelEvent>(arg_in);
-  if (WebInputEvent::IsKeyboardEventType(type))
-    return op.template Execute<WebKeyboardEvent>(arg_in);
-  if (WebInputEvent::IsTouchEventType(type))
-    return op.template Execute<WebTouchEvent>(arg_in);
-  if (WebInputEvent::IsGestureEventType(type))
-    return op.template Execute<WebGestureEvent>(arg_in);
-  if (WebInputEvent::IsPointerEventType(type))
-    return op.template Execute<WebPointerEvent>(arg_in);
-
-  NOTREACHED() << "Unknown webkit event type " << type;
-  return false;
-}
-}
-
-void WebCoalescedInputEvent::WebInputEventDeleter::operator()(
-    WebInputEvent* event) const {
-  if (!event)
-    return;
-  Apply(WebInputEventDelete(), event->GetType(), event);
-}
 
 WebInputEvent* WebCoalescedInputEvent::EventPointer() {
   return event_.get();

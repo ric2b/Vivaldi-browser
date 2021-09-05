@@ -1,11 +1,12 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
 
 <link rel="import" href="chrome://resources/html/load_time_data.html">
-<link rel="import" href="../../route.html">
+<link rel="import" href="../os_route.html">
+<link rel="import" href="../../router.html">
 <link rel="import" href="../../settings_page/settings_animated_pages.html">
 <link rel="import" href="../../settings_page/settings_subpage.html">
 <link rel="import" href="../../settings_shared_css.html">
-<link rel="import" href="../../printing_page/cups_printers.html">
+<link rel="import" href="cups_printers.html">
 
 <dom-module id="os-settings-printing-page">
   <template>
@@ -14,7 +15,8 @@
         focus-config="[[focusConfig_]]">
       <div route-path="default">
         <cr-link-row id="cupsPrinters" label="$i18n{cupsPrintersTitle}"
-            on-click="onTapCupsPrinters_">
+            on-click="onTapCupsPrinters_"
+            role-description="$i18n{subpageArrowRoleDescription}">
         </cr-link-row>
       </div>
       <template is="dom-if" route-path="/cupsPrinters">

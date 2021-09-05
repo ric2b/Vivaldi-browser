@@ -6,24 +6,26 @@ package org.chromium.chrome.browser.feed;
 
 import androidx.annotation.NonNull;
 
-import com.google.android.libraries.feed.api.client.stream.Stream.ScrollListener;
-import com.google.android.libraries.feed.api.host.logging.ActionType;
-import com.google.android.libraries.feed.api.host.logging.BasicLoggingApi;
-import com.google.android.libraries.feed.api.host.logging.ContentLoggingData;
-import com.google.android.libraries.feed.api.host.logging.ElementLoggingData;
-import com.google.android.libraries.feed.api.host.logging.InternalFeedError;
-import com.google.android.libraries.feed.api.host.logging.RequestReason;
-import com.google.android.libraries.feed.api.host.logging.ScrollType;
-import com.google.android.libraries.feed.api.host.logging.SessionEvent;
-import com.google.android.libraries.feed.api.host.logging.SpinnerType;
-import com.google.android.libraries.feed.api.host.logging.Task;
-import com.google.android.libraries.feed.api.host.logging.ZeroStateShowReason;
-import com.google.search.now.ui.action.FeedActionProto;
-
+import org.chromium.base.ContextUtils;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
+import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.chrome.browser.feed.library.api.client.stream.Stream.ScrollListener;
+import org.chromium.chrome.browser.feed.library.api.host.logging.ActionType;
+import org.chromium.chrome.browser.feed.library.api.host.logging.BasicLoggingApi;
+import org.chromium.chrome.browser.feed.library.api.host.logging.ContentLoggingData;
+import org.chromium.chrome.browser.feed.library.api.host.logging.ElementLoggingData;
+import org.chromium.chrome.browser.feed.library.api.host.logging.InternalFeedError;
+import org.chromium.chrome.browser.feed.library.api.host.logging.RequestReason;
+import org.chromium.chrome.browser.feed.library.api.host.logging.ScrollType;
+import org.chromium.chrome.browser.feed.library.api.host.logging.SessionEvent;
+import org.chromium.chrome.browser.feed.library.api.host.logging.SpinnerType;
+import org.chromium.chrome.browser.feed.library.api.host.logging.Task;
+import org.chromium.chrome.browser.feed.library.api.host.logging.ZeroStateShowReason;
+import org.chromium.chrome.browser.feed.library.common.time.Clock;
 import org.chromium.chrome.browser.ntp.NewTabPageUma;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.components.feed.core.proto.ui.action.FeedActionProto;
 import org.chromium.ui.mojom.WindowOpenDisposition;
 
 import java.util.List;
@@ -35,7 +37,24 @@ import java.util.concurrent.TimeUnit;
  */
 @JNINamespace("feed")
 public class FeedLoggingBridge implements BasicLoggingApi {
+    private static final String TAG = "FeedLoggingBridge";
     private long mNativeFeedLoggingBridge;
+    private static final int MIN_SCROLL_THRESHOLD_DP = 160; // one inch.
+    private static final long VISIT_TIME_THRESHOLD = 1000 * 60 * 5; // 5 min in ms.
+    private boolean mEngagedReported;
+    private boolean mEngagedSimpleReported;
+    private boolean mScrolledReported;
+    private long mVisitStartTime;
+    private Clock mClock;
+
+    // This enum is used for UMA, don't move or reassign these numbers.
+    public @interface FeedEngagementType {
+        int FEED_ENGAGED = 0;
+        int FEED_ENGAGED_SIMPLE = 1;
+        int FEED_INTERACTED = 2;
+        int FEED_SCROLLED = 3;
+        int NUM_ENTRIES = 4;
+    }
 
     /**
      * Creates a {@link FeedLoggingBridge} for accessing native feed logging
@@ -43,8 +62,13 @@ public class FeedLoggingBridge implements BasicLoggingApi {
      *
      * @param profile {@link Profile} of the user we are rendering the Feed for.
      */
-    public FeedLoggingBridge(Profile profile) {
+    public FeedLoggingBridge(Profile profile, Clock clock) {
         mNativeFeedLoggingBridge = FeedLoggingBridgeJni.get().init(FeedLoggingBridge.this, profile);
+        mEngagedReported = false;
+        mEngagedSimpleReported = false;
+        mScrolledReported = false;
+        mClock = clock;
+        mVisitStartTime = 0;
     }
 
     /** Cleans up native half of this bridge. */
@@ -297,7 +321,7 @@ public class FeedLoggingBridge implements BasicLoggingApi {
 
     @Override
     public void onScroll(@ScrollType int scrollType, int distanceScrolled) {
-        // TODO(https://crbug.com/924739): Implementation.
+        reportScrollActivity(distanceScrolled);
     }
 
     @Override
@@ -337,6 +361,7 @@ public class FeedLoggingBridge implements BasicLoggingApi {
             case ActionType.DOWNLOAD:
                 return WindowOpenDisposition.SAVE_TO_DISK;
             case ActionType.LEARN_MORE:
+            case ActionType.MANAGE_INTERESTS:
             case ActionType.UNKNOWN:
             default:
                 return WindowOpenDisposition.UNKNOWN;
@@ -353,6 +378,9 @@ public class FeedLoggingBridge implements BasicLoggingApi {
                 break;
             case ActionType.LEARN_MORE:
                 NewTabPageUma.recordAction(NewTabPageUma.ACTION_CLICKED_LEARN_MORE);
+                break;
+            case ActionType.MANAGE_INTERESTS:
+                NewTabPageUma.recordAction(NewTabPageUma.ACTION_CLICKED_MANAGE_INTERESTS);
                 break;
             case ActionType.DOWNLOAD:
             case ActionType.UNKNOWN:
@@ -393,6 +421,71 @@ public class FeedLoggingBridge implements BasicLoggingApi {
 
         @Override
         public void onScrolled(int dx, int dy) {}
+    }
+
+    @Override
+    public void reportScrollActivity(int scrollAmount) {
+        // Report each engagement type if we have not already reported it this session.
+        recordEngagement(scrollAmount, false /* no user interaction */);
+
+        if (!mScrolledReported) {
+            recordEngagementType(FeedEngagementType.FEED_SCROLLED);
+            mScrolledReported = true;
+        }
+    }
+
+    @Override
+    public void reportFeedInteraction() {
+        recordEngagement(0, true /* user interacted */);
+        recordEngagementType(FeedEngagementType.FEED_INTERACTED);
+    }
+
+    private int convertPixelsToDP(int pixels) {
+        return (int) (pixels
+                / ContextUtils.getApplicationContext().getResources().getDisplayMetrics().density);
+    }
+
+    /** Records FEED_ENGAGED and FEED_ENGAGED_SIMPLE if appropriate. */
+    private void recordEngagement(int scrollAmount, boolean interacted) {
+        // Convert scrollAmount from pixels to DP.
+        int dpScrolled = 0;
+        if (scrollAmount > 0) {
+            dpScrolled = convertPixelsToDP(scrollAmount);
+        }
+
+        resetVisitIfNeeded();
+
+        // Report the user as engaged-simple if they have scrolled any amount or interacted
+        // with the card, and we have not already reported it for this chrome run.
+        if (!mEngagedSimpleReported && (scrollAmount > 0 || interacted)) {
+            recordEngagementType(FeedEngagementType.FEED_ENGAGED_SIMPLE);
+            mEngagedSimpleReported = true;
+        }
+
+        // Report the user as engaged if they have scrolled more than the threshold or interacted
+        // with the card, and we have not already reported it this chrome run.
+        if (!mEngagedReported && (dpScrolled > MIN_SCROLL_THRESHOLD_DP || interacted)) {
+            recordEngagementType(FeedEngagementType.FEED_ENGAGED);
+            mEngagedReported = true;
+        }
+    }
+
+    /**
+     * If enough time has elapsed since we the user started a visit, start a new visit.
+     *  If the user interacts within the window, reset the window.
+     */
+    private void resetVisitIfNeeded() {
+        if (mClock.elapsedRealtime() - mVisitStartTime > VISIT_TIME_THRESHOLD) {
+            mEngagedReported = false;
+            mEngagedSimpleReported = false;
+        }
+        // Reset the last active time for session measurement.
+        mVisitStartTime = mClock.elapsedRealtime();
+    }
+
+    private void recordEngagementType(int engagementType) {
+        RecordHistogram.recordEnumeratedHistogram("ContentSuggestions.Feed.EngagementType",
+                engagementType, FeedEngagementType.NUM_ENTRIES);
     }
 
     @NativeMethods

@@ -40,8 +40,8 @@ class SyncableService : public base::SupportsWeakPtr<SyncableService> {
   // 3) You want to signal to sync that it's safe to start now that the
   // browser's IO-intensive startup process is over. The ModelType parameter is
   // included so that the recieving end can track usage and timing statistics,
-  // make pptimizations or tradeoffs by type, etc.
-  using StartSyncFlare = base::Callback<void(ModelType)>;
+  // make optimizations or tradeoffs by type, etc.
+  using StartSyncFlare = base::RepeatingCallback<void(ModelType)>;
 
   // Allows the SyncableService to delay sync events (all below) until the model
   // becomes ready to sync. Callers must ensure there is no previous ongoing
@@ -73,10 +73,6 @@ class SyncableService : public base::SupportsWeakPtr<SyncableService> {
   //          otherwise.
   virtual SyncError ProcessSyncChanges(const base::Location& from_here,
                                        const SyncChangeList& change_list) = 0;
-
-  // TODO(crbug.com/870624): We don't seem to use this function anywhere, so
-  // we should simply remove it and simplify all implementations.
-  virtual SyncDataList GetAllSyncData(ModelType type) const = 0;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(SyncableService);

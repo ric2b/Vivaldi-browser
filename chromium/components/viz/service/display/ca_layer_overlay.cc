@@ -19,6 +19,11 @@ namespace viz {
 
 namespace {
 
+// The CoreAnimation renderer's performance starts suffering when too many
+// quads are promoted to CALayers. At extremes, corruption can occur.
+// https://crbug.com/1022116
+constexpr size_t kTooManyQuads = 128;
+
 // If there are too many RenderPassDrawQuads, we shouldn't use Core
 // Animation to present them as individual layers, since that potentially
 // doubles the amount of work needed to present them. cc has to blit them into
@@ -56,6 +61,7 @@ enum CALayerResult {
   // CA_LAYER_FAILED_QUAD_ROUNDED_CORNER = 24,
   CA_LAYER_FAILED_QUAD_ROUNDED_CORNER_CLIP_MISMATCH = 25,
   CA_LAYER_FAILED_QUAD_ROUNDED_CORNER_NOT_UNIFORM = 26,
+  CA_LAYER_FAILED_TOO_MANY_QUADS = 27,
   CA_LAYER_FAILED_COUNT,
 };
 
@@ -173,7 +179,7 @@ CALayerResult FromTileQuad(DisplayResourceProvider* resource_provider,
   return CA_LAYER_SUCCESS;
 }
 
-class CALayerOverlayProcessor {
+class CALayerOverlayProcessorInternal {
  public:
   CALayerResult FromDrawQuad(
       DisplayResourceProvider* resource_provider,
@@ -190,7 +196,8 @@ class CALayerOverlayProcessor {
       return CA_LAYER_FAILED_QUAD_BLEND_MODE;
 
     // Early-out for invisible quads.
-    if (quad->shared_quad_state->opacity == 0.f) {
+    if (quad->shared_quad_state->opacity == 0.f ||
+        quad->visible_rect.IsEmpty()) {
       *skip = true;
       return CA_LAYER_SUCCESS;
     }
@@ -290,7 +297,7 @@ CALayerOverlay::CALayerOverlay(const CALayerOverlay& other) = default;
 
 CALayerOverlay::~CALayerOverlay() {}
 
-bool ProcessForCALayerOverlays(
+bool CALayerOverlayProcessor::ProcessForCALayerOverlays(
     DisplayResourceProvider* resource_provider,
     const gfx::RectF& display_rect,
     const QuadList& quad_list,
@@ -298,14 +305,25 @@ bool ProcessForCALayerOverlays(
         render_pass_filters,
     const base::flat_map<RenderPassId, cc::FilterOperations*>&
         render_pass_backdrop_filters,
-    CALayerOverlayList* ca_layer_overlays) {
+    CALayerOverlayList* ca_layer_overlays) const {
   CALayerResult result = CA_LAYER_SUCCESS;
-  ca_layer_overlays->reserve(quad_list.size());
+
+  size_t num_visible_quads = quad_list.size();
+  for (const auto* quad : quad_list) {
+    if (quad->shared_quad_state->opacity == 0.f ||
+        quad->visible_rect.IsEmpty()) {
+      num_visible_quads--;
+    }
+  }
+  if (num_visible_quads < kTooManyQuads)
+    ca_layer_overlays->reserve(num_visible_quads);
+  else
+    result = CA_LAYER_FAILED_TOO_MANY_QUADS;
 
   int render_pass_draw_quad_count = 0;
-  CALayerOverlayProcessor processor;
-  for (auto it = quad_list.BackToFrontBegin(); it != quad_list.BackToFrontEnd();
-       ++it) {
+  CALayerOverlayProcessorInternal processor;
+  for (auto it = quad_list.BackToFrontBegin();
+       result == CA_LAYER_SUCCESS && it != quad_list.BackToFrontEnd(); ++it) {
     const DrawQuad* quad = *it;
     CALayerOverlay ca_layer;
     bool skip = false;

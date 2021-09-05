@@ -3,12 +3,8 @@
 # found in the LICENSE file.
 
 source_set("setup") {
-  public_deps = [
-    ":common",
-  ]
-  deps = [
-    "//remoting/host",
-  ]
+  public_deps = [ ":common" ]
+  deps = [ "//remoting/host" ]
 }
 
 source_set("common") {
@@ -49,6 +45,10 @@ source_set("common") {
     "//services/network/public/cpp",
     "//services/network/public/mojom",
   ]
+
+  if (is_mac) {
+    deps += [ "//remoting/host/mac:permission_checking" ]
+  }
 
   if (is_mac || is_ios) {
     deps += [ "//remoting/host/mac:constants" ]

@@ -48,33 +48,8 @@ base::string16 RequestFileSystemDialogView::GetAccessibleWindowTitle() const {
       IDS_FILE_SYSTEM_REQUEST_FILE_SYSTEM_DIALOG_TITLE);
 }
 
-base::string16 RequestFileSystemDialogView::GetDialogButtonLabel(
-    ui::DialogButton button) const {
-  switch (button) {
-    case ui::DIALOG_BUTTON_OK:
-      return l10n_util::GetStringUTF16(
-          IDS_FILE_SYSTEM_REQUEST_FILE_SYSTEM_DIALOG_ALLOW_BUTTON);
-    case ui::DIALOG_BUTTON_CANCEL:
-      return l10n_util::GetStringUTF16(
-          IDS_FILE_SYSTEM_REQUEST_FILE_SYSTEM_DIALOG_DENY_BUTTON);
-    default:
-      NOTREACHED();
-  }
-  return base::string16();
-}
-
 ui::ModalType RequestFileSystemDialogView::GetModalType() const {
   return ui::MODAL_TYPE_CHILD;
-}
-
-bool RequestFileSystemDialogView::Cancel() {
-  callback_.Run(ui::DIALOG_BUTTON_CANCEL);
-  return true;
-}
-
-bool RequestFileSystemDialogView::Accept() {
-  callback_.Run(ui::DIALOG_BUTTON_OK);
-  return true;
 }
 
 gfx::Size RequestFileSystemDialogView::CalculatePreferredSize() const {
@@ -88,7 +63,25 @@ RequestFileSystemDialogView::RequestFileSystemDialogView(
     bool writable,
     const base::Callback<void(ui::DialogButton)>& callback)
     : callback_(callback) {
-  DialogDelegate::set_default_button(ui::DIALOG_BUTTON_CANCEL);
+  DialogDelegate::SetDefaultButton(ui::DIALOG_BUTTON_CANCEL);
+  DialogDelegate::SetButtonLabel(
+      ui::DIALOG_BUTTON_OK,
+      l10n_util::GetStringUTF16(
+          IDS_FILE_SYSTEM_REQUEST_FILE_SYSTEM_DIALOG_ALLOW_BUTTON));
+  DialogDelegate::SetButtonLabel(
+      ui::DIALOG_BUTTON_CANCEL,
+      l10n_util::GetStringUTF16(
+          IDS_FILE_SYSTEM_REQUEST_FILE_SYSTEM_DIALOG_DENY_BUTTON));
+
+  auto run_callback = [](RequestFileSystemDialogView* dialog,
+                         ui::DialogButton button) {
+    dialog->callback_.Run(button);
+  };
+  DialogDelegate::SetAcceptCallback(base::BindOnce(
+      run_callback, base::Unretained(this), ui::DIALOG_BUTTON_OK));
+  DialogDelegate::SetCancelCallback(base::BindOnce(
+      run_callback, base::Unretained(this), ui::DIALOG_BUTTON_CANCEL));
+
   DCHECK(!callback_.is_null());
   set_margins(ChromeLayoutProvider::Get()->GetDialogInsetsForContentType(
       views::TEXT, views::TEXT));

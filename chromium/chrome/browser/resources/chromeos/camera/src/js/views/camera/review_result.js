@@ -2,27 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-'use strict';
-
-/**
- * Namespace for the Camera app.
- */
-var cca = cca || {};
-
-/**
- * Namespace for views.
- */
-cca.views = cca.views || {};
-
-/**
- * Namespace for Camera view.
- */
-cca.views.camera = cca.views.camera || {};
+import {assertInstanceof} from '../../chrome_util.js';
+import * as state from '../../state.js';
+import * as util from '../../util.js';
 
 /**
  * Creates a controller for reviewing intent result in Camera view.
  */
-cca.views.camera.ReviewResult = class {
+export class ReviewResult {
   /**
    * @public
    */
@@ -31,15 +18,39 @@ cca.views.camera.ReviewResult = class {
      * @const {!HTMLImageElement}
      * @private
      */
-    this.reviewPhotoResult_ = /** @type {!HTMLImageElement} */ (
-        document.querySelector('#review-photo-result'));
+    this.reviewPhotoResult_ = assertInstanceof(
+        document.querySelector('#review-photo-result'), HTMLImageElement);
 
     /**
      * @const {!HTMLVideoElement}
      * @private
      */
-    this.reviewVideoResult_ = /** @type {!HTMLVideoElement} */ (
-        document.querySelector('#review-video-result'));
+    this.reviewVideoResult_ = assertInstanceof(
+        document.querySelector('#review-video-result'), HTMLVideoElement);
+
+    /**
+     * @const {!HTMLButtonElement}
+     * @private
+     */
+    this.confirmResultButton_ =
+        /** @type {!HTMLButtonElement} */ (
+            document.querySelector('#confirm-result'));
+
+    /**
+     * @const {!HTMLButtonElement}
+     * @private
+     */
+    this.cancelResultButton_ =
+        /** @type {!HTMLButtonElement} */ (
+            document.querySelector('#cancel-result'));
+
+    /**
+     * @const {!HTMLButtonElement}
+     * @private
+     */
+    this.playResultVideoButton_ =
+        /** @type {!HTMLButtonElement} */ (
+            document.querySelector('#play-result-video'));
 
     /**
      * Function resolving open result call called with whether user confirms
@@ -51,14 +62,15 @@ cca.views.camera.ReviewResult = class {
 
     this.reviewVideoResult_.onended = () => {
       this.reviewVideoResult_.currentTime = 0;
-      cca.state.set('playing-result-video', false);
+      state.set(state.State.PLAYING_RESULT_VIDEO, false);
     };
 
-    const addClickListener = (selector, handler) =>
-        document.querySelector(selector).addEventListener('click', handler);
-    addClickListener('#confirm-result', () => this.close_(true));
-    addClickListener('#cancel-result', () => this.close_(false));
-    addClickListener('#play-result-video', () => this.playResultVideo_());
+    this.confirmResultButton_.addEventListener(
+        'click', () => this.close_(true));
+    this.cancelResultButton_.addEventListener(
+        'click', () => this.close_(false));
+    this.playResultVideoButton_.addEventListener(
+        'click', () => this.playResultVideo_());
   }
 
   /**
@@ -66,10 +78,13 @@ cca.views.camera.ReviewResult = class {
    * @private
    */
   playResultVideo_() {
-    if (cca.state.get('playing-result-video')) {
+    if (state.get(state.State.PLAYING_RESULT_VIDEO)) {
       return;
     }
-    cca.state.set('playing-result-video', true);
+    state.set(state.State.PLAYING_RESULT_VIDEO, true);
+    if (document.activeElement === this.playResultVideoButton_) {
+      this.confirmResultButton_.focus();
+    }
     this.reviewVideoResult_.play();
   }
 
@@ -86,10 +101,10 @@ cca.views.camera.ReviewResult = class {
     }
     const resolve = this.resolveOpen_;
     this.resolveOpen_ = null;
-    cca.state.set('review-result', false);
-    cca.state.set('review-photo-result', false);
-    cca.state.set('review-video-result', false);
-    cca.state.set('playing-result-video', false);
+    state.set(state.State.REVIEW_RESULT, false);
+    state.set(state.State.REVIEW_PHOTO_RESULT, false);
+    state.set(state.State.REVIEW_VIDEO_RESULT, false);
+    state.set(state.State.PLAYING_RESULT_VIDEO, false);
     this.reviewPhotoResult_.src = '';
     this.reviewVideoResult_.src = '';
     resolve(confirmed);
@@ -102,10 +117,12 @@ cca.views.camera.ReviewResult = class {
    *     with the photo result.
    */
   async openPhoto(blob) {
-    const img = await cca.util.blobToImage(blob);
+    const img = await util.blobToImage(blob);
     this.reviewPhotoResult_.src = img.src;
-    cca.state.set('review-photo-result', true);
-    cca.state.set('review-result', true);
+    state.set(state.State.REVIEW_PHOTO_RESULT, true);
+    state.set(state.State.REVIEW_RESULT, true);
+    this.confirmResultButton_.focus();
+
     return new Promise((resolve) => {
       this.resolveOpen_ = resolve;
     });
@@ -119,10 +136,12 @@ cca.views.camera.ReviewResult = class {
    */
   async openVideo(fileEntry) {
     this.reviewVideoResult_.src = fileEntry.toURL();
-    cca.state.set('review-video-result', true);
-    cca.state.set('review-result', true);
+    state.set(state.State.REVIEW_VIDEO_RESULT, true);
+    state.set(state.State.REVIEW_RESULT, true);
+    this.confirmResultButton_.focus();
+
     return new Promise((resolve) => {
       this.resolveOpen_ = resolve;
     });
   }
-};
+}

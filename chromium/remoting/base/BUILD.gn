@@ -69,7 +69,7 @@ source_set("base") {
     "//remoting/base/grpc_support",
     "//third_party/libvpx",
     "//third_party/libyuv",
-    "//third_party/webrtc/modules/desktop_capture:primitives",
+    "//third_party/webrtc_overrides:webrtc_component",
     "//url",
   ]
   if (is_nacl) {
@@ -114,9 +114,7 @@ source_set("authorization") {
     "//net",
   ]
 
-  deps = [
-    "//remoting/proto/remoting/v1:directory_grpc_library",
-  ]
+  deps = [ "//remoting/proto/remoting/v1:directory_grpc_library" ]
 }
 
 source_set("breakpad") {
@@ -129,9 +127,7 @@ source_set("breakpad") {
 
   configs += [ "//build/config/compiler:wexit_time_destructors" ]
 
-  deps = [
-    "//base",
-  ]
+  deps = [ "//base" ]
 
   if (is_mac) {
     deps += [ "//third_party/breakpad" ]
@@ -151,9 +147,7 @@ static_library("test_support") {
     "test_rsa_key_pair.h",
   ]
 
-  deps = [
-    "//remoting/proto",
-  ]
+  deps = [ "//remoting/proto" ]
   public_deps = [
     ":authorization",
     ":base",
@@ -198,7 +192,7 @@ source_set("unit_tests") {
     "//mojo/core/embedder",
     "//net:test_support",
     "//third_party/libyuv",
-    "//third_party/webrtc/modules/desktop_capture:primitives",
+    "//third_party/webrtc_overrides:webrtc_component",
   ]
 
   if (is_win || is_mac || is_chromeos) {

@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="pl">
+<translation id="1169602411434249000">Blokuj trackery</translation>
 <translation id="1397811292916898096">Szukaj w <ph name="PRODUCT_NAME" /></translation>
+<translation id="1598449788754183301">Przełącz normalne/prywatne karty</translation>
 <translation id="1644574205037202324">Historia</translation>
 <translation id="17513872634828108">Otwarte karty</translation>
 <translation id="1829244130665387512">Znajdź na stronie</translation>
@@ -10,9 +12,11 @@
 <translation id="2633278372998075009">Karty prywatne</translation>
 <translation id="3076631378407175873">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. Wszelkie prawa zastrzeżone.</translation>
 <translation id="3234355010754616171">Nowa karta prywatna</translation>
+<translation id="3518985090088779359">Akceptuj i kontynuuj</translation>
 <translation id="3700829948786686853">Witamy w Vivaldi</translation>
 <translation id="4121750346708795461">Korzystając z tej aplikacji, akceptujesz <ph name="BEGIN_LINK1" />Warunki korzystania z Vivaldi<ph name="END_LINK1" /> oraz <ph name="BEGIN_LINK2" />Politykę prywatności<ph name="END_LINK2" />.</translation>
 <translation id="4243710787042215766">Otwórz w karcie prywatnej</translation>
+<translation id="4526803704855831732">Karty prywatne</translation>
 <translation id="4883379392681899581">Opuść tryb prywatny</translation>
 <translation id="4943872375798546930">Brak wyników</translation>
 <translation id="5118676864324397542">Dane aplikacji <ph name="APP_NAME" /></translation>
@@ -31,7 +35,6 @@ Jeśli chcesz dostosować wyszukiwane hasło, naciśnij je i przytrzymaj, by je
 <translation id="7519434535192513364">Funkcja "Dotknij, aby wyszukać" jest dostępna wyłącznie, gdy domyślną wyszukiwarką w przeglądarce Vivaldi jest Google. Funkcja ta przekazuje słowo wraz z jego kontekstem do wyszukiwarki Google. Możesz ją wyłączyć w <ph name="BEGIN_LINK" />ustawieniach<ph name="END_LINK" />.</translation>
 <translation id="7649070708921625228">Pomoc</translation>
 <translation id="804786196054284061">Warunki korzystania z Vivaldi</translation>
-<translation id="8428213095426709021">Ustawienia</translation>
 <translation id="8820817407110198400">Zakładki</translation>
 <translation id="9063523880881406963">Wyłącz opcję „Żądanie wersji na komputer”</translation>
 <translation id="9080642952018487277">Przejdź do trybu prywatnego</translation>

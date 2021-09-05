@@ -25,9 +25,12 @@ V4L2DevicePoller::V4L2DevicePoller(V4L2Device* const device,
 }
 
 V4L2DevicePoller::~V4L2DevicePoller() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(client_sequence_checker_);
-
-  StopPolling();
+  // It's possible the V4L2 device poller gets destroyed on a different thread
+  // than expected if e.g. destroying a decoder immediately after creation. The
+  // check here is not thread-safe, but using a lock or atomic state doesn't
+  // make sense as destruction is never thread-safe.
+  if (poll_thread_.IsRunning())
+    StopPolling();
 }
 
 bool V4L2DevicePoller::StartPolling(EventCallback event_callback,
@@ -36,6 +39,8 @@ bool V4L2DevicePoller::StartPolling(EventCallback event_callback,
 
   if (IsPolling())
     return true;
+
+  DVLOGF(4) << "Starting polling";
 
   client_task_runner_ = base::SequencedTaskRunnerHandle::Get();
   error_callback_ = error_callback;
@@ -52,6 +57,8 @@ bool V4L2DevicePoller::StartPolling(EventCallback event_callback,
       FROM_HERE, base::BindOnce(&V4L2DevicePoller::DevicePollTask,
                                 base::Unretained(this)));
 
+  DVLOGF(3) << "Polling thread started";
+
   SchedulePoll();
 
   return true;
@@ -62,6 +69,8 @@ bool V4L2DevicePoller::StopPolling() {
 
   if (!IsPolling())
     return true;
+
+  DVLOGF(4) << "Stopping polling";
 
   stop_polling_.store(true);
 
@@ -80,6 +89,8 @@ bool V4L2DevicePoller::StopPolling() {
     return false;
   }
 
+  DVLOGF(4) << "Polling thread stopped";
+
   return true;
 }
 
@@ -96,6 +107,8 @@ void V4L2DevicePoller::SchedulePoll() {
   if (!IsPolling())
     return;
 
+  DVLOGF(4) << "Scheduling poll";
+
   trigger_poll_.Signal();
 }
 
@@ -103,17 +116,23 @@ void V4L2DevicePoller::DevicePollTask() {
   DCHECK(poll_thread_.task_runner()->RunsTasksInCurrentSequence());
 
   while (true) {
+    DVLOGF(4) << "Waiting for poll to be scheduled.";
     trigger_poll_.Wait();
 
-    if (stop_polling_)
+    if (stop_polling_) {
+      DVLOGF(4) << "Poll stopped, exiting.";
       break;
+    }
 
     bool event_pending = false;
+    DVLOGF(4) << "Polling device.";
     if (!device_->Poll(true, &event_pending)) {
+      VLOGF(1) << "An error occured while polling, calling error callback";
       client_task_runner_->PostTask(FROM_HERE, error_callback_);
       return;
     }
 
+    DVLOGF(4) << "Poll returned, calling event callback.";
     client_task_runner_->PostTask(FROM_HERE,
                                   base::Bind(event_callback_, event_pending));
   }

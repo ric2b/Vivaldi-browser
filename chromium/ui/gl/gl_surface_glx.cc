@@ -12,6 +12,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/no_destructor.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/atomic_flag.h"
 #include "base/synchronization/lock.h"
@@ -459,7 +460,10 @@ bool GLSurfaceGLX::InitializeOneOff() {
     return false;
   }
 
-  const auto& visual_info = gl::GLVisualPickerGLX::GetInstance()->rgba_visual();
+  auto* visual_picker = gl::GLVisualPickerGLX::GetInstance();
+  XVisualInfo visual_info = visual_picker->rgba_visual();
+  if (!visual_info.visual)
+    visual_info = visual_picker->system_visual();
   g_visual = visual_info.visual;
   g_depth = visual_info.depth;
   g_colormap =
@@ -530,8 +534,23 @@ void GLSurfaceGLX::ShutdownOneOff() {
 }
 
 // static
+std::string GLSurfaceGLX::QueryGLXExtensions() {
+  Display* display = gfx::GetXDisplay();
+  const int screen = (display ? DefaultScreen(display) : 0);
+  const char* extensions = glXQueryExtensionsString(display, screen);
+  if (extensions) {
+    return std::string(extensions);
+  }
+  return "";
+}
+
+// static
 const char* GLSurfaceGLX::GetGLXExtensions() {
-  return glXQueryExtensionsString(gfx::GetXDisplay(), 0);
+  static base::NoDestructor<std::string> glx_extensions("");
+  if (glx_extensions->empty()) {
+    *glx_extensions = QueryGLXExtensions();
+  }
+  return glx_extensions->c_str();
 }
 
 // static
@@ -690,7 +709,7 @@ void NativeViewGLSurfaceGLX::Destroy() {
 
 bool NativeViewGLSurfaceGLX::Resize(const gfx::Size& size,
                                     float scale_factor,
-                                    ColorSpace color_space,
+                                    const gfx::ColorSpace& color_space,
                                     bool has_alpha) {
   size_ = size;
   glXWaitGL();
@@ -745,10 +764,6 @@ void* NativeViewGLSurfaceGLX::GetConfig() {
 
 GLSurfaceFormat NativeViewGLSurfaceGLX::GetFormat() {
   return GLSurfaceFormat();
-}
-
-unsigned long NativeViewGLSurfaceGLX::GetCompatibilityKey() {
-  return XVisualIDFromVisual(g_visual);
 }
 
 gfx::SwapResult NativeViewGLSurfaceGLX::PostSubBuffer(
@@ -883,10 +898,6 @@ void* UnmappedNativeViewGLSurfaceGLX::GetConfig() {
 
 GLSurfaceFormat UnmappedNativeViewGLSurfaceGLX::GetFormat() {
   return GLSurfaceFormat();
-}
-
-unsigned long UnmappedNativeViewGLSurfaceGLX::GetCompatibilityKey() {
-  return XVisualIDFromVisual(g_visual);
 }
 
 UnmappedNativeViewGLSurfaceGLX::~UnmappedNativeViewGLSurfaceGLX() {

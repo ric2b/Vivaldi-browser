@@ -199,9 +199,10 @@ void RealtimeAudioDestinationHandler::Render(
   // takes time for the destination to stop, but we want to stop pulling before
   // the destination has actually stopped.
   if (IsPullingAudioGraphAllowed()) {
-    // Renders the graph by pulling all the input(s) to this node. This will in
-    // turn pull on their input(s), all the way backwards through the graph.
-    AudioBus* rendered_bus = Input(0).Pull(destination_bus, number_of_frames);
+    // Renders the graph by pulling all the inputs to this node. This will in
+    // turn pull on their inputs, all the way backwards through the graph.
+    scoped_refptr<AudioBus> rendered_bus =
+        Input(0).Pull(destination_bus, number_of_frames);
 
     DCHECK(rendered_bus);
     if (!rendered_bus) {
@@ -209,7 +210,7 @@ void RealtimeAudioDestinationHandler::Render(
       // summing bus will return as nullptr. Then zero out the output.
       destination_bus->Zero();
     } else if (rendered_bus != destination_bus) {
-      // In-place processing was not possible. Copy the rendererd result to the
+      // In-place processing was not possible. Copy the rendered result to the
       // given |destination_bus| buffer.
       destination_bus->CopyFrom(*rendered_bus);
     }

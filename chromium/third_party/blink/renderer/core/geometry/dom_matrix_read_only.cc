@@ -4,6 +4,9 @@
 
 #include "third_party/blink/renderer/core/geometry/dom_matrix_read_only.h"
 
+#include "third_party/blink/renderer/bindings/core/v8/v8_dom_matrix_2d_init.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_dom_matrix_init.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_dom_point_init.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_object_builder.h"
 #include "third_party/blink/renderer/core/css/css_identifier_value.h"
 #include "third_party/blink/renderer/core/css/css_to_length_conversion_data.h"
@@ -11,9 +14,7 @@
 #include "third_party/blink/renderer/core/css/parser/css_parser.h"
 #include "third_party/blink/renderer/core/css/resolver/transform_builder.h"
 #include "third_party/blink/renderer/core/geometry/dom_matrix.h"
-#include "third_party/blink/renderer/core/geometry/dom_matrix_init.h"
 #include "third_party/blink/renderer/core/geometry/dom_point.h"
-#include "third_party/blink/renderer/core/geometry/dom_point_init.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 
@@ -107,7 +108,7 @@ DOMMatrixReadOnly* DOMMatrixReadOnly::Create(
 
 DOMMatrixReadOnly* DOMMatrixReadOnly::Create(
     ExecutionContext* execution_context,
-    StringOrUnrestrictedDoubleSequence& init,
+    const StringOrUnrestrictedDoubleSequence& init,
     ExceptionState& exception_state) {
   if (init.IsString()) {
     if (!execution_context->IsDocument()) {
@@ -146,29 +147,31 @@ DOMMatrixReadOnly* DOMMatrixReadOnly::CreateForSerialization(double sequence[],
 DOMMatrixReadOnly* DOMMatrixReadOnly::fromFloat32Array(
     NotShared<DOMFloat32Array> float32_array,
     ExceptionState& exception_state) {
-  if (float32_array.View()->length() != 6 &&
-      float32_array.View()->length() != 16) {
+  if (float32_array.View()->lengthAsSizeT() != 6 &&
+      float32_array.View()->lengthAsSizeT() != 16) {
     exception_state.ThrowTypeError(
         "The sequence must contain 6 elements for a 2D matrix or 16 elements a "
         "for 3D matrix.");
     return nullptr;
   }
   return MakeGarbageCollected<DOMMatrixReadOnly>(
-      float32_array.View()->Data(), float32_array.View()->length());
+      float32_array.View()->Data(),
+      static_cast<int>(float32_array.View()->lengthAsSizeT()));
 }
 
 DOMMatrixReadOnly* DOMMatrixReadOnly::fromFloat64Array(
     NotShared<DOMFloat64Array> float64_array,
     ExceptionState& exception_state) {
-  if (float64_array.View()->length() != 6 &&
-      float64_array.View()->length() != 16) {
+  if (float64_array.View()->lengthAsSizeT() != 6 &&
+      float64_array.View()->lengthAsSizeT() != 16) {
     exception_state.ThrowTypeError(
         "The sequence must contain 6 elements for a 2D matrix or 16 elements "
         "for a 3D matrix.");
     return nullptr;
   }
   return MakeGarbageCollected<DOMMatrixReadOnly>(
-      float64_array.View()->Data(), float64_array.View()->length());
+      float64_array.View()->Data(),
+      static_cast<int>(float64_array.View()->lengthAsSizeT()));
 }
 
 DOMMatrixReadOnly* DOMMatrixReadOnly::fromMatrix2D(

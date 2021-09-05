@@ -55,13 +55,8 @@ namespace keyboard {
 class KeyboardUIFactory;
 }
 
-namespace service_manager {
-class Connector;
-}
-
 namespace ui {
 class ContextFactory;
-class ContextFactoryPrivate;
 class UserActivityDetector;
 class UserActivityPowerManagerNotifier;
 }  // namespace ui
@@ -98,6 +93,7 @@ class NativeCursorManagerAsh;
 class AshTouchTransformController;
 class AssistantController;
 class AutoclickController;
+class BackGestureEventHandler;
 class BacklightsForcedOffSetter;
 class BluetoothNotificationController;
 class BluetoothPowerController;
@@ -123,7 +119,7 @@ class FocusCycler;
 class HighContrastController;
 class HighlighterController;
 class HomeScreenController;
-class ImeController;
+class ImeControllerImpl;
 class ImmersiveContext;
 class KeyAccessibilityEnabler;
 class KeyboardBrightnessControlDelegate;
@@ -144,6 +140,7 @@ class MultiDeviceNotificationPresenter;
 class NightLightControllerImpl;
 class OverlayEventFilter;
 class OverviewController;
+class ParentAccessController;
 class PartialMagnificationController;
 class PeripheralBatteryNotifier;
 class PeripheralBatteryTracker;
@@ -152,7 +149,9 @@ class PolicyRecommendationRestorer;
 class PowerButtonController;
 class PowerEventObserver;
 class PowerPrefs;
+class PrivacyScreenController;
 class ProjectingObserver;
+class QuickAnswersController;
 class ResizeShadowController;
 class ResolutionNotificationController;
 class RootWindowController;
@@ -285,7 +284,12 @@ class ASH_EXPORT Shell : public SessionObserver,
   // Called when dictation is ended.
   void OnDictationEnded();
 
-  // Test if TabletModeWindowManager is not enabled, and if
+  // Returns whether the device is currently in tablet mode. If the tablet
+  // mode controller isn't available, we assume the device is not in
+  // tablet mode.
+  bool IsInTabletMode() const;
+
+  // Tests if TabletModeWindowManager is not enabled, and if
   // TabletModeController is not currently setting a display rotation. Or if
   // the |resolution_notification_controller_| is not showing its confirmation
   // dialog. If true then changes to display settings can be saved.
@@ -321,7 +325,6 @@ class ASH_EXPORT Shell : public SessionObserver,
   BrightnessControlDelegate* brightness_control_delegate() {
     return brightness_control_delegate_.get();
   }
-  service_manager::Connector* connector() { return connector_; }
   CrosDisplayConfig* cros_display_config() {
     return cros_display_config_.get();
   }
@@ -367,7 +370,7 @@ class ASH_EXPORT Shell : public SessionObserver,
   HighContrastController* high_contrast_controller() {
     return high_contrast_controller_.get();
   }
-  ImeController* ime_controller() { return ime_controller_.get(); }
+  ImeControllerImpl* ime_controller() { return ime_controller_.get(); }
   KeyAccessibilityEnabler* key_accessibility_enabler() {
     return key_accessibility_enabler_.get();
   }
@@ -409,7 +412,13 @@ class ASH_EXPORT Shell : public SessionObserver,
   NightLightControllerImpl* night_light_controller() {
     return night_light_controller_.get();
   }
+  PrivacyScreenController* privacy_screen_controller() {
+    return privacy_screen_controller_.get();
+  }
   OverlayEventFilter* overlay_filter() { return overlay_filter_.get(); }
+  ParentAccessController* parent_access_controller() {
+    return parent_access_controller_.get();
+  }
   PartialMagnificationController* partial_magnification_controller() {
     return partial_magnification_controller_.get();
   }
@@ -466,7 +475,7 @@ class ASH_EXPORT Shell : public SessionObserver,
   SystemTrayNotifier* system_tray_notifier() {
     return system_tray_notifier_.get();
   }
-  TabletModeController* tablet_mode_controller() {
+  TabletModeController* tablet_mode_controller() const {
     return tablet_mode_controller_.get();
   }
   ToastManagerImpl* toast_manager() { return toast_manager_.get(); }
@@ -497,6 +506,9 @@ class ASH_EXPORT Shell : public SessionObserver,
   }
   WindowTreeHostManager* window_tree_host_manager() {
     return window_tree_host_manager_.get();
+  }
+  BackGestureEventHandler* back_gesture_event_handler() {
+    return back_gesture_event_handler_.get();
   }
   ToplevelWindowEventHandler* toplevel_window_event_handler() {
     return toplevel_window_event_handler_.get();
@@ -549,7 +561,8 @@ class ASH_EXPORT Shell : public SessionObserver,
 
   // Notifies observers that |root_window|'s shelf changed alignment.
   // TODO(jamescook): Move to Shelf.
-  void NotifyShelfAlignmentChanged(aura::Window* root_window);
+  void NotifyShelfAlignmentChanged(aura::Window* root_window,
+                                   ShelfAlignment old_alignment);
 
   // Notifies observers that |root_window|'s shelf changed auto-hide behavior.
   // TODO(jamescook): Move to Shelf.
@@ -566,12 +579,10 @@ class ASH_EXPORT Shell : public SessionObserver,
   friend class ShellTestApi;
   friend class SmsObserverTest;
 
-  Shell(std::unique_ptr<ShellDelegate> shell_delegate,
-        service_manager::Connector* connector);
+  explicit Shell(std::unique_ptr<ShellDelegate> shell_delegate);
   ~Shell() override;
 
   void Init(ui::ContextFactory* context_factory,
-            ui::ContextFactoryPrivate* context_factory_private,
             PrefService* local_state,
             std::unique_ptr<keyboard::KeyboardUIFactory> keyboard_ui_factory,
             scoped_refptr<dbus::Bus> dbus_bus);
@@ -629,7 +640,6 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<BacklightsForcedOffSetter> backlights_forced_off_setter_;
   std::unique_ptr<BrightnessControlDelegate> brightness_control_delegate_;
   std::unique_ptr<CrosDisplayConfig> cros_display_config_;
-  service_manager::Connector* const connector_;
   std::unique_ptr<DesksController> desks_controller_;
   std::unique_ptr<DetachableBaseHandler> detachable_base_handler_;
   std::unique_ptr<DetachableBaseNotificationController>
@@ -638,7 +648,7 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<DragDropController> drag_drop_controller_;
   std::unique_ptr<FocusCycler> focus_cycler_;
   std::unique_ptr<HomeScreenController> home_screen_controller_;
-  std::unique_ptr<ImeController> ime_controller_;
+  std::unique_ptr<ImeControllerImpl> ime_controller_;
   std::unique_ptr<ImmersiveContext> immersive_context_;
   std::unique_ptr<KeyboardBrightnessControlDelegate>
       keyboard_brightness_control_delegate_;
@@ -652,10 +662,13 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<MruWindowTracker> mru_window_tracker_;
   std::unique_ptr<MultiDeviceNotificationPresenter>
       multidevice_notification_presenter_;
+  std::unique_ptr<ParentAccessController> parent_access_controller_;
+  std::unique_ptr<QuickAnswersController> quick_answers_controller_;
   std::unique_ptr<ResizeShadowController> resize_shadow_controller_;
   std::unique_ptr<AshColorProvider> ash_color_provider_;
   std::unique_ptr<SessionControllerImpl> session_controller_;
   std::unique_ptr<NightLightControllerImpl> night_light_controller_;
+  std::unique_ptr<PrivacyScreenController> privacy_screen_controller_;
   std::unique_ptr<PolicyRecommendationRestorer> policy_recommendation_restorer_;
   std::unique_ptr<ScreenSwitchCheckController> screen_switch_check_controller_;
   std::unique_ptr<ShelfConfig> shelf_config_;
@@ -703,6 +716,9 @@ class ASH_EXPORT Shell : public SessionObserver,
   // An event filter that pre-handles key events while the partial
   // screenshot UI or the keyboard overlay is active.
   std::unique_ptr<OverlayEventFilter> overlay_filter_;
+
+  // An event filter which handles swiping back from left side of the window.
+  std::unique_ptr<BackGestureEventHandler> back_gesture_event_handler_;
 
   // An event filter which handles moving and resizing windows.
   std::unique_ptr<ToplevelWindowEventHandler> toplevel_window_event_handler_;

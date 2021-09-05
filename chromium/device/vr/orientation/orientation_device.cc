@@ -28,16 +28,8 @@ namespace {
 static constexpr int kDefaultPumpFrequencyHz = 60;
 
 mojom::VRDisplayInfoPtr CreateVRDisplayInfo(mojom::XRDeviceId id) {
-  static const char DEVICE_NAME[] = "VR Orientation Device";
-
   mojom::VRDisplayInfoPtr display_info = mojom::VRDisplayInfo::New();
   display_info->id = id;
-  display_info->display_name = DEVICE_NAME;
-  display_info->capabilities = mojom::VRDisplayCapabilities::New();
-  display_info->capabilities->has_position = false;
-  display_info->capabilities->has_external_display = false;
-  display_info->capabilities->can_present = false;
-
   return display_info;
 }
 
@@ -57,6 +49,7 @@ VROrientationDevice::VROrientationDevice(mojom::SensorProvider* sensor_provider,
                                          base::OnceClosure ready_callback)
     : VRDeviceBase(mojom::XRDeviceId::ORIENTATION_DEVICE_ID),
       ready_callback_(std::move(ready_callback)) {
+  DVLOG(2) << __func__;
   sensor_provider->GetSensor(kOrientationSensorType,
                              base::BindOnce(&VROrientationDevice::SensorReady,
                                             base::Unretained(this)));
@@ -64,7 +57,9 @@ VROrientationDevice::VROrientationDevice(mojom::SensorProvider* sensor_provider,
   SetVRDisplayInfo(CreateVRDisplayInfo(GetId()));
 }
 
-VROrientationDevice::~VROrientationDevice() = default;
+VROrientationDevice::~VROrientationDevice() {
+  DVLOG(2) << __func__;
+}
 
 void VROrientationDevice::SensorReady(
     device::mojom::SensorCreationResult,
@@ -76,6 +71,7 @@ void VROrientationDevice::SensorReady(
     return;
   }
 
+  DVLOG(2) << __func__;
   constexpr size_t kReadBufferSize = sizeof(device::SensorReadingSharedBuffer);
 
   DCHECK_EQ(0u, params->buffer_offset % kReadBufferSize);
@@ -132,7 +128,8 @@ void VROrientationDevice::HandleSensorError() {
 void VROrientationDevice::RequestSession(
     mojom::XRRuntimeSessionOptionsPtr options,
     mojom::XRRuntime::RequestSessionCallback callback) {
-  DCHECK(!options->immersive);
+  DVLOG(2) << __func__;
+  DCHECK_EQ(options->mode, mojom::XRSessionMode::kInline);
 
   // TODO(http://crbug.com/695937): Perform a check to see if sensors are
   // available when RequestSession is called for non-immersive sessions.
@@ -156,6 +153,7 @@ void VROrientationDevice::RequestSession(
 }
 
 void VROrientationDevice::EndMagicWindowSession(VROrientationSession* session) {
+  DVLOG(2) << __func__;
   base::EraseIf(magic_window_sessions_,
                 [session](const std::unique_ptr<VROrientationSession>& item) {
                   return item.get() == session;

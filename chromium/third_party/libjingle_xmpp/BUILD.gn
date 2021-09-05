@@ -28,7 +28,7 @@ static_library("rtc_task_runner") {
   ]
   deps = [
     "//base",
-    "//third_party/webrtc/rtc_base/third_party/sigslot",
+    "//third_party/webrtc_overrides:webrtc_component",
   ]
 }
 
@@ -51,12 +51,8 @@ static_library("rtc_xmllite") {
     "xmllite/xmlprinter.h",
   ]
 
-  deps = [
-    "//base",
-  ]
-  public_deps = [
-    "//third_party/expat",
-  ]
+  deps = [ "//base" ]
+  public_deps = [ "//third_party/expat" ]
   all_dependent_configs = [ ":libjingle_xmpp_common_config" ]
 }
 
@@ -97,8 +93,7 @@ static_library("rtc_xmpp") {
     ":rtc_xmllite",
     "//base",
     "//net",
-    "//third_party/webrtc/rtc_base/third_party/base64",
-    "//third_party/webrtc/rtc_base/third_party/sigslot",
+    "//third_party/webrtc_overrides:webrtc_component",
   ]
   public_deps = [
     ":rtc_task_runner",
@@ -112,12 +107,8 @@ static_library("rtc_xmpp") {
 }
 
 fuzzer_test("libjingle_xmpp_xmlparser_fuzzer") {
-  sources = [
-    "xmllite/xmlparser_fuzzer.cc",
-  ]
-  deps = [
-    ":libjingle_xmpp",
-  ]
+  sources = [ "xmllite/xmlparser_fuzzer.cc" ]
+  deps = [ ":libjingle_xmpp" ]
 }
 
 test("libjingle_xmpp_unittests") {
@@ -127,7 +118,7 @@ test("libjingle_xmpp_unittests") {
     "//base/test:run_all_unittests",
     "//base/test:test_support",
     "//testing/gtest",
-    "//third_party/webrtc/rtc_base:rtc_base",
+    "//third_party/webrtc_overrides:webrtc_component",
   ]
 
   sources = [

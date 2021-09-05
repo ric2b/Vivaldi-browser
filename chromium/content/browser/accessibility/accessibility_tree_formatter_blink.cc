@@ -110,7 +110,7 @@ std::string IntAttrToString(const BrowserAccessibility& node,
     case ax::mojom::IntAttribute::kBackgroundColor:
     case ax::mojom::IntAttribute::kColor:
     case ax::mojom::IntAttribute::kColorValue:
-    case ax::mojom::IntAttribute::kDetailsId:
+    case ax::mojom::IntAttribute::kDOMNodeId:
     case ax::mojom::IntAttribute::kErrormessageId:
     case ax::mojom::IntAttribute::kHierarchicalLevel:
     case ax::mojom::IntAttribute::kInPageLinkTargetId:
@@ -176,7 +176,6 @@ void AccessibilityTreeFormatterBlink::AddDefaultFilters(
   AddPropertyFilter(property_filters, "valueForRange*");
   AddPropertyFilter(property_filters, "minValueForRange*");
   AddPropertyFilter(property_filters, "maxValueForRange*");
-  AddPropertyFilter(property_filters, "hierarchicalLevel*");
   AddPropertyFilter(property_filters, "autoComplete*");
   AddPropertyFilter(property_filters, "restriction*");
   AddPropertyFilter(property_filters, "keyShortcuts*");

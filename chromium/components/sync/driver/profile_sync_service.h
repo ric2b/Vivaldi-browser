@@ -16,7 +16,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/sequence_checker.h"
-#include "base/single_thread_task_runner.h"
+#include "base/sequenced_task_runner.h"
 #include "base/threading/thread.h"
 #include "base/time/time.h"
 #include "components/invalidation/public/identity_provider.h"
@@ -36,6 +36,7 @@
 #include "components/sync/driver/sync_user_settings_impl.h"
 #include "components/sync/engine/configure_reason.h"
 #include "components/sync/engine/events/protocol_event_observer.h"
+#include "components/sync/engine/net/http_post_provider_factory.h"
 #include "components/sync/engine/net/network_time_update_callback.h"
 #include "components/sync/engine/shutdown_reason.h"
 #include "components/sync/engine/sync_engine.h"
@@ -58,7 +59,6 @@ class VivaldiProfileSyncService;
 namespace syncer {
 
 class BackendMigrator;
-class NetworkResources;
 class SyncAuthManager;
 class TypeDebugInfoObserver;
 struct CommitCounters;
@@ -92,9 +92,10 @@ class ProfileSyncService : public SyncService,
     ~InitParams();
 
     std::unique_ptr<SyncClient> sync_client;
+    // TODO(treib): Remove this and instead retrieve it via
+    // SyncClient::GetIdentityManager (but mind LocalSync).
     signin::IdentityManager* identity_manager = nullptr;
-    std::vector<invalidation::IdentityProvider*>
-        invalidations_identity_providers;
+    invalidation::IdentityProvider* invalidations_identity_provider = nullptr;
     StartBehavior start_behavior = MANUAL_START;
     NetworkTimeUpdateCallback network_time_update_callback;
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory;
@@ -120,7 +121,7 @@ class ProfileSyncService : public SyncService,
   // SyncService implementation
   SyncUserSettings* GetUserSettings() override;
   const SyncUserSettings* GetUserSettings() const override;
-  int GetDisableReasons() const override;
+  DisableReasonSet GetDisableReasons() const override;
   TransportState GetTransportState() const override;
   bool IsLocalSyncEnabled() const override;
   CoreAccountInfo GetAuthenticatedAccountInfo() const override;
@@ -136,11 +137,16 @@ class ProfileSyncService : public SyncService,
   ModelTypeSet GetRegisteredDataTypes() const override;
   ModelTypeSet GetPreferredDataTypes() const override;
   ModelTypeSet GetActiveDataTypes() const override;
+  ModelTypeSet GetBackedOffDataTypes() const override;
   void StopAndClear() override;
   void OnDataTypeRequestsSyncStartup(ModelType type) override;
   void TriggerRefresh(const ModelTypeSet& types) override;
   void DataTypePreconditionChanged(ModelType type) override;
   void SetInvalidationsForSessionsEnabled(bool enabled) override;
+  void AddTrustedVaultDecryptionKeysFromWeb(
+      const std::string& gaia_id,
+      const std::vector<std::vector<uint8_t>>& keys,
+      int last_key_version) override;
   UserDemographicsResult GetUserNoisedBirthYearAndGender(
       base::Time now) override;
   void AddObserver(SyncServiceObserver* observer) override;
@@ -161,7 +167,7 @@ class ProfileSyncService : public SyncService,
   void RemoveTypeDebugInfoObserver(TypeDebugInfoObserver* observer) override;
   base::WeakPtr<JsController> GetJsController() override;
   void GetAllNodesForDebugging(
-      const base::Callback<void(std::unique_ptr<base::ListValue>)>& callback)
+      base::OnceCallback<void(std::unique_ptr<base::ListValue>)> callback)
       override;
 
   // SyncEngineHost implementation.
@@ -169,7 +175,6 @@ class ProfileSyncService : public SyncService,
       ModelTypeSet initial_types,
       const WeakHandle<JsBackend>& js_backend,
       const WeakHandle<DataTypeDebugInfoListener>& debug_info_listener,
-      const std::string& cache_guid,
       const std::string& birthday,
       const std::string& bag_of_chips,
       const std::string& last_keystore_key,
@@ -188,6 +193,7 @@ class ProfileSyncService : public SyncService,
   void OnConnectionStatusChange(ConnectionStatus status) override;
   void OnMigrationNeededForTypes(ModelTypeSet types) override;
   void OnActionableError(const SyncProtocolError& error) override;
+  void OnBackedOffTypesChanged() override;
 
   // DataTypeManagerObserver implementation.
   void OnConfigureDone(const DataTypeManager::ConfigureResult& result) override;
@@ -197,11 +203,12 @@ class ProfileSyncService : public SyncService,
   void OnAccountsInCookieUpdated(
       const signin::AccountsInCookieJarInfo& accounts_in_cookie_jar_info,
       const GoogleServiceAuthError& error) override;
+  void OnAccountsCookieDeletedByUserAction() override;
 
   // Similar to above but with a callback that will be invoked on completion.
   void OnAccountsInCookieUpdatedWithCallback(
       const std::vector<gaia::ListedAccount>& signed_in_accounts,
-      const base::Closure& callback);
+      base::OnceClosure callback);
 
   // Returns true if currently signed in account is not present in the list of
   // accounts from cookie jar.
@@ -247,18 +254,17 @@ class ProfileSyncService : public SyncService,
   // Returns true if the syncer is waiting for new datatypes to be encrypted.
   bool IsEncryptionPendingForTest() const;
 
-  // Overrides the NetworkResources used for Sync connections.
+  // Overrides the callback used to create network connections.
   // TODO(crbug.com/949504): Inject this in the ctor instead. As it is, it's
-  // possible that the real NetworkResources were already used before the test
-  // had a chance to call this.
-  void OverrideNetworkResourcesForTest(
-      std::unique_ptr<NetworkResources> network_resources);
+  // possible that the real callback was already used before the test had a
+  // chance to call this.
+  void OverrideNetworkForTest(const CreateHttpPostProviderFactory&
+                                  create_http_post_provider_factory_cb);
 
   bool IsDataTypeControllerRunningForTest(ModelType type) const;
 
-  // Sometimes we need to wait for tasks on the sync thread in tests.
-  scoped_refptr<base::SingleThreadTaskRunner> GetSyncThreadTaskRunnerForTest()
-      const;
+  // Sometimes we need to wait for tasks on the |backend_task_runner_| in tests.
+  void FlushBackendTaskRunnerForTest() const;
 
   // Some tests rely on injecting calls to the encryption observer.
   SyncEncryptionHandler::Observer* GetEncryptionObserverForTest();
@@ -268,6 +274,8 @@ class ProfileSyncService : public SyncService,
   // Combines GAIA ID, sync birthday and keystore key with '|' sepearator to
   // generate a secret. Returns empty string if keystore key is not available.
   std::string GetExperimentalAuthenticationSecretForTest() const;
+
+  static std::string GenerateCacheGUIDForTest();
 
  private:
   friend class vivaldi::VivaldiProfileSyncService;
@@ -293,8 +301,6 @@ class ProfileSyncService : public SyncService,
   // Virtual for testing.
   virtual WeakHandle<JsEventHandler> GetJsEventHandler();
 
-  SyncEngine::HttpPostProviderFactoryGetter MakeHttpPostProviderFactoryGetter();
-
   WeakHandle<UnrecoverableErrorHandler> GetUnrecoverableErrorHandler();
 
   // Callbacks for SyncAuthManager.
@@ -315,6 +321,10 @@ class ProfileSyncService : public SyncService,
 
   // Helper to install and configure a data type manager.
   void ConfigureDataTypeManager(ConfigureReason reason);
+
+  // Returns the ModelTypes allowed in transport-only mode (i.e. those that are
+  // not tied to sync-the-feature).
+  ModelTypeSet GetModelTypesForTransportOnlyMode() const;
 
  protected:
   // Shuts down the engine sync components.
@@ -347,8 +357,9 @@ class ProfileSyncService : public SyncService,
 
   void ClearUnrecoverableError();
 
-  // Initializes and starts |sync_thread_|.
-  void StartSyncThreadIfNeeded();
+  // Initializes |backend_task_runner_| which is backed by |sync_thread_| or the
+  // ThreadPool depending on the ProfileSyncServiceUsesThreadPool experiment.
+  void InitializeBackendTaskRunnerIfNeeded();
 
   // Kicks off asynchronous initialization of the SyncEngine.
   void StartUpSlowEngineComponents();
@@ -385,6 +396,7 @@ class ProfileSyncService : public SyncService,
 
   // Encapsulates user signin - used to set/get the user's authenticated
   // email address and sign-out upon error.
+  // May be null (if local Sync is enabled).
   signin::IdentityManager* const identity_manager_;
 
   // The user-configurable knobs. Non-null between Initialize() and Shutdown().
@@ -410,11 +422,13 @@ class ProfileSyncService : public SyncService,
   // A utility object containing logic and state relating to encryption.
   SyncServiceCrypto crypto_;
 
-  // The thread where all the sync operations happen. This thread is kept alive
-  // until browser shutdown and reused if sync is turned off and on again. It is
-  // joined during the shutdown process, but there is an abort mechanism in
-  // place to prevent slow HTTP requests from blocking browser shutdown.
-  std::unique_ptr<base::Thread> sync_thread_;
+  // Owns the sync thread and takes care of its destruction.
+  // TODO(https://crbug.com/1014464): Remove once we have switched to
+  // Threadpool.
+  base::OnceClosure sync_thread_stopper_;
+
+  // TODO(crbug.com/923287): Move out of this class. Possibly to SyncEngineImpl.
+  scoped_refptr<base::SequencedTaskRunner> backend_task_runner_;
 
   // Our asynchronous engine to communicate with sync components living on
   // other threads.
@@ -486,16 +500,16 @@ class ProfileSyncService : public SyncService,
   // or must delay loading for some reason).
   DataTypeStatusTable::TypeErrorMap data_type_error_map_;
 
-  // This providers tells the invalidations code which identity to register for.
+  // This provider tells the invalidations code which identity to register for.
   // The account that it registers for should be the same as the currently
   // syncing account, so we'll need to update this whenever the account changes.
-  std::vector<invalidation::IdentityProvider*> const
-      invalidations_identity_providers_;
+  // May be null (if local Sync is enabled).
+  invalidation::IdentityProvider* const invalidations_identity_provider_;
 
   // List of available data type controllers.
   DataTypeController::TypeMap data_type_controllers_;
 
-  std::unique_ptr<NetworkResources> network_resources_;
+  CreateHttpPostProviderFactory create_http_post_provider_factory_cb_;
 
   const StartBehavior start_behavior_;
 

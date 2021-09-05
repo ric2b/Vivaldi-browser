@@ -36,6 +36,7 @@
 <translation id="2292556288342944218">インターネットアクセスがブロックされています</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" />にはユーザー名とパスワードが必要です。</translation>
 <translation id="2337852623177822836">管理者が指定する設定</translation>
+<translation id="2344028582131185878">自動ダウンロード</translation>
 <translation id="2355395290879513365">悪意あるユーザーが、あなたがこのサイトで見ている画像を推測し、修正することで、あなたを騙そうとしているかも知れません。</translation>
 <translation id="2356070529366658676">確認</translation>
 <translation id="2359808026110333948">続行</translation>
@@ -88,7 +89,6 @@
 <translation id="3973234410852337861"><ph name="HOST_NAME" />はブロックされています</translation>
 <translation id="3987940399970879459">1 MB未満</translation>
 <translation id="4075732493274867456">クライアントとサーバーの両方がサポートするSSLプロトコルのバージョンまたは暗号化方式が見つかりません。</translation>
-<translation id="410351446219883937">自動再生</translation>
 <translation id="4116663294526079822">このサイトでは常に許可</translation>
 <translation id="4130226655945681476">ネットワークケーブル、モデム、ルーターを確認する</translation>
 <translation id="4151403195736952345">グローバルの既定値（[検出]）を使用</translation>
@@ -114,7 +114,7 @@
 <translation id="4744603770635761495">実行ファイルのパス</translation>
 <translation id="4750917950439032686">このサイトに送信した情報（パスワード、クレジット カード番号など）が第三者に見られることはありません。</translation>
 <translation id="4764776831041365478"><ph name="URL" />のウェブページは一時的に停止しているか、新しいウェブアドレスに移動した可能性があります。</translation>
-<translation id="4943872375798546930">結果はありません</translation>
+<translation id="4943872375798546930">見つかりません</translation>
 <translation id="4974590756084640048">警告を再度有効にする</translation>
 <translation id="5023310440958281426">管理者のポリシーを確認してください</translation>
 <translation id="5039804452771397117">許可</translation>

@@ -107,7 +107,6 @@ class ExtensionHost : public DeferredStartRenderHost,
   void RenderViewReady() override;
   void RenderProcessGone(base::TerminationStatus status) override;
   void DocumentAvailableInMainFrame() override;
-  void DidStartLoading() override;
   void DidStopLoading() override;
 
   // content::WebContentsDelegate:
@@ -127,7 +126,7 @@ class ExtensionHost : public DeferredStartRenderHost,
   bool CheckMediaAccessPermission(content::RenderFrameHost* render_frame_host,
                                   const GURL& security_origin,
                                   blink::mojom::MediaStreamType type) override;
-  bool IsNeverVisible(content::WebContents* web_contents) override;
+  bool IsNeverComposited(content::WebContents* web_contents) override;
   content::PictureInPictureResult EnterPictureInPicture(
       content::WebContents* web_contents,
       const viz::SurfaceId& surface_id,
@@ -155,10 +154,6 @@ class ExtensionHost : public DeferredStartRenderHost,
  private:
   // DeferredStartRenderHost:
   void CreateRenderViewNow() override;
-  void AddDeferredStartRenderHostObserver(
-      DeferredStartRenderHostObserver* observer) override;
-  void RemoveDeferredStartRenderHostObserver(
-      DeferredStartRenderHostObserver* observer) override;
 
   // Message handlers.
   void OnEventAck(int event_id);
@@ -191,6 +186,12 @@ class ExtensionHost : public DeferredStartRenderHost,
   // Whether CreateRenderViewNow was called before the extension was ready.
   bool is_render_view_creation_pending_;
 
+  // Whether NOTIFICATION_EXTENSION_HOST_CREATED has been already delivered
+  // (since it is triggered by RenderViewReady which happens not only for the
+  // very first RenderViewHost, but also can happen when swapping RenderViewHost
+  // for another one).
+  bool has_creation_notification_already_fired_ = false;
+
   // Whether the ExtensionHost has finished loading some content at least once.
   // There may be subsequent loads - such as reloads and navigations - and this
   // will not affect its value (it will remain true).
@@ -221,8 +222,6 @@ class ExtensionHost : public DeferredStartRenderHost,
   std::unique_ptr<base::ElapsedTimer> load_start_;
 
   base::ObserverList<ExtensionHostObserver>::Unchecked observer_list_;
-  base::ObserverList<DeferredStartRenderHostObserver>::Unchecked
-      deferred_start_render_host_observer_list_;
 
   DISALLOW_COPY_AND_ASSIGN(ExtensionHost);
 };

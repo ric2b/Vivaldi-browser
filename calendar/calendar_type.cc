@@ -26,6 +26,7 @@ CalendarRow::CalendarRow()
 CalendarRow::~CalendarRow() {}
 
 CalendarRow::CalendarRow(CalendarID id,
+                         AccountID account_id,
                          base::string16 name,
                          base::string16 description,
                          GURL url,
@@ -39,9 +40,11 @@ CalendarRow::CalendarRow(CalendarID id,
                          int type,
                          int interval,
                          base::Time last_checked,
+                         std::string timezone,
                          base::Time created,
                          base::Time lastmodified)
-    : name_(name),
+    : account_id_(account_id),
+      name_(name),
       description_(description),
       url_(url),
       ctag_(ctag),
@@ -54,11 +57,13 @@ CalendarRow::CalendarRow(CalendarID id,
       type_(type),
       interval_(interval),
       last_checked_(last_checked),
+      timezone_(timezone),
       created_(created),
       lastmodified_(lastmodified) {}
 
 void CalendarRow::Swap(CalendarRow* other) {
   std::swap(id_, other->id_);
+  std::swap(account_id_, other->account_id_);
   std::swap(name_, other->name_);
   std::swap(description_, other->description_);
   std::swap(url_, other->url_);
@@ -71,10 +76,12 @@ void CalendarRow::Swap(CalendarRow* other) {
   std::swap(type_, other->type_);
   std::swap(interval_, other->interval_);
   std::swap(last_checked_, other->last_checked_);
+  std::swap(timezone_, other->timezone_);
 }
 
 CalendarRow::CalendarRow(const CalendarRow& other)
     : id_(other.id_),
+      account_id_(other.account_id_),
       name_(other.name_),
       description_(other.description_),
       url_(other.url_),
@@ -88,6 +95,7 @@ CalendarRow::CalendarRow(const CalendarRow& other)
       type_(other.type_),
       interval_(other.interval_),
       last_checked_(other.last_checked_),
+      timezone_(other.timezone_),
       created_(other.created_),
       lastmodified_(other.lastmodified_) {}
 
@@ -98,6 +106,7 @@ Calendar::Calendar()
 
 Calendar::Calendar(const Calendar& calendar)
     : id(calendar.id),
+      account_id(calendar.account_id),
       name(calendar.name),
       description(calendar.description),
       url(calendar.url),
@@ -111,6 +120,7 @@ Calendar::Calendar(const Calendar& calendar)
       type(calendar.type),
       interval(calendar.interval),
       last_checked(calendar.last_checked),
+      timezone(calendar.timezone),
       updateFields(calendar.updateFields) {}
 
 Calendar::~Calendar() {}

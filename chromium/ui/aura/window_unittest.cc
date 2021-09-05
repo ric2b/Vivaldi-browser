@@ -37,7 +37,6 @@
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/class_property.h"
 #include "ui/base/hit_test.h"
-#include "ui/base/ui_base_switches_util.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animation_observer.h"
 #include "ui/compositor/layer_animator.h"
@@ -53,6 +52,7 @@
 #include "ui/events/test/event_generator.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/vector2d.h"
+#include "ui/gfx/overlay_transform_utils.h"
 #include "ui/gfx/skia_util.h"
 
 DEFINE_UI_CLASS_PROPERTY_TYPE(const char*)
@@ -441,7 +441,8 @@ TEST_F(WindowTest, WindowEmbeddingClientHasValidLocalSurfaceId) {
 TEST_F(WindowTest, MoveCursorToWithTransformRootWindow) {
   gfx::Transform transform;
   transform.Translate(100.0, 100.0);
-  transform.Rotate(90.0);
+  transform = transform * OverlayTransformToTransform(
+                              gfx::OVERLAY_TRANSFORM_ROTATE_90, gfx::SizeF());
   transform.Scale(2.0, 5.0);
   host()->SetRootTransform(transform);
   host()->MoveCursorToLocationInDIP(gfx::Point(10, 10));
@@ -473,7 +474,8 @@ TEST_F(WindowTest, MoveCursorToWithTransformWindow) {
             display::Screen::GetScreen()->GetCursorScreenPoint().ToString());
 
   gfx::Transform transform3;
-  transform3.Rotate(90.0);
+  transform3 = transform3 * OverlayTransformToTransform(
+                                gfx::OVERLAY_TRANSFORM_ROTATE_90, gfx::SizeF());
   w1->SetTransform(transform3);
   w1->MoveCursorTo(gfx::Point(5, 5));
   EXPECT_EQ("5,15",
@@ -481,7 +483,8 @@ TEST_F(WindowTest, MoveCursorToWithTransformWindow) {
 
   gfx::Transform transform4;
   transform4.Translate(100.0, 100.0);
-  transform4.Rotate(90.0);
+  transform4 = transform4 * OverlayTransformToTransform(
+                                gfx::OVERLAY_TRANSFORM_ROTATE_90, gfx::SizeF());
   transform4.Scale(2.0, 5.0);
   w1->SetTransform(transform4);
   w1->MoveCursorTo(gfx::Point(10, 10));
@@ -505,7 +508,9 @@ TEST_F(WindowTest, MoveCursorToWithComplexTransform) {
   // The root window expects transforms that produce integer rects.
   gfx::Transform root_transform;
   root_transform.Translate(60.0, 70.0);
-  root_transform.Rotate(-90.0);
+  root_transform =
+      root_transform * OverlayTransformToTransform(
+                           gfx::OVERLAY_TRANSFORM_ROTATE_270, gfx::SizeF());
   root_transform.Translate(-50.0, -50.0);
   root_transform.Scale(2.0, 3.0);
 
@@ -1654,10 +1659,8 @@ TEST_F(WindowTest, Transform) {
                                  .bounds());
 
   // Rotate it clock-wise 90 degrees.
-  gfx::Transform transform;
-  transform.Translate(size.height(), 0);
-  transform.Rotate(90.0);
-  host()->SetRootTransform(transform);
+  host()->SetRootTransform(OverlayTransformToTransform(
+      gfx::OVERLAY_TRANSFORM_ROTATE_90, gfx::SizeF(size)));
 
   // The size should be the transformed size.
   gfx::Size transformed_size(size.height(), size.width());
@@ -1682,10 +1685,8 @@ TEST_F(WindowTest, TransformGesture) {
       delegate.get(), -1234, gfx::Rect(0, 0, 20, 20), root_window()));
 
   // Rotate the root-window clock-wise 90 degrees.
-  gfx::Transform transform;
-  transform.Translate(size.height(), 0.0);
-  transform.Rotate(90.0);
-  host()->SetRootTransform(transform);
+  host()->SetRootTransform(OverlayTransformToTransform(
+      gfx::OVERLAY_TRANSFORM_ROTATE_90, gfx::SizeF(size)));
 
   ui::TouchEvent press(
       ui::ET_TOUCH_PRESSED, gfx::Point(size.height() - 10, 10), getTime(),

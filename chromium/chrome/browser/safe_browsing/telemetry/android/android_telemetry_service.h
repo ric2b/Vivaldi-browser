@@ -12,7 +12,7 @@
 #include "chrome/browser/safe_browsing/telemetry/telemetry_service.h"
 #include "components/download/public/common/download_item.h"
 #include "components/download/public/common/simple_download_manager_coordinator.h"
-#include "components/safe_browsing/proto/csd.pb.h"
+#include "components/safe_browsing/core/proto/csd.pb.h"
 #include "content/public/browser/download_manager.h"
 
 class Profile;
@@ -35,6 +35,7 @@ enum class ApkDownloadTelemetryOutcome {
   // No ping sent because the user is in Incognito mode.
   NOT_SENT_INCOGNITO = 2,
   // No ping sent because the user hasn't enabled extended reporting.
+  // Deprecated for NOT_SENT_UNCONSENTED.
   NOT_SENT_EXTENDED_REPORTING_DISABLED = 3,
   // Download was cancelled.
   NOT_SENT_DOWNLOAD_CANCELLED = 4,
@@ -44,8 +45,10 @@ enum class ApkDownloadTelemetryOutcome {
   NOT_SENT_FEATURE_NOT_ENABLED = 6,
   // Download completed. Ping sent.
   SENT = 7,
-
-  kMaxValue = SENT
+  // No ping sent because the user hasn't enabled enhanced protection and
+  // extended reporting.
+  NOT_SENT_UNCONSENTED = 8,
+  kMaxValue = NOT_SENT_UNCONSENTED
 };
 
 // This class is used to send telemetry information to Safe Browsing for
@@ -71,6 +74,8 @@ class AndroidTelemetryService
 
   // download::DownloadItem::Observer.
   void OnDownloadUpdated(download::DownloadItem* download) override;
+
+  Profile* profile() { return profile_; }
 
  private:
   friend class AndroidTelemetryServiceTest;
@@ -105,9 +110,6 @@ class AndroidTelemetryService
 
   // Helper method to get prefs from |profile_|.
   const PrefService* GetPrefs();
-
-  // Helper method to check if Safe Browsing is enabled.
-  bool IsSafeBrowsingEnabled();
 
   // Profile associated with this instance. Unowned.
   Profile* profile_;

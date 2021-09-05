@@ -11,24 +11,34 @@
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 #include "cc/base/switches.h"
+#include "components/captive_portal/core/buildflags.h"
+#include "components/startup_metric_utils/browser/startup_metric_utils.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/render_process_host.h"
-#include "content/public/browser/storage_partition.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/main_function_params.h"
 #include "content/public/common/url_constants.h"
 #include "services/service_manager/embedder/result_codes.h"
-#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "weblayer/browser/browser_process.h"
+#include "weblayer/browser/feature_list_creator.h"
+#include "weblayer/browser/host_content_settings_map_factory.h"
+#include "weblayer/browser/permissions/weblayer_permissions_client.h"
+#include "weblayer/browser/stateful_ssl_host_state_delegate_factory.h"
 #include "weblayer/browser/webui/web_ui_controller_factory.h"
 #include "weblayer/public/main.h"
 
 #if defined(OS_ANDROID)
 #include "components/crash/content/browser/child_exit_observer_android.h"
 #include "components/crash/content/browser/child_process_crash_observer_android.h"
+#include "components/crash/core/common/crash_key.h"
+#include "components/javascript_dialogs/android/app_modal_dialog_view_android.h"  // nogncheck
+#include "components/javascript_dialogs/app_modal_dialog_manager.h"  // nogncheck
+#include "content/public/browser/web_contents.h"
 #include "net/android/network_change_notifier_factory_android.h"
 #include "net/base/network_change_notifier.h"
+#include "weblayer/browser/android/metrics/uma_utils.h"
 #endif
 
 #if defined(USE_X11)
@@ -41,9 +51,25 @@
 #include "ui/base/ime/init/input_method_initializer.h"
 #endif
 
+#if BUILDFLAG(ENABLE_CAPTIVE_PORTAL_DETECTION)
+#include "weblayer/browser/captive_portal_service_factory.h"
+#endif
+
 namespace weblayer {
 
 namespace {
+
+// Instantiates all weblayer KeyedService factories, which is
+// especially important for services that should be created at profile
+// creation time as compared to lazily on first access.
+static void EnsureBrowserContextKeyedServiceFactoriesBuilt() {
+  StatefulSSLHostStateDelegateFactory::GetInstance();
+  HostContentSettingsMapFactory::GetInstance();
+
+#if BUILDFLAG(ENABLE_CAPTIVE_PORTAL_DETECTION)
+  CaptivePortalServiceFactory::GetInstance();
+#endif
+}
 
 void StopMessageLoop(base::OnceClosure quit_closure) {
   for (auto it = content::RenderProcessHost::AllHostsIterator(); !it.IsAtEnd();
@@ -64,23 +90,34 @@ BrowserMainPartsImpl::BrowserMainPartsImpl(
 BrowserMainPartsImpl::~BrowserMainPartsImpl() = default;
 
 int BrowserMainPartsImpl::PreCreateThreads() {
+  // Make sure permissions client has been set.
+  WebLayerPermissionsClient::GetInstance();
 #if defined(OS_ANDROID)
   // The ChildExitObserver needs to be created before any child process is
   // created because it needs to be notified during process creation.
   crash_reporter::ChildExitObserver::Create();
   crash_reporter::ChildExitObserver::GetInstance()->RegisterClient(
       std::make_unique<crash_reporter::ChildProcessCrashObserver>());
+
+  crash_reporter::InitializeCrashKeys();
 #endif
 
   return service_manager::RESULT_CODE_NORMAL_EXIT;
 }
+
 void BrowserMainPartsImpl::PreMainMessageLoopStart() {
 #if defined(USE_AURA) && defined(USE_X11)
   ui::TouchFactory::SetTouchDeviceListFromCommandLine();
 #endif
+
+#if defined(OS_ANDROID)
+  startup_metric_utils::RecordApplicationStartTime(GetApplicationStartTime());
+#endif
 }
 
 int BrowserMainPartsImpl::PreEarlyInitialization() {
+  browser_process_ = std::make_unique<BrowserProcess>();
+
 #if defined(USE_X11)
   ui::SetDefaultX11ErrorHandlers();
 #endif
@@ -95,21 +132,51 @@ int BrowserMainPartsImpl::PreEarlyInitialization() {
 }
 
 void BrowserMainPartsImpl::PreMainMessageLoopRun() {
-  ui::MaterialDesignController::Initialize();
+  FeatureListCreator::GetInstance()->PerformPreMainMessageLoopStartup();
+
+  // It's necessary to have a complete dependency graph of
+  // BrowserContextKeyedServices before calling out to the delegate (which
+  // will potentially create a profile), so that a profile creation message is
+  // properly dispatched to the factories that want to create their services
+  // at profile creation time.
+  EnsureBrowserContextKeyedServiceFactoriesBuilt();
+
   params_->delegate->PreMainMessageLoopRun();
 
   content::WebUIControllerFactory::RegisterFactory(
       WebUIControllerFactory::GetInstance());
 
   if (main_function_params_.ui_task) {
-    main_function_params_.ui_task->Run();
+    std::move(*main_function_params_.ui_task).Run();
     delete main_function_params_.ui_task;
     run_message_loop_ = false;
   }
+
+#if defined(OS_ANDROID)
+  // Record collected startup metrics.
+  startup_metric_utils::RecordBrowserMainMessageLoopStart(
+      base::TimeTicks::Now(), /* is_first_run */ false);
+  memory_metrics_logger_ = std::make_unique<metrics::MemoryMetricsLogger>();
+
+  // Set the global singleton app modal dialog factory.
+  javascript_dialogs::AppModalDialogManager::GetInstance()
+      ->SetNativeDialogFactory(base::BindRepeating(
+          [](javascript_dialogs::AppModalDialogController* controller)
+              -> javascript_dialogs::AppModalDialogView* {
+            return new javascript_dialogs::AppModalDialogViewAndroid(
+                base::android::AttachCurrentThread(), controller,
+                controller->web_contents()->GetTopLevelNativeWindow());
+          }));
+#endif
 }
 
 bool BrowserMainPartsImpl::MainMessageLoopRun(int* result_code) {
   return !run_message_loop_;
+}
+
+void BrowserMainPartsImpl::PostMainMessageLoopRun() {
+  params_->delegate->PostMainMessageLoopRun();
+  browser_process_->StartTearDown();
 }
 
 void BrowserMainPartsImpl::PreDefaultMainMessageLoopRun(

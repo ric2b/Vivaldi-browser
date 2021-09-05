@@ -121,6 +121,12 @@ ScopedEvent Event::Deserialize(const void* buffer, size_t num_bytes) {
       return ObserveClosureEvent::Deserialize(port_name, header + 1, data_size);
     case Type::kMergePort:
       return MergePortEvent::Deserialize(port_name, header + 1, data_size);
+    case Type::kUserMessageReadAckRequest:
+      return UserMessageReadAckRequestEvent::Deserialize(port_name, header + 1,
+                                                         data_size);
+    case Type::kUserMessageReadAck:
+      return UserMessageReadAckEvent::Deserialize(port_name, header + 1,
+                                                  data_size);
     default:
       DVLOG(2) << "Ingoring unknown port event type: "
                << static_cast<uint32_t>(header->type);
@@ -399,7 +405,6 @@ UserMessageReadAckRequestEvent::UserMessageReadAckRequestEvent(
     uint64_t sequence_num_to_acknowledge)
     : Event(Type::kUserMessageReadAckRequest, port_name),
       sequence_num_to_acknowledge_(sequence_num_to_acknowledge) {
-  DCHECK(sequence_num_to_acknowledge);
 }
 
 UserMessageReadAckRequestEvent::~UserMessageReadAckRequestEvent() = default;
@@ -432,7 +437,6 @@ UserMessageReadAckEvent::UserMessageReadAckEvent(
     uint64_t sequence_num_acknowledged)
     : Event(Type::kUserMessageReadAck, port_name),
       sequence_num_acknowledged_(sequence_num_acknowledged) {
-  DCHECK(sequence_num_acknowledged);
 }
 
 UserMessageReadAckEvent::~UserMessageReadAckEvent() = default;

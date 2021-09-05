@@ -25,7 +25,6 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/javascript_dialogs/javascript_dialog_tab_helper.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
 #include "chrome/browser/ui/login/login_handler.h"
 #include "chrome/browser/ui/login/login_handler_test_utils.h"
@@ -33,17 +32,18 @@
 #include "chrome/browser/ui/view_ids.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
-#include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/search_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "components/app_modal/javascript_app_modal_dialog.h"
-#include "components/app_modal/javascript_dialog_manager.h"
-#include "components/app_modal/native_app_modal_dialog.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/embedder_support/switches.h"
+#include "components/javascript_dialogs/app_modal_dialog_controller.h"
+#include "components/javascript_dialogs/app_modal_dialog_manager.h"
+#include "components/javascript_dialogs/app_modal_dialog_view.h"
+#include "components/javascript_dialogs/tab_modal_dialog_manager.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/autocomplete_result.h"
 #include "components/omnibox/browser/omnibox_edit_model.h"
@@ -375,7 +375,7 @@ IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest, PopupMetrics) {
 
   // Whitelist the site and navigate again.
   HostContentSettingsMapFactory::GetForProfile(browser()->profile())
-      ->SetContentSettingDefaultScope(url, GURL(), CONTENT_SETTINGS_TYPE_POPUPS,
+      ->SetContentSettingDefaultScope(url, GURL(), ContentSettingsType::POPUPS,
                                       std::string(), CONTENT_SETTING_ALLOW);
   ui_test_utils::NavigateToURL(browser(), url);
   tester.ExpectBucketCount(
@@ -397,7 +397,7 @@ IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest,
   GURL url(embedded_test_server()->GetURL(
       "/popup_blocker/popup-blocked-to-post-blank.html"));
   HostContentSettingsMapFactory::GetForProfile(browser()->profile())
-      ->SetContentSettingDefaultScope(url, GURL(), CONTENT_SETTINGS_TYPE_POPUPS,
+      ->SetContentSettingDefaultScope(url, GURL(), ContentSettingsType::POPUPS,
                                       std::string(), CONTENT_SETTING_ALLOW);
 
   NavigateAndCheckPopupShown(url, kExpectForegroundTab);
@@ -408,7 +408,7 @@ IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest,
                        AllowPopupThroughContentSettingIFrame) {
   GURL url(embedded_test_server()->GetURL("/popup_blocker/popup-frames.html"));
   HostContentSettingsMapFactory::GetForProfile(browser()->profile())
-      ->SetContentSettingDefaultScope(url, GURL(), CONTENT_SETTINGS_TYPE_POPUPS,
+      ->SetContentSettingDefaultScope(url, GURL(), ContentSettingsType::POPUPS,
                                       std::string(), CONTENT_SETTING_ALLOW);
 
   // Popup from the iframe should be allowed since the top-level URL is
@@ -422,10 +422,10 @@ IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest,
                      ->GetURL("/popup_blocker/popup-frames-iframe.html")
                      .ReplaceComponents(replace_host));
   HostContentSettingsMapFactory::GetForProfile(browser()->profile())
-      ->ClearSettingsForOneType(CONTENT_SETTINGS_TYPE_POPUPS);
+      ->ClearSettingsForOneType(ContentSettingsType::POPUPS);
   HostContentSettingsMapFactory::GetForProfile(browser()->profile())
       ->SetContentSettingDefaultScope(frame_url, GURL(),
-                                      CONTENT_SETTINGS_TYPE_POPUPS,
+                                      ContentSettingsType::POPUPS,
                                       std::string(), CONTENT_SETTING_ALLOW);
 
   // Popup should be blocked.
@@ -433,11 +433,9 @@ IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest,
   ASSERT_EQ(1, GetBlockedContentsCount());
 }
 
-// TODO(https://crbug.com/1010509): Re-enable this in Chrome 80.
-#if 0
 IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest, NoPopupsLaunchWhenTabIsClosed) {
   base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      switches::kDisablePopupBlocking);
+      embedder_support::kDisablePopupBlocking);
   GURL url(
       embedded_test_server()->GetURL("/popup_blocker/popup-on-unload.html"));
   ui_test_utils::NavigateToURL(browser(), url);
@@ -448,10 +446,9 @@ IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest, NoPopupsLaunchWhenTabIsClosed) {
   // Expect no popup.
   ASSERT_EQ(1u, chrome::GetBrowserCount(browser()->profile()));
 }
-#endif
 
 // This only exists for the AllowPopupsWhenTabIsClosedWithSpecialPolicy test.
-// Remove this in Chrome 82. https://crbug.com/937569
+// Remove this in Chrome 88. https://crbug.com/937569
 class PopupBlockerSpecialPolicyBrowserTest : public PopupBlockerBrowserTest {
  public:
   PopupBlockerSpecialPolicyBrowserTest() {}
@@ -484,11 +481,11 @@ class PopupBlockerSpecialPolicyBrowserTest : public PopupBlockerBrowserTest {
   DISALLOW_COPY_AND_ASSIGN(PopupBlockerSpecialPolicyBrowserTest);
 };
 
-// Remove this in Chrome 82. https://crbug.com/937569
+// Remove this in Chrome 88. https://crbug.com/937569
 IN_PROC_BROWSER_TEST_F(PopupBlockerSpecialPolicyBrowserTest,
                        AllowPopupsWhenTabIsClosedWithSpecialPolicy) {
   base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      switches::kDisablePopupBlocking);
+      embedder_support::kDisablePopupBlocking);
   GURL url(
       embedded_test_server()->GetURL("/popup_blocker/popup-on-unload.html"));
   ui_test_utils::NavigateToURL(browser(), url);
@@ -501,7 +498,7 @@ IN_PROC_BROWSER_TEST_F(PopupBlockerSpecialPolicyBrowserTest,
 IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest,
                        UnblockedPopupShowsInHistoryAndOmnibox) {
   base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      switches::kDisablePopupBlocking);
+      embedder_support::kDisablePopupBlocking);
   GURL url(embedded_test_server()->GetURL(
       "/popup_blocker/popup-blocked-to-post-blank.html"));
   NavigateAndCheckPopupShown(url, kExpectForegroundTab);
@@ -676,7 +673,7 @@ IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest, ModalPopUnder) {
   GURL url(
       embedded_test_server()->GetURL("/popup_blocker/popup-window-open.html"));
   HostContentSettingsMapFactory::GetForProfile(browser()->profile())
-      ->SetContentSettingDefaultScope(url, GURL(), CONTENT_SETTINGS_TYPE_POPUPS,
+      ->SetContentSettingDefaultScope(url, GURL(), ContentSettingsType::POPUPS,
                                       std::string(), CONTENT_SETTING_ALLOW);
 
   NavigateAndCheckPopupShown(url, kExpectPopup);
@@ -691,10 +688,10 @@ IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest, ModalPopUnder) {
   ui_test_utils::BrowserActivationWaiter alert_waiter(browser());
 #endif
   bool ignored;
-  app_modal::JavaScriptDialogManager::GetInstance()->RunJavaScriptDialog(
+  javascript_dialogs::AppModalDialogManager::GetInstance()->RunJavaScriptDialog(
       tab, tab->GetMainFrame(), content::JAVASCRIPT_DIALOG_TYPE_ALERT,
       base::string16(), base::string16(), base::DoNothing(), &ignored);
-  app_modal::JavaScriptAppModalDialog* dialog =
+  javascript_dialogs::AppModalDialogController* dialog =
       ui_test_utils::WaitForAppModalDialog();
   ASSERT_TRUE(dialog);
 #if !defined(OS_MACOSX)
@@ -706,8 +703,8 @@ IN_PROC_BROWSER_TEST_F(PopupBlockerBrowserTest, ModalPopUnder) {
 #if !defined(OS_MACOSX)
   ui_test_utils::BrowserActivationWaiter waiter(popup_browser);
 #endif
-  app_modal::JavaScriptDialogManager::GetInstance()->HandleJavaScriptDialog(
-      tab, true, nullptr);
+  javascript_dialogs::AppModalDialogManager::GetInstance()
+      ->HandleJavaScriptDialog(tab, true, nullptr);
 #if !defined(OS_MACOSX)
   waiter.WaitForActivation();
 #endif

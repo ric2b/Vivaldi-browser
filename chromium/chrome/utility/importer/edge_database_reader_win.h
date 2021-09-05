@@ -89,6 +89,9 @@ class EdgeDatabaseReader : public EdgeErrorObject {
  private:
   bool IsOpen() { return instance_id_ != JET_instanceNil; }
 
+  // This specifies the optional location of the folder where the ESE database
+  // will write the log of a possible recovery from a corrupted database.
+  // When specified, the folder must exist, or opening the database will fail.
   base::string16 log_folder_;
 
   JET_DBID db_id_;

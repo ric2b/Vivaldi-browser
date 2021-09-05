@@ -38,7 +38,7 @@ ScrollableArea* GetScrollableArea(Node* node) {
 TopDocumentRootScrollerController::TopDocumentRootScrollerController(Page& page)
     : page_(&page) {}
 
-void TopDocumentRootScrollerController::Trace(blink::Visitor* visitor) {
+void TopDocumentRootScrollerController::Trace(Visitor* visitor) {
   visitor->Trace(viewport_apply_scroll_);
   visitor->Trace(global_root_scroller_);
   visitor->Trace(page_);
@@ -139,7 +139,10 @@ void TopDocumentRootScrollerController::UpdateGlobalRootScroller(
   if (!viewport_apply_scroll_)
     return;
 
-  if (new_global_root_scroller == global_root_scroller_)
+  // Note, the layout object can be replaced during a rebuild. In that case,
+  // re-run process even if the element itself is the same.
+  if (new_global_root_scroller == global_root_scroller_ &&
+      global_root_scroller_->GetLayoutObject()->IsGlobalRootScroller())
     return;
 
   ScrollableArea* target_scroller = GetScrollableArea(new_global_root_scroller);

@@ -9,6 +9,7 @@
 
 #include "base/sequenced_task_runner.h"
 #include "base/task/post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/win/scoped_handle.h"
 #include "chrome/chrome_cleaner/ipc/chrome_prompt_ipc.h"
 #include "components/chrome_cleaner/public/proto/chrome_prompt.pb.h"
@@ -18,14 +19,6 @@ namespace chrome_cleaner {
 class ProtoChromePromptIPC : public ChromePromptIPC {
  public:
   static constexpr uint32_t kMaxMessageLength = 1 * 1024 * 1024;  // 1M bytes
-
-  // Currently some mojom types are used to provide as drop-in replacement
-  // for the existing mojo based implementation. Since they are very simple
-  // they will stay essentially identical once the PromptAcceptance enum is
-  // replaced with a hand rolled one.
-  using PromptAcceptance = mojom::PromptAcceptance;
-  using PromptUserCallback = base::OnceCallback<void(PromptAcceptance)>;
-  using DisableExtensionsCallback = base::OnceCallback<void(bool)>;
 
   ProtoChromePromptIPC(base::win::ScopedHandle response_read_handle,
                        base::win::ScopedHandle request_write_handle);
@@ -62,7 +55,7 @@ class ProtoChromePromptIPC : public ChromePromptIPC {
 
   void SendBuffer(const std::string& request_content);
 
-  PromptAcceptance WaitForPromptAcceptance();
+  PromptUserResponse::PromptAcceptance WaitForPromptAcceptance();
 
   template <typename T>
   void WriteByValue(T value) {
@@ -106,7 +99,7 @@ class ProtoChromePromptIPC : public ChromePromptIPC {
   base::win::ScopedHandle request_write_handle_;
 
   scoped_refptr<base::SequencedTaskRunner> task_runner_ =
-      base::CreateSequencedTaskRunner({base::ThreadPool(), base::MayBlock()});
+      base::ThreadPool::CreateSequencedTaskRunner({base::MayBlock()});
 };
 
 }  // namespace chrome_cleaner

@@ -15,11 +15,11 @@ NavigationLoaderInterceptor::MaybeCreateSubresourceLoaderParams() {
 
 bool NavigationLoaderInterceptor::MaybeCreateLoaderForResponse(
     const network::ResourceRequest& request,
-    const network::ResourceResponseHead& response,
+    network::mojom::URLResponseHeadPtr* response,
     mojo::ScopedDataPipeConsumerHandle* response_body,
-    network::mojom::URLLoaderPtr* loader,
-    network::mojom::URLLoaderClientRequest* client_request,
-    ThrottlingURLLoader* url_loader,
+    mojo::PendingRemote<network::mojom::URLLoader>* loader,
+    mojo::PendingReceiver<network::mojom::URLLoaderClient>* client_receiver,
+    blink::ThrottlingURLLoader* url_loader,
     bool* skip_other_interceptors,
     bool* will_return_unsafe_redirect) {
   return false;

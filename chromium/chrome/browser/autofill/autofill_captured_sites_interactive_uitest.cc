@@ -48,6 +48,7 @@
 #include "components/autofill/core/common/autofill_util.h"
 #include "content/public/test/test_renderer_host.h"
 #include "content/public/test/test_utils.h"
+#include "net/dns/mock_host_resolver.h"
 #include "services/network/public/cpp/data_element.h"
 #include "services/network/public/cpp/network_switches.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -100,7 +101,8 @@ class AutofillCapturedSitesInteractiveTest
     int tries = 0;
     while (tries < attempts) {
       tries++;
-      autofill_manager->client()->HideAutofillPopup();
+      autofill_manager->client()->HideAutofillPopup(
+          autofill::PopupHidingReason::kViewDestroyed);
 
       if (!ShowAutofillSuggestion(focus_element_css_selector, iframe_path,
                                   frame)) {
@@ -131,7 +133,8 @@ class AutofillCapturedSitesInteractiveTest
       return true;
     }
 
-    autofill_manager->client()->HideAutofillPopup();
+    autofill_manager->client()->HideAutofillPopup(
+        autofill::PopupHidingReason::kViewDestroyed);
     ADD_FAILURE() << "Failed to autofill the form!";
     return false;
   }
@@ -215,6 +218,13 @@ class AutofillCapturedSitesInteractiveTest
     // the raw pointer will be nullptr.
     server_url_loader_.reset(nullptr);
     AutofillUiTest::TearDownOnMainThread();
+  }
+
+  void SetUpInProcessBrowserTestFixture() override {
+    // Allow access exception to live Autofill Server for
+    // overriding cache replay behavior.
+    host_resolver()->AllowDirectLookup("clients1.google.com");
+    AutofillUiTest::SetUpInProcessBrowserTestFixture();
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -327,7 +337,7 @@ IN_PROC_BROWSER_TEST_P(AutofillCapturedSitesInteractiveTest, Recipe) {
   }
 }
 INSTANTIATE_TEST_SUITE_P(
-    ,
+    All,
     AutofillCapturedSitesInteractiveTest,
     testing::ValuesIn(GetCapturedSites(GetReplayFilesRootDirectory())),
     captured_sites_test_utils::GetParamAsString());

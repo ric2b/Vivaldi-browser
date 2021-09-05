@@ -9,10 +9,10 @@
 #include "chrome/browser/subresource_filter/chrome_subresource_filter_client.h"
 #include "chrome/browser/subresource_filter/subresource_filter_test_harness.h"
 #include "components/adverse_adblocking/adverse_ad_filter_list_factory.h"
-#include "components/adverse_adblocking/vivaldi_content_browser_client.h"
 #include "components/adverse_adblocking/vivaldi_subresource_filter_client.h"
 #include "components/subresource_filter/content/browser/subresource_filter_observer_test_utils.h"
 #include "content/public/common/content_client.h"
+#include "extraparts/vivaldi_content_browser_client.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 

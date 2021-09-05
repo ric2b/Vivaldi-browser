@@ -10,6 +10,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
+#include "chrome/browser/web_applications/extensions/web_app_extension_shortcut.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/constrained_window/constrained_window_views.h"
@@ -44,7 +45,7 @@ CreateChromeApplicationShortcutView::CreateChromeApplicationShortcutView(
     const extensions::Extension* app,
     const base::Callback<void(bool)>& close_callback)
     : profile_(profile), close_callback_(close_callback) {
-  DialogDelegate::set_button_label(
+  DialogDelegate::SetButtonLabel(
       ui::DIALOG_BUTTON_OK,
       l10n_util::GetStringUTF16(IDS_CREATE_SHORTCUTS_COMMIT));
   set_margins(ChromeLayoutProvider::Get()->GetDialogInsetsForContentType(
@@ -146,7 +147,6 @@ void CreateChromeApplicationShortcutView::InitControls() {
 }
 
 gfx::Size CreateChromeApplicationShortcutView::CalculatePreferredSize() const {
-  // TODO(evanm): should this use IDS_CREATE_SHORTCUTS_DIALOG_WIDTH_CHARS?
   static const int kDialogWidth = 360;
   int height = GetLayoutManager()->GetPreferredHeightForWidth(this,
       kDialogWidth);

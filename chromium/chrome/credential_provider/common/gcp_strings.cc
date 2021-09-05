@@ -25,6 +25,9 @@ const char kKeyUsername[] = "user_name";
 const char kKeyDomain[] = "domain";
 const char kKeyExitCode[] = "exit_code";
 
+// AD attributes related to the device.
+const char kKeyIsAdJoinedUser[] = "is_ad_joined_user";
+
 // Name of registry value that holds user properties.
 const wchar_t kUserTokenHandle[] = L"th";
 const wchar_t kUserEmail[] = L"email";
@@ -48,6 +51,8 @@ const wchar_t kRegUpdaterClientStateAppPath[] =
     L"SOFTWARE\\Google\\Update\\ClientState\\" GCPW_UPDATE_CLIENT_GUID;
 const wchar_t kRegUpdaterClientsAppPath[] =
     L"SOFTWARE\\Google\\Update\\Clients\\" GCPW_UPDATE_CLIENT_GUID;
+const wchar_t kRegUninstallStringField[] = L"UninstallString";
+const wchar_t kRegUninstallArgumentsField[] = L"UninstallArguments";
 const wchar_t kRegUsageStatsName[] = L"usagestats";
 
 // Chrome is being opened to show the credential provider logon page.  This
@@ -74,6 +79,10 @@ const char kGcpwEndpointPathSwitch[] = "gcpw-endpoint-path";
 // to GCPW.
 const char kGcpwAdditionalOauthScopes[] = "gcpw-additional-oauth-scopes";
 
+// The show_tos parameter is used to specify whether tos screen needs to be
+// shown as part of the login process or not.
+const char kShowTosSwitch[] = "show_tos";
+
 // Parameter appended to sign in URL to pass valid signin domains to the inline
 // login handler. These domains are separated by ','.
 const char kEmailDomainsSigninPromoParameter[] = "emailDomains";
@@ -82,6 +91,12 @@ const char kValidateGaiaIdSigninPromoParameter[] = "validate_gaia_id";
 const char kGcpwEndpointPathPromoParameter[] = "gcpw_endpoint_path";
 
 const wchar_t kRunAsCrashpadHandlerEntryPoint[] = L"RunAsCrashpadHandler";
+
+// Flags to manipulate behavior of Chrome when importing credentials for the
+// account signs in through GCPW.
+const wchar_t kAllowImportOnlyOnFirstRun[] = L"allow_import_only_on_first_run";
+const wchar_t kAllowImportWhenPrimaryAccountExists[] =
+    L"allow_import_when_primary_exists";
 
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
 const wchar_t kRegHkcuAccountsPath[] = L"Software\\Google\\Accounts";

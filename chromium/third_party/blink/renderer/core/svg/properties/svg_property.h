@@ -39,7 +39,7 @@
 namespace blink {
 
 class SVGElement;
-class SVGAnimationElement;
+class SVGAnimateElement;
 
 class SVGPropertyBase : public GarbageCollected<SVGPropertyBase> {
  public:
@@ -65,7 +65,7 @@ class SVGPropertyBase : public GarbageCollected<SVGPropertyBase> {
   // WebAnimations transition.
   virtual void Add(SVGPropertyBase*, SVGElement*) = 0;
   virtual void CalculateAnimatedValue(
-      SVGAnimationElement*,
+      const SVGAnimateElement&,
       float percentage,
       unsigned repeat_count,
       SVGPropertyBase* from,
@@ -85,7 +85,7 @@ class SVGPropertyBase : public GarbageCollected<SVGPropertyBase> {
     owner_list_ = owner_list;
   }
 
-  virtual void Trace(blink::Visitor* visitor) {}
+  virtual void Trace(Visitor* visitor) {}
 
  protected:
   SVGPropertyBase() : owner_list_(nullptr) {}
@@ -98,11 +98,6 @@ class SVGPropertyBase : public GarbageCollected<SVGPropertyBase> {
   UntracedMember<SVGPropertyBase> owner_list_;
   DISALLOW_COPY_AND_ASSIGN(SVGPropertyBase);
 };
-
-#define DEFINE_SVG_PROPERTY_TYPE_CASTS(thisType)               \
-  DEFINE_TYPE_CASTS(thisType, SVGPropertyBase, value,          \
-                    value->GetType() == thisType::ClassType(), \
-                    value.GetType() == thisType::ClassType())
 
 }  // namespace blink
 

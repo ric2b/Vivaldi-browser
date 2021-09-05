@@ -540,8 +540,7 @@ RuntimePrivateOpenNamedProfileFunction::Run() {
   for (auto* entry : entries) {
     if (entry->GetPath().AsUTF8Unsafe() == params->profile_path) {
       profiles::SwitchToProfile(entry->GetPath(), false,
-                                ProfileManager::CreateCallback(),
-                                ProfileMetrics::SWITCH_PROFILE_ICON);
+                                ProfileManager::CreateCallback());
       success = true;
       break;
     }

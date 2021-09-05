@@ -6,7 +6,6 @@
 
 #include "base/memory/ptr_util.h"
 #include "base/metrics/user_metrics.h"
-#include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/profiles/profile.h"
@@ -15,6 +14,7 @@
 #include "components/infobars/core/infobar.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/url_formatter/elide_url.h"
+#include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/referrer.h"
@@ -40,8 +40,7 @@ PepperBrokerInfoBarDelegate::PepperBrokerInfoBarDelegate(
     HostContentSettingsMap* content_settings,
     TabSpecificContentSettings* tab_content_settings,
     base::OnceCallback<void(bool)> callback)
-    : ConfirmInfoBarDelegate(),
-      url_(url),
+    : url_(url),
       plugin_name_(plugin_name),
       content_settings_(content_settings),
       tab_content_settings_(tab_content_settings),
@@ -58,7 +57,15 @@ PepperBrokerInfoBarDelegate::GetIdentifier() const {
 }
 
 const gfx::VectorIcon& PepperBrokerInfoBarDelegate::GetVectorIcon() const {
-  return kExtensionIcon;
+  return vector_icons::kExtensionIcon;
+}
+
+base::string16 PepperBrokerInfoBarDelegate::GetLinkText() const {
+  return l10n_util::GetStringUTF16(IDS_LEARN_MORE);
+}
+
+GURL PepperBrokerInfoBarDelegate::GetLinkURL() const {
+  return GURL("https://support.google.com/chrome/?p=ib_pepper_broker");
 }
 
 base::string16 PepperBrokerInfoBarDelegate::GetMessageText() const {
@@ -83,21 +90,13 @@ bool PepperBrokerInfoBarDelegate::Cancel() {
   return true;
 }
 
-base::string16 PepperBrokerInfoBarDelegate::GetLinkText() const {
-  return l10n_util::GetStringUTF16(IDS_LEARN_MORE);
-}
-
-GURL PepperBrokerInfoBarDelegate::GetLinkURL() const {
-  return GURL("https://support.google.com/chrome/?p=ib_pepper_broker");
-}
-
 void PepperBrokerInfoBarDelegate::DispatchCallback(bool result) {
   base::RecordAction(
       result ? base::UserMetricsAction("PPAPI.BrokerInfobarClickedAllow")
              : base::UserMetricsAction("PPAPI.BrokerInfobarClickedDeny"));
   std::move(callback_).Run(result);
   content_settings_->SetContentSettingDefaultScope(
-      url_, GURL(), CONTENT_SETTINGS_TYPE_PPAPI_BROKER, std::string(),
+      url_, GURL(), ContentSettingsType::PPAPI_BROKER, std::string(),
       result ? CONTENT_SETTING_ALLOW : CONTENT_SETTING_BLOCK);
   tab_content_settings_->SetPepperBrokerAllowed(result);
 }

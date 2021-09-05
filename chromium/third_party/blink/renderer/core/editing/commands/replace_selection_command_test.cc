@@ -53,8 +53,7 @@ TEST_F(ReplaceSelectionCommandTest, pastingEmptySpan) {
       GetDocument(), fragment, options);
 
   EXPECT_TRUE(command->Apply()) << "the replace command should have succeeded";
-  EXPECT_EQ("foo", GetDocument().body()->InnerHTMLAsString())
-      << "no DOM tree mutation";
+  EXPECT_EQ("foo", GetDocument().body()->innerHTML()) << "no DOM tree mutation";
 }
 
 // This is a regression test for https://crbug.com/668808
@@ -79,37 +78,8 @@ TEST_F(ReplaceSelectionCommandTest, pasteSpanInText) {
       GetDocument(), fragment, options);
 
   EXPECT_TRUE(command->Apply()) << "the replace command should have succeeded";
-  EXPECT_EQ("<b>t</b>bar<b>ext</b>", GetDocument().body()->InnerHTMLAsString())
+  EXPECT_EQ("<b>t</b>bar<b>ext</b>", GetDocument().body()->innerHTML())
       << "'bar' should have been inserted";
-}
-
-// This is a regression test for https://crbug.com/121163
-TEST_F(ReplaceSelectionCommandTest, styleTagsInPastedHeadIncludedInContent) {
-  GetDocument().setDesignMode("on");
-  UpdateAllLifecyclePhasesForTest();
-  GetDummyPageHolder().GetFrame().Selection().SetSelection(
-      SelectionInDOMTree::Builder()
-          .Collapse(Position(GetDocument().body(), 0))
-          .Build(),
-      SetSelectionOptions());
-
-  DocumentFragment* fragment = GetDocument().createDocumentFragment();
-  fragment->ParseHTML(
-      "<head><style>foo { bar: baz; }</style></head>"
-      "<body><p>Text</p></body>",
-      GetDocument().documentElement(), kDisallowScriptingAndPluginContent);
-
-  ReplaceSelectionCommand::CommandOptions options = 0;
-  auto* command = MakeGarbageCollected<ReplaceSelectionCommand>(
-      GetDocument(), fragment, options);
-  EXPECT_TRUE(command->Apply()) << "the replace command should have succeeded";
-
-  EXPECT_EQ(
-      "<head><style>foo { bar: baz; }</style></head>"
-      "<body><p>Text</p></body>",
-      GetDocument().body()->InnerHTMLAsString())
-      << "the STYLE and P elements should have been pasted into the body "
-      << "of the document";
 }
 
 // Helper function to set autosizing multipliers on a document.

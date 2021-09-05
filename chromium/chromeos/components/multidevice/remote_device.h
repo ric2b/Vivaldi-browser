@@ -25,7 +25,15 @@ struct RemoteDevice {
   // returns empty string if |device_id| is not a valid device ID.
   static std::string DerivePublicKey(const std::string& device_id);
 
-  std::string user_id;
+  std::string user_email;
+
+  // The Instance ID is the primary identifier for devices using CryptAuth v2,
+  // but the Instance ID is not present in CryptAuth v1. This string is empty
+  // for devices not using CryptAuth v2 Enrollment and v2 DeviceSync.
+  // TODO(https://crbug.com/1019206): Remove comments when v1 DeviceSync is
+  // disabled.
+  std::string instance_id;
+
   std::string name;
   std::string pii_free_name;
   std::string public_key;
@@ -36,7 +44,8 @@ struct RemoteDevice {
 
   RemoteDevice();
   RemoteDevice(
-      const std::string& user_id,
+      const std::string& user_email,
+      const std::string& instance_id,
       const std::string& name,
       const std::string& pii_free_name,
       const std::string& public_key,
@@ -51,8 +60,8 @@ struct RemoteDevice {
 
   bool operator==(const RemoteDevice& other) const;
 
-  // Compares devices via their public keys. Note that this function is
-  // necessary in order to use |RemoteDevice| as a key of a std::map.
+  // If at least one of the RemoteDevices has an Instance ID, compare by that;
+  // otherwise, compare by public key.
   bool operator<(const RemoteDevice& other) const;
 };
 

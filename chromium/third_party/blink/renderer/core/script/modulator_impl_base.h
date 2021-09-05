@@ -42,11 +42,6 @@ class ModulatorImplBase : public Modulator {
   bool IsScriptingDisabled() const override;
 
   bool ImportMapsEnabled() const override;
-  bool BuiltInModuleInfraEnabled() const override;
-  bool BuiltInModuleEnabled(layered_api::Module) const override;
-  void BuiltInModuleUseCount(layered_api::Module) const override;
-
-  static bool BuiltInModuleRequireSecureContext(layered_api::Module);
 
   ModuleRecordResolver* GetModuleRecordResolver() override {
     return module_record_resolver_.Get();
@@ -57,14 +52,16 @@ class ModulatorImplBase : public Modulator {
 
   void FetchTree(const KURL&,
                  ResourceFetcher* fetch_client_settings_object_fetcher,
-                 mojom::RequestContextType destination,
+                 mojom::RequestContextType context_type,
+                 network::mojom::RequestDestination destination,
                  const ScriptFetchOptions&,
                  ModuleScriptCustomFetchType,
                  ModuleTreeClient*) override;
   void FetchDescendantsForInlineScript(
       ModuleScript*,
       ResourceFetcher* fetch_client_settings_object_fetcher,
-      mojom::RequestContextType destination,
+      mojom::RequestContextType context_type,
+      network::mojom::RequestDestination destination,
       ModuleTreeClient*) override;
   void FetchSingle(const ModuleScriptFetchRequest&,
                    ResourceFetcher* fetch_client_settings_object_fetcher,

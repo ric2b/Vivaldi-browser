@@ -27,9 +27,6 @@ class ExtensionErrorUI {
     // Get the BrowserContext associated with this UI.
     virtual content::BrowserContext* GetContext() = 0;
 
-    // Get the set of external extensions to warn the user about.
-    virtual const ExtensionSet& GetExternalExtensions() = 0;
-
     // Get the set of blacklisted extensions to warn the user about.
     virtual const ExtensionSet& GetBlacklistedExtensions() = 0;
 
@@ -42,10 +39,6 @@ class ExtensionErrorUI {
     // Handle the alert closing.
     virtual void OnAlertClosed() = 0;
   };
-
-  static ExtensionErrorUI* Create(Delegate* delegate);
-
-  virtual ~ExtensionErrorUI();
 
   // Shows the installation error in a bubble view. Should return true if a
   // bubble is shown, false if one could not be shown.
@@ -61,29 +54,7 @@ class ExtensionErrorUI {
   // synchronously.
   virtual void Close() = 0;
 
- protected:
-  explicit ExtensionErrorUI(Delegate* delegate);
-
-  // Model methods for the bubble view.
-  base::string16 GetBubbleViewTitle();
-  std::vector<base::string16> GetBubbleViewMessages();
-  base::string16 GetBubbleViewAcceptButtonLabel();
-  base::string16 GetBubbleViewCancelButtonLabel();
-
-  // Sub-classes should call this methods based on the actions taken by the user
-  // in the error bubble.
-  void BubbleViewDidClose();  // destroys |this|
-  void BubbleViewAcceptButtonPressed();
-  void BubbleViewCancelButtonPressed();
-
- private:
-  base::string16 GenerateMessage();
-
-  Delegate* delegate_;
-
-  base::string16 message_;  // Displayed in the body of the alert.
-
-  DISALLOW_COPY_AND_ASSIGN(ExtensionErrorUI);
+  virtual ~ExtensionErrorUI() {}
 };
 
 }  // namespace extensions

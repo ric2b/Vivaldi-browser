@@ -20,9 +20,9 @@
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/browser/web_applications/web_app_registry_update.h"
 #include "chrome/browser/web_applications/web_app_sync_bridge.h"
+#include "components/services/app_service/public/cpp/file_handler.h"
 #include "components/sync/model/model_type_store.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
 #include "url/gurl.h"
 
 namespace web_app {
@@ -35,6 +35,34 @@ class WebAppDatabaseTest : public WebAppTest {
     test_registry_controller_ =
         std::make_unique<TestWebAppRegistryController>();
     test_registry_controller_->SetUp(profile());
+  }
+
+  static apps::FileHandlers CreateFileHandlers(int suffix) {
+    apps::FileHandlers file_handlers;
+
+    for (unsigned int i = 0; i < 5; ++i) {
+      std::string suffix_str =
+          base::NumberToString(suffix) + base::NumberToString(i);
+
+      apps::FileHandler::AcceptEntry accept_entry1;
+      accept_entry1.mime_type = "application/" + suffix_str + "+foo";
+      accept_entry1.file_extensions.insert("." + suffix_str + "a");
+      accept_entry1.file_extensions.insert("." + suffix_str + "b");
+
+      apps::FileHandler::AcceptEntry accept_entry2;
+      accept_entry2.mime_type = "application/" + suffix_str + "+bar";
+      accept_entry2.file_extensions.insert("." + suffix_str + "a");
+      accept_entry2.file_extensions.insert("." + suffix_str + "b");
+
+      apps::FileHandler file_handler;
+      file_handler.action = GURL("https://example.com/open-" + suffix_str);
+      file_handler.accept.push_back(std::move(accept_entry1));
+      file_handler.accept.push_back(std::move(accept_entry2));
+
+      file_handlers.push_back(std::move(file_handler));
+    }
+
+    return file_handlers;
   }
 
   static std::unique_ptr<WebApp> CreateWebApp(const std::string& base_url,
@@ -72,17 +100,31 @@ class WebAppDatabaseTest : public WebAppTest {
     app->SetThemeColor(theme_color);
     app->SetIsLocallyInstalled(!(suffix & 2));
     app->SetIsInSyncInstall(!(suffix & 4));
-    app->SetDisplayMode((suffix & 1) ? blink::mojom::DisplayMode::kBrowser
-                                     : blink::mojom::DisplayMode::kStandalone);
+    app->SetUserDisplayMode((suffix & 1) ? DisplayMode::kBrowser
+                                         : DisplayMode::kStandalone);
 
-    const std::string icon_url =
-        base_url + "/icon" + base::NumberToString(suffix);
-    const int icon_size_in_px = 256;
+    const DisplayMode display_modes[4] = {
+        DisplayMode::kBrowser, DisplayMode::kMinimalUi,
+        DisplayMode::kStandalone, DisplayMode::kFullscreen};
+    app->SetDisplayMode(display_modes[(suffix >> 4) & 3]);
 
-    WebApp::Icons icons;
-    icons.push_back({GURL(icon_url), icon_size_in_px});
+    WebApplicationIconInfo icon;
+    icon.url = GURL(base_url + "/icon" + base::NumberToString(suffix));
+    const SquareSizePx size = 256;
+    icon.square_size_px = size;
+    app->SetIconInfos({std::move(icon)});
+    app->SetDownloadedIconSizes({size});
 
-    app->SetIcons(std::move(icons));
+    app->SetFileHandlers(CreateFileHandlers(suffix));
+
+    const int num_additional_search_terms = suffix & 7;
+    std::vector<std::string> additional_search_terms(
+        num_additional_search_terms);
+    for (int i = 0; i < num_additional_search_terms; ++i) {
+      additional_search_terms[i] =
+          "Foo_" + base::NumberToString(suffix) + "_" + base::NumberToString(i);
+    }
+    app->SetAdditionalSearchTerms(std::move(additional_search_terms));
 
     WebApp::SyncData sync_data;
     sync_data.name = "Sync" + name;
@@ -250,30 +292,34 @@ TEST_F(WebAppDatabaseTest, WebAppWithoutOptionalFields) {
   const auto launch_url = GURL("https://example.com/");
   const AppId app_id = GenerateAppIdFromURL(GURL(launch_url));
   const std::string name = "Name";
-  const auto display_mode = blink::mojom::DisplayMode::kBrowser;
+  const auto user_display_mode = DisplayMode::kBrowser;
 
   auto app = std::make_unique<WebApp>(app_id);
 
   // Required fields:
   app->SetLaunchUrl(launch_url);
   app->SetName(name);
-  app->SetDisplayMode(display_mode);
+  app->SetUserDisplayMode(user_display_mode);
   app->SetIsLocallyInstalled(false);
 
   EXPECT_FALSE(app->HasAnySources());
-  for (int i = Source::kMinValue; i < Source::kMaxValue; ++i) {
+  for (int i = Source::kMinValue; i <= Source::kMaxValue; ++i) {
     app->AddSource(static_cast<Source::Type>(i));
     EXPECT_TRUE(app->HasAnySources());
   }
 
   // Let optional fields be empty:
+  EXPECT_EQ(app->display_mode(), DisplayMode::kUndefined);
   EXPECT_TRUE(app->description().empty());
   EXPECT_TRUE(app->scope().is_empty());
   EXPECT_FALSE(app->theme_color().has_value());
-  EXPECT_TRUE(app->icons().empty());
+  EXPECT_TRUE(app->icon_infos().empty());
+  EXPECT_TRUE(app->downloaded_icon_sizes().empty());
   EXPECT_FALSE(app->is_in_sync_install());
   EXPECT_TRUE(app->sync_data().name.empty());
   EXPECT_FALSE(app->sync_data().theme_color.has_value());
+  EXPECT_TRUE(app->file_handlers().empty());
+  EXPECT_TRUE(app->additional_search_terms().empty());
   controller().RegisterApp(std::move(app));
 
   Registry registry = database_factory().ReadRegistry();
@@ -285,23 +331,27 @@ TEST_F(WebAppDatabaseTest, WebAppWithoutOptionalFields) {
   EXPECT_EQ(app_id, app_copy->app_id());
   EXPECT_EQ(launch_url, app_copy->launch_url());
   EXPECT_EQ(name, app_copy->name());
-  EXPECT_EQ(display_mode, app_copy->display_mode());
+  EXPECT_EQ(user_display_mode, app_copy->user_display_mode());
   EXPECT_FALSE(app_copy->is_locally_installed());
 
-  for (int i = Source::kMinValue; i < Source::kMaxValue; ++i) {
+  for (int i = Source::kMinValue; i <= Source::kMaxValue; ++i) {
     EXPECT_TRUE(app_copy->HasAnySources());
     app_copy->RemoveSource(static_cast<Source::Type>(i));
   }
   EXPECT_FALSE(app_copy->HasAnySources());
 
   // No optional fields.
+  EXPECT_EQ(app_copy->display_mode(), DisplayMode::kUndefined);
   EXPECT_TRUE(app_copy->description().empty());
   EXPECT_TRUE(app_copy->scope().is_empty());
   EXPECT_FALSE(app_copy->theme_color().has_value());
-  EXPECT_TRUE(app_copy->icons().empty());
+  EXPECT_TRUE(app_copy->icon_infos().empty());
+  EXPECT_TRUE(app_copy->downloaded_icon_sizes().empty());
   EXPECT_FALSE(app_copy->is_in_sync_install());
   EXPECT_TRUE(app_copy->sync_data().name.empty());
   EXPECT_FALSE(app_copy->sync_data().theme_color.has_value());
+  EXPECT_TRUE(app_copy->file_handlers().empty());
+  EXPECT_TRUE(app_copy->additional_search_terms().empty());
 }
 
 TEST_F(WebAppDatabaseTest, WebAppWithManyIcons) {
@@ -313,15 +363,18 @@ TEST_F(WebAppDatabaseTest, WebAppWithManyIcons) {
   auto app = CreateWebApp(base_url, 0);
   auto app_id = app->app_id();
 
-  WebApp::Icons icons;
+  std::vector<WebApplicationIconInfo> icons;
+  std::vector<SquareSizePx> sizes;
   for (int i = 1; i <= num_icons; ++i) {
-    const std::string icon_url =
-        base_url + "/icon" + base::NumberToString(num_icons);
+    WebApplicationIconInfo icon;
+    icon.url = GURL(base_url + "/icon" + base::NumberToString(num_icons));
     // Let size equals the icon's number squared.
-    const int icon_size_in_px = i * i;
-    icons.push_back({GURL(icon_url), icon_size_in_px});
+    icon.square_size_px = i * i;
+    sizes.push_back(icon.square_size_px);
+    icons.push_back(std::move(icon));
   }
-  app->SetIcons(std::move(icons));
+  app->SetIconInfos(std::move(icons));
+  app->SetDownloadedIconSizes(std::move(sizes));
 
   controller().RegisterApp(std::move(app));
 
@@ -329,11 +382,49 @@ TEST_F(WebAppDatabaseTest, WebAppWithManyIcons) {
   EXPECT_EQ(1UL, registry.size());
 
   std::unique_ptr<WebApp>& app_copy = registry.at(app_id);
-  EXPECT_EQ(static_cast<unsigned>(num_icons), app_copy->icons().size());
+  EXPECT_EQ(static_cast<unsigned>(num_icons), app_copy->icon_infos().size());
   for (int i = 1; i <= num_icons; ++i) {
     const int icon_size_in_px = i * i;
-    EXPECT_EQ(icon_size_in_px, app_copy->icons()[i - 1].size_in_px);
+    EXPECT_EQ(icon_size_in_px, app_copy->icon_infos()[i - 1].square_size_px);
   }
+}
+
+TEST_F(WebAppDatabaseTest, WebAppWithFileHandlersRoundTrip) {
+  controller().Init();
+
+  const std::string base_url = "https://example.com/path";
+  auto app = CreateWebApp(base_url, 0);
+  auto app_id = app->app_id();
+
+  apps::FileHandlers file_handlers;
+
+  apps::FileHandler file_handler1;
+  file_handler1.action = GURL("https://example.com/path/csv");
+  apps::FileHandler::AcceptEntry accept_csv;
+  accept_csv.mime_type = "text/csv";
+  accept_csv.file_extensions.insert(".csv");
+  accept_csv.file_extensions.insert(".txt");
+  file_handler1.accept.push_back(std::move(accept_csv));
+  file_handlers.push_back(std::move(file_handler1));
+
+  apps::FileHandler file_handler2;
+  file_handler2.action = GURL("https://example.com/path/svg");
+  apps::FileHandler::AcceptEntry accept_xml;
+  accept_xml.mime_type = "text/xml";
+  accept_xml.file_extensions.insert(".xml");
+  file_handler2.accept.push_back(std::move(accept_xml));
+  apps::FileHandler::AcceptEntry accept_svg;
+  accept_svg.mime_type = "text/xml+svg";
+  accept_svg.file_extensions.insert(".svg");
+  file_handler2.accept.push_back(std::move(accept_svg));
+  file_handlers.push_back(std::move(file_handler2));
+
+  app->SetFileHandlers(std::move(file_handlers));
+
+  controller().RegisterApp(std::move(app));
+
+  Registry registry = database_factory().ReadRegistry();
+  EXPECT_TRUE(IsRegistryEqual(mutable_registrar().registry(), registry));
 }
 
 }  // namespace web_app

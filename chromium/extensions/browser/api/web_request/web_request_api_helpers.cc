@@ -156,7 +156,6 @@ constexpr RequestHeaderEntry kRequestHeaderEntries[] = {
     {"proxy-connection", RequestHeaderType::kProxyConnection},
     {"range", RequestHeaderType::kRange},
     {"referer", RequestHeaderType::kReferer},
-    {"sec-origin-policy", RequestHeaderType::kSecOriginPolicy},
     {"te", RequestHeaderType::kTe},
     {"transfer-encoding", RequestHeaderType::kTransferEncoding},
     {"upgrade", RequestHeaderType::kUpgrade},
@@ -189,7 +188,11 @@ constexpr bool ValidateHeaderEntries(const T& entries) {
 }
 
 // All entries other than kOther and kNone are mapped.
-static_assert(static_cast<size_t>(RequestHeaderType::kMaxValue) - 1 ==
+// sec-origin-policy was removed.
+// So -2 is -1 for the count of the enums, and -1 for the removed
+// sec-origin-policy which does not have a corresponding entry in
+// kRequestHeaderEntries but does contribute to RequestHeaderType::kMaxValue.
+static_assert(static_cast<size_t>(RequestHeaderType::kMaxValue) - 2 ==
                   base::size(kRequestHeaderEntries),
               "Invalid number of request header entries");
 
@@ -522,19 +525,17 @@ ResponseCookieModification ResponseCookieModification::Clone() const {
   return clone;
 }
 
-EventResponseDelta::EventResponseDelta(
-    const std::string& extension_id, const base::Time& extension_install_time)
+EventResponseDelta::EventResponseDelta(const std::string& extension_id,
+                                       const base::Time& extension_install_time)
     : extension_id(extension_id),
       extension_install_time(extension_install_time),
-      cancel(false) {
-}
+      cancel(false) {}
 
 EventResponseDelta::EventResponseDelta(EventResponseDelta&& other) = default;
 EventResponseDelta& EventResponseDelta ::operator=(EventResponseDelta&& other) =
     default;
 
-EventResponseDelta::~EventResponseDelta() {
-}
+EventResponseDelta::~EventResponseDelta() = default;
 
 bool InDecreasingExtensionInstallationTimeOrder(const EventResponseDelta& a,
                                                 const EventResponseDelta& b) {
@@ -1086,8 +1087,8 @@ static ParsedResponseCookies GetResponseCookies(
 
   size_t iter = 0;
   std::string value;
-  while (override_response_headers->EnumerateHeader(&iter, "Set-Cookie",
-                                                    &value)) {
+  while (
+      override_response_headers->EnumerateHeader(&iter, "Set-Cookie", &value)) {
     result.push_back(std::make_unique<net::ParsedCookie>(value));
   }
   return result;
@@ -1306,7 +1307,7 @@ void MergeOnHeadersReceivedResponses(
     const EventResponseDeltas& deltas,
     const net::HttpResponseHeaders* original_response_headers,
     scoped_refptr<net::HttpResponseHeaders>* override_response_headers,
-    GURL* allowed_unsafe_redirect_url,
+    GURL* preserve_fragment_on_redirect_url,
     IgnoredActions* ignored_actions,
     bool* response_headers_modified) {
   DCHECK(response_headers_modified);
@@ -1405,9 +1406,8 @@ void MergeOnHeadersReceivedResponses(
     (*override_response_headers)->ReplaceStatusLine("HTTP/1.1 302 Found");
     (*override_response_headers)->RemoveHeader("location");
     (*override_response_headers)->AddHeader("Location: " + new_url.spec());
-    // Explicitly mark the URL as safe for redirection, to prevent the request
-    // from being blocked because of net::ERR_UNSAFE_REDIRECT.
-    *allowed_unsafe_redirect_url = new_url;
+    // Prevent the original URL's fragment from being added to the new URL.
+    *preserve_fragment_on_redirect_url = new_url;
   }
 
   // Record metrics.
@@ -1503,8 +1503,7 @@ std::unique_ptr<base::DictionaryValue> CreateHeaderDictionary(
   if (base::IsStringUTF8(value)) {
     header->SetString(keys::kHeaderValueKey, value);
   } else {
-    header->Set(keys::kHeaderBinaryValueKey,
-                StringToCharList(value));
+    header->Set(keys::kHeaderBinaryValueKey, StringToCharList(value));
   }
   return header;
 }

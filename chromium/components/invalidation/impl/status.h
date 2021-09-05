@@ -16,7 +16,8 @@ enum class InvalidationParsingStatus {
   kPublicTopicEmpty = 1,
   kPrivateTopicEmpty = 2,
   kVersionEmpty = 3,
-  kMaxValue = kVersionEmpty,
+  kVersionInvalid = 4,
+  kMaxValue = kVersionInvalid,
 };
 
 // This enum indicates how an operation was completed. These values are written
@@ -45,7 +46,7 @@ struct Status {
 
   bool IsSuccess() const { return code == StatusCode::SUCCESS; }
   bool IsAuthFailure() const { return code == StatusCode::AUTH_FAILURE; }
-  bool ShouldRetry() const { return code != StatusCode::FAILED_NON_RETRIABLE; }
+  bool ShouldRetry() const { return code == StatusCode::FAILED; }
 
   StatusCode code;
   // The message is not meant to be displayed to the user.

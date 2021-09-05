@@ -22,17 +22,18 @@
 #include "base/time/time.h"
 #include "net/base/auth.h"
 #include "net/base/ip_endpoint.h"
+#include "net/base/isolation_info.h"
 #include "net/base/load_states.h"
 #include "net/base/load_timing_info.h"
 #include "net/base/net_error_details.h"
 #include "net/base/net_export.h"
 #include "net/base/network_delegate.h"
-#include "net/base/network_isolation_key.h"
 #include "net/base/privacy_mode.h"
 #include "net/base/proxy_server.h"
 #include "net/base/request_priority.h"
 #include "net/base/upload_progress.h"
 #include "net/cookies/canonical_cookie.h"
+#include "net/cookies/site_for_cookies.h"
 #include "net/http/http_raw_request_headers.h"
 #include "net/http/http_request_headers.h"
 #include "net/http/http_response_headers.h"
@@ -93,32 +94,37 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
   // of the initial leg of the request; the caller is responsible for
   // setting the initial Referer, and the ReferrerPolicy only controls
   // what happens to the Referer while following redirects.
+  //
+  // NOTE: This enum is persisted to histograms. Do not change or reorder
+  // values.
+  // TODO(~M82): Once the Net.URLRequest.ReferrerPolicyForRequest
+  // metric is retired, remove this notice.
   enum ReferrerPolicy {
     // Clear the referrer header if the header value is HTTPS but the request
     // destination is HTTP. This is the default behavior of URLRequest.
-    CLEAR_REFERRER_ON_TRANSITION_FROM_SECURE_TO_INSECURE,
+    CLEAR_REFERRER_ON_TRANSITION_FROM_SECURE_TO_INSECURE = 0,
     // A slight variant on CLEAR_REFERRER_ON_TRANSITION_FROM_SECURE_TO_INSECURE:
     // If the request destination is HTTP, an HTTPS referrer will be cleared. If
     // the request's destination is cross-origin with the referrer (but does not
     // downgrade), the referrer's granularity will be stripped down to an origin
     // rather than a full URL. Same-origin requests will send the full referrer.
-    REDUCE_REFERRER_GRANULARITY_ON_TRANSITION_CROSS_ORIGIN,
+    REDUCE_REFERRER_GRANULARITY_ON_TRANSITION_CROSS_ORIGIN = 1,
     // Strip the referrer down to an origin when the origin of the referrer is
     // different from the destination's origin.
-    ORIGIN_ONLY_ON_TRANSITION_CROSS_ORIGIN,
+    ORIGIN_ONLY_ON_TRANSITION_CROSS_ORIGIN = 2,
     // Never change the referrer.
-    NEVER_CLEAR_REFERRER,
+    NEVER_CLEAR_REFERRER = 3,
     // Strip the referrer down to the origin regardless of the redirect
     // location.
-    ORIGIN,
+    ORIGIN = 4,
     // Clear the referrer when the request's referrer is cross-origin with
     // the request's destination.
-    CLEAR_REFERRER_ON_TRANSITION_CROSS_ORIGIN,
+    CLEAR_REFERRER_ON_TRANSITION_CROSS_ORIGIN = 5,
     // Strip the referrer down to the origin, but clear it entirely if the
     // referrer value is HTTPS and the destination is HTTP.
-    ORIGIN_CLEAR_ON_TRANSITION_FROM_SECURE_TO_INSECURE,
+    ORIGIN_CLEAR_ON_TRANSITION_FROM_SECURE_TO_INSECURE = 6,
     // Always clear the referrer regardless of the request destination.
-    NO_REFERRER,
+    NO_REFERRER = 7,
     MAX_REFERRER_POLICY = NO_REFERRER
   };
 
@@ -153,12 +159,9 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
   //   Read() initiated by delegate
   //    - OnReadCompleted* (zero or more calls until all data is read)
   //
-  // Read() must be called at least once. Read() returns true when it completed
-  // immediately, and false if an IO is pending or if there is an error.  When
-  // Read() returns false, the caller can check the Request's status() to see
-  // if an error occurred, or if the IO is just pending.  When Read() returns
-  // true with zero bytes read, it indicates the end of the response.
-  //
+  // Read() must be called at least once. Read() returns bytes read when it
+  // completes immediately, and a negative error value if an IO is pending or if
+  // there is an error.
   class NET_EXPORT Delegate {
    public:
     // Called upon receiving a redirect.  The delegate may call the request's
@@ -247,17 +250,6 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
   // started. Once it was set to block all cookies, it cannot be changed back.
   static void SetDefaultCookiePolicyToBlock();
 
-  // Returns true if the scheme can be handled by URLRequest. False otherwise.
-  static bool IsHandledProtocol(const std::string& scheme);
-
-  // Returns true if the url can be handled by URLRequest. False otherwise.
-  // The function returns true for invalid urls because URLRequest knows how
-  // to handle those.
-  // NOTE: This will also return true for URLs that are handled by
-  // ProtocolFactories that only work for requests that are scoped to a
-  // Profile.
-  static bool IsHandledURL(const GURL& url);
-
   // The original url is the url used to initialize the request, and it may
   // differ from the url if the request was redirected.
   const GURL& original_url() const { return url_chain_.front(); }
@@ -280,22 +272,21 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
   //          by starting from some page that redirects to the
   //          host-to-be-attacked.
   //
-  // TODO(mkwst): Convert this to a 'url::Origin'. Several callsites are using
-  // this value as a proxy for the "top-level frame URL", which is simply
-  // incorrect and fragile. We don't need the full URL for any //net checks,
-  // so we should drop the pieces we don't need. https://crbug.com/577565
-  const GURL& site_for_cookies() const { return site_for_cookies_; }
+  const SiteForCookies& site_for_cookies() const { return site_for_cookies_; }
   // This method may only be called before Start().
-  void set_site_for_cookies(const GURL& site_for_cookies);
+  void set_site_for_cookies(const SiteForCookies& site_for_cookies);
 
-  // This key is used to isolate requests from different contexts in accessing
-  // shared network resources like the cache.
-  const NetworkIsolationKey& network_isolation_key() const {
-    return network_isolation_key_;
+  // Sets IsolationInfo for the request, which affects whether SameSite cookies
+  // are sent, what NetworkIsolationKey is used for cached resources, and how
+  // that behavior changes when following redirects. This may only be changed
+  // before Start() is called.
+  //
+  // TODO(https://crbug.com/1060631): This isn't actually used yet for SameSite
+  // cookies. Update consumers and fix that.
+  void set_isolation_info(const IsolationInfo& isolation_info) {
+    isolation_info_ = isolation_info;
   }
-  void set_network_isolation_key(const NetworkIsolationKey& key) {
-    network_isolation_key_ = key;
-  }
+  const IsolationInfo& isolation_info() const { return isolation_info_; }
 
   // Indicate whether SameSite cookies should be attached even though the
   // request is cross-site.
@@ -613,7 +604,7 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
   // request.
   void CancelWithSSLError(int error, const SSLInfo& ssl_info);
 
-  //  Read initiates an asynchronous read from the response, and must only be
+  // Read initiates an asynchronous read from the response, and must only be
   // called after the OnResponseStarted callback is received with a net::OK. If
   // data is available, length and the data will be returned immediately. If the
   // request has failed, an error code will be returned. If data is not yet
@@ -628,9 +619,6 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
   //
   // The |max_bytes| parameter is the maximum number of bytes to read.
   int Read(IOBuffer* buf, int max_bytes);
-  // Deprecated.
-  // TODO(maksims): Remove this.
-  bool Read(IOBuffer* buf, int max_bytes, int* bytes_read);
 
   // This method may be called to follow a redirect that was deferred in
   // response to an OnReceivedRedirect call. If non-null,
@@ -698,10 +686,6 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
   // encryption, 0 for cached responses.
   int raw_header_size() const { return raw_header_size_; }
 
-  // Returns the error status of the request.
-  // Do not use! Going to be protected!
-  const URLRequestStatus& status() const { return status_; }
-
   const NetworkTrafficAnnotationTag& traffic_annotation() const {
     return traffic_annotation_;
   }
@@ -747,6 +731,9 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
 
   // Allow the URLRequestJob class to set our status too.
   void set_status(URLRequestStatus status);
+
+  // Returns the error status of the request.
+  const URLRequestStatus& status() const { return status_; }
 
   // Allow the URLRequestJob to redirect this request. If non-null,
   // |removed_headers| and |modified_headers| are changes
@@ -836,6 +823,12 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
   // cancellation.
   void OnCallToDelegateComplete();
 
+  // Records the referrer policy of the given request, bucketed by
+  // whether the request is same-origin or not. To save computation,
+  // takes this fact as a boolean parameter rather than dynamically
+  // checking.
+  void RecordReferrerGranularityMetrics(bool request_is_same_origin) const;
+
   // Contextual information used for this request. Cannot be NULL. This contains
   // most of the dependencies which are shared between requests (disk cache,
   // cookie store, socket pool, etc.)
@@ -850,9 +843,9 @@ class NET_EXPORT URLRequest : public base::SupportsUserData {
   std::unique_ptr<UploadDataStream> upload_data_stream_;
 
   std::vector<GURL> url_chain_;
-  GURL site_for_cookies_;
+  SiteForCookies site_for_cookies_;
 
-  NetworkIsolationKey network_isolation_key_;
+  IsolationInfo isolation_info_;
 
   bool attach_same_site_cookies_;
   base::Optional<url::Origin> initiator_;

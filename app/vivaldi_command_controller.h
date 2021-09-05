@@ -14,7 +14,7 @@ enum VivaldiScrollType {
   kVivaldiScrollInertial
 };
 
-bool NeedsDisabledMacMenuItem(int action);
+bool GetIsEnabledWithNoWindows(int action, bool* enabled);
 void SetVivaldiScrollType(int scrollType);
 void UpdateCommandsForVivaldi(CommandUpdater*);
 bool ExecuteVivaldiCommands(Browser* browser, int id);

@@ -9,16 +9,14 @@ assert(is_chromeos, "Non-Chrome-OS builds must not depend on //chromeos")
 
 component("auth") {
   defines = [ "IS_CHROMEOS_LOGIN_AUTH_IMPL" ]
-  public_deps = [
-    ":challenge_response_key",
-  ]
+  public_deps = [ ":challenge_response_key" ]
   deps = [
     "//base",
     "//base:i18n",
     "//chromeos/constants",
     "//chromeos/cryptohome",
-    "//chromeos/dbus/auth_policy",
-    "//chromeos/dbus/auth_policy:authpolicy_proto",
+    "//chromeos/dbus/authpolicy",
+    "//chromeos/dbus/authpolicy:authpolicy_proto",
     "//chromeos/dbus/constants",
     "//chromeos/dbus/cryptohome",
     "//chromeos/dbus/cryptohome:cryptohome_proto",
@@ -110,9 +108,7 @@ source_set("test_support") {
 # chromeos/cryptohome.
 source_set("challenge_response_key") {
   defines = [ "IS_CHROMEOS_LOGIN_AUTH_IMPL" ]
-  deps = [
-    "//base",
-  ]
+  deps = [ "//base" ]
   sources = [
     "challenge_response_key.cc",
     "challenge_response_key.h",
@@ -126,8 +122,8 @@ source_set("unit_tests") {
     ":auth",
     "//base",
     "//base:i18n",
-    "//chromeos/dbus/auth_policy",
-    "//chromeos/dbus/auth_policy:authpolicy_proto",
+    "//chromeos/dbus/authpolicy",
+    "//chromeos/dbus/authpolicy:authpolicy_proto",
     "//chromeos/dbus/cryptohome",
     "//chromeos/tpm:test_support",
     "//components/prefs",

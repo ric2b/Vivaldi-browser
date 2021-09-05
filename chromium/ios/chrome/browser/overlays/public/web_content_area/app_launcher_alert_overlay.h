@@ -5,12 +5,13 @@
 #ifndef IOS_CHROME_BROWSER_OVERLAYS_PUBLIC_WEB_CONTENT_AREA_APP_LAUNCHER_ALERT_OVERLAY_H_
 #define IOS_CHROME_BROWSER_OVERLAYS_PUBLIC_WEB_CONTENT_AREA_APP_LAUNCHER_ALERT_OVERLAY_H_
 
-#include "ios/chrome/browser/overlays/public/overlay_user_data.h"
+#include "ios/chrome/browser/overlays/public/overlay_request_config.h"
+#include "ios/chrome/browser/overlays/public/overlay_response_info.h"
 
 // Configuration object for OverlayRequests for alerts notifying the user that
 // a navigation will open another app.
 class AppLauncherAlertOverlayRequestConfig
-    : public OverlayUserData<AppLauncherAlertOverlayRequestConfig> {
+    : public OverlayRequestConfig<AppLauncherAlertOverlayRequestConfig> {
  public:
   ~AppLauncherAlertOverlayRequestConfig() override;
 
@@ -26,7 +27,7 @@ class AppLauncherAlertOverlayRequestConfig
 
 // User interaction info for OverlayResponses for app launcher alerts.
 class AppLauncherAlertOverlayResponseInfo
-    : public OverlayUserData<AppLauncherAlertOverlayResponseInfo> {
+    : public OverlayResponseInfo<AppLauncherAlertOverlayResponseInfo> {
  public:
   ~AppLauncherAlertOverlayResponseInfo() override;
 

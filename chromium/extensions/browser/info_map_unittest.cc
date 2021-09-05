@@ -6,6 +6,7 @@
 
 #include "base/path_service.h"
 #include "content/public/test/browser_task_environment.h"
+#include "extensions/browser/unloaded_extension_reason.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_builder.h"
 #include "extensions/common/extension_paths.h"
@@ -51,7 +52,7 @@ TEST_F(InfoMapTest, RefCounting) {
 
   // Release extension1, and the info map should have the only ref.
   const Extension* weak_extension1 = extension1.get();
-  extension1 = NULL;
+  extension1.reset();
   EXPECT_TRUE(weak_extension1->HasOneRef());
 
   // Remove extension2, and the extension2 object should have the only ref.
@@ -60,7 +61,7 @@ TEST_F(InfoMapTest, RefCounting) {
   EXPECT_TRUE(extension2->HasOneRef());
 
   // Delete the info map, and the extension3 object should have the only ref.
-  info_map = NULL;
+  info_map.reset();
   EXPECT_TRUE(extension3->HasOneRef());
 }
 

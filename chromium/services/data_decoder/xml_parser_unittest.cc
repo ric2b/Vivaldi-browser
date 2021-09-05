@@ -28,14 +28,15 @@ void TestParseXmlCallback(std::unique_ptr<base::Value>* value_out,
 // Parses the passed in |xml| and compares the result to |json|.
 // If |json| is empty, the parsing is expected to fail.
 void TestParseXml(const std::string& xml, const std::string& json) {
-  XmlParser parser_impl(/*service_ref=*/nullptr);
+  XmlParser parser_impl;
   // Use a reference to mojom::XmlParser as XmlParser implements the interface
   // privately.
   mojom::XmlParser& parser = parser_impl;
 
   std::unique_ptr<base::Value> actual_value;
   base::Optional<std::string> error;
-  parser.Parse(xml, base::Bind(&TestParseXmlCallback, &actual_value, &error));
+  parser.Parse(xml,
+               base::BindOnce(&TestParseXmlCallback, &actual_value, &error));
   if (json.empty()) {
     EXPECT_TRUE(error);
     EXPECT_FALSE(actual_value)

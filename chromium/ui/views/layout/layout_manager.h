@@ -7,6 +7,7 @@
 
 #include <vector>
 
+#include "ui/views/layout/layout_types.h"
 #include "ui/views/views_export.h"
 
 namespace gfx {
@@ -65,6 +66,10 @@ class VIEWS_EXPORT LayoutManager {
   // The default implementation returns GetPreferredSize().height().
   virtual int GetPreferredHeightForWidth(const View* host, int width) const;
 
+  // Returns the maximum space available in the layout for the specified child
+  // view. Default is unbounded.
+  virtual SizeBounds GetAvailableSize(const View* host, const View* view) const;
+
   // Called when a View is added as a child of the View the LayoutManager has
   // been installed on.
   virtual void ViewAdded(View* host, View* view);
@@ -76,8 +81,13 @@ class VIEWS_EXPORT LayoutManager {
 
   // Called when View::SetVisible() is called by external code. Classes derived
   // from LayoutManager can call SetViewVisibility() below to avoid triggering
-  // this event.
-  virtual void ViewVisibilitySet(View* host, View* view, bool visible);
+  // this event. Note that |old_visibility| and |new_visibility| can be the
+  // same, because the old visibility may have been set by the layout and not
+  // external code.
+  virtual void ViewVisibilitySet(View* host,
+                                 View* view,
+                                 bool old_visibility,
+                                 bool new_visibility);
 
  protected:
   // Sets the visibility of a view without triggering ViewVisibilitySet().

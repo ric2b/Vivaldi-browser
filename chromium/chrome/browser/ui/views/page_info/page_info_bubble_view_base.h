@@ -5,7 +5,7 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_PAGE_INFO_PAGE_INFO_BUBBLE_VIEW_BASE_H_
 #define CHROME_BROWSER_UI_VIEWS_PAGE_INFO_PAGE_INFO_BUBBLE_VIEW_BASE_H_
 
-#include "chrome/browser/ui/page_info/page_info_ui.h"
+#include "components/page_info/page_info_ui.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
@@ -52,7 +52,6 @@ class PageInfoBubbleViewBase : public views::BubbleDialogDelegateView,
                          content::WebContents* web_contents);
 
   // views::BubbleDialogDelegateView:
-  int GetDialogButtons() const override;
   base::string16 GetWindowTitle() const override;
   bool ShouldShowCloseButton() const override;
   void OnWidgetDestroying(views::Widget* widget) override;

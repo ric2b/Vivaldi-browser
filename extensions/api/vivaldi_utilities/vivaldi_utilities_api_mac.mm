@@ -6,10 +6,6 @@
 
 #include <Cocoa/Cocoa.h>
 
-namespace {
-NSString* vivaldi_uuid_key = @"vivaldi_user_id";
-}  // anonymous namespace
-
 namespace extensions {
 bool UtilitiesGetSystemDateFormatFunction::ReadDateFormats(
     vivaldi::utilities::DateFormats* date_formats) {

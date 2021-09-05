@@ -4,6 +4,8 @@
 #ifndef BROWSER_MENUS_PWA_MENU_CONTROLLER_H_
 #define BROWSER_MENUS_PWA_MENU_CONTROLLER_H_
 
+#include "base/strings/string16.h"
+
 class Browser;
 
 namespace content {

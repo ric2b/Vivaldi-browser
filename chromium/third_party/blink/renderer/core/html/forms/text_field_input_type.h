@@ -48,6 +48,8 @@ class TextFieldInputType : public InputType,
   void Trace(Visitor*) override;
   using InputType::GetElement;
 
+  String RawValue() const override;
+
  protected:
   TextFieldInputType(HTMLInputElement&);
   ~TextFieldInputType() override;
@@ -56,7 +58,7 @@ class TextFieldInputType : public InputType,
 
   void CreateShadowSubtree() override;
   void DestroyShadowSubtree() override;
-  void AttributeChanged() override;
+  void ValueAttributeChanged() override;
   void DisabledAttributeChanged() override;
   void ReadonlyAttributeChanged() override;
   bool SupportsReadOnly() const override;
@@ -68,6 +70,8 @@ class TextFieldInputType : public InputType,
                 TextFieldEventBehavior,
                 TextControlSetValueSelection) override;
   void UpdateView() override;
+  void CustomStyleForLayoutObject(ComputedStyle& style) override;
+  bool TypeShouldForceLegacyLayout() const override;
   LayoutObject* CreateLayoutObject(const ComputedStyle&,
                                    LegacyLayout) const override;
 

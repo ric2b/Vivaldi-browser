@@ -16,12 +16,12 @@
 #include "base/bind.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/android/chrome_jni_headers/FaviconHelper_jni.h"
 #include "chrome/browser/favicon/favicon_service_factory.h"
 #include "chrome/browser/favicon/history_ui_favicon_request_handler_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_android.h"
 #include "chrome/browser/sync/session_sync_service_factory.h"
+#include "chrome/browser/ui/android/favicon/jni_headers/FaviconHelper_jni.h"
 #include "components/favicon/core/favicon_service.h"
 #include "components/favicon/core/favicon_util.h"
 #include "components/favicon/core/history_ui_favicon_request_handler.h"
@@ -46,29 +46,6 @@ using base::android::ConvertJavaStringToUTF8;
 using base::android::ConvertUTF8ToJavaString;
 
 namespace {
-
-void OnFaviconBitmapResultAvailable(
-    const JavaRef<jobject>& j_favicon_image_callback,
-    const favicon_base::FaviconRawBitmapResult& result) {
-  JNIEnv* env = AttachCurrentThread();
-
-  // Convert favicon_image_result to java objects.
-  ScopedJavaLocalRef<jstring> j_icon_url =
-      ConvertUTF8ToJavaString(env, result.icon_url.spec());
-  ScopedJavaLocalRef<jobject> j_favicon_bitmap;
-  if (result.is_valid()) {
-    SkBitmap favicon_bitmap;
-    gfx::PNGCodec::Decode(result.bitmap_data->front(),
-                          result.bitmap_data->size(),
-                          &favicon_bitmap);
-    if (!favicon_bitmap.isNull())
-      j_favicon_bitmap = gfx::ConvertToJavaBitmap(&favicon_bitmap);
-  }
-
-  // Call java side OnFaviconBitmapResultAvailable method.
-  Java_FaviconImageCallback_onFaviconAvailable(env, j_favicon_image_callback,
-                                               j_favicon_bitmap, j_icon_url);
-}
 
 void OnEnsureIconIsAvailableFinished(
     const ScopedJavaGlobalRef<jobject>& j_availability_callback,
@@ -111,7 +88,8 @@ jboolean FaviconHelper::GetLocalFaviconImageForURL(
     return false;
 
   favicon_base::FaviconRawBitmapCallback callback_runner =
-      base::BindOnce(&OnFaviconBitmapResultAvailable,
+      base::BindOnce(&FaviconHelper::OnFaviconBitmapResultAvailable,
+                     weak_ptr_factory_.GetWeakPtr(),
                      ScopedJavaGlobalRef<jobject>(j_favicon_image_callback));
 
   // |j_page_url| is an origin, and it may not have had a favicon associated
@@ -157,13 +135,12 @@ jboolean FaviconHelper::GetForeignFaviconImageForURL(
     return false;
   history_ui_favicon_request_handler->GetRawFaviconForPageURL(
       page_url, static_cast<int>(j_desired_size_in_pixel),
-      base::BindOnce(&OnFaviconBitmapResultAvailable,
+      base::BindOnce(&FaviconHelper::OnFaviconBitmapResultAvailable,
+                     weak_ptr_factory_.GetWeakPtr(),
                      ScopedJavaGlobalRef<jobject>(j_favicon_image_callback)),
-      favicon::FaviconRequestPlatform::kMobile,
       favicon::HistoryUiFaviconRequestOrigin::kRecentTabs,
       /*icon_url_for_uma=*/
-      open_tabs ? open_tabs->GetIconUrlForPageUrl(page_url) : GURL(),
-      cancelable_task_tracker_.get());
+      open_tabs ? open_tabs->GetIconUrlForPageUrl(page_url) : GURL());
   return true;
 }
 
@@ -238,6 +215,7 @@ size_t FaviconHelper::GetLargestSizeIndex(const std::vector<gfx::Size>& sizes) {
   return ret;
 }
 
+// static
 void FaviconHelper::OnFaviconDownloaded(
     const ScopedJavaGlobalRef<jobject>& j_availability_callback,
     Profile* profile,
@@ -266,6 +244,7 @@ void FaviconHelper::OnFaviconDownloaded(
       base::Bind(&OnEnsureIconIsAvailableFinished, j_availability_callback));
 }
 
+// static
 void FaviconHelper::OnFaviconImageResultAvailable(
     const ScopedJavaGlobalRef<jobject>& j_availability_callback,
     Profile* profile,
@@ -285,7 +264,29 @@ void FaviconHelper::OnFaviconImageResultAvailable(
   }
 
   web_contents->DownloadImage(
-      icon_url, true, 0, false,
-      base::Bind(&FaviconHelper::OnFaviconDownloaded, j_availability_callback,
-                 profile, page_url, icon_type));
+      icon_url, true, 0, 0, false,
+      base::BindOnce(&FaviconHelper::OnFaviconDownloaded,
+                     j_availability_callback, profile, page_url, icon_type));
+}
+
+void FaviconHelper::OnFaviconBitmapResultAvailable(
+    const JavaRef<jobject>& j_favicon_image_callback,
+    const favicon_base::FaviconRawBitmapResult& result) {
+  JNIEnv* env = AttachCurrentThread();
+
+  // Convert favicon_image_result to java objects.
+  ScopedJavaLocalRef<jstring> j_icon_url =
+      ConvertUTF8ToJavaString(env, result.icon_url.spec());
+  ScopedJavaLocalRef<jobject> j_favicon_bitmap;
+  if (result.is_valid()) {
+    SkBitmap favicon_bitmap;
+    gfx::PNGCodec::Decode(result.bitmap_data->front(),
+                          result.bitmap_data->size(), &favicon_bitmap);
+    if (!favicon_bitmap.isNull())
+      j_favicon_bitmap = gfx::ConvertToJavaBitmap(&favicon_bitmap);
+  }
+
+  // Call java side OnFaviconBitmapResultAvailable method.
+  Java_FaviconImageCallback_onFaviconAvailable(env, j_favicon_image_callback,
+                                               j_favicon_bitmap, j_icon_url);
 }

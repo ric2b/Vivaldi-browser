@@ -437,15 +437,15 @@ ExtensionFunction::ResponseAction AppWindowCreateFunction::Run() {
           ->HadDevToolsAttached(app_window->web_contents())) {
     AppWindowClient::Get()->OpenDevToolsWindow(
         app_window->web_contents(),
-        base::Bind(&AppWindowCreateFunction::Respond, this,
-                   base::Passed(&result_arg)));
+        base::BindOnce(&AppWindowCreateFunction::Respond, this,
+                       std::move(result_arg)));
     // OpenDevToolsWindow might have already responded.
     return did_respond() ? AlreadyResponded() : RespondLater();
   }
 
   // Delay sending the response until the newly created window has finished its
   // navigation or was closed during that process.
-  // AddOnDidFinishFirstNavigationCallback() will respond asynchrously.
+  // AddOnDidFinishFirstNavigationCallback() will respond asynchronously.
   app_window->AddOnDidFinishFirstNavigationCallback(base::BindOnce(
       &AppWindowCreateFunction::OnAppWindowFinishedFirstNavigationOrClosed,
       this, std::move(result_arg)));

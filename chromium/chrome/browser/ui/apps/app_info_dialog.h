@@ -8,9 +8,8 @@
 #include <string>
 
 #include "base/callback_forward.h"
-#include "chrome/common/buildflags.h"
 
-#if BUILDFLAG(ENABLE_APP_LIST)
+#if defined(OS_CHROMEOS)
 #include "ui/gfx/native_widget_types.h"
 #endif
 
@@ -44,7 +43,7 @@ bool CanPlatformShowAppInfoDialog();
 // Returns true if the app info dialog is available for an app.
 bool CanShowAppInfoDialog(Profile* profile, const std::string& extension_id);
 
-#if BUILDFLAG(ENABLE_APP_LIST)
+#if defined(OS_CHROMEOS)
 // Shows the chrome app information as a frameless window for the given |app|
 // and |profile| at the given |app_info_bounds|.
 void ShowAppInfoInAppList(gfx::NativeWindow parent,

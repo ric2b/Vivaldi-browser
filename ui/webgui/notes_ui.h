@@ -16,9 +16,9 @@ class NotesUIHTMLSource : public content::URLDataSource {
 
   std::string GetSource() override;
   void StartDataRequest(
-      const std::string& path,
+      const GURL& path,
                         const content::WebContents::Getter& wc_getter,
-      const GotDataCallback& callback) override;
+      GotDataCallback callback) override;
   std::string GetMimeType(const std::string& path) override;
 
  private:

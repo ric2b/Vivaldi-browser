@@ -5,6 +5,8 @@
 Polymer({
   is: 'gaia-password-changed',
 
+  behaviors: [OobeI18nBehavior],
+
   properties: {
     email: String,
 
@@ -12,7 +14,7 @@ Polymer({
   },
 
   /** @override */
-  ready: function() {
+  ready() {
     /**
      * Workaround for
      * https://github.com/PolymerElements/neon-animation/issues/32
@@ -21,34 +23,33 @@ Polymer({
     var pages = this.$.animatedPages;
     delete pages._squelchNextFinishEvent;
     Object.defineProperty(pages, '_squelchNextFinishEvent', {
-      get: function() {
+      get() {
         return false;
       }
     });
   },
 
-  invalidate: function() {
-    this.$.oldPasswordInput.isInvalid = true;
+  invalidate() {
+    this.$.oldPasswordInput.invalid = true;
   },
 
-  reset: function() {
+  reset() {
     this.$.animatedPages.selected = 0;
     this.clearPassword();
-    this.$.oldPasswordInput.isInvalid = false;
     this.disabled = false;
     this.$.navigation.closeVisible = true;
     this.$.oldPasswordCard.classList.remove('disabled');
   },
 
 
-  focus: function() {
+  focus() {
     if (this.$.animatedPages.selected == 0)
       this.$.oldPasswordInput.focus();
   },
 
   /** @private */
-  onPasswordSubmitted_: function() {
-    if (!this.$.oldPasswordInput.checkValidity())
+  onPasswordSubmitted_() {
+    if (!this.$.oldPasswordInput.validate())
       return;
     this.$.oldPasswordCard.classList.add('disabled');
     this.disabled = true;
@@ -56,28 +57,29 @@ Polymer({
   },
 
   /** @private */
-  onForgotPasswordClicked_: function() {
+  onForgotPasswordClicked_() {
     this.clearPassword();
     this.$.animatedPages.selected += 1;
   },
 
   /** @private */
-  onTryAgainClicked_: function() {
-    this.$.oldPasswordInput.isInvalid = false;
+  onTryAgainClicked_() {
+    this.$.oldPasswordInput.invalid = false;
     this.$.animatedPages.selected -= 1;
   },
 
   /** @private */
-  onAnimationFinish_: function() {
+  onAnimationFinish_() {
     this.focus();
   },
 
-  clearPassword: function() {
+  clearPassword() {
     this.$.oldPasswordInput.value = '';
+    this.$.oldPasswordInput.invalid = false;
   },
 
   /** @private */
-  onProceedClicked_: function() {
+  onProceedClicked_() {
     this.disabled = true;
     this.$.navigation.closeVisible = false;
     this.$.animatedPages.selected = 2;
@@ -85,7 +87,7 @@ Polymer({
   },
 
   /** @private */
-  onClose_: function() {
+  onClose_() {
     this.fire('cancel');
   }
 });

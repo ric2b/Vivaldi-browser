@@ -21,7 +21,6 @@
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
 #include "third_party/blink/public/platform/platform.h"
-#include "third_party/blink/renderer/platform/instrumentation/histogram.h"
 #include "third_party/blink/renderer/platform/scheduler/common/features.h"
 #include "third_party/blink/renderer/platform/scheduler/common/process_state.h"
 #include "third_party/blink/renderer/platform/scheduler/common/throttling/task_queue_throttler.h"
@@ -89,7 +88,7 @@ base::Optional<base::TimeDelta> GetMaxThrottlingDelay() {
 }  // namespace
 
 WorkerThreadScheduler::WorkerThreadScheduler(
-    WebThreadType thread_type,
+    ThreadType thread_type,
     base::sequence_manager::SequenceManager* sequence_manager,
     WorkerSchedulerProxy* proxy)
     : NonMainThreadSchedulerImpl(sequence_manager,
@@ -108,7 +107,7 @@ WorkerThreadScheduler::WorkerThreadScheduler(
       ukm_source_id_(proxy ? proxy->ukm_source_id() : ukm::kInvalidSourceId) {
   if (base::SequencedTaskRunnerHandle::IsSet()) {
     mojo::PendingRemote<ukm::mojom::UkmRecorderInterface> recorder;
-    Platform::Current()->GetBrowserInterfaceBrokerProxy()->GetInterface(
+    Platform::Current()->GetBrowserInterfaceBroker()->GetInterface(
         recorder.InitWithNewPipeAndPassReceiver());
     ukm_recorder_ = std::make_unique<ukm::MojoUkmRecorder>(std::move(recorder));
   }
@@ -116,7 +115,7 @@ WorkerThreadScheduler::WorkerThreadScheduler(
   if (proxy && proxy->parent_frame_type())
     worker_metrics_helper_.SetParentFrameType(*proxy->parent_frame_type());
 
-  if (thread_type == WebThreadType::kDedicatedWorkerThread &&
+  if (thread_type == ThreadType::kDedicatedWorkerThread &&
       base::FeatureList::IsEnabled(kDedicatedWorkerThrottling)) {
     CreateTaskQueueThrottler();
   }
@@ -152,6 +151,12 @@ WorkerThreadScheduler::CompositorTaskRunner() {
 
 scoped_refptr<base::SingleThreadTaskRunner>
 WorkerThreadScheduler::IPCTaskRunner() {
+  NOTREACHED() << "Not implemented";
+  return nullptr;
+}
+
+scoped_refptr<base::SingleThreadTaskRunner>
+WorkerThreadScheduler::NonWakingTaskRunner() {
   NOTREACHED() << "Not implemented";
   return nullptr;
 }

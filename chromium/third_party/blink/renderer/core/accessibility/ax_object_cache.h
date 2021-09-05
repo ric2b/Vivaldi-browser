@@ -42,20 +42,16 @@ class HTMLCanvasElement;
 class HTMLOptionElement;
 class HTMLSelectElement;
 class IntPoint;
-class LayoutMenuList;
 class LayoutRect;
 class LineLayoutItem;
 class LocalFrameView;
 
-class CORE_EXPORT AXObjectCache : public GarbageCollected<AXObjectCache>,
-                                  public ContextLifecycleObserver {
-  USING_GARBAGE_COLLECTED_MIXIN(AXObjectCache);
-
+class CORE_EXPORT AXObjectCache : public GarbageCollected<AXObjectCache> {
  public:
   static AXObjectCache* Create(Document&);
 
-  virtual ~AXObjectCache();
-  void Trace(blink::Visitor*) override;
+  virtual ~AXObjectCache() = default;
+  virtual void Trace(Visitor*) {}
 
   virtual void Dispose() = 0;
 
@@ -102,10 +98,10 @@ class CORE_EXPORT AXObjectCache : public GarbageCollected<AXObjectCache>,
   virtual void HandleTextMarkerDataAdded(Node* start, Node* end) = 0;
   virtual void HandleTextFormControlChanged(Node*) = 0;
   virtual void HandleValueChanged(Node*) = 0;
-  virtual void HandleUpdateActiveMenuOption(LayoutMenuList*,
+  virtual void HandleUpdateActiveMenuOption(LayoutObject*,
                                             int option_index) = 0;
-  virtual void DidShowMenuListPopup(LayoutMenuList*) = 0;
-  virtual void DidHideMenuListPopup(LayoutMenuList*) = 0;
+  virtual void DidShowMenuListPopup(LayoutObject*) = 0;
+  virtual void DidHideMenuListPopup(LayoutObject*) = 0;
   virtual void HandleLoadComplete(Document*) = 0;
   virtual void HandleLayoutComplete(Document*) = 0;
   virtual void HandleClicked(Node*) = 0;
@@ -113,7 +109,7 @@ class CORE_EXPORT AXObjectCache : public GarbageCollected<AXObjectCache>,
       const Element* form_control) = 0;
 
   // Handle any notifications which arrived while layout was dirty.
-  virtual void ProcessUpdatesAfterLayout(Document&) = 0;
+  virtual void ProcessDeferredAccessibilityEvents(Document&) = 0;
 
   // Changes to virtual Accessibility Object Model nodes.
   virtual void HandleAttributeChanged(const QualifiedName& attr_name,
@@ -153,7 +149,7 @@ class CORE_EXPORT AXObjectCache : public GarbageCollected<AXObjectCache>,
 
  private:
   friend class AXObjectCacheBase;
-  AXObjectCache(Document&);
+  AXObjectCache() = default;
 
   static AXObjectCacheCreateFunction create_function_;
   DISALLOW_COPY_AND_ASSIGN(AXObjectCache);

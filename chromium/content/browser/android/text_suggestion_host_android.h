@@ -8,11 +8,12 @@
 #include "content/browser/android/render_widget_host_connector.h"
 #include "content/browser/renderer_host/input/timeout_monitor.h"
 #include "mojo/public/cpp/bindings/remote.h"
-#include "services/service_manager/public/cpp/binder_registry.h"
 #include "third_party/blink/public/mojom/input/input_host.mojom.h"
 #include "third_party/blink/public/mojom/input/input_messages.mojom.h"
 
 namespace content {
+
+class TextSuggestionHostMojoImplAndroid;
 
 // This class, along with its Java counterpart TextSuggestionHost, is used to
 // implement the Android text suggestion menu that appears when you tap a
@@ -21,8 +22,7 @@ namespace content {
 // Blink side code (these are separate classes due to lifecycle considerations;
 // this class is created by ImeAdapterAndroid ctor and destroyed together with
 // WebContents. Mojo code takes ownership of mojom::TextSuggestionHost).
-class TextSuggestionHostAndroid : public RenderWidgetHostConnector,
-                                  public WebContentsObserver {
+class TextSuggestionHostAndroid : public RenderWidgetHostConnector {
  public:
   static void Create(JNIEnv* env, WebContents* web_contents);
   TextSuggestionHostAndroid(JNIEnv* env,
@@ -88,11 +88,8 @@ class TextSuggestionHostAndroid : public RenderWidgetHostConnector,
   // suggestion menu timer.
   void StopSuggestionMenuTimer();
 
-  // WebContentsObserver overrides
-  void OnInterfaceRequestFromFrame(
-      content::RenderFrameHost* render_frame_host,
-      const std::string& interface_name,
-      mojo::ScopedMessagePipeHandle* interface_pipe) override;
+  void BindTextSuggestionHost(
+      mojo::PendingReceiver<blink::mojom::TextSuggestionHost> receiver);
 
  private:
   RenderFrameHost* GetFocusedFrame();
@@ -104,11 +101,11 @@ class TextSuggestionHostAndroid : public RenderWidgetHostConnector,
   void OnSuggestionMenuTimeout();
   double DpToPxIfNeeded(double value);
 
-  service_manager::BinderRegistry registry_;
   // Current RenderWidgetHostView connected to this instance. Can be null.
   RenderWidgetHostViewAndroid* rwhva_;
   JavaObjectWeakGlobalRef java_text_suggestion_host_;
   mojo::Remote<blink::mojom::TextSuggestionBackend> text_suggestion_backend_;
+  std::unique_ptr<TextSuggestionHostMojoImplAndroid> text_suggestion_impl_;
   TimeoutMonitor suggestion_menu_timeout_;
 };
 

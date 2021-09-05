@@ -15,20 +15,23 @@
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/image/image.h"
 #include "ui/views/view.h"
+#include "ui/views/widget/widget_observer.h"
 
 struct AutocompleteMatch;
 class LocationBarView;
 class OmniboxEditModel;
 class OmniboxResultView;
 class OmniboxViewViews;
+class WebUIOmniboxPopupView;
 
 // A view representing the contents of the autocomplete popup.
-class OmniboxPopupContentsView : public views::View, public OmniboxPopupView {
+class OmniboxPopupContentsView : public views::View,
+                                 public OmniboxPopupView,
+                                 public views::WidgetObserver {
  public:
   OmniboxPopupContentsView(OmniboxViewViews* omnibox_view,
                            OmniboxEditModel* edit_model,
-                           LocationBarView* location_bar_view,
-                           const ui::ThemeProvider* theme_provider);
+                           LocationBarView* location_bar_view);
   ~OmniboxPopupContentsView() override;
 
   OmniboxPopupModel* model() const { return model_.get(); }
@@ -60,8 +63,8 @@ class OmniboxPopupContentsView : public views::View, public OmniboxPopupView {
   // Called by the active result view to inform model (due to mouse event).
   void UnselectButton();
 
-  // Called to inform result view of button focus.
-  void ProvideButtonFocusHint(size_t line);
+  // Gets the OmniboxResultView for match |i|.
+  OmniboxResultView* result_view_at(size_t i);
 
   // Returns whether we're in experimental keyword mode and the input gives
   // sufficient confidence that the user wants keyword mode.
@@ -70,8 +73,10 @@ class OmniboxPopupContentsView : public views::View, public OmniboxPopupView {
   // OmniboxPopupView:
   bool IsOpen() const override;
   void InvalidateLine(size_t line) override;
-  void OnLineSelected(size_t line) override;
+  void OnSelectedLineChanged(size_t old_selected_line,
+                             size_t new_selected_line) override;
   void UpdatePopupAppearance() override;
+  void ProvideButtonFocusHint(size_t line) override;
   void OnMatchIconUpdated(size_t match_index) override;
   void OnDragCanceled() override;
 
@@ -79,6 +84,10 @@ class OmniboxPopupContentsView : public views::View, public OmniboxPopupView {
   bool OnMouseDragged(const ui::MouseEvent& event) override;
   void OnGestureEvent(ui::GestureEvent* event) override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
+
+  // views::WidgetObserver:
+  void OnWidgetBoundsChanged(views::Widget* widget,
+                             const gfx::Rect& new_bounds) override;
 
  private:
   friend class OmniboxPopupContentsViewTest;
@@ -99,13 +108,10 @@ class OmniboxPopupContentsView : public views::View, public OmniboxPopupView {
   // the specified point.
   size_t GetIndexForPoint(const gfx::Point& point);
 
-  OmniboxResultView* result_view_at(size_t i);
-
-  LocationBarView* location_bar_view() { return location_bar_view_; }
-
   // views::View:
   const char* GetClassName() const override;
 
+  // Our model that contains our business logic.
   std::unique_ptr<OmniboxPopupModel> model_;
 
   // The popup that contains this view.  We create this, but it deletes itself
@@ -117,10 +123,13 @@ class OmniboxPopupContentsView : public views::View, public OmniboxPopupView {
   // The edit view that invokes us.
   OmniboxViewViews* omnibox_view_;
 
+  // The location bar view that owns |omnibox_view_|.
   LocationBarView* location_bar_view_;
 
-  const ui::ThemeProvider* theme_provider_;
-  
+  // The child WebView for the suggestions. This only exists if the
+  // omnibox::kWebUIOmniboxPopup flag is on.
+  WebUIOmniboxPopupView* webui_view_ = nullptr;
+
   DISALLOW_COPY_AND_ASSIGN(OmniboxPopupContentsView);
 };
 

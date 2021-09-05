@@ -16,8 +16,8 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/default_tick_clock.h"
 #include "chromecast/base/metrics/cast_metrics_helper.h"
+#include "chromecast/media/api/cma_backend.h"
 #include "chromecast/media/cdm/cast_cdm_context.h"
-#include "chromecast/media/cma/backend/cma_backend.h"
 #include "chromecast/media/cma/base/buffering_controller.h"
 #include "chromecast/media/cma/base/buffering_state.h"
 #include "chromecast/media/cma/base/coded_frame_provider.h"
@@ -78,7 +78,7 @@ void LogEstimatedBitrate(int decoded_bytes,
 struct MediaPipelineImpl::FlushTask {
   bool audio_flushed;
   bool video_flushed;
-  base::Closure done_cb;
+  base::OnceClosure done_cb;
 };
 
 MediaPipelineImpl::MediaPipelineImpl()
@@ -265,7 +265,7 @@ void MediaPipelineImpl::StartPlayingFrom(base::TimeDelta time) {
   }
 }
 
-void MediaPipelineImpl::Flush(const base::Closure& flush_cb) {
+void MediaPipelineImpl::Flush(base::OnceClosure flush_cb) {
   LOG(INFO) << __FUNCTION__;
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK((backend_state_ == BACKEND_STATE_PLAYING) ||
@@ -283,7 +283,7 @@ void MediaPipelineImpl::Flush(const base::Closure& flush_cb) {
   pending_flush_task_.reset(new FlushTask);
   pending_flush_task_->audio_flushed = !audio_pipeline_;
   pending_flush_task_->video_flushed = !video_pipeline_;
-  pending_flush_task_->done_cb = flush_cb;
+  pending_flush_task_->done_cb = std::move(flush_cb);
   if (audio_pipeline_) {
     audio_pipeline_->Flush(
         base::Bind(&MediaPipelineImpl::OnFlushDone, weak_this_, true));
@@ -372,8 +372,8 @@ void MediaPipelineImpl::OnFlushDone(bool is_audio_stream) {
     metrics::CastMetricsHelper::GetInstance()->RecordApplicationEvent(
         "Cast.Platform.Ended");
 
-    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
-                                                  pending_flush_task_->done_cb);
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, std::move(pending_flush_task_->done_cb));
     pending_flush_task_.reset();
   }
 }

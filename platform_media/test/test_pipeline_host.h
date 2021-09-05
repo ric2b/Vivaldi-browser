@@ -12,54 +12,41 @@
 
 #include <string>
 
-#include "platform_media/test/test_ipc_data_source.h"
+#include "base/memory/weak_ptr.h"
+#include "media/base/data_source.h"
+#include "platform_media/gpu/data_source/ipc_data_source_impl.h"
+#include "platform_media/gpu/pipeline/ipc_decoding_buffer.h"
 #include "platform_media/renderer/pipeline/ipc_media_pipeline_host.h"
 
 #include "media/base/video_decoder_config.h"
 
 namespace media {
-class DataBuffer;
-}
 
-namespace media {
+class DataBuffer;
 
 class PlatformMediaPipeline;
+class PlatformMediaPipelineFactory;
 
 // A trivial implementation of IPCMediaPipelineHost that just delegates to
 // PlatformMediaPipeline directly, no IPC involved.
 class TestPipelineHost : public IPCMediaPipelineHost {
  public:
-  explicit TestPipelineHost(DataSource* data_source);
-
+  TestPipelineHost();
   ~TestPipelineHost() override;
 
   void Initialize(const std::string& mimetype,
-                  const InitializeCB& callback) override;
+                  InitializeCB callback) override;
 
   void StartWaitingForSeek() override;
 
   void Seek(base::TimeDelta time,
-            const PipelineStatusCB& status_cb) override;
-
-  void Stop() override;
+            PipelineStatusCallback status_cb) override;
 
   void ReadDecodedData(PlatformMediaDataType type,
-                       const DemuxerStream::ReadCB& read_cb) override;
-
-  void AppendBuffer(const scoped_refptr<DecoderBuffer>& buffer,
-                    const VideoDecoder::DecodeCB& decode_cb) override;
-  bool DecodeVideo(const VideoDecoderConfig& config,
-                   const DecodeVideoCB& read_cb) override;
-  bool HasEnoughData() override;
-  int GetMaxDecodeBuffers() override;
-
-  PlatformAudioConfig audio_config() const override;
-  PlatformVideoConfig video_config() const override;
+                       DemuxerStream::ReadCB read_cb) override;
 
  private:
-
-
-  static void SeekDone(const PipelineStatusCB& status_cb, bool success);
+  static void SeekDone(PipelineStatusCallback status_cb, bool success);
 
   void Initialized(bool success,
                    int bitrate,
@@ -67,27 +54,24 @@ class TestPipelineHost : public IPCMediaPipelineHost {
                    const PlatformAudioConfig& audio_config,
                    const PlatformVideoConfig& video_config);
 
-  void DataReady(PlatformMediaDataType type,
-                 const scoped_refptr<DataBuffer>& buffer);
+  void DataReady(DemuxerStream::ReadCB read_cb,
+                 IPCDecodingBuffer buffer);
 
-  void DecodedVideoReady(DemuxerStream::Status status,
-                         scoped_refptr<DecoderBuffer> buffer);
+  void ReadRawData(int64_t position,
+                   int size,
+                   ipc_data_source::ReadCB read_cb);
 
-  void OnAudioConfigChanged(const PlatformAudioConfig& audio_config);
+  void OnReadRawDataDone(ipc_data_source::ReadCB read_cb,
+                         std::unique_ptr<uint8_t[]> data,
+                         int size);
 
-  void OnVideoConfigChanged(const PlatformVideoConfig& video_config);
-
-  TestIPCDataSource data_source_adapter_;
+  std::unique_ptr<PlatformMediaPipelineFactory> platform_pipeline_factory_;
   std::unique_ptr<PlatformMediaPipeline> platform_pipeline_;
 
   InitializeCB init_cb_;
-  DemuxerStream::ReadCB read_cb_[PlatformMediaDataType::PLATFORM_MEDIA_DATA_TYPE_COUNT];
-  IPCMediaPipelineHost::DecodeVideoCB decoded_video_frame_callback_;
+  IPCDecodingBuffer ipc_decoding_buffers_[kPlatformMediaDataTypeCount];
 
-  PlatformAudioConfig audio_config_;
-  PlatformVideoConfig video_config_;
-
-  VideoDecoderConfig config_;
+  base::WeakPtrFactory<TestPipelineHost> weak_ptr_factory_;
 };
 
 }  // namespace media

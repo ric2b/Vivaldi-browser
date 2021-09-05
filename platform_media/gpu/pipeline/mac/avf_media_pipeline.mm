@@ -28,43 +28,30 @@ class AVFMediaPipeline::MediaDecoderClient : public AVFMediaDecoderClient {
     DCHECK(avf_media_pipeline_ != NULL);
   }
 
-  void AudioSamplesReady(
-      const scoped_refptr<DataBuffer>& buffer) override {
-    HandleNewBuffer(buffer, avf_media_pipeline_->audio_queue_.get());
-  }
-  void VideoFrameReady(
-      const scoped_refptr<DataBuffer>& buffer) override {
-    HandleNewBuffer(buffer, avf_media_pipeline_->video_queue_.get());
-  }
-
   void StreamHasEnded() override {
-    if (avf_media_pipeline_->audio_queue_.get() != NULL)
-      avf_media_pipeline_->audio_queue_->SetEndOfStream();
-
-    if (avf_media_pipeline_->video_queue_.get() != NULL)
-      avf_media_pipeline_->video_queue_->SetEndOfStream();
+    for (auto& queue : avf_media_pipeline_->media_queues_) {
+      if (queue) {
+        queue->SetEndOfStream();
+      }
+    }
   }
 
   bool HasAvailableCapacity() override {
     if (IsMemoryLimitReached())
       return false;
 
-    if (avf_media_pipeline_->audio_queue_.get() != NULL &&
-        avf_media_pipeline_->audio_queue_->HasAvailableCapacity())
-      return true;
-
-    if (avf_media_pipeline_->video_queue_.get() != NULL &&
-        avf_media_pipeline_->video_queue_->HasAvailableCapacity())
-      return true;
-
+    for (auto& queue : avf_media_pipeline_->media_queues_) {
+      if (queue && queue->HasAvailableCapacity())
+        return true;
+    }
     return false;
   }
 
- private:
-  void HandleNewBuffer(const scoped_refptr<DataBuffer>& buffer,
-                       AVFDataBufferQueue* queue) {
-    DCHECK(buffer.get() != NULL);
-    DCHECK(queue != NULL);
+  void MediaSamplesReady(
+      PlatformMediaDataType type, scoped_refptr<DataBuffer> buffer) override {
+    DCHECK(buffer);
+    AVFDataBufferQueue* queue = avf_media_pipeline_->media_queues_[type].get();
+    DCHECK(queue);
 
     queue->BufferReady(buffer);
 
@@ -72,29 +59,23 @@ class AVFMediaPipeline::MediaDecoderClient : public AVFMediaDecoderClient {
       avf_media_pipeline_->DataBufferCapacityDepleted();
   }
 
+ private:
   bool IsMemoryLimitReached() {
     // Maximum memory usage allowed for the whole pipeline.  Choosing the same
     // value FFmpegDemuxer is using, for lack of a better heuristic.
     const size_t kPipelineMemoryLimit = 150 * 1024 * 1024;
 
     size_t memory_left = kPipelineMemoryLimit;
-
-    AVFDataBufferQueue* const queues[] = {
-        avf_media_pipeline_->audio_queue_.get(),
-        avf_media_pipeline_->video_queue_.get(),
-    };
-
-    for (size_t i = 0; i < base::size(queues); ++i) {
-      if (queues[i] == NULL)
+    for (auto& queue : avf_media_pipeline_->media_queues_) {
+      if (!queue)
         continue;
 
-      if (queues[i]->memory_usage() > memory_left) {
+      if (queue->memory_usage() > memory_left) {
         LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
                    << " Memory limit reached";
         return true;
       }
-
-      memory_left -= queues[i]->memory_usage();
+      memory_left -= queue->memory_usage();
     }
 
     return false;
@@ -103,10 +84,8 @@ class AVFMediaPipeline::MediaDecoderClient : public AVFMediaDecoderClient {
   AVFMediaPipeline* const avf_media_pipeline_;
 };
 
-//TODO: get rid of the reinterpret_cast
-AVFMediaPipeline::AVFMediaPipeline(IPCDataSource* data_source)
-    : data_source_(reinterpret_cast<DataSource*>(data_source)), weak_ptr_factory_(this) {
-  DCHECK(data_source_ != NULL);
+AVFMediaPipeline::AVFMediaPipeline()
+    : weak_ptr_factory_(this) {
   VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__;
 }
 
@@ -116,83 +95,49 @@ AVFMediaPipeline::~AVFMediaPipeline() {
           << " ~AVFMediaPipeline()";
 }
 
-void AVFMediaPipeline::Initialize(const std::string& mime_type,
-                                  const InitializeCB& initialize_cb) {
+void AVFMediaPipeline::Initialize(ipc_data_source::Reader source_reader,
+                                  ipc_data_source::Info source_info,
+                                  InitializeCB initialize_cb) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   TRACE_EVENT_ASYNC_BEGIN0("IPC_MEDIA", "AVFMediaPipeline::Initialize", this);
   media_decoder_client_.reset(new MediaDecoderClient(this));
   media_decoder_.reset(new AVFMediaDecoder(media_decoder_client_.get()));
-  media_decoder_->Initialize(
-      data_source_,
-      mime_type,
+  media_decoder_->Initialize(std::move(source_reader), std::move(source_info),
       base::Bind(&AVFMediaPipeline::MediaDecoderInitialized,
                  weak_ptr_factory_.GetWeakPtr(),
-                 initialize_cb));
+                 std::move(initialize_cb)));
 }
 
-void AVFMediaPipeline::ReadAudioData(const ReadDataCB& read_audio_data_cb) {
+void AVFMediaPipeline::ReadMediaData(IPCDecodingBuffer buffer) {
+  PlatformMediaDataType type = buffer.type();
   VLOG(5) << " PROPMEDIA(GPU) : " << __FUNCTION__
-          << " Renderer asking for audio data";
+          << " Renderer asking for media data, type=" << type;
   DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(audio_queue_.get() != NULL);
+  DCHECK(media_queues_[type]);
 
-  audio_queue_->Read(base::Bind(&AVFMediaPipeline::AudioBufferReady,
-                                weak_ptr_factory_.GetWeakPtr(),
-                                read_audio_data_cb));
+  media_queues_[type]->Read(std::move(buffer));
 }
 
-void AVFMediaPipeline::ReadVideoData(const ReadDataCB& read_video_data_cb) {
-  VLOG(5) << " PROPMEDIA(GPU) : " << __FUNCTION__
-          << " Renderer asking for video data";
-  DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(video_queue_.get() != NULL);
-
-  video_queue_->Read(base::Bind(&AVFMediaPipeline::VideoBufferReady,
-                                weak_ptr_factory_.GetWeakPtr(),
-                                read_video_data_cb));
-}
-
-void AVFMediaPipeline::Seek(base::TimeDelta time, const SeekCB& seek_cb) {
+void AVFMediaPipeline::Seek(base::TimeDelta time, SeekCB seek_cb) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   media_decoder_->Seek(time,
                        base::Bind(&AVFMediaPipeline::SeekDone,
                                   weak_ptr_factory_.GetWeakPtr(),
-                                  seek_cb));
+                                  std::move(seek_cb)));
 }
 
-void AVFMediaPipeline::SeekDone(const SeekCB& seek_cb, bool success) {
+void AVFMediaPipeline::SeekDone(SeekCB seek_cb, bool success) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  if (audio_queue_.get() != NULL)
-    audio_queue_->Flush();
-  if (video_queue_.get() != NULL)
-    video_queue_->Flush();
+  for (auto& queue : media_queues_) {
+    if (queue) {
+      queue->Flush();
+    }
+  }
 
-  seek_cb.Run(success);
-}
-
-void AVFMediaPipeline::AudioBufferReady(
-    const ReadDataCB& read_audio_data_cb,
-    const scoped_refptr<DataBuffer>& buffer) {
-  VLOG(5) << " PROPMEDIA(GPU) : " << __FUNCTION__
-          << " Ready to reply to renderer with decoded audio";
-  DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(buffer.get() != NULL);
-
-  read_audio_data_cb.Run(buffer);
-}
-
-void AVFMediaPipeline::VideoBufferReady(
-    const ReadDataCB& read_video_data_cb,
-    const scoped_refptr<DataBuffer>& buffer) {
-  VLOG(5) << " PROPMEDIA(GPU) : " << __FUNCTION__
-          << " Ready to reply to renderer with decoded video";
-  DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(buffer.get() != NULL);
-
-  read_video_data_cb.Run(buffer);
+  std::move(seek_cb).Run(success);
 }
 
 void AVFMediaPipeline::MediaDecoderInitialized(
@@ -221,18 +166,18 @@ void AVFMediaPipeline::MediaDecoderInitialized(
                  weak_ptr_factory_.GetWeakPtr());
 
   if (media_decoder_->has_video_track()) {
-    video_queue_.reset(
-        new AVFDataBufferQueue(AVFDataBufferQueue::VIDEO,
-                               // >=3 frames for fps <= 25
-                               base::TimeDelta::FromMilliseconds(120),
-                               capacity_available_cb, capacity_depleted_cb));
+    PlatformMediaDataType type = PlatformMediaDataType::PLATFORM_MEDIA_VIDEO;
+    // >=3 frames for fps <= 25
+    base::TimeDelta capacity = base::TimeDelta::FromMilliseconds(120);
+    media_queues_[type] = std::make_unique<AVFDataBufferQueue>(
+        type, capacity, capacity_available_cb, capacity_depleted_cb);
   }
   if (media_decoder_->has_audio_track()) {
-    audio_queue_.reset(
-        new AVFDataBufferQueue(AVFDataBufferQueue::AUDIO,
-                               // AVFMediaDecoder decodes audio ahead of video.
-                               base::TimeDelta::FromMilliseconds(200),
-                               capacity_available_cb, capacity_depleted_cb));
+    PlatformMediaDataType type = PlatformMediaDataType::PLATFORM_MEDIA_AUDIO;
+    // AVFMediaDecoder decodes audio ahead of video.
+    base::TimeDelta capacity = base::TimeDelta::FromMilliseconds(200);
+    media_queues_[type] = std::make_unique<AVFDataBufferQueue>(
+        type, capacity, capacity_available_cb, capacity_depleted_cb);
   }
 
   media::PlatformAudioConfig audio_config;

@@ -8,18 +8,18 @@
 #import <UIKit/UIKit.h>
 
 @protocol BrowserCommands;
+@class FindBarViewController;
+@protocol FindInPageCommands;
 @class FindInPageModel;
-
-// The a11y ID of the find-in-page bar.
-extern NSString* const kFindInPageContainerViewId;
 
 @interface FindBarControllerIOS : NSObject
 
-// The main view, for both iPhone or iPad.
-@property(nonatomic, readonly, strong) IBOutlet UIView* view;
-
-// The dispatcher for sending browser commands.
-@property(nonatomic, weak) id<BrowserCommands> dispatcher;
+// The command handler for all necessary commands
+@property(nonatomic, weak) id<FindInPageCommands> commandHandler;
+// The view controller containing all the buttons and textfields that is common
+// between iPhone and iPad.
+@property(nonatomic, strong, readonly)
+    FindBarViewController* findBarViewController;
 
 // Init with incognito style.
 - (instancetype)initWithIncognito:(BOOL)isIncognito;
@@ -35,16 +35,11 @@ extern NSString* const kFindInPageContainerViewId;
 // Updates the results count in Find Bar.
 - (void)updateResultsCount:(FindInPageModel*)model;
 
-// Display find bar view. For regular size, the find bar aligns with the right
-// border of |parentView| and below |toolbarView|. For compact size, the find
-// bar overlaps the |toolbarView|. If |selectText| flag is YES, the text in the
-// text input field will be selected.
-- (void)addFindBarViewToParentView:(UIView*)parentView
-                  usingToolbarView:(UIView*)toolbarView
-                        selectText:(BOOL)selectText
-                          animated:(BOOL)animated;
-// Hide find bar view.
-- (void)hideFindBarView:(BOOL)animate;
+// Alerts the controller that its find bar will hide.
+- (void)findBarViewWillHide;
+// Alerts the controller that its find bar did hide.
+- (void)findBarViewDidHide;
+
 // Hide the keyboard when the find next/previous buttons are pressed.
 - (IBAction)hideKeyboard:(id)sender;
 // Indicates that Find in Page is shown. When true, |view| is guaranteed not to
@@ -52,6 +47,9 @@ extern NSString* const kFindInPageContainerViewId;
 - (BOOL)isFindInPageShown;
 // Indicates that the Find in Page text field is first responder.
 - (BOOL)isFocused;
+
+// Selects all the text in the Find in Page text field.
+- (void)selectAllText;
 
 @end
 

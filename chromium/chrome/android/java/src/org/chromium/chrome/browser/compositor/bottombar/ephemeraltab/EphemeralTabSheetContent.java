@@ -7,8 +7,6 @@ package org.chromium.chrome.browser.compositor.bottombar.ephemeraltab;
 import android.content.Context;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.TransitionDrawable;
-import android.support.annotation.DrawableRes;
-import android.support.annotation.Nullable;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -17,28 +15,37 @@ import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
+import androidx.annotation.DrawableRes;
+import androidx.annotation.Nullable;
+
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.thinwebview.ThinWebView;
+import org.chromium.chrome.browser.thinwebview.ThinWebViewConstraints;
 import org.chromium.chrome.browser.thinwebview.ThinWebViewFactory;
-import org.chromium.chrome.browser.ui.widget.FadingShadow;
-import org.chromium.chrome.browser.ui.widget.FadingShadowView;
-import org.chromium.chrome.browser.widget.bottomsheet.BottomSheet;
+import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetContent;
+import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetController;
+import org.chromium.components.browser_ui.widget.FadingShadow;
+import org.chromium.components.browser_ui.widget.FadingShadowView;
+import org.chromium.components.embedder_support.delegate.WebContentsDelegateAndroid;
 import org.chromium.components.embedder_support.view.ContentView;
+import org.chromium.components.url_formatter.SchemeDisplay;
 import org.chromium.components.url_formatter.UrlFormatter;
 import org.chromium.content_public.browser.RenderCoordinates;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.ActivityWindowAndroid;
+import org.chromium.url.GURL;
 
 /**
  * Represents ephemeral tab content and the toolbar, which can be included inside the bottom sheet.
  */
-public class EphemeralTabSheetContent implements BottomSheet.BottomSheetContent {
+public class EphemeralTabSheetContent implements BottomSheetContent {
     private static final float PEEK_TOOLBAR_HEIGHT_MULTIPLE = 2.f;
 
     private final Context mContext;
     private final Runnable mOpenNewTabCallback;
     private final Runnable mToolbarClickCallback;
+    private final Runnable mCloseButtonCallback;
     private final int mToolbarHeightPx;
 
     private ViewGroup mToolbarView;
@@ -56,15 +63,17 @@ public class EphemeralTabSheetContent implements BottomSheet.BottomSheetContent 
      * @param context An Android context.
      * @param openNewTabCallback Callback invoked to open a new tab.
      * @param toolbarClickCallback Callback invoked when user clicks on the toolbar.
+     * @param closeButtonCallback Callback invoked when user clicks on the close button.
      * @param maxSheetHeight The height of the sheet in full height position.
      */
     public EphemeralTabSheetContent(Context context, Runnable openNewTabCallback,
-            Runnable toolbarClickCallback, int maxSheetHeight) {
+            Runnable toolbarClickCallback, Runnable closeButtonCallback, int maxSheetHeight) {
         mContext = context;
         mOpenNewTabCallback = openNewTabCallback;
         mToolbarClickCallback = toolbarClickCallback;
+        mCloseButtonCallback = closeButtonCallback;
         mToolbarHeightPx =
-                mContext.getResources().getDimensionPixelSize(R.dimen.preview_tab_toolbar_height);
+                mContext.getResources().getDimensionPixelSize(R.dimen.sheet_tab_toolbar_height);
 
         createThinWebView(maxSheetHeight);
         createToolbarView();
@@ -74,14 +83,16 @@ public class EphemeralTabSheetContent implements BottomSheet.BottomSheetContent 
      * Add web contents to the sheet.
      * @param webContents The {@link WebContents} to be displayed.
      * @param contentView The {@link ContentView} associated with the web contents.
+     * @param delegate The {@link WebContentsDelegateAndroid} that handles requests on WebContents.
      */
-    public void attachWebContents(WebContents webContents, ContentView contentView) {
+    public void attachWebContents(
+            WebContents webContents, ContentView contentView, WebContentsDelegateAndroid delegate) {
         mWebContents = webContents;
         mWebContentView = contentView;
         if (mWebContentView.getParent() != null) {
             ((ViewGroup) mWebContentView.getParent()).removeView(mWebContentView);
         }
-        mThinWebView.attachWebContents(mWebContents, mWebContentView);
+        mThinWebView.attachWebContents(mWebContents, mWebContentView, delegate);
     }
 
     /**
@@ -89,7 +100,8 @@ public class EphemeralTabSheetContent implements BottomSheet.BottomSheetContent 
      * bottom sheet.
      */
     private void createThinWebView(int maxSheetHeight) {
-        mThinWebView = ThinWebViewFactory.create(mContext, new ActivityWindowAndroid(mContext));
+        mThinWebView = ThinWebViewFactory.create(
+                mContext, new ActivityWindowAndroid(mContext), new ThinWebViewConstraints());
 
         mSheetContentView = new FrameLayout(mContext);
         mThinWebView.getView().setLayoutParams(new FrameLayout.LayoutParams(
@@ -100,8 +112,8 @@ public class EphemeralTabSheetContent implements BottomSheet.BottomSheetContent 
     }
 
     private void createToolbarView() {
-        mToolbarView = (ViewGroup) LayoutInflater.from(mContext).inflate(
-                R.layout.ephemeral_tab_toolbar, null);
+        mToolbarView =
+                (ViewGroup) LayoutInflater.from(mContext).inflate(R.layout.sheet_tab_toolbar, null);
         mShadow = mToolbarView.findViewById(R.id.shadow);
         mShadow.init(ApiCompatibilityUtils.getColor(
                              mContext.getResources(), R.color.toolbar_shadow_color),
@@ -111,6 +123,9 @@ public class EphemeralTabSheetContent implements BottomSheet.BottomSheetContent 
 
         View toolbar = mToolbarView.findViewById(R.id.toolbar);
         toolbar.setOnClickListener(view -> mToolbarClickCallback.run());
+
+        View closeButton = mToolbarView.findViewById(R.id.close);
+        closeButton.setOnClickListener(view -> mCloseButtonCallback.run());
 
         mFaviconView = mToolbarView.findViewById(R.id.favicon);
         mCurrentFavicon = mFaviconView.getDrawable();
@@ -142,7 +157,7 @@ public class EphemeralTabSheetContent implements BottomSheet.BottomSheetContent 
             TransitionDrawable transitionDrawable = ApiCompatibilityUtils.createTransitionDrawable(
                     new Drawable[] {mCurrentFavicon, favicon});
             transitionDrawable.setCrossFadeEnabled(true);
-            transitionDrawable.startTransition((int) BottomSheet.BASE_ANIMATION_DURATION_MS);
+            transitionDrawable.startTransition(BottomSheetController.BASE_ANIMATION_DURATION_MS);
             presentedDrawable = transitionDrawable;
         }
 
@@ -152,14 +167,15 @@ public class EphemeralTabSheetContent implements BottomSheet.BottomSheetContent 
 
     /** Sets the ephemeral tab title text. */
     public void updateTitle(String title) {
-        TextView toolbarText = mToolbarView.findViewById(R.id.ephemeral_tab_text);
+        TextView toolbarText = mToolbarView.findViewById(R.id.title);
         toolbarText.setText(title);
     }
 
     /** Sets the ephemeral tab URL. */
-    public void updateURL(String url) {
-        TextView caption = mToolbarView.findViewById(R.id.ephemeral_tab_caption);
-        caption.setText(UrlFormatter.formatUrlForSecurityDisplayOmitScheme(url));
+    public void updateURL(GURL url) {
+        TextView originView = mToolbarView.findViewById(R.id.origin);
+        originView.setText(
+                UrlFormatter.formatUrlForSecurityDisplay(url, SchemeDisplay.OMIT_HTTP_AND_HTTPS));
     }
 
     /** Sets the security icon. */
@@ -168,16 +184,31 @@ public class EphemeralTabSheetContent implements BottomSheet.BottomSheetContent 
         securityIcon.setImageResource(resId);
     }
 
-    /** Sets the progress percentage on the progress bar. */
-    public void setProgress(int progress) {
+    /** Sets the progress on the progress bar. */
+    public void setProgress(float progress) {
         ProgressBar progressBar = mToolbarView.findViewById(R.id.progress_bar);
-        progressBar.setProgress(progress);
+        progressBar.setProgress(Math.round(progress * 100));
     }
 
     /** Called to show or hide the progress bar. */
     public void setProgressVisible(boolean visible) {
         ProgressBar progressBar = mToolbarView.findViewById(R.id.progress_bar);
         progressBar.setVisibility(visible ? View.VISIBLE : View.GONE);
+    }
+
+    /**
+     * Called to show (with alpha) or hide the open in new tab button.
+     * @param fraction Alpha for the button when visible.
+     */
+    public void showOpenInNewTabButton(float fraction) {
+        View button = mToolbarView.findViewById(R.id.open_in_new_tab);
+        // Start showing the button about halfway toward the full state.
+        if (fraction <= 0.5f) {
+            if (button.getVisibility() != View.GONE) button.setVisibility(View.GONE);
+        } else {
+            if (button.getVisibility() != View.VISIBLE) button.setVisibility(View.VISIBLE);
+            button.setAlpha((fraction - 0.5f) * 2.0f);
+        }
     }
 
     @Override
@@ -205,7 +236,7 @@ public class EphemeralTabSheetContent implements BottomSheet.BottomSheetContent 
 
     @Override
     public int getPriority() {
-        return BottomSheet.ContentPriority.HIGH;
+        return BottomSheetContent.ContentPriority.HIGH;
     }
 
     @Override
@@ -221,12 +252,13 @@ public class EphemeralTabSheetContent implements BottomSheet.BottomSheetContent 
     }
 
     @Override
-    public boolean hideOnScroll() {
-        return false;
+    public float getFullHeightRatio() {
+        return BottomSheetContent.HeightMode.WRAP_CONTENT;
     }
 
     @Override
-    public boolean wrapContentEnabled() {
+    public boolean handleBackPress() {
+        mCloseButtonCallback.run();
         return true;
     }
 

@@ -31,7 +31,7 @@ PDFWebContentsHelper::PDFWebContentsHelper(
     content::WebContents* web_contents,
     std::unique_ptr<PDFWebContentsHelperClient> client)
     : content::WebContentsObserver(web_contents),
-      pdf_service_bindings_(web_contents, this),
+      pdf_service_receivers_(web_contents, this),
       client_(std::move(client)) {}
 
 PDFWebContentsHelper::~PDFWebContentsHelper() {
@@ -94,12 +94,18 @@ void PDFWebContentsHelper::DidScroll() {
   if (touch_selection_controller_client_manager_) {
     gfx::SelectionBound start;
     gfx::SelectionBound end;
-    start.SetEdgeTop(ConvertToRoot(selection_left_));
-    start.SetEdgeBottom(ConvertToRoot(gfx::PointF(
+    start.SetEdgeStart(ConvertToRoot(selection_left_));
+    start.SetEdgeEnd(ConvertToRoot(gfx::PointF(
         selection_left_.x(), selection_left_.y() + selection_left_height_)));
-    end.SetEdgeTop(ConvertToRoot(selection_right_));
-    end.SetEdgeBottom(ConvertToRoot(gfx::PointF(
+    end.SetEdgeStart(ConvertToRoot(selection_right_));
+    end.SetEdgeEnd(ConvertToRoot(gfx::PointF(
         selection_right_.x(), selection_right_.y() + selection_right_height_)));
+
+    // TouchSelectionControllerClientAura needs these visible edges of selection
+    // to show the quick menu and context menu. Set the visible edges by the
+    // edges of |start| and |end|.
+    start.SetVisibleEdge(start.edge_start(), start.edge_end());
+    end.SetVisibleEdge(end.edge_start(), end.edge_end());
 
     // Don't do left/right comparison after setting type.
     // TODO(wjmaclean): When PDFium supports editing, we'll need to detect

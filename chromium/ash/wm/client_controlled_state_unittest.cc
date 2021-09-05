@@ -9,6 +9,7 @@
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/desks/desks_util.h"
+#include "ash/wm/pip/pip_positioner.h"
 #include "ash/wm/screen_pinning_controller.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
@@ -563,7 +564,7 @@ TEST_F(ClientControlledStateTest, MoveWindowToDisplayOutOfBounds) {
 }
 
 TEST_F(ClientControlledStateTest, HandleBoundsEventsUpdatesPipRestoreBounds) {
-  state()->EnterNextState(window_state(), ash::WindowStateType::kPip);
+  state()->EnterNextState(window_state(), WindowStateType::kPip);
 
   EXPECT_TRUE(window_state()->IsPip());
 
@@ -572,9 +573,7 @@ TEST_F(ClientControlledStateTest, HandleBoundsEventsUpdatesPipRestoreBounds) {
   window_state()->OnWMEvent(&event);
   state()->set_bounds_locally(false);
 
-  EXPECT_TRUE(window_state()->HasRestoreBounds());
-  EXPECT_EQ(gfx::Rect(0, 0, 50, 50),
-            window_state()->GetRestoreBoundsInParent());
+  EXPECT_TRUE(PipPositioner::HasSnapFraction(window_state()));
 }
 
 // Make sure disconnecting primary notifies the display id change.

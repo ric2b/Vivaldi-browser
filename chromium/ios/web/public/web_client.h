@@ -19,7 +19,6 @@
 #include "ios/web/common/user_agent.h"
 #include "mojo/public/cpp/bindings/generic_pending_receiver.h"
 #include "ui/base/layout.h"
-#include "url/url_util.h"
 
 namespace base {
 class RefCountedMemory;
@@ -168,22 +167,37 @@ class WebClient {
   // when a navigation error occurs. |error| is always a valid pointer. The
   // string passed to |callback| will be nil if no error page should be
   // displayed. Otherwise, this string will contain the details of the error
-  // and maybe links to more info.
+  // and maybe links to more info. |info| will have a value for SSL cert errors
+  // and otherwise be nullopt. |navigation_id| is passed into this method so
+  // that in the case of an SSL cert error, the blocking page can be associated
+  // with the tab.
   virtual void PrepareErrorPage(WebState* web_state,
                                 const GURL& url,
                                 NSError* error,
                                 bool is_post,
                                 bool is_off_the_record,
+                                const base::Optional<net::SSLInfo>& info,
+                                int64_t navigation_id,
                                 base::OnceCallback<void(NSString*)> callback);
-
-  // Allows upper layers to inject experimental flags to the web layer.
-  // TODO(crbug.com/734150): Clean up this flag after experiment. If need for a
-  // second flag arises before clean up, consider generalizing to an experiment
-  // flags struct instead of adding a bool method for each experiment.
-  virtual bool IsSlimNavigationManagerEnabled() const;
 
   // Instructs the embedder to return a container that is attached to a window.
   virtual UIView* GetWindowedContainer();
+
+  // Enables the logic to handle long press and force
+  // touch. Should return false to use the context menu API.
+  // Defaults to return true.
+  virtual bool EnableLongPressAndForceTouchHandling() const;
+
+  // This method is used when the user didn't express any preference for the
+  // version of |url|. Returning true allows to make sure that for |url|, the
+  // mobile version will be used, unless the user explicitly requested the
+  // desktop version. This method can be overriden to avoid having specific URL
+  // being requested in desktop mode when the default mode is desktop.
+  virtual bool ForceMobileVersionByDefault(const GURL& url);
+
+  // Returns the UserAgentType that should be used by default for the web
+  // content, based on the size class of |web_view| and the |url|.
+  virtual UserAgentType GetDefaultUserAgent(UIView* web_view, const GURL& url);
 };
 
 }  // namespace web

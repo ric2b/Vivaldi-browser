@@ -61,7 +61,7 @@ class VivVideoDecoder : public VideoDecoder {
  private:
   void Destroy() override;
   bool FinishDelayedFrames();
-  void WriteToMediaLog(MediaLog::MediaLogLevel level,
+  void WriteToMediaLog(MediaLogMessageLevel level,
                        const std::string& message);
   void NotifyEndOfBitstreamBuffer(int32_t bitstream_buffer_id);
 

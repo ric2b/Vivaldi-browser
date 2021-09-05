@@ -13,9 +13,9 @@ import android.text.TextUtils;
 
 import org.chromium.base.Log;
 import org.chromium.chrome.browser.browserservices.ClientAppDataRegister;
-import org.chromium.chrome.browser.browserservices.Origin;
 import org.chromium.chrome.browser.dependency_injection.ActivityScope;
-import org.chromium.chrome.browser.util.UrlUtilities;
+import org.chromium.components.embedder_support.util.Origin;
+import org.chromium.components.embedder_support.util.UrlUtilities;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -31,7 +31,7 @@ import javax.inject.Named;
  * - Transforming the origin into a domain (requires native).
  *
  * Lifecycle: There should be a 1-1 relationship between this class and
- * {@link TrustedWebActivityVerifier}. Having more instances won't effect correctness, but will
+ * {@link CurrentPageVerifier}. Having more instances won't effect correctness, but will
  * limit the performance benefits of the cache.
  * Thread safety: All methods on this class should be called from the same thread.
  */

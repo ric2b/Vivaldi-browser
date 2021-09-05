@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/command_line.h"
@@ -260,14 +261,14 @@ class LabelSelectionTest : public LabelTest {
   DISALLOW_COPY_AND_ASSIGN(LabelSelectionTest);
 };
 
-// Crashes on Linux only. http://crbug.com/612406
+TEST_F(LabelTest, FontPropertySymbol) {
 #if defined(OS_LINUX)
-#define MAYBE_FontPropertySymbol DISABLED_FontPropertySymbol
+  // On linux, the fonts are mocked with a custom FontConfig. The "Courier New"
+  // family name is mapped to Cousine-Regular.ttf (see: $build/test_fonts/*).
+  std::string font_name("Courier New");
 #else
-#define MAYBE_FontPropertySymbol FontPropertySymbol
-#endif
-TEST_F(LabelTest, MAYBE_FontPropertySymbol) {
   std::string font_name("symbol");
+#endif
   gfx::Font font(font_name, 26);
   label()->SetFontList(gfx::FontList(font));
   gfx::Font font_used = label()->font_list().GetPrimaryFont();
@@ -324,6 +325,54 @@ TEST_F(LabelTest, AlignmentProperty) {
   }
 
   EXPECT_EQ(was_rtl, base::i18n::IsRTL());
+}
+
+TEST_F(LabelTest, MinimumSizeRespectsLineHeight) {
+  base::string16 text(ASCIIToUTF16("This is example text."));
+  label()->SetText(text);
+
+  const gfx::Size minimum_size = label()->GetMinimumSize();
+  const int expected_height = minimum_size.height() + 10;
+  label()->SetLineHeight(expected_height);
+  EXPECT_EQ(expected_height, label()->GetMinimumSize().height());
+}
+
+TEST_F(LabelTest, MinimumSizeRespectsLineHeightMultiline) {
+  base::string16 text(ASCIIToUTF16("This is example text."));
+  label()->SetText(text);
+  label()->SetMultiLine(true);
+
+  const gfx::Size minimum_size = label()->GetMinimumSize();
+  const int expected_height = minimum_size.height() + 10;
+  label()->SetLineHeight(expected_height);
+  EXPECT_EQ(expected_height, label()->GetMinimumSize().height());
+}
+
+TEST_F(LabelTest, MinimumSizeRespectsLineHeightWithInsets) {
+  base::string16 text(ASCIIToUTF16("This is example text."));
+  label()->SetText(text);
+
+  const gfx::Size minimum_size = label()->GetMinimumSize();
+  int expected_height = minimum_size.height() + 10;
+  label()->SetLineHeight(expected_height);
+  constexpr gfx::Insets kInsets{2, 3, 4, 5};
+  expected_height += kInsets.height();
+  label()->SetBorder(CreateEmptyBorder(kInsets));
+  EXPECT_EQ(expected_height, label()->GetMinimumSize().height());
+}
+
+TEST_F(LabelTest, MinimumSizeRespectsLineHeightMultilineWithInsets) {
+  base::string16 text(ASCIIToUTF16("This is example text."));
+  label()->SetText(text);
+  label()->SetMultiLine(true);
+
+  const gfx::Size minimum_size = label()->GetMinimumSize();
+  int expected_height = minimum_size.height() + 10;
+  label()->SetLineHeight(expected_height);
+  constexpr gfx::Insets kInsets{2, 3, 4, 5};
+  expected_height += kInsets.height();
+  label()->SetBorder(CreateEmptyBorder(kInsets));
+  EXPECT_EQ(expected_height, label()->GetMinimumSize().height());
 }
 
 TEST_F(LabelTest, ElideBehavior) {
@@ -970,6 +1019,15 @@ TEST_F(LabelTest, IsDisplayTextTruncated) {
   EXPECT_FALSE(label()->IsDisplayTextTruncated());
   label()->SetBoundsRect(gfx::Rect(zero_size));
   EXPECT_FALSE(label()->IsDisplayTextTruncated());
+}
+
+TEST_F(LabelTest, TextChangedCallback) {
+  bool text_changed = false;
+  auto subscription = label()->AddTextChangedCallback(base::BindRepeating(
+      [](bool* text_changed) { *text_changed = true; }, &text_changed));
+
+  label()->SetText(ASCIIToUTF16("abc"));
+  EXPECT_TRUE(text_changed);
 }
 
 TEST_F(LabelSelectionTest, Selectable) {

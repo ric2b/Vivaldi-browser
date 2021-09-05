@@ -44,7 +44,7 @@ bool FileEnumerator::FileInfo::IsDirectory() const {
 }
 
 FilePath FileEnumerator::FileInfo::GetName() const {
-  return FilePath(as_u16cstr(find_data_.cFileName));
+  return FilePath(find_data_.cFileName);
 }
 
 int64_t FileEnumerator::FileInfo::GetSize() const {
@@ -86,10 +86,24 @@ FileEnumerator::FileEnumerator(const FilePath& root_path,
                                int file_type,
                                const FilePath::StringType& pattern,
                                FolderSearchPolicy folder_search_policy)
+    : FileEnumerator(root_path,
+                     recursive,
+                     file_type,
+                     pattern,
+                     folder_search_policy,
+                     ErrorPolicy::IGNORE_ERRORS) {}
+
+FileEnumerator::FileEnumerator(const FilePath& root_path,
+                               bool recursive,
+                               int file_type,
+                               const FilePath::StringType& pattern,
+                               FolderSearchPolicy folder_search_policy,
+                               ErrorPolicy error_policy)
     : recursive_(recursive),
       file_type_(file_type),
       pattern_(!pattern.empty() ? pattern : FILE_PATH_LITERAL("*")),
-      folder_search_policy_(folder_search_policy) {
+      folder_search_policy_(folder_search_policy),
+      error_policy_(error_policy) {
   // INCLUDE_DOT_DOT must not be specified if recursive.
   DCHECK(!(recursive && (INCLUDE_DOT_DOT & file_type_)));
   memset(&find_data_, 0, sizeof(find_data_));
@@ -123,7 +137,7 @@ FilePath FileEnumerator::Next() {
       // Start a new find operation.
       const FilePath src =
           BuildSearchFilter(folder_search_policy_, root_path_, pattern_);
-      find_handle_ = FindFirstFileEx(as_wcstr(src.value()),
+      find_handle_ = FindFirstFileEx(src.value().c_str(),
                                      FindExInfoBasic,  // Omit short name.
                                      &find_data_, FindExSearchNameMatch,
                                      nullptr, FIND_FIRST_EX_LARGE_FETCH);
@@ -136,6 +150,7 @@ FilePath FileEnumerator::Next() {
       }
     }
 
+    DWORD last_error = GetLastError();
     if (INVALID_HANDLE_VALUE == find_handle_) {
       has_find_data_ = false;
 
@@ -150,10 +165,16 @@ FilePath FileEnumerator::Next() {
         pattern_ = FILE_PATH_LITERAL("*");
       }
 
-      continue;
+      if (last_error == ERROR_NO_MORE_FILES ||
+          error_policy_ == ErrorPolicy::IGNORE_ERRORS) {
+        continue;
+      }
+
+      error_ = File::OSErrorToFileError(last_error);
+      return FilePath();
     }
 
-    const FilePath filename(as_u16cstr(find_data_.cFileName));
+    const FilePath filename(find_data_.cFileName);
     if (ShouldSkip(filename))
       continue;
 
@@ -167,7 +188,7 @@ FilePath FileEnumerator::Next() {
       // add it to pending_paths_ so we scan it after we finish scanning this
       // directory. However, don't do recursion through reparse points or we
       // may end up with an infinite cycle.
-      DWORD attributes = GetFileAttributes(as_wcstr(abs_path.value()));
+      DWORD attributes = GetFileAttributes(abs_path.value().c_str());
       if (!(attributes & FILE_ATTRIBUTE_REPARSE_POINT))
         pending_paths_.push(abs_path);
     }
@@ -187,7 +208,7 @@ bool FileEnumerator::IsPatternMatched(const FilePath& src) const {
     case FolderSearchPolicy::ALL:
       // ALL policy enumerates all files, we need to check pattern match
       // manually.
-      return PathMatchSpec(as_wcstr(src.value()), as_wcstr(pattern_)) == TRUE;
+      return PathMatchSpec(src.value().c_str(), pattern_.c_str()) == TRUE;
   }
   NOTREACHED();
   return false;

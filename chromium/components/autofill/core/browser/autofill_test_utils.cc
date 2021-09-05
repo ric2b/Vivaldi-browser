@@ -374,28 +374,28 @@ AutofillProfile GetServerProfile2() {
 CreditCard GetCreditCard() {
   CreditCard credit_card(base::GenerateGUID(), kEmptyOrigin);
   SetCreditCardInfo(&credit_card, "Test User", "4111111111111111" /* Visa */,
-                    "11", "2022", "1");
+                    NextMonth().c_str(), NextYear().c_str(), "1");
   return credit_card;
 }
 
 CreditCard GetCreditCard2() {
   CreditCard credit_card(base::GenerateGUID(), kEmptyOrigin);
   SetCreditCardInfo(&credit_card, "Someone Else", "378282246310005" /* AmEx */,
-                    "07", "2022", "1");
+                    NextMonth().c_str(), TenYearsFromNow().c_str(), "1");
   return credit_card;
 }
 
 CreditCard GetExpiredCreditCard() {
   CreditCard credit_card(base::GenerateGUID(), kEmptyOrigin);
   SetCreditCardInfo(&credit_card, "Test User", "4111111111111111" /* Visa */,
-                    "11", "2002", "1");
+                    NextMonth().c_str(), LastYear().c_str(), "1");
   return credit_card;
 }
 
 CreditCard GetIncompleteCreditCard() {
   CreditCard credit_card(base::GenerateGUID(), kEmptyOrigin);
-  SetCreditCardInfo(&credit_card, "", "4111111111111111" /* Visa */, "11",
-                    "2022", "1");
+  SetCreditCardInfo(&credit_card, "", "4111111111111111" /* Visa */,
+                    NextMonth().c_str(), NextYear().c_str(), "1");
   return credit_card;
 }
 
@@ -413,27 +413,37 @@ CreditCard GetVerifiedCreditCard2() {
 
 CreditCard GetMaskedServerCard() {
   CreditCard credit_card(CreditCard::MASKED_SERVER_CARD, "a123");
+  // TODO(crbug/1059087): Change hardcoded year to NextYear.
   test::SetCreditCardInfo(&credit_card, "Bonnie Parker",
                           "2109" /* Mastercard */, "12", "2020", "1");
   credit_card.SetNetworkForMaskedCard(kMasterCard);
-  credit_card.set_card_type(CreditCard::CARD_TYPE_CREDIT);
   return credit_card;
 }
 
 CreditCard GetMaskedServerCardAmex() {
   CreditCard credit_card(CreditCard::MASKED_SERVER_CARD, "b456");
+  // TODO(crbug/1059087): Change hardcoded year to NextYear.
   test::SetCreditCardInfo(&credit_card, "Justin Thyme", "8431" /* Amex */, "9",
                           "2020", "1");
   credit_card.SetNetworkForMaskedCard(kAmericanExpressCard);
-  credit_card.set_card_type(CreditCard::CARD_TYPE_PREPAID);
+  return credit_card;
+}
+
+CreditCard GetMaskedServerCardWithNickname() {
+  CreditCard credit_card(CreditCard::MASKED_SERVER_CARD, "c789");
+  // TODO(crbug/1059087): Change hardcoded year to NextYear.
+  test::SetCreditCardInfo(&credit_card, "Test user", "1111" /* Visa */, "9",
+                          "2050", "1");
+  credit_card.SetNetworkForMaskedCard(kVisaCard);
+  credit_card.set_nickname(ASCIIToUTF16("Test nickname"));
   return credit_card;
 }
 
 CreditCard GetFullServerCard() {
   CreditCard credit_card(CreditCard::FULL_SERVER_CARD, "c123");
+  // TODO(crbug/1059087): Change hardcoded year to NextYear.
   test::SetCreditCardInfo(&credit_card, "Full Carter",
                           "4111111111111111" /* Visa */, "12", "2020", "1");
-  credit_card.set_card_type(CreditCard::CARD_TYPE_CREDIT);
   return credit_card;
 }
 
@@ -468,6 +478,29 @@ CreditCard GetRandomCreditCard(CreditCard::RecordType record_type) {
   }
 
   return credit_card;
+}
+
+CreditCardCloudTokenData GetCreditCardCloudTokenData1() {
+  CreditCardCloudTokenData data;
+  data.masked_card_id = "data1_id";
+  data.suffix = ASCIIToUTF16("1111");
+  data.exp_month = 1;
+  base::StringToInt(NextYear(), &data.exp_year);
+  data.card_art_url = "fake url 1";
+  data.instrument_token = "fake token 1";
+  return data;
+}
+
+CreditCardCloudTokenData GetCreditCardCloudTokenData2() {
+  CreditCardCloudTokenData data;
+  data.masked_card_id = "data2_id";
+  data.suffix = ASCIIToUTF16("2222");
+  data.exp_month = 2;
+  base::StringToInt(NextYear(), &data.exp_year);
+  data.exp_year += 1;
+  data.card_art_url = "fake url 2";
+  data.instrument_token = "fake token 2";
+  return data;
 }
 
 void SetProfileInfo(AutofillProfile* profile,
@@ -720,22 +753,22 @@ std::string ObfuscatedCardDigitsAsUTF8(const std::string& str) {
 
 std::string NextMonth() {
   base::Time::Exploded now;
-  base::Time::Now().LocalExplode(&now);
-  return base::NumberToString(now.month % 12 + 1);
+  AutofillClock::Now().LocalExplode(&now);
+  return base::StringPrintf("%02d", now.month % 12 + 1);
 }
 std::string LastYear() {
   base::Time::Exploded now;
-  base::Time::Now().LocalExplode(&now);
+  AutofillClock::Now().LocalExplode(&now);
   return base::NumberToString(now.year - 1);
 }
 std::string NextYear() {
   base::Time::Exploded now;
-  base::Time::Now().LocalExplode(&now);
+  AutofillClock::Now().LocalExplode(&now);
   return base::NumberToString(now.year + 1);
 }
 std::string TenYearsFromNow() {
   base::Time::Exploded now;
-  base::Time::Now().LocalExplode(&now);
+  AutofillClock::Now().LocalExplode(&now);
   return base::NumberToString(now.year + 10);
 }
 

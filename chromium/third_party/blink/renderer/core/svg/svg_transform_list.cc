@@ -29,6 +29,7 @@
 #include "third_party/blink/renderer/core/css/css_numeric_literal_value.h"
 #include "third_party/blink/renderer/core/css/css_primitive_value.h"
 #include "third_party/blink/renderer/core/css/css_value_list.h"
+#include "third_party/blink/renderer/core/svg/svg_animate_element.h"
 #include "third_party/blink/renderer/core/svg/svg_parser_utilities.h"
 #include "third_party/blink/renderer/core/svg/svg_transform_distance.h"
 #include "third_party/blink/renderer/core/svg_names.h"
@@ -434,7 +435,7 @@ void SVGTransformList::Add(SVGPropertyBase* other,
   if (IsEmpty())
     return;
 
-  SVGTransformList* other_list = ToSVGTransformList(other);
+  auto* other_list = To<SVGTransformList>(other);
   if (length() != other_list->length())
     return;
 
@@ -448,27 +449,23 @@ void SVGTransformList::Add(SVGPropertyBase* other,
 }
 
 void SVGTransformList::CalculateAnimatedValue(
-    SVGAnimationElement* animation_element,
+    const SVGAnimateElement& animation_element,
     float percentage,
     unsigned repeat_count,
     SVGPropertyBase* from_value,
     SVGPropertyBase* to_value,
     SVGPropertyBase* to_at_end_of_duration_value,
     SVGElement* context_element) {
-  DCHECK(animation_element);
-  bool is_to_animation = animation_element->GetAnimationMode() == kToAnimation;
-
   // Spec: To animations provide specific functionality to get a smooth change
   // from the underlying value to the 'to' attribute value, which conflicts
   // mathematically with the requirement for additive transform animations to be
   // post-multiplied. As a consequence, in SVG 1.1 the behavior of to animations
   // for 'animateTransform' is undefined.
   // FIXME: This is not taken into account yet.
-  SVGTransformList* from_list =
-      is_to_animation ? this : ToSVGTransformList(from_value);
-  SVGTransformList* to_list = ToSVGTransformList(to_value);
-  SVGTransformList* to_at_end_of_duration_list =
-      ToSVGTransformList(to_at_end_of_duration_value);
+  auto* from_list = To<SVGTransformList>(from_value);
+  auto* to_list = To<SVGTransformList>(to_value);
+  auto* to_at_end_of_duration_list =
+      To<SVGTransformList>(to_at_end_of_duration_value);
 
   size_t to_list_size = to_list->length();
   if (!to_list_size)
@@ -487,16 +484,20 @@ void SVGTransformList::CalculateAnimatedValue(
     effective_from = MakeGarbageCollected<SVGTransform>(
         to_transform->TransformType(), SVGTransform::kConstructZeroTransform);
 
-  // Never resize the animatedTransformList to the toList size, instead either
-  // clear the list or append to it.
-  if (!IsEmpty() && (!animation_element->IsAdditive() || is_to_animation))
-    Clear();
-
   SVGTransform* current_transform =
       SVGTransformDistance(effective_from, to_transform)
           .ScaledDistance(percentage)
           .AddToSVGTransform(effective_from);
-  if (animation_element->IsAccumulated() && repeat_count) {
+  if (animation_element.GetAnimationMode() == kToAnimation) {
+    Initialize(current_transform);
+    return;
+  }
+  // Never resize the animatedTransformList to the toList size, instead either
+  // clear the list or append to it.
+  if (!IsEmpty() && !animation_element.IsAdditive())
+    Clear();
+
+  if (repeat_count && animation_element.IsAccumulated()) {
     SVGTransform* effective_to_at_end =
         !to_at_end_of_duration_list->IsEmpty()
             ? to_at_end_of_duration_list->at(0)
@@ -516,7 +517,7 @@ float SVGTransformList::CalculateDistance(SVGPropertyBase* to_value,
   // component (translate x and y for example) is paced separately. To implement
   // this we need to treat each component as individual animation everywhere.
 
-  SVGTransformList* to_list = ToSVGTransformList(to_value);
+  auto* to_list = To<SVGTransformList>(to_value);
   if (IsEmpty() || length() != to_list->length())
     return -1;
 

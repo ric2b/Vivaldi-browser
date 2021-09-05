@@ -27,15 +27,22 @@
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_resource_marker.h"
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_resource_masker.h"
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_resource_paint_server.h"
+#include "third_party/blink/renderer/core/layout/svg/layout_svg_text.h"
 #include "third_party/blink/renderer/core/layout/svg/svg_resources_cache.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/core/style/reference_clip_path_operation.h"
 #include "third_party/blink/renderer/core/style/style_svg_resource.h"
+#include "third_party/blink/renderer/core/svg/graphics/filters/svg_filter_builder.h"
+#include "third_party/blink/renderer/core/svg/svg_filter_primitive_standard_attributes.h"
 #include "third_party/blink/renderer/core/svg/svg_pattern_element.h"
 #include "third_party/blink/renderer/core/svg/svg_resource.h"
 #include "third_party/blink/renderer/core/svg/svg_tree_scope_resources.h"
 #include "third_party/blink/renderer/core/svg/svg_uri_reference.h"
 #include "third_party/blink/renderer/core/svg_names.h"
+#include "third_party/blink/renderer/platform/graphics/filters/filter.h"
+#include "third_party/blink/renderer/platform/graphics/filters/filter_effect.h"
+#include "third_party/blink/renderer/platform/graphics/filters/paint_filter_builder.h"
+#include "third_party/blink/renderer/platform/graphics/filters/source_graphic.h"
 
 #if DCHECK_IS_ON()
 #include <stdio.h>
@@ -43,12 +50,32 @@
 
 namespace blink {
 
-using namespace svg_names;
-
 SVGResources::SVGResources() : linked_resource_(nullptr) {}
 
-SVGResourceClient* SVGResources::GetClient(const LayoutObject& object) {
+SVGElementResourceClient* SVGResources::GetClient(const LayoutObject& object) {
   return To<SVGElement>(object.GetNode())->GetSVGResourceClient();
+}
+
+FloatRect SVGResources::ReferenceBoxForEffects(
+    const LayoutObject& layout_object) {
+  // For SVG foreign objects, remove the position part of the bounding box. The
+  // position is already baked into the transform, and we don't want to re-apply
+  // the offset when, e.g., using "objectBoundingBox" for clipPathUnits.
+  if (layout_object.IsSVGForeignObject()) {
+    FloatRect rect = layout_object.ObjectBoundingBox();
+    return FloatRect(FloatPoint::Zero(), rect.Size());
+  }
+
+  // Text "sub-elements" (<tspan>, <textpath>, <a>) should use the entire
+  // <text>s object bounding box rather then their own.
+  // https://svgwg.org/svg2-draft/text.html#ObjectBoundingBoxUnitsTextObjects
+  const LayoutObject* obb_layout_object = &layout_object;
+  if (layout_object.IsSVGInline()) {
+    obb_layout_object =
+        LayoutSVGText::LocateLayoutSVGTextAncestor(&layout_object);
+  }
+  DCHECK(obb_layout_object);
+  return obb_layout_object->ObjectBoundingBox();
 }
 
 static HashSet<AtomicString>& ClipperFilterMaskerTags() {
@@ -59,26 +86,28 @@ static HashSet<AtomicString>& ClipperFilterMaskerTags() {
           // http://www.w3.org/TR/SVG11/intro.html#TermContainerElement
           // "graphics elements" :
           // http://www.w3.org/TR/SVG11/intro.html#TermGraphicsElement
-          kATag.LocalName(), kCircleTag.LocalName(), kEllipseTag.LocalName(),
-          kGTag.LocalName(), kImageTag.LocalName(), kLineTag.LocalName(),
-          kMarkerTag.LocalName(), kMaskTag.LocalName(), kPathTag.LocalName(),
-          kPolygonTag.LocalName(), kPolylineTag.LocalName(),
-          kRectTag.LocalName(), kSVGTag.LocalName(), kTextTag.LocalName(),
-          kUseTag.LocalName(),
+          svg_names::kATag.LocalName(), svg_names::kCircleTag.LocalName(),
+          svg_names::kEllipseTag.LocalName(), svg_names::kGTag.LocalName(),
+          svg_names::kImageTag.LocalName(), svg_names::kLineTag.LocalName(),
+          svg_names::kMarkerTag.LocalName(), svg_names::kMaskTag.LocalName(),
+          svg_names::kPathTag.LocalName(), svg_names::kPolygonTag.LocalName(),
+          svg_names::kPolylineTag.LocalName(), svg_names::kRectTag.LocalName(),
+          svg_names::kSVGTag.LocalName(), svg_names::kTextTag.LocalName(),
+          svg_names::kUseTag.LocalName(),
           // Not listed in the definitions is the clipPath element, the SVG spec
           // says though:
           // The "clipPath" element or any of its children can specify property
           // "clip-path".
           // So we have to add kClipPathTag here, otherwhise clip-path on
           // clipPath will fail. (Already mailed SVG WG, waiting for a solution)
-          kClipPathTag.LocalName(),
+          svg_names::kClipPathTag.LocalName(),
           // Not listed in the definitions are the text content elements, though
           // filter/clipper/masker on tspan/text/.. is allowed.
           // (Already mailed SVG WG, waiting for a solution)
-          kTextPathTag.LocalName(), kTSpanTag.LocalName(),
+          svg_names::kTextPathTag.LocalName(), svg_names::kTSpanTag.LocalName(),
           // Not listed in the definitions is the foreignObject element, but
           // clip-path is a supported attribute.
-          kForeignObjectTag.LocalName(),
+          svg_names::kForeignObjectTag.LocalName(),
           // Elements that we ignore, as it doesn't make any sense.
           // defs, pattern, switch (FIXME: Mail SVG WG about these)
           // symbol (is converted to a svg element, when referenced by use, we
@@ -90,54 +119,30 @@ static HashSet<AtomicString>& ClipperFilterMaskerTags() {
 bool SVGResources::SupportsMarkers(const SVGElement& element) {
   DEFINE_STATIC_LOCAL(HashSet<AtomicString>, tag_list,
                       ({
-                          kLineTag.LocalName(), kPathTag.LocalName(),
-                          kPolygonTag.LocalName(), kPolylineTag.LocalName(),
+                          svg_names::kLineTag.LocalName(),
+                          svg_names::kPathTag.LocalName(),
+                          svg_names::kPolygonTag.LocalName(),
+                          svg_names::kPolylineTag.LocalName(),
                       }));
   return tag_list.Contains(element.localName());
 }
 
 static HashSet<AtomicString>& FillAndStrokeTags() {
-  DEFINE_STATIC_LOCAL(
-      HashSet<AtomicString>, tag_list,
-      ({
-          kCircleTag.LocalName(), kEllipseTag.LocalName(), kLineTag.LocalName(),
-          kPathTag.LocalName(), kPolygonTag.LocalName(),
-          kPolylineTag.LocalName(), kRectTag.LocalName(), kTextTag.LocalName(),
-          kTextPathTag.LocalName(), kTSpanTag.LocalName(),
-      }));
+  DEFINE_STATIC_LOCAL(HashSet<AtomicString>, tag_list,
+                      ({
+                          svg_names::kCircleTag.LocalName(),
+                          svg_names::kEllipseTag.LocalName(),
+                          svg_names::kLineTag.LocalName(),
+                          svg_names::kPathTag.LocalName(),
+                          svg_names::kPolygonTag.LocalName(),
+                          svg_names::kPolylineTag.LocalName(),
+                          svg_names::kRectTag.LocalName(),
+                          svg_names::kTextTag.LocalName(),
+                          svg_names::kTextPathTag.LocalName(),
+                          svg_names::kTSpanTag.LocalName(),
+                      }));
   return tag_list;
 }
-
-namespace {
-
-template <typename ContainerType>
-bool IsResourceOfType(LayoutSVGResourceContainer* container) {
-  return container->ResourceType() == ContainerType::kResourceType;
-}
-
-template <>
-bool IsResourceOfType<LayoutSVGResourcePaintServer>(
-    LayoutSVGResourceContainer* container) {
-  return container->IsSVGPaintServer();
-}
-
-template <typename ContainerType>
-ContainerType* CastResource(SVGResource* resource) {
-  if (!resource)
-    return nullptr;
-  if (LayoutSVGResourceContainer* container = resource->ResourceContainer()) {
-    if (IsResourceOfType<ContainerType>(container))
-      return static_cast<ContainerType*>(container);
-  }
-  return nullptr;
-}
-
-template <typename ContainerType>
-ContainerType* CastResource(StyleSVGResource& style_resource) {
-  return CastResource<ContainerType>(style_resource.Resource());
-}
-
-}  // namespace
 
 bool SVGResources::HasResourceData() const {
   return clipper_filter_masker_data_ || marker_data_ || fill_stroke_data_ ||
@@ -169,63 +174,55 @@ std::unique_ptr<SVGResources> SVGResources::BuildResources(
   std::unique_ptr<SVGResources> resources;
   if (ClipperFilterMaskerTags().Contains(tag_name)) {
     if (computed_style.ClipPath() && !object.IsSVGRoot()) {
-      ClipPathOperation* clip_path_operation = computed_style.ClipPath();
-      if (clip_path_operation->GetType() == ClipPathOperation::REFERENCE) {
-        const ReferenceClipPathOperation& clip_path_reference =
-            To<ReferenceClipPathOperation>(*clip_path_operation);
-        EnsureResources(resources).SetClipper(
-            CastResource<LayoutSVGResourceClipper>(
-                clip_path_reference.Resource()));
+      if (LayoutSVGResourceClipper* clipper =
+              GetSVGResourceAsType(computed_style.ClipPath())) {
+        EnsureResources(resources).SetClipper(clipper);
       }
     }
 
     if (computed_style.HasFilter() && !object.IsSVGRoot()) {
-      const FilterOperations& filter_operations = computed_style.Filter();
-      if (filter_operations.size() == 1) {
-        const FilterOperation& filter_operation = *filter_operations.at(0);
-        if (const auto* reference_filter_operation =
-                DynamicTo<ReferenceFilterOperation>(filter_operation)) {
-          EnsureResources(resources).SetFilter(
-              CastResource<LayoutSVGResourceFilter>(
-                  reference_filter_operation->Resource()));
-        }
+      if (LayoutSVGResourceFilter* filter =
+              GetFilterResourceForSVG(computed_style)) {
+        EnsureResources(resources).SetFilter(filter);
       }
     }
 
-    if (StyleSVGResource* masker_resource = style.MaskerResource()) {
-      EnsureResources(resources).SetMasker(
-          CastResource<LayoutSVGResourceMasker>(*masker_resource));
+    if (auto* masker = GetSVGResourceAsType<LayoutSVGResourceMasker>(
+            style.MaskerResource())) {
+      EnsureResources(resources).SetMasker(masker);
     }
   }
 
   if (style.HasMarkers() && SupportsMarkers(element)) {
-    if (StyleSVGResource* marker_start_resource = style.MarkerStartResource()) {
-      EnsureResources(resources).SetMarkerStart(
-          CastResource<LayoutSVGResourceMarker>(*marker_start_resource));
+    if (auto* marker = GetSVGResourceAsType<LayoutSVGResourceMarker>(
+            style.MarkerStartResource())) {
+      EnsureResources(resources).SetMarkerStart(marker);
     }
-    if (StyleSVGResource* marker_mid_resource = style.MarkerMidResource()) {
-      EnsureResources(resources).SetMarkerMid(
-          CastResource<LayoutSVGResourceMarker>(*marker_mid_resource));
+    if (auto* marker = GetSVGResourceAsType<LayoutSVGResourceMarker>(
+            style.MarkerMidResource())) {
+      EnsureResources(resources).SetMarkerMid(marker);
     }
-    if (StyleSVGResource* marker_end_resource = style.MarkerEndResource()) {
-      EnsureResources(resources).SetMarkerEnd(
-          CastResource<LayoutSVGResourceMarker>(*marker_end_resource));
+    if (auto* marker = GetSVGResourceAsType<LayoutSVGResourceMarker>(
+            style.MarkerEndResource())) {
+      EnsureResources(resources).SetMarkerEnd(marker);
     }
   }
 
   if (FillAndStrokeTags().Contains(tag_name)) {
-    if (StyleSVGResource* fill_resource = style.FillPaint().Resource()) {
-      EnsureResources(resources).SetFill(
-          CastResource<LayoutSVGResourcePaintServer>(*fill_resource));
+    if (auto* paint_resource =
+            GetSVGResourceAsType<LayoutSVGResourcePaintServer>(
+                style.FillPaint().Resource())) {
+      EnsureResources(resources).SetFill(paint_resource);
     }
 
-    if (StyleSVGResource* stroke_resource = style.StrokePaint().Resource()) {
-      EnsureResources(resources).SetStroke(
-          CastResource<LayoutSVGResourcePaintServer>(*stroke_resource));
+    if (auto* paint_resource =
+            GetSVGResourceAsType<LayoutSVGResourcePaintServer>(
+                style.StrokePaint().Resource())) {
+      EnsureResources(resources).SetStroke(paint_resource);
     }
   }
 
-  if (auto* pattern = ToSVGPatternElementOrNull(element)) {
+  if (auto* pattern = DynamicTo<SVGPatternElement>(element)) {
     const SVGPatternElement* directly_referenced_pattern =
         pattern->ReferencedElement();
     if (directly_referenced_pattern) {
@@ -270,41 +267,28 @@ void SVGResources::LayoutIfNeeded() {
     linked_resource_->LayoutIfNeeded();
 }
 
-InvalidationModeMask SVGResources::RemoveClientFromCacheAffectingObjectBounds(
-    SVGResourceClient& client) const {
-  if (!clipper_filter_masker_data_)
-    return 0;
-  InvalidationModeMask invalidation_flags = 0;
-  if (LayoutSVGResourceClipper* clipper = clipper_filter_masker_data_->clipper)
-    clipper->RemoveClientFromCache(client);
-  if (LayoutSVGResourceFilter* filter = clipper_filter_masker_data_->filter) {
-    if (filter->RemoveClientFromCache(client))
-      invalidation_flags |= SVGResourceClient::kPaintInvalidation;
-  }
-  if (LayoutSVGResourceMasker* masker = clipper_filter_masker_data_->masker)
-    masker->RemoveClientFromCache(client);
-  return invalidation_flags | SVGResourceClient::kBoundariesInvalidation;
+bool SVGResources::DifferenceNeedsLayout(const SVGResources* a,
+                                         const SVGResources* b) {
+  bool a_has_bounds_affecting_resource = a && a->clipper_filter_masker_data_;
+  bool b_has_bounds_affecting_resource = b && b->clipper_filter_masker_data_;
+  if (a_has_bounds_affecting_resource != b_has_bounds_affecting_resource)
+    return true;
+  if (!a_has_bounds_affecting_resource)
+    return false;
+  return a->Clipper() != b->Clipper() || a->Filter() != b->Filter() ||
+         a->Masker() != b->Masker();
 }
 
-InvalidationModeMask SVGResources::RemoveClientFromCache(
-    SVGResourceClient& client) const {
-  if (!HasResourceData())
+InvalidationModeMask SVGResources::RemoveClientFromCacheAffectingObjectBounds(
+    SVGElementResourceClient& client) const {
+  if (!clipper_filter_masker_data_)
     return 0;
-
-  // We never call this method for the elements where this would be non-null.
-  DCHECK(!linked_resource_);
-
   InvalidationModeMask invalidation_flags =
-      RemoveClientFromCacheAffectingObjectBounds(client);
-
-  if (fill_stroke_data_) {
-    if (LayoutSVGResourcePaintServer* fill = fill_stroke_data_->fill)
-      fill->RemoveClientFromCache(client);
-    if (LayoutSVGResourcePaintServer* stroke = fill_stroke_data_->stroke)
-      stroke->RemoveClientFromCache(client);
-    invalidation_flags |= SVGResourceClient::kPaintInvalidation;
+      SVGResourceClient::kBoundariesInvalidation;
+  if (clipper_filter_masker_data_->filter) {
+    if (client.ClearFilterData())
+      invalidation_flags |= SVGResourceClient::kPaintInvalidation;
   }
-
   return invalidation_flags;
 }
 
@@ -458,9 +442,7 @@ void SVGResources::BuildSetOfResources(
 }
 
 void SVGResources::SetClipper(LayoutSVGResourceClipper* clipper) {
-  if (!clipper)
-    return;
-
+  DCHECK(clipper);
   DCHECK_EQ(clipper->ResourceType(), kClipperResourceType);
 
   if (!clipper_filter_masker_data_)
@@ -470,9 +452,7 @@ void SVGResources::SetClipper(LayoutSVGResourceClipper* clipper) {
 }
 
 void SVGResources::SetFilter(LayoutSVGResourceFilter* filter) {
-  if (!filter)
-    return;
-
+  DCHECK(filter);
   DCHECK_EQ(filter->ResourceType(), kFilterResourceType);
 
   if (!clipper_filter_masker_data_)
@@ -482,9 +462,7 @@ void SVGResources::SetFilter(LayoutSVGResourceFilter* filter) {
 }
 
 void SVGResources::SetMarkerStart(LayoutSVGResourceMarker* marker_start) {
-  if (!marker_start)
-    return;
-
+  DCHECK(marker_start);
   DCHECK_EQ(marker_start->ResourceType(), kMarkerResourceType);
 
   if (!marker_data_)
@@ -494,9 +472,7 @@ void SVGResources::SetMarkerStart(LayoutSVGResourceMarker* marker_start) {
 }
 
 void SVGResources::SetMarkerMid(LayoutSVGResourceMarker* marker_mid) {
-  if (!marker_mid)
-    return;
-
+  DCHECK(marker_mid);
   DCHECK_EQ(marker_mid->ResourceType(), kMarkerResourceType);
 
   if (!marker_data_)
@@ -506,9 +482,7 @@ void SVGResources::SetMarkerMid(LayoutSVGResourceMarker* marker_mid) {
 }
 
 void SVGResources::SetMarkerEnd(LayoutSVGResourceMarker* marker_end) {
-  if (!marker_end)
-    return;
-
+  DCHECK(marker_end);
   DCHECK_EQ(marker_end->ResourceType(), kMarkerResourceType);
 
   if (!marker_data_)
@@ -518,9 +492,7 @@ void SVGResources::SetMarkerEnd(LayoutSVGResourceMarker* marker_end) {
 }
 
 void SVGResources::SetMasker(LayoutSVGResourceMasker* masker) {
-  if (!masker)
-    return;
-
+  DCHECK(masker);
   DCHECK_EQ(masker->ResourceType(), kMaskerResourceType);
 
   if (!clipper_filter_masker_data_)
@@ -530,8 +502,7 @@ void SVGResources::SetMasker(LayoutSVGResourceMasker* masker) {
 }
 
 void SVGResources::SetFill(LayoutSVGResourcePaintServer* fill) {
-  if (!fill)
-    return;
+  DCHECK(fill);
 
   if (!fill_stroke_data_)
     fill_stroke_data_ = std::make_unique<FillStrokeData>();
@@ -540,8 +511,7 @@ void SVGResources::SetFill(LayoutSVGResourcePaintServer* fill) {
 }
 
 void SVGResources::SetStroke(LayoutSVGResourcePaintServer* stroke) {
-  if (!stroke)
-    return;
+  DCHECK(stroke);
 
   if (!fill_stroke_data_)
     fill_stroke_data_ = std::make_unique<FillStrokeData>();
@@ -698,6 +668,83 @@ void SVGResources::ClearMarkers(SVGElement& element,
     marker_resource->RemoveClient(*client);
 }
 
+bool FilterData::UpdateStateOnFinish() {
+  switch (state_) {
+    // A cycle can occur when an FeImage references a source that
+    // makes use of the FeImage itself. This is the first place we
+    // would hit the cycle so we reset the state and continue.
+    case kGeneratingFilterCycleDetected:
+      state_ = kGeneratingFilter;
+      return false;
+    case kRecordingContentCycleDetected:
+      state_ = kRecordingContent;
+      return false;
+    default:
+      return true;
+  }
+}
+
+void FilterData::UpdateStateOnPrepare() {
+  switch (state_) {
+    case kGeneratingFilter:
+      state_ = kGeneratingFilterCycleDetected;
+      break;
+    case kRecordingContent:
+      state_ = kRecordingContentCycleDetected;
+      break;
+    default:
+      break;
+  }
+}
+
+void FilterData::UpdateContent(sk_sp<PaintRecord> content) {
+  DCHECK_EQ(state_, kRecordingContent);
+  Filter* filter = last_effect_->GetFilter();
+  FloatRect bounds = filter->FilterRegion();
+  DCHECK(filter->GetSourceGraphic());
+  paint_filter_builder::BuildSourceGraphic(filter->GetSourceGraphic(),
+                                           std::move(content), bounds);
+  state_ = kReadyToPaint;
+}
+
+sk_sp<PaintFilter> FilterData::CreateFilter() {
+  DCHECK_EQ(state_, kReadyToPaint);
+  state_ = kGeneratingFilter;
+  sk_sp<PaintFilter> image_filter =
+      paint_filter_builder::Build(last_effect_, kInterpolationSpaceSRGB);
+  state_ = kReadyToPaint;
+  return image_filter;
+}
+
+FloatRect FilterData::MapRect(const FloatRect& input_rect) const {
+  DCHECK_EQ(state_, kReadyToPaint);
+  return last_effect_->MapRect(input_rect);
+}
+
+bool FilterData::Invalidate(SVGFilterPrimitiveStandardAttributes& primitive,
+                            const QualifiedName& attribute) {
+  if (state_ != kReadyToPaint)
+    return true;
+  if (FilterEffect* effect = node_map_->EffectForElement(primitive)) {
+    if (!primitive.SetFilterEffectAttribute(effect, attribute))
+      return false;  // No change
+    node_map_->InvalidateDependentEffects(effect);
+  }
+  return true;
+}
+
+void FilterData::Trace(Visitor* visitor) {
+  visitor->Trace(last_effect_);
+  visitor->Trace(node_map_);
+}
+
+void FilterData::Dispose() {
+  node_map_ = nullptr;
+  if (last_effect_)
+    last_effect_->DisposeImageFiltersRecursive();
+  last_effect_ = nullptr;
+}
+
 SVGElementResourceClient::SVGElementResourceClient(SVGElement* element)
     : element_(element) {}
 
@@ -706,22 +753,15 @@ void SVGElementResourceClient::ResourceContentChanged(
   LayoutObject* layout_object = element_->GetLayoutObject();
   if (!layout_object)
     return;
-  bool mark_for_invalidation =
-      invalidation_mask & ~SVGResourceClient::kParentOnlyInvalidation;
   if (layout_object->IsSVGResourceContainer()) {
-    ToLayoutSVGResourceContainer(layout_object)
-        ->RemoveAllClientsFromCache(mark_for_invalidation);
+    ToLayoutSVGResourceContainer(layout_object)->RemoveAllClientsFromCache();
     return;
   }
 
-  if (mark_for_invalidation) {
-    LayoutSVGResourceContainer::MarkClientForInvalidation(*layout_object,
-                                                          invalidation_mask);
-  }
+  LayoutSVGResourceContainer::MarkClientForInvalidation(*layout_object,
+                                                        invalidation_mask);
 
-  // Special case for filter invalidation.
-  if (invalidation_mask & SVGResourceClient::kSkipAncestorInvalidation)
-    return;
+  ClearFilterData();
 
   bool needs_layout =
       invalidation_mask & SVGResourceClient::kLayoutInvalidation;
@@ -730,8 +770,10 @@ void SVGElementResourceClient::ResourceContentChanged(
 }
 
 void SVGElementResourceClient::ResourceElementChanged() {
-  if (LayoutObject* layout_object = element_->GetLayoutObject())
+  if (LayoutObject* layout_object = element_->GetLayoutObject()) {
+    ClearFilterData();
     SVGResourcesCache::ResourceReferenceChanged(*layout_object);
+  }
 }
 
 void SVGElementResourceClient::ResourceDestroyed(
@@ -745,8 +787,32 @@ void SVGElementResourceClient::ResourceDestroyed(
     resources->ResourceDestroyed(resource);
 }
 
+void SVGElementResourceClient::FilterPrimitiveChanged(
+    SVGFilterPrimitiveStandardAttributes& primitive,
+    const QualifiedName& attribute) {
+  if (filter_data_ && !filter_data_->Invalidate(primitive, attribute))
+    return;  // No change
+  LayoutObject* layout_object = element_->GetLayoutObject();
+  if (!layout_object)
+    return;
+  LayoutSVGResourceContainer::MarkClientForInvalidation(
+      *layout_object, SVGResourceClient::kPaintInvalidation);
+}
+
+void SVGElementResourceClient::SetFilterData(FilterData* filter_data) {
+  filter_data_ = filter_data;
+}
+
+bool SVGElementResourceClient::ClearFilterData() {
+  FilterData* filter_data = filter_data_.Release();
+  if (filter_data)
+    filter_data->Dispose();
+  return !!filter_data;
+}
+
 void SVGElementResourceClient::Trace(Visitor* visitor) {
   visitor->Trace(element_);
+  visitor->Trace(filter_data_);
   SVGResourceClient::Trace(visitor);
 }
 

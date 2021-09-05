@@ -7,15 +7,11 @@ package org.chromium.chrome.browser.tab;
 import android.graphics.Bitmap;
 import android.view.ContextMenu;
 
-import org.chromium.chrome.browser.findinpage.FindMatchRectsDetails;
-import org.chromium.chrome.browser.findinpage.FindNotificationDetails;
-import org.chromium.chrome.browser.fullscreen.FullscreenOptions;
-import org.chromium.chrome.browser.tab.Tab.TabHidingType;
-import org.chromium.chrome.browser.tabmodel.TabSelectionType;
+import org.chromium.components.find_in_page.FindMatchRectsDetails;
+import org.chromium.components.find_in_page.FindNotificationDetails;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.NavigationHandle;
 import org.chromium.content_public.browser.WebContents;
-import org.chromium.content_public.common.BrowserControlsState;
 import org.chromium.net.NetError;
 
 /**
@@ -59,6 +55,9 @@ public class EmptyTabObserver implements TabObserver {
     public void onRestoreStarted(Tab tab) {}
 
     @Override
+    public void onRestoreFailed(Tab tab) {}
+
+    @Override
     public void onFaviconUpdated(Tab tab, Bitmap icon) { }
 
     @Override
@@ -80,9 +79,6 @@ public class EmptyTabObserver implements TabObserver {
     public void onContextMenuShown(Tab tab, ContextMenu menu) { }
 
     @Override
-    public void onContextualActionBarVisibilityChanged(Tab tab, boolean visible) { }
-
-    @Override
     public void onCloseContents(Tab tab) {}
 
     @Override
@@ -92,20 +88,13 @@ public class EmptyTabObserver implements TabObserver {
     public void onLoadStopped(Tab tab, boolean toDifferentDocument) { }
 
     @Override
-    public void onLoadProgressChanged(Tab tab, int progress) { }
+    public void onLoadProgressChanged(Tab tab, float progress) {}
 
     @Override
     public void onUpdateUrl(Tab tab, String url) { }
 
     @Override
-    public void onEnterFullscreenMode(Tab tab, FullscreenOptions options) {}
-
-    @Override
-    public void onExitFullscreenMode(Tab tab) {}
-
-    @Override
-    public void onDidFailLoad(
-            Tab tab, boolean isMainFrame, int errorCode, String description, String failingUrl) {}
+    public void onDidFailLoad(Tab tab, boolean isMainFrame, int errorCode, String failingUrl) {}
 
     @Override
     public void onDidStartNavigation(Tab tab, NavigationHandle navigationHandle) {}
@@ -140,17 +129,13 @@ public class EmptyTabObserver implements TabObserver {
     public void onActivityAttachmentChanged(Tab tab, boolean isAttached) {}
 
     @Override
-    public void onInteractabilityChanged(boolean isInteractable) {}
+    public void onInteractabilityChanged(Tab tab, boolean isInteractable) {}
 
     @Override
     public void onRendererResponsiveStateChanged(Tab tab, boolean isResponsive) {}
 
     @Override
     public void onNavigationEntriesDeleted(Tab tab) {}
-
-    @Override
-    public void onBrowserControlsConstraintsUpdated(
-            Tab tab, @BrowserControlsState int constraints) {}
 
     @Override
     public void onFindResultAvailable(FindNotificationDetails result) {}
@@ -162,6 +147,7 @@ public class EmptyTabObserver implements TabObserver {
     public void onRootIdChanged(Tab tab, int newRootId) {}
 
     @Override
-    public void onBrowserControlsOffsetChanged(
-            Tab tab, int topControlsOffsetY, int bottomControlsOffsetY, int contentOffsetY) {}
+    public void onBrowserControlsOffsetChanged(Tab tab, int topControlsOffsetY,
+            int bottomControlsOffsetY, int contentOffsetY, int topControlsMinHeightOffsetY,
+            int bottomControlsMinHeightOffsetY) {}
 }

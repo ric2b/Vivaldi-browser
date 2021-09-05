@@ -243,7 +243,14 @@ class ProfileManagerBrowserTest : public InProcessBrowserTest {
 #if !defined(OS_CHROMEOS)
 
 // Delete single profile and make sure a new one is created.
-IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, DeleteSingletonProfile) {
+// TODO(https://crbug.com/1073451) flaky on windows bots
+#if defined(OS_WIN)
+#define MAYBE_DeleteSingletonProfile DISABLED_DeleteSingletonProfile
+#else
+#define MAYBE_DeleteSingletonProfile DeleteSingletonProfile
+#endif
+IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest,
+                       MAYBE_DeleteSingletonProfile) {
   ProfileManager* profile_manager = g_browser_process->profile_manager();
   ProfileAttributesStorage& storage =
       profile_manager->GetProfileAttributesStorage();
@@ -316,7 +323,13 @@ IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, DeleteInactiveProfile) {
 
 // Delete current profile in a multi profile setup and make sure an existing one
 // is loaded.
-IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, DeleteCurrentProfile) {
+// TODO(https://crbug.com/1073451) flaky on windows + linux bots
+#if defined(OS_WIN) || defined(OS_LINUX)
+#define MAYBE_DeleteCurrentProfile DISABLED_DeleteCurrentProfile
+#else
+#define MAYBE_DeleteCurrentProfile DeleteCurrentProfile
+#endif
+IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, MAYBE_DeleteCurrentProfile) {
   ProfileManager* profile_manager = g_browser_process->profile_manager();
   ProfileAttributesStorage& storage =
       profile_manager->GetProfileAttributesStorage();
@@ -348,7 +361,13 @@ IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, DeleteCurrentProfile) {
 
 // Delete all profiles in a multi profile setup and make sure a new one is
 // created.
-IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, DeleteAllProfiles) {
+// TODO(https://crbug.com/1073451) flaky on windows bots
+#if defined(OS_WIN)
+#define MAYBE_DeleteAllProfiles DISABLED_DeleteAllProfiles
+#else
+#define MAYBE_DeleteAllProfiles DeleteAllProfiles
+#endif
+IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, MAYBE_DeleteAllProfiles) {
   ProfileManager* profile_manager = g_browser_process->profile_manager();
   ProfileAttributesStorage& storage =
       profile_manager->GetProfileAttributesStorage();
@@ -478,22 +497,19 @@ IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, SwitchToProfile) {
   EXPECT_EQ(1U, browser_list->size());
 
   // Open a browser window for the first profile.
-  profiles::SwitchToProfile(path_profile1, false, kOnProfileSwitchDoNothing,
-                            ProfileMetrics::SWITCH_PROFILE_ICON);
+  profiles::SwitchToProfile(path_profile1, false, kOnProfileSwitchDoNothing);
   EXPECT_EQ(1U, chrome::GetTotalBrowserCount());
   EXPECT_EQ(1U, browser_list->size());
   EXPECT_EQ(path_profile1, browser_list->get(0)->profile()->GetPath());
 
   // Open a browser window for the second profile.
-  profiles::SwitchToProfile(path_profile2, false, kOnProfileSwitchDoNothing,
-                            ProfileMetrics::SWITCH_PROFILE_ICON);
+  profiles::SwitchToProfile(path_profile2, false, kOnProfileSwitchDoNothing);
   EXPECT_EQ(2U, chrome::GetTotalBrowserCount());
   EXPECT_EQ(2U, browser_list->size());
   EXPECT_EQ(path_profile2, browser_list->get(1)->profile()->GetPath());
 
   // Switch to the first profile without opening a new window.
-  profiles::SwitchToProfile(path_profile1, false, kOnProfileSwitchDoNothing,
-                            ProfileMetrics::SWITCH_PROFILE_ICON);
+  profiles::SwitchToProfile(path_profile1, false, kOnProfileSwitchDoNothing);
   EXPECT_EQ(2U, chrome::GetTotalBrowserCount());
   EXPECT_EQ(2U, browser_list->size());
 
@@ -537,15 +553,13 @@ IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, MAYBE_EphemeralProfile) {
   EXPECT_EQ(1U, browser_list->size());
 
   // Open a browser window for the second profile.
-  profiles::SwitchToProfile(path_profile2, false, kOnProfileSwitchDoNothing,
-                            ProfileMetrics::SWITCH_PROFILE_ICON);
+  profiles::SwitchToProfile(path_profile2, false, kOnProfileSwitchDoNothing);
   EXPECT_EQ(2U, chrome::GetTotalBrowserCount());
   EXPECT_EQ(2U, browser_list->size());
   EXPECT_EQ(path_profile2, browser_list->get(1)->profile()->GetPath());
 
   // Create a second window for the ephemeral profile.
-  profiles::SwitchToProfile(path_profile2, true, kOnProfileSwitchDoNothing,
-                            ProfileMetrics::SWITCH_PROFILE_ICON);
+  profiles::SwitchToProfile(path_profile2, true, kOnProfileSwitchDoNothing);
   EXPECT_EQ(3U, chrome::GetTotalBrowserCount());
   EXPECT_EQ(3U, browser_list->size());
 
@@ -584,7 +598,6 @@ IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, MAYBE_DeletePasswords) {
   form.signon_realm = "http://accounts.google.com/";
   form.username_value = base::ASCIIToUTF16("my_username");
   form.password_value = base::ASCIIToUTF16("my_password");
-  form.preferred = true;
   form.blacklisted_by_user = false;
 
   scoped_refptr<password_manager::PasswordStore> password_store =

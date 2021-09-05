@@ -8,6 +8,7 @@
 #include "base/optional.h"
 #include "base/time/time.h"
 #include "cc/animation/animation_export.h"
+#include "cc/animation/animation_timeline.h"
 #include "cc/animation/keyframe_model.h"
 #include "cc/paint/element_id.h"
 
@@ -20,8 +21,12 @@ class ScrollTree;
 //
 // This is the compositor-side representation of the web concept expressed in
 // https://wicg.github.io/scroll-animations/#scrolltimeline-interface.
-class CC_ANIMATION_EXPORT ScrollTimeline {
+class CC_ANIMATION_EXPORT ScrollTimeline : public AnimationTimeline {
  public:
+  // cc does not know about writing modes. The ScrollDirection below is
+  // converted using blink::scroll_timeline_util::ConvertOrientation which takes
+  // the spec-compliant ScrollDirection enumeration.
+  // https://drafts.csswg.org/scroll-animations/#scrolldirection-enumeration
   enum ScrollDirection {
     ScrollUp,
     ScrollDown,
@@ -34,12 +39,18 @@ class CC_ANIMATION_EXPORT ScrollTimeline {
                  base::Optional<double> start_scroll_offset,
                  base::Optional<double> end_scroll_offset,
                  double time_range,
-                 KeyframeModel::FillMode fill);
-  virtual ~ScrollTimeline();
+                 int animation_timeline_id);
+
+  static scoped_refptr<ScrollTimeline> Create(
+      base::Optional<ElementId> scroller_id,
+      ScrollDirection direction,
+      base::Optional<double> start_scroll_offset,
+      base::Optional<double> end_scroll_offset,
+      double time_range);
 
   // Create a copy of this ScrollTimeline intended for the impl thread in the
   // compositor.
-  std::unique_ptr<ScrollTimeline> CreateImplInstance() const;
+  scoped_refptr<AnimationTimeline> CreateImplInstance() const override;
 
   // ScrollTimeline is active if the scroll node exists in active or pending
   // scroll tree.
@@ -54,14 +65,13 @@ class CC_ANIMATION_EXPORT ScrollTimeline {
       const ScrollTree& scroll_tree,
       bool is_active_tree) const;
 
-  void SetScrollerId(base::Optional<ElementId> scroller_id);
-  void UpdateStartAndEndScrollOffsets(
+  void UpdateScrollerIdAndScrollOffsets(
+      base::Optional<ElementId> scroller_id,
       base::Optional<double> start_scroll_offset,
       base::Optional<double> end_scroll_offset);
 
-  void PushPropertiesTo(ScrollTimeline* impl_timeline);
-
-  void PromoteScrollTimelinePendingToActive();
+  void PushPropertiesTo(AnimationTimeline* impl_timeline) override;
+  void ActivateTimeline() override;
 
   base::Optional<ElementId> GetActiveIdForTest() const { return active_id_; }
   base::Optional<ElementId> GetPendingIdForTest() const { return pending_id_; }
@@ -73,6 +83,11 @@ class CC_ANIMATION_EXPORT ScrollTimeline {
     return end_scroll_offset_;
   }
   double GetTimeRangeForTest() const { return time_range_; }
+
+  bool IsScrollTimeline() const override;
+
+ protected:
+  ~ScrollTimeline() override;
 
  private:
   // The scroller which this ScrollTimeline is based on. The same underlying
@@ -95,11 +110,12 @@ class CC_ANIMATION_EXPORT ScrollTimeline {
   // value based on a 'time range'. See the implementation of CurrentTime or the
   // spec for details.
   double time_range_;
-
-  // Determines whether the timeline is active when the scroll offset is outside
-  // the range defined by |start_scroll_offset_| and |end_scroll_offset_|.
-  KeyframeModel::FillMode fill_;
 };
+
+inline ScrollTimeline* ToScrollTimeline(AnimationTimeline* timeline) {
+  DCHECK(timeline->IsScrollTimeline());
+  return static_cast<ScrollTimeline*>(timeline);
+}
 
 }  // namespace cc
 

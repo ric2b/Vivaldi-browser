@@ -34,6 +34,8 @@ void TestWebState::RemoveObserver(WebStateObserver* observer) {
   observers_.RemoveObserver(observer);
 }
 
+void TestWebState::CloseWebState() {}
+
 TestWebState::TestWebState()
     : browser_state_(nullptr),
       web_usage_enabled_(true),
@@ -201,7 +203,9 @@ const GURL& TestWebState::GetLastCommittedURL() const {
 }
 
 GURL TestWebState::GetCurrentURL(URLVerificationTrustLevel* trust_level) const {
-  *trust_level = trust_level_;
+  if (trust_level) {
+    *trust_level = trust_level_;
+  }
   return url_;
 }
 

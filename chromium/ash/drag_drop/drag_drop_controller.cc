@@ -25,12 +25,15 @@
 #include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/base/hit_test.h"
+#include "ui/base/mojom/cursor_type.mojom-shared.h"
 #include "ui/events/event.h"
 #include "ui/events/event_utils.h"
+#include "ui/gfx/animation/animation_delegate_notifier.h"
 #include "ui/gfx/animation/linear_animation.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_conversions.h"
+#include "ui/views/animation/animation_delegate_views.h"
 #include "ui/views/widget/native_widget_aura.h"
 #include "ui/wm/core/coordinate_conversion.h"
 
@@ -456,14 +459,14 @@ void DragDropController::DragUpdate(aura::Window* target,
       e.set_flags(event.flags());
       ui::Event::DispatcherApi(&e).set_target(target);
       op = delegate->OnDragUpdated(e);
-      gfx::NativeCursor cursor = ui::CursorType::kNoDrop;
+      gfx::NativeCursor cursor = ui::mojom::CursorType::kNoDrop;
       if (op & ui::DragDropTypes::DRAG_COPY)
-        cursor = ui::CursorType::kCopy;
+        cursor = ui::mojom::CursorType::kCopy;
       else if (op & ui::DragDropTypes::DRAG_LINK)
-        cursor = ui::CursorType::kAlias;
+        cursor = ui::mojom::CursorType::kAlias;
       else if (op & ui::DragDropTypes::DRAG_MOVE)
-        cursor = ui::CursorType::kGrabbing;
-      ash::Shell::Get()->cursor_manager()->SetCursor(cursor);
+        cursor = ui::mojom::CursorType::kGrabbing;
+      Shell::Get()->cursor_manager()->SetCursor(cursor);
     }
   }
 
@@ -488,7 +491,7 @@ void DragDropController::DragUpdate(aura::Window* target,
 
 void DragDropController::Drop(aura::Window* target,
                               const ui::LocatedEvent& event) {
-  ash::Shell::Get()->cursor_manager()->SetCursor(ui::CursorType::kPointer);
+  Shell::Get()->cursor_manager()->SetCursor(ui::mojom::CursorType::kPointer);
 
   // We must guarantee that a target gets a OnDragEntered before Drop. WebKit
   // depends on not getting a Drop without DragEnter. This behavior is
@@ -515,7 +518,7 @@ void DragDropController::Drop(aura::Window* target,
 
   Cleanup();
   if (should_block_during_drag_drop_)
-    quit_closure_.Run();
+    std::move(quit_closure_).Run();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -523,6 +526,7 @@ void DragDropController::Drop(aura::Window* target,
 
 void DragDropController::AnimationEnded(const gfx::Animation* animation) {
   cancel_animation_.reset();
+  cancel_animation_notifier_.reset();
 
   // By the time we finish animation, another drag/drop session may have
   // started. We do not want to destroy the drag image in that case.
@@ -543,7 +547,7 @@ void DragDropController::AnimationEnded(const gfx::Animation* animation) {
 
 void DragDropController::DoDragCancel(
     base::TimeDelta drag_cancel_animation_duration) {
-  ash::Shell::Get()->cursor_manager()->SetCursor(ui::CursorType::kPointer);
+  Shell::Get()->cursor_manager()->SetCursor(ui::mojom::CursorType::kPointer);
 
   // |drag_window_| can be NULL if we have just started the drag and have not
   // received any DragUpdates, or, if the |drag_window_| gets destroyed during
@@ -557,7 +561,7 @@ void DragDropController::DoDragCancel(
   drag_operation_ = 0;
   StartCanceledAnimation(drag_cancel_animation_duration);
   if (should_block_during_drag_drop_)
-    quit_closure_.Run();
+    std::move(quit_closure_).Run();
 }
 
 void DragDropController::AnimationProgressed(const gfx::Animation* animation) {
@@ -584,8 +588,12 @@ void DragDropController::StartCanceledAnimation(
   drag_image_->SetTouchDragOperationHintOff();
   drag_image_initial_bounds_for_cancel_animation_ =
       drag_image_->GetBoundsInScreen();
-  cancel_animation_.reset(CreateCancelAnimation(
-      animation_duration, kCancelAnimationFrameRate, this));
+  cancel_animation_notifier_ = std::make_unique<
+      gfx::AnimationDelegateNotifier<views::AnimationDelegateViews>>(
+      this, drag_image_.get());
+  cancel_animation_.reset(
+      CreateCancelAnimation(animation_duration, kCancelAnimationFrameRate,
+                            cancel_animation_notifier_.get()));
   cancel_animation_->Start();
 }
 
@@ -609,7 +617,7 @@ void DragDropController::Cleanup() {
   drag_data_.reset();
   // Cleanup can be called again while deleting DragDropTracker, so delete
   // the pointer with a local variable to avoid double free.
-  std::unique_ptr<ash::DragDropTracker> holder = std::move(drag_drop_tracker_);
+  std::unique_ptr<DragDropTracker> holder = std::move(drag_drop_tracker_);
 }
 
 }  // namespace ash

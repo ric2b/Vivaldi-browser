@@ -5,6 +5,8 @@
 #ifndef UI_VIEWS_CONTROLS_BUTTON_IMAGE_BUTTON_FACTORY_H_
 #define UI_VIEWS_CONTROLS_BUTTON_IMAGE_BUTTON_FACTORY_H_
 
+#include <memory>
+
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/views/views_export.h"
@@ -18,6 +20,12 @@ namespace views {
 class ButtonListener;
 class ImageButton;
 class ToggleImageButton;
+
+// Creates an ImageButton with an ink drop and a centered image built from a
+// vector icon that tracks color changes in NativeTheme.
+VIEWS_EXPORT std::unique_ptr<ImageButton>
+CreateVectorImageButtonWithNativeTheme(ButtonListener* listener,
+                                       const gfx::VectorIcon& icon);
 
 // Creates an ImageButton with an ink drop and a centered image in preparation
 // for applying a vector icon with SetImageFromVectorIcon below.
@@ -33,11 +41,6 @@ VIEWS_EXPORT std::unique_ptr<ToggleImageButton> CreateVectorToggleImageButton(
 // Configures an existing ImageButton with an ink drop and a centered image in
 // preparation for applying a vector icon with SetImageFromVectorIcon below.
 VIEWS_EXPORT void ConfigureVectorImageButton(ImageButton* button);
-
-// Sets images on |button| for STATE_NORMAL and STATE_DISABLED from the given
-// vector icon using the default color from the current NativeTheme.
-VIEWS_EXPORT void SetImageFromVectorIcon(ImageButton* button,
-                                         const gfx::VectorIcon& icon);
 
 // Sets images on |button| for STATE_NORMAL and STATE_DISABLED from the given
 // vector icon and color. |related_text_color| is normally the main text color

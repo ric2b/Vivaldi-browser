@@ -30,14 +30,15 @@
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/context_menu_params.h"
 #include "extensions/buildflags/buildflags.h"
 #include "net/base/load_states.h"
 #include "net/http/http_request_headers.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "ui/base/l10n/l10n_util.h"
 
-#if !defined(OS_ANDROID)
+#if defined(OS_ANDROID)
+#include "chrome/browser/android/tab_android.h"
+#else
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
@@ -94,13 +95,27 @@ void CoreTabHelper::SearchByImageInNewTab(
   // Bind the InterfacePtr into the callback so that it's kept alive until
   // there's either a connection error or a response.
   auto* thumbnail_capturer_proxy = chrome_render_frame.get();
-  thumbnail_capturer_proxy->RequestThumbnailForContextNode(
+  thumbnail_capturer_proxy->RequestImageForContextNode(
       kImageSearchThumbnailMinSize,
       gfx::Size(kImageSearchThumbnailMaxWidth, kImageSearchThumbnailMaxHeight),
       chrome::mojom::ImageFormat::JPEG,
       base::Bind(&CoreTabHelper::DoSearchByImageInNewTab,
                  weak_factory_.GetWeakPtr(), base::Passed(&chrome_render_frame),
                  src_url));
+}
+
+std::unique_ptr<content::WebContents> CoreTabHelper::SwapWebContents(
+    std::unique_ptr<content::WebContents> new_contents,
+    bool did_start_load,
+    bool did_finish_load) {
+#if defined(OS_ANDROID)
+  TabAndroid* tab = TabAndroid::FromWebContents(web_contents());
+  return tab->SwapWebContents(std::move(new_contents), did_start_load,
+                              did_finish_load);
+#else
+  Browser* browser = chrome::FindBrowserWithWebContents(web_contents());
+  return browser->SwapWebContents(web_contents(), std::move(new_contents));
+#endif
 }
 
 // static
@@ -239,7 +254,8 @@ void CoreTabHelper::DoSearchByImageInNewTab(
         chrome_render_frame,
     const GURL& src_url,
     const std::vector<uint8_t>& thumbnail_data,
-    const gfx::Size& original_size) {
+    const gfx::Size& original_size,
+    const std::string& image_extension) {
   if (thumbnail_data.empty())
     return;
 
@@ -274,7 +290,6 @@ void CoreTabHelper::DoSearchByImageInNewTab(
   const std::string& post_data = post_content.second;
   if (!post_data.empty()) {
     DCHECK(!content_type.empty());
-    open_url_params.uses_post = true;
     open_url_params.post_data = network::ResourceRequestBody::CreateFromBytes(
         post_data.data(), post_data.size());
     open_url_params.extra_headers += base::StringPrintf(

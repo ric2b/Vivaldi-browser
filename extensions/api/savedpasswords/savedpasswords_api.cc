@@ -67,7 +67,7 @@ void SavedpasswordsGetListFunction::OnGetPasswordStoreResults(
     notes_tree_node->password = base::UTF16ToUTF8(form->password_value);
     notes_tree_node->origin =
         base::UTF16ToUTF8(url_formatter::FormatUrl(form->origin));
-    notes_tree_node->id = base::NumberToString(i);
+    notes_tree_node->index = base::NumberToString(i);
   }
 
   Respond(ArgumentList(Results::Create(svd_pwd_entries)));
@@ -148,11 +148,12 @@ ExtensionFunction::ResponseAction SavedpasswordsGetFunction::Run() {
   std::unique_ptr<Params> params = Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
+  // EXPLICIT_ACCESS used as this is a read operation that must work in
+  // incognito too.
   Profile* profile = Profile::FromBrowserContext(browser_context());
   scoped_refptr<password_manager::PasswordStore> password_store =
-      PasswordStoreFactory::GetForProfile(
-          profile, params->is_explicit ? ServiceAccessType::EXPLICIT_ACCESS
-                                       : ServiceAccessType::IMPLICIT_ACCESS);
+      PasswordStoreFactory::GetForProfile(profile,
+                                          ServiceAccessType::EXPLICIT_ACCESS);
 
   username_ = params->password_form.username;
 

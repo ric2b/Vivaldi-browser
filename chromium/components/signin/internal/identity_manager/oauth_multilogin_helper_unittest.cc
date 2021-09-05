@@ -11,6 +11,7 @@
 #include "components/prefs/testing_pref_service.h"
 #include "components/signin/internal/identity_manager/fake_profile_oauth2_token_service.h"
 #include "components/signin/public/base/test_signin_client.h"
+#include "components/signin/public/identity_manager/accounts_cookie_mutator.h"
 #include "components/signin/public/identity_manager/set_accounts_in_cookie_result.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "services/network/test/test_cookie_manager.h"
@@ -162,33 +163,33 @@ class MockTokenService : public FakeProfileOAuth2TokenService {
 
 }  // namespace
 
-class OAuthMultiloginHelperTest : public testing::Test {
+class OAuthMultiloginHelperTest
+    : public testing::Test,
+      public AccountsCookieMutator::PartitionDelegate {
  public:
   OAuthMultiloginHelperTest()
       : test_signin_client_(&pref_service_),
         mock_token_service_(&pref_service_) {
-    std::unique_ptr<MockCookieManager> cookie_manager =
-        std::make_unique<MockCookieManager>();
-    mock_cookie_manager_ = cookie_manager.get();
-    test_signin_client_.set_cookie_manager(std::move(cookie_manager));
   }
 
   ~OAuthMultiloginHelperTest() override = default;
 
   std::unique_ptr<OAuthMultiloginHelper> CreateHelper(
-      const std::vector<GaiaCookieManagerService::AccountIdGaiaIdPair>
-          accounts) {
+      const std::vector<OAuthMultiloginHelper::AccountIdGaiaIdPair> accounts) {
     return std::make_unique<OAuthMultiloginHelper>(
-        &test_signin_client_, token_service(), accounts, std::string(),
+        &test_signin_client_, this, token_service(),
+        gaia::MultiloginMode::MULTILOGIN_UPDATE_COOKIE_ACCOUNTS_ORDER, accounts,
+        std::string(),
         base::BindOnce(&OAuthMultiloginHelperTest::OnOAuthMultiloginFinished,
                        base::Unretained(this)));
   }
 
   std::unique_ptr<OAuthMultiloginHelper> CreateHelperWithExternalCcResult(
-      const std::vector<GaiaCookieManagerService::AccountIdGaiaIdPair>
-          accounts) {
+      const std::vector<OAuthMultiloginHelper::AccountIdGaiaIdPair> accounts) {
     return std::make_unique<OAuthMultiloginHelper>(
-        &test_signin_client_, token_service(), accounts, kExternalCcResult,
+        &test_signin_client_, this, token_service(),
+        gaia::MultiloginMode::MULTILOGIN_UPDATE_COOKIE_ACCOUNTS_ORDER, accounts,
+        kExternalCcResult,
         base::BindOnce(&OAuthMultiloginHelperTest::OnOAuthMultiloginFinished,
                        base::Unretained(this)));
   }
@@ -199,15 +200,16 @@ class OAuthMultiloginHelperTest : public testing::Test {
 
   std::string multilogin_url() const {
     return GaiaUrls::GetInstance()->oauth_multilogin_url().spec() +
-           "?source=ChromiumBrowser";
+           "?source=ChromiumBrowser&mlreuse=0";
   }
 
   std::string multilogin_url_with_external_cc_result() const {
     return GaiaUrls::GetInstance()->oauth_multilogin_url().spec() +
-           "?source=ChromiumBrowser&externalCcResult=" + kExternalCcResult;
+           "?source=ChromiumBrowser&mlreuse=0&externalCcResult=" +
+           kExternalCcResult;
   }
 
-  MockCookieManager* cookie_manager() { return mock_cookie_manager_; }
+  MockCookieManager* cookie_manager() { return &mock_cookie_manager_; }
   MockTokenService* token_service() { return &mock_token_service_; }
 
  protected:
@@ -217,13 +219,24 @@ class OAuthMultiloginHelperTest : public testing::Test {
     result_ = result;
   }
 
+  // AccountsCookieMuator::PartitionDelegate:
+  std::unique_ptr<GaiaAuthFetcher> CreateGaiaAuthFetcherForPartition(
+      GaiaAuthConsumer* consumer) override {
+    return test_signin_client_.CreateGaiaAuthFetcher(consumer,
+                                                     gaia::GaiaSource::kChrome);
+  }
+
+  network::mojom::CookieManager* GetCookieManagerForPartition() override {
+    return &mock_cookie_manager_;
+  }
+
   base::test::TaskEnvironment task_environment_;
 
   bool callback_called_ = false;
   SetAccountsInCookieResult result_;
 
   TestingPrefServiceSimple pref_service_;
-  MockCookieManager* mock_cookie_manager_;  // Owned by test_signin_client_
+  MockCookieManager mock_cookie_manager_;
   TestSigninClient test_signin_client_;
   MockTokenService mock_token_service_;
 };

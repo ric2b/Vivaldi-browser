@@ -14,6 +14,7 @@
 #include "base/logging.h"
 #include "base/memory/singleton.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/optional.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
@@ -35,9 +36,7 @@
 #include "components/policy/policy_constants.h"
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/user.h"
-#include "content/public/browser/system_connector.h"
 #include "crypto/sha2.h"
-#include "services/data_decoder/public/cpp/safe_json_parser.h"
 
 namespace arc {
 
@@ -54,7 +53,7 @@ void MapBoolToBool(const std::string& arc_policy_name,
                    const std::string& policy_name,
                    const policy::PolicyMap& policy_map,
                    bool invert_bool_value,
-                   base::DictionaryValue* filtered_policies) {
+                   base::Value* filtered_policies) {
   const base::Value* const policy_value = policy_map.GetValue(policy_name);
   if (!policy_value)
     return;
@@ -62,10 +61,8 @@ void MapBoolToBool(const std::string& arc_policy_name,
     NOTREACHED() << "Policy " << policy_name << " is not a boolean.";
     return;
   }
-  bool bool_value;
-  policy_value->GetAsBoolean(&bool_value);
-  filtered_policies->SetBoolean(arc_policy_name,
-                                bool_value != invert_bool_value);
+  filtered_policies->SetBoolKey(arc_policy_name,
+                                policy_value->GetBool() != invert_bool_value);
 }
 
 // int_true: value of Chrome OS policy for which arc policy is set to true.
@@ -74,7 +71,7 @@ void MapIntToBool(const std::string& arc_policy_name,
                   const std::string& policy_name,
                   const policy::PolicyMap& policy_map,
                   int int_true,
-                  base::DictionaryValue* filtered_policies) {
+                  base::Value* filtered_policies) {
   const base::Value* const policy_value = policy_map.GetValue(policy_name);
   if (!policy_value)
     return;
@@ -82,9 +79,8 @@ void MapIntToBool(const std::string& arc_policy_name,
     NOTREACHED() << "Policy " << policy_name << " is not an integer.";
     return;
   }
-  int int_value;
-  policy_value->GetAsInteger(&int_value);
-  filtered_policies->SetBoolean(arc_policy_name, int_value == int_true);
+  filtered_policies->SetBoolKey(arc_policy_name,
+                                policy_value->GetInt() == int_true);
 }
 
 // |arc_policy_name| is only set if the |pref_name| pref is managed.
@@ -94,12 +90,12 @@ void MapManagedIntPrefToBool(const std::string& arc_policy_name,
                              const std::string& pref_name,
                              const PrefService* profile_prefs,
                              int int_true,
-                             base::DictionaryValue* filtered_policies) {
+                             base::Value* filtered_policies) {
   if (!profile_prefs->IsManagedPreference(pref_name))
     return;
 
-  int int_value = profile_prefs->GetInteger(pref_name);
-  filtered_policies->SetBoolean(arc_policy_name, int_value == int_true);
+  filtered_policies->SetBoolKey(
+      arc_policy_name, profile_prefs->GetInteger(pref_name) == int_true);
 }
 
 // Checks whether |policy_name| is present as an object and has all |fields|,
@@ -107,33 +103,30 @@ void MapManagedIntPrefToBool(const std::string& arc_policy_name,
 void MapObjectToPresenceBool(const std::string& arc_policy_name,
                              const std::string& policy_name,
                              const policy::PolicyMap& policy_map,
-                             base::DictionaryValue* filtered_policies,
+                             base::Value* filtered_policies,
                              const std::vector<std::string>& fields) {
   const base::Value* const policy_value = policy_map.GetValue(policy_name);
   if (!policy_value)
     return;
-  const base::DictionaryValue* dict = nullptr;
-  if (!policy_value->GetAsDictionary(&dict)) {
+  if (!policy_value->is_dict()) {
     NOTREACHED() << "Policy " << policy_name << " is not an object.";
     return;
   }
   for (const auto& field : fields) {
-    if (!dict->HasKey(field))
+    if (!policy_value->FindKey(field))
       return;
   }
-  filtered_policies->SetBoolean(arc_policy_name, true);
+  filtered_policies->SetBoolKey(arc_policy_name, true);
 }
 
 void AddOncCaCertsToPolicies(const policy::PolicyMap& policy_map,
-                             base::DictionaryValue* filtered_policies) {
+                             base::Value* filtered_policies) {
   const base::Value* const policy_value =
       policy_map.GetValue(policy::key::kArcCertificatesSyncMode);
-  int32_t mode = ArcCertsSyncMode::SYNC_DISABLED;
-
   // Old certs should be uninstalled if the sync is disabled or policy is not
   // set.
-  if (!policy_value || !policy_value->GetAsInteger(&mode) ||
-      mode != ArcCertsSyncMode::COPY_CA_CERTS) {
+  if (!policy_value || !policy_value->is_int() ||
+      policy_value->GetInt() != ArcCertsSyncMode::COPY_CA_CERTS) {
     return;
   }
 
@@ -145,12 +138,12 @@ void AddOncCaCertsToPolicies(const policy::PolicyMap& policy_map,
     VLOG(1) << "onc policy is not set.";
     return;
   }
-  std::string onc_blob;
-  if (!onc_policy_value->GetAsString(&onc_blob)) {
+  if (!onc_policy_value->is_string()) {
     LOG(ERROR) << "Value of onc policy has invalid format.";
     return;
   }
 
+  const std::string& onc_blob = onc_policy_value->GetString();
   base::ListValue certificates;
   {
     base::ListValue unused_network_configs;
@@ -163,35 +156,30 @@ void AddOncCaCertsToPolicies(const policy::PolicyMap& policy_map,
     }
   }
 
-  std::unique_ptr<base::ListValue> ca_certs(
-      std::make_unique<base::ListValue>());
-  for (const auto& entry : certificates) {
-    const base::DictionaryValue* certificate = nullptr;
-    if (!entry.GetAsDictionary(&certificate)) {
+  base::Value ca_certs(base::Value::Type::LIST);
+  for (const auto& certificate : certificates) {
+    if (!certificate.is_dict()) {
       DLOG(FATAL) << "Value of a certificate entry is not a dictionary "
                   << "value.";
       continue;
     }
 
-    std::string cert_type;
-    certificate->GetStringWithoutPathExpansion(::onc::certificate::kType,
-                                               &cert_type);
-    if (cert_type != ::onc::certificate::kAuthority)
+    const std::string* const cert_type =
+        certificate.FindStringKey(::onc::certificate::kType);
+    if (!cert_type || *cert_type != ::onc::certificate::kAuthority)
       continue;
 
-    const base::ListValue* trust_list = nullptr;
-    if (!certificate->GetListWithoutPathExpansion(
-            ::onc::certificate::kTrustBits, &trust_list)) {
+    const base::Value* const trust_list =
+        certificate.FindListKey(::onc::certificate::kTrustBits);
+    if (!trust_list)
       continue;
-    }
 
     bool web_trust_flag = false;
-    for (const auto& list_val : *trust_list) {
-      std::string trust_type;
-      if (!list_val.GetAsString(&trust_type))
+    for (const auto& list_val : trust_list->GetList()) {
+      if (!list_val.is_string())
         NOTREACHED();
 
-      if (trust_type == ::onc::certificate::kWeb) {
+      if (list_val.GetString() == ::onc::certificate::kWeb) {
         // "Web" implies that the certificate is to be trusted for SSL
         // identification.
         web_trust_flag = true;
@@ -201,31 +189,31 @@ void AddOncCaCertsToPolicies(const policy::PolicyMap& policy_map,
     if (!web_trust_flag)
       continue;
 
-    std::string x509_data;
-    if (!certificate->GetStringWithoutPathExpansion(::onc::certificate::kX509,
-                                                    &x509_data)) {
+    const std::string* const x509_data =
+        certificate.FindStringKey(::onc::certificate::kX509);
+    if (!x509_data)
       continue;
-    }
 
-    base::DictionaryValue data;
-    data.SetString("X509", x509_data);
-    ca_certs->Append(data.CreateDeepCopy());
+    base::Value data(base::Value::Type::DICTIONARY);
+    data.SetStringKey("X509", *x509_data);
+    ca_certs.Append(std::move(data));
   }
-  if (!ca_certs->GetList().empty())
+  if (!ca_certs.GetList().empty())
     filtered_policies->SetKey("credentialsConfigDisabled", base::Value(true));
-  filtered_policies->Set(kArcCaCerts, std::move(ca_certs));
+  filtered_policies->SetKey(kArcCaCerts, std::move(ca_certs));
 }
 
 void AddRequiredKeyPairs(const ArcSmartCardManagerBridge* smart_card_manager,
-                         base::DictionaryValue* filtered_policies) {
+                         base::Value* filtered_policies) {
   if (!smart_card_manager)
     return;
-  std::unique_ptr<base::ListValue> cert_names(
-      std::make_unique<base::ListValue>());
+  base::Value cert_names(base::Value::Type::LIST);
   for (const auto& name : smart_card_manager->get_required_cert_names()) {
-    cert_names->GetList().emplace_back(name);
+    base::Value value(base::Value::Type::DICTIONARY);
+    value.SetStringKey("alias", name);
+    cert_names.Append(std::move(value));
   }
-  filtered_policies->Set(kArcRequiredKeyPairs, std::move(cert_names));
+  filtered_policies->SetKey(kArcRequiredKeyPairs, std::move(cert_names));
 }
 
 std::string GetFilteredJSONPolicies(
@@ -234,23 +222,26 @@ std::string GetFilteredJSONPolicies(
     const std::string& guid,
     bool is_affiliated,
     const ArcSmartCardManagerBridge* smart_card_manager) {
-  base::DictionaryValue filtered_policies;
+  base::Value filtered_policies(base::Value::Type::DICTIONARY);
   // Parse ArcPolicy as JSON string before adding other policies to the
   // dictionary.
   const base::Value* const app_policy_value =
       policy_map.GetValue(policy::key::kArcPolicy);
   if (app_policy_value) {
-    std::string app_policy_string;
-    app_policy_value->GetAsString(&app_policy_string);
-    std::unique_ptr<base::DictionaryValue> app_policy_dict =
-        base::DictionaryValue::From(
-            base::JSONReader::ReadDeprecated(app_policy_string));
-    if (app_policy_dict) {
+    base::Optional<base::Value> app_policy_dict;
+    if (app_policy_value->is_string()) {
+      app_policy_dict = base::JSONReader::Read(
+          app_policy_value->GetString(),
+          base::JSONParserOptions::JSON_ALLOW_TRAILING_COMMAS);
+    }
+    if (app_policy_dict.has_value() && app_policy_dict.value().is_dict()) {
       // Need a deep copy of all values here instead of doing a swap, because
       // JSONReader::Read constructs a dictionary whose StringValues are
       // JSONStringValues which are based on StringPiece instead of string.
-      filtered_policies.MergeDictionary(app_policy_dict.get());
+      filtered_policies.MergeDictionary(&app_policy_dict.value());
     } else {
+      std::string app_policy_string =
+          app_policy_value->is_string() ? app_policy_value->GetString() : "";
       LOG(ERROR) << "Value of ArcPolicy has invalid format: "
                  << app_policy_string;
     }
@@ -289,7 +280,7 @@ std::string GetFilteredJSONPolicies(
   if (!is_affiliated)
     filtered_policies.RemoveKey("apkCacheEnabled");
 
-  filtered_policies.SetString("guid", guid);
+  filtered_policies.SetStringKey("guid", guid);
 
   AddRequiredKeyPairs(smart_card_manager, &filtered_policies);
 
@@ -297,14 +288,6 @@ std::string GetFilteredJSONPolicies(
   JSONStringValueSerializer serializer(&policy_json);
   serializer.Serialize(filtered_policies);
   return policy_json;
-}
-
-void OnReportComplianceParseFailure(
-    base::OnceCallback<void(const std::string&)> callback,
-    const std::string& error) {
-  // TODO(poromov@): Report to histogram.
-  DLOG(ERROR) << "Can't parse policy compliance report";
-  std::move(callback).Run(kPolicyCompliantJson);
 }
 
 void UpdateFirstComplianceSinceSignInTiming(
@@ -441,11 +424,11 @@ void ArcPolicyBridge::OnConnectionClosed() {
 
 void ArcPolicyBridge::GetPolicies(GetPoliciesCallback callback) {
   VLOG(1) << "ArcPolicyBridge::GetPolicies";
-  const std::string policy = GetCurrentJSONPolicies();
+  arc_policy_for_reporting_ = GetCurrentJSONPolicies();
   for (Observer& observer : observers_) {
-    observer.OnPolicySent(policy);
+    observer.OnPolicySent(arc_policy_for_reporting_);
   }
-  std::move(callback).Run(policy);
+  std::move(callback).Run(arc_policy_for_reporting_);
 }
 
 void ArcPolicyBridge::ReportCompliance(const std::string& request,
@@ -455,11 +438,10 @@ void ArcPolicyBridge::ReportCompliance(const std::string& request,
   // the callee interface.
   auto repeating_callback =
       base::AdaptCallbackForRepeating(std::move(callback));
-  data_decoder::SafeJsonParser::Parse(
-      content::GetSystemConnector(), request,
-      base::BindOnce(&ArcPolicyBridge::OnReportComplianceParseSuccess,
-                     weak_ptr_factory_.GetWeakPtr(), repeating_callback),
-      base::BindOnce(&OnReportComplianceParseFailure, repeating_callback));
+  data_decoder::DataDecoder::ParseJsonIsolated(
+      request,
+      base::BindOnce(&ArcPolicyBridge::OnReportComplianceParse,
+                     weak_ptr_factory_.GetWeakPtr(), repeating_callback));
 }
 
 void ArcPolicyBridge::ReportCloudDpsRequested(
@@ -573,25 +555,34 @@ std::string ArcPolicyBridge::GetCurrentJSONPolicies() const {
                                  smart_card_manager);
 }
 
-void ArcPolicyBridge::OnReportComplianceParseSuccess(
+void ArcPolicyBridge::OnReportComplianceParse(
     base::OnceCallback<void(const std::string&)> callback,
-    base::Value parsed_json) {
+    data_decoder::DataDecoder::ValueOrError result) {
+  if (!result.value) {
+    // TODO(poromov@): Report to histogram.
+    DLOG(ERROR) << "Can't parse policy compliance report";
+    std::move(callback).Run(kPolicyCompliantJson);
+    return;
+  }
+
   // Always returns "compliant".
   std::move(callback).Run(kPolicyCompliantJson);
   Profile::FromBrowserContext(context_)->GetPrefs()->SetBoolean(
       prefs::kArcPolicyComplianceReported, true);
 
   const base::DictionaryValue* dict = nullptr;
-  if (parsed_json.GetAsDictionary(&dict)) {
+  if (result.value->GetAsDictionary(&dict)) {
     UpdateComplianceReportMetrics(dict);
     for (Observer& observer : observers_) {
-      observer.OnComplianceReportReceived(&parsed_json);
+      observer.OnComplianceReportReceived(&result.value.value());
     }
   }
 }
 
 void ArcPolicyBridge::UpdateComplianceReportMetrics(
     const base::DictionaryValue* report) {
+  JSONStringValueSerializer serializer(&arc_policy_compliance_report_);
+  serializer.Serialize(*report);
   bool is_arc_plus_plus_report_successful = false;
   report->GetBoolean("isArcPlusPlusReportSuccessful",
                      &is_arc_plus_plus_report_successful);

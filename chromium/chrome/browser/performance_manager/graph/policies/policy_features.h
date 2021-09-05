@@ -76,6 +76,24 @@ extern const base::FeatureParam<int> kDynamicTuningScaleInvisibleTimeSec;
 
 #endif  // defined(OS_LINUX)
 
+#if !defined(OS_ANDROID)
+// Enables freezing pages directly from PerformanceManager rather than via
+// TabManager.
+extern const base::Feature kPageFreezingFromPerformanceManager;
+
+// Enables urgent discarding of pages directly from PerformanceManager rather
+// than via TabManager.
+extern const base::Feature kUrgentDiscardingFromPerformanceManager;
+
+// Enable background tab loading of pages (restored via session restore)
+// directly from Performance Manager rather than via TabLoader.
+extern const base::Feature kBackgroundTabLoadingFromPerformanceManager;
+#endif
+
+// Feature that controls whether or not memory pressure signals will be emitted
+// when the total PMF is too high.
+extern const base::Feature kHighPMFMemoryPressureSignals;
+
 }  // namespace features
 }  // namespace performance_manager
 

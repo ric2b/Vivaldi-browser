@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {$, quoteString} from 'chrome://resources/js/util.m.js';
+import {$, findAncestor, quoteString} from 'chrome://resources/js/util.m.js';
 
 suite('UtilModuleTest', function() {
   test('quote string', function() {
@@ -23,25 +23,29 @@ suite('UtilModuleTest', function() {
     assertEquals(null, match);
   });
 
-  test('click handler', function() {
-    document.body.innerHTML = `
-      <a id="file" href="file:///path/to/file">File</a>
-      <a id="chrome" href="about:chrome">Chrome</a>
-      <a href="about:blank"><b id="blank">Click me</b></a>
-    `;
+  test('findAncestor', function() {
+    const option = document.createElement('option');
+    option.value = 'success';
 
-    var clickArgs = null;
-    var oldSend = chrome.send;
-    chrome.send = function(message, args) {
-      assertEquals('navigateToUrl', message);
-      clickArgs = args;
-    };
-    $('file').click();
-    assertEquals('file:///path/to/file', clickArgs[0]);
-    $('chrome').click();
-    assertEquals('about:chrome', clickArgs[0]);
-    $('blank').click();
-    assertEquals('about:blank', clickArgs[0]);
-    chrome.send = oldSend;
+    const failure = document.createTextNode('is not an option');
+    option.appendChild(failure);
+
+    const select = document.createElement('select');
+    select.appendChild(option);
+
+    const div = document.createElement('div');
+    const root = div.attachShadow({mode: 'open'});
+    root.appendChild(select);
+
+    assertEquals(findAncestor(failure, n => n.nodeName === 'SELECT'), select);
+
+    // findAncestor() only traverses shadow roots (which |div| is outside of) if
+    // |includeShadowHosts| is true. If omitted, |div| shouldn't be found.
+    assertEquals(findAncestor(failure, n => n.nodeName === 'DIV'), null);
+    assertEquals(
+        findAncestor(
+            failure, n => n.nodeName === 'DIV',
+            /*includeShadowHosts=*/ true),
+        div);
   });
 });
