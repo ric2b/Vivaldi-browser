@@ -374,11 +374,6 @@ void RenderWidgetHostViewChildFrame::InitAsPopup(
   NOTREACHED();
 }
 
-void RenderWidgetHostViewChildFrame::InitAsFullscreen(
-    RenderWidgetHostView* reference_host_view) {
-  NOTREACHED();
-}
-
 void RenderWidgetHostViewChildFrame::UpdateCursor(const WebCursor& cursor) {
   if (frame_connector_)
     frame_connector_->UpdateCursor(cursor);
@@ -468,20 +463,26 @@ void RenderWidgetHostViewChildFrame::UpdateViewportIntersection(
   if (host()) {
     host()->SetIntersectsViewport(
         !intersection_state.viewport_intersection.IsEmpty());
-    host()->GetAssociatedFrameWidget()->SetViewportIntersection(
-        intersection_state.Clone());
+
+    // Do not send viewport intersection to main frames.
+    if (!host()->owner_delegate()) {
+      host()->GetAssociatedFrameWidget()->SetViewportIntersection(
+          intersection_state.Clone());
+    }
   }
 }
 
 void RenderWidgetHostViewChildFrame::SetIsInert() {
-  if (host() && frame_connector_) {
+  // Do not send inert to main frames.
+  if (host() && frame_connector_ && !host()->owner_delegate()) {
     host_->GetAssociatedFrameWidget()->SetIsInertForSubFrame(
         frame_connector_->IsInert());
   }
 }
 
 void RenderWidgetHostViewChildFrame::UpdateInheritedEffectiveTouchAction() {
-  if (host_ && frame_connector_) {
+  // Do not send inherited touch action to main frames.
+  if (host_ && frame_connector_ && !host()->owner_delegate()) {
     host_->GetAssociatedFrameWidget()
         ->SetInheritedEffectiveTouchActionForSubFrame(
             frame_connector_->InheritedEffectiveTouchAction());
@@ -489,10 +490,11 @@ void RenderWidgetHostViewChildFrame::UpdateInheritedEffectiveTouchAction() {
 }
 
 void RenderWidgetHostViewChildFrame::UpdateRenderThrottlingStatus() {
-  if (host() && frame_connector_) {
+  // Do not send throttling status to main frames.
+  if (host() && frame_connector_ && !host()->owner_delegate()) {
     host_->GetAssociatedFrameWidget()->UpdateRenderThrottlingStatusForSubFrame(
-        frame_connector_->IsThrottled(),
-        frame_connector_->IsSubtreeThrottled());
+        frame_connector_->IsThrottled(), frame_connector_->IsSubtreeThrottled(),
+        frame_connector_->IsDisplayLocked());
   }
 }
 
@@ -547,25 +549,23 @@ void RenderWidgetHostViewChildFrame::GestureEventAck(
     DCHECK(!is_scroll_sequence_bubbling_);
     is_scroll_sequence_bubbling_ =
         ack_result == blink::mojom::InputEventResultState::kNotConsumed ||
-        ack_result == blink::mojom::InputEventResultState::kNoConsumerExists ||
-        ack_result ==
-            blink::mojom::InputEventResultState::kConsumedShouldBubble;
+        ack_result == blink::mojom::InputEventResultState::kNoConsumerExists;
     if (vivaldi::IsVivaldiRunning() &&
-        ack_result ==
-            blink::mojom::InputEventResultState::kConsumedShouldBubble &&
         RenderViewHostImpl::From(host()) &&
         BrowserPluginGuest::IsGuest(
             static_cast<WebContentsImpl*>(WebContents::FromRenderViewHost(
                 RenderViewHostImpl::From(host()))))) {
-      // NOTE(espen@vivaldi.com): A begin must never start bubbling events
-      // to the root view. It will break elastic scrolling in guestviews.
-      // To get here the begin event is sent to the view and dealt with in
-      // InputHandlerProxy::HandleGestureScrollBegin(). Bubbling is set
-      // if the event happens at the very end or front of a document so that
-      // there us no more to scroll at the start of the sequence. We only
-      // need this for InputEventResultState::kConsumedShouldBubble hence
-      // the test above.
-      is_scroll_sequence_bubbling_ = false;
+          // NOTE(espen@vivaldi.com): A begin must never start bubbling events
+          // to the root view. It will break elastic scrolling in guestviews.
+          // To get here the begin event is sent to the view and dealt with in
+          // InputHandlerProxy::HandleGestureScrollBegin(). Bubbling is set
+          // if the event happens at the very end or front of a document so that
+          // there us no more to scroll at the start of the sequence.
+          // * We only need this for
+          // InputEventResultState::kConsumedShouldBubble hence the test above.
+          // ** InputEventResultState::kConsumedShouldBubble was removed with
+          // ch89 so we do not test for it anymore. Same logic otherwise.
+          is_scroll_sequence_bubbling_ = false;
     }
   }
 
@@ -990,14 +990,6 @@ RenderWidgetHostViewChildFrame::FilterInputEvent(
   }
 
   return blink::mojom::InputEventResultState::kNotConsumed;
-}
-
-BrowserAccessibilityManager*
-RenderWidgetHostViewChildFrame::CreateBrowserAccessibilityManager(
-    BrowserAccessibilityDelegate* delegate,
-    bool for_root_frame) {
-  return BrowserAccessibilityManager::Create(
-      BrowserAccessibilityManager::GetEmptyDocument(), delegate);
 }
 
 void RenderWidgetHostViewChildFrame::GetScreenInfo(

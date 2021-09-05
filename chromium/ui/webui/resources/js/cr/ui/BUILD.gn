@@ -2,8 +2,9 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/chromeos/ui_mode.gni")
 import("//third_party/closure_compiler/compile_js.gni")
-import("//tools/grit/preprocess_grit.gni")
+import("//tools/grit/preprocess_if_expr.gni")
 import("//ui/webui/resources/tools/generate_grd.gni")
 import("../../../tools/js_modulizer.gni")
 import("../../cr.gni")
@@ -30,7 +31,7 @@ group("preprocess") {
   ]
 }
 
-preprocess_grit("preprocess_src") {
+preprocess_if_expr("preprocess_src") {
   in_folder = "./"
   out_folder = "$preprocess_folder"
   out_manifest = "$target_gen_dir/$preprocess_src_manifest"
@@ -38,10 +39,8 @@ preprocess_grit("preprocess_src") {
     "array_data_model.js",
     "bubble_button.js",
     "bubble.js",
-    "card_slider.js",
     "command.js",
     "context_menu_handler.js",
-    "controlled_indicator.js",
     "dialogs.js",
     "drag_wrapper.js",
     "focus_grid.js",
@@ -63,7 +62,6 @@ preprocess_grit("preprocess_src") {
     "store_client.js",
     "store.js",
     "tabs.js",
-    "touch_handler.js",
     "tree.js",
   ]
 
@@ -74,12 +72,12 @@ preprocess_grit("preprocess_src") {
     ]
   }
 
-  if (is_chromeos) {
+  if (is_chromeos_ash) {
     in_files += [ "grid.js" ]
   }
 }
 
-preprocess_grit("preprocess_generated") {
+preprocess_if_expr("preprocess_generated") {
   deps = [ ":modulize" ]
   in_folder = target_gen_dir
   out_folder = "$preprocess_folder"
@@ -103,7 +101,7 @@ preprocess_grit("preprocess_generated") {
     ]
   }
 
-  if (is_chromeos) {
+  if (is_chromeos_ash) {
     in_files += [
       "array_data_model.m.js",
       "command.m.js",
@@ -162,7 +160,7 @@ js_type_check("ui_resources") {
     ":tree",
   ]
 
-  if (is_chromeos) {
+  if (is_chromeos_ash) {
     deps += [ ":grid" ]
   }
 }
@@ -354,6 +352,7 @@ js_library("tabs") {
     ":focus_outline_manager",
     "..:ui",
     "../..:cr",
+    "../..:util",
   ]
 }
 

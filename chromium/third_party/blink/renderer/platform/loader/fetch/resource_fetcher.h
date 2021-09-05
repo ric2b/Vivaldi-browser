@@ -174,6 +174,8 @@ class PLATFORM_EXPORT ResourceFetcher
                                             base::OnceCallback<void(int)>);
 
   using DocumentResourceMap = HeapHashMap<String, WeakMember<Resource>>;
+  // Note: This function is defined for devtools. Do not use this function in
+  // non-inspector/non-tent-only contexts.
   const DocumentResourceMap& AllResources() const {
     return cached_resources_map_;
   }
@@ -305,8 +307,12 @@ class PLATFORM_EXPORT ResourceFetcher
 
   void AddSubresourceWebBundle(SubresourceWebBundle& subresource_web_bundle);
   void RemoveSubresourceWebBundle(SubresourceWebBundle& subresource_web_bundle);
+  void AttachWebBundleTokenIfNeeded(ResourceRequest&) const;
+  bool ShouldBeLoadedFromWebBundle(const KURL&) const;
 
   void EvictFromBackForwardCache(mojom::RendererEvictionReason reason);
+  void DidBufferLoadWhileInBackForwardCache(size_t num_bytes);
+  bool CanContinueBufferingWhileInBackForwardCache();
 
   // Vivaldi
   void setServeOnlyCachedResources(bool);
@@ -344,8 +350,8 @@ class PLATFORM_EXPORT ResourceFetcher
       const ResourceFactory&,
       WebScopedVirtualTimePauser& virtual_time_pauser);
 
-  Resource* ResourceForStaticData(const FetchParameters&,
-                                  const ResourceFactory&);
+  Resource* CreateResourceForStaticData(const FetchParameters&,
+                                        const ResourceFactory&);
   Resource* ResourceForBlockedRequest(const FetchParameters&,
                                       const ResourceFactory&,
                                       ResourceRequestBlockedReason,
@@ -409,7 +415,9 @@ class PLATFORM_EXPORT ResourceFetcher
                               RevalidationPolicy,
                               const FetchParameters&,
                               const ResourceFactory&,
-                              bool is_static_data) const;
+                              bool is_static_data,
+                              bool in_cached_resources_map,
+                              bool same_top_frame_site_resource_cached) const;
 
   void ScheduleStaleRevalidate(Resource* stale_resource);
   void RevalidateStaleResource(Resource* stale_resource);

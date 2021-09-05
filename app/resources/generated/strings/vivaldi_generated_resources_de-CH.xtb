@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="de-CH">
 <translation id="1017280919048282932">&amp;Zum Wörterbuech dezue tue</translation>
+<translation id="1029317248976101138">Nöcher anehole</translation>
 <translation id="1031362278801463162">Vorschau werd glade</translation>
 <translation id="1049795001945932310">&amp;Sprochihstellige</translation>
 <translation id="1056898198331236512">Warnig</translation>
@@ -67,6 +68,7 @@
 <translation id="2470702053775288986">Ned onderstötzti Erwiiterig deaktiviert</translation>
 <translation id="2476578072172137802">Siite-Ihstellige</translation>
 <translation id="2482878487686419369">Nachricht</translation>
+<translation id="2498539833203011245">Verchlinere</translation>
 <translation id="2509495747794740764">Dä Wert för d'Skalierig moss zwösche 10 ond 200 legge.</translation>
 <translation id="26224892172169984">Verarbeitig vo Protokoll för kei Internetsite zueloh</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
@@ -116,6 +118,7 @@
 <translation id="3744111561329211289">Abgliche im Hentergrond</translation>
 <translation id="3797900183766075808">&amp;Met <ph name="SEARCH_ENGINE" /> nach "<ph name="SEARCH_TERMS" />" sueche</translation>
 <translation id="3800806661949714323">Alli ahzeige (empfohle)</translation>
+<translation id="3810973564298564668">Verwalte</translation>
 <translation id="383891835335927981">Kei Internetsite send vergrösseret oder verchlineret wurde</translation>
 <translation id="385051799172605136">Zrog</translation>
 <translation id="3899879303189199559">Set öber nem Jahr offline</translation>
@@ -255,6 +258,7 @@
 <translation id="7521387064766892559">JavaScript</translation>
 <translation id="7576690715254076113">Sortiere</translation>
 <translation id="7629827748548208700">Riter: <ph name="TAB_NAME" /></translation>
+<translation id="7658239707568436148">Ufhöre</translation>
 <translation id="7661259717474717992">Speichere ond Läse vo Guetzli (Cookie) Date zueloh</translation>
 <translation id="7663719505383602579">Empfänger: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7704305437604973648">Ufgabe</translation>

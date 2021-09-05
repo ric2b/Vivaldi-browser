@@ -18,6 +18,10 @@
 
 namespace gpu {
 
+constexpr uint32_t kVendorARM = 0x13b5;
+constexpr uint32_t kVendorQualcomm = 0x5143;
+constexpr uint32_t kVendorImagination = 0x1010;
+
 struct GPUInfo;
 class VulkanInfo;
 
@@ -87,7 +91,8 @@ COMPONENT_EXPORT(VULKAN) void ReportUMAPerSwapBuffers();
 
 COMPONENT_EXPORT(VULKAN)
 bool CheckVulkanCompabilities(const VulkanInfo& vulkan_info,
-                              const GPUInfo& gpu_info);
+                              const GPUInfo& gpu_info,
+                              std::string enable_by_device_name);
 
 }  // namespace gpu
 

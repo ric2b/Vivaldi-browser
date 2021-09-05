@@ -66,7 +66,6 @@ const NoNamespaceName kAttrUrl{"url"};
 const SparkleNamespacedName kAttrVersion = kNodeVersion;
 const SparkleNamespacedName kAttrDeltaFrom{"deltaFrom"};
 const SparkleNamespacedName kAttrOs{"os"};
-const SparkleNamespacedName kAttrInstallerArguments{"installerArguments"};
 
 const char kOsMarker[] = "windows";
 
@@ -389,8 +388,6 @@ void OnStartElement(int depth,
             value = &item.Version;
           } else if (HasName(attr, kAttrOs)) {
             value = &item.Os;
-          } else if (HasName(attr, kAttrInstallerArguments)) {
-            value = &item.InstallerArguments;
           }
         }
         if (value) {

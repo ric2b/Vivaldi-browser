@@ -5,7 +5,7 @@
 
 #include "base/supports_user_data.h"
 #include "chromium/content/common/content_export.h" // nogncheck
-#include "third_party/blink/public/common/page/drag_operation.h"
+#include "ui/base/dragdrop/mojom/drag_drop_types.mojom-forward.h"
 
 namespace blink {
 class WebMouseEvent;
@@ -62,7 +62,7 @@ class CONTENT_EXPORT VivaldiEventHooks : public base::SupportsUserData::Data {
   // action in Chromium. cancelled indicate that the platform API indicated
   // explicitly cancelled drag (currently can be true only on Windows).
   static bool HandleDragEnd(content::WebContents* web_contents,
-                            blink::DragOperation operation,
+                            ui::mojom::DragOperation operation,
                             bool cancelled,
                             int screen_x,
                             int screen_y);
@@ -89,7 +89,7 @@ class CONTENT_EXPORT VivaldiEventHooks : public base::SupportsUserData::Data {
       const content::NativeWebKeyboardEvent& event) = 0;
 
   virtual bool DoHandleDragEnd(content::WebContents* web_contents,
-                               blink::DragOperation operation,
+                               ui::mojom::DragOperation operation,
                                bool cancelled,
                                int screen_x,
                                int screen_y) = 0;

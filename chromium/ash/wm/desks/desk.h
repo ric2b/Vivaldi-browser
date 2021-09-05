@@ -58,6 +58,8 @@ class ASH_EXPORT Desk {
 
   bool is_active() const { return is_active_; }
 
+  bool is_desk_being_removed() const { return is_desk_being_removed_; }
+
   bool should_notify_content_changed() const {
     return should_notify_content_changed_;
   }
@@ -124,6 +126,10 @@ class ASH_EXPORT Desk {
   // visibility on the containers (on all roots) associated with this desk.
   void UpdateDeskBackdrops();
 
+  // Set desk being removed to avoid unwanted action such as `GetDeskIndex()`
+  // when desk is already removed from |desks_| in DesksController.
+  void SetDeskBeingRemoved();
+
  private:
   void MoveWindowToDeskInternal(aura::Window* window,
                                 Desk* target_desk,
@@ -171,6 +177,9 @@ class ASH_EXPORT Desk {
   // desks are added/removed if this desk changes position, whereas names that
   // are set by the user don't change.
   bool is_name_set_by_user_ = false;
+
+  // True if the desk is being removed.
+  bool is_desk_being_removed_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(Desk);
 };

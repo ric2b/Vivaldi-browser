@@ -411,8 +411,8 @@ Polymer({
    * Shows additional terms of service dialog.
    */
   showAdditionalTosDialog() {
-    this.$.additionalToS.showModal();
-    this.$.additionalToS.focus();
+    this.$.additionalToS.showDialog();
+    this.$.closeAdditionalTos.focus();
   },
 
   /**
@@ -421,7 +421,8 @@ Polymer({
    * @private
    */
   hideToSDialog_() {
-    this.$.additionalToS.close();
+    this.$.additionalToS.hideDialog();
+    this.focusAdditionalTermsLink_();
   },
 
   /**
@@ -457,7 +458,6 @@ Polymer({
   onSecuritySettingsCloseClicked_() {
     this.$.securitySettingsDialog.hidden = true;
     this.$.eulaDialog.hidden = false;
-    this.$.eulaDialog.show();
     this.$.securitySettings.focus();
   },
 
@@ -491,9 +491,15 @@ Polymer({
 
   /**
    * Called when focus is returned.
+   * @param {boolean} reverse Is focus returned in reverse order?
    */
-  onFocusReturned() {
-    this.focus();
+  onFocusReturned(reverse) {
+    // We need to explicitly adjust focus inside the webview part when focus is
+    // returned from the system tray in regular order. Because the webview is
+    // the first focusable element of the screen and we want to eliminate extra
+    // tab. Reverse tab doesn't need any adjustments here.
+    if (!reverse)
+      this.focus();
   },
 });
 })();

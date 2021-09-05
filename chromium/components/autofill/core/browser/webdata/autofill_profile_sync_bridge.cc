@@ -10,8 +10,8 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/containers/contains.h"
 #include "base/guid.h"
-#include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/autofill/core/browser/autofill_profile_sync_util.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
@@ -82,7 +82,7 @@ AutofillProfileSyncBridge::AutofillProfileSyncBridge(
       web_data_backend_(backend) {
   DCHECK(web_data_backend_);
 
-  scoped_observer_.Add(web_data_backend_);
+  scoped_observation_.Observe(web_data_backend_);
 
   LoadMetadata();
 }

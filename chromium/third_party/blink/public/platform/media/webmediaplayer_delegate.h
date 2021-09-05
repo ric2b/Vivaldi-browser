@@ -8,17 +8,9 @@
 #include "third_party/blink/public/platform/web_common.h"
 #include "third_party/blink/public/platform/web_media_player.h"
 
-namespace gfx {
-class Size;
-}  // namespace gfx
-
 namespace media {
 enum class MediaContentType;
 }  // namespace media
-
-namespace media_session {
-struct MediaPosition;
-}  // namespace media_session
 
 namespace blink {
 
@@ -60,13 +52,6 @@ class BLINK_PLATFORM_EXPORT WebMediaPlayerDelegate {
     virtual void OnIdleTimeout() = 0;
 
     // Called when external controls are activated.
-    virtual void OnPlay() = 0;
-    virtual void OnPause() = 0;
-    virtual void OnMuted(bool muted) = 0;
-    virtual void OnSeekForward(double seconds) = 0;
-    virtual void OnSeekBackward(double seconds) = 0;
-    virtual void OnEnterPictureInPicture() = 0;
-    virtual void OnExitPictureInPicture() = 0;
     virtual void OnSetAudioSink(const std::string& sink_id) = 0;
 
     // Called to control audio ducking. Output volume should be set to
@@ -116,34 +101,10 @@ class BLINK_PLATFORM_EXPORT WebMediaPlayerDelegate {
   // so that we can do the right thing with media that starts paused.
   virtual void DidPause(int player_id, bool reached_end_of_stream) = 0;
 
-  // Notify that the size of the media player is changed.
-  virtual void DidPlayerSizeChange(int delegate_id, const gfx::Size& size) = 0;
-
-  // Notify that the muted status of the media player has changed.
-  virtual void DidPlayerMutedStatusChange(int delegate_id, bool muted) = 0;
-
-  // Notify that the media position state of the media player has changed.
-  virtual void DidPlayerMediaPositionStateChange(
-      int delegate_id,
-      const media_session::MediaPosition& position) = 0;
-
-  // Notify that picture-in-picture availability has changed.
-  virtual void DidPictureInPictureAvailabilityChange(int delegate_id,
-                                                     bool available) = 0;
-
   // Notify that the audio output sink has changed
   virtual void DidAudioOutputSinkChange(
       int delegate_id,
       const std::string& hashed_device_id) = 0;
-
-  // Notify that the audio sink cannot be changed
-  virtual void DidDisableAudioOutputSinkChanges(int delegate_id) = 0;
-
-  // Notify that a buffer underflow event happened for the media player.
-  virtual void DidBufferUnderflow(int player_id) = 0;
-
-  // Notify that a playback seek event happened for the media player.
-  virtual void DidSeek(int player_id) = 0;
 
   // Notify that playback is stopped. This will drop wake locks and remove any
   // external controls.

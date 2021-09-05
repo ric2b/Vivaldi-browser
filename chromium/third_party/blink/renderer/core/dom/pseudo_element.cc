@@ -99,7 +99,7 @@ bool PseudoElement::IsWebExposed(PseudoId pseudo_id, const Node* parent) {
     case kPseudoIdMarker:
       if (parent && parent->IsPseudoElement())
         return RuntimeEnabledFeatures::CSSMarkerNestedPseudoElementEnabled();
-      return RuntimeEnabledFeatures::CSSMarkerPseudoElementEnabled();
+      return true;
     default:
       return true;
   }
@@ -121,7 +121,9 @@ PseudoElement::PseudoElement(Element* parent, PseudoId pseudo_id)
   }
 }
 
-scoped_refptr<ComputedStyle> PseudoElement::CustomStyleForLayoutObject() {
+scoped_refptr<ComputedStyle> PseudoElement::CustomStyleForLayoutObject(
+    const StyleRecalcContext& style_recalc_context) {
+  // TODO(crbug.com/1145970): Pass StyleRecalcContext to StyleForPseudoElement.
   return ParentOrShadowHostElement()->StyleForPseudoElement(
       PseudoElementStyleRequest(pseudo_id_));
 }
@@ -275,9 +277,8 @@ bool PseudoElementLayoutObjectIsNeeded(const ComputedStyle* pseudo_style,
         return !pseudo_style->ContentPreventsBoxGeneration();
       const ComputedStyle* parent_style =
           originating_element->GetComputedStyle();
-      return parent_style &&
-             (parent_style->ListStyleType() != EListStyleType::kNone ||
-              parent_style->GeneratesMarkerImage());
+      return parent_style && (parent_style->GetListStyleType() ||
+                              parent_style->GeneratesMarkerImage());
     }
     default:
       NOTREACHED();

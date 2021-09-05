@@ -32,6 +32,10 @@ extern const base::Feature kWebAuthBiometricEnrollment;
 COMPONENT_EXPORT(DEVICE_FIDO)
 extern const base::Feature kWebAuthPhoneSupport;
 
+// Support the caBLE extension in assertion requests from any origin.
+COMPONENT_EXPORT(DEVICE_FIDO)
+extern const base::Feature kWebAuthCableExtensionAnywhere;
+
 // Enable WebAuthn GetAssertion calls in cross-origin iframes if allowed by
 // Feature Policy.
 COMPONENT_EXPORT(DEVICE_FIDO)
@@ -44,22 +48,11 @@ COMPONENT_EXPORT(DEVICE_FIDO)
 extern const base::Feature kWebAuthCableLowLatency;
 #endif  // defined(OS_CHROMEOS) || defined(OS_LINUX)
 
-#if BUILDFLAG(IS_ASH)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 // Enable a ChromeOS platform authenticator
 COMPONENT_EXPORT(DEVICE_FIDO)
 extern const base::Feature kWebAuthCrosPlatformAuthenticator;
-#endif  // BUILDFLAG(IS_ASH)
-
-COMPONENT_EXPORT(DEVICE_FIDO)
-extern const base::Feature kWebAuthAttestationBlockList;
-COMPONENT_EXPORT(DEVICE_FIDO)
-extern const base::FeatureParam<std::string> kWebAuthAttestationBlockedDomains;
-
-// DoesMatchWebAuthAttestationBlockedDomains returns true if the
-// |kWebAuthAttestationBlocked| feature is enabled and |origin| is listed
-// in |kWebAuthAttestationBlockedDomains|.
-COMPONENT_EXPORT(DEVICE_FIDO)
-bool DoesMatchWebAuthAttestationBlockedDomains(const url::Origin& origin);
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 }  // namespace device
 

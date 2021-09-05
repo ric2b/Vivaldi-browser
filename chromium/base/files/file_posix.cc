@@ -22,6 +22,8 @@
 #include "base/os_compat_android.h"
 #endif
 
+#include "app/vivaldi_apptools.h"
+
 namespace base {
 
 // Make sure our Whence mappings match the system headers.
@@ -506,7 +508,7 @@ void File::DoInitialize(const FilePath& path, uint32_t flags) {
   static_assert(O_RDONLY == 0, "O_RDONLY must equal zero");
 
   int mode = S_IRUSR | S_IWUSR;
-#if defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
+#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
   mode |= S_IRGRP | S_IROTH;
 #endif
 
@@ -558,9 +560,11 @@ bool File::Flush() {
   // the data to the medium. When used by database systems, this may result in
   // unexpected data loss.
   // https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/fsync.2.html
+  // NOTE(yngve) DO NOT remove; causes some unit_tests to slow down significantly
+  if (vivaldi::IsVivaldiRunning()) {
   if (!HANDLE_EINTR(fcntl(file_.get(), F_FULLFSYNC)))
     return true;
-
+  }
   // Some filesystms do not support fcntl(F_FULLFSYNC). We handle these cases by
   // falling back to fsync(). Unfortunately, lack of F_FULLFSYNC support results
   // in various error codes, so we cannot use the error code as a definitive

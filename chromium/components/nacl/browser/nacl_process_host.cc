@@ -34,6 +34,7 @@
 #include "base/task/thread_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "components/nacl/browser/nacl_browser.h"
 #include "components/nacl/browser/nacl_browser_delegate.h"
 #include "components/nacl/browser/nacl_host_message_filter.h"
@@ -315,7 +316,9 @@ void NaClProcessHost::OnProcessCrashed(int exit_status) {
 void NaClProcessHost::EarlyStartup() {
   NaClBrowser::GetInstance()->EarlyStartup();
   // Inform NaClBrowser that we exist and will have a debug port at some point.
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// of lacros-chrome is complete.
+#if defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
   // Open the IRT file early to make sure that it isn't replaced out from
   // under us by autoupdate.
   NaClBrowser::GetInstance()->EnsureIrtAvailable();
@@ -900,7 +903,7 @@ bool NaClProcessHost::StartPPAPIProxy(
   // browser process.
   ppapi_host_.reset(content::BrowserPpapiHost::CreateExternalPluginProcess(
       ipc_proxy_channel_.get(),  // sender
-      permissions_, process_->GetData().GetProcess().Handle(),
+      permissions_, process_->GetData().GetProcess().Duplicate(),
       ipc_proxy_channel_.get(), nacl_host_message_filter_->render_process_id(),
       render_view_id_, profile_directory_));
 

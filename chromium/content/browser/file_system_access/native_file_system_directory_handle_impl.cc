@@ -4,6 +4,7 @@
 
 #include "content/browser/file_system_access/native_file_system_directory_handle_impl.h"
 
+#include "base/i18n/file_util_icu.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -12,44 +13,24 @@
 #include "content/browser/file_system_access/native_file_system_transfer_token_impl.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/base/escape.h"
+#include "net/base/filename_util.h"
 #include "storage/browser/file_system/file_system_context.h"
 #include "storage/browser/file_system/file_system_operation_runner.h"
 #include "storage/common/file_system/file_system_util.h"
-#include "third_party/blink/public/mojom/file_system_access/native_file_system_error.mojom.h"
-#include "third_party/blink/public/mojom/file_system_access/native_file_system_file_handle.mojom.h"
-#include "third_party/blink/public/mojom/file_system_access/native_file_system_transfer_token.mojom.h"
+#include "third_party/blink/public/mojom/file_system_access/file_system_access_error.mojom.h"
+#include "third_party/blink/public/mojom/file_system_access/file_system_access_file_handle.mojom.h"
+#include "third_party/blink/public/mojom/file_system_access/file_system_access_transfer_token.mojom.h"
 
-using blink::mojom::NativeFileSystemEntry;
-using blink::mojom::NativeFileSystemEntryPtr;
-using blink::mojom::NativeFileSystemHandle;
-using blink::mojom::NativeFileSystemStatus;
-using blink::mojom::NativeFileSystemTransferToken;
+using blink::mojom::FileSystemAccessEntry;
+using blink::mojom::FileSystemAccessEntryPtr;
+using blink::mojom::FileSystemAccessHandle;
+using blink::mojom::FileSystemAccessStatus;
+using blink::mojom::FileSystemAccessTransferToken;
 using storage::FileSystemOperationRunner;
 
 namespace content {
 
-using HandleType = NativeFileSystemPermissionContext::HandleType;
-
-namespace {
-
-// Returns true when |name| contains a path separator like "/".
-bool ContainsPathSeparator(const std::string& name) {
-  const base::FilePath filepath_name = storage::StringToFilePath(name);
-
-  const size_t separator_position =
-      filepath_name.value().find_first_of(base::FilePath::kSeparators);
-
-  return separator_position != base::FilePath::StringType::npos;
-}
-
-// Returns true when |name| is "." or "..".
-bool IsCurrentOrParentDirectory(const std::string& name) {
-  const base::FilePath filepath_name = storage::StringToFilePath(name);
-  return filepath_name.value() == base::FilePath::kCurrentDirectory ||
-         filepath_name.value() == base::FilePath::kParentDirectory;
-}
-
-}  // namespace
+using HandleType = FileSystemAccessPermissionContext::HandleType;
 
 NativeFileSystemDirectoryHandleImpl::NativeFileSystemDirectoryHandleImpl(
     NativeFileSystemManagerImpl* manager,
@@ -79,9 +60,9 @@ void NativeFileSystemDirectoryHandleImpl::GetFile(const std::string& basename,
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   storage::FileSystemURL child_url;
-  blink::mojom::NativeFileSystemErrorPtr get_child_url_result =
+  blink::mojom::FileSystemAccessErrorPtr get_child_url_result =
       GetChildURL(basename, &child_url);
-  if (get_child_url_result->status != NativeFileSystemStatus::kOk) {
+  if (get_child_url_result->status != FileSystemAccessStatus::kOk) {
     std::move(callback).Run(std::move(get_child_url_result),
                             mojo::NullRemote());
     return;
@@ -89,7 +70,7 @@ void NativeFileSystemDirectoryHandleImpl::GetFile(const std::string& basename,
 
   if (GetReadPermissionStatus() != PermissionStatus::GRANTED) {
     std::move(callback).Run(native_file_system_error::FromStatus(
-                                NativeFileSystemStatus::kPermissionDenied),
+                                FileSystemAccessStatus::kPermissionDenied),
                             mojo::NullRemote());
     return;
   }
@@ -102,7 +83,7 @@ void NativeFileSystemDirectoryHandleImpl::GetFile(const std::string& basename,
         base::BindOnce(
             &NativeFileSystemDirectoryHandleImpl::GetFileWithWritePermission,
             weak_factory_.GetWeakPtr(), child_url),
-        base::BindOnce([](blink::mojom::NativeFileSystemErrorPtr result,
+        base::BindOnce([](blink::mojom::FileSystemAccessErrorPtr result,
                           GetFileCallback callback) {
           std::move(callback).Run(std::move(result), mojo::NullRemote());
         }),
@@ -124,9 +105,9 @@ void NativeFileSystemDirectoryHandleImpl::GetDirectory(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   storage::FileSystemURL child_url;
-  blink::mojom::NativeFileSystemErrorPtr get_child_url_result =
+  blink::mojom::FileSystemAccessErrorPtr get_child_url_result =
       GetChildURL(basename, &child_url);
-  if (get_child_url_result->status != NativeFileSystemStatus::kOk) {
+  if (get_child_url_result->status != FileSystemAccessStatus::kOk) {
     std::move(callback).Run(std::move(get_child_url_result),
                             mojo::NullRemote());
     return;
@@ -134,7 +115,7 @@ void NativeFileSystemDirectoryHandleImpl::GetDirectory(
 
   if (GetReadPermissionStatus() != PermissionStatus::GRANTED) {
     std::move(callback).Run(native_file_system_error::FromStatus(
-                                NativeFileSystemStatus::kPermissionDenied),
+                                FileSystemAccessStatus::kPermissionDenied),
                             mojo::NullRemote());
     return;
   }
@@ -147,7 +128,7 @@ void NativeFileSystemDirectoryHandleImpl::GetDirectory(
         base::BindOnce(&NativeFileSystemDirectoryHandleImpl::
                            GetDirectoryWithWritePermission,
                        weak_factory_.GetWeakPtr(), child_url),
-        base::BindOnce([](blink::mojom::NativeFileSystemErrorPtr result,
+        base::BindOnce([](blink::mojom::FileSystemAccessErrorPtr result,
                           GetDirectoryCallback callback) {
           std::move(callback).Run(std::move(result), mojo::NullRemote());
         }),
@@ -163,19 +144,27 @@ void NativeFileSystemDirectoryHandleImpl::GetDirectory(
 }
 
 void NativeFileSystemDirectoryHandleImpl::GetEntries(
-    mojo::PendingRemote<blink::mojom::NativeFileSystemDirectoryEntriesListener>
+    mojo::PendingRemote<blink::mojom::FileSystemAccessDirectoryEntriesListener>
         pending_listener) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   std::unique_ptr<
-      mojo::Remote<blink::mojom::NativeFileSystemDirectoryEntriesListener>,
+      mojo::Remote<blink::mojom::FileSystemAccessDirectoryEntriesListener>,
       base::OnTaskRunnerDeleter>
       listener(
           new mojo::Remote<
-              blink::mojom::NativeFileSystemDirectoryEntriesListener>(
+              blink::mojom::FileSystemAccessDirectoryEntriesListener>(
               std::move(pending_listener)),
           base::OnTaskRunnerDeleter(base::SequencedTaskRunnerHandle::Get()));
   listener->reset_on_disconnect();
+
+  if (GetReadPermissionStatus() != PermissionStatus::GRANTED) {
+    (*listener)->DidReadDirectory(
+        native_file_system_error::FromStatus(
+            FileSystemAccessStatus::kPermissionDenied),
+        {}, false);
+    return;
+  }
 
   DoFileSystemOperation(
       FROM_HERE, &FileSystemOperationRunner::ReadDirectory,
@@ -192,9 +181,9 @@ void NativeFileSystemDirectoryHandleImpl::RemoveEntry(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   storage::FileSystemURL child_url;
-  blink::mojom::NativeFileSystemErrorPtr get_child_url_result =
+  blink::mojom::FileSystemAccessErrorPtr get_child_url_result =
       GetChildURL(basename, &child_url);
-  if (get_child_url_result->status != NativeFileSystemStatus::kOk) {
+  if (get_child_url_result->status != FileSystemAccessStatus::kOk) {
     std::move(callback).Run(std::move(get_child_url_result));
     return;
   }
@@ -202,14 +191,14 @@ void NativeFileSystemDirectoryHandleImpl::RemoveEntry(
   RunWithWritePermission(
       base::BindOnce(&NativeFileSystemDirectoryHandleImpl::RemoveEntryImpl,
                      weak_factory_.GetWeakPtr(), child_url, recurse),
-      base::BindOnce([](blink::mojom::NativeFileSystemErrorPtr result,
+      base::BindOnce([](blink::mojom::FileSystemAccessErrorPtr result,
                         RemoveEntryCallback callback) {
         std::move(callback).Run(std::move(result));
       }),
       std::move(callback));
 }
 void NativeFileSystemDirectoryHandleImpl::Resolve(
-    mojo::PendingRemote<blink::mojom::NativeFileSystemTransferToken>
+    mojo::PendingRemote<blink::mojom::FileSystemAccessTransferToken>
         possible_child,
     ResolveCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -226,7 +215,7 @@ void NativeFileSystemDirectoryHandleImpl::ResolveImpl(
   if (!possible_child) {
     std::move(callback).Run(
         native_file_system_error::FromStatus(
-            blink::mojom::NativeFileSystemStatus::kOperationFailed),
+            blink::mojom::FileSystemAccessStatus::kOperationFailed),
         base::nullopt);
     return;
   }
@@ -281,7 +270,7 @@ void NativeFileSystemDirectoryHandleImpl::ResolveImpl(
 }
 
 void NativeFileSystemDirectoryHandleImpl::Transfer(
-    mojo::PendingReceiver<NativeFileSystemTransferToken> token) {
+    mojo::PendingReceiver<FileSystemAccessTransferToken> token) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   manager()->CreateTransferToken(*this, std::move(token));
@@ -354,7 +343,7 @@ void NativeFileSystemDirectoryHandleImpl::DidGetDirectory(
 }
 
 void NativeFileSystemDirectoryHandleImpl::DidReadDirectory(
-    mojo::Remote<blink::mojom::NativeFileSystemDirectoryEntriesListener>*
+    mojo::Remote<blink::mojom::FileSystemAccessDirectoryEntriesListener>*
         listener,
     base::File::Error result,
     std::vector<filesystem::mojom::DirectoryEntry> file_list,
@@ -371,17 +360,18 @@ void NativeFileSystemDirectoryHandleImpl::DidReadDirectory(
     return;
   }
 
-  std::vector<NativeFileSystemEntryPtr> entries;
+  std::vector<FileSystemAccessEntryPtr> entries;
   for (const auto& entry : file_list) {
     std::string basename = storage::FilePathToString(entry.name);
 
     storage::FileSystemURL child_url;
-    blink::mojom::NativeFileSystemErrorPtr get_child_url_result =
+    blink::mojom::FileSystemAccessErrorPtr get_child_url_result =
         GetChildURL(basename, &child_url);
 
-    // All entries must exist in this directory as a direct child with a valid
-    // |basename|.
-    CHECK_EQ(get_child_url_result->status, NativeFileSystemStatus::kOk);
+    // Skip any entries with names that aren't allowed to be accessed by
+    // this API, such as files with disallowed characters in their names.
+    if (get_child_url_result->status != FileSystemAccessStatus::kOk)
+      continue;
 
     entries.push_back(
         CreateEntry(basename, child_url,
@@ -412,25 +402,97 @@ void NativeFileSystemDirectoryHandleImpl::RemoveEntryImpl(
       url, recurse);
 }
 
-blink::mojom::NativeFileSystemErrorPtr
+namespace {
+
+// Returns whether the specified extension receives special handling by the
+// Windows shell.
+bool IsShellIntegratedExtension(const base::FilePath::StringType& extension) {
+  base::FilePath::StringType extension_lower = base::ToLowerASCII(extension);
+
+  // .lnk files may be used to execute arbitrary code (see
+  // https://nvd.nist.gov/vuln/detail/CVE-2010-2568).
+  if (extension_lower == FILE_PATH_LITERAL("lnk"))
+    return true;
+
+  // Setting a file's extension to a CLSID may conceal its actual file type on
+  // some Windows versions (see https://nvd.nist.gov/vuln/detail/CVE-2004-0420).
+  if (!extension_lower.empty() &&
+      (extension_lower.front() == FILE_PATH_LITERAL('{')) &&
+      (extension_lower.back() == FILE_PATH_LITERAL('}')))
+    return true;
+  return false;
+}
+
+}  // namespace
+
+// static
+bool NativeFileSystemDirectoryHandleImpl::IsSafePathComponent(
+    const std::string& name) {
+  // This method is similar to net::IsSafePortablePathComponent, with a few
+  // notable differences where the net version does not consider names safe
+  // while here we do want to allow them. These cases are:
+  //  - Names starting with a '.'. These would be hidden files in most file
+  //    managers, but are something we explicitly want to support for the
+  //    File System Access API, for names like .git.
+  //  - Names that end in '.local'. For downloads writing to such files is
+  //    dangerous since it might modify what code is executed when an executable
+  //    is ran from the same directory. For the File System Access API this
+  //    isn't really a problem though, since if a website can write to a .local
+  //    file via a FileSystemDirectoryHandle they can also just modify the
+  //    executables in the directory directly.
+  //
+  // TODO(https://crbug.com/1154757): Unify this with
+  // net::IsSafePortablePathComponent, with the result probably ending up in
+  // base/i18n/file_util_icu.h.
+
+  const base::FilePath component = storage::StringToFilePath(name);
+  // Empty names, or names that contain path separators are invalid.
+  if (component.empty() || component != component.BaseName() ||
+      component != component.StripTrailingSeparators()) {
+    return false;
+  }
+
+  base::string16 component16;
+#if defined(OS_WIN)
+  component16.assign(component.value().begin(), component.value().end());
+#else
+  std::string component8 = component.AsUTF8Unsafe();
+  if (!base::UTF8ToUTF16(component8.c_str(), component8.size(), &component16))
+    return false;
+#endif
+  // base::i18n::IsFilenameLegal blocks names that start with '.', so strip out
+  // a leading '.' before passing it to that method.
+  // TODO(mek): Consider making IsFilenameLegal more flexible to support this
+  // use case.
+  if (component16[0] == '.')
+    component16 = component16.substr(1);
+  if (!base::i18n::IsFilenameLegal(component16))
+    return false;
+
+  base::FilePath::StringType extension = component.Extension();
+  if (!extension.empty())
+    extension.erase(extension.begin());  // Erase preceding '.'.
+  if (IsShellIntegratedExtension(extension))
+    return false;
+
+  if (base::TrimString(component.value(), FILE_PATH_LITERAL("."),
+                       base::TRIM_TRAILING) != component.value()) {
+    return false;
+  }
+
+  if (net::IsReservedNameOnWindows(component.value()))
+    return false;
+
+  return true;
+}
+
+blink::mojom::FileSystemAccessErrorPtr
 NativeFileSystemDirectoryHandleImpl::GetChildURL(
     const std::string& basename,
     storage::FileSystemURL* result) {
-  // TODO(mek): Rather than doing URL serialization and parsing we should just
-  // have a way to get a child FileSystemURL directly from its parent.
-
-  if (basename.empty()) {
+  if (!IsSafePathComponent(basename)) {
     return native_file_system_error::FromStatus(
-        NativeFileSystemStatus::kInvalidArgument,
-        "Name can't be an empty string.");
-  }
-
-  if (ContainsPathSeparator(basename) || IsCurrentOrParentDirectory(basename)) {
-    // |basename| must refer to a entry that exists in this directory as a
-    // direct child.
-    return native_file_system_error::FromStatus(
-        NativeFileSystemStatus::kInvalidArgument,
-        "Name contains invalid characters.");
+        FileSystemAccessStatus::kInvalidArgument, "Name is not allowed.");
   }
 
   const storage::FileSystemURL parent = url();
@@ -440,18 +502,18 @@ NativeFileSystemDirectoryHandleImpl::GetChildURL(
   return native_file_system_error::Ok();
 }
 
-NativeFileSystemEntryPtr NativeFileSystemDirectoryHandleImpl::CreateEntry(
+FileSystemAccessEntryPtr NativeFileSystemDirectoryHandleImpl::CreateEntry(
     const std::string& basename,
     const storage::FileSystemURL& url,
     HandleType handle_type) {
   if (handle_type == HandleType::kDirectory) {
-    return NativeFileSystemEntry::New(
-        NativeFileSystemHandle::NewDirectory(
+    return FileSystemAccessEntry::New(
+        FileSystemAccessHandle::NewDirectory(
             manager()->CreateDirectoryHandle(context(), url, handle_state())),
         basename);
   }
-  return NativeFileSystemEntry::New(
-      NativeFileSystemHandle::NewFile(
+  return FileSystemAccessEntry::New(
+      FileSystemAccessHandle::NewFile(
           manager()->CreateFileHandle(context(), url, handle_state())),
       basename);
 }

@@ -5,10 +5,10 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/containers/contains.h"
 #include "base/memory/ref_counted.h"
 #include "base/metrics/statistics_recorder.h"
 #include "base/run_loop.h"
-#include "base/stl_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -19,7 +19,7 @@
 #include "base/threading/platform_thread.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
+#include "chrome/browser/browsing_data/chrome_browsing_data_remover_constants.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/history/history_test_utils.h"
 #include "chrome/browser/predictors/autocomplete_action_predictor.h"
@@ -325,30 +325,18 @@ class NoStatePrefetchBrowserTest
         NavigateWithPrerenders(loader_url, expected_final_status_queue);
     prerenders[0]->WaitForLoads(0);
 
-    // Ensure that the referring page receives the right start and load events.
-    WaitForPrerenderStartEventForLinkNumber(0);
-    if (check_load_events_) {
-      WaitForPrerenderEventCount(0, "webkitprerenderload",
-                                 expected_number_of_loads);
-    }
-
     if (ShouldAbortPrerenderBeforeSwap(expected_final_status_queue.front())) {
       // The prerender will abort on its own. Assert it does so correctly.
       prerenders[0]->WaitForStop();
       EXPECT_FALSE(prerenders[0]->contents());
-      WaitForPrerenderStopEventForLinkNumber(0);
     } else {
       // Otherwise, check that it prerendered correctly.
       test_utils::TestPrerenderContents* prerender_contents =
           prerenders[0]->contents();
       if (prerender_contents) {
         EXPECT_EQ(FINAL_STATUS_UNKNOWN, prerender_contents->final_status());
-        EXPECT_FALSE(DidReceivePrerenderStopEventForLinkNumber(0));
       }
     }
-
-    // Test for proper event ordering.
-    EXPECT_FALSE(HadPrerenderEventErrors());
 
     return std::move(prerenders[0]);
   }
@@ -369,8 +357,6 @@ class NoStatePrefetchBrowserTest
         return true;
     }
   }
-
-  void DisableLoadEventCheck() { check_load_events_ = false; }
 
   std::unique_ptr<TestPrerender> PrefetchFromFile(
       const std::string& html_file,
@@ -402,68 +388,6 @@ class NoStatePrefetchBrowserTest
         content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB, &observer);
     observer.BlockUntilCompletion();
     // BrowsingDataRemover deletes itself.
-  }
-
-  // Synchronization note: The IPCs used to communicate DOM events back to the
-  // referring web page (see blink::mojom::PrerenderProcessorClient) may race w/
-  // the IPCs used here to inject script. The WaitFor* variants should be used
-  // when an event was expected to happen or to happen soon.
-
-  int GetPrerenderEventCount(int index, const std::string& type) const {
-    int event_count;
-    std::string expression = base::StringPrintf(
-        "window.domAutomationController.send("
-        "    GetPrerenderEventCount(%d, '%s'))",
-        index, type.c_str());
-
-    CHECK(content::ExecuteScriptAndExtractInt(GetActiveWebContents(),
-                                              expression, &event_count));
-    return event_count;
-  }
-
-  bool DidReceivePrerenderStartEventForLinkNumber(int index) const {
-    return GetPrerenderEventCount(index, "webkitprerenderstart") > 0;
-  }
-
-  int GetPrerenderLoadEventCountForLinkNumber(int index) const {
-    return GetPrerenderEventCount(index, "webkitprerenderload");
-  }
-
-  bool DidReceivePrerenderStopEventForLinkNumber(int index) const {
-    return GetPrerenderEventCount(index, "webkitprerenderstop") > 0;
-  }
-
-  void WaitForPrerenderEventCount(int index,
-                                  const std::string& type,
-                                  int count) const {
-    int dummy;
-    std::string expression = base::StringPrintf(
-        "WaitForPrerenderEventCount(%d, '%s', %d,"
-        "    window.domAutomationController.send.bind("
-        "        window.domAutomationController, 0))",
-        index, type.c_str(), count);
-
-    CHECK(content::ExecuteScriptAndExtractInt(GetActiveWebContents(),
-                                              expression, &dummy));
-    CHECK_EQ(0, dummy);
-  }
-
-  void WaitForPrerenderStartEventForLinkNumber(int index) const {
-    WaitForPrerenderEventCount(index, "webkitprerenderstart", 1);
-  }
-
-  void WaitForPrerenderStopEventForLinkNumber(int index) const {
-    WaitForPrerenderEventCount(index, "webkitprerenderstart", 1);
-  }
-
-  bool HadPrerenderEventErrors() const {
-    bool had_prerender_event_errors;
-    CHECK(content::ExecuteScriptAndExtractBool(
-        GetActiveWebContents(),
-        "window.domAutomationController.send(Boolean("
-        "    hadPrerenderEventErrors))",
-        &had_prerender_event_errors));
-    return had_prerender_event_errors;
   }
 
   // Opens the prerendered page using javascript functions in the loader
@@ -507,7 +431,6 @@ class NoStatePrefetchBrowserTest
 #endif
   }
 
-  bool check_load_events_ = true;
   base::SimpleTestTickClock clock_;
 
  private:
@@ -1445,7 +1368,7 @@ IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest,
   bool prefetch_canceled_histogram_added = false;
   EXPECT_TRUE(base::StatisticsRecorder::SetCallback(
       kPrefetchCanceledHistogram,
-      base::Bind(
+      base::BindRepeating(
           [](const base::Closure& quit_closure, bool* called,
              const char* histogram_name, uint64_t name_hash,
              base::HistogramBase::Sample sample) {
@@ -1698,9 +1621,9 @@ IN_PROC_BROWSER_TEST_F(NoStatePrefetchIncognitoBrowserTest,
 }
 
 // Checks that prerenders are aborted when an incognito profile is closed.
-// ToDo(crbug.com/994068): The test is crashing on multiple platforms.
+// TODO(crbug.com/994068): The test is crashing on multiple platforms.
 IN_PROC_BROWSER_TEST_F(NoStatePrefetchIncognitoBrowserTest,
-                       PrerenderIncognitoClosed) {
+                       DISABLED_PrerenderIncognitoClosed) {
   std::unique_ptr<TestPrerender> test_prerender =
       PrefetchFromFile(kHungPrerenderPage, FINAL_STATUS_PROFILE_DESTROYED);
   current_browser()->window()->Close();
@@ -1713,7 +1636,7 @@ IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest, ClearHistory) {
       kHungPrerenderPage, FINAL_STATUS_CACHE_OR_HISTORY_CLEARED);
 
   ClearBrowsingData(current_browser(),
-                    ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY);
+                    chrome_browsing_data_remover::DATA_TYPE_HISTORY);
   test_prerender->WaitForStop();
 
   // Make sure prerender history was cleared.
@@ -1763,7 +1686,6 @@ IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest,
 
 // Checks shutdown code while a prerender is active.
 IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest, PrerenderQuickQuit) {
-  DisableLoadEventCheck();
   GURL url = src_server()->GetURL(kHungPrerenderPage);
   std::unique_ptr<TestPrerender> prerender =
       PrefetchFromURL(url, FINAL_STATUS_APP_TERMINATING);
@@ -1789,12 +1711,6 @@ IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest,
 IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest, PrerenderExcessiveMemory) {
   ASSERT_TRUE(GetPrerenderManager());
   GetPrerenderManager()->mutable_config().max_bytes = 100;
-  // The excessive memory kill may happen before or after the load event as it
-  // happens asynchronously with IPC calls. Even if the test does not start
-  // allocating until after load, the browser process might notice before the
-  // message gets through. This happens on XP debug bots because they're so
-  // slow. Instead, don't bother checking the load event count.
-  DisableLoadEventCheck();
   PrefetchFromURL(
       src_server()->GetURL("/prerender/prerender_excessive_memory.html"),
       FINAL_STATUS_MEMORY_LIMIT_EXCEEDED);

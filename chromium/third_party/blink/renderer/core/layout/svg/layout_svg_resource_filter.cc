@@ -86,18 +86,4 @@ bool LayoutSVGResourceFilter::FindCycleFromSelf(
   return false;
 }
 
-LayoutSVGResourceFilter* GetFilterResourceForSVG(const ComputedStyle& style) {
-  if (!style.HasFilter())
-    return nullptr;
-  const FilterOperations& operations = style.Filter();
-  if (operations.size() != 1)
-    return nullptr;
-  const auto* reference_filter =
-      DynamicTo<ReferenceFilterOperation>(*operations.at(0));
-  if (!reference_filter)
-    return nullptr;
-  return GetSVGResourceAsType<LayoutSVGResourceFilter>(
-      reference_filter->Resource());
-}
-
 }  // namespace blink

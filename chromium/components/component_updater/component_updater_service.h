@@ -16,6 +16,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/version.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "components/update_client/update_client.h"
 #include "url/gurl.h"
 
@@ -27,7 +28,7 @@ class ComponentUpdaterPolicyTest;
 }
 
 namespace speech {
-class SODAInstallerImpl;
+class SodaInstallerImpl;
 }
 
 namespace update_client {
@@ -147,7 +148,7 @@ class ComponentUpdateService {
   virtual bool GetComponentDetails(const std::string& id,
                                    CrxUpdateItem* item) const = 0;
 
-  friend class speech::SODAInstallerImpl;
+  friend class speech::SodaInstallerImpl;
   friend class ::ComponentsHandler;
   FRIEND_TEST_ALL_PREFIXES(ComponentInstallerTest, RegisterComponent);
 };
@@ -170,12 +171,11 @@ class OnDemandUpdater {
   friend class ::ComponentsHandler;
   friend class ::PluginObserver;
   friend class SwReporterOnDemandFetcher;
-  friend class SODAComponentInstallerPolicy;
-  friend class SodaEnUsComponentInstallerPolicy;
-  friend class SodaJaJpComponentInstallerPolicy;
-#if defined(OS_CHROMEOS)
+  friend class SodaComponentInstallerPolicy;
+  friend class SodaLanguagePackComponentInstallerPolicy;
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   friend class CrOSComponentInstaller;
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
   friend class VrAssetsComponentInstallerPolicy;
 
   // Triggers an update check for a component. |id| is a value

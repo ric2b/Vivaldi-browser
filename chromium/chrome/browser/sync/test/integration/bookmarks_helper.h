@@ -31,6 +31,10 @@
 class BookmarkUndoService;
 class GURL;
 
+namespace base {
+class GUID;
+}  // namespace base
+
 namespace bookmarks {
 class BookmarkModel;
 }  // namespace bookmarks
@@ -72,7 +76,7 @@ bookmarks::BookmarkModel* GetVerifierBookmarkModel() WARN_UNUSED_RESULT;
 // profile |profile|. Returns a pointer to the node that was added.
 const bookmarks::BookmarkNode* AddURL(int profile,
                                       const std::string& title,
-                                      const GURL& url) WARN_UNUSED_RESULT;
+                                      const GURL& url);
 
 // Adds a URL with address |url| and title |title| to the bookmark bar of
 // profile |profile| at position |index|. Returns a pointer to the node that
@@ -80,7 +84,7 @@ const bookmarks::BookmarkNode* AddURL(int profile,
 const bookmarks::BookmarkNode* AddURL(int profile,
                                       size_t index,
                                       const std::string& title,
-                                      const GURL& url) WARN_UNUSED_RESULT;
+                                      const GURL& url);
 
 // Adds a URL with address |url| and title |title| under the node |parent| of
 // profile |profile| at position |index|. Returns a pointer to the node that
@@ -89,19 +93,17 @@ const bookmarks::BookmarkNode* AddURL(int profile,
                                       const bookmarks::BookmarkNode* parent,
                                       size_t index,
                                       const std::string& title,
-                                      const GURL& url) WARN_UNUSED_RESULT;
+                                      const GURL& url);
 
 // Adds a folder named |title| to the bookmark bar of profile |profile|.
 // Returns a pointer to the folder that was added.
-const bookmarks::BookmarkNode* AddFolder(int profile, const std::string& title)
-    WARN_UNUSED_RESULT;
+const bookmarks::BookmarkNode* AddFolder(int profile, const std::string& title);
 
 // Adds a folder named |title| to the bookmark bar of profile |profile| at
 // position |index|. Returns a pointer to the folder that was added.
 const bookmarks::BookmarkNode* AddFolder(int profile,
                                          size_t index,
-                                         const std::string& title)
-    WARN_UNUSED_RESULT;
+                                         const std::string& title);
 
 // Adds a folder named |title| to the node |parent| in the bookmark model of
 // profile |profile| at position |index|. Returns a pointer to the node that
@@ -109,8 +111,7 @@ const bookmarks::BookmarkNode* AddFolder(int profile,
 const bookmarks::BookmarkNode* AddFolder(int profile,
                                          const bookmarks::BookmarkNode* parent,
                                          size_t index,
-                                         const std::string& title)
-    WARN_UNUSED_RESULT;
+                                         const std::string& title);
 
 // Changes the title of the node |node| in the bookmark model of profile
 // |profile| to |new_title|.
@@ -150,7 +151,7 @@ void CheckHasNoFavicon(int profile, const GURL& page_url);
 // |profile| to |new_url|. Returns a pointer to the node with the changed url.
 const bookmarks::BookmarkNode* SetURL(int profile,
                                       const bookmarks::BookmarkNode* node,
-                                      const GURL& new_url) WARN_UNUSED_RESULT;
+                                      const GURL& new_url);
 
 // Moves the node |node| in the bookmark model of profile |profile| so it ends
 // up under the node |new_parent| at position |index|.
@@ -223,8 +224,8 @@ size_t CountFoldersWithTitlesMatching(int profile, const std::string& title)
     WARN_UNUSED_RESULT;
 
 // Returns whether there exists a BookmarkNode in the bookmark model of
-// profile |profile| whose GUID matches the string |guid|.
-bool ContainsBookmarkNodeWithGUID(int profile, const std::string& guid);
+// profile |profile| whose GUID matches |guid|.
+bool ContainsBookmarkNodeWithGUID(int profile, const base::GUID& guid);
 
 // Creates a favicon of |color| with image reps of the platform's supported
 // scale factors (eg MacOS) in addition to 1x.
@@ -491,7 +492,7 @@ class BookmarksUrlChecker : public SingleBookmarkModelStatusChangeChecker {
 // Checker used to block until there exists a bookmark with the given GUID.
 class BookmarksGUIDChecker : public SingleBookmarksModelMatcherChecker {
  public:
-  BookmarksGUIDChecker(int profile, const std::string& guid);
+  BookmarksGUIDChecker(int profile, const base::GUID& guid);
   ~BookmarksGUIDChecker() override;
 };
 

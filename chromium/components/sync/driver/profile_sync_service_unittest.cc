@@ -10,6 +10,7 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/run_loop.h"
 #include "base/test/bind.h"
@@ -18,6 +19,7 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "components/policy/core/common/policy_service_impl.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/signin/public/identity_manager/account_info.h"
@@ -37,8 +39,8 @@
 #include "components/sync/driver/sync_service_observer.h"
 #include "components/sync/driver/sync_service_utils.h"
 #include "components/sync/driver/sync_token_status.h"
-#include "components/sync/engine/fake_sync_engine.h"
 #include "components/sync/invalidations/switches.h"
+#include "components/sync/test/engine/fake_sync_engine.h"
 #include "components/version_info/version_info_values.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -193,7 +195,7 @@ class ProfileSyncServiceTest : public ::testing::Test {
     std::unique_ptr<SyncClientMock> sync_client =
         profile_sync_service_bundle_.CreateSyncClientMock();
     sync_client_ = sync_client.get();
-    ON_CALL(*sync_client, CreateDataTypeControllers(_))
+    ON_CALL(*sync_client, CreateDataTypeControllers)
         .WillByDefault(Return(ByMove(std::move(controllers))));
 
     auto init_params = profile_sync_service_bundle_.CreateBasicInitParams(
@@ -202,9 +204,9 @@ class ProfileSyncServiceTest : public ::testing::Test {
 
     service_ = std::make_unique<ProfileSyncService>(std::move(init_params));
 
-    ON_CALL(*component_factory(), CreateSyncEngine(_, _, _, _))
+    ON_CALL(*component_factory(), CreateSyncEngine)
         .WillByDefault(ReturnNewFakeSyncEngine());
-    ON_CALL(*component_factory(), CreateDataTypeManager(_, _, _, _, _, _))
+    ON_CALL(*component_factory(), CreateDataTypeManager)
         .WillByDefault(
             ReturnNewFakeDataTypeManager(GetDefaultConfigureCalledCallback()));
   }
@@ -221,7 +223,7 @@ class ProfileSyncServiceTest : public ::testing::Test {
     std::unique_ptr<SyncClientMock> sync_client =
         profile_sync_service_bundle_.CreateSyncClientMock();
     sync_client_ = sync_client.get();
-    ON_CALL(*sync_client, CreateDataTypeControllers(_))
+    ON_CALL(*sync_client, CreateDataTypeControllers)
         .WillByDefault(Return(ByMove(std::move(controllers))));
 
     ProfileSyncService::InitParams init_params =
@@ -233,9 +235,9 @@ class ProfileSyncServiceTest : public ::testing::Test {
 
     service_ = std::make_unique<ProfileSyncService>(std::move(init_params));
 
-    ON_CALL(*component_factory(), CreateSyncEngine(_, _, _, _))
+    ON_CALL(*component_factory(), CreateSyncEngine)
         .WillByDefault(ReturnNewFakeSyncEngine());
-    ON_CALL(*component_factory(), CreateDataTypeManager(_, _, _, _, _, _))
+    ON_CALL(*component_factory(), CreateDataTypeManager)
         .WillByDefault(
             ReturnNewFakeDataTypeManager(GetDefaultConfigureCalledCallback()));
   }
@@ -328,19 +330,6 @@ class ProfileSyncServiceTest : public ::testing::Test {
   SyncClientMock* sync_client_;  // Owned by |service_|.
 };
 
-class ProfileSyncServiceTestWithStopSyncInPausedState
-    : public ProfileSyncServiceTest {
- public:
-  ProfileSyncServiceTestWithStopSyncInPausedState() {
-    override_features_.InitAndEnableFeature(switches::kStopSyncInPausedState);
-  }
-
-  ~ProfileSyncServiceTestWithStopSyncInPausedState() override = default;
-
- private:
-  base::test::ScopedFeatureList override_features_;
-};
-
 class ProfileSyncServiceTestWithSyncInvalidationsServiceCreated
     : public ProfileSyncServiceTest {
  public:
@@ -358,7 +347,7 @@ class ProfileSyncServiceTestWithSyncInvalidationsServiceCreated
 
 // Verify that the server URLs are sane.
 TEST_F(ProfileSyncServiceTest, InitialState) {
-  CreateService(ProfileSyncService::AUTO_START);
+  CreateService(ProfileSyncService::MANUAL_START);
   InitializeForNthSync();
   const std::string& url = service()->GetSyncServiceUrlForDebugging().spec();
   EXPECT_TRUE(url == internal::kSyncServerUrl ||
@@ -367,10 +356,10 @@ TEST_F(ProfileSyncServiceTest, InitialState) {
 
 TEST_F(ProfileSyncServiceTest, SuccessfulInitialization) {
   SignIn();
-  CreateService(ProfileSyncService::AUTO_START);
-  EXPECT_CALL(*component_factory(), CreateSyncEngine(_, _, _, _))
+  CreateService(ProfileSyncService::MANUAL_START);
+  EXPECT_CALL(*component_factory(), CreateSyncEngine)
       .WillOnce(ReturnNewFakeSyncEngine());
-  EXPECT_CALL(*component_factory(), CreateDataTypeManager(_, _, _, _, _, _))
+  EXPECT_CALL(*component_factory(), CreateDataTypeManager)
       .WillOnce(
           ReturnNewFakeDataTypeManager(GetDefaultConfigureCalledCallback()));
   InitializeForNthSync();
@@ -381,9 +370,9 @@ TEST_F(ProfileSyncServiceTest, SuccessfulInitialization) {
 
 TEST_F(ProfileSyncServiceTest, SuccessfulLocalBackendInitialization) {
   CreateServiceWithLocalSyncBackend();
-  EXPECT_CALL(*component_factory(), CreateSyncEngine(_, _, _, _))
+  EXPECT_CALL(*component_factory(), CreateSyncEngine)
       .WillOnce(ReturnNewFakeSyncEngine());
-  EXPECT_CALL(*component_factory(), CreateDataTypeManager(_, _, _, _, _, _))
+  EXPECT_CALL(*component_factory(), CreateDataTypeManager)
       .WillOnce(
           ReturnNewFakeDataTypeManager(GetDefaultConfigureCalledCallback()));
   InitializeForNthSync();
@@ -427,8 +416,8 @@ TEST_F(ProfileSyncServiceTest, NeedsConfirmation) {
 }
 
 TEST_F(ProfileSyncServiceTest, ModelTypesForTransportMode) {
-  CreateService(ProfileSyncService::AUTO_START);
   SignIn();
+  CreateService(ProfileSyncService::MANUAL_START);
   InitializeForNthSync();
 
   // Disable sync-the-feature.
@@ -450,7 +439,7 @@ TEST_F(ProfileSyncServiceTest, ModelTypesForTransportMode) {
 // Verify that the SetSetupInProgress function call updates state
 // and notifies observers.
 TEST_F(ProfileSyncServiceTest, SetupInProgress) {
-  CreateService(ProfileSyncService::AUTO_START);
+  CreateService(ProfileSyncService::MANUAL_START);
   InitializeForFirstSync();
 
   TestSyncServiceObserver observer;
@@ -473,10 +462,10 @@ TEST_F(ProfileSyncServiceTest, WaitForPoliciesToStart) {
           policy::PolicyServiceImpl::Providers());
 
   SignIn();
-  CreateService(ProfileSyncService::AUTO_START, policy_service.get());
-  EXPECT_CALL(*component_factory(), CreateSyncEngine(_, _, _, _))
+  CreateService(ProfileSyncService::MANUAL_START, policy_service.get());
+  EXPECT_CALL(*component_factory(), CreateSyncEngine)
       .WillOnce(ReturnNewFakeSyncEngine());
-  EXPECT_CALL(*component_factory(), CreateDataTypeManager(_, _, _, _, _, _))
+  EXPECT_CALL(*component_factory(), CreateDataTypeManager)
       .WillOnce(
           ReturnNewFakeDataTypeManager(GetDefaultConfigureCalledCallback()));
   InitializeForNthSync();
@@ -500,53 +489,58 @@ TEST_F(ProfileSyncServiceTest, DisabledByPolicyBeforeInit) {
   prefs()->SetManagedPref(prefs::kSyncManaged,
                           std::make_unique<base::Value>(true));
   SignIn();
-  CreateService(ProfileSyncService::AUTO_START);
+  CreateService(ProfileSyncService::MANUAL_START);
   InitializeForNthSync();
+  // Sync was disabled due to the policy, setting SyncRequested to false and
+  // causing DISABLE_REASON_USER_CHOICE.
   EXPECT_EQ(SyncService::DisableReasonSet(
-                SyncService::DISABLE_REASON_ENTERPRISE_POLICY),
+                SyncService::DISABLE_REASON_ENTERPRISE_POLICY,
+                SyncService::DISABLE_REASON_USER_CHOICE),
             service()->GetDisableReasons());
   EXPECT_EQ(SyncService::TransportState::DISABLED,
             service()->GetTransportState());
 }
 
-// This test exercises sign-in after startup, which isn't supported on ChromeOS.
-#if !defined(OS_CHROMEOS)
 TEST_F(ProfileSyncServiceTest, DisabledByPolicyBeforeInitThenPolicyRemoved) {
   prefs()->SetManagedPref(prefs::kSyncManaged,
                           std::make_unique<base::Value>(true));
-  CreateService(ProfileSyncService::AUTO_START);
+  SignIn();
+  CreateService(ProfileSyncService::MANUAL_START);
   InitializeForNthSync();
+  // Sync was disabled due to the policy, setting SyncRequested to false and
+  // causing DISABLE_REASON_USER_CHOICE.
   EXPECT_EQ(SyncService::DisableReasonSet(
                 SyncService::DISABLE_REASON_ENTERPRISE_POLICY,
-                SyncService::DISABLE_REASON_NOT_SIGNED_IN),
+                SyncService::DISABLE_REASON_USER_CHOICE),
             service()->GetDisableReasons());
   EXPECT_EQ(SyncService::TransportState::DISABLED,
             service()->GetTransportState());
 
-  // Remove the policy. Now only missing sign-in is preventing startup.
+  // Remove the policy. Sync-the-feature is still disabled, sync-the-transport
+  // can run.
   prefs()->SetManagedPref(prefs::kSyncManaged,
                           std::make_unique<base::Value>(false));
   EXPECT_EQ(
-      SyncService::DisableReasonSet(SyncService::DISABLE_REASON_NOT_SIGNED_IN),
+      SyncService::DisableReasonSet(SyncService::DISABLE_REASON_USER_CHOICE),
       service()->GetDisableReasons());
-  EXPECT_EQ(SyncService::TransportState::DISABLED,
+  EXPECT_EQ(SyncService::TransportState::ACTIVE,
             service()->GetTransportState());
 
   // Once we mark first setup complete again (it was cleared by the policy) and
-  // sign in, sync starts up.
+  // set SyncRequested to true, sync starts up.
+  service()->GetUserSettings()->SetSyncRequested(true);
   service()->GetUserSettings()->SetFirstSetupComplete(
       syncer::SyncFirstSetupCompleteSource::BASIC_FLOW);
-  SignIn();
   EXPECT_EQ(SyncService::TransportState::ACTIVE,
             service()->GetTransportState());
+  EXPECT_TRUE(service()->GetDisableReasons().Empty());
 }
-#endif  // !defined(OS_CHROMEOS)
 
 // Verify that disable by enterprise policy works even after the backend has
 // been initialized.
 TEST_F(ProfileSyncServiceTest, DisabledByPolicyAfterInit) {
   SignIn();
-  CreateService(ProfileSyncService::AUTO_START);
+  CreateService(ProfileSyncService::MANUAL_START);
   InitializeForNthSync();
 
   ASSERT_EQ(SyncService::DisableReasonSet(), service()->GetDisableReasons());
@@ -556,8 +550,11 @@ TEST_F(ProfileSyncServiceTest, DisabledByPolicyAfterInit) {
   prefs()->SetManagedPref(prefs::kSyncManaged,
                           std::make_unique<base::Value>(true));
 
+  // Sync was disabled due to the policy, setting SyncRequested to false and
+  // causing DISABLE_REASON_USER_CHOICE.
   EXPECT_EQ(SyncService::DisableReasonSet(
-                SyncService::DISABLE_REASON_ENTERPRISE_POLICY),
+                SyncService::DISABLE_REASON_ENTERPRISE_POLICY,
+                SyncService::DISABLE_REASON_USER_CHOICE),
             service()->GetDisableReasons());
   EXPECT_EQ(SyncService::TransportState::DISABLED,
             service()->GetTransportState());
@@ -566,11 +563,11 @@ TEST_F(ProfileSyncServiceTest, DisabledByPolicyAfterInit) {
 // Exercises the ProfileSyncService's code paths related to getting shut down
 // before the backend initialize call returns.
 TEST_F(ProfileSyncServiceTest, AbortedByShutdown) {
-  CreateService(ProfileSyncService::AUTO_START);
-  ON_CALL(*component_factory(), CreateSyncEngine(_, _, _, _))
+  SignIn();
+  CreateService(ProfileSyncService::MANUAL_START);
+  ON_CALL(*component_factory(), CreateSyncEngine)
       .WillByDefault(ReturnNewFakeSyncEngineNoReturn());
 
-  SignIn();
   InitializeForNthSync();
   ASSERT_EQ(SyncService::TransportState::INITIALIZING,
             service()->GetTransportState());
@@ -580,11 +577,11 @@ TEST_F(ProfileSyncServiceTest, AbortedByShutdown) {
 
 // Test SetSyncRequested(false) before we've initialized the backend.
 TEST_F(ProfileSyncServiceTest, EarlyRequestStop) {
-  CreateService(ProfileSyncService::AUTO_START);
-  // Set up a fake sync engine that will not immediately finish initialization.
-  EXPECT_CALL(*component_factory(), CreateSyncEngine(_, _, _, _))
-      .WillOnce(ReturnNewFakeSyncEngineNoReturn());
   SignIn();
+  CreateService(ProfileSyncService::MANUAL_START);
+  // Set up a fake sync engine that will not immediately finish initialization.
+  EXPECT_CALL(*component_factory(), CreateSyncEngine)
+      .WillOnce(ReturnNewFakeSyncEngineNoReturn());
   InitializeForNthSync();
 
   ASSERT_EQ(SyncService::TransportState::INITIALIZING,
@@ -592,7 +589,7 @@ TEST_F(ProfileSyncServiceTest, EarlyRequestStop) {
 
   // Request stop. This should immediately restart the service in standalone
   // transport mode.
-  EXPECT_CALL(*component_factory(), CreateSyncEngine(_, _, _, _))
+  EXPECT_CALL(*component_factory(), CreateSyncEngine)
       .WillOnce(ReturnNewFakeSyncEngine());
   service()->GetUserSettings()->SetSyncRequested(false);
   EXPECT_EQ(
@@ -614,8 +611,8 @@ TEST_F(ProfileSyncServiceTest, EarlyRequestStop) {
 
 // Test SetSyncRequested(false) after we've initialized the backend.
 TEST_F(ProfileSyncServiceTest, DisableAndEnableSyncTemporarily) {
-  CreateService(ProfileSyncService::AUTO_START);
   SignIn();
+  CreateService(ProfileSyncService::MANUAL_START);
   InitializeForNthSync();
 
   SyncPrefs sync_prefs(prefs());
@@ -650,11 +647,11 @@ TEST_F(ProfileSyncServiceTest, DisableAndEnableSyncTemporarily) {
 
 // Certain ProfileSyncService tests don't apply to Chrome OS, for example
 // things that deal with concepts like "signing out".
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
 TEST_F(ProfileSyncServiceTest, SignOutDisablesSyncTransportAndSyncFeature) {
   // Sign-in and enable sync.
-  CreateService(ProfileSyncService::AUTO_START);
   SignIn();
+  CreateService(ProfileSyncService::MANUAL_START);
   InitializeForNthSync();
   ASSERT_EQ(SyncService::DisableReasonSet(), service()->GetDisableReasons());
   ASSERT_EQ(SyncService::TransportState::ACTIVE,
@@ -664,13 +661,14 @@ TEST_F(ProfileSyncServiceTest, SignOutDisablesSyncTransportAndSyncFeature) {
   auto* account_mutator = identity_manager()->GetPrimaryAccountMutator();
   DCHECK(account_mutator) << "Account mutator should only be null on ChromeOS.";
   account_mutator->ClearPrimaryAccount(
-      signin::PrimaryAccountMutator::ClearAccountsAction::kDefault,
       signin_metrics::SIGNOUT_TEST,
       signin_metrics::SignoutDelete::IGNORE_METRIC);
   // Wait for ProfileSyncService to be notified.
   base::RunLoop().RunUntilIdle();
+  // SyncRequested was set to false, causing DISABLE_REASON_USER_CHOICE.
   EXPECT_EQ(
-      SyncService::DisableReasonSet(SyncService::DISABLE_REASON_NOT_SIGNED_IN),
+      SyncService::DisableReasonSet(SyncService::DISABLE_REASON_NOT_SIGNED_IN,
+                                    SyncService::DISABLE_REASON_USER_CHOICE),
       service()->GetDisableReasons());
   EXPECT_EQ(SyncService::TransportState::DISABLED,
             service()->GetTransportState());
@@ -679,8 +677,8 @@ TEST_F(ProfileSyncServiceTest, SignOutDisablesSyncTransportAndSyncFeature) {
 TEST_F(ProfileSyncServiceTest,
        SignOutClearsSyncTransportDataAndSyncTheFeaturePrefs) {
   // Sign-in and enable sync.
-  CreateService(ProfileSyncService::AUTO_START);
   SignIn();
+  CreateService(ProfileSyncService::MANUAL_START);
   InitializeForNthSync();
   ASSERT_TRUE(service()->GetUserSettings()->IsFirstSetupComplete());
   ASSERT_TRUE(service()->GetUserSettings()->IsSyncRequested());
@@ -691,21 +689,31 @@ TEST_F(ProfileSyncServiceTest,
   EXPECT_CALL(*sync_client(), OnLocalSyncTransportDataCleared())
       .Times(testing::AtLeast(1));
   account_mutator->ClearPrimaryAccount(
-      signin::PrimaryAccountMutator::ClearAccountsAction::kDefault,
       signin_metrics::SIGNOUT_TEST,
       signin_metrics::SignoutDelete::IGNORE_METRIC);
   // Wait for ProfileSyncService to be notified.
   base::RunLoop().RunUntilIdle();
   // These are specific to sync-the-feature and should be cleared.
   EXPECT_FALSE(service()->GetUserSettings()->IsFirstSetupComplete());
-  // TODO(crbug.com/1147026): Add expectation for IsSyncRequested when it's
-  // being cleared.
+  EXPECT_FALSE(service()->GetUserSettings()->IsSyncRequested());
+}
+
+TEST_F(ProfileSyncServiceTest, SyncRequestedSetToFalseIfStartsSignedOut) {
+  // Set up bad state.
+  SyncPrefs sync_prefs(prefs());
+  sync_prefs.SetSyncRequested(true);
+
+  CreateService(ProfileSyncService::MANUAL_START);
+  service()->Initialize();
+
+  // There's no signed-in user, so SyncRequested should have been set to false.
+  EXPECT_FALSE(service()->GetUserSettings()->IsSyncRequested());
 }
 
 TEST_F(ProfileSyncServiceTest, IdentityProvider_GetActiveAccountId) {
   // Sign-in and enable sync.
-  CreateService(ProfileSyncService::AUTO_START);
   SignIn();
+  CreateService(ProfileSyncService::MANUAL_START);
   InitializeForNthSync();
   EXPECT_EQ(identity_manager()->GetPrimaryAccountId(),
             identity_provider()->GetActiveAccountId());
@@ -714,7 +722,6 @@ TEST_F(ProfileSyncServiceTest, IdentityProvider_GetActiveAccountId) {
   auto* account_mutator = identity_manager()->GetPrimaryAccountMutator();
   DCHECK(account_mutator) << "Account mutator should only be null on ChromeOS.";
   account_mutator->ClearPrimaryAccount(
-      signin::PrimaryAccountMutator::ClearAccountsAction::kDefault,
       signin_metrics::SIGNOUT_TEST,
       signin_metrics::SignoutDelete::IGNORE_METRIC);
   // Wait for ProfileSyncService to be notified.
@@ -728,12 +735,11 @@ TEST_F(ProfileSyncServiceTest, IdentityProvider_GetActiveAccountId) {
   EXPECT_EQ(identity_manager()->GetPrimaryAccountId(),
             identity_provider()->GetActiveAccountId());
 }
-#endif  // !defined(OS_CHROMEOS)
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
 TEST_F(ProfileSyncServiceTest, GetSyncTokenStatus) {
-  CreateService(ProfileSyncService::AUTO_START);
-
   SignIn();
+  CreateService(ProfileSyncService::MANUAL_START);
   InitializeForNthSync();
 
   // Initial status.
@@ -781,12 +787,12 @@ TEST_F(ProfileSyncServiceTest, GetSyncTokenStatus) {
 TEST_F(ProfileSyncServiceTest, RevokeAccessTokenFromTokenService) {
   CoreAccountId init_account_id;
 
-  CreateService(ProfileSyncService::AUTO_START);
   SignIn();
-  EXPECT_CALL(*component_factory(), CreateSyncEngine(_, _, _, _))
+  CreateService(ProfileSyncService::MANUAL_START);
+  EXPECT_CALL(*component_factory(), CreateSyncEngine)
       .WillOnce(
           Return(ByMove(std::make_unique<FakeSyncEngineCollectCredentials>(
-              &init_account_id, base::RepeatingClosure()))));
+              &init_account_id, base::DoNothing()))));
   InitializeForNthSync();
   ASSERT_EQ(SyncService::TransportState::ACTIVE,
             service()->GetTransportState());
@@ -819,17 +825,14 @@ TEST_F(ProfileSyncServiceTest, RevokeAccessTokenFromTokenService) {
 // Checks that CREDENTIALS_REJECTED_BY_CLIENT resets the access token and stops
 // Sync. Regression test for https://crbug.com/824791.
 TEST_F(ProfileSyncServiceTest, CredentialsRejectedByClient_StopSync) {
-  base::test::ScopedFeatureList feature;
-  feature.InitAndEnableFeature(switches::kStopSyncInPausedState);
-
   CoreAccountId init_account_id;
 
-  CreateService(ProfileSyncService::AUTO_START);
   SignIn();
-  EXPECT_CALL(*component_factory(), CreateSyncEngine(_, _, _, _))
+  CreateService(ProfileSyncService::MANUAL_START);
+  EXPECT_CALL(*component_factory(), CreateSyncEngine)
       .WillOnce(
           Return(ByMove(std::make_unique<FakeSyncEngineCollectCredentials>(
-              &init_account_id, base::RepeatingClosure()))));
+              &init_account_id, base::DoNothing()))));
   InitializeForNthSync();
   ASSERT_EQ(SyncService::TransportState::ACTIVE,
             service()->GetTransportState());
@@ -877,81 +880,17 @@ TEST_F(ProfileSyncServiceTest, CredentialsRejectedByClient_StopSync) {
   service()->RemoveObserver(&observer);
 }
 
-TEST_F(ProfileSyncServiceTest, CredentialsRejectedByClient_DoNotStopSync) {
-  base::test::ScopedFeatureList feature;
-  feature.InitAndDisableFeature(switches::kStopSyncInPausedState);
-
-  CoreAccountId init_account_id;
-
-  bool invalidate_credentials_called = false;
-  base::RepeatingClosure invalidate_credentials_callback =
-      base::BindRepeating([](bool* called) { *called = true; },
-                          base::Unretained(&invalidate_credentials_called));
-
-  CreateService(ProfileSyncService::AUTO_START);
-  SignIn();
-  EXPECT_CALL(*component_factory(), CreateSyncEngine(_, _, _, _))
-      .WillOnce(
-          Return(ByMove(std::make_unique<FakeSyncEngineCollectCredentials>(
-              &init_account_id, invalidate_credentials_callback))));
-  InitializeForNthSync();
-  ASSERT_EQ(SyncService::TransportState::ACTIVE,
-            service()->GetTransportState());
-
-  TestSyncServiceObserver observer;
-  service()->AddObserver(&observer);
-
-  const CoreAccountId primary_account_id =
-      identity_manager()->GetPrimaryAccountId();
-
-  // Make sure the expected account_id was passed to the SyncEngine.
-  ASSERT_EQ(primary_account_id, init_account_id);
-
-  // At this point, the real SyncEngine would try to connect to the server, fail
-  // (because it has no access token), and eventually call
-  // OnConnectionStatusChange(CONNECTION_AUTH_ERROR). Since our fake SyncEngine
-  // doesn't do any of this, call that explicitly here.
-  service()->OnConnectionStatusChange(CONNECTION_AUTH_ERROR);
-
-  base::RunLoop().RunUntilIdle();
-  ASSERT_FALSE(service()->GetAccessTokenForTest().empty());
-  ASSERT_EQ(GoogleServiceAuthError::AuthErrorNone(), service()->GetAuthError());
-  ASSERT_EQ(GoogleServiceAuthError::AuthErrorNone(), observer.auth_error());
-
-  // Simulate the credentials getting locally rejected by the client by setting
-  // the refresh token to a special invalid value.
-  identity_test_env()->SetInvalidRefreshTokenForPrimaryAccount();
-  const GoogleServiceAuthError rejected_by_client =
-      GoogleServiceAuthError::FromInvalidGaiaCredentialsReason(
-          GoogleServiceAuthError::InvalidGaiaCredentialsReason::
-              CREDENTIALS_REJECTED_BY_CLIENT);
-  ASSERT_EQ(rejected_by_client,
-            identity_test_env()
-                ->identity_manager()
-                ->GetErrorStateOfRefreshTokenForAccount(primary_account_id));
-  EXPECT_TRUE(service()->GetAccessTokenForTest().empty());
-  EXPECT_TRUE(invalidate_credentials_called);
-
-  // The observer should have been notified of the auth error state.
-  EXPECT_EQ(rejected_by_client, observer.auth_error());
-  // The Sync engine should still be running.
-  EXPECT_EQ(SyncService::TransportState::ACTIVE,
-            service()->GetTransportState());
-
-  service()->RemoveObserver(&observer);
-}
-
 // CrOS does not support signout.
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
 TEST_F(ProfileSyncServiceTest, SignOutRevokeAccessToken) {
   CoreAccountId init_account_id;
 
-  CreateService(ProfileSyncService::AUTO_START);
   SignIn();
-  EXPECT_CALL(*component_factory(), CreateSyncEngine(_, _, _, _))
+  CreateService(ProfileSyncService::MANUAL_START);
+  EXPECT_CALL(*component_factory(), CreateSyncEngine)
       .WillOnce(
           Return(ByMove(std::make_unique<FakeSyncEngineCollectCredentials>(
-              &init_account_id, base::RepeatingClosure()))));
+              &init_account_id, base::DoNothing()))));
   InitializeForNthSync();
   ASSERT_EQ(SyncService::TransportState::ACTIVE,
             service()->GetTransportState());
@@ -977,7 +916,6 @@ TEST_F(ProfileSyncServiceTest, SignOutRevokeAccessToken) {
   DCHECK(account_mutator);
 
   account_mutator->ClearPrimaryAccount(
-      signin::PrimaryAccountMutator::ClearAccountsAction::kDefault,
       signin_metrics::SIGNOUT_TEST,
       signin_metrics::SignoutDelete::IGNORE_METRIC);
   EXPECT_TRUE(service()->GetAccessTokenForTest().empty());
@@ -987,7 +925,7 @@ TEST_F(ProfileSyncServiceTest, SignOutRevokeAccessToken) {
 TEST_F(ProfileSyncServiceTest,
        StopAndClearWillClearDataAndSwitchToTransportMode) {
   SignIn();
-  CreateService(ProfileSyncService::AUTO_START);
+  CreateService(ProfileSyncService::MANUAL_START);
   InitializeForNthSync();
   ASSERT_EQ(SyncService::TransportState::ACTIVE,
             service()->GetTransportState());
@@ -1014,7 +952,7 @@ TEST_F(ProfileSyncServiceTest,
 // and account is signed out.
 TEST_F(ProfileSyncServiceTest, ClearDemographicsOnInitializeWhenSignedOut) {
   // Don't sign-in before creating the service.
-  CreateService(ProfileSyncService::AUTO_START);
+  CreateService(ProfileSyncService::MANUAL_START);
 
   // Local transport data should be cleared and the client notified.
   EXPECT_CALL(*sync_client(), OnLocalSyncTransportDataCleared());
@@ -1025,7 +963,7 @@ TEST_F(ProfileSyncServiceTest, ClearDemographicsOnInitializeWhenSignedOut) {
 
 TEST_F(ProfileSyncServiceTest, StopSyncAndClearTwiceDoesNotCrash) {
   SignIn();
-  CreateService(ProfileSyncService::AUTO_START);
+  CreateService(ProfileSyncService::MANUAL_START);
   InitializeForNthSync();
   ASSERT_EQ(SyncService::TransportState::ACTIVE,
             service()->GetTransportState());
@@ -1053,12 +991,12 @@ TEST_F(ProfileSyncServiceTest, CredentialErrorReturned) {
 
   CoreAccountId init_account_id;
 
-  CreateService(ProfileSyncService::AUTO_START);
   SignIn();
-  EXPECT_CALL(*component_factory(), CreateSyncEngine(_, _, _, _))
+  CreateService(ProfileSyncService::MANUAL_START);
+  EXPECT_CALL(*component_factory(), CreateSyncEngine)
       .WillOnce(
           Return(ByMove(std::make_unique<FakeSyncEngineCollectCredentials>(
-              &init_account_id, base::RepeatingClosure()))));
+              &init_account_id, base::DoNothing()))));
   InitializeForNthSync();
   ASSERT_EQ(SyncService::TransportState::ACTIVE,
             service()->GetTransportState());
@@ -1114,12 +1052,12 @@ TEST_F(ProfileSyncServiceTest, CredentialErrorClearsOnNewToken) {
 
   CoreAccountId init_account_id;
 
-  CreateService(ProfileSyncService::AUTO_START);
   SignIn();
-  EXPECT_CALL(*component_factory(), CreateSyncEngine(_, _, _, _))
+  CreateService(ProfileSyncService::MANUAL_START);
+  EXPECT_CALL(*component_factory(), CreateSyncEngine)
       .WillOnce(
           Return(ByMove(std::make_unique<FakeSyncEngineCollectCredentials>(
-              &init_account_id, base::RepeatingClosure()))));
+              &init_account_id, base::DoNothing()))));
   InitializeForNthSync();
   ASSERT_EQ(SyncService::TransportState::ACTIVE,
             service()->GetTransportState());
@@ -1193,7 +1131,7 @@ TEST_F(ProfileSyncServiceTest, NoDisableSyncFlag) {
 // on a datatype type requesting startup, but only happens once.
 TEST_F(ProfileSyncServiceTest, PassphrasePromptDueToVersion) {
   SignIn();
-  CreateService(ProfileSyncService::AUTO_START);
+  CreateService(ProfileSyncService::MANUAL_START);
   InitializeForNthSync();
 
   SyncPrefs sync_prefs(prefs());
@@ -1222,15 +1160,15 @@ TEST_F(ProfileSyncServiceTest, PassphrasePromptDueToVersion) {
 // RESET_LOCAL_SYNC_DATA it restarts sync.
 TEST_F(ProfileSyncServiceTest, ResetSyncData) {
   SignIn();
-  CreateService(ProfileSyncService::AUTO_START);
+  CreateService(ProfileSyncService::MANUAL_START);
   // Backend should get initialized two times: once during initialization and
   // once when handling actionable error.
-  EXPECT_CALL(*component_factory(), CreateDataTypeManager(_, _, _, _, _, _))
+  EXPECT_CALL(*component_factory(), CreateDataTypeManager)
       .WillOnce(
           ReturnNewFakeDataTypeManager(GetDefaultConfigureCalledCallback()))
       .WillOnce(
           ReturnNewFakeDataTypeManager(GetDefaultConfigureCalledCallback()));
-  EXPECT_CALL(*component_factory(), CreateSyncEngine(_, _, _, _))
+  EXPECT_CALL(*component_factory(), CreateSyncEngine)
       .WillOnce(ReturnNewFakeSyncEngine())
       .WillOnce(ReturnNewFakeSyncEngine());
 
@@ -1245,7 +1183,7 @@ TEST_F(ProfileSyncServiceTest, ResetSyncData) {
 // DISABLE_SYNC_ON_CLIENT it disables sync and signs out.
 TEST_F(ProfileSyncServiceTest, DisableSyncOnClient) {
   SignIn();
-  CreateService(ProfileSyncService::AUTO_START);
+  CreateService(ProfileSyncService::MANUAL_START);
   InitializeForNthSync();
 
   ASSERT_EQ(SyncService::TransportState::ACTIVE,
@@ -1257,7 +1195,7 @@ TEST_F(ProfileSyncServiceTest, DisableSyncOnClient) {
   client_cmd.action = DISABLE_SYNC_ON_CLIENT;
   service()->OnActionableError(client_cmd);
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // ChromeOS does not support signout.
   EXPECT_TRUE(identity_manager()->HasPrimaryAccount());
   EXPECT_EQ(
@@ -1320,8 +1258,8 @@ TEST_F(ProfileSyncServiceTest, ConfigureDataTypeManagerReason) {
   SignIn();
 
   // First sync.
-  CreateService(ProfileSyncService::AUTO_START);
-  EXPECT_CALL(*component_factory(), CreateDataTypeManager(_, _, _, _, _, _))
+  CreateService(ProfileSyncService::MANUAL_START);
+  EXPECT_CALL(*component_factory(), CreateDataTypeManager)
       .WillOnce(ReturnNewFakeDataTypeManager(
           GetRecordingConfigureCalledCallback(&configure_reason)));
   InitializeForFirstSync();
@@ -1340,8 +1278,8 @@ TEST_F(ProfileSyncServiceTest, ConfigureDataTypeManagerReason) {
   ShutdownAndDeleteService();
 
   // Nth sync.
-  CreateService(ProfileSyncService::AUTO_START);
-  EXPECT_CALL(*component_factory(), CreateDataTypeManager(_, _, _, _, _, _))
+  CreateService(ProfileSyncService::MANUAL_START);
+  EXPECT_CALL(*component_factory(), CreateDataTypeManager)
       .WillOnce(ReturnNewFakeDataTypeManager(
           GetRecordingConfigureCalledCallback(&configure_reason)));
   InitializeForNthSync();
@@ -1370,11 +1308,10 @@ TEST_F(ProfileSyncServiceTest, GenerateCacheGUID) {
 
 // Regression test for crbug.com/1043642, can be removed once
 // ProfileSyncService usages after shutdown are addressed.
-TEST_F(ProfileSyncServiceTestWithStopSyncInPausedState,
-       ShouldProvideDisableReasonsAfterShutdown) {
-  CreateService(ProfileSyncService::AUTO_START);
-  InitializeForFirstSync();
+TEST_F(ProfileSyncServiceTest, ShouldProvideDisableReasonsAfterShutdown) {
   SignIn();
+  CreateService(ProfileSyncService::MANUAL_START);
+  InitializeForFirstSync();
   service()->Shutdown();
   EXPECT_FALSE(service()->GetDisableReasons().Empty());
 }
@@ -1383,7 +1320,7 @@ TEST_F(ProfileSyncServiceTest, ShouldPopulateAccountIdCachedInPrefs) {
   SyncPrefs sync_prefs(prefs());
 
   SignIn();
-  CreateService(ProfileSyncService::AUTO_START);
+  CreateService(ProfileSyncService::MANUAL_START);
   InitializeForNthSync();
   ASSERT_EQ(SyncService::TransportState::ACTIVE,
             service()->GetTransportState());
@@ -1420,7 +1357,6 @@ TEST_F(ProfileSyncServiceTest, DecoupleFromMasterSyncIfSignsOut) {
   auto* account_mutator = identity_manager()->GetPrimaryAccountMutator();
   DCHECK(account_mutator) << "Account mutator should only be null on ChromeOS.";
   account_mutator->ClearPrimaryAccount(
-      signin::PrimaryAccountMutator::ClearAccountsAction::kDefault,
       signin_metrics::SIGNOUT_TEST,
       signin_metrics::SignoutDelete::IGNORE_METRIC);
   // Wait for ProfileSyncService to be notified.
@@ -1449,7 +1385,7 @@ TEST_F(ProfileSyncServiceTest,
   SyncPrefs sync_prefs(prefs());
 
   SignIn();
-  CreateService(ProfileSyncService::AUTO_START);
+  CreateService(ProfileSyncService::MANUAL_START);
   PopulatePrefsForNthSync();
   ASSERT_EQ(kTestCacheGuid, sync_prefs.GetCacheGuid());
 
@@ -1467,9 +1403,9 @@ TEST_F(ProfileSyncServiceTest,
 
 TEST_F(ProfileSyncServiceTestWithSyncInvalidationsServiceCreated,
        ShouldSendDataTypesToSyncInvalidationsService) {
-  CreateService(ProfileSyncService::AUTO_START);
   SignIn();
-  EXPECT_CALL(*sync_invalidations_service(), SetInterestedDataTypes(_, _));
+  CreateService(ProfileSyncService::MANUAL_START);
+  EXPECT_CALL(*sync_invalidations_service(), SetInterestedDataTypes);
   InitializeForFirstSync();
 }
 
@@ -1479,9 +1415,9 @@ MATCHER(ContainsSessions, "") {
 
 TEST_F(ProfileSyncServiceTestWithSyncInvalidationsServiceCreated,
        ShouldEnableAndDisableInvalidationsForSessions) {
-  CreateService(ProfileSyncService::AUTO_START, nullptr,
-                {{SESSIONS, false}, {TYPED_URLS, false}});
   SignIn();
+  CreateService(ProfileSyncService::MANUAL_START, nullptr,
+                {{SESSIONS, false}, {TYPED_URLS, false}});
   InitializeForNthSync();
 
   EXPECT_CALL(*sync_invalidations_service(),
@@ -1494,16 +1430,16 @@ TEST_F(ProfileSyncServiceTestWithSyncInvalidationsServiceCreated,
 
 TEST_F(ProfileSyncServiceTestWithSyncInvalidationsServiceCreated,
        ShouldActivateSyncInvalidationsServiceWhenSyncIsInitialized) {
-  CreateService(ProfileSyncService::AUTO_START);
-  EXPECT_CALL(*sync_invalidations_service(), SetActive(true)).Times(0);
   SignIn();
+  CreateService(ProfileSyncService::MANUAL_START);
+  EXPECT_CALL(*sync_invalidations_service(), SetActive(true)).Times(0);
   EXPECT_CALL(*sync_invalidations_service(), SetActive(true));
   InitializeForFirstSync();
 }
 
 TEST_F(ProfileSyncServiceTestWithSyncInvalidationsServiceCreated,
        ShouldActivateSyncInvalidationsServiceOnSignIn) {
-  CreateService(ProfileSyncService::AUTO_START);
+  CreateService(ProfileSyncService::MANUAL_START);
   EXPECT_CALL(*sync_invalidations_service(), SetActive(false));
   InitializeForFirstSync();
   EXPECT_CALL(*sync_invalidations_service(), SetActive(true));
@@ -1511,11 +1447,11 @@ TEST_F(ProfileSyncServiceTestWithSyncInvalidationsServiceCreated,
 }
 
 // CrOS does not support signout.
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
 TEST_F(ProfileSyncServiceTestWithSyncInvalidationsServiceCreated,
        ShouldDectivateSyncInvalidationsServiceOnSignOut) {
-  CreateService(ProfileSyncService::AUTO_START);
   SignIn();
+  CreateService(ProfileSyncService::MANUAL_START);
   EXPECT_CALL(*sync_invalidations_service(), SetActive(true));
   InitializeForFirstSync();
 
@@ -1526,7 +1462,6 @@ TEST_F(ProfileSyncServiceTestWithSyncInvalidationsServiceCreated,
   // Sign out.
   EXPECT_CALL(*sync_invalidations_service(), SetActive(false));
   account_mutator->ClearPrimaryAccount(
-      signin::PrimaryAccountMutator::ClearAccountsAction::kDefault,
       signin_metrics::SIGNOUT_TEST,
       signin_metrics::SignoutDelete::IGNORE_METRIC);
 }

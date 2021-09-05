@@ -321,15 +321,6 @@ void BubbleDialogModelHost::Close() {
   model_.reset();
 }
 
-void BubbleDialogModelHost::SelectAllText(int unique_id) {
-  const DialogModelHostField& field_view_info =
-      FindDialogModelHostField(model_->GetFieldByUniqueId(unique_id));
-
-  DCHECK(field_view_info.focusable_view);
-  static_cast<views::Textfield*>(field_view_info.focusable_view)
-      ->SelectAll(false);
-}
-
 void BubbleDialogModelHost::OnFieldAdded(ui::DialogModelField* field) {
   switch (field->type(GetPassKey())) {
     case ui::DialogModelField::kButton:
@@ -439,10 +430,11 @@ void BubbleDialogModelHost::AddOrUpdateCheckbox(
     const int line_height = label->GetLineHeight();
     checkbox = std::make_unique<CheckboxControl>(std::move(label), line_height);
   }
+  checkbox->SetChecked(model_field->is_checked());
 
   checkbox->SetCallback(base::BindRepeating(
       [](ui::DialogModelCheckbox* model_field,
-         util::PassKey<DialogModelHost> pass_key, Checkbox* checkbox,
+         base::PassKey<DialogModelHost> pass_key, Checkbox* checkbox,
          const ui::Event& event) {
         model_field->OnChecked(pass_key, checkbox->GetChecked());
       },
@@ -462,7 +454,7 @@ void BubbleDialogModelHost::AddOrUpdateCombobox(
                                   : model_field->accessible_name(GetPassKey()));
   combobox->SetCallback(base::BindRepeating(
       [](ui::DialogModelCombobox* model_field,
-         util::PassKey<DialogModelHost> pass_key, Combobox* combobox) {
+         base::PassKey<DialogModelHost> pass_key, Combobox* combobox) {
         // TODO(pbos): This should be a subscription through the Combobox
         // directly, but Combobox right now doesn't support listening to
         // selected-index changes.
@@ -490,10 +482,19 @@ void BubbleDialogModelHost::AddOrUpdateTextfield(
           : model_field->accessible_name(GetPassKey()));
   textfield->SetText(model_field->text());
 
+  // If this textfield is initially focused the text should be initially
+  // selected as well.
+  base::Optional<int> initially_focused_field_id =
+      model_->initially_focused_field(GetPassKey());
+  if (initially_focused_field_id &&
+      model_field->unique_id(GetPassKey()) == initially_focused_field_id) {
+    textfield->SelectAll(true);
+  }
+
   property_changed_subscriptions_.push_back(
       textfield->AddTextChangedCallback(base::BindRepeating(
           [](ui::DialogModelTextfield* model_field,
-             util::PassKey<DialogModelHost> pass_key, Textfield* textfield) {
+             base::PassKey<DialogModelHost> pass_key, Textfield* textfield) {
             model_field->OnTextChanged(pass_key, textfield->GetText());
           },
           model_field, GetPassKey(), textfield.get())));

@@ -8,6 +8,8 @@ import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
 
 import static androidx.test.espresso.Espresso.onView;
 import static androidx.test.espresso.action.ViewActions.click;
+import static androidx.test.espresso.action.ViewActions.pressKey;
+import static androidx.test.espresso.action.ViewActions.replaceText;
 import static androidx.test.espresso.assertion.ViewAssertions.doesNotExist;
 import static androidx.test.espresso.assertion.ViewAssertions.matches;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
@@ -17,6 +19,7 @@ import static androidx.test.espresso.matcher.ViewMatchers.withText;
 import static com.google.common.truth.Truth.assertThat;
 
 import static org.hamcrest.CoreMatchers.allOf;
+import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.not;
 import static org.hamcrest.Matchers.greaterThan;
@@ -37,6 +40,7 @@ import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.MediumTest;
 import android.text.TextUtils;
 import android.util.Base64;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
@@ -48,6 +52,7 @@ import androidx.test.filters.SmallTest;
 
 import org.hamcrest.Description;
 import org.hamcrest.Matcher;
+import org.hamcrest.MatcherAssert;
 import org.hamcrest.core.AllOf;
 import org.junit.Assert;
 import org.junit.Rule;
@@ -73,6 +78,7 @@ import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
+import org.chromium.base.test.util.ScalableTimeout;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.compositor.layouts.Layout;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManagerChromePhone;
@@ -81,6 +87,7 @@ import org.chromium.chrome.browser.compositor.layouts.StaticLayout;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.feed.FeedV1;
+import org.chromium.chrome.browser.feed.FeedV2;
 import org.chromium.chrome.browser.feed.shared.FeedFeatures;
 import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -110,8 +117,10 @@ import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
 import org.chromium.chrome.test.util.OmniboxTestUtils;
+import org.chromium.chrome.test.util.OverviewModeBehaviorWatcher;
 import org.chromium.chrome.test.util.ViewUtils;
 import org.chromium.chrome.test.util.browser.Features;
+import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
@@ -121,7 +130,7 @@ import org.chromium.ui.test.util.UiRestriction;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -159,13 +168,16 @@ public class InstantStartTest {
      * Parameter set controlling whether Feed v2 is enabled.
      */
     public static class FeedParams implements ParameterProvider {
-        private static List<ParameterSet> sFeedParams =
-                Arrays.asList(new ParameterSet().value(false).name("FeedV1"),
-                        new ParameterSet().value(true).name("FeedV2"));
-
         @Override
         public List<ParameterSet> getParameters() {
-            return sFeedParams;
+            List<ParameterSet> feedParams = new ArrayList<ParameterSet>();
+            if (FeedV1.IS_AVAILABLE) {
+                feedParams.add(new ParameterSet().value(false).name("FeedV1"));
+            }
+            if (FeedV2.IS_AVAILABLE) {
+                feedParams.add(new ParameterSet().value(true).name("FeedV2"));
+            }
+            return feedParams;
         }
     }
 
@@ -182,7 +194,7 @@ public class InstantStartTest {
         Intent intent = new Intent(Intent.ACTION_MAIN);
         intent.addCategory(Intent.CATEGORY_LAUNCHER);
         mActivityTestRule.prepareUrlIntent(intent, null);
-        mActivityTestRule.startActivityCompletely(intent);
+        mActivityTestRule.launchActivity(intent);
     }
 
     public static Bitmap createThumbnailBitmapAndWriteToFile(int tabId) {
@@ -281,7 +293,8 @@ public class InstantStartTest {
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> mActivityTestRule.getActivity().startDelayedNativeInitializationForTests());
         CriteriaHelper.pollUiThread(
-                mActivityTestRule.getActivity().getTabModelSelector()::isTabStateInitialized);
+                mActivityTestRule.getActivity().getTabModelSelector()::isTabStateInitialized,
+                ScalableTimeout.scaleTimeout(10000L), CriteriaHelper.DEFAULT_POLLING_INTERVAL);
         Assert.assertTrue(LibraryLoader.getInstance().isInitialized());
     }
 
@@ -578,6 +591,7 @@ public class InstantStartTest {
             RecyclerView.ViewHolder viewHolder = recyclerView.findViewHolderForAdapterPosition(i);
             if (viewHolder != null) {
                 ImageView thumbnail = viewHolder.itemView.findViewById(R.id.tab_thumbnail);
+                if (!(thumbnail.getDrawable() instanceof BitmapDrawable)) return false;
                 BitmapDrawable drawable = (BitmapDrawable) thumbnail.getDrawable();
                 Bitmap bitmap = drawable.getBitmap();
                 if (bitmap == null) return false;
@@ -1020,6 +1034,43 @@ public class InstantStartTest {
     }
 
     @Test
+    @SmallTest
+    @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE})
+    // clang-format off
+    @EnableFeatures({ChromeFeatureList.TAB_SWITCHER_ON_RETURN + "<Study,",
+            ChromeFeatureList.START_SURFACE_ANDROID + "<Study"})
+    @CommandLineFlags.Add({ChromeSwitches.DISABLE_NATIVE_INITIALIZATION,
+            "force-fieldtrials=Study/Group",
+            IMMEDIATE_RETURN_PARAMS + "/start_surface_variation/single"})
+    public void testShadowVisibility() throws IOException {
+        // clang-format on
+        startMainActivityFromLauncher();
+        CriteriaHelper.pollUiThread(
+                () -> mActivityTestRule.getActivity().getLayoutManager().overviewVisible());
+
+        int shadowVisibility =
+                mActivityTestRule.getActivity().findViewById(R.id.toolbar_shadow).getVisibility();
+
+        Assert.assertEquals(View.INVISIBLE, shadowVisibility);
+    }
+
+    @Test
+    @SmallTest
+    @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE})
+    // clang-format off
+    @EnableFeatures({ChromeFeatureList.TAB_SWITCHER_ON_RETURN + "<Study,",
+            ChromeFeatureList.START_SURFACE_ANDROID + "<Study"})
+    @DisableFeatures(ChromeFeatureList.INSTANT_START)
+    @CommandLineFlags.Add({ChromeSwitches.DISABLE_NATIVE_INITIALIZATION,
+            "force-fieldtrials=Study/Group",
+            IMMEDIATE_RETURN_PARAMS + "/start_surface_variation/single"})
+    public void testShadowVisibilityWithoutInstantStart() throws IOException {
+        // clang-format on
+        startMainActivityFromLauncher();
+        onViewWaiting(withId(R.id.toolbar_shadow)).check(matches(isDisplayed()));
+    }
+
+    @Test
     @MediumTest
     @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE})
     // clang-format off
@@ -1094,6 +1145,68 @@ public class InstantStartTest {
                 mActivityTestRule.getActivity().findViewById(R.id.primary_tasks_surface_view);
         mRenderTestRule.render(
                 surface, "singlePane_landscape" + (isFeedV2 ? "_FeedV2" : "_FeedV1"));
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"RenderTest"})
+    @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE})
+    // clang-format off
+    @EnableFeatures({ChromeFeatureList.TAB_SWITCHER_ON_RETURN + "<Study,",
+            ChromeFeatureList.START_SURFACE_ANDROID + "<Study"})
+    @CommandLineFlags.Add({ChromeSwitches.DISABLE_NATIVE_INITIALIZATION,
+            "force-fieldtrials=Study/Group",
+            IMMEDIATE_RETURN_PARAMS +
+                    "/start_surface_variation/single" +
+                    "/exclude_mv_tiles/true" +
+                    "/thumbnail_aspect_ratio/1"})
+    public void renderSingleAsHomepage_Landscape_TabSize() throws IOException{
+        // clang-format on
+        startMainActivityFromLauncher();
+        CriteriaHelper.pollUiThread(
+                () -> mActivityTestRule.getActivity().getLayoutManager().overviewVisible());
+
+        // Initializes native.
+        startAndWaitNativeInitialization();
+        onViewWaiting(
+                allOf(withId(org.chromium.chrome.start_surface.R.id.feed_stream_recycler_view),
+                        isDisplayed()));
+
+        // Rotate to landscape mode.
+        mActivityTestRule.getActivity().setRequestedOrientation(
+                ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
+        CriteriaHelper.pollUiThread(() -> {
+            Criteria.checkThat(
+                    mActivityTestRule.getActivity().getResources().getConfiguration().orientation,
+                    is(ORIENTATION_LANDSCAPE));
+        });
+
+        // Open a tab from search box.
+        MatcherAssert.assertThat(
+                mActivityTestRule.getActivity().getTabModelSelector().getCurrentModel().getCount(),
+                equalTo(0));
+        OverviewModeBehaviorWatcher hideWatcher =
+                TabUiTestHelper.createOverviewHideWatcher(mActivityTestRule.getActivity());
+        onView(withId(org.chromium.chrome.start_surface.R.id.search_box_text))
+                .perform(replaceText("about:blank"));
+        onView(withId(org.chromium.chrome.start_surface.R.id.url_bar))
+                .perform(pressKey(KeyEvent.KEYCODE_ENTER));
+        hideWatcher.waitForBehavior();
+        MatcherAssert.assertThat(
+                mActivityTestRule.getActivity().getTabModelSelector().getCurrentModel().getCount(),
+                equalTo(1));
+        onView(withId(org.chromium.chrome.tab_ui.R.id.home_button)).perform(click());
+
+        // Wait for thumbnail to show.
+        CriteriaHelper.pollUiThread(
+                mActivityTestRule.getActivity().getLayoutManager()::overviewVisible);
+        RecyclerView recyclerView =
+                mActivityTestRule.getActivity().findViewById(R.id.tab_list_view);
+        CriteriaHelper.pollUiThread(() -> allCardsHaveThumbnail(recyclerView));
+
+        View surface =
+                mActivityTestRule.getActivity().findViewById(R.id.primary_tasks_surface_view);
+        mRenderTestRule.render(surface, "singlePane_landscape_tabSize");
     }
 
     /**

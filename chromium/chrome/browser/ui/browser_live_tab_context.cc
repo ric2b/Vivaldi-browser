@@ -141,9 +141,9 @@ sessions::LiveTab* BrowserLiveTabContext::AddRestoredTab(
     const tab_groups::TabGroupVisualData& group_visual_data,
     bool select,
     bool pin,
-    bool from_last_session,
     const sessions::PlatformSpecificTabData* tab_platform_data,
     const sessions::SerializedUserAgentOverride& user_agent_override,
+    const SessionID* tab_id,
     const std::map<std::string, bool> page_action_overrides,
     const std::string& ext_data) {
   SessionStorageNamespace* storage_namespace =
@@ -159,8 +159,8 @@ sessions::LiveTab* BrowserLiveTabContext::AddRestoredTab(
 
   WebContents* web_contents = chrome::AddRestoredTab(
       browser_, navigations, tab_index, selected_navigation, extension_app_id,
-      group, select, pin, from_last_session, base::TimeTicks(),
-      storage_namespace, user_agent_override, false /* from_session_restore */,
+      group, select, pin, base::TimeTicks(), storage_namespace,
+      user_agent_override, false /* from_session_restore */,
       page_action_overrides, ext_data);
 
   // Only update the metadata if the group doesn't already exist since the
@@ -205,7 +205,6 @@ sessions::LiveTab* BrowserLiveTabContext::ReplaceRestoredTab(
     const std::vector<sessions::SerializedNavigationEntry>& navigations,
     base::Optional<tab_groups::TabGroupId> group,
     int selected_navigation,
-    bool from_last_session,
     const std::string& extension_app_id,
     const sessions::PlatformSpecificTabData* tab_platform_data,
     const sessions::SerializedUserAgentOverride& user_agent_override,
@@ -219,9 +218,9 @@ sessions::LiveTab* BrowserLiveTabContext::ReplaceRestoredTab(
           : nullptr;
 
   WebContents* web_contents = chrome::ReplaceRestoredTab(
-      browser_, navigations, selected_navigation, from_last_session,
-      extension_app_id, storage_namespace, user_agent_override,
-      false /* from_session_restore */, page_action_overrides, ext_data);
+      browser_, navigations, selected_navigation, extension_app_id,
+      storage_namespace, user_agent_override, false /* from_session_restore */,
+      page_action_overrides, ext_data);
 
   return sessions::ContentLiveTab::GetForWebContents(web_contents);
 }

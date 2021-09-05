@@ -18,7 +18,6 @@ import org.chromium.base.annotations.CalledByNative;
 import org.chromium.chrome.browser.banners.AppDetailsDelegate;
 import org.chromium.chrome.browser.customtabs.CustomTabsConnection;
 import org.chromium.chrome.browser.directactions.DirectActionCoordinator;
-import org.chromium.chrome.browser.externalauth.ExternalAuthUtils;
 import org.chromium.chrome.browser.feedback.FeedbackReporter;
 import org.chromium.chrome.browser.feedback.HelpAndFeedbackLauncher;
 import org.chromium.chrome.browser.feedback.HelpAndFeedbackLauncherImpl;
@@ -38,7 +37,7 @@ import org.chromium.chrome.browser.partnercustomizations.PartnerBrowserCustomiza
 import org.chromium.chrome.browser.password_manager.GooglePasswordManagerUIProvider;
 import org.chromium.chrome.browser.policy.PolicyAuditor;
 import org.chromium.chrome.browser.rlz.RevenueStats;
-import org.chromium.chrome.browser.signin.GoogleActivityController;
+import org.chromium.chrome.browser.signin.ui.GoogleActivityController;
 import org.chromium.chrome.browser.survey.SurveyController;
 import org.chromium.chrome.browser.sync.TrustedVaultClient;
 import org.chromium.chrome.browser.tab.Tab;
@@ -64,9 +63,6 @@ import java.util.List;
  */
 public abstract class AppHooks {
     private static AppHooksImpl sInstance;
-
-    @Nullable
-    private ExternalAuthUtils mExternalAuthUtils;
 
     /**
      * Sets a mocked instance for testing.
@@ -136,24 +132,6 @@ public abstract class AppHooks {
      */
     public SurveyController createSurveyController() {
         return new SurveyController();
-    }
-
-    /**
-     * @return An instance of ExternalAuthUtils to be installed as a singleton.
-     */
-    protected ExternalAuthUtils createExternalAuthUtils() {
-        return new ExternalAuthUtils();
-    }
-
-    /**
-     * @return The singleton instance of ExternalAuthUtils.
-     */
-    public ExternalAuthUtils getExternalAuthUtils() {
-        if (mExternalAuthUtils == null) {
-            mExternalAuthUtils = createExternalAuthUtils();
-        }
-
-        return mExternalAuthUtils;
     }
 
     /**
@@ -254,17 +232,6 @@ public abstract class AppHooks {
     public void registerPolicyProviders(CombinedPolicyProvider combinedProvider) {
         combinedProvider.registerProvider(
                 new AppRestrictionsProvider(ContextUtils.getApplicationContext()));
-    }
-
-    /**
-     * TODO(crbug.com/1102812) : Remove this method after updating the downstream to use the new
-     * method {@link getOfflinePagesCctAllowlist} instead.
-     * @return A list of allowlisted apps that are allowed to receive notification when the
-     * set of offlined pages downloaded on their behalf has changed. Apps are listed by their
-     * package name.
-     */
-    public List<String> getOfflinePagesCctWhitelist() {
-        return Collections.emptyList();
     }
 
     /**

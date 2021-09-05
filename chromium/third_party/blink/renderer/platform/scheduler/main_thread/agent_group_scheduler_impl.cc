@@ -37,7 +37,7 @@ AgentGroupSchedulerImpl::AgentGroupSchedulerImpl(
 }
 
 AgentGroupSchedulerImpl::~AgentGroupSchedulerImpl() {
-  default_task_queue_->ShutdownTaskQueue();
+  default_task_queue_->DetachFromMainThreadScheduler();
   main_thread_scheduler_.RemoveAgentGroupScheduler(this);
 }
 
@@ -46,6 +46,18 @@ std::unique_ptr<PageScheduler> AgentGroupSchedulerImpl::CreatePageScheduler(
   auto page_scheduler = std::make_unique<PageSchedulerImpl>(delegate, *this);
   main_thread_scheduler_.AddPageScheduler(page_scheduler.get());
   return page_scheduler;
+}
+
+scoped_refptr<base::SingleThreadTaskRunner>
+AgentGroupSchedulerImpl::DefaultTaskRunner() {
+  return default_task_runner_;
+}
+
+scoped_refptr<base::SingleThreadTaskRunner>
+AgentGroupSchedulerImpl::CompositorTaskRunner() {
+  // We temporarily redirect the per-AGS compositor task runner to the main
+  // thread's compositor task runner.
+  return main_thread_scheduler_.CompositorTaskRunner();
 }
 
 AgentGroupScheduler& AgentGroupSchedulerImpl::AsAgentGroupScheduler() {

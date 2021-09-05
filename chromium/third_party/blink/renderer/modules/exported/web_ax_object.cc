@@ -86,31 +86,6 @@ mojom::blink::ScrollAlignment::Behavior ToBlinkScrollAlignmentBehavior(
 }
 }  // namespace
 
-class WebAXSparseAttributeClientAdapter : public AXSparseAttributeClient {
- public:
-  explicit WebAXSparseAttributeClientAdapter(
-      WebAXSparseAttributeClient& attribute_map)
-      : attribute_map_(attribute_map) {}
-  virtual ~WebAXSparseAttributeClientAdapter() = default;
-
- private:
-  WebAXSparseAttributeClient& attribute_map_;
-
-  void AddObjectAttribute(AXObjectAttribute attribute,
-                          AXObject& value) override {
-    attribute_map_.AddObjectAttribute(
-        static_cast<WebAXObjectAttribute>(attribute), WebAXObject(&value));
-  }
-
-  void AddObjectVectorAttribute(AXObjectVectorAttribute attribute,
-                                HeapVector<Member<AXObject>>* value) override {
-    WebVector<WebAXObject> result(value->size());
-    std::copy(value->begin(), value->end(), result.begin());
-    attribute_map_.AddObjectVectorAttribute(
-        static_cast<WebAXObjectVectorAttribute>(attribute), result);
-  }
-};
-
 // A utility class which uses the lifetime of this object to signify when
 // AXObjCache or AXObjectCacheImpl handles programmatic actions.
 class ScopedActionAnnotator {
@@ -240,7 +215,6 @@ bool WebAXObject::CanSetValueAttribute() const {
 unsigned WebAXObject::ChildCount() const {
   if (IsDetached())
     return 0;
-
   return private_->ChildCountIncludingIgnored();
 }
 
@@ -256,15 +230,6 @@ WebAXObject WebAXObject::ParentObject() const {
     return WebAXObject();
 
   return WebAXObject(private_->ParentObjectIncludedInTree());
-}
-
-void WebAXObject::GetSparseAXAttributes(
-    WebAXSparseAttributeClient& client) const {
-  if (IsDetached())
-    return;
-
-  WebAXSparseAttributeClientAdapter adapter(client);
-  private_->GetSparseAXAttributes(adapter);
 }
 
 void WebAXObject::Serialize(ui::AXNodeData* node_data,
@@ -425,20 +390,6 @@ bool WebAXObject::IsEditable() const {
     return false;
 
   return private_->IsEditable();
-}
-
-int WebAXObject::PosInSet() const {
-  if (IsDetached())
-    return 0;
-
-  return private_->PosInSet();
-}
-
-int WebAXObject::SetSize() const {
-  if (IsDetached())
-    return 0;
-
-  return private_->SetSize();
 }
 
 bool WebAXObject::IsInLiveRegion() const {
@@ -898,13 +849,13 @@ WebAXObject WebAXObject::ChooserPopup() const {
 
 WebString WebAXObject::GetName(ax::mojom::NameFrom& out_name_from,
                                WebVector<WebAXObject>& out_name_objects) const {
+  out_name_from = ax::mojom::blink::NameFrom::kUninitialized;
+
   if (IsDetached())
     return WebString();
 
-  ax::mojom::NameFrom name_from = ax::mojom::NameFrom::kUninitialized;
   HeapVector<Member<AXObject>> name_objects;
-  WebString result = private_->GetName(name_from, &name_objects);
-  out_name_from = name_from;
+  WebString result = private_->GetName(out_name_from, &name_objects);
 
   out_name_objects.reserve(name_objects.size());
   out_name_objects.resize(name_objects.size());
@@ -926,15 +877,14 @@ WebString WebAXObject::Description(
     ax::mojom::NameFrom name_from,
     ax::mojom::DescriptionFrom& out_description_from,
     WebVector<WebAXObject>& out_description_objects) const {
+  out_description_from = ax::mojom::blink::DescriptionFrom::kUninitialized;
+
   if (IsDetached())
     return WebString();
 
-  ax::mojom::DescriptionFrom description_from =
-      ax::mojom::DescriptionFrom::kUninitialized;
   HeapVector<Member<AXObject>> description_objects;
-  String result =
-      private_->Description(name_from, description_from, &description_objects);
-  out_description_from = description_from;
+  String result = private_->Description(name_from, out_description_from,
+                                        &description_objects);
 
   out_description_objects.reserve(description_objects.size());
   out_description_objects.resize(description_objects.size());
@@ -1287,12 +1237,6 @@ bool WebAXObject::IsScrollableContainer() const {
   return private_->IsScrollableContainer();
 }
 
-bool WebAXObject::IsUserScrollable() const {
-  if (IsDetached())
-    return false;
-
-  return private_->IsUserScrollable();
-}
 gfx::Point WebAXObject::GetScrollOffset() const {
   if (IsDetached())
     return gfx::Point();
@@ -1499,12 +1443,9 @@ WebAXObject WebAXObject::FromWebNode(const WebNode& web_node) {
 }
 
 // static
-WebAXObject WebAXObject::FromWebDocument(const WebDocument& web_document,
-                                         bool update_layout_if_necessary) {
-  if (update_layout_if_necessary &&
-      !MaybeUpdateLayoutAndCheckValidity(web_document)) {
+WebAXObject WebAXObject::FromWebDocument(const WebDocument& web_document) {
+  if (!MaybeUpdateLayoutAndCheckValidity(web_document))
     return WebAXObject();
-  }
   const Document* document = web_document.ConstUnwrap<Document>();
   auto* cache = To<AXObjectCacheImpl>(document->ExistingAXObjectCache());
   return cache ? WebAXObject(cache->GetOrCreate(document->GetLayoutView()))
@@ -1554,8 +1495,7 @@ bool WebAXObject::MaybeUpdateLayoutAndCheckValidity(
     return false;
 
   if (document->NeedsLayoutTreeUpdate() || document->View()->NeedsLayout() ||
-      document->Lifecycle().GetState() <
-          DocumentLifecycle::kCompositingAssignmentsClean) {
+      document->Lifecycle().GetState() < DocumentLifecycle::kPrePaintClean) {
     // Note: this always alters the lifecycle, because
     // RunAccessibilityLifecyclePhase() will be called.
     if (!document->View()->UpdateAllLifecyclePhasesExceptPaint(
@@ -1569,6 +1509,22 @@ bool WebAXObject::MaybeUpdateLayoutAndCheckValidity(
   }
 
   return true;
+}
+
+// static
+void WebAXObject::Freeze(const WebDocument& web_document) {
+  const Document* doc = web_document.ConstUnwrap<Document>();
+  auto* cache = To<AXObjectCacheImpl>(doc->ExistingAXObjectCache());
+  if (cache)
+    cache->Freeze();
+}
+
+// static
+void WebAXObject::Thaw(const WebDocument& web_document) {
+  const Document* doc = web_document.ConstUnwrap<Document>();
+  auto* cache = To<AXObjectCacheImpl>(doc->ExistingAXObjectCache());
+  if (cache)
+    cache->Thaw();
 }
 
 }  // namespace blink

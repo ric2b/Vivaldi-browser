@@ -62,7 +62,7 @@ base::string16 WebUI::GetJavascriptCall(
   return result;
 }
 
-WebUIImpl::WebUIImpl(WebContentsImpl* contents, RenderFrameHost* frame_host)
+WebUIImpl::WebUIImpl(WebContentsImpl* contents, RenderFrameHostImpl* frame_host)
     : bindings_(BINDINGS_POLICY_WEB_UI),
       requestable_schemes_({kChromeUIScheme, url::kFileScheme}),
       frame_host_(frame_host),
@@ -127,10 +127,9 @@ void WebUIImpl::SetupMojoConnection() {
   if (frame_host_->GetParent())
     return;
 
-  static_cast<RenderFrameHostImpl*>(frame_host_)
-      ->GetFrameBindingsControl()
-      ->BindWebUI(remote_.BindNewPipeAndPassReceiver(),
-                  receiver_.BindNewPipeAndPassRemote());
+  frame_host_->GetFrameBindingsControl()->BindWebUI(
+      remote_.BindNewEndpointAndPassReceiver(),
+      receiver_.BindNewEndpointAndPassRemote());
 }
 
 void WebUIImpl::InvalidateMojoConnection() {

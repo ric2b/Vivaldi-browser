@@ -31,7 +31,7 @@ namespace {
 
 media::mojom::VideoFrameDataPtr MakeVideoFrameData(
     const media::VideoFrame* input) {
-  if (input->metadata()->end_of_stream) {
+  if (input->metadata().end_of_stream) {
     return media::mojom::VideoFrameData::NewEosData(
         media::mojom::EosVideoFrameData::New());
   }
@@ -238,7 +238,7 @@ bool StructTraits<media::mojom::VideoFrameDataView,
     std::unique_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer =
         support.CreateGpuMemoryBufferImplFromHandle(
             std::move(gpu_memory_buffer_handle), coded_size, *buffer_format,
-            gfx::BufferUsage::SCANOUT_VEA_READ_CAMERA_AND_CPU_READ_WRITE,
+            gfx::BufferUsage::VEA_READ_CAMERA_AND_CPU_READ_WRITE,
             base::NullCallback());
     if (!gpu_memory_buffer)
       return false;

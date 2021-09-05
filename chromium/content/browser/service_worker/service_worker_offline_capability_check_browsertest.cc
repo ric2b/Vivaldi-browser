@@ -12,6 +12,7 @@
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
 #include "base/test/bind.h"
+#include "build/build_config.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/browser/service_worker/service_worker_fetch_dispatcher.h"
 #include "content/browser/service_worker/service_worker_version.h"
@@ -646,6 +647,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerOfflineCapabilityCheckBrowserTest,
 
 // Sites with a service worker are identified as supporting offline capability
 // only when it returns a valid response in the offline mode.
+
 IN_PROC_BROWSER_TEST_F(ServiceWorkerOfflineCapabilityCheckBrowserTest,
                        CheckOfflineCapability) {
   EXPECT_TRUE(NavigateToURL(shell(),

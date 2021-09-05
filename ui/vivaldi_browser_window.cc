@@ -107,13 +107,6 @@ VivaldiAutofillBubbleHandler::ShowSaveCreditCardBubble(
   return nullptr;
 }
 
-autofill::SaveCardBubbleView*
-VivaldiAutofillBubbleHandler::ShowSaveCardSignInPromoBubble(
-    content::WebContents* contents,
-    autofill::SaveCardBubbleController* controller) {
-  return nullptr;
-}
-
 autofill::LocalCardMigrationBubble*
 VivaldiAutofillBubbleHandler::ShowLocalCardMigrationBubble(
     content::WebContents* web_contents,
@@ -568,14 +561,14 @@ void VivaldiBrowserWindow::ContinueClose(bool quiting,
 void VivaldiBrowserWindow::ConfirmBrowserCloseWithPendingDownloads(
     int download_count,
     Browser::DownloadCloseType dialog_type,
-    const base::Callback<void(bool)>& callback) {
+    base::OnceCallback<void(bool)> callback) {
 #if defined(OS_MAC)
   // We allow closing the window here since the real quit decision on Mac is
   // made in [AppController quit:].
-  callback.Run(true);
+  std::move(callback).Run(true);
 #else
   DownloadInProgressDialogView::Show(GetNativeWindow(), download_count,
-                                     dialog_type, callback);
+                                     dialog_type, std::move(callback));
 #endif  // OS_MAC
 }
 
@@ -716,8 +709,7 @@ bool VivaldiBrowserWindow::HandleKeyboardEvent(
 bool VivaldiBrowserWindow::GetAcceleratorForCommandId(
     int command_id,
     ui::Accelerator* accelerator) const {
-  return vivaldi::VivaldiGetAcceleratorForCommandId(nullptr, command_id,
-                                                    accelerator);
+  return vivaldi::GetFixedAcceleratorForCommandId(command_id, accelerator);
 }
 
 ui::AcceleratorProvider* VivaldiBrowserWindow::GetAcceleratorProvider() {
@@ -856,7 +848,8 @@ void VivaldiBrowserWindow::UpdateDevTools() {
   // Iterate the list of inspected tabs and send events if any is
   // in the process of closing.
   for (int i = 0; i < tab_strip_model->count(); ++i) {
-    WebContents* inspected_contents = tab_strip_model->GetWebContentsAt(i);
+    content::WebContents* inspected_contents =
+        tab_strip_model->GetWebContentsAt(i);
     DevToolsWindow* w =
         DevToolsWindow::GetInstanceForInspectedWebContents(inspected_contents);
     if (w && w->IsClosing()) {
@@ -1201,19 +1194,6 @@ void VivaldiBrowserWindow::NavigationStateChanged(
           extensions::vivaldi::window_private::OnActiveTabStatusText::Create(
               id(), base::UTF16ToUTF8(statustext)),
           GetProfile());
-    }
-  }
-  if (changed_flags & content::INVALIDATE_TYPE_URL) {
-    int tab_id = sessions::SessionTabHelper::IdForTab(source).id();
-    if (tab_id) {
-      GURL url = source->GetURL();
-      ::vivaldi::BroadcastEvent(
-        extensions::vivaldi::tabs_private::OnNavigationUrlChanged::
-        kEventName,
-        extensions::vivaldi::tabs_private::OnNavigationUrlChanged::Create(
-          tab_id, url.spec()),
-        GetProfile());
-
     }
   }
 }

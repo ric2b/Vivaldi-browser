@@ -11,6 +11,7 @@
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "components/viz/common/display/overlay_strategy.h"
 #include "components/viz/common/display/renderer_settings.h"
 #include "components/viz/common/features.h"
@@ -58,7 +59,7 @@ RendererSettings CreateRendererSettings() {
 #if defined(OS_APPLE)
   renderer_settings.release_overlay_resources_after_gpu_query = true;
   renderer_settings.auto_resize_output_surface = false;
-#elif defined(OS_CHROMEOS)
+#elif BUILDFLAG(IS_CHROMEOS_ASH)
   renderer_settings.auto_resize_output_surface = false;
 #endif
   renderer_settings.allow_antialiasing =
@@ -88,9 +89,18 @@ RendererSettings CreateRendererSettings() {
       auto& host_properties =
           ui::OzonePlatform::GetInstance()->GetInitializedHostProperties();
       if (host_properties.supports_overlays) {
-        renderer_settings.overlay_strategies = {OverlayStrategy::kFullscreen,
-                                                OverlayStrategy::kSingleOnTop,
+        renderer_settings.overlay_strategies = {OverlayStrategy::kSingleOnTop,
                                                 OverlayStrategy::kUnderlay};
+        // TODO(https://crbug.com/1156182): We suspect overlays promoted via
+        // fullscreen strategy cause crashes on Chrome OS with SkiaRenderer,
+        // so let's disable the strategy with Skia as a quick fix. All
+        // overlays previously covered by the fullscreen strategy should
+        // still be promoted via SingleOnTop, just a little bit less
+        // performantly. Re-enable the fullscreen overlay strategy when fixed.
+        if (!renderer_settings.use_skia_renderer) {
+          renderer_settings.overlay_strategies.push_back(
+              OverlayStrategy::kFullscreen);
+        }
       }
     }
   }

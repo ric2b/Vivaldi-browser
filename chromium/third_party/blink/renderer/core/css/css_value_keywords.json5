@@ -435,6 +435,8 @@
     "disc",
     "circle",
     "square",
+    "disclosure-open",
+    "disclosure-closed",
     "decimal",
     "decimal-leading-zero",
     "arabic-indic",
@@ -1435,6 +1437,14 @@
     "single-fold-vertical",
     "single-fold-horizontal",
 
+    // (screen-fold-posture) media feature
+    "no-fold",
+    "laptop",
+    // flat,
+    "tent",
+    "tablet",
+    "book",
+
     // scrollbar-gutter
     // auto
     "stable",
@@ -1447,5 +1457,24 @@
     "more",
     "less",
     "forced",
+
+    // @counter-style system
+    "cyclic",
+    // fixed,
+    "symbolic",
+    // alphabetic,
+    "numeric",
+    "additive",
+    "extends",
+
+    // @counter-style range
+    // infinite,
+
+    // @counter-style speak-as
+    // auto
+    "bullets",
+    "numbers",
+    "words",
+    // spell-out,
   ],
 }

@@ -9,8 +9,10 @@
 <translation id="1411638389238344450">Sänd länk som e-post</translation>
 <translation id="1454726940098520109">Visa inte bekräftelse igen</translation>
 <translation id="1462666970065907900">Är du säker på att du vill stänga det här fönstret?</translation>
+<translation id="1526344461589023948">Ett fel inträffade medan en nedladdad uppdatering höll på att sparas. Vänligen kontrollera att datorn har tillräckligt med diskutrymme och försök igen senare.</translation>
 <translation id="1657174850639146440">Monster 9</translation>
 <translation id="1676595396635191120">Nytt privat fönster</translation>
+<translation id="1702758681952953055">Om felet kvarstår, vänligen rapportera det tillsammans med följade information:</translation>
 <translation id="1728549374069268714">Klistra in och gå</translation>
 <translation id="1756026472674246267">Öppna länk i ny flik</translation>
 <translation id="1759842336958782510">Chrome</translation>
@@ -20,6 +22,7 @@
 <translation id="1924750141060565109">Landskap 15</translation>
 <translation id="19598411548897379">Generisk</translation>
 <translation id="2079036669923635404">Klicka här för att uppdatera Vivaldi till version <ph name="VERSION" />.</translation>
+<translation id="2141974047387702305">Ett fel inträffade under nedladdningen av uppdateringsfiler. Vänligen kontrollera din internetuppkoppling och försök igen senare.</translation>
 <translation id="2441056087170876076">Monster 2</translation>
 <translation id="2444387452209867610">Klistra in anteckning</translation>
 <translation id="2486841023299517366">Djur 4</translation>
@@ -45,6 +48,7 @@
 <translation id="3542768452570884558">Öppna länk i nytt fönster</translation>
 <translation id="3588820906588687999">Öppna bild i ny flik</translation>
 <translation id="3601066750251199488">Monster 3</translation>
+<translation id="3708982624815781692">Nedladdningen avbröts.</translation>
 <translation id="3732157130969736834">Bokmärk länk</translation>
 <translation id="3732388226447288666">Djur 2</translation>
 <translation id="3732439195215136813">Djur 5</translation>
@@ -81,11 +85,13 @@
 <translation id="5594602170491763400">Monster 5</translation>
 <translation id="5615637589913244581">Opera version 15+ (beta)</translation>
 <translation id="5648110075441906505">Öppna bild i nytt fönster</translation>
+<translation id="5656371807944747581">Uppdateringsfel!</translation>
 <translation id="5716238312826274098">Inaktivera aviseringar</translation>
 <translation id="5770433027661640693">Landskap 10</translation>
 <translation id="5857090052475505287">Ny mapp</translation>
 <translation id="588258955323874662">Fullskärm</translation>
 <translation id="5916080360077521750">Dessvärre är dina Chromeinställningar inte tillgängliga medan webbläsaren körs. För att importera inställningarna till Vivaldi, spara det du håller med och stäng alla Chromefönster. Klicka sedan Fortsätt.</translation>
+<translation id="6040143037577758943">Stäng</translation>
 <translation id="6229528619562190452">Klicka här för att uppdatera Vivaldi.</translation>
 <translation id="6234173136417926046">Använd bild som bakgrund på Vivaldi-startsidan</translation>
 <translation id="630690498669249215">Operabokmärkesfil</translation>
@@ -102,9 +108,11 @@
 <translation id="7111492742514999492">Landskap 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7496505986576158197">Vivaldi möjliggörs av öppen källkods-projektet <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> och annan <ph name="BEGIN_LINK_OSS" />mjukvara med öppen källkod<ph name="END_LINK_OSS" />.</translation>
+<translation id="7581266044164103589">Misslyckades med att starta installationsprogrammet för uppdateringen. Vänligen kontrollera att datorn har tillräckligt med minne och diskutrymme och försök igen senare.</translation>
 <translation id="7715497554424665066">&amp;Ignorera uppdatering</translation>
 <translation id="7724603315864178912">Klipp ut</translation>
 <translation id="7793738202466490491">Lägg till som kalenderhändelse</translation>
+<translation id="7848222781052558334">Misslyckades med veriferingen av de nedladdad filernas digitala signatur.</translation>
 <translation id="7865983598101744945">Bekräfta stängning</translation>
 <translation id="7957213167373139414">Min kalender</translation>
 <translation id="8027581147000338959">Öppna i nytt fönster</translation>

@@ -96,15 +96,15 @@
     "description": "English: or"
   },
   "popupBlockedOnThisPage_v2": {
-    "message": "Blocked on this page",
+    "message": "بلاک‌شده در این صفحه",
     "description": "For the new mobile-friendly popup design"
   },
   "popupBlockedSinceInstall_v2": {
-    "message": "Blocked since install",
+    "message": "بلاک شده از زمان نصب",
     "description": "For the new mobile-friendly popup design"
   },
   "popupDomainsConnected_v2": {
-    "message": "Domains connected",
+    "message": "دامنه‌های متصل‌شده",
     "description": "For the new mobile-friendly popup design"
   },
   "popupTipDashboard": {
@@ -180,11 +180,11 @@
     "description": "Tooltip for the no-scripting per-site switch"
   },
   "popupNoPopups_v2": {
-    "message": "Pop-up windows",
+    "message": "پنجره‌ی پاپ‌آپ",
     "description": "Caption for the no-popups per-site switch"
   },
   "popupNoLargeMedia_v2": {
-    "message": "Large media elements",
+    "message": "اِلمان‌های دارای مدیای بزرگ",
     "description": "Caption for the no-large-media per-site switch"
   },
   "popupNoCosmeticFiltering_v2": {
@@ -192,19 +192,19 @@
     "description": "Caption for the no-cosmetic-filtering per-site switch"
   },
   "popupNoRemoteFonts_v2": {
-    "message": "Remote fonts",
+    "message": "فونت‌های راه دور",
     "description": "Caption for the no-remote-fonts per-site switch"
   },
   "popupNoScripting_v2": {
-    "message": "JavaScript",
+    "message": "جاوااسکریپت",
     "description": "Caption for the no-scripting per-site switch"
   },
   "popupMoreButton_v2": {
-    "message": "More",
+    "message": "بیشتر",
     "description": "Label to be used to show popup panel sections"
   },
   "popupLessButton_v2": {
-    "message": "Less",
+    "message": "کمتر",
     "description": "Label to be used to hide popup panel sections"
   },
   "popupTipGlobalRules": {
@@ -264,7 +264,7 @@
     "description": "appears in popup"
   },
   "popupVersion": {
-    "message": "Version",
+    "message": "نگارش",
     "description": "Example of use: Version 1.26.4"
   },
   "pickerCreate": {
@@ -468,7 +468,7 @@
     "description": "used as a tooltip for the out-of-date icon beside a list"
   },
   "3pViewContent": {
-    "message": "view content",
+    "message": "نمایش محتویات",
     "description": "used as a tooltip for eye icon beside a list"
   },
   "3pLastUpdate": {
@@ -550,6 +550,22 @@
   "rulesFormatHint": {
     "message": "نحوه استفاده: <code>source destination type action</code> (<a href='https://github.com/gorhill/uBlock/wiki/Dynamic-filtering:-rule-syntax'>مستندات کامل</a>).",
     "description": "English: dynamic rule syntax and full documentation."
+  },
+  "rulesSort": {
+    "message": "مرتب‌سازی:",
+    "description": "English: label for sort option."
+  },
+  "rulesSortByType": {
+    "message": "نوع قانون",
+    "description": "English: a sort option for list of rules."
+  },
+  "rulesSortBySource": {
+    "message": "منبع ",
+    "description": "English: a sort option for list of rules."
+  },
+  "rulesSortByDestination": {
+    "message": "مقصد",
+    "description": "English: a sort option for list of rules."
   },
   "whitelistPrompt": {
     "message": "دستور العمل‌های لیست سفید حکم می‌کند که uBlock₀ باید بر روی کدام یک از صفحات وب غیر فعال باشد. در هر خط فقط یک مورد. دستور العمل‌های نامعتبر بدون اشاره ای نادیده گرفته شده و بیرون انداخته می‌شوند.",
@@ -640,7 +656,7 @@
     "description": "Tooltip for the button to bring up logger output filtering options"
   },
   "loggerRowFiltererBuiltinNot": {
-    "message": "Not",
+    "message": "نفی",
     "description": "A keyword in the built-in row filtering expression"
   },
   "loggerRowFiltererBuiltinEventful": {
@@ -653,6 +669,10 @@
   },
   "loggerRowFiltererBuiltinAllowed": {
     "message": "مجاز",
+    "description": "A keyword in the built-in row filtering expression"
+  },
+  "loggerRowFiltererBuiltinModified": {
+    "message": "تغییر کرده",
     "description": "A keyword in the built-in row filtering expression"
   },
   "loggerRowFiltererBuiltin1p": {
@@ -772,7 +792,7 @@
     "description": "A logger setting"
   },
   "loggerSettingPerTabMaxEntries": {
-    "message": "Preserve at most {{input}} entries per tab",
+    "message": "لطفا در هر تب حداکثر {{input}} مدخل نگه‌دارید",
     "description": "A logger setting"
   },
   "loggerSettingPerEntryLineCount": {
@@ -780,7 +800,7 @@
     "description": "A logger setting"
   },
   "loggerSettingHideColumnsPrompt": {
-    "message": "Hide columns:",
+    "message": "پنهان‌سازی ستون",
     "description": "Logger settings: a sentence to describe the purpose of the checkboxes below"
   },
   "loggerSettingHideColumnTime": {
@@ -840,19 +860,19 @@
     "description": "English: Contributors"
   },
   "aboutSourceCode": {
-    "message": "Source code",
+    "message": "کد منبع",
     "description": "Link text to source code repo"
   },
   "aboutTranslations": {
-    "message": "Translations",
+    "message": "ترجمه‌ها",
     "description": "Link text to translations repo"
   },
   "aboutFilterLists": {
-    "message": "Filter lists",
+    "message": "لیست‌های فیلتر",
     "description": "Link text to uBO's own filter lists repo"
   },
   "aboutDependencies": {
-    "message": "External dependencies (GPLv3-compatible):",
+    "message": "وابستگی‌های خارجی (سازگار با GPLv3):",
     "description": "Shown in the About pane"
   },
   "aboutBackupDataButton": {
@@ -889,7 +909,11 @@
   },
   "subscriberConfirm": {
     "message": "uBlock₀: آدرس اینترنتی زیر به فهرست فیلتر های سفارشی شما اضافه شود؟\n\nعنوان: \"{{title}}\"\nآدرس: {{url}}",
-    "description": "English: The message seen by the user to confirm subscription to a ABP filter list"
+    "description": "No longer used"
+  },
+  "subscribeButton": {
+    "message": "مشترک شدن",
+    "description": "For the button used to subscribe to a filter list"
   },
   "elapsedOneMinuteAgo": {
     "message": "1 دقیقه پیش",
@@ -929,11 +953,11 @@
   },
   "docblockedPrompt1": {
     "message": "uBlock₀ از بارگذاری این صفحات جلوگیری کرده:",
-    "description": "English: uBlock₀ has prevented the following page from loading:"
+    "description": "Used in the strict-blocking page"
   },
   "docblockedPrompt2": {
     "message": "بخاطر فیلتر زیر",
-    "description": "English: Because of the following filter"
+    "description": "Used in the strict-blocking page"
   },
   "docblockedNoParamsPrompt": {
     "message": "بدون پارامترها",
@@ -1003,6 +1027,10 @@
     "message": "بایت",
     "description": ""
   },
+  "contextMenuBlockElementInFrame": {
+    "message": "بلاک‌کردن اِلمان در فریم...",
+    "description": "An entry in the browser's contextual menu"
+  },
   "contextMenuTemporarilyAllowLargeMediaElements": {
     "message": "اجازه موقت عناصر رسانه‌ای حجیم",
     "description": "A context menu entry, present when large media elements have been blocked on the current site"
@@ -1012,36 +1040,40 @@
     "description": "Placeholder string for input field used to capture a keyboard shortcut"
   },
   "genericMergeViewScrollLock": {
-    "message": "Toggle locked scrolling",
+    "message": "تغییر وضعیت پیمایش قفل شده",
     "description": "Tooltip for the button used to lock scrolling between the views in the 'My rules' pane"
   },
   "genericCopyToClipboard": {
-    "message": "Copy to clipboard",
+    "message": "کپی به کلیپ‌بورد",
     "description": "Label for buttons used to copy something to the clipboard"
   },
   "toggleBlockingProfile": {
-    "message": "Toggle blocking profile",
+    "message": "تغییروضعیت نمایه‌ی بلاک‌کردن",
     "description": "Label for keyboard shortcut used to toggle blocking profile"
   },
   "relaxBlockingMode": {
-    "message": "Relax blocking mode",
+    "message": "حالت بلاک‌کردن غیرسخت‌گیر",
     "description": "Label for keyboard shortcut used to relax blocking mode (meant to replace 'Toggle blocking profile')"
   },
   "storageUsed": {
-    "message": "Storage used: {{value}} {{unit}}",
+    "message": "فضای مصرفی: {{value}} {{unit}}",
     "description": " In Setting pane, renders as (example): Storage used: 13.2 MB"
   },
   "KB": {
-    "message": "KB",
+    "message": "کیلوبایت",
     "description": "short for 'kilobytes'"
   },
   "MB": {
-    "message": "MB",
+    "message": "مگابایت",
     "description": "short for 'megabytes'"
   },
   "GB": {
-    "message": "GB",
+    "message": "گیگابایت",
     "description": "short for 'gigabytes'"
+  },
+  "clickToLoad": {
+    "message": "برای بازکردن کلیک نمایید",
+    "description": "Message used in frame placeholders"
   },
   "dummy": {
     "message": "این باید آخرین مطلب باشد",

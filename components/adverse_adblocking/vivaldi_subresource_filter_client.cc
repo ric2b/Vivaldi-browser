@@ -122,15 +122,6 @@ void VivaldiSubresourceFilterClient::OnReloadRequested() {
   chrome_subresource_filter_client_->OnReloadRequested();
 }
 
-subresource_filter::mojom::ActivationLevel
-VivaldiSubresourceFilterClient::OnPageActivationComputed(
-    content::NavigationHandle* navigation_handle,
-    subresource_filter::mojom::ActivationLevel initial_activation_level,
-    subresource_filter::ActivationDecision* decision) {
-  return chrome_subresource_filter_client_->OnPageActivationComputed(
-      navigation_handle, initial_activation_level, decision);
-}
-
 const scoped_refptr<safe_browsing::SafeBrowsingDatabaseManager>
 VivaldiSubresourceFilterClient::GetSafeBrowsingDatabaseManager() {
   safe_browsing::SafeBrowsingService* safe_browsing_service =
@@ -139,15 +130,14 @@ VivaldiSubresourceFilterClient::GetSafeBrowsingDatabaseManager() {
                                : nullptr;
 }
 
+subresource_filter::ProfileInteractionManager*
+VivaldiSubresourceFilterClient::GetProfileInteractionManager() {
+  return nullptr;
+}
+
 void VivaldiSubresourceFilterClient::OnAdsViolationTriggered(
     content::RenderFrameHost* rfh,
     subresource_filter::mojom::AdsViolation triggered_violation) {
   chrome_subresource_filter_client_->OnAdsViolationTriggered(
       rfh, triggered_violation);
-}
-
-void VivaldiSubresourceFilterClient::ToggleForceActivationInCurrentWebContents(
-  bool force_activation) {
-  chrome_subresource_filter_client_->ToggleForceActivationInCurrentWebContents(
-      force_activation);
 }

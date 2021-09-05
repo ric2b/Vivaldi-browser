@@ -22,8 +22,6 @@
 #include "ui/base/ui_base_features.h"
 #include "ui/events/base_event_utils.h"
 
-using blink::WebInputEvent;
-
 namespace {
 
 const std::string kBrowserFlingDataURL = R"HTML(
@@ -121,14 +119,23 @@ class BrowserSideFlingBrowserTest : public ContentBrowserTest {
       deleted_observer.WaitUntilDeleted();
     }
 
+    // TODO(szager): This is a speculative fix for test flakiness caused by
+    // changes to render throttling (crbug.com/1158644). The hypothesis is that
+    // the test code might be initiating a scroll gesture before
+    // LocalFrameView::BeginLifecycleUpdates() is called in the child frame. By
+    // the time EvalJsAfterLifecycleUpdate() returns, BeginLifecycleUpdates() is
+    // guaranteed to have run.
+    ASSERT_TRUE(
+        EvalJsAfterLifecycleUpdate(iframe_node->current_frame_host(), "", "")
+            .error.empty());
+
     WaitForHitTestData(iframe_node->current_frame_host());
-    FrameTreeVisualizer visualizer;
     ASSERT_EQ(
         " Site A ------------ proxies for B\n"
         "   +--Site B ------- proxies for A\n"
         "Where A = http://a.com/\n"
         "      B = http://b.com/",
-        visualizer.DepictFrameTree(root));
+        DepictFrameTree(*root));
 
     root_view_ = static_cast<RenderWidgetHostViewBase*>(
         root->current_frame_host()->GetRenderWidgetHost()->GetView());

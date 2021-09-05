@@ -16,6 +16,9 @@ import android.view.SurfaceView;
 
 import org.chromium.ui.display.DisplayAndroid;
 
+import org.chromium.base.Log;
+import org.vivaldi.browser.common.VivaldiUtils;
+
 /** CameraPreview class controls camera and camera previews. */
 public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback {
     private static final String THREAD_NAME = "CameraHandlerThread";
@@ -103,10 +106,19 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
             mCamera.setDisplayOrientation(getCameraOrientation());
             mCamera.setOneShotPreviewCallback(mPreviewCallback);
             mCamera.setErrorCallback(mErrorCallback);
-
-            Camera.Parameters parameters = mCamera.getParameters();
+            // Vivaldi - virtual device may throw.
+            Camera.Parameters parameters = VivaldiUtils.getCameraParameters(mCamera);
+            if (parameters == null) {
+                mErrorCallback.onError(CAMERA_FAILED_ERROR, mCamera);
+                return;
+            }
             parameters.setFocusMode(Camera.Parameters.FOCUS_MODE_CONTINUOUS_PICTURE);
+            // Vivaldi - virtual device may throw. Log this instead of returning error.
+            try {
             mCamera.setParameters(parameters);
+            } catch (RuntimeException ex) {
+                Log.e("Vivaldi QR scanner", "startCameraPreview() " + ex);
+            }
 
             mCamera.startPreview();
         } catch (Exception e) {

@@ -14,12 +14,12 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/optional.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
 #include "chrome/browser/apps/app_service/app_service_metrics.h"
 #include "chrome/browser/apps/app_service/launch_utils.h"
 #include "chrome/browser/chromeos/printing/print_management/print_management_uma.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
-#include "chrome/browser/installable/installable_params.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_navigator.h"
@@ -36,6 +36,11 @@
 #include "ui/base/window_open_disposition.h"
 #include "ui/display/types/display_constants.h"
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
+#include "chromeos/components/scanning/scanning_uma.h"
+#endif
+
 namespace {
 // Returns the profile where we should launch System Web Apps into. It returns
 // the most appropriate profile for launching, if the provided |profile| is
@@ -47,7 +52,7 @@ Profile* GetProfileForSystemWebAppLaunch(Profile* profile) {
   // alternative.
   if (profile->IsSystemProfile())
     return nullptr;
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   if (chromeos::ProfileHelper::IsSigninProfile(profile))
     return nullptr;
 #endif
@@ -174,6 +179,11 @@ Browser* LaunchSystemWebApp(Profile* profile,
       return nullptr;
   }
 
+  if (Browser::GetCreationStatusForProfile(profile_for_launch) !=
+      Browser::CreationStatus::kOk) {
+    return nullptr;
+  }
+
   auto* provider = WebAppProvider::Get(profile_for_launch);
 
   if (!provider)
@@ -202,6 +212,14 @@ Browser* LaunchSystemWebApp(Profile* profile,
   if (app_type == SystemAppType::PRINT_MANAGEMENT) {
     LogPrintManagementEntryPoints(params->source);
   }
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  // Log enumerated entry point for the Scan app.
+  if (app_type == SystemAppType::SCANNING &&
+      params->source == apps::mojom::AppLaunchSource::kSourceAppLauncher) {
+    chromeos::scanning::RecordScanAppEntryPoint(
+        chromeos::scanning::ScanAppEntryPoint::kLauncher);
+  }
+#endif
 
   // Make sure we have a browser for app.  Always reuse an existing browser for
   // popups, otherwise check app type whether we should use a single window.
@@ -223,11 +241,9 @@ Browser* LaunchSystemWebApp(Profile* profile,
   content::WebContents* web_contents = nullptr;
 
   if (!browser) {
-    // TODO(crbug.com/1129340): Remove these lines and make CCA resizeable after
-    // CCA supports responsive UI.
-    bool can_resize = app_type != SystemAppType::CAMERA;
-    browser = CreateWebApplicationWindow(profile_for_launch, params->app_id,
-                                         params->disposition, can_resize);
+    browser =
+        CreateWebApplicationWindow(profile_for_launch, params->app_id,
+                                   params->disposition, params->restore_id);
   }
 
   // Navigate application window to application's |url| if necessary.
@@ -254,8 +270,16 @@ Browser* LaunchSystemWebApp(Profile* profile,
     }
   }
 
-  // TODO(crbug.com/1114939): Need to make sure the browser is shown on the
-  // correct desktop, when used in multi-profile mode.
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  // LaunchSystemWebApp may be called with a profile associated with an
+  // inactive (background) desktop (e.g. when multiple users are logged in).
+  // Here we move the newly created browser window (or the existing one on the
+  // inactive desktop) to the current active (visible) desktop, so the user
+  // always sees the launched app.
+  multi_user_util::MoveWindowToCurrentDesktop(
+      browser->window()->GetNativeWindow());
+#endif
+
   browser->window()->Show();
   return browser;
 }

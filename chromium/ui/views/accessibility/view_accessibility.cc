@@ -10,10 +10,15 @@
 #include "base/callback.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/chromeos_buildflags.h"
+#include "ui/accessibility/accessibility_features.h"
 #include "ui/accessibility/ax_enums.mojom.h"
+#include "ui/accessibility/ax_tree_manager_map.h"
 #include "ui/accessibility/platform/ax_platform_node.h"
 #include "ui/accessibility/platform/ax_platform_node_delegate.h"
 #include "ui/base/buildflags.h"
+#include "ui/views/accessibility/views_ax_tree_manager.h"
+#include "ui/views/accessibility/widget_ax_tree_id_map.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/root_view.h"
 #include "ui/views/widget/widget.h"
@@ -27,11 +32,15 @@ bool IsValidRoleForViews(ax::mojom::Role role) {
     // These roles all have special meaning and shouldn't ever be
     // set on a View.
     case ax::mojom::Role::kDesktop:
+    case ax::mojom::Role::kDocument:  // Used for ARIA role="document".
+    case ax::mojom::Role::kIframe:
+    case ax::mojom::Role::kIframePresentational:
     case ax::mojom::Role::kNone:
+    case ax::mojom::Role::kPdfRoot:
+    case ax::mojom::Role::kPortal:
     case ax::mojom::Role::kRootWebArea:
     case ax::mojom::Role::kSvgRoot:
     case ax::mojom::Role::kUnknown:
-    case ax::mojom::Role::kWebArea:
       return false;
 
     default:
@@ -53,7 +62,20 @@ ViewAccessibility::ViewAccessibility(View* view)
     : view_(view),
       focused_virtual_child_(nullptr),
       is_leaf_(false),
-      is_ignored_(false) {}
+      is_ignored_(false) {
+#if defined(USE_AURA) && !BUILDFLAG(IS_CHROMEOS_ASH)
+  if (features::IsAccessibilityTreeForViewsEnabled()) {
+    Widget* widget = view_->GetWidget();
+    if (widget && widget->is_top_level() &&
+        !WidgetAXTreeIDMap::GetInstance().HasWidget(widget)) {
+      View* root_view = static_cast<View*>(widget->GetRootView());
+      if (root_view && root_view == view) {
+        ax_tree_manager_ = std::make_unique<views::ViewsAXTreeManager>(widget);
+      }
+    }
+  }
+#endif
+}
 
 ViewAccessibility::~ViewAccessibility() = default;
 
@@ -135,6 +157,34 @@ bool ViewAccessibility::IsLeaf() const {
   return is_leaf_;
 }
 
+ViewsAXTreeManager* ViewAccessibility::AXTreeManager() const {
+  ViewsAXTreeManager* manager = nullptr;
+#if defined(USE_AURA) && !BUILDFLAG(IS_CHROMEOS_ASH)
+  Widget* widget = view_->GetWidget();
+
+  // Don't return managers for closing Widgets.
+  if (widget->IsClosed())
+    return nullptr;
+
+  manager = ax_tree_manager_.get();
+
+  // ViewsAXTreeManagers are only created for top-level windows (Widgets). For
+  // non top-level Views, look up the Widget's tree ID to retrieve the manager.
+  if (!manager) {
+    ui::AXTreeID tree_id =
+        WidgetAXTreeIDMap::GetInstance().GetWidgetTreeID(widget);
+    DCHECK_NE(tree_id, ui::AXTreeIDUnknown());
+    manager = static_cast<views::ViewsAXTreeManager*>(
+        ui::AXTreeManagerMap::GetInstance().GetManager(tree_id));
+  }
+#endif
+  return manager;
+}
+
+bool ViewAccessibility::IsIgnored() const {
+  return is_ignored_;
+}
+
 void ViewAccessibility::GetAccessibleNodeData(ui::AXNodeData* data) const {
   data->id = GetUniqueId().Get();
 
@@ -174,7 +224,7 @@ void ViewAccessibility::GetAccessibleNodeData(ui::AXNodeData* data) const {
   if (custom_data_.GetHasPopup() != ax::mojom::HasPopup::kFalse)
     data->SetHasPopup(custom_data_.GetHasPopup());
 
-  static const ax::mojom::IntAttribute kOverridableIntAttributes[]{
+  static constexpr ax::mojom::IntAttribute kOverridableIntAttributes[]{
       ax::mojom::IntAttribute::kPosInSet,
       ax::mojom::IntAttribute::kSetSize,
   };
@@ -183,7 +233,7 @@ void ViewAccessibility::GetAccessibleNodeData(ui::AXNodeData* data) const {
       data->AddIntAttribute(attribute, custom_data_.GetIntAttribute(attribute));
   }
 
-  static const ax::mojom::IntListAttribute kOverridableIntListAttributes[]{
+  static constexpr ax::mojom::IntListAttribute kOverridableIntListAttributes[]{
       ax::mojom::IntListAttribute::kDescribedbyIds,
   };
   for (auto attribute : kOverridableIntListAttributes) {
@@ -212,19 +262,18 @@ void ViewAccessibility::GetAccessibleNodeData(ui::AXNodeData* data) const {
   data->AddStringAttribute(ax::mojom::StringAttribute::kClassName,
                            view_->GetClassName());
 
-  if (IsIgnored()) {
-    // Prevent screen readers from navigating to or speaking ignored nodes.
-    data->AddState(ax::mojom::State::kInvisible);
+  if (is_ignored_ || data->role == ax::mojom::Role::kIgnored) {
     data->AddState(ax::mojom::State::kIgnored);
-    data->role = ax::mojom::Role::kIgnored;
-    return;
+  } else {
+    if (view_->IsAccessibilityFocusable() && !focused_virtual_child_)
+      data->AddState(ax::mojom::State::kFocusable);
   }
 
-  if (view_->IsAccessibilityFocusable() && !focused_virtual_child_)
-    data->AddState(ax::mojom::State::kFocusable);
-
-  if (!view_->GetEnabled())
+  if (custom_data_.HasIntAttribute(ax::mojom::IntAttribute::kRestriction)) {
+    data->SetRestriction(custom_data_.GetRestriction());
+  } else if (!view_->GetEnabled()) {
     data->SetRestriction(ax::mojom::Restriction::kDisabled);
+  }
 
   if (!view_->GetVisible() && data->role != ax::mojom::Role::kAlert)
     data->AddState(ax::mojom::State::kInvisible);
@@ -252,7 +301,7 @@ void ViewAccessibility::SetPopupFocusOverride() {}
 
 void ViewAccessibility::EndPopupFocusOverride() {}
 
-bool ViewAccessibility::IsFocusedForTesting() {
+bool ViewAccessibility::IsFocusedForTesting() const {
   return view_->HasFocus() && !focused_virtual_child_;
 }
 
@@ -285,6 +334,19 @@ void ViewAccessibility::OverrideIsIgnored(bool value) {
   is_ignored_ = value;
 }
 
+void ViewAccessibility::OverrideViewEnablingState(bool enabled) {
+  // Cannot use `AXNodeData::SetRestriction()` which does not store
+  // `ax::mojom::Restriction::kNone`.
+
+  if (custom_data_.HasIntAttribute(ax::mojom::IntAttribute::kRestriction))
+    custom_data_.RemoveIntAttribute(ax::mojom::IntAttribute::kRestriction);
+
+  custom_data_.AddIntAttribute(
+      ax::mojom::IntAttribute::kRestriction,
+      enabled ? static_cast<int>(ax::mojom::Restriction::kNone)
+              : static_cast<int>(ax::mojom::Restriction::kDisabled));
+}
+
 void ViewAccessibility::OverrideBounds(const gfx::RectF& bounds) {
   custom_data_.relative_bounds.bounds = bounds;
 }
@@ -313,11 +375,11 @@ void ViewAccessibility::OverridePreviousFocus(Widget* widget) {
   previous_focus_ = widget;
 }
 
-Widget* ViewAccessibility::GetNextFocus() {
+Widget* ViewAccessibility::GetNextFocus() const {
   return next_focus_;
 }
 
-Widget* ViewAccessibility::GetPreviousFocus() {
+Widget* ViewAccessibility::GetPreviousFocus() const {
   return previous_focus_;
 }
 

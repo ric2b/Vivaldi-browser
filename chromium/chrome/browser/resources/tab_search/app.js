@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'chrome://resources/cr_elements/icons.m.js';
 import 'chrome://resources/cr_elements/shared_vars_css.m.js';
 import 'chrome://resources/cr_elements/mwb_shared_style.js';
 import 'chrome://resources/cr_elements/mwb_shared_vars.js';
@@ -41,10 +40,9 @@ export class TabSearchAppElement extends PolymerElement {
         value: '',
       },
 
-      /** @private {?Array<!WindowTabs>} */
+      /** @private {?Array<!TabData>}*/
       openTabs_: {
         type: Array,
-        observer: 'openTabsChanged_',
       },
 
       /** @private {!Array<!TabData>} */
@@ -89,6 +87,9 @@ export class TabSearchAppElement extends PolymerElement {
         type: Boolean,
         value: () => loadTimeData.getBoolean('moveActiveTabToBottom'),
       },
+
+      /** @private */
+      searchResultText_: {type: String, value: ''}
     };
   }
 
@@ -134,6 +135,22 @@ export class TabSearchAppElement extends PolymerElement {
         callbackRouter.tabUpdated.addListener(tab => this.onTabUpdated_(tab)),
         callbackRouter.tabsRemoved.addListener(
             tabIds => this.onTabsRemoved_(tabIds)));
+
+    // The infinite-list only triggers a dom-change event after it is ready
+    // and observes a change on the list items.
+    listenOnce(this.$.tabsList, 'dom-change', () => {
+      // Push showUI() to the event loop to allow reflow to occur following
+      // the DOM update.
+      setTimeout(() => {
+        this.apiProxy_.showUI();
+
+        // Record the first time it takes for the initial list of tabs to
+        // render.
+        chrome.metricsPrivate.recordTime(
+            'Tabs.TabSearch.WebUI.InitialTabsRenderTime',
+            Math.round(window.performance.now()));
+      }, 0);
+    });
     this.updateTabs_();
   }
 
@@ -151,21 +168,7 @@ export class TabSearchAppElement extends PolymerElement {
           'Tabs.TabSearch.WebUI.TabListDataReceived',
           Math.round(Date.now() - getTabsStartTimestamp));
 
-      // Prior to the first load |this.openTabs_| has not been set. Record the
-      // time it takes for the initial list of tabs to render.
-      if (!this.openTabs_) {
-        listenOnce(this.$.tabsList, 'dom-change', () => {
-          // Push showUI() to the event loop to allow reflow to occur following
-          // the DOM update.
-          setTimeout(() => {
-            this.apiProxy_.showUI();
-            chrome.metricsPrivate.recordTime(
-                'Tabs.TabSearch.WebUI.InitialTabsRenderTime',
-                Math.round(window.performance.now()));
-          }, 0);
-        });
-      }
-      this.openTabs_ = profileTabs.windows;
+      this.openTabsChanged_(profileTabs.windows);
     });
   }
 
@@ -174,19 +177,13 @@ export class TabSearchAppElement extends PolymerElement {
    * @private
    */
   onTabUpdated_(updatedTab) {
-    const updatedTabId = updatedTab.tabId;
-    const windows = this.openTabs_;
-    if (windows) {
-      for (const window of windows) {
-        const {tabs} = window;
-        for (let i = 0; i < tabs.length; ++i) {
-          // Replace the tab with the same tabId and trigger rerender.
-          if (tabs[i].tabId === updatedTabId) {
-            tabs[i] = updatedTab;
-            this.openTabs_ = windows.concat();
-            return;
-          }
-        }
+    // Replace the tab with the same tabId and trigger rerender.
+    for (let i = 0; i < this.openTabs_.length; ++i) {
+      if (this.openTabs_[i].tab.tabId === updatedTab.tabId) {
+        this.openTabs_[i] =
+            this.tabData_(updatedTab, this.openTabs_[i].inActiveWindow);
+        this.updateFilteredTabs_(this.openTabs_);
+        return;
       }
     }
   }
@@ -196,14 +193,21 @@ export class TabSearchAppElement extends PolymerElement {
    * @private
    */
   onTabsRemoved_(tabIds) {
-    const windows = this.openTabs_;
-    if (windows) {
-      const ids = new Set(tabIds);
-      for (const window of windows) {
-        window.tabs = window.tabs.filter(tab => (!ids.has(tab.tabId)));
-      }
-      this.openTabs_ = windows.concat();
+    if (!this.openTabs_) {
+      return;
     }
+
+    const ids = new Set(tabIds);
+    // Splicing in descending index order to avoid affecting preceding indices
+    // that are to be removed.
+    for (let i = this.openTabs_.length - 1; i >= 0; i--) {
+      if (ids.has(this.openTabs_[i].tab.tabId)) {
+        this.openTabs_.splice(i, 1);
+      }
+    }
+
+    this.filteredOpenTabs_ =
+        this.filteredOpenTabs_.filter(tabData => !ids.has(tabData.tab.tabId));
   }
 
   /**
@@ -226,6 +230,14 @@ export class TabSearchAppElement extends PolymerElement {
     /** @type {!InfiniteList} */ (this.$.tabsList).selected =
         this.filteredOpenTabs_.length > 0 ? 0 : NO_SELECTION;
 
+    this.$.searchField.announce(this.getA11ySearchResultText_());
+  }
+
+  /**
+   * @return {string}
+   * @private
+   */
+  getA11ySearchResultText_() {
     const length = this.filteredOpenTabs_.length;
     let text;
     if (this.searchText_.length > 0) {
@@ -236,7 +248,7 @@ export class TabSearchAppElement extends PolymerElement {
       text = loadTimeData.getStringF(
           length == 1 ? 'a11yFoundTab' : 'a11yFoundTabs', length);
     }
-    this.announceA11y_(text);
+    return text;
   }
 
   /** @private */
@@ -254,9 +266,9 @@ export class TabSearchAppElement extends PolymerElement {
    * @private
    */
   onItemClick_(e) {
-    const tabIndex = e.currentTarget.parentNode.indexOf(e.currentTarget);
     const tabId = Number.parseInt(e.currentTarget.id, 10);
-    this.apiProxy_.switchToTab({tabId}, !!this.searchText_, tabIndex);
+    this.apiProxy_.switchToTab(
+        {tabId}, !!this.searchText_, /** @type {number} */ (e.model.index));
   }
 
   /**
@@ -265,9 +277,9 @@ export class TabSearchAppElement extends PolymerElement {
    */
   onItemClose_(e) {
     performance.mark('close_tab:benchmark_begin');
-    const tabIndex = e.currentTarget.parentNode.indexOf(e.currentTarget);
     const tabId = Number.parseInt(e.currentTarget.id, 10);
-    this.apiProxy_.closeTab(tabId, !!this.searchText_, tabIndex);
+    this.apiProxy_.closeTab(
+        tabId, !!this.searchText_, /** @type {number} */ (e.model.index));
     this.announceA11y_(loadTimeData.getString('a11yTabClosed'));
     listenOnce(this.$.tabsList, 'iron-items-changed', () => {
       performance.mark('close_tab:benchmark_end');
@@ -292,11 +304,17 @@ export class TabSearchAppElement extends PolymerElement {
   }
 
   /**
-   * @param {!Array<!WindowTabs>} newOpenTabs
+   * @param {!Array<!WindowTabs>} newOpenWindowTabs
    * @private
    */
-  openTabsChanged_(newOpenTabs) {
-    this.updateFilteredTabs_(newOpenTabs);
+  openTabsChanged_(newOpenWindowTabs) {
+    this.openTabs_ = [];
+    newOpenWindowTabs.forEach(({active, tabs}) => {
+      tabs.forEach(tab => {
+        this.openTabs_.push(this.tabData_(tab, active));
+      });
+    });
+    this.updateFilteredTabs_(this.openTabs_);
 
     // If there was no previously selected index, set the first item as
     // selected; else retain the currently selected index. If the list
@@ -316,7 +334,7 @@ export class TabSearchAppElement extends PolymerElement {
     // Ensure that when a TabSearchItem receives focus, it becomes the selected
     // item in the list.
     /** @type {!InfiniteList} */ (this.$.tabsList).selected =
-        e.currentTarget.parentNode.indexOf(e.currentTarget);
+        /** @type {number} */ (e.model.index);
   }
 
   /** @private */
@@ -374,10 +392,9 @@ export class TabSearchAppElement extends PolymerElement {
       e.stopPropagation();
       e.preventDefault();
 
-      // For some reasons setting combobox/aria-activedescendant on
-      // tab-search-search-field has no effect, so manually announce a11y
-      // message here.
-      this.announceA11y_(
+      // TODO(tluk): Fix this to use aria-activedescendant when it's updated to
+      // work with ShadowDOM elements.
+      this.$.searchField.announce(
           this.ariaLabel_(this.filteredOpenTabs_[this.getSelectedIndex()]));
     } else if (e.key === 'Enter') {
       this.apiProxy_.switchToTab(
@@ -404,19 +421,22 @@ export class TabSearchAppElement extends PolymerElement {
   }
 
   /**
-   * @param {!Array<!WindowTabs>} windowTabs
+   * @param {!Tab} tab
+   * @param {boolean} inActiveWindow
+   * @return {!TabData}
    * @private
    */
-  updateFilteredTabs_(windowTabs) {
-    const result = [];
-    windowTabs.forEach(window => {
-      window.tabs.forEach(tab => {
-        const hostname = new URL(tab.url).hostname;
-        const inActiveWindow = window.active;
-        result.push({hostname, inActiveWindow, tab});
-      });
-    });
-    result.sort((a, b) => {
+  tabData_(tab, inActiveWindow) {
+    const hostname = new URL(tab.url).hostname;
+    return /** @type {!TabData} */ ({hostname, inActiveWindow, tab});
+  }
+
+  /**
+   * @param {!Array<!TabData>} tabs
+   * @private
+   */
+  updateFilteredTabs_(tabs) {
+    tabs.sort((a, b) => {
       // Move the active tab to the bottom of the list
       // because it's not likely users want to click on it.
       if (this.moveActiveTabToBottom_) {
@@ -433,8 +453,10 @@ export class TabSearchAppElement extends PolymerElement {
               a.tab.lastActiveTimeTicks.internalValue) :
           0;
     });
+
     this.filteredOpenTabs_ =
-        fuzzySearch(this.searchText_, result, this.fuzzySearchOptions_);
+        fuzzySearch(this.searchText_, tabs, this.fuzzySearchOptions_);
+    this.searchResultText_ = this.getA11ySearchResultText_();
   }
 
   /** return {!Tab} */

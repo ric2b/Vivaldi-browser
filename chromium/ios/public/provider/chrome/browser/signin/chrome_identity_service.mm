@@ -156,9 +156,9 @@ bool ChromeIdentityService::IsInvalidGrantError(NSDictionary* user_info) {
   return false;
 }
 
-void ChromeIdentityService::FireIdentityListChanged() {
+void ChromeIdentityService::FireIdentityListChanged(bool keychainReload) {
   for (auto& observer : observer_list_)
-    observer.OnIdentityListChanged();
+    observer.OnIdentityListChanged(keychainReload);
 }
 
 void ChromeIdentityService::FireAccessTokenRefreshFailed(

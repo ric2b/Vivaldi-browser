@@ -73,7 +73,11 @@ WebAppUninstallDialogDelegateView::WebAppUninstallDialogDelegateView(
       std::make_unique<WebAppInfoImageSource>(kIconSizeInDip, icon_bitmaps),
       image_size);
 
+  SetModalType(ui::MODAL_TYPE_WINDOW);
   SetShowCloseButton(false);
+  set_fixed_width(views::LayoutProvider::Get()->GetDistanceMetric(
+      views::DISTANCE_MODAL_DIALOG_PREFERRED_WIDTH));
+
   SetShowIcon(true);
   SetTitle(l10n_util::GetStringFUTF16(
       IDS_EXTENSION_PROMPT_UNINSTALL_TITLE,
@@ -115,7 +119,7 @@ WebAppUninstallDialogDelegateView::WebAppUninstallDialogDelegateView(
 
 WebAppUninstallDialogDelegateView::~WebAppUninstallDialogDelegateView() {
   if (dialog_)
-    dialog_->CallCallback(/*uninstalled=*/false);
+    dialog_->UninstallCancelled();
 }
 
 void WebAppUninstallDialogDelegateView::OnDialogAccepted() {
@@ -128,11 +132,9 @@ void WebAppUninstallDialogDelegateView::OnDialogAccepted() {
           : HistogramCloseAction::kUninstall;
   UMA_HISTOGRAM_ENUMERATION("Webapp.UninstallDialogAction", action);
 
-  bool uninstalled = Uninstall();
+  Uninstall();
   if (checkbox_->GetChecked())
     ClearWebAppSiteData();
-
-  std::exchange(dialog_, nullptr)->CallCallback(uninstalled);
 }
 
 void WebAppUninstallDialogDelegateView::OnDialogCanceled() {
@@ -140,36 +142,32 @@ void WebAppUninstallDialogDelegateView::OnDialogCanceled() {
                             HistogramCloseAction::kCancelled);
 
   if (dialog_)
-    std::exchange(dialog_, nullptr)->CallCallback(/*uninstalled=*/false);
-}
-
-gfx::Size WebAppUninstallDialogDelegateView::CalculatePreferredSize() const {
-  const int width = ChromeLayoutProvider::Get()->GetDistanceMetric(
-                        views::DISTANCE_MODAL_DIALOG_PREFERRED_WIDTH) -
-                    margins().width();
-  return gfx::Size(width, GetHeightForWidth(width));
-}
-
-ui::ModalType WebAppUninstallDialogDelegateView::GetModalType() const {
-  return ui::MODAL_TYPE_WINDOW;
+    std::exchange(dialog_, nullptr)->UninstallCancelled();
 }
 
 gfx::ImageSkia WebAppUninstallDialogDelegateView::GetWindowIcon() {
   return image_;
 }
 
-bool WebAppUninstallDialogDelegateView::Uninstall() {
+void WebAppUninstallDialogDelegateView::Uninstall() {
   auto* provider = web_app::WebAppProvider::Get(profile_);
   DCHECK(provider);
 
-  if (!provider->install_finalizer().CanUserUninstallExternalApp(app_id_))
-    return false;
+  if (!provider->install_finalizer().CanUserUninstallExternalApp(app_id_)) {
+    std::exchange(dialog_, nullptr)->UninstallCancelled();
+    return;
+  }
 
-  dialog_->UninstallStarted();
-
-  provider->install_finalizer().UninstallExternalAppByUser(app_id_,
-                                                           base::DoNothing());
-  return true;
+  // Forward callback from the WebAppUninstallDialogViews because
+  // WebAppUninstallDialogDelegateView lifetime is controlled by Widget and it
+  // is terminiated as soon as dialog is closed regardless of web app
+  // uninstallation.
+  provider->install_finalizer().UninstallExternalAppByUser(
+      app_id_, dialog_->UninstallStarted());
+  // We successfully call Web App Uninstall routine, then
+  // WebAppUninstallDialogDelegateView can be terminated, but can't call the
+  // callback of the dialog caller.
+  dialog_ = nullptr;
 }
 
 void WebAppUninstallDialogDelegateView::ClearWebAppSiteData() {
@@ -222,7 +220,7 @@ void WebAppUninstallDialogViews::ConfirmUninstall(
   closed_callback_ = std::move(closed_callback);
 
   if (parent_ && parent_window_tracker_->WasNativeWindowClosed()) {
-    CallCallback(/*uninstalled=*/false);
+    UninstallCancelled();
     return;
   }
 
@@ -248,7 +246,7 @@ void WebAppUninstallDialogViews::OnIconsRead(
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   if (parent_ && parent_window_tracker_->WasNativeWindowClosed()) {
-    CallCallback(/*uninstalled=*/false);
+    UninstallCancelled();
     return;
   }
 
@@ -264,7 +262,7 @@ void WebAppUninstallDialogViews::OnIconsRead(
   view_->ProcessAutoConfirmValue();
 }
 
-void WebAppUninstallDialogViews::OnWebAppUninstalled(
+void WebAppUninstallDialogViews::OnWebAppWillBeUninstalled(
     const web_app::AppId& app_id) {
   // Handle the case when web app was uninstalled externally and we have to
   // cancel current dialog.
@@ -278,14 +276,21 @@ void WebAppUninstallDialogViews::OnAppRegistrarDestroyed() {
     view_->CancelDialog();
 }
 
-void WebAppUninstallDialogViews::UninstallStarted() {
-  // Next OnWebAppUninstalled should be ignored. Unsubscribe:
+base::OnceCallback<void(bool uninstalled)>
+WebAppUninstallDialogViews::UninstallStarted() {
+  DCHECK(closed_callback_);
+  // Next OnWebAppWillBeUninstalled should be ignored. Unsubscribe:
   registrar_observer_.RemoveAll();
+  // The view can now be destroyed without us knowing, so clear it to prevent
+  // UAF in the destructor.
+  view_ = nullptr;
+  return std::move(closed_callback_);
 }
 
-void WebAppUninstallDialogViews::CallCallback(bool uninstalled) {
+void WebAppUninstallDialogViews::UninstallCancelled() {
+  DCHECK(closed_callback_);
   view_ = nullptr;
-  std::move(closed_callback_).Run(uninstalled);
+  std::move(closed_callback_).Run(/*uninstalled=*/false);
 }
 
 // static

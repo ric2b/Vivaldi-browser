@@ -59,7 +59,7 @@ public class StartupPaintPreviewTest {
         Mockito.doReturn(true).when(mockService).hasCaptureForTab(Mockito.anyInt());
         TabbedPaintPreview.overridePaintPreviewTabServiceForTesting(mockService);
         PlayerManager.overrideCompositorDelegateFactoryForTesting(
-                TabbedPaintPreviewTest.TestCompositorDelegate::new);
+                new TabbedPaintPreviewTest.TestCompositorDelegateFactory());
     }
 
     @AfterClass
@@ -83,7 +83,6 @@ public class StartupPaintPreviewTest {
         Tab tab = sActivityTestRule.getActivity().getActivityTab();
         StartupPaintPreview startupPaintPreview = TestThreadUtils.runOnUiThreadBlocking(
                 () -> new StartupPaintPreview(tab, null, null, null, null));
-        TestThreadUtils.runOnUiThreadBlocking(() -> startupPaintPreview.show(null));
         TabbedPaintPreview tabbedPaintPreview =
                 TestThreadUtils.runOnUiThreadBlocking(() -> TabbedPaintPreview.get(tab));
         showAndWaitForInflation(startupPaintPreview, tabbedPaintPreview, null);

@@ -90,7 +90,7 @@ constexpr char kCommandPrefix[] = "passwordForm";
       _formActivityObserverBridge;
 
   // Subscription for JS message.
-  std::unique_ptr<web::WebState::ScriptCommandSubscription> _subscription;
+  base::CallbackListSubscription _subscription;
 }
 
 #pragma mark - Properties
@@ -326,10 +326,10 @@ constexpr char kCommandPrefix[] = "passwordForm";
                password:UTF16ToUTF8(passwordValue)
       completionHandler:^(BOOL success) {
         if (success) {
-          weakSelf.fieldDataManager->UpdateFieldDataWithAutofilledValue(
+          weakSelf.fieldDataManager->UpdateFieldDataMap(
               usernameID, usernameValue,
               FieldPropertiesFlags::kAutofilledOnPageLoad);
-          weakSelf.fieldDataManager->UpdateFieldDataWithAutofilledValue(
+          weakSelf.fieldDataManager->UpdateFieldDataMap(
               passwordID, passwordValue,
               FieldPropertiesFlags::kAutofilledOnPageLoad);
         }
@@ -354,11 +354,11 @@ constexpr char kCommandPrefix[] = "passwordForm";
               generatedPassword:generatedPassword
               completionHandler:^(BOOL success) {
                 if (success) {
-                  weakSelf.fieldDataManager->UpdateFieldDataWithAutofilledValue(
+                  weakSelf.fieldDataManager->UpdateFieldDataMap(
                       newPasswordIdentifier,
                       SysNSStringToUTF16(generatedPassword),
                       FieldPropertiesFlags::kAutofilledOnUserTrigger);
-                  weakSelf.fieldDataManager->UpdateFieldDataWithAutofilledValue(
+                  weakSelf.fieldDataManager->UpdateFieldDataMap(
                       confirmPasswordIdentifier,
                       SysNSStringToUTF16(generatedPassword),
                       FieldPropertiesFlags::kAutofilledOnUserTrigger);
@@ -370,6 +370,7 @@ constexpr char kCommandPrefix[] = "passwordForm";
 }
 
 - (void)fillPasswordFormWithFillData:(const password_manager::FillData&)fillData
+                    triggeredOnField:(FieldRendererId)uniqueFieldID
                    completionHandler:
                        (nullable void (^)(BOOL))completionHandler {
   // Necessary copy so the values can be used inside a block.
@@ -378,18 +379,22 @@ constexpr char kCommandPrefix[] = "passwordForm";
   base::string16 usernameValue = fillData.username_value;
   base::string16 passwordValue = fillData.password_value;
 
+  // Do not fill the username if filling was triggered on a password field and
+  // the username field has user typed input.
+  BOOL fillUsername = uniqueFieldID == usernameID ||
+                      !_fieldDataManager->DidUserType(usernameID);
   __weak PasswordFormHelper* weakSelf = self;
   [self.jsPasswordManager
-       fillPasswordForm:SerializeFillData(fillData)
+       fillPasswordForm:SerializeFillData(fillData, fillUsername)
                 inFrame:GetMainFrame(_webState)
            withUsername:UTF16ToUTF8(usernameValue)
                password:UTF16ToUTF8(passwordValue)
       completionHandler:^(BOOL success) {
         if (success) {
-          weakSelf.fieldDataManager->UpdateFieldDataWithAutofilledValue(
+          weakSelf.fieldDataManager->UpdateFieldDataMap(
               usernameID, usernameValue,
               FieldPropertiesFlags::kAutofilledOnUserTrigger);
-          weakSelf.fieldDataManager->UpdateFieldDataWithAutofilledValue(
+          weakSelf.fieldDataManager->UpdateFieldDataMap(
               passwordID, passwordValue,
               FieldPropertiesFlags::kAutofilledOnUserTrigger);
         }

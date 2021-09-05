@@ -4,13 +4,16 @@
 <translation id="1033008476608128425">风景 3</translation>
 <translation id="1118377629180821201">风景 12</translation>
 <translation id="1158503667684816647">不再显示确认对话框</translation>
+<translation id="1222195720020481779">正在加载安装程序...</translation>
 <translation id="1276145862619442150">快速拨号</translation>
 <translation id="1281950884873973195">动物 6</translation>
 <translation id="1411638389238344450">使用邮件发送链接</translation>
 <translation id="1454726940098520109">不再显示确认信息</translation>
 <translation id="1462666970065907900">确认要关闭此窗口？</translation>
+<translation id="1526344461589023948">保存下载的更新文件时出错。请检查是否有足够的存储空间然后重试。</translation>
 <translation id="1657174850639146440">怪兽 9</translation>
 <translation id="1676595396635191120">新建隐身窗口</translation>
+<translation id="1702758681952953055">如果错误持续发生，请发送报告并包含下列详情：</translation>
 <translation id="1728549374069268714">粘贴并转到</translation>
 <translation id="1756026472674246267">在新标签页中打开链接</translation>
 <translation id="1759842336958782510">Chrome 浏览器</translation>
@@ -20,9 +23,12 @@
 <translation id="1924750141060565109">风景 15</translation>
 <translation id="19598411548897379">普通</translation>
 <translation id="2079036669923635404">点击此处更新Vivaldi到版本 <ph name="VERSION" />。</translation>
+<translation id="2141974047387702305">下载更新文件时出现一个错误。请检查您的互联网连接并重试。</translation>
+<translation id="2339641773402824483">检查更新...</translation>
 <translation id="2441056087170876076">怪兽 2</translation>
 <translation id="2444387452209867610">插入笔记</translation>
 <translation id="2486841023299517366">动物 4</translation>
+<translation id="2612127540243995147">准备安装。Vivaldi 将被关闭，随后重新打开。</translation>
 <translation id="2848085334714181751">动物 3</translation>
 <translation id="2873951654529031587">回收站</translation>
 <translation id="292258461174562431">怪兽 4</translation>
@@ -33,6 +39,7 @@
 <translation id="3084011186245865060">风景 6</translation>
 <translation id="3127383884976966729">动物 7</translation>
 <translation id="3156398087075132709">新建书签</translation>
+<translation id="3255747772218936245">安装更新</translation>
 <translation id="3259769196742189631">校验</translation>
 <translation id="3302905971452834934">怪兽 1</translation>
 <translation id="3334610655141903168">（无标题）</translation>
@@ -45,6 +52,8 @@
 <translation id="3542768452570884558">在新窗口中打开链接</translation>
 <translation id="3588820906588687999">在新标签页中打开图片</translation>
 <translation id="3601066750251199488">怪兽 3</translation>
+<translation id="3680031241659195730">Vivaldi 新版本已发布！</translation>
+<translation id="3708982624815781692">下载被取消。</translation>
 <translation id="3732157130969736834">保存链接为书签</translation>
 <translation id="3732388226447288666">动物 2</translation>
 <translation id="3732439195215136813">动物 5</translation>
@@ -68,6 +77,7 @@
 <translation id="4677434526832593569">动物 8</translation>
 <translation id="474217410105706308">使此页面静音</translation>
 <translation id="4881695831933465202">打开</translation>
+<translation id="498766871928286903"><ph name="DOWNLOADED" /> 已下载，总共 <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
 <translation id="5014281392052865061">导入的快速拨号</translation>
 <translation id="5092656712000637858">添加页面到网页面板</translation>
 <translation id="5177818338935286353">怪兽 7</translation>
@@ -81,11 +91,13 @@
 <translation id="5594602170491763400">怪兽 5</translation>
 <translation id="5615637589913244581">Opera 15+ （Beta 版浏览器）</translation>
 <translation id="5648110075441906505">在新窗口中打开图片</translation>
+<translation id="5656371807944747581">更新出错！</translation>
 <translation id="5716238312826274098">关闭通知</translation>
 <translation id="5770433027661640693">风景 10</translation>
 <translation id="5857090052475505287">新建文件夹</translation>
 <translation id="588258955323874662">全屏</translation>
 <translation id="5916080360077521750">很遗憾，你的 Chrome 浏览器设置不能在浏览器运行时使用。要导入这些配置到 Vivaldi，你需要保存工作并关闭 Chrome 窗口然后点击继续。</translation>
+<translation id="6040143037577758943">关闭</translation>
 <translation id="6229528619562190452">点击此处更新 Vivaldi。</translation>
 <translation id="6234173136417926046">使用图片作为起始页背景</translation>
 <translation id="630690498669249215">Opera 书签文件</translation>
@@ -96,15 +108,20 @@
 <translation id="6538338088414940408">在后台标签页中打开链接</translation>
 <translation id="6551219277044048123">添加为搜索引擎(&amp;G)...</translation>
 <translation id="6630781781151951863">风景 18</translation>
+<translation id="6635049669875534328">发行注记：</translation>
 <translation id="6804831687363620480">很遗憾，你的 Opera 15+ 浏览器设置不能在浏览器运行时使用。要导入这些配置到 Vivaldi，你需要保存工作并关闭 Opera 15+ 窗口然后点击继续。</translation>
+<translation id="6892812721183419409">以<ph name="USER" />身份打开链接</translation>
 <translation id="6896758677409633944">复制</translation>
 <translation id="7086554968911045110">风景 7</translation>
 <translation id="7111492742514999492">风景 9</translation>
 <translation id="7337881442233988129">Chromium 浏览器</translation>
 <translation id="7496505986576158197">Vivaldi的诞生离不开<ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" />开源项目及其他<ph name="BEGIN_LINK_OSS" />开源软件<ph name="END_LINK_OSS" />。</translation>
+<translation id="7581266044164103589">启动更新安装器失败。请检查是否有足够的内存或存储空间然后重试。</translation>
+<translation id="7658239707568436148">取消</translation>
 <translation id="7715497554424665066">忽略更新(&amp;I)</translation>
 <translation id="7724603315864178912">剪切</translation>
 <translation id="7793738202466490491">添加到日历事件</translation>
+<translation id="7848222781052558334">下载文件的数字签名校验失败。</translation>
 <translation id="7865983598101744945">确认退出</translation>
 <translation id="7957213167373139414">我的日历</translation>
 <translation id="8027581147000338959">在新窗口中打开</translation>
@@ -113,9 +130,13 @@
 <translation id="8261506727792406068">删除</translation>
 <translation id="8331671104904436324">在后台标签页打开</translation>
 <translation id="8373293945112511707">风景 1</translation>
+<translation id="8388552048012645975">正在下载更新...</translation>
 <translation id="8427094907586191051">风景 17</translation>
+<translation id="8439034818057146672">准备安装 Vivaldi 新版本。</translation>
 <translation id="8446668873108041390">以停用通过 AppleScript 运行 JavaScript。启用“设置&gt;隐私&gt;Apple Events”选项以允许从 Apple Events 执行JavaScript。</translation>
 <translation id="8539196077526389150">风景 13</translation>
+<translation id="8562339533180097902">立即关闭 Vivaldi 并开始安装</translation>
+<translation id="8567452685425968223">正在执行更新...</translation>
 <translation id="8624587806981488221">重新加载图片(&amp;R)</translation>
 <translation id="864444594187862076">Opera 15+ （开发版浏览器）</translation>
 <translation id="8651348004684669199">添加活动标签</translation>
@@ -128,6 +149,7 @@
 <translation id="8947109330183116400">选择 HTML 书签文件</translation>
 <translation id="9017566390391482291">选择 Vivaldi 配置文件夹以导入</translation>
 <translation id="9065203028668620118">编辑</translation>
+<translation id="912022491595344261">以<ph name="USER" />身份打开图像</translation>
 <translation id="9157539936604258187">打开链接</translation>
 <translation id="9169060351863393881">Opera 12.x 浏览器</translation>
 <translation id="970294721402795299">风景 16</translation>

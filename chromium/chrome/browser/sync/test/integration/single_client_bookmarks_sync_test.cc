@@ -9,6 +9,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sync/test/integration/bookmarks_helper.h"
 #include "chrome/browser/sync/test/integration/profile_sync_service_harness.h"
@@ -411,10 +412,9 @@ IN_PROC_BROWSER_TEST_F(SingleClientBookmarksSyncTest,
 
 IN_PROC_BROWSER_TEST_F(SingleClientBookmarksSyncTest,
                        DownloadLegacyUppercaseGuid2016BookmarksAndCommit) {
-  const std::string lowercase_guid = base::GenerateGUID();
-  ASSERT_EQ(lowercase_guid, base::ToLowerASCII(lowercase_guid));
-
-  const std::string uppercase_guid = base::ToUpperASCII(lowercase_guid);
+  const base::GUID guid = base::GUID::GenerateRandomV4();
+  const std::string uppercase_guid_str =
+      base::ToUpperASCII(guid.AsLowercaseString());
   const std::string title1 = "Title1";
   const std::string title2 = "Title2";
 
@@ -422,7 +422,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientBookmarksSyncTest,
   // originator client item ID.
   fake_server::BookmarkEntityBuilder bookmark_builder(
       title1, /*originator_cache_guid=*/base::GenerateGUID(),
-      /*originator_client_item_id=*/uppercase_guid);
+      /*originator_client_item_id=*/uppercase_guid_str);
 
   fake_server_->InjectEntity(bookmark_builder.BuildBookmark(
       GURL("http://page1.com"), /*is_legacy=*/true));
@@ -431,10 +431,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientBookmarksSyncTest,
   ASSERT_EQ(1u, CountBookmarksWithTitlesMatching(kSingleProfileIndex, title1));
 
   // The GUID should have been canonicalized (lowercased) in BookmarkModel.
-  EXPECT_TRUE(
-      ContainsBookmarkNodeWithGUID(kSingleProfileIndex, lowercase_guid));
-  EXPECT_FALSE(
-      ContainsBookmarkNodeWithGUID(kSingleProfileIndex, uppercase_guid));
+  EXPECT_TRUE(ContainsBookmarkNodeWithGUID(kSingleProfileIndex, guid));
 
   // Changing the title should populate the server-side GUID in specifics in
   // lowercase form.
@@ -453,7 +450,8 @@ IN_PROC_BROWSER_TEST_F(SingleClientBookmarksSyncTest,
   ASSERT_EQ(
       title2,
       server_bookmarks[0].specifics().bookmark().legacy_canonicalized_title());
-  EXPECT_EQ(lowercase_guid, server_bookmarks[0].specifics().bookmark().guid());
+  EXPECT_EQ(guid.AsLowercaseString(),
+            server_bookmarks[0].specifics().bookmark().guid());
 }
 
 IN_PROC_BROWSER_TEST_F(SingleClientBookmarksSyncTest,
@@ -961,11 +959,11 @@ IN_PROC_BROWSER_TEST_F(SingleClientBookmarksSyncTest,
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
   ASSERT_EQ(1u, GetBookmarkBarNode(kSingleProfileIndex)->children().size());
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // signin::SetRefreshTokenForPrimaryAccount() is needed on ChromeOS in order
   // to get a non-empty refresh token on startup.
   GetClient(0)->SignInPrimaryAccount();
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
   ASSERT_TRUE(GetClient(kSingleProfileIndex)->AwaitEngineInitialization());
 
   // After restart, the last sync cycle snapshot should be empty.
@@ -994,8 +992,9 @@ IN_PROC_BROWSER_TEST_F(SingleClientBookmarksSyncTest,
   base::HistogramTester histogram_tester;
   std::unique_ptr<syncer::LoopbackServerEntity> folder =
       bookmark_builder.BuildFolder(/*is_legacy=*/false);
-  const std::string guid = folder.get()->GetSpecifics().bookmark().guid();
-  ASSERT_TRUE(base::IsValidGUID(guid));
+  const base::GUID guid = base::GUID::ParseCaseInsensitive(
+      folder.get()->GetSpecifics().bookmark().guid());
+  ASSERT_TRUE(guid.is_valid());
   ASSERT_FALSE(ContainsBookmarkNodeWithGUID(kSingleProfileIndex, guid));
   fake_server_->InjectEntity(std::move(folder));
 
@@ -1015,14 +1014,14 @@ IN_PROC_BROWSER_TEST_F(SingleClientBookmarksSyncTest,
   ASSERT_TRUE(SetupSync());
   ASSERT_EQ(0u, GetBookmarkBarNode(kSingleProfileIndex)->children().size());
 
-  const std::string originator_client_item_id = base::GenerateGUID();
+  const base::GUID originator_client_item_id = base::GUID::GenerateRandomV4();
   ASSERT_FALSE(ContainsBookmarkNodeWithGUID(kSingleProfileIndex,
                                             originator_client_item_id));
 
   fake_server::EntityBuilderFactory entity_builder_factory;
   fake_server::BookmarkEntityBuilder bookmark_builder =
       entity_builder_factory.NewBookmarkEntityBuilder(
-          "Seattle Sounders FC", originator_client_item_id);
+          "Seattle Sounders FC", originator_client_item_id.AsLowercaseString());
 
   // Issue remote creation without a valid GUID but with a valid
   // originator_client_item_id.
@@ -1071,10 +1070,9 @@ IN_PROC_BROWSER_TEST_F(SingleClientBookmarksSyncTest,
   // A bookmark should have been added with a newly assigned valid GUID.
   EXPECT_TRUE(BookmarksUrlChecker(kSingleProfileIndex, url, 1).Wait());
   EXPECT_EQ(1u, GetBookmarkBarNode(kSingleProfileIndex)->children().size());
-  EXPECT_TRUE(base::IsValidGUID(
-      GetBookmarkBarNode(kSingleProfileIndex)->children()[0].get()->guid()));
-  EXPECT_FALSE(ContainsBookmarkNodeWithGUID(kSingleProfileIndex,
-                                            originator_client_item_id));
+  EXPECT_FALSE(ContainsBookmarkNodeWithGUID(
+      kSingleProfileIndex,
+      base::GUID::ParseCaseInsensitive(originator_client_item_id)));
 
   EXPECT_EQ(1, histogram_tester.GetBucketCount("Sync.BookmarkGUIDSource2",
                                                /*kInferred=*/3));
@@ -1090,8 +1088,9 @@ IN_PROC_BROWSER_TEST_F(SingleClientBookmarksSyncTest,
   // Create bookmark in server with a valid GUID.
   std::unique_ptr<syncer::LoopbackServerEntity> bookmark =
       bookmark_builder.BuildBookmark(url, /*is_legacy=*/false);
-  const std::string guid = bookmark.get()->GetSpecifics().bookmark().guid();
-  ASSERT_TRUE(base::IsValidGUID(guid));
+  const base::GUID guid = base::GUID::ParseCaseInsensitive(
+      bookmark.get()->GetSpecifics().bookmark().guid());
+  ASSERT_TRUE(guid.is_valid());
   fake_server_->InjectEntity(std::move(bookmark));
 
   // Start syncing.
@@ -1154,11 +1153,11 @@ IN_PROC_BROWSER_TEST_F(SingleClientBookmarksSyncTest,
 IN_PROC_BROWSER_TEST_F(SingleClientBookmarksSyncTest,
                        MergeRemoteCreationWithoutValidGUID) {
   const GURL url = GURL("http://www.foo.com");
-  const std::string originator_client_item_id = base::GenerateGUID();
+  const base::GUID originator_client_item_id = base::GUID::GenerateRandomV4();
   fake_server::EntityBuilderFactory entity_builder_factory;
   fake_server::BookmarkEntityBuilder bookmark_builder =
       entity_builder_factory.NewBookmarkEntityBuilder(
-          "Seattle Sounders FC", originator_client_item_id);
+          "Seattle Sounders FC", originator_client_item_id.AsLowercaseString());
 
   // Create bookmark in server without a valid GUID but with a valid
   // originator_client_item_id.
@@ -1216,10 +1215,9 @@ IN_PROC_BROWSER_TEST_F(SingleClientBookmarksSyncTest,
   // A bookmark should have been added with a newly assigned valid GUID.
   EXPECT_TRUE(BookmarksUrlChecker(kSingleProfileIndex, url, 1).Wait());
   EXPECT_EQ(1u, GetBookmarkBarNode(kSingleProfileIndex)->children().size());
-  EXPECT_TRUE(base::IsValidGUID(
-      GetBookmarkBarNode(kSingleProfileIndex)->children()[0].get()->guid()));
-  EXPECT_FALSE(ContainsBookmarkNodeWithGUID(kSingleProfileIndex,
-                                            originator_client_item_id));
+  EXPECT_FALSE(ContainsBookmarkNodeWithGUID(
+      kSingleProfileIndex,
+      base::GUID::ParseCaseInsensitive(originator_client_item_id)));
 
   // Do not check for kSpecifics bucket because it may be 0 or 1. It depends on
   // reupload of bookmark (legacy bookmark will be reuploaded and may return
@@ -1240,8 +1238,8 @@ IN_PROC_BROWSER_TEST_F(SingleClientBookmarksSyncTest,
   const std::string title = "Seattle Sounders FC";
   const BookmarkNode* local_folder = AddFolder(
       kSingleProfileIndex, GetBookmarkBarNode(kSingleProfileIndex), 0, title);
-  const std::string old_guid = local_folder->guid();
-  SCOPED_TRACE(std::string("old_guid=") + old_guid);
+  const base::GUID old_guid = local_folder->guid();
+  SCOPED_TRACE(std::string("old_guid=") + old_guid.AsLowercaseString());
 
   ASSERT_TRUE(local_folder);
   ASSERT_TRUE(BookmarksGUIDChecker(kSingleProfileIndex, old_guid).Wait());
@@ -1253,7 +1251,8 @@ IN_PROC_BROWSER_TEST_F(SingleClientBookmarksSyncTest,
       entity_builder_factory.NewBookmarkEntityBuilder(title);
   std::unique_ptr<syncer::LoopbackServerEntity> remote_folder =
       bookmark_builder.BuildFolder(/*is_legacy=*/false);
-  const std::string new_guid = remote_folder->GetSpecifics().bookmark().guid();
+  const base::GUID new_guid = base::GUID::ParseCaseInsensitive(
+      remote_folder->GetSpecifics().bookmark().guid());
   fake_server_->InjectEntity(std::move(remote_folder));
 
   // Start syncing.
@@ -1347,11 +1346,11 @@ IN_PROC_BROWSER_TEST_F(
   ASSERT_FALSE(node->is_favicon_loading());
   ASSERT_FALSE(node->is_favicon_loaded());
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // signin::SetRefreshTokenForPrimaryAccount() is needed on ChromeOS in order
   // to get a non-empty refresh token on startup.
   GetClient(0)->SignInPrimaryAccount();
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
   ASSERT_TRUE(GetClient(kSingleProfileIndex)->StartSyncService());
   ASSERT_TRUE(GetClient(kSingleProfileIndex)->AwaitEngineInitialization());
   ASSERT_TRUE(bookmarks_helper::ServerBookmarksEqualityChecker(
@@ -1381,11 +1380,11 @@ IN_PROC_BROWSER_TEST_F(
 
   base::HistogramTester histogram_tester;
   ASSERT_TRUE(SetupClients());
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // signin::SetRefreshTokenForPrimaryAccount() is needed on ChromeOS in order
   // to get a non-empty refresh token on startup.
   GetClient(0)->SignInPrimaryAccount();
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
   ASSERT_TRUE(GetClient(kSingleProfileIndex)->AwaitEngineInitialization());
 
   // Make sure the favicon gets loaded.
@@ -1471,11 +1470,11 @@ IN_PROC_BROWSER_TEST_F(
                    .bookmark()
                    .has_full_title());
   ASSERT_TRUE(SetupClients());
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // signin::SetRefreshTokenForPrimaryAccount() is needed on ChromeOS in order
   // to get a non-empty refresh token on startup.
   GetClient(0)->SignInPrimaryAccount();
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
   ASSERT_TRUE(GetClient(kSingleProfileIndex)->AwaitEngineInitialization());
   ASSERT_TRUE(
       BookmarkFaviconLoadedChecker(kSingleProfileIndex, GURL(kBookmarkPageUrl))
@@ -1523,11 +1522,11 @@ IN_PROC_BROWSER_TEST_F(
                    .has_full_title());
 
   ASSERT_TRUE(SetupClients());
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // signin::SetRefreshTokenForPrimaryAccount() is needed on ChromeOS in order
   // to get a non-empty refresh token on startup.
   GetClient(0)->SignInPrimaryAccount();
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
   ASSERT_TRUE(GetClient(kSingleProfileIndex)->AwaitEngineInitialization());
   ASSERT_TRUE(
       BookmarkFaviconLoadedChecker(kSingleProfileIndex, GURL(kBookmarkPageUrl))

@@ -13,6 +13,7 @@
 #include "base/path_service.h"
 #include "base/strings/string_split.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/infobars/infobar_service.h"
@@ -108,11 +109,11 @@ ChromeTranslateClient::ChromeTranslateClient(content::WebContents* web_contents)
           web_contents->GetBrowserContext())
           ->GetPrimaryModel());
   if (translate_driver_) {
-    translate_driver_->AddObserver(this);
+    translate_driver_->AddLanguageDetectionObserver(this);
     translate_driver_->set_translate_manager(translate_manager_.get());
   }
   if (per_frame_translate_driver_) {
-    per_frame_translate_driver_->AddObserver(this);
+    per_frame_translate_driver_->AddLanguageDetectionObserver(this);
     per_frame_translate_driver_->set_translate_manager(
         translate_manager_.get());
   }
@@ -125,11 +126,11 @@ ChromeTranslateClient::ChromeTranslateClient(content::WebContents* web_contents)
 
 ChromeTranslateClient::~ChromeTranslateClient() {
   if (translate_driver_) {
-    translate_driver_->RemoveObserver(this);
+    translate_driver_->RemoveLanguageDetectionObserver(this);
     translate_driver_->set_translate_manager(nullptr);
   }
   if (per_frame_translate_driver_) {
-    per_frame_translate_driver_->RemoveObserver(this);
+    per_frame_translate_driver_->RemoveLanguageDetectionObserver(this);
     per_frame_translate_driver_->set_translate_manager(nullptr);
   }
 }
@@ -156,14 +157,8 @@ ChromeTranslateClient::per_frame_translate_driver() {
 // static
 std::unique_ptr<translate::TranslatePrefs>
 ChromeTranslateClient::CreateTranslatePrefs(PrefService* prefs) {
-#if defined(OS_CHROMEOS)
-  const char* preferred_languages_prefs = language::prefs::kPreferredLanguages;
-#else
-  const char* preferred_languages_prefs = NULL;
-#endif
   std::unique_ptr<translate::TranslatePrefs> translate_prefs(
-      new translate::TranslatePrefs(prefs, language::prefs::kAcceptLanguages,
-                                    preferred_languages_prefs));
+      new translate::TranslatePrefs(prefs));
 
   // We need to obtain the country here, since it comes from VariationsService.
   // components/ does not have access to that.
@@ -263,8 +258,8 @@ bool ChromeTranslateClient::ShowTranslateUI(
     return false;
   }
 
-  ShowTranslateBubbleResult result =
-      ShowBubble(step, source_language, target_language, error_type);
+  ShowTranslateBubbleResult result = ShowBubble(
+      step, source_language, target_language, error_type, triggered_from_menu);
   if (result != ShowTranslateBubbleResult::SUCCESS &&
       step == translate::TRANSLATE_STEP_BEFORE_TRANSLATE) {
     translate_manager_->RecordTranslateEvent(
@@ -366,15 +361,15 @@ void ChromeTranslateClient::WebContentsDestroyed() {
   }
 }
 
-// ContentTranslateDriver::Observer implementation.
+// TranslateDriver::LanguageDetectionObserver implementation.
 
 void ChromeTranslateClient::OnLanguageDetermined(
     const translate::LanguageDetectionDetails& details) {
   translate::TranslateBrowserMetrics::ReportLanguageDetectionContentLength(
       details.contents.size());
 
-  // TODO(268984): Remove translate notifications and have the clients be
-  // ContentTranslateDriver::Observer directly instead.
+  // TODO(268984): Remove language detection notifications and have the
+  // clients be TranslateDriver::LanguageDetectionObserver directly instead.
   content::NotificationService::current()->Notify(
       chrome::NOTIFICATION_TAB_LANGUAGE_DETERMINED,
       content::Source<content::WebContents>(web_contents()),
@@ -395,7 +390,8 @@ ShowTranslateBubbleResult ChromeTranslateClient::ShowBubble(
     translate::TranslateStep step,
     const std::string& source_language,
     const std::string& target_language,
-    translate::TranslateErrors::Type error_type) {
+    translate::TranslateErrors::Type error_type,
+    bool is_user_gesture) {
   DCHECK(translate_manager_);
   Browser* browser = chrome::FindBrowserWithWebContents(web_contents());
 
@@ -404,7 +400,7 @@ ShowTranslateBubbleResult ChromeTranslateClient::ShowBubble(
   if (!browser) {
     return TranslateBubbleFactory::Show(NULL, web_contents(), step,
                                         source_language, target_language,
-                                        error_type);
+                                        error_type, is_user_gesture);
   }
 
   if (web_contents() != browser->tab_strip_model()->GetActiveWebContents())
@@ -419,15 +415,15 @@ ShowTranslateBubbleResult ChromeTranslateClient::ShowBubble(
     return ShowTranslateBubbleResult::BROWSER_WINDOW_NOT_ACTIVE;
 
   // During auto-translating, the bubble should not be shown.
-  if (step == translate::TRANSLATE_STEP_TRANSLATING ||
-      step == translate::TRANSLATE_STEP_AFTER_TRANSLATE) {
+  if (!is_user_gesture && (step == translate::TRANSLATE_STEP_TRANSLATING ||
+                           step == translate::TRANSLATE_STEP_AFTER_TRANSLATE)) {
     if (GetLanguageState().InTranslateNavigation())
       return ShowTranslateBubbleResult::SUCCESS;
   }
 
   return TranslateBubbleFactory::Show(browser->window(), web_contents(), step,
                                       source_language, target_language,
-                                      error_type);
+                                      error_type, is_user_gesture);
 }
 #endif
 

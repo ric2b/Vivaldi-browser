@@ -80,6 +80,11 @@ const char kEduCoexistenceToSVersion[] =
 const char kEduCoexistenceToSAcceptedVersion[] =
     "family_link_user.edu_coexistence_tos_accepted_version";
 
+// A boolean pref indicating whether welcome page should be skipped in
+// in-session 'Add account' flow.
+const char kShouldSkipInlineLoginWelcomePage[] =
+    "should_skip_inline_login_welcome_page";
+
 // A dictionary of info for Quirks Client/Server interaction, mostly last server
 // request times, keyed to display product_id's.
 const char kQuirksClientLastServerCheck[] = "quirks_client.last_server_check";
@@ -127,6 +132,11 @@ const char kLauncherResultEverLaunched[] = "launcher.result_ever_launched";
 // Whether the status of the platform app version of camera app is migrated to
 // SWA.
 const char kHasCameraAppMigratedToSWA[] = "camera.has_migrated_to_swa";
+
+// Dictioanry pref to store data on the distribution of provider relevance
+// scores for the launcher normalizer.
+const char kLauncherSearchNormalizerParameters[] =
+    "launcher.search_normalizer_parameters";
 
 }  // namespace prefs
 }  // namespace chromeos

@@ -213,8 +213,7 @@ TEST_F(ActionFactoryTest, OpenInNewWindowAction) {
 
     UIAction* action =
         [factory actionToOpenInNewWindowWithURL:testURL
-                                 activityOrigin:WindowActivityToolsOrigin
-                                     completion:nil];
+                                 activityOrigin:WindowActivityToolsOrigin];
 
     EXPECT_TRUE([expectedTitle isEqualToString:action.title]);
     EXPECT_EQ(expectedImage, action.image);
@@ -374,6 +373,26 @@ TEST_F(ActionFactoryTest, viewOfflineVersion) {
 
     EXPECT_TRUE([expectedTitle isEqualToString:action.title]);
     EXPECT_EQ(expectedImage, action.image);
+  }
+}
+
+// Tests that the Open with JavaScript evaluation has have the right titles and
+// image.
+TEST_F(ActionFactoryTest, OpenWithJavaScript) {
+  if (@available(iOS 13.0, *)) {
+    ActionFactory* factory =
+        [[ActionFactory alloc] initWithBrowser:test_browser_.get()
+                                      scenario:kTestMenuScenario];
+
+    UIImage* expectedImage = [UIImage imageNamed:@"open"];
+
+    NSString* expectedTitle =
+        l10n_util::GetNSString(IDS_IOS_CONTENT_CONTEXT_OPEN);
+
+    UIAction* actionWithBlock = [factory actionToOpenJavascriptWithBlock:^{
+    }];
+    EXPECT_TRUE([expectedTitle isEqualToString:actionWithBlock.title]);
+    EXPECT_EQ(expectedImage, actionWithBlock.image);
   }
 }
 

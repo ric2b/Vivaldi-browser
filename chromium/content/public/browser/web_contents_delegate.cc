@@ -38,7 +38,11 @@ bool WebContentsDelegate::ShouldTransferNavigation(
 }
 
 bool WebContentsDelegate::CanOverscrollContent() {
+#if defined(USE_AURA)
+  return true;
+#else
   return false;
+#endif
 }
 
 bool WebContentsDelegate::ShouldSuppressDialogs(WebContents* source) {
@@ -343,8 +347,8 @@ bool WebContentsDelegate::ShouldShowStaleContentOnEviction(
 }
 
 bool WebContentsDelegate::IsFrameLowPriority(
-    const WebContents* web_contents,
-    const RenderFrameHost* render_frame_host) {
+    WebContents* web_contents,
+    RenderFrameHost* render_frame_host) {
   return false;
 }
 

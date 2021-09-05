@@ -30,6 +30,7 @@
 
 #include "third_party/blink/renderer/modules/service_worker/service_worker_global_scope.h"
 
+#include <algorithm>
 #include <memory>
 #include <utility>
 
@@ -47,6 +48,7 @@
 #include "third_party/blink/public/mojom/appcache/appcache.mojom-blink.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/mojom/timing/worker_timing_container.mojom-blink.h"
+#include "third_party/blink/public/mojom/web_feature/web_feature.mojom-blink.h"
 #include "third_party/blink/public/mojom/worker/subresource_loader_updater.mojom.h"
 #include "third_party/blink/public/platform/modules/service_worker/web_service_worker_error.h"
 #include "third_party/blink/public/platform/modules/service_worker/web_service_worker_fetch_context.h"
@@ -74,6 +76,7 @@
 #include "third_party/blink/renderer/core/loader/threadable_loader.h"
 #include "third_party/blink/renderer/core/loader/worker_resource_timing_notifier_impl.h"
 #include "third_party/blink/renderer/core/messaging/blink_transferable_message.h"
+#include "third_party/blink/renderer/core/messaging/message_port.h"
 #include "third_party/blink/renderer/core/origin_trials/origin_trial_context.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
 #include "third_party/blink/renderer/core/trustedtypes/trusted_script_url.h"
@@ -198,8 +201,7 @@ ServiceWorkerGlobalScope* ServiceWorkerGlobalScope::Create(
         installed_scripts_manager,
     mojo::PendingRemote<mojom::blink::CacheStorage> cache_storage_remote,
     base::TimeTicks time_origin,
-    const ServiceWorkerToken& service_worker_token,
-    ukm::SourceId ukm_source_id) {
+    const ServiceWorkerToken& service_worker_token) {
 #if DCHECK_IS_ON()
   // If the script is being loaded via script streaming, the script is not yet
   // loaded.
@@ -216,8 +218,7 @@ ServiceWorkerGlobalScope* ServiceWorkerGlobalScope::Create(
 
   return MakeGarbageCollected<ServiceWorkerGlobalScope>(
       std::move(creation_params), thread, std::move(installed_scripts_manager),
-      std::move(cache_storage_remote), time_origin, service_worker_token,
-      ukm_source_id);
+      std::move(cache_storage_remote), time_origin, service_worker_token);
 }
 
 ServiceWorkerGlobalScope::ServiceWorkerGlobalScope(
@@ -227,12 +228,8 @@ ServiceWorkerGlobalScope::ServiceWorkerGlobalScope(
         installed_scripts_manager,
     mojo::PendingRemote<mojom::blink::CacheStorage> cache_storage_remote,
     base::TimeTicks time_origin,
-    const ServiceWorkerToken& service_worker_token,
-    ukm::SourceId ukm_source_id)
-    : WorkerGlobalScope(std::move(creation_params),
-                        thread,
-                        time_origin,
-                        ukm_source_id),
+    const ServiceWorkerToken& service_worker_token)
+    : WorkerGlobalScope(std::move(creation_params), thread, time_origin),
       installed_scripts_manager_(std::move(installed_scripts_manager)),
       cache_storage_remote_(std::move(cache_storage_remote)),
       token_(service_worker_token) {
@@ -1005,7 +1002,10 @@ void ServiceWorkerGlobalScope::RespondToFetchEventWithNoResponse(
       TRACE_ID_WITH_SCOPE(kServiceWorkerGlobalScopeTraceScope,
                           TRACE_ID_LOCAL(fetch_event_id)),
       TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
-  DCHECK(fetch_response_callbacks_.Contains(fetch_event_id));
+  // `fetch_response_callbacks_` does not have the entry when the event timed
+  // out.
+  if (!fetch_response_callbacks_.Contains(fetch_event_id))
+    return;
   mojom::blink::ServiceWorkerFetchResponseCallback* response_callback =
       fetch_response_callbacks_.Take(fetch_event_id)->Value().get();
 
@@ -1030,7 +1030,10 @@ void ServiceWorkerGlobalScope::RespondToFetchEvent(
       TRACE_ID_WITH_SCOPE(kServiceWorkerGlobalScopeTraceScope,
                           TRACE_ID_LOCAL(fetch_event_id)),
       TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
-  DCHECK(fetch_response_callbacks_.Contains(fetch_event_id));
+  // `fetch_response_callbacks_` does not have the entry when the event timed
+  // out.
+  if (!fetch_response_callbacks_.Contains(fetch_event_id))
+    return;
 
   mojom::blink::ServiceWorkerFetchResponseCallback* response_callback =
       fetch_response_callbacks_.Take(fetch_event_id)->Value().get();
@@ -1058,7 +1061,10 @@ void ServiceWorkerGlobalScope::RespondToFetchEventWithResponseStream(
       TRACE_ID_WITH_SCOPE(kServiceWorkerGlobalScopeTraceScope,
                           TRACE_ID_LOCAL(fetch_event_id)),
       TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
-  DCHECK(fetch_response_callbacks_.Contains(fetch_event_id));
+  // `fetch_response_callbacks_` does not have the entry when the event timed
+  // out.
+  if (!fetch_response_callbacks_.Contains(fetch_event_id))
+    return;
   mojom::blink::ServiceWorkerFetchResponseCallback* response_callback =
       fetch_response_callbacks_.Take(fetch_event_id)->Value().get();
 
@@ -1471,24 +1477,31 @@ void ServiceWorkerGlobalScope::DispatchExtendableMessageEventInternal(
   DispatchExtendableEvent(event_to_dispatch, observer);
 }
 
+void ServiceWorkerGlobalScope::AbortCallbackForFetchEvent(
+    int event_id,
+    mojom::blink::ServiceWorkerEventStatus status) {
+  // Discard a callback for an inflight respondWith() if it still exists.
+  auto response_callback_iter = fetch_response_callbacks_.find(event_id);
+  if (response_callback_iter != fetch_response_callbacks_.end()) {
+    response_callback_iter->value->TakeValue().reset();
+    fetch_response_callbacks_.erase(response_callback_iter);
+  }
+
+  // Run the event callback with the error code.
+  auto event_callback_iter = fetch_event_callbacks_.find(event_id);
+  std::move(event_callback_iter->value).Run(status);
+  fetch_event_callbacks_.erase(event_callback_iter);
+}
+
 void ServiceWorkerGlobalScope::StartFetchEvent(
     mojom::blink::DispatchFetchEventParamsPtr params,
     base::WeakPtr<CrossOriginResourcePolicyChecker> corp_checker,
-    mojo::PendingRemote<mojom::blink::ServiceWorkerFetchResponseCallback>
-        response_callback,
     base::Optional<base::TimeTicks> created_time,
     int event_id) {
   DCHECK(IsContextThread());
   if (created_time.has_value()) {
     RecordQueuingTime(created_time.value());
   }
-
-  HeapMojoRemote<mojom::blink::ServiceWorkerFetchResponseCallback,
-                 HeapMojoWrapperMode::kWithoutContextObserver>
-      remote(this);
-  remote.Bind(std::move(response_callback),
-              GetThread()->GetTaskRunner(TaskType::kNetworking));
-  fetch_response_callbacks_.Set(event_id, WrapDisallowNew(std::move(remote)));
 
   // This TRACE_EVENT is used for perf benchmark to confirm if all of fetch
   // events have completed. (crbug.com/736697)
@@ -1573,23 +1586,31 @@ void ServiceWorkerGlobalScope::DispatchFetchEventForSubresource(
 
   const int event_id = event_queue_->NextEventId();
   fetch_event_callbacks_.Set(event_id, std::move(callback));
+  HeapMojoRemote<mojom::blink::ServiceWorkerFetchResponseCallback,
+                 HeapMojoWrapperMode::kWithoutContextObserver>
+      remote(this);
+  remote.Bind(std::move(response_callback),
+              GetThread()->GetTaskRunner(TaskType::kNetworking));
+  fetch_response_callbacks_.Set(event_id, WrapDisallowNew(std::move(remote)));
 
   if (RequestedTermination()) {
     event_queue_->EnqueuePending(
         event_id,
         WTF::Bind(&ServiceWorkerGlobalScope::StartFetchEvent,
                   WrapWeakPersistent(this), std::move(params),
-                  std::move(corp_checker), std::move(response_callback),
-                  base::TimeTicks::Now()),
-        CreateAbortCallback(&fetch_event_callbacks_), base::nullopt);
+                  std::move(corp_checker), base::TimeTicks::Now()),
+        WTF::Bind(&ServiceWorkerGlobalScope::AbortCallbackForFetchEvent,
+                  WrapWeakPersistent(this)),
+        base::nullopt);
   } else {
     event_queue_->EnqueueNormal(
         event_id,
         WTF::Bind(&ServiceWorkerGlobalScope::StartFetchEvent,
                   WrapWeakPersistent(this), std::move(params),
-                  std::move(corp_checker), std::move(response_callback),
-                  base::TimeTicks::Now()),
-        CreateAbortCallback(&fetch_event_callbacks_), base::nullopt);
+                  std::move(corp_checker), base::TimeTicks::Now()),
+        WTF::Bind(&ServiceWorkerGlobalScope::AbortCallbackForFetchEvent,
+                  WrapWeakPersistent(this)),
+        base::nullopt);
   }
 }
 
@@ -1959,6 +1980,13 @@ void ServiceWorkerGlobalScope::DispatchFetchEventForMainResource(
   const int event_id = event_queue_->NextEventId();
   fetch_event_callbacks_.Set(event_id, std::move(callback));
 
+  HeapMojoRemote<mojom::blink::ServiceWorkerFetchResponseCallback,
+                 HeapMojoWrapperMode::kWithoutContextObserver>
+      remote(this);
+  remote.Bind(std::move(response_callback),
+              GetThread()->GetTaskRunner(TaskType::kNetworking));
+  fetch_response_callbacks_.Set(event_id, WrapDisallowNew(std::move(remote)));
+
   // We can use nullptr as a |corp_checker| for the main resource because it
   // must be the same origin.
   if (params->is_offline_capability_check) {
@@ -1966,18 +1994,19 @@ void ServiceWorkerGlobalScope::DispatchFetchEventForMainResource(
         event_id,
         WTF::Bind(&ServiceWorkerGlobalScope::StartFetchEvent,
                   WrapWeakPersistent(this), std::move(params),
-                  /*corp_checker=*/nullptr, std::move(response_callback),
-                  base::nullopt),
-        CreateAbortCallback(&fetch_event_callbacks_),
+                  /*corp_checker=*/nullptr, base::nullopt),
+        WTF::Bind(&ServiceWorkerGlobalScope::AbortCallbackForFetchEvent,
+                  WrapWeakPersistent(this)),
         base::TimeDelta::FromSeconds(kCustomTimeoutForOfflineEvent.Get()));
   } else {
     event_queue_->EnqueueNormal(
         event_id,
         WTF::Bind(&ServiceWorkerGlobalScope::StartFetchEvent,
                   WrapWeakPersistent(this), std::move(params),
-                  /*corp_checker=*/nullptr, std::move(response_callback),
-                  base::TimeTicks::Now()),
-        CreateAbortCallback(&fetch_event_callbacks_), base::nullopt);
+                  /*corp_checker=*/nullptr, base::TimeTicks::Now()),
+        WTF::Bind(&ServiceWorkerGlobalScope::AbortCallbackForFetchEvent,
+                  WrapWeakPersistent(this)),
+        base::nullopt);
   }
 }
 
@@ -2373,6 +2402,18 @@ void ServiceWorkerGlobalScope::StartPaymentRequestEvent(
         event_data->payment_options->request_shipping);
   }
 
+  // Count standardized payment method identifiers, such as "basic-card" or
+  // "tokenized-card". Omit counting the URL-based payment method identifiers,
+  // such as "https://bobpay.xyz".
+  if (std::any_of(
+          event_data->method_data.begin(), event_data->method_data.end(),
+          [](const payments::mojom::blink::PaymentMethodDataPtr& datum) {
+            return datum && !datum->supported_method.StartsWith("http");
+          })) {
+    UseCounter::Count(
+        this, WebFeature::kPaymentHandlerStandardizedPaymentMethodIdentifier);
+  }
+
   mojo::PendingRemote<payments::mojom::blink::PaymentHandlerHost>
       payment_handler_host = std::move(event_data->payment_handler_host);
   Event* event = PaymentRequestEvent::Create(
@@ -2380,8 +2421,7 @@ void ServiceWorkerGlobalScope::StartPaymentRequestEvent(
       PaymentEventDataConversion::ToPaymentRequestEventInit(
           ScriptController()->GetScriptState(), std::move(event_data)),
       std::move(payment_handler_host), respond_with_observer,
-      wait_until_observer,
-      ExecutionContext::From(ScriptController()->GetScriptState()));
+      wait_until_observer, this);
 
   DispatchExtendableEventWithRespondWith(event, wait_until_observer,
                                          respond_with_observer);

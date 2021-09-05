@@ -67,14 +67,16 @@ ContentTranslateDriver::ContentTranslateDriver(
   DCHECK(navigation_controller_);
 }
 
-ContentTranslateDriver::~ContentTranslateDriver() {}
+ContentTranslateDriver::~ContentTranslateDriver() = default;
 
-void ContentTranslateDriver::AddObserver(Observer* observer) {
-  observer_list_.AddObserver(observer);
+void ContentTranslateDriver::AddTranslationObserver(
+    TranslationObserver* observer) {
+  translation_observers_.AddObserver(observer);
 }
 
-void ContentTranslateDriver::RemoveObserver(Observer* observer) {
-  observer_list_.RemoveObserver(observer);
+void ContentTranslateDriver::RemoveTranslationObserver(
+    TranslationObserver* observer) {
+  translation_observers_.RemoveObserver(observer);
 }
 
 void ContentTranslateDriver::InitiateTranslation(const std::string& page_lang,
@@ -114,13 +116,13 @@ bool ContentTranslateDriver::IsLinkNavigation() {
 
 void ContentTranslateDriver::OnTranslateEnabledChanged() {
   content::WebContents* web_contents = navigation_controller_->GetWebContents();
-  for (auto& observer : observer_list_)
+  for (auto& observer : translation_observers_)
     observer.OnTranslateEnabledChanged(web_contents);
 }
 
 void ContentTranslateDriver::OnIsPageTranslatedChanged() {
   content::WebContents* web_contents = navigation_controller_->GetWebContents();
-  for (auto& observer : observer_list_)
+  for (auto& observer : translation_observers_)
     observer.OnIsPageTranslatedChanged(web_contents);
 }
 
@@ -211,7 +213,7 @@ void ContentTranslateDriver::NavigationEntryCommitted(
   // If not a reload, return.
   if (!ui::PageTransitionCoreTypeIs(entry->GetTransitionType(),
                                     ui::PAGE_TRANSITION_RELOAD) &&
-      load_details.type != content::NAVIGATION_TYPE_SAME_PAGE) {
+      load_details.type != content::NAVIGATION_TYPE_SAME_ENTRY) {
     return;
   }
 
@@ -227,7 +229,8 @@ void ContentTranslateDriver::NavigationEntryCommitted(
     return;
   }
 
-  if (!translate_manager_->GetLanguageState()->page_needs_translation())
+  if (!translate_manager_->GetLanguageState()
+           ->page_level_translation_critiera_met())
     return;
 
   // Note that we delay it as the ordering of the processing of this callback
@@ -286,15 +289,15 @@ void ContentTranslateDriver::AddReceiver(
 void ContentTranslateDriver::RegisterPage(
     mojo::PendingRemote<translate::mojom::TranslateAgent> translate_agent,
     const translate::LanguageDetectionDetails& details,
-    const bool page_needs_translation) {
+    const bool page_level_translation_critiera_met) {
   base::TimeTicks language_determined_time = base::TimeTicks::Now();
   ReportLanguageDeterminedDuration(finish_navigation_time_,
                                    language_determined_time);
 
   // If we have a language histogram (i.e. we're not in incognito), update it
   // with the detected language of every page visited.
-  if (language_histogram_ && details.is_cld_reliable)
-    language_histogram_->OnPageVisited(details.cld_language);
+  if (language_histogram_ && details.is_model_reliable)
+    language_histogram_->OnPageVisited(details.model_detected_language);
 
   translate_agents_[++next_page_seq_no_].Bind(std::move(translate_agent));
   translate_agents_[next_page_seq_no_].set_disconnect_handler(
@@ -303,7 +306,7 @@ void ContentTranslateDriver::RegisterPage(
   translate_manager_->set_current_seq_no(next_page_seq_no_);
 
   translate_manager_->GetLanguageState()->LanguageDetermined(
-      details.adopted_language, page_needs_translation);
+      details.adopted_language, page_level_translation_critiera_met);
 
   if (web_contents()) {
     translate_manager_->InitiateTranslation(details.adopted_language);
@@ -314,7 +317,7 @@ void ContentTranslateDriver::RegisterPage(
       SetPageLanguageInNavigation(details.adopted_language, entry);
   }
 
-  for (auto& observer : observer_list_)
+  for (auto& observer : language_detection_observers())
     observer.OnLanguageDetermined(details);
 }
 
@@ -326,13 +329,13 @@ void ContentTranslateDriver::OnPageTranslated(
   if (cancelled) {
     // Informs the |TranslateMetricsLogger| that the translation was cancelled.
     translate_manager_->GetActiveTranslateMetricsLogger()
-        ->LogTranslationFinished(false);
+        ->LogTranslationFinished(false, error_type);
     return;
   }
 
   translate_manager_->PageTranslated(
       original_lang, translated_lang, error_type);
-  for (auto& observer : observer_list_)
+  for (auto& observer : translation_observers_)
     observer.OnPageTranslated(original_lang, translated_lang, error_type);
 }
 

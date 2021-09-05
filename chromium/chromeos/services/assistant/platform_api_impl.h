@@ -10,14 +10,13 @@
 #include <utility>
 #include <vector>
 
-#include "chromeos/audio/cras_audio_handler.h"
-#include "chromeos/services/assistant/cros_platform_api.h"
 #include "chromeos/services/assistant/platform/audio_input_provider_impl.h"
 #include "chromeos/services/assistant/platform/audio_output_provider_impl.h"
 #include "chromeos/services/assistant/platform/file_provider_impl.h"
 #include "chromeos/services/assistant/platform/network_provider_impl.h"
 #include "chromeos/services/assistant/platform/system_provider_impl.h"
 #include "chromeos/services/assistant/public/cpp/assistant_service.h"
+#include "chromeos/services/assistant/public/cpp/migration/cros_platform_api.h"
 #include "libassistant/shared/public/platform_auth.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "services/device/public/mojom/battery_monitor.mojom.h"
@@ -30,17 +29,14 @@ namespace assistant {
 class AssistantMediaSession;
 
 // Platform API required by the voice assistant.
-class PlatformApiImpl : public CrosPlatformApi,
-                        CrasAudioHandler::AudioObserver {
+class PlatformApiImpl : public CrosPlatformApi {
  public:
   PlatformApiImpl(
       AssistantMediaSession* media_session,
       PowerManagerClient* power_manager_client,
-      CrasAudioHandler* cras_audio_handler,
       mojo::PendingRemote<device::mojom::BatteryMonitor> battery_monitor,
       scoped_refptr<base::SequencedTaskRunner> main_thread_task_runner,
-      scoped_refptr<base::SingleThreadTaskRunner> background_task_runner,
-      std::string pref_locale);
+      scoped_refptr<base::SingleThreadTaskRunner> background_task_runner);
   ~PlatformApiImpl() override;
 
   // assistant_client::PlatformApi overrides
@@ -51,17 +47,7 @@ class PlatformApiImpl : public CrosPlatformApi,
   assistant_client::NetworkProvider& GetNetworkProvider() override;
   assistant_client::SystemProvider& GetSystemProvider() override;
 
-  // chromeos::CrasAudioHandler::AudioObserver overrides
-  void OnAudioNodesChanged() override;
-
-  // Called when the mic state associated with the interaction is changed.
-  void SetMicState(bool mic_open) override;
-
-  void OnConversationTurnStarted() override;
-  void OnConversationTurnFinished() override;
-
-  // Called when hotword enabled status changed.
-  void OnHotwordEnabled(bool enable) override;
+  void InitializeAudioInputHost(AudioInputHost& host) override;
 
  private:
   // ChromeOS does not use auth manager, so we don't yet need to implement a
@@ -102,9 +88,6 @@ class PlatformApiImpl : public CrosPlatformApi,
   FileProviderImpl file_provider_;
   NetworkProviderImpl network_provider_;
   std::unique_ptr<SystemProviderImpl> system_provider_;
-  std::string pref_locale_;
-
-  CrasAudioHandler* const cras_audio_handler_;
 
   DISALLOW_COPY_AND_ASSIGN(PlatformApiImpl);
 };

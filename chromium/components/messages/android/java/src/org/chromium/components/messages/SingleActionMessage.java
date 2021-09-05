@@ -4,6 +4,7 @@
 
 package org.chromium.components.messages;
 
+import android.animation.Animator;
 import android.annotation.SuppressLint;
 import android.text.format.DateUtils;
 import android.view.LayoutInflater;
@@ -14,35 +15,55 @@ import androidx.annotation.VisibleForTesting;
 import org.chromium.base.Callback;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.ui.modelutil.PropertyModel;
+import org.chromium.ui.util.AccessibilityUtil;
 
 /**
  * Coordinator to show / hide a banner message on given container and delegate events.
  */
 public class SingleActionMessage implements MessageStateHandler {
+    private static final long DURATION = 10 * DateUtils.SECOND_IN_MILLIS;
+    private static final long DURATION_ON_A11Y = 30 * DateUtils.SECOND_IN_MILLIS;
+
+    /**
+     * The interface that consumers of SingleActionMessage should implement to receive notification
+     * that the message was dismissed.
+     */
+    @FunctionalInterface
+    public interface DismissCallback {
+        void invoke(PropertyModel messageProperties, int dismissReason);
+    }
+
     private MessageBannerCoordinator mMessageBanner;
     private MessageBannerView mView;
     private final MessageContainer mContainer;
     private final PropertyModel mModel;
-    private final Callback<PropertyModel> mDismissHandler;
+    private final DismissCallback mDismissHandler;
     private MessageAutoDismissTimer mAutoDismissTimer;
     private final Supplier<Integer> mMaxTranslationSupplier;
+    private final AccessibilityUtil mAccessibilityUtil;
+    private final Callback<Animator> mAnimatorStartCallback;
 
     /**
      * @param container The container holding messages.
      * @param model The PropertyModel with {@link
      *         MessageBannerProperties#SINGLE_ACTION_MESSAGE_KEYS}.
-     * @param dismissHandler The {@link Callback<PropertyModel>} able to dismiss a message by given
-     *         property model.
+     * @param dismissHandler The {@link DismissCallback} able to dismiss a message by given property
+     *         model.
      * @param maxTranslationSupplier A {@link Supplier} that supplies the maximum translation Y
-     *         value the message banner can have as a result of the animations or the gestures.
+     * @param accessibilityUtil A util to expose information related to system accessibility state.
+     * @param animatorStartCallback The {@link Callback} that will be used by the message banner to
+     *         delegate starting the animations to the {@link WindowAndroid}.
      */
     public SingleActionMessage(MessageContainer container, PropertyModel model,
-            Callback<PropertyModel> dismissHandler, Supplier<Integer> maxTranslationSupplier) {
+            DismissCallback dismissHandler, Supplier<Integer> maxTranslationSupplier,
+            AccessibilityUtil accessibilityUtil, Callback<Animator> animatorStartCallback) {
         mModel = model;
         mContainer = container;
         mDismissHandler = dismissHandler;
-        mAutoDismissTimer = new MessageAutoDismissTimer(10 * DateUtils.SECOND_IN_MILLIS);
+        mAccessibilityUtil = accessibilityUtil;
+        mAutoDismissTimer = new MessageAutoDismissTimer(getAutoDismissDuration());
         mMaxTranslationSupplier = maxTranslationSupplier;
+        mAnimatorStartCallback = animatorStartCallback;
 
         mModel.set(
                 MessageBannerProperties.PRIMARY_BUTTON_CLICK_LISTENER, this::handlePrimaryAction);
@@ -57,20 +78,24 @@ public class SingleActionMessage implements MessageStateHandler {
         if (mMessageBanner == null) {
             mView = (MessageBannerView) LayoutInflater.from(mContainer.getContext())
                             .inflate(R.layout.message_banner_view, mContainer, false);
-            mMessageBanner = new MessageBannerCoordinator(mView, mModel, mMaxTranslationSupplier,
-                    mContainer.getResources(), mDismissHandler.bind(mModel));
+            mMessageBanner = new MessageBannerCoordinator(
+                    mView, mModel, mMaxTranslationSupplier, mContainer.getResources(), () -> {
+                        mDismissHandler.invoke(mModel, DismissReason.GESTURE);
+                    }, mAnimatorStartCallback);
         }
         mContainer.addMessage(mView);
 
         final Runnable showRunnable = () -> mMessageBanner.show(() -> {
             mMessageBanner.setOnTouchRunnable(mAutoDismissTimer::resetTimer);
-            mAutoDismissTimer.startTimer(() -> { mDismissHandler.onResult(mModel); });
+            mMessageBanner.announceForAccessibility();
+            mAutoDismissTimer.startTimer(
+                    () -> { mDismissHandler.invoke(mModel, DismissReason.TIMER); });
         });
 
         // Wait until the message and the container are measured before showing the message. This
         // is required in case the animation set-up requires the height of the container, e.g.
         // showing messages without the top controls visible.
-        mContainer.runAfterInitialLayout(showRunnable);
+        mContainer.runAfterInitialMessageLayout(showRunnable);
     }
 
     /**
@@ -84,26 +109,28 @@ public class SingleActionMessage implements MessageStateHandler {
             mContainer.removeMessage(mView);
             if (hiddenCallback != null) hiddenCallback.run();
         };
-        if (animate) {
-            mMessageBanner.hide(hiddenRunnable);
-        } else {
-            hiddenRunnable.run();
-        }
+        mMessageBanner.hide(animate, hiddenRunnable);
     }
 
     /**
      * Remove message from the message queue so that the message will not be shown anymore.
+     * @param dismissReason The reason why message is being dismissed.
      */
     @Override
-    public void dismiss() {
+    public void dismiss(@DismissReason int dismissReason) {
         mAutoDismissTimer.cancelTimer();
-        Runnable onDismissed = mModel.get(MessageBannerProperties.ON_DISMISSED);
-        if (onDismissed != null) onDismissed.run();
+        Callback<Integer> onDismissed = mModel.get(MessageBannerProperties.ON_DISMISSED);
+        if (onDismissed != null) onDismissed.onResult(dismissReason);
     }
 
     private void handlePrimaryAction(View v) {
         mModel.get(MessageBannerProperties.ON_PRIMARY_ACTION).run();
-        mDismissHandler.onResult(mModel);
+        mDismissHandler.invoke(mModel, DismissReason.PRIMARY_ACTION);
+    }
+
+    @VisibleForTesting
+    long getAutoDismissDuration() {
+        return mAccessibilityUtil.isAccessibilityEnabled() ? DURATION_ON_A11Y : DURATION;
     }
 
     @VisibleForTesting

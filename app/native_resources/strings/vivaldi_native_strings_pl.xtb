@@ -4,6 +4,7 @@
 <translation id="1033008476608128425">Krajobraz 3</translation>
 <translation id="1118377629180821201">Krajobraz 12</translation>
 <translation id="1158503667684816647">Nie pytaj ponownie</translation>
+<translation id="1222195720020481779">Uruchamianie instalatora...</translation>
 <translation id="1276145862619442150">Szybkie wybieranie</translation>
 <translation id="1281950884873973195">Zwierzę 6</translation>
 <translation id="1411638389238344450">Wyślij link pocztą e-mail</translation>
@@ -21,11 +22,15 @@
 <translation id="1921101374471252440">&amp;Przeładuj obraz</translation>
 <translation id="1924750141060565109">Krajobraz 15</translation>
 <translation id="19598411548897379">Ogólny</translation>
+<translation id="1985669426322966465">Aktualizacja oprogramowania</translation>
 <translation id="2079036669923635404">Kliknij tutaj, aby zaktualizować Vivaldi do wersji <ph name="VERSION" />.</translation>
 <translation id="2141974047387702305">Wystąpił błąd podczas pobierania plików aktualizacji. Sprawdź połączenie internetowe i spróbuj ponownie później.</translation>
+<translation id="2339641773402824483">Sprawdzanie dostępnych aktualizacji...</translation>
 <translation id="2441056087170876076">Potwór 2</translation>
 <translation id="2444387452209867610">Wstaw notatkę</translation>
 <translation id="2486841023299517366">Zwierzę 4</translation>
+<translation id="2612127540243995147">Gotowy do instalacji. Przeglądarka zostanie zamknięta i uruchomiona ponownie.</translation>
+<translation id="2613387515621326337">Przejdź do strony aktualizacji</translation>
 <translation id="2848085334714181751">Zwierzę 3</translation>
 <translation id="2873951654529031587">Kosz</translation>
 <translation id="292258461174562431">Potwór 4</translation>
@@ -36,9 +41,12 @@
 <translation id="3084011186245865060">Krajobraz 6</translation>
 <translation id="3127383884976966729">Zwierzę 7</translation>
 <translation id="3156398087075132709">Nowa zakładka</translation>
+<translation id="3255747772218936245">Zainstaluj aktualizację</translation>
 <translation id="3259769196742189631">Sprawdź poprawność kodu źródłowego</translation>
 <translation id="3302905971452834934">Potwór 1</translation>
 <translation id="3334610655141903168">(brak tytułu)</translation>
+<translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> jest obecnie najnowszą dostępną wersją.</translation>
+<translation id="3383198080133834965">Masz najnowszą wersję!</translation>
 <translation id="3402602684546832928">Wybierz plik zakładek Opery</translation>
 <translation id="3451317331714872347">Krajobraz 8</translation>
 <translation id="3457498675806041407">Potwierdź zamknięcie</translation>
@@ -48,6 +56,7 @@
 <translation id="3542768452570884558">Otwórz link w nowym oknie</translation>
 <translation id="3588820906588687999">Otwórz obraz w nowej karcie</translation>
 <translation id="3601066750251199488">Potwór 3</translation>
+<translation id="3680031241659195730">Dostępna jest nowa wersja przeglądarki Vivaldi!</translation>
 <translation id="3708982624815781692">Pobieranie zostało anulowane.</translation>
 <translation id="3732157130969736834">Dodaj link do zakładek</translation>
 <translation id="3732388226447288666">Zwierzę 2</translation>
@@ -56,6 +65,7 @@
 <translation id="3914946330804881301">Zaimportowane z Opery</translation>
 <translation id="3921292902397893431">Potwór 8</translation>
 <translation id="3943857333388298514">Wklej</translation>
+<translation id="4005270918754737597">Pomiń tę wersję</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4073157431025461511">&amp;Nie pokazuj ponownie</translation>
 <translation id="4074744496918018786">Otwórz obraz w oknie prywatnym</translation>
@@ -72,6 +82,7 @@
 <translation id="4677434526832593569">Zwierzę 8</translation>
 <translation id="474217410105706308">Wycisz kartę</translation>
 <translation id="4881695831933465202">Otwórz</translation>
+<translation id="498766871928286903"><ph name="DOWNLOADED" /> z <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
 <translation id="5014281392052865061">Zaimportowane szybkie wybieranie</translation>
 <translation id="5092656712000637858">Dodaj stronę jako panel www</translation>
 <translation id="5177818338935286353">Potwór 7</translation>
@@ -87,6 +98,7 @@
 <translation id="5648110075441906505">Otwórz obraz w nowym oknie</translation>
 <translation id="5656371807944747581">Błąd aktualizacji!</translation>
 <translation id="5716238312826274098">Wyłącz powiadomienia</translation>
+<translation id="5732584064771442623">Vivaldi <ph name="NEW_VERSION" /> jest już dostępna (posiadasz wersję <ph name="OLD_VERSION" />). Czy chcesz pobrać aktualizację teraz?</translation>
 <translation id="5770433027661640693">Krajobraz 10</translation>
 <translation id="5857090052475505287">Nowy folder</translation>
 <translation id="588258955323874662">Pełny ekran</translation>
@@ -102,15 +114,19 @@
 <translation id="6538338088414940408">Otwórz link w karcie w tle</translation>
 <translation id="6551219277044048123">Dodaj jako &amp;wyszukiwarkę...</translation>
 <translation id="6630781781151951863">Krajobraz 18</translation>
+<translation id="6635049669875534328">Informacje o wydaniu:</translation>
 <translation id="6804831687363620480">Niestety, twoje ustawienia Opery 15+ nie są dostępne podczas korzystania z przeglądarki. Aby zaimportować te ustawienia, zapisz swoją pracę i zamknij wszystkie okna Opery 15+. Następnie naciśnij Dalej, aby kontynuować.</translation>
+<translation id="6892812721183419409">Otwórz link jako <ph name="USER" /></translation>
 <translation id="6896758677409633944">Kopiuj</translation>
 <translation id="7086554968911045110">Krajobraz 7</translation>
 <translation id="7111492742514999492">Krajobraz 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7496505986576158197">Przeglądarka Vivaldi powstała dzięki otwartemu projektowi <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> oraz innego <ph name="BEGIN_LINK_OSS" />oprogramowania open source<ph name="END_LINK_OSS" />.</translation>
 <translation id="7581266044164103589">Nie udało się uruchomić instalatora aktualizacji. Sprawdź, czy komputer ma wystarczającą ilość pamięci lub miejsca na dysku i spróbuj ponownie później.</translation>
+<translation id="7658239707568436148">Anuluj</translation>
 <translation id="7715497554424665066">Ignoruj aktualizację</translation>
 <translation id="7724603315864178912">Wytnij</translation>
+<translation id="7727481996062361502">Weryfikowanie aktualizacji...</translation>
 <translation id="7793738202466490491">Dodaj jako wydarzenie kalendarza</translation>
 <translation id="7848222781052558334">Nie udało się zweryfikować podpisu cyfrowego pobranych plików.</translation>
 <translation id="7865983598101744945">Potwierdź zamknięcie</translation>
@@ -121,9 +137,13 @@
 <translation id="8261506727792406068">Usuń</translation>
 <translation id="8331671104904436324">Otwórz w nowej karcie w tle</translation>
 <translation id="8373293945112511707">Krajobraz 1</translation>
+<translation id="8388552048012645975">Pobieranie aktualizacji...</translation>
 <translation id="8427094907586191051">Krajobraz 17</translation>
+<translation id="8439034818057146672">Nowa wersja przeglądarki Vivaldi jest gotowa do zainstalowania.</translation>
 <translation id="8446668873108041390">Wykonywanie skryptów JavaScript przez AppleScript jest wyłączone. Możesz zezwolić na wykonywanie skryptów JavaScript przez zdarzenia Apple Events w Ustawieniach &gt; Prywatność &gt; Zdarzenia Apple Events.</translation>
 <translation id="8539196077526389150">Krajobraz 13</translation>
+<translation id="8562339533180097902">Zamknij Vivaldi i zainstaluj teraz</translation>
+<translation id="8567452685425968223">Rozpakowywanie aktualizacji...</translation>
 <translation id="8624587806981488221">&amp;Przeładuj obraz</translation>
 <translation id="864444594187862076">Opera 15+ (Developer)</translation>
 <translation id="8651348004684669199">Dodaj aktywną kartę</translation>
@@ -131,11 +151,13 @@
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8768970203213061953">Krajobraz 14</translation>
 <translation id="8773635261052182196">Nie będziesz już widzieć tych powiadomień. Możesz je ponownie aktywować z poziomu ustawień Vivaldi.</translation>
+<translation id="8813277370772331957">Przypomnij mi później</translation>
 <translation id="8894900864683381599">Dodaj link jako panel www</translation>
 <translation id="8912720443398351457">Czy na pewno chcesz zamknąć przeglądarkę Vivaldi?</translation>
 <translation id="8947109330183116400">Wybierz plik HTML z zakładkami</translation>
 <translation id="9017566390391482291">Wybierz folder profilu przeglądarki Vivaldi, z którego chcesz zaimportować dane</translation>
 <translation id="9065203028668620118">Edytuj</translation>
+<translation id="912022491595344261">Otwórz obraz jako <ph name="USER" /></translation>
 <translation id="9157539936604258187">Otwórz link</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
 <translation id="970294721402795299">Krajobraz 16</translation>

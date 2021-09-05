@@ -42,9 +42,9 @@ blink::WebView* WebViewTestProxy::CreateView(
     const blink::WebString& frame_name,
     blink::WebNavigationPolicy policy,
     network::mojom::WebSandboxFlags sandbox_flags,
-    const blink::FeaturePolicyFeatureState& opener_feature_state,
     const blink::SessionStorageNamespaceId& session_storage_namespace_id,
-    bool& consumed_user_gesture) {
+    bool& consumed_user_gesture,
+    const base::Optional<blink::WebImpression>& impression) {
   if (test_runner_->ShouldDumpNavigationPolicy()) {
     test_runner_->PrintMessage(
         "Default policy for createView for '" +
@@ -60,17 +60,16 @@ blink::WebView* WebViewTestProxy::CreateView(
         std::string("createView(") +
         web_test_string_util::URLDescription(request.Url()) + ")\n");
   }
-  return RenderViewImpl::CreateView(creator, request, features, frame_name,
-                                    policy, sandbox_flags, opener_feature_state,
-                                    session_storage_namespace_id,
-                                    consumed_user_gesture);
+  return RenderViewImpl::CreateView(
+      creator, request, features, frame_name, policy, sandbox_flags,
+      session_storage_namespace_id, consumed_user_gesture, impression);
 }
 
 void WebViewTestProxy::PrintPage(blink::WebLocalFrame* frame) {
   // This is using the main frame for the size, but maybe it should be using the
   // frame's size.
   blink::WebSize page_size_in_pixels =
-      GetMainRenderFrame()->GetLocalRootRenderWidget()->GetWebWidget()->Size();
+      GetMainRenderFrame()->GetLocalRootWebFrameWidget()->Size();
   if (page_size_in_pixels.IsEmpty())
     return;
   blink::WebPrintParams print_params(page_size_in_pixels);

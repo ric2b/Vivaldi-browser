@@ -8,15 +8,13 @@
 #include <utility>
 
 #include "chrome/browser/buildflags.h"
-#include "chrome/browser/media/kaleidoscope/constants.h"
-#include "chrome/browser/media/kaleidoscope/kaleidoscope_data_provider_impl.h"
-#include "chrome/browser/media/kaleidoscope/kaleidoscope_ui.h"
+#include "chrome/browser/cart/cart_handler.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/search/drive/drive_handler.h"
 #include "chrome/browser/search/instant_service.h"
 #include "chrome/browser/search/instant_service_factory.h"
 #include "chrome/browser/search/task_module/task_module_handler.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
-#include "chrome/browser/ui/search/ntp_user_data_logger.h"
 #include "chrome/browser/ui/search/omnibox_mojo_utils.h"
 #include "chrome/browser/ui/webui/customize_themes/chrome_customize_themes_handler.h"
 #include "chrome/browser/ui/webui/favicon_source.h"
@@ -46,7 +44,7 @@
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
-#include "ui/resources/grit/webui_resources.h"
+#include "ui/resources/grit/webui_generated_resources.h"
 #include "url/url_util.h"
 
 #if !defined(OFFICIAL_BUILD)
@@ -57,9 +55,6 @@ using content::BrowserContext;
 using content::WebContents;
 
 namespace {
-
-constexpr char kGeneratedPath[] =
-    "@out_folder@/gen/chrome/browser/resources/new_tab_page/";
 
 content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
   content::WebUIDataSource* source =
@@ -85,6 +80,8 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
       base::FeatureList::IsEnabled(ntp_features::kRealboxUseGoogleGIcon)
           ? omnibox::kGoogleGIconResourceName
           : omnibox::kSearchIconResourceName);
+  source->AddString("realboxHint", l10n_util::GetStringUTF8(
+                                       IDS_GOOGLE_SEARCH_BOX_EMPTY_HINT_MD));
 
   source->AddBoolean(
       "handleMostVisitedNavigationExplicitly",
@@ -101,8 +98,17 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
   source->AddBoolean(
       "themeModeDoodlesEnabled",
       base::FeatureList::IsEnabled(ntp_features::kWebUIThemeModeDoodles));
+  source->AddBoolean("shortcutsEnabled",
+                     base::FeatureList::IsEnabled(ntp_features::kNtpShortcuts));
+  source->AddBoolean("logoEnabled",
+                     base::FeatureList::IsEnabled(ntp_features::kNtpLogo));
+  source->AddBoolean(
+      "middleSlotPromoEnabled",
+      base::FeatureList::IsEnabled(ntp_features::kNtpMiddleSlotPromo));
   source->AddBoolean("modulesEnabled",
                      base::FeatureList::IsEnabled(ntp_features::kModules));
+  source->AddInteger("modulesLoadTimeout",
+                     ntp_features::GetModulesLoadTimeout().InMilliseconds());
 
   static constexpr webui::LocalizedString kStrings[] = {
       {"doneButton", IDS_DONE},
@@ -126,6 +132,7 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
       {"nameField", IDS_NTP_CUSTOM_LINKS_NAME},
       {"restoreDefaultLinks", IDS_NTP_CONFIRM_MSG_RESTORE_DEFAULTS},
       {"restoreThumbnailsShort", IDS_NEW_TAB_RESTORE_THUMBNAILS_SHORT_LINK},
+      {"shortcutAlreadyExists", IDS_NTP_CUSTOM_LINKS_ALREADY_EXISTS},
       {"urlField", IDS_NTP_CUSTOM_LINKS_URL},
 
       // Customize button and dialog.
@@ -140,8 +147,7 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
       {"defaultThemeLabel", IDS_NTP_CUSTOMIZE_DEFAULT_LABEL},
       {"hideShortcuts", IDS_NTP_CUSTOMIZE_HIDE_SHORTCUTS_LABEL},
       {"hideShortcutsDesc", IDS_NTP_CUSTOMIZE_HIDE_SHORTCUTS_DESC},
-      {"hideModules", IDS_NTP_CUSTOMIZE_HIDE_MODULES_LABEL},
-      {"hideModulesDesc", IDS_NTP_CUSTOMIZE_HIDE_MODULES_DESC},
+      {"showModules", IDS_NTP_CUSTOMIZE_SHOW_MODULES_LABEL},
       {"mostVisited", IDS_NTP_CUSTOMIZE_MOST_VISITED_LABEL},
       {"myShortcuts", IDS_NTP_CUSTOMIZE_MY_SHORTCUTS_LABEL},
       {"noBackground", IDS_NTP_CUSTOMIZE_NO_BACKGROUND_LABEL},
@@ -177,6 +183,8 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
       {"searchBoxHint", IDS_GOOGLE_SEARCH_BOX_EMPTY_HINT_MD},
       {"realboxSeparator", IDS_AUTOCOMPLETE_MATCH_DESCRIPTION_SEPARATOR},
       {"removeSuggestion", IDS_OMNIBOX_REMOVE_SUGGESTION},
+      {"removeSuggestionA11ySuffix", IDS_ACC_REMOVE_SUGGESTION_SUFFIX},
+      {"removeSuggestionA11yPrefix", IDS_ACC_REMOVE_SUGGESTION_FOCUSED_PREFIX},
       {"hideSuggestions", IDS_TOOLTIP_HEADER_HIDE_SUGGESTIONS_BUTTON},
       {"showSuggestions", IDS_TOOLTIP_HEADER_SHOW_SUGGESTIONS_BUTTON},
       {"hideSection", IDS_ACC_HEADER_HIDE_SUGGESTIONS_BUTTON},
@@ -197,11 +205,29 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
       {"dismissModuleToastMessage", IDS_NTP_MODULES_DISMISS_TOAST_MESSAGE},
       {"moduleInfoButtonTitle", IDS_NTP_MODULES_INFO_BUTTON_TITLE},
       {"moduleDismissButtonTitle", IDS_NTP_MODULES_DISMISS_BUTTON_TITLE},
+      {"modulesDriveTitle", IDS_NTP_MODULES_DRIVE_TITLE},
       {"modulesDummyTitle", IDS_NTP_MODULES_DUMMY_TITLE},
       {"modulesDummy2Title", IDS_NTP_MODULES_DUMMY2_TITLE},
       {"modulesKaleidoscopeTitle", IDS_NTP_MODULES_KALEIDOSCOPE_TITLE},
       {"modulesTasksInfoTitle", IDS_NTP_MODULES_SHOPPING_TASKS_INFO_TITLE},
       {"modulesTasksInfoClose", IDS_NTP_MODULES_SHOPPING_TASKS_INFO_CLOSE},
+      {"modulesCartHeaderNew", IDS_NTP_MODULES_CART_HEADER_CHIP_NEW},
+      {"modulesCartTitle", IDS_NTP_MODULES_CART_TITLE},
+      {"modulesCartWarmWelcome", IDS_NTP_MODULES_CART_WARM_WELCOME},
+      {"modulesCartModuleMenuHide", IDS_NTP_MODULES_CART_MODULE_MENU_HIDE},
+      {"modulesCartModuleMenuHideToastMessage",
+       IDS_NTP_MODULES_CART_MODULE_MENU_HIDE_TOAST_MESSAGE},
+      {"modulesCartModuleMenuRemove", IDS_NTP_MODULES_CART_MODULE_MENU_REMOVE},
+      {"modulesCartModuleMenuRemoveToastMessage",
+       IDS_NTP_MODULES_CART_MODULE_MENU_REMOVE_TOAST_MESSAGE},
+      {"modulesCartCartMenuHideMerchant",
+       IDS_NTP_MODULES_CART_CART_MENU_HIDE_MERCHANT},
+      {"modulesCartCartMenuHideMerchantToastMessage",
+       IDS_NTP_MODULES_CART_CART_MENU_HIDE_MERCHANT_TOAST_MESSAGE},
+      {"modulesCartCartMenuRemoveMerchant",
+       IDS_NTP_MODULES_CART_CART_MENU_REMOVE_MERCHANT},
+      {"modulesCartCartMenuRemoveMerchantToastMessage",
+       IDS_NTP_MODULES_CART_CART_MENU_REMOVE_MERCHANT_TOAST_MESSAGE},
   };
   AddLocalizedStringsBulk(source, kStrings);
 
@@ -218,7 +244,7 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
   // are set in Javascript.
   static constexpr webui::ResourcePath kImages[] = {
       {omnibox::kGoogleGIconResourceName,
-       IDR_WEBUI_IMAGES_200_LOGO_GOOGLE_G_PNG},
+       IDR_WEBUI_IMAGES_200_LOGO_GOOGLEG_PNG},
       {omnibox::kBookmarkIconResourceName, IDR_LOCAL_NTP_ICONS_BOOKMARK},
       {omnibox::kCalculatorIconResourceName, IDR_LOCAL_NTP_ICONS_CALCULATOR},
       {omnibox::kClockIconResourceName, IDR_LOCAL_NTP_ICONS_CLOCK},
@@ -238,42 +264,21 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
       {omnibox::kTrendingUpIconResourceName, IDR_LOCAL_NTP_ICONS_TRENDING_UP}};
   webui::AddResourcePathsBulk(source, kImages);
 
-#if BUILDFLAG(ENABLE_KALEIDOSCOPE)
-  source->AddBoolean("kaleidoscopeModuleEnabled",
-                     base::FeatureList::IsEnabled(media::kKaleidoscopeModule));
-#else
-  source->AddBoolean("kaleidoscopeModuleEnabled", false);
-#endif  // BUILDFLAG(ENABLE_KALEIDOSCOPE)
   source->AddBoolean(
       "recipeTasksModuleEnabled",
       base::FeatureList::IsEnabled(ntp_features::kNtpRecipeTasksModule));
   source->AddBoolean(
       "shoppingTasksModuleEnabled",
       base::FeatureList::IsEnabled(ntp_features::kNtpShoppingTasksModule));
+  source->AddBoolean(
+      "chromeCartModuleEnabled",
+      base::FeatureList::IsEnabled(ntp_features::kNtpChromeCartModule));
+  source->AddBoolean("driveModuleEnabled", base::FeatureList::IsEnabled(
+                                               ntp_features::kNtpDriveModule));
 
-  source->AddResourcePath("new_tab_page.mojom-lite.js",
-                          IDR_NEW_TAB_PAGE_MOJO_LITE_JS);
-  source->AddResourcePath("omnibox.mojom-lite.js",
-                          IDR_NEW_TAB_PAGE_OMNIBOX_MOJO_LITE_JS);
-  source->AddResourcePath("promo_browser_command.mojom-lite.js",
-                          IDR_NEW_TAB_PAGE_PROMO_BROWSER_COMMAND_MOJO_LITE_JS);
-  source->AddResourcePath(
-      "modules/task_module/task_module.mojom-lite.js",
-      IDR_NEW_TAB_PAGE_MODULES_TASK_MODULE_TASK_MODULE_MOJO_LITE_JS);
-#if !defined(OFFICIAL_BUILD)
-  source->AddResourcePath("foo.mojom-lite.js",
-                          IDR_NEW_TAB_PAGE_FOO_MOJO_LITE_JS);
-#endif
-#if BUILDFLAG(OPTIMIZE_WEBUI)
-  source->AddResourcePath("new_tab_page.js",
-                          IDR_NEW_TAB_PAGE_NEW_TAB_PAGE_ROLLUP_JS);
-  source->AddResourcePath("shared.rollup.js",
-                          IDR_NEW_TAB_PAGE_SHARED_ROLLUP_JS);
-  source->AddResourcePath("lazy_load.js", IDR_NEW_TAB_PAGE_LAZY_LOAD_ROLLUP_JS);
-#endif  // BUILDFLAG(OPTIMIZE_WEBUI)
   webui::SetupWebUIDataSource(
       source, base::make_span(kNewTabPageResources, kNewTabPageResourcesSize),
-      kGeneratedPath, IDR_NEW_TAB_PAGE_NEW_TAB_PAGE_HTML);
+      IDR_NEW_TAB_PAGE_NEW_TAB_PAGE_HTML);
 
   // Allows creating <script> and inlining as well as network requests to
   // support inlining the OneGoogleBar.
@@ -282,17 +287,15 @@ content::WebUIDataSource* CreateNewTabPageUiHtmlSource(Profile* profile) {
   // script-src.
   source->OverrideContentSecurityPolicy(
       network::mojom::CSPDirectiveName::ScriptSrc,
-      "script-src chrome://resources chrome://test chrome://kaleidoscope "
+      "script-src chrome://resources chrome://test "
       "'self' 'unsafe-inline' https:;");
   // Allow embedding of iframes from the One Google Bar and
-  // chrome-untrusted://new-tab-page for other external content and resources
-  // and chrome-untrusted://kaleidoscope for Kaleidoscope.
+  // chrome-untrusted://new-tab-page for other external content and resources.
   source->OverrideContentSecurityPolicy(
       network::mojom::CSPDirectiveName::ChildSrc,
-      base::StringPrintf("child-src https: %s %s %s;",
+      base::StringPrintf("child-src https: %s %s;",
                          google_util::CommandLineGoogleBaseURL().spec().c_str(),
-                         chrome::kChromeUIUntrustedNewTabPageUrl,
-                         kKaleidoscopeUntrustedContentUIURL));
+                         chrome::kChromeUIUntrustedNewTabPageUrl));
 
   return source;
 }
@@ -329,12 +332,6 @@ NewTabPageUI::NewTabPageUI(content::WebUI* web_ui)
   content::URLDataSource::Add(
       profile_,
       std::make_unique<ThemeSource>(profile_, /*serve_untrusted=*/true));
-
-  content::WebUIDataSource::Add(profile_,
-                                KaleidoscopeUI::CreateWebUIDataSource());
-
-  content::WebUIDataSource::Add(
-      profile_, KaleidoscopeUI::CreateUntrustedWebUIDataSource());
 
   web_ui->AddRequestableScheme(content::kChromeUIUntrustedScheme);
 
@@ -381,24 +378,30 @@ void NewTabPageUI::BindInterface(
 }
 
 void NewTabPageUI::BindInterface(
-    mojo::PendingReceiver<media::mojom::KaleidoscopeDataProvider>
-        pending_page_handler) {
-  kaleidoscope_data_provider_ = std::make_unique<KaleidoscopeDataProviderImpl>(
-      std::move(pending_page_handler), profile_, nullptr);
-}
-
-void NewTabPageUI::BindInterface(
     mojo::PendingReceiver<task_module::mojom::TaskModuleHandler>
         pending_receiver) {
   task_module_handler_ = std::make_unique<TaskModuleHandler>(
       std::move(pending_receiver), profile_);
 }
+
+void NewTabPageUI::BindInterface(
+    mojo::PendingReceiver<drive::mojom::DriveHandler> pending_receiver) {
+  drive_handler_ = std::make_unique<DriveHandler>(std::move(pending_receiver));
+}
+
 #if !defined(OFFICIAL_BUILD)
 void NewTabPageUI::BindInterface(
     mojo::PendingReceiver<foo::mojom::FooHandler> pending_page_handler) {
   foo_handler_ = std::make_unique<FooHandler>(std::move(pending_page_handler));
 }
 #endif
+
+void NewTabPageUI::BindInterface(
+    mojo::PendingReceiver<chrome_cart::mojom::CartHandler>
+        pending_page_handler) {
+  cart_handler_ =
+      std::make_unique<CartHandler>(std::move(pending_page_handler), profile_);
+}
 
 void NewTabPageUI::CreatePageHandler(
     mojo::PendingRemote<new_tab_page::mojom::Page> pending_page,
@@ -408,7 +411,6 @@ void NewTabPageUI::CreatePageHandler(
   page_handler_ = std::make_unique<NewTabPageHandler>(
       std::move(pending_page_handler), std::move(pending_page), profile_,
       instant_service_, web_contents_,
-      NTPUserDataLogger::GetOrCreateFromWebContents(web_contents_),
       navigation_start_time_);
 }
 

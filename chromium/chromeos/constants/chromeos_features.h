@@ -17,6 +17,8 @@ namespace features {
 // being rolled out via Finch, add a comment in the .cc file.
 
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
+extern const base::Feature kAccountManagementFlowsV2;
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kAllowScrollSettings;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kAmbientModeFeature;
@@ -60,6 +62,8 @@ extern const base::Feature kAutoScreenBrightness;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kAssistAutoCorrect;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
+extern const base::Feature kAssistMultiWord;
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kAssistPersonalInfo;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kAssistPersonalInfoAddress;
@@ -84,7 +88,11 @@ extern const base::Feature kBluetoothPhoneFilter;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kCameraSystemWebApp;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
+extern const base::Feature kPreferConstantFrameRate;
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kCdmFactoryDaemon;
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
+extern const base::Feature kCellularUseAttachApn;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kChildSpecificSignin;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
@@ -106,6 +114,8 @@ extern const base::Feature kDisableCryptAuthV1DeviceSync;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kCryptAuthV2DeviceActivityStatus;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
+extern const base::Feature kCryptAuthV2DeviceActivityStatusUseConnectivity;
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kDisableIdleSocketsCloseOnMemoryPressure;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kCrostiniWebUIUpgrader;
@@ -115,6 +125,8 @@ COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kCryptAuthV2Enrollment;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kDisableOfficeEditingComponentApp;
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
+extern const base::Feature kDisablePeripheralDataAccessProtection;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const base::Feature kDriveFs;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kDriveFsBidirectionalNativeMessaging;
@@ -124,6 +136,9 @@ COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kEmojiSuggestAddition;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kEnableHostnameSetting;
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
+extern const base::Feature kEnableLocalSearchService;
+extern const base::Feature kEnableOobeChromeVoxHint;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kEolWarningNotifications;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
@@ -143,8 +158,6 @@ COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const base::Feature kFilesNG;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kFilesSinglePartitionFormat;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const base::Feature kFilesSWA;
-COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
-extern const base::Feature kFilesTransferDetails;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const base::Feature kFilesTrash;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const base::Feature kFilesZipMount;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const base::Feature kFilesZipPack;
@@ -157,12 +170,14 @@ extern const base::Feature kClipboardHistoryNudgeSessionReset;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kClipboardHistorySimpleRender;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
-extern const base::Feature kEnableFilesAppCopyImage;
+extern const base::Feature kClipboardHistoryContextMenuNudge;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
-extern const base::Feature kEnableImeSandbox;
+extern const base::Feature kEnableFilesAppCopyImage;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const base::Feature kFsNosymfollow;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kHandwritingGestureEditing;
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
+extern const base::Feature kGaiaReauthEndpoint;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kGamepadVibration;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
@@ -170,13 +185,13 @@ extern const base::Feature kGesturePropertiesDBusService;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kGuestOsExternalProtocol;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
-extern const base::Feature kHelpAppFirstRun;
-COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kHelpAppSearchServiceIntegration;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kImeMojoDecoder;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kImeOptionsInSettings;
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
+extern const base::Feature kImeSystemEmojiPicker;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kVirtualKeyboardFloatingDefault;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
@@ -188,8 +203,6 @@ COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kLanguageSettingsUpdate;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kLoginDeviceManagementDisclosure;
-COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
-extern const base::Feature kLoginDisplayPasswordButton;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const base::Feature kMediaApp;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kMediaAppAnnotation;
@@ -200,13 +213,21 @@ extern const base::Feature kMediaAppPdfInInk;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kMinimumChromeVersion;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
+extern const base::Feature kMultilingualTyping;
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
+extern const base::Feature kOnDeviceGrammarCheck;
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
+extern const base::Feature kNewOobeLayout;
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kOsSettingsDeepLinking;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kOsSettingsPolymer3;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kPhoneHub;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
-extern const base::Feature kPhoneHubUseBle;
+extern const base::Feature kPinSetupForFamilyLink;
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
+extern const base::Feature kPluginVmFullscreen;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kPluginVmShowCameraPermissions;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
@@ -256,6 +277,8 @@ extern const base::Feature kSessionManagerLongKillTimeout;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kShowBluetoothDebugLogToggle;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
+extern const base::Feature kEnableBluetoothVerboseLogsForGooglers;
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kShowBluetoothDeviceBattery;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kShowPlayInDemoMode;
@@ -302,9 +325,12 @@ COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kImeMozcProto;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::Feature kCrostiniResetLxdDb;
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
+extern const base::Feature kCameraPrivacySwitchNotifications;
 
 // Keep alphabetized.
 
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS) bool IsAccountManagementFlowsV2Enabled();
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) bool IsAmbientModeEnabled();
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) bool IsAmbientModePhotoPreviewEnabled();
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) bool IsAmbientModeDevUseProdEnabled();
@@ -313,26 +339,33 @@ COMPONENT_EXPORT(CHROMEOS_CONSTANTS) bool IsBetterUpdateEnabled();
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) bool IsChildSpecificSigninEnabled();
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) bool IsDeepLinkingEnabled();
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) bool IsDiagnosticsAppEnabled();
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
+bool IsPeripheralDataAccessProtectionEnabled();
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) bool IsHostnameSettingEnabled();
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) bool IsFamilyLinkOnSchoolDeviceEnabled();
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS) bool IsGaiaReauthEndpointEnabled();
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) bool IsImeSandboxEnabled();
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 bool IsInstantTetheringBackgroundAdvertisingSupported();
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) bool IsKerberosSettingsSectionEnabled();
-COMPONENT_EXPORT(CHROMEOS_CONSTANTS) bool IsLacrosSupportEnabled();
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 bool IsLoginDeviceManagementDisclosureEnabled();
-COMPONENT_EXPORT(CHROMEOS_CONSTANTS) bool IsLoginDisplayPasswordButtonEnabled();
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) bool IsMinimumChromeVersionEnabled();
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS) bool IsNewOobeLayoutEnabled();
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) bool IsClipboardHistoryEnabled();
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 bool IsClipboardHistoryNudgeSessionResetEnabled();
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 bool IsClipboardHistorySimpleRenderEnabled();
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
+bool IsClipboardHistoryContextMenuNudgeEnabled();
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS) bool IsOobeChromeVoxHintEnabled();
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) bool IsOobeScreensPriorityEnabled();
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) bool IsPhoneHubEnabled();
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) bool IsPhoneHubUseBleEnabled();
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) bool IsPinAutosubmitFeatureEnabled();
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS) bool IsPinSetupForFamilyLinkEnabled();
+
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 bool IsPinAutosubmitBackfillFeatureEnabled();
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) bool IsQuickAnswersDogfood();

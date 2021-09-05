@@ -11,6 +11,7 @@
 
 #include "base/strings/string_split.h"
 #include "components/request_filter/adblock_filter/adblock_rule_pattern_matcher.h"
+#include "components/request_filter/adblock_filter/parse_utils.h"
 #include "components/request_filter/adblock_filter/stylesheet_builder.h"
 #include "components/request_filter/adblock_filter/utils.h"
 #include "components/url_pattern_index/closed_hash_map.h"
@@ -46,9 +47,53 @@ using FlatDomains = flatbuffers::Vector<FlatStringOffset>;
 
 const size_t kMaxActivationCacheSize = 4;
 
+template <class T>
+struct ContentInjectionIndexTraversalResult {
+  std::set<const T*, ContentInjectionRuleBodyCompare> selected;
+  std::set<const T*, ContentInjectionRuleBodyCompare> exceptions;
+};
+
+struct ContentInjectionIndexTraversalResults {
+  ContentInjectionIndexTraversalResult<flat::CosmeticRule> cosmetic_rules;
+  ContentInjectionIndexTraversalResult<flat::ScriptletInjectionRule>
+      scriptlet_injection_rules;
+
+  RulesIndex::InjectionData ToInjectionData() {
+    RulesIndex::InjectionData injection_data;
+    injection_data.stylesheet = BuildStyleSheet(cosmetic_rules.selected);
+
+    std::string abp_snippets_arguments = "[";
+    for (const flat::ScriptletInjectionRule* rule :
+         scriptlet_injection_rules.selected) {
+      if (rule->scriptlet_name()->string_view() == kAbpSnippetsScriptletName) {
+        DCHECK(rule->arguments()->size() == 1);
+        abp_snippets_arguments += rule->arguments()->Get(0)->str() + ",";
+      } else {
+        RulesIndex::ScriptletInjection scriptlet_injection;
+        scriptlet_injection.first = rule->scriptlet_name()->str();
+        for (auto* argument : *(rule->arguments()))
+          scriptlet_injection.second.push_back(argument->str());
+        injection_data.scriptlet_injections.push_back(
+            std::move(scriptlet_injection));
+      }
+    }
+    if (abp_snippets_arguments != "[") {
+      // Remove extra comma
+      abp_snippets_arguments.pop_back();
+      abp_snippets_arguments.push_back(']');
+      RulesIndex::ScriptletInjection scriptlet_injection;
+      scriptlet_injection.first = kAbpSnippetsScriptletName;
+      scriptlet_injection.second.push_back(std::move(abp_snippets_arguments));
+    }
+
+    return injection_data;
+  }
+};
+
 // Returns whether the request matches the third-party of the specified
 // filtering|rule|.
-bool DoesRulePartyMatch(const flat::FilterRule& rule, bool is_third_party) {
+bool DoesRulePartyMatch(const flat::RequestFilterRule& rule,
+                        bool is_third_party) {
   if (is_third_party && !(rule.options() & flat::OptionFlag_THIRD_PARTY)) {
     return false;
   }
@@ -62,7 +107,7 @@ bool DoesRulePartyMatch(const flat::FilterRule& rule, bool is_third_party) {
 // Takes into account:
 //  - |resource_type| of the requested resource, if not *_NONE.
 //  - Whether the resource |is_third_party| w.r.t. its embedding document.
-bool DoesRuleFlagsMatch(const flat::FilterRule& rule,
+bool DoesRuleFlagsMatch(const flat::RequestFilterRule& rule,
                         flat::ResourceType resource_type,
                         bool is_third_party) {
   DCHECK(resource_type != flat::ResourceType_NONE);
@@ -74,7 +119,7 @@ bool DoesRuleFlagsMatch(const flat::FilterRule& rule,
   return DoesRulePartyMatch(rule, is_third_party);
 }
 
-bool DoesUrlMatchRulePattern(const flat::FilterRule& rule,
+bool DoesUrlMatchRulePattern(const flat::RequestFilterRule& rule,
                              const RulePatternMatcher::UrlInfo& url) {
   if (rule.host() && rule.host()->size()) {
     base::StringPiece host =
@@ -167,7 +212,7 @@ size_t GetLongestMatchingSubdomain(const url::Origin& origin,
 // considered a "generic" rule. Therefore, if |disable_generic_rules| is set,
 // this function will always return false for such rules.
 bool DoesOriginMatchDomainList(const url::Origin& origin,
-                               const flat::FilterRule& rule,
+                               const flat::RequestFilterRule& rule,
                                bool disable_generic_rules) {
   const bool is_generic = !rule.domains_included();
   DCHECK(is_generic || rule.domains_included()->size());
@@ -190,12 +235,12 @@ bool DoesOriginMatchDomainList(const url::Origin& origin,
   return !!longest_matching_included_domain_length;
 }
 
-const flat::FilterRule* GetRuleFromId(
+const flat::RequestFilterRule* GetRuleFromId(
     const RulesIndex::RulesBufferMap& rule_buffers,
     const flat::RuleId& rule_id) {
   auto rule_buffer = rule_buffers.find(rule_id.source_id());
   DCHECK(rule_buffer != rule_buffers.end());
-  return rule_buffer->second.rules_list()->filter_rules_list()->Get(
+  return rule_buffer->second.rules_list()->request_filter_rules_list()->Get(
       rule_id.rule_nr());
 }
 
@@ -208,9 +253,19 @@ const flat::CosmeticRule* GetCosmeticRuleFromId(
       rule_id.rule_nr());
 }
 
+const flat::ScriptletInjectionRule* GetScriptletInjectionRuleFromId(
+    const RulesIndex::RulesBufferMap& rule_buffers,
+    const flat::RuleId& rule_id) {
+  auto rule_buffer = rule_buffers.find(rule_id.source_id());
+  DCHECK(rule_buffer != rule_buffers.end());
+  return rule_buffer->second.rules_list()
+      ->scriptlet_injection_rules_list()
+      ->Get(rule_id.rule_nr());
+}
+
 RulesIndex::ActivationsFound AddActivationsFromRule(
     RulesIndex::ActivationsFound activations,
-    const flat::FilterRule& rule) {
+    const flat::RequestFilterRule& rule) {
   if ((rule.options() & flat::OptionFlag_IS_ALLOW_RULE) == 0)
     activations.in_block_rules |= rule.activation_types();
   else
@@ -230,7 +285,7 @@ void GetActivationsFromCandidates(
 
   for (const flat::RuleId* rule_id : *candidates) {
     DCHECK_NE(rule_id, nullptr);
-    const flat::FilterRule* rule = GetRuleFromId(rule_buffers, *rule_id);
+    const flat::RequestFilterRule* rule = GetRuleFromId(rule_buffers, *rule_id);
 
     RulesIndex::ActivationsFound modified_activations_found =
         AddActivationsFromRule(*activations_found, *rule);
@@ -259,7 +314,7 @@ void GetActivationsFromCandidates(
 
 // |sorted_candidates| is sorted with by GetRulePriority. This returns
 // the first matching rule in |sorted_candidates| or null if no rule matches.
-const flat::FilterRule* FindMatchAmongCandidates(
+const flat::RequestFilterRule* FindMatchAmongCandidates(
     const FlatRuleIdList* sorted_candidates,
     const RulesIndex::RulesBufferMap& rule_buffers,
     const RulePatternMatcher::UrlInfo& url,
@@ -282,7 +337,7 @@ const flat::FilterRule* FindMatchAmongCandidates(
 
   for (const flat::RuleId* rule_id : *sorted_candidates) {
     DCHECK_NE(rule_id, nullptr);
-    const flat::FilterRule* rule = GetRuleFromId(rule_buffers, *rule_id);
+    const flat::RequestFilterRule* rule = GetRuleFromId(rule_buffers, *rule_id);
     if (current_rule_priority >= GetRulePriority(*rule))
       return nullptr;
 
@@ -309,14 +364,14 @@ const flat::FilterRule* FindMatchAmongCandidates(
 //   - All matching rules in |sorted_candidates that would modify headers.
 //   - One matching blanket allow rule that denies all modifications.
 //   - An empty list of rules if no match were found.
-std::vector<const flat::FilterRule*> FindHeaderRulesMatchesCandidates(
+std::vector<const flat::RequestFilterRule*> FindHeaderRulesMatchesCandidates(
     const FlatRuleIdList* sorted_candidates,
     const RulesIndex::RulesBufferMap& rule_buffers,
     const RulePatternMatcher::UrlInfo& url,
     const url::Origin& document_origin,
     bool is_third_party,
     bool disable_generic_rules) {
-  std::vector<const flat::FilterRule*> result;
+  std::vector<const flat::RequestFilterRule*> result;
   if (!sorted_candidates)
     return result;
 
@@ -331,7 +386,7 @@ std::vector<const flat::FilterRule*> FindHeaderRulesMatchesCandidates(
 
   for (const flat::RuleId* rule_id : *sorted_candidates) {
     DCHECK_NE(rule_id, nullptr);
-    const flat::FilterRule* rule = GetRuleFromId(rule_buffers, *rule_id);
+    const flat::RequestFilterRule* rule = GetRuleFromId(rule_buffers, *rule_id);
 
     if (!DoesRulePartyMatch(*rule, is_third_party)) {
       continue;
@@ -347,7 +402,7 @@ std::vector<const flat::FilterRule*> FindHeaderRulesMatchesCandidates(
     }
 
     if (IsFullCSPAllowRule(*rule))
-      return std::vector<const flat::FilterRule*>{rule};
+      return std::vector<const flat::RequestFilterRule*>{rule};
 
     result.push_back(rule);
   }
@@ -392,9 +447,9 @@ void FindMatchingRuleInMap(
 
 base::Optional<uint32_t> GetSubdomainNodeIndex(
     base::StringPiece domain_piece,
-    const flatbuffers::Vector<flatbuffers::Offset<flat::CosmeticRulesNode>>*
-        tree,
-    const flat::CosmeticRulesNode* node) {
+    const flatbuffers::Vector<
+        flatbuffers::Offset<flat::ContentInjectionRulesNode>>* tree,
+    const flat::ContentInjectionRulesNode* node) {
   if (!node->subdomains())
     return base::nullopt;
 
@@ -425,23 +480,38 @@ base::Optional<uint32_t> GetSubdomainNodeIndex(
 }
 
 void GetSelectorsForDomain(
-    const RulesIndex::RulesBufferMap& rule_buffers,
+    const RulesIndex::RulesBufferMap& rules_buffers,
     std::vector<base::StringPiece>::const_reverse_iterator domain_piece,
     std::vector<base::StringPiece>::const_reverse_iterator domain_end,
-    std::set<std::string>* blocked_selectors,
-    std::set<std::string>* allowed_selectors,
-    const flatbuffers::Vector<flatbuffers::Offset<flat::CosmeticRulesNode>>*
-        tree,
-    const flat::CosmeticRulesNode* node) {
+    ContentInjectionIndexTraversalResults* results,
+    const flatbuffers::Vector<
+        flatbuffers::Offset<flat::ContentInjectionRulesNode>>* tree,
+    const flat::ContentInjectionRulesNode* node) {
   for (const auto* rule_for_domain : *node->rules()) {
-    const flat::CosmeticRule* rule =
-        GetCosmeticRuleFromId(rule_buffers, *rule_for_domain->rule_id());
-    std::string selector = rule->selector()->str();
-    if (rule_for_domain->allow_for_domain()) {
-      blocked_selectors->erase(selector);
-      allowed_selectors->insert(selector);
-    } else if (!allowed_selectors->count(selector)) {
-      blocked_selectors->insert(selector);
+    switch (rule_for_domain->rule_type()) {
+      case flat::ContentInjectionRuleType_COSMETIC: {
+        const flat::CosmeticRule* rule =
+            GetCosmeticRuleFromId(rules_buffers, *rule_for_domain->rule_id());
+        if (rule_for_domain->allow_for_domain()) {
+          results->cosmetic_rules.selected.erase(rule);
+          results->cosmetic_rules.exceptions.insert(rule);
+        } else if (!results->cosmetic_rules.exceptions.count(rule)) {
+          results->cosmetic_rules.selected.insert(rule);
+        }
+        break;
+      }
+      case flat::ContentInjectionRuleType_SCRIPTLET_INJECTION: {
+        const flat::ScriptletInjectionRule* rule =
+            GetScriptletInjectionRuleFromId(rules_buffers,
+                                            *rule_for_domain->rule_id());
+        if (rule_for_domain->allow_for_domain()) {
+          results->scriptlet_injection_rules.selected.erase(rule);
+          results->scriptlet_injection_rules.exceptions.insert(rule);
+        } else if (!results->scriptlet_injection_rules.exceptions.count(rule)) {
+          results->scriptlet_injection_rules.selected.insert(rule);
+        }
+        break;
+      }
     }
   }
 
@@ -454,8 +524,7 @@ void GetSelectorsForDomain(
   if (!subdomain_node_index)
     return;
 
-  GetSelectorsForDomain(rule_buffers, domain_piece, domain_end,
-                        blocked_selectors, allowed_selectors, tree,
+  GetSelectorsForDomain(rules_buffers, domain_piece, domain_end, results, tree,
                         tree->Get(subdomain_node_index.value()));
   return;
 }
@@ -465,6 +534,8 @@ RulesIndex::ActivationsFound::ActivationsFound() = default;
 RulesIndex::ActivationsFound::ActivationsFound(const ActivationsFound& other) =
     default;
 RulesIndex::ActivationsFound::~ActivationsFound() = default;
+RulesIndex::ActivationsFound& RulesIndex::ActivationsFound::operator=(
+    const ActivationsFound& other) = default;
 bool RulesIndex::ActivationsFound::operator==(const ActivationsFound& other) {
   return in_allow_rules == other.in_allow_rules &&
          in_block_rules == other.in_block_rules;
@@ -588,13 +659,13 @@ RulesIndex::ActivationsFound RulesIndex::GetActivationsForFrame(
   return activations;
 }
 
-const flat::FilterRule* RulesIndex::FindMatchingBeforeRequestRule(
+const flat::RequestFilterRule* RulesIndex::FindMatchingBeforeRequestRule(
     const GURL& url,
     const url::Origin& document_origin,
     flat::ResourceType resource_type,
     bool is_third_party,
     bool disable_generic_rules) {
-  const flat::FilterRule* result = nullptr;
+  const flat::RequestFilterRule* result = nullptr;
 
   // Ignore URLs that are greater than the max URL length. Since those will be
   // disallowed elsewhere in the loading stack, we can save compute time by
@@ -610,7 +681,7 @@ const flat::FilterRule* RulesIndex::FindMatchingBeforeRequestRule(
   auto handle_matches =
       [this, &result, &url_info, document_origin, resource_type, is_third_party,
        disable_generic_rules](const FlatRuleIdList* rule_list) {
-        const flat::FilterRule* rule = FindMatchAmongCandidates(
+        const flat::RequestFilterRule* rule = FindMatchAmongCandidates(
             rule_list, this->rules_buffers_, url_info, document_origin,
             resource_type, is_third_party, disable_generic_rules,
             result ? GetRulePriority(*result) : -1);
@@ -630,19 +701,19 @@ const flat::FilterRule* RulesIndex::FindMatchingBeforeRequestRule(
   return result;
 }
 
-std::vector<const flat::FilterRule*>
+std::vector<const flat::RequestFilterRule*>
 RulesIndex::FindMatchingHeadersReceivedRules(const GURL& url,
                                              const url::Origin& document_origin,
                                              bool is_third_party,
                                              bool disable_generic_rules) {
-  std::vector<const flat::FilterRule*> result;
+  std::vector<const flat::RequestFilterRule*> result;
 
   RulePatternMatcher::UrlInfo url_info(url);
 
   auto handle_matches = [this, &result, &url_info, document_origin,
                          is_third_party, disable_generic_rules](
                             const FlatRuleIdList* rule_list) {
-    std::vector<const flat::FilterRule*> rules =
+    std::vector<const flat::RequestFilterRule*> rules =
         FindHeaderRulesMatchesCandidates(rule_list, this->rules_buffers_,
                                          url_info, document_origin,
                                          is_third_party, disable_generic_rules);
@@ -666,41 +737,61 @@ std::string RulesIndex::GetDefaultStylesheet() {
   return rules_index_->default_stylesheet()->str();
 }
 
-std::string RulesIndex::GetStyleSheetForOrigin(const url::Origin& origin,
-                                               bool disable_generic_rules) {
-  std::set<std::string> blocked_selectors;
-  std::set<std::string> allowed_selectors;
+RulesIndex::InjectionData::InjectionData() = default;
+RulesIndex::InjectionData::InjectionData(InjectionData&& other) = default;
+RulesIndex::InjectionData::~InjectionData() = default;
+RulesIndex::InjectionData& RulesIndex::InjectionData::operator=(
+    InjectionData&& other) = default;
 
-  const auto* tree = rules_index_->cosmetic_rules_tree();
+RulesIndex::InjectionData RulesIndex::GetInjectionDataForOrigin(
+    const url::Origin& origin,
+    bool disable_generic_rules) {
+  ContentInjectionIndexTraversalResults results;
 
-  const flat::CosmeticRulesNode* root =
-      tree->Get(rules_index_->cosmetic_rule_tree_root_index());
+  const auto* tree = rules_index_->content_injection_rules_tree();
+
+  const flat::ContentInjectionRulesNode* root =
+      tree->Get(rules_index_->content_injection_rule_tree_root_index());
 
   for (const auto* rule_for_domain : *root->rules()) {
-    const flat::CosmeticRule* rule = GetCosmeticRuleFromId(
-        this->rules_buffers_, *rule_for_domain->rule_id());
-    if (rule_for_domain->allow_for_domain())
-      allowed_selectors.insert(rule->selector()->str());
-    else if (!disable_generic_rules)
-      blocked_selectors.insert(rule->selector()->str());
+    switch (rule_for_domain->rule_type()) {
+      case flat::ContentInjectionRuleType_COSMETIC: {
+        const flat::CosmeticRule* rule = GetCosmeticRuleFromId(
+            this->rules_buffers_, *rule_for_domain->rule_id());
+        if (rule_for_domain->allow_for_domain())
+          results.cosmetic_rules.exceptions.insert(rule);
+        else if (!disable_generic_rules)
+          results.cosmetic_rules.selected.insert(rule);
+        break;
+      }
+      case flat::ContentInjectionRuleType_SCRIPTLET_INJECTION: {
+        const flat::ScriptletInjectionRule* rule =
+            GetScriptletInjectionRuleFromId(this->rules_buffers_,
+                                            *rule_for_domain->rule_id());
+        if (rule_for_domain->allow_for_domain())
+          results.scriptlet_injection_rules.exceptions.insert(rule);
+        else if (!disable_generic_rules)
+          results.scriptlet_injection_rules.selected.insert(rule);
+        break;
+      }
+    }
   }
 
   if (origin.host().empty())
-    return BuildStyleSheet(blocked_selectors);
+    return results.ToInjectionData();
 
   const auto domain_pieces = base::SplitStringPiece(
       origin.host(), ".", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
 
   base::Optional<uint32_t> subdomain_node_index = GetSubdomainNodeIndex(
-      domain_pieces.back(), rules_index_->cosmetic_rules_tree(), root);
+      domain_pieces.back(), rules_index_->content_injection_rules_tree(), root);
 
   if (subdomain_node_index)
     GetSelectorsForDomain(this->rules_buffers_, domain_pieces.rbegin() + 1,
-                          domain_pieces.rend(), &blocked_selectors,
-                          &allowed_selectors, tree,
+                          domain_pieces.rend(), &results, tree,
                           tree->Get(subdomain_node_index.value()));
 
-  return BuildStyleSheet(blocked_selectors);
+  return results.ToInjectionData();
 }
 
 void RulesIndex::RenderProcessHostDestroyed(content::RenderProcessHost* host) {

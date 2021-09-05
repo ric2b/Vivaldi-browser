@@ -29,7 +29,8 @@ using std::string;
 
 namespace {
 
-bool IsTheme(const extensions::Extension* extension) {
+bool IsTheme(const extensions::Extension* extension,
+             content::BrowserContext* context) {
   return extension->is_theme();
 }
 
@@ -43,7 +44,6 @@ ThemeSyncableService::ThemeSyncableService(Profile* profile,
     : profile_(profile),
       theme_service_(theme_service),
       use_system_theme_by_default_(false) {
-  DCHECK(profile_);
   DCHECK(theme_service_);
 }
 
@@ -59,6 +59,22 @@ void ThemeSyncableService::OnThemeChange() {
     use_system_theme_by_default_ =
         current_specifics.use_system_theme_by_default();
   }
+}
+
+void ThemeSyncableService::AddObserver(
+    ThemeSyncableService::Observer* observer) {
+  observer_list_.AddObserver(observer);
+  if (sync_processor_)
+    observer->OnThemeSyncStarted();
+}
+
+void ThemeSyncableService::RemoveObserver(
+    ThemeSyncableService::Observer* observer) {
+  observer_list_.RemoveObserver(observer);
+}
+
+void ThemeSyncableService::NotifyOnSyncStartedForTesting() {
+  NotifyOnSyncStarted();
 }
 
 void ThemeSyncableService::WaitUntilReadyToSync(base::OnceClosure done) {
@@ -91,6 +107,7 @@ ThemeSyncableService::MergeDataAndStartSyncing(
   if (!GetThemeSpecificsFromCurrentTheme(&current_specifics)) {
     // Current theme is unsyncable - don't overwrite from sync data, and don't
     // save the unsyncable theme to sync data.
+    NotifyOnSyncStarted();
     return base::nullopt;
   }
 
@@ -103,13 +120,17 @@ ThemeSyncableService::MergeDataAndStartSyncing(
       if (!HasNonDefaultTheme(current_specifics) ||
           HasNonDefaultTheme(sync_data->GetSpecifics().theme())) {
         MaybeSetTheme(current_specifics, *sync_data);
+        NotifyOnSyncStarted();
         return base::nullopt;
       }
     }
   }
 
   // No theme specifics are found. Create one according to current theme.
-  return ProcessNewTheme(syncer::SyncChange::ACTION_ADD, current_specifics);
+  base::Optional<syncer::ModelError> error =
+      ProcessNewTheme(syncer::SyncChange::ACTION_ADD, current_specifics);
+  NotifyOnSyncStarted();
+  return error;
 }
 
 void ThemeSyncableService::StopSyncing(syncer::ModelType type) {
@@ -368,4 +389,9 @@ base::Optional<syncer::ModelError> ThemeSyncableService::ProcessNewTheme(
       << changes.back().ToString();
 
   return sync_processor_->ProcessSyncChanges(FROM_HERE, changes);
+}
+
+void ThemeSyncableService::NotifyOnSyncStarted() {
+  for (Observer& observer : observer_list_)
+    observer.OnThemeSyncStarted();
 }

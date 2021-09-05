@@ -38,7 +38,7 @@
 #include "base/feature_list.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
-#include "base/util/type_safety/strong_alias.h"
+#include "base/types/strong_alias.h"
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/mojom/websockets/websocket_connector.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
@@ -218,11 +218,9 @@ bool WebSocketChannelImpl::Connect(const KURL& url, const String& protocol) {
     feature_handle_for_scheduler_ = scheduler->RegisterFeature(
         SchedulingPolicy::Feature::kWebSocket,
         base::FeatureList::IsEnabled(kAllowAggressiveThrottlingWithWebSocket)
-            ? SchedulingPolicy{SchedulingPolicy::
-                                   RecordMetricsForBackForwardCache()}
-            : SchedulingPolicy{
-                  SchedulingPolicy::DisableAggressiveThrottling(),
-                  SchedulingPolicy::RecordMetricsForBackForwardCache()});
+            ? SchedulingPolicy{SchedulingPolicy::DisableBackForwardCache()}
+            : SchedulingPolicy{SchedulingPolicy::DisableAggressiveThrottling(),
+                               SchedulingPolicy::DisableBackForwardCache()});
   }
 
   if (MixedContentChecker::IsMixedContent(
@@ -469,7 +467,11 @@ void WebSocketChannelImpl::OnOpeningHandshakeStarted(
 
 void WebSocketChannelImpl::OnFailure(const WTF::String& message,
                                      int net_error,
-                                     int response_code) {}
+                                     int response_code) {
+  NETWORK_DVLOG(1) << this << " OnFailure(" << message << ", " << net_error
+                   << ", " << response_code << ")";
+  failure_message_ = message;
+}
 
 void WebSocketChannelImpl::OnConnectionEstablished(
     mojo::PendingRemote<network::mojom::blink::WebSocket> websocket,
@@ -1080,11 +1082,13 @@ void WebSocketChannelImpl::OnConnectionError(const base::Location& set_from,
                                              const std::string& description) {
   DCHECK_NE(GetState(), State::kDisconnected);
   NETWORK_DVLOG(1) << " OnConnectionError("
-                   << " reason: " << custom_reason
                    << ", description:" << description
+                   << ", failure_message:" << failure_message_
                    << "), set_from:" << set_from.ToString();
-  String message = "Unknown reason";
-  if (custom_reason == network::mojom::blink::WebSocket::kInternalFailure) {
+  String message;
+  if (description.empty()) {
+    message = failure_message_;
+  } else {
     message = String::FromUTF8(description.c_str(), description.size());
   }
 

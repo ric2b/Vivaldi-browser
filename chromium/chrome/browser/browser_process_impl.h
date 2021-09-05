@@ -20,6 +20,7 @@
 #include "base/sequence_checker.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/common/buildflags.h"
 #include "components/keep_alive_registry/keep_alive_state_observer.h"
@@ -174,20 +175,16 @@ class BrowserProcessImpl : public BrowserProcess,
       override;
   federated_learning::FlocSortingLshClustersService*
   floc_sorting_lsh_clusters_service() override;
-  optimization_guide::OptimizationGuideService* optimization_guide_service()
-      override;
 
   StartupData* startup_data() override;
 
-#if defined(OS_WIN) || (defined(OS_LINUX) && !defined(OS_CHROMEOS))
+// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// of lacros-chrome is complete.
+#if defined(OS_WIN) || (defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
   void StartAutoupdateTimer() override;
 #endif
 
   component_updater::ComponentUpdateService* component_updater() override;
-#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-  component_updater::SupervisedUserWhitelistInstaller*
-  supervised_user_whitelist_installer() override;
-#endif
   MediaFileSystemRegistry* media_file_system_registry() override;
   WebRtcLogUploader* webrtc_log_uploader() override;
   network_time::NetworkTimeTracker* network_time_tracker() override;
@@ -294,7 +291,7 @@ class BrowserProcessImpl : public BrowserProcess,
       background_printing_manager_;
 #endif
 
-#if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
+#if !defined(OS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_ASH)
   // Manager for desktop notification UI.
   bool created_notification_ui_manager_ = false;
   std::unique_ptr<NotificationUIManager> notification_ui_manager_;
@@ -316,6 +313,8 @@ class BrowserProcessImpl : public BrowserProcess,
   std::unique_ptr<SystemNotificationHelper> system_notification_helper_;
 
 #if BUILDFLAG(ENABLE_BACKGROUND_MODE)
+  // Must be destroyed after the profile manager, because it doesn't remove
+  // itself as a profile attributes storage observer on destruction.
   std::unique_ptr<BackgroundModeManager> background_mode_manager_;
 #endif
 
@@ -328,10 +327,6 @@ class BrowserProcessImpl : public BrowserProcess,
 
   std::unique_ptr<federated_learning::FlocSortingLshClustersService>
       floc_sorting_lsh_clusters_service_;
-
-  bool created_optimization_guide_service_ = false;
-  std::unique_ptr<optimization_guide::OptimizationGuideService>
-      optimization_guide_service_;
 
   bool shutting_down_ = false;
 
@@ -355,7 +350,9 @@ class BrowserProcessImpl : public BrowserProcess,
 
   std::unique_ptr<BatteryMetrics> battery_metrics_;
 
-#if defined(OS_WIN) || (defined(OS_LINUX) && !defined(OS_CHROMEOS))
+// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// of lacros-chrome is complete.
+#if defined(OS_WIN) || (defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
   base::RepeatingTimer autoupdate_timer_;
 
   // Gets called by autoupdate timer to see if browser needs restart and can be
@@ -364,17 +361,13 @@ class BrowserProcessImpl : public BrowserProcess,
   bool IsRunningInBackground() const;
   void OnPendingRestartResult(bool is_update_pending_restart);
   void RestartBackgroundInstance();
-#endif  // defined(OS_WIN) || (defined(OS_LINUX) && !defined(OS_CHROMEOS))
+#endif  // defined(OS_WIN) || (defined(OS_LINUX) ||
+        // BUILDFLAG(IS_CHROMEOS_LACROS))
 
   // component updater is normally not used under ChromeOS due
   // to concerns over integrity of data shared between profiles,
   // but some users of component updater only install per-user.
   std::unique_ptr<component_updater::ComponentUpdateService> component_updater_;
-
-#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-  std::unique_ptr<component_updater::SupervisedUserWhitelistInstaller>
-      supervised_user_whitelist_installer_;
-#endif
 
 #if BUILDFLAG(ENABLE_PLUGINS)
   std::unique_ptr<PluginsResourceService> plugins_resource_service_;

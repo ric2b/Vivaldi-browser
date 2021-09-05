@@ -14,11 +14,12 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/containers/contains.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/pickle.h"
-#include "base/stl_util.h"
 #include "base/threading/thread.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/apps/app_service/launch_utils.h"
 #include "chrome/browser/background/background_mode_manager.h"
 #include "chrome/browser/browser_process.h"
@@ -43,10 +44,10 @@
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "components/sessions/content/content_serialized_navigation_builder.h"
 #include "components/sessions/content/session_tab_helper.h"
+#include "components/sessions/core/command_storage_manager.h"
 #include "components/sessions/core/session_command.h"
 #include "components/sessions/core/session_constants.h"
 #include "components/sessions/core/session_types.h"
-#include "components/sessions/core/snapshotting_command_storage_manager.h"
 #include "components/sessions/core/tab_restore_service.h"
 #include "components/tab_groups/tab_group_id.h"
 #include "components/tab_groups/tab_group_visual_data.h"
@@ -55,7 +56,7 @@
 #include "content/public/browser/session_storage_namespace.h"
 #include "content/public/browser/web_contents.h"
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/chromeos/crostini/crostini_util.h"
 #endif
 
@@ -90,8 +91,8 @@ SessionService::SessionService(Profile* profile)
     : profile_(profile),
       should_use_delayed_save_(true),
       command_storage_manager_(
-          std::make_unique<sessions::SnapshottingCommandStorageManager>(
-              sessions::SnapshottingCommandStorageManager::SESSION_RESTORE,
+          std::make_unique<sessions::CommandStorageManager>(
+              sessions::CommandStorageManager::kSessionRestore,
               profile->GetPath(),
               this)),
       has_open_trackable_browsers_(false),
@@ -107,8 +108,8 @@ SessionService::SessionService(const base::FilePath& save_path)
     : profile_(nullptr),
       should_use_delayed_save_(false),
       command_storage_manager_(
-          std::make_unique<sessions::SnapshottingCommandStorageManager>(
-              sessions::SnapshottingCommandStorageManager::SESSION_RESTORE,
+          std::make_unique<sessions::CommandStorageManager>(
+              sessions::CommandStorageManager::kSessionRestore,
               save_path,
               this)),
       has_open_trackable_browsers_(false),
@@ -129,7 +130,7 @@ bool SessionService::ShouldNewWindowStartSession() {
   // ChromeOS and OSX have different ideas of application lifetime than
   // the other platforms.
   // On ChromeOS opening a new window should never start a new session.
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   if (!force_browser_not_alive_with_no_windows_)
     return false;
 #endif
@@ -161,6 +162,8 @@ void SessionService::MoveCurrentSessionToLastSession() {
   pending_window_close_ids_.clear();
 
   command_storage_manager_->MoveCurrentSessionToLastSession();
+  // TODO(https://crbug.com/1163158): this needs to call
+  // ScheduleResetCommands().
 }
 
 void SessionService::DeleteLastSession() {
@@ -192,6 +195,16 @@ void SessionService::SetWindowWorkspace(const SessionID& window_id,
 
   ScheduleCommand(
       sessions::CreateSetWindowWorkspaceCommand(window_id, workspace));
+}
+
+void SessionService::SetWindowVisibleOnAllWorkspaces(
+    const SessionID& window_id,
+    bool visible_on_all_workspaces) {
+  if (!ShouldTrackChangesToWindow(window_id))
+    return;
+
+  ScheduleCommand(sessions::CreateSetWindowVisibleOnAllWorkspacesCommand(
+      window_id, visible_on_all_workspaces));
 }
 
 void SessionService::SetTabIndexInWindow(const SessionID& window_id,
@@ -284,6 +297,14 @@ void SessionService::WindowOpened(Browser* browser) {
   RestoreIfNecessary(std::vector<GURL>(), browser);
   SetWindowType(browser->session_id(), browser->type());
   SetWindowAppName(browser->session_id(), browser->app_name());
+
+  // Save a browser workspace after window is created in `Browser()`.
+  // Bento desks restore feature in ash requires this line to restore correctly
+  // after creating a new browser window in a particular desk.
+  SetWindowWorkspace(browser->session_id(), browser->window()->GetWorkspace());
+  SetWindowVisibleOnAllWorkspaces(
+      browser->session_id(), browser->window()->IsVisibleOnAllWorkspaces());
+
   SetWindowExtData(browser->session_id(), browser->ext_data());
 }
 
@@ -494,6 +515,11 @@ void SessionService::OnWillSaveCommands() {
   RebuildCommandsIfRequired();
 }
 
+void SessionService::OnErrorWritingSessionCommands() {
+  // TODO(https://crbug.com/648266): implement this.
+  NOTIMPLEMENTED();
+}
+
 void SessionService::RebuildCommandsIfRequired() {
   if (rebuild_on_next_save_ && pending_window_close_ids_.empty()) {
     ScheduleResetCommands();
@@ -605,7 +631,7 @@ void SessionService::Init() {
 
 bool SessionService::ShouldRestoreWindowOfType(
     sessions::SessionWindow::WindowType window_type) const {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // Restore apps and app popups for ChromeOS alone.
   if (window_type == sessions::SessionWindow::TYPE_APP ||
       window_type == sessions::SessionWindow::TYPE_APP_POPUP)
@@ -811,6 +837,11 @@ void SessionService::BuildCommandsForBrowser(
       sessions::CreateSetWindowWorkspaceCommand(
           browser->session_id(), browser->window()->GetWorkspace()));
 
+  command_storage_manager_->AppendRebuildCommand(
+      sessions::CreateSetWindowVisibleOnAllWorkspacesCommand(
+          browser->session_id(),
+          browser->window()->IsVisibleOnAllWorkspaces()));
+
   if (!browser->ext_data().empty()) {
     command_storage_manager_->AppendRebuildCommand(
         sessions::CreateSetWindowExtDataCommand(browser->session_id(),
@@ -956,7 +987,7 @@ bool SessionService::ShouldTrackChangesToWindow(
 bool SessionService::ShouldTrackBrowser(Browser* browser) const {
   if (browser->profile() != profile())
     return false;
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // Do not track Crostini apps or terminal.  Apps will fail since VMs are not
   // restarted on restore, and we don't want terminal to force the VM to start.
   if (crostini::CrostiniAppIdFromAppName(browser->app_name()) ||

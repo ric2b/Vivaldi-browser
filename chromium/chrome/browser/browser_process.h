@@ -19,6 +19,7 @@
 #include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/common/buildflags.h"
 #include "media/media_buildflags.h"
 
@@ -67,7 +68,6 @@ class VariationsService;
 
 namespace component_updater {
 class ComponentUpdateService;
-class SupervisedUserWhitelistInstaller;
 }
 
 namespace extensions {
@@ -88,10 +88,6 @@ class MetricsServicesManager;
 
 namespace network_time {
 class NetworkTimeTracker;
-}
-
-namespace optimization_guide {
-class OptimizationGuideService;
 }
 
 namespace policy {
@@ -229,16 +225,13 @@ class BrowserProcess {
   virtual federated_learning::FlocSortingLshClustersService*
   floc_sorting_lsh_clusters_service() = 0;
 
-  // Returns the service used to provide hints for what optimizations can be
-  // performed on slow page loads.
-  virtual optimization_guide::OptimizationGuideService*
-  optimization_guide_service() = 0;
-
   // Returns the StartupData which owns any pre-created objects in //chrome
   // before the full browser starts.
   virtual StartupData* startup_data() = 0;
 
-#if (defined(OS_WIN) || defined(OS_LINUX)) && !defined(OS_CHROMEOS)
+// TODO(crbug.com/1052397): Revisit once build flag switch of lacros-chrome is
+// complete.
+#if defined(OS_WIN) || (defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
   // This will start a timer that, if Chrome is in persistent mode, will check
   // whether an update is available, and if that's the case, restart the
   // browser. Note that restart code will strip some of the command line keys
@@ -250,11 +243,6 @@ class BrowserProcess {
 #endif
 
   virtual component_updater::ComponentUpdateService* component_updater() = 0;
-
-#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-  virtual component_updater::SupervisedUserWhitelistInstaller*
-  supervised_user_whitelist_installer() = 0;
-#endif
 
   virtual MediaFileSystemRegistry* media_file_system_registry() = 0;
 

@@ -32,6 +32,7 @@
 #include "base/threading/sequence_local_storage_slot.h"
 #include "base/time/default_clock.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "components/leveldb_proto/public/proto_database_provider.h"
 #include "components/services/storage/public/cpp/filesystem/filesystem_impl.h"
 #include "components/services/storage/public/mojom/filesystem/directory.mojom.h"
@@ -74,8 +75,9 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/dom_storage_context.h"
+#include "content/public/browser/file_system_access_entry_factory.h"
+#include "content/public/browser/font_access_context.h"
 #include "content/public/browser/login_delegate.h"
-#include "content/public/browser/native_file_system_entry_factory.h"
 #include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/permission_controller.h"
 #include "content/public/browser/service_process_host.h"
@@ -115,7 +117,9 @@
 #include "third_party/blink/public/mojom/quota/quota_types.mojom.h"
 
 #if defined(OS_ANDROID)
+#include "content/public/browser/android/java_interfaces.h"
 #include "net/android/http_auth_negotiate_android.h"
+#include "services/service_manager/public/cpp/interface_provider.h"
 #else
 #include "content/browser/host_zoom_map_impl.h"
 #endif  // defined(OS_ANDROID)
@@ -800,8 +804,13 @@ storage::QuotaClientTypes StoragePartitionImpl::GenerateQuotaClientTypes(
     uint32_t remove_mask) {
   storage::QuotaClientTypes quota_client_types;
 
-  if (remove_mask & StoragePartition::REMOVE_DATA_MASK_FILE_SYSTEMS)
+  if (remove_mask & StoragePartition::REMOVE_DATA_MASK_FILE_SYSTEMS) {
     quota_client_types.insert(storage::QuotaClientType::kFileSystem);
+
+    // TODO(crbug.com/1137788): Add a removal mask for NativeIO after adopting a
+    // more inclusive name.
+    quota_client_types.insert(storage::QuotaClientType::kNativeIO);
+  }
   if (remove_mask & StoragePartition::REMOVE_DATA_MASK_WEBSQL)
     quota_client_types.insert(storage::QuotaClientType::kDatabase);
   if (remove_mask & StoragePartition::REMOVE_DATA_MASK_APPCACHE)
@@ -814,7 +823,6 @@ storage::QuotaClientTypes StoragePartitionImpl::GenerateQuotaClientTypes(
     quota_client_types.insert(storage::QuotaClientType::kServiceWorkerCache);
   if (remove_mask & StoragePartition::REMOVE_DATA_MASK_BACKGROUND_FETCH)
     quota_client_types.insert(storage::QuotaClientType::kBackgroundFetch);
-
   return quota_client_types;
 }
 
@@ -1199,10 +1207,10 @@ void StoragePartitionImpl::Initialize(
   native_file_system_manager_ =
       base::MakeRefCounted<NativeFileSystemManagerImpl>(
           filesystem_context_, blob_context,
-          browser_context_->GetNativeFileSystemPermissionContext(),
+          browser_context_->GetFileSystemAccessPermissionContext(),
           browser_context_->IsOffTheRecord());
 
-  mojo::PendingRemote<storage::mojom::NativeFileSystemContext>
+  mojo::PendingRemote<storage::mojom::FileSystemAccessContext>
       native_file_system_context;
   native_file_system_manager_->BindInternalsReceiver(
       native_file_system_context.InitWithNewPipeAndPassReceiver());
@@ -1214,7 +1222,7 @@ void StoragePartitionImpl::Initialize(
       std::move(native_file_system_context), GetIOThreadTaskRunner({}),
       /*task_runner=*/nullptr);
 
-  cache_storage_context_ = new CacheStorageContextImpl();
+  cache_storage_context_ = base::MakeRefCounted<CacheStorageContextImpl>();
   cache_storage_context_->Init(
       path, browser_context_->GetSpecialStoragePolicy(), quota_manager_proxy);
 
@@ -1227,7 +1235,10 @@ void StoragePartitionImpl::Initialize(
   }
 
   dedicated_worker_service_ = std::make_unique<DedicatedWorkerServiceImpl>();
-  native_io_context_ = std::make_unique<NativeIOContext>(path);
+
+  native_io_context_ = base::MakeRefCounted<NativeIOContext>();
+  native_io_context_->Initialize(
+      path, browser_context_->GetSpecialStoragePolicy(), quota_manager_proxy);
 
   shared_worker_service_ = std::make_unique<SharedWorkerServiceImpl>(
       this, service_worker_context_, appcache_service_);
@@ -1294,7 +1305,8 @@ void StoragePartitionImpl::Initialize(
   // The Conversion Measurement API is not available in Incognito mode.
   if (!is_in_memory_ &&
       base::FeatureList::IsEnabled(features::kConversionMeasurement)) {
-    conversion_manager_ = std::make_unique<ConversionManagerImpl>(this, path);
+    conversion_manager_ = std::make_unique<ConversionManagerImpl>(
+        this, path, special_storage_policy_);
   }
 
   is_vivaldi_ = vivaldi::IsVivaldiApp(partition_domain_);
@@ -1413,8 +1425,7 @@ StoragePartitionImpl::GetCookieManagerForBrowserProcess() {
 void StoragePartitionImpl::CreateRestrictedCookieManager(
     network::mojom::RestrictedCookieManagerRole role,
     const url::Origin& origin,
-    const net::SiteForCookies& site_for_cookies,
-    const url::Origin& top_frame_origin,
+    const net::IsolationInfo& isolation_info,
     bool is_service_worker,
     int process_id,
     int routing_id,
@@ -1422,11 +1433,11 @@ void StoragePartitionImpl::CreateRestrictedCookieManager(
     mojo::PendingRemote<network::mojom::CookieAccessObserver> cookie_observer) {
   DCHECK(initialized_);
   if (!GetContentClient()->browser()->WillCreateRestrictedCookieManager(
-          role, browser_context_, origin, site_for_cookies, top_frame_origin,
-          is_service_worker, process_id, routing_id, &receiver)) {
-    GetNetworkContext()->GetRestrictedCookieManager(
-        std::move(receiver), role, origin, site_for_cookies, top_frame_origin,
-        std::move(cookie_observer));
+          role, browser_context_, origin, isolation_info, is_service_worker,
+          process_id, routing_id, &receiver)) {
+    GetNetworkContext()->GetRestrictedCookieManager(std::move(receiver), role,
+                                                    origin, isolation_info,
+                                                    std::move(cookie_observer));
   }
 }
 
@@ -1458,6 +1469,11 @@ storage::FileSystemContext* StoragePartitionImpl::GetFileSystemContext() {
   return filesystem_context_.get();
 }
 
+FontAccessContext* StoragePartitionImpl::GetFontAccessContext() {
+  DCHECK(initialized_);
+  return font_access_manager_.get();
+}
+
 storage::DatabaseTracker* StoragePartitionImpl::GetDatabaseTracker() {
   DCHECK(initialized_);
   return database_tracker_.get();
@@ -1483,8 +1499,8 @@ IndexedDBContextImpl* StoragePartitionImpl::GetIndexedDBContextInternal() {
   return indexed_db_control_wrapper_->GetIndexedDBContextInternal();
 }
 
-NativeFileSystemEntryFactory*
-StoragePartitionImpl::GetNativeFileSystemEntryFactory() {
+FileSystemAccessEntryFactory*
+StoragePartitionImpl::GetFileSystemAccessEntryFactory() {
   DCHECK(initialized_);
   return native_file_system_manager_.get();
 }
@@ -1495,6 +1511,12 @@ QuotaContext* StoragePartitionImpl::GetQuotaContext() {
 }
 
 CacheStorageContextImpl* StoragePartitionImpl::GetCacheStorageContext() {
+  DCHECK(initialized_);
+  return cache_storage_context_.get();
+}
+
+CacheStorageContextImpl*
+StoragePartitionImpl::GetCacheStorageContextImplForTesting() {
   DCHECK(initialized_);
   return cache_storage_context_.get();
 }
@@ -1851,7 +1873,7 @@ void StoragePartitionImpl::OnGenerateHttpNegotiateAuthToken(
 }
 #endif
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 void StoragePartitionImpl::OnTrustAnchorUsed() {
   GetContentClient()->browser()->OnTrustAnchorUsed(browser_context_);
 }
@@ -1860,12 +1882,45 @@ void StoragePartitionImpl::OnTrustAnchorUsed() {
 void StoragePartitionImpl::OnTrustTokenIssuanceDivertedToSystem(
     network::mojom::FulfillTrustTokenIssuanceRequestPtr request,
     OnTrustTokenIssuanceDivertedToSystemCallback callback) {
-  // TODO(crbug.com/1130272): Implement logic that allows executing Trust
-  // Tokens operations when available, rather than failing unconditionally.
-  auto response = network::mojom::FulfillTrustTokenIssuanceAnswer::New();
-  response->status =
-      network::mojom::FulfillTrustTokenIssuanceAnswer::Status::kNotFound;
-  std::move(callback).Run(std::move(response));
+  if (!local_trust_token_fulfiller_ &&
+      !attempted_to_bind_local_trust_token_fulfiller_) {
+    attempted_to_bind_local_trust_token_fulfiller_ = true;
+    ProvisionallyBindUnboundLocalTrustTokenFulfillerIfSupportedBySystem();
+  }
+
+  if (!local_trust_token_fulfiller_) {
+    auto response = network::mojom::FulfillTrustTokenIssuanceAnswer::New();
+    response->status =
+        network::mojom::FulfillTrustTokenIssuanceAnswer::Status::kNotFound;
+    std::move(callback).Run(std::move(response));
+    return;
+  }
+
+  int callback_key = next_pending_trust_token_issuance_callback_key_++;
+  pending_trust_token_issuance_callbacks_.emplace(callback_key,
+                                                  std::move(callback));
+
+  local_trust_token_fulfiller_->FulfillTrustTokenIssuance(
+      std::move(request),
+      base::BindOnce(
+          [](int callback_key, base::WeakPtr<StoragePartitionImpl> partition,
+             network::mojom::FulfillTrustTokenIssuanceAnswerPtr answer) {
+            if (!partition)
+              return;
+
+            if (!base::Contains(
+                    partition->pending_trust_token_issuance_callbacks_,
+                    callback_key)) {
+              return;
+            }
+            auto callback =
+                std::move(partition->pending_trust_token_issuance_callbacks_.at(
+                    callback_key));
+            partition->pending_trust_token_issuance_callbacks_.erase(
+                callback_key);
+            std::move(callback).Run(std::move(answer));
+          },
+          callback_key, weak_factory_.GetWeakPtr()));
 }
 
 void StoragePartitionImpl::ClearDataImpl(
@@ -2557,6 +2612,36 @@ StoragePartitionImpl::CreateCookieAccessObserverForServiceWorker() {
       std::make_unique<ServiceWorkerCookieAccessObserver>(this),
       remote.InitWithNewPipeAndPassReceiver());
   return remote;
+}
+
+void StoragePartitionImpl::OnLocalTrustTokenFulfillerConnectionError() {
+  auto not_found_answer =
+      network::mojom::FulfillTrustTokenIssuanceAnswer::New();
+  // kNotFound represents a case where the local system was unable to provide an
+  // answer to the request.
+  not_found_answer->status =
+      network::mojom::FulfillTrustTokenIssuanceAnswer::Status::kNotFound;
+
+  for (auto& key_and_callback : pending_trust_token_issuance_callbacks_)
+    std::move(key_and_callback.second).Run(not_found_answer.Clone());
+  pending_trust_token_issuance_callbacks_.clear();
+}
+
+void StoragePartitionImpl::
+    ProvisionallyBindUnboundLocalTrustTokenFulfillerIfSupportedBySystem() {
+  if (local_trust_token_fulfiller_)
+    return;
+
+#if defined(OS_ANDROID)
+  GetGlobalJavaInterfaces()->GetInterface(
+      local_trust_token_fulfiller_.BindNewPipeAndPassReceiver());
+#endif  // defined(OS_ANDROID)
+
+  if (local_trust_token_fulfiller_) {
+    local_trust_token_fulfiller_.set_disconnect_handler(base::BindOnce(
+        &StoragePartitionImpl::OnLocalTrustTokenFulfillerConnectionError,
+        weak_factory_.GetWeakPtr()));
+  }
 }
 
 }  // namespace content

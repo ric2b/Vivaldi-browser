@@ -74,7 +74,7 @@
 <translation id="3447661539832366887">Власник овог уређаја је искључио ову застарелу игру.</translation>
 <translation id="3447884698081792621">Прикажи сертификат (издавач <ph name="ISSUER" />)</translation>
 <translation id="3462200631372590220">Сакриј напредно</translation>
-<translation id="3484560055331845446">Могли бисте да изгубите приступ Google налогу. Препоручује се да одмах промените лозинку. Мораћете да се пријавите.</translation>
+<translation id="3484560055331845446">Могли бисте изгубити приступ свом Google налогу. Препоручује се да одмах промените лозинку. Од вас ће се тражити да се пријавите.</translation>
 <translation id="3566021033012934673">Веза није приватна</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Сакриј детаље</translation>
@@ -105,7 +105,6 @@
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> није прихватио сертификат за пријављивање или сертификат за пријављивање није приложен.</translation>
 <translation id="4506599922270137252">да се обратите администратору система</translation>
 <translation id="4522570452068850558">Детаљи</translation>
-<translation id="4552089082226364758">Flash</translation>
 <translation id="4558551763791394412">Покушајте да онемогућите проширења.</translation>
 <translation id="4592951414987517459">Веза са доменом <ph name="DOMAIN" /> је шифрована помоћу модерног пакета за шифровање.</translation>
 <translation id="4690462567478992370">Заустави коришћење неважећег сертификата</translation>
@@ -231,7 +230,7 @@
 <translation id="9180553614777056266">Блокатор реклама</translation>
 <translation id="9183425211371246419">Хост <ph name="HOST_NAME" /> користи неподржани протокол.</translation>
 <translation id="9219103736887031265">Слике</translation>
-<translation id="936602727769022409">Могли бисте да изгубите приступ Google налогу. Препоручује се да одмах промените лозинку. Мораћете да се пријавите.</translation>
+<translation id="936602727769022409">Могли бисте изгубити приступ свом Google налогу. Препоручује се да одмах промените лозинку. Од вас ће се тражити да се пријавите.</translation>
 <translation id="969892804517981540">Званична верзија</translation>
 <translation id="988159990683914416">Верзија за програмере</translation>
 </translationbundle>

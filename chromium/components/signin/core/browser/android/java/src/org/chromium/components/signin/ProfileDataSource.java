@@ -8,25 +8,23 @@ import android.graphics.Bitmap;
 
 import androidx.annotation.Nullable;
 
-import java.util.Map;
-
 /**
- * Observable source of profile data for accounts on device. Must be used from UI thread only.
+ * Observable source of profile data for accounts on device.
  */
 public interface ProfileDataSource {
     /**
      * Immutable holder for profile data.
      */
     class ProfileData {
-        private final String mAccountName;
+        private final String mAccountEmail;
         private final @Nullable Bitmap mAvatar;
         private final @Nullable String mFullName;
         private final @Nullable String mGivenName;
 
-        public ProfileData(String accountName, @Nullable Bitmap avatar, @Nullable String fullName,
+        public ProfileData(String accountEmail, @Nullable Bitmap avatar, @Nullable String fullName,
                 @Nullable String givenName) {
-            assert accountName != null;
-            this.mAccountName = accountName;
+            assert accountEmail != null;
+            this.mAccountEmail = accountEmail;
             this.mAvatar = avatar;
             this.mFullName = fullName;
             this.mGivenName = givenName;
@@ -34,10 +32,10 @@ public interface ProfileDataSource {
 
         /**
          * Gets the account email address.
-         * @return the account name.
+         * @return the account email.
          */
-        public String getAccountName() {
-            return mAccountName;
+        public String getAccountEmail() {
+            return mAccountEmail;
         }
 
         /**
@@ -71,26 +69,23 @@ public interface ProfileDataSource {
     interface Observer {
         /**
          * Notifies that an account's profile data has been updated.
-         * @param accountId An account ID.
          */
-        void onProfileDataUpdated(String accountId);
-    }
+        void onProfileDataUpdated(ProfileData profileData);
 
-    /**
-     * Gets ProfileData for all accounts. There must be at least one active observer when this
-     * method is invoked (see {@link #addObserver}).
-     * @return unmodifiable map of ProfileData for all accounts (keyed by account name).
-     */
-    Map<String, ProfileData> getProfileDataMap();
+        /**
+         * Removes the profile data of a given accountEmail.
+         */
+        void removeProfileData(String accountEmail);
+    }
 
     /**
      * Gets ProfileData for single account. There must be at least one active observer when this
      * method is invoked (see {@link #addObserver}).
-     * @param accountId account name to get ProfileData for.
+     * @param accountEmail account email to get ProfileData for.
      * @return ProfileData if there's any profile data for this account name, null otherwise.
      */
     @Nullable
-    ProfileData getProfileDataForAccount(String accountId);
+    ProfileData getProfileDataForAccount(String accountEmail);
 
     /**
      * Adds an observer to get notified about changes to profile data.

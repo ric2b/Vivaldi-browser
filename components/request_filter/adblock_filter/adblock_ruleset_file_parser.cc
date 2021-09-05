@@ -8,8 +8,9 @@
 
 namespace adblock_filter {
 
-RulesetFileParser::RulesetFileParser(ParseResult* parse_result)
-    : parse_result_(parse_result), parser_(parse_result) {
+RulesetFileParser::RulesetFileParser(ParseResult* parse_result,
+                                     bool allow_abp_snippets)
+    : parse_result_(parse_result), parser_(parse_result, allow_abp_snippets) {
   DCHECK_NE(nullptr, parse_result);
 }
 RulesetFileParser::~RulesetFileParser() = default;
@@ -23,7 +24,7 @@ void RulesetFileParser::Parse(base::StringPiece file_contents) {
     ParseLine(rule_string);
   }
 
-  if (parse_result_->filter_rules.empty() &&
+  if (parse_result_->request_filter_rules.empty() &&
       parse_result_->cosmetic_rules.empty()) {
     parse_result_->fetch_result = FetchResult::kFileUnsupported;
   }
@@ -40,8 +41,9 @@ void RulesetFileParser::ParseLine(base::StringPiece string_piece) {
     case RuleParser::kError:
       parse_result_->rules_info.invalid_rules++;
       break;
-    case RuleParser::kFilterRule:
+    case RuleParser::kRequestFilterRule:
     case RuleParser::kCosmeticRule:
+    case RuleParser::kScriptletInjectionRule:
       parse_result_->rules_info.valid_rules++;
       break;
   }

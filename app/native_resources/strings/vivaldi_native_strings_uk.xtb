@@ -4,6 +4,7 @@
 <translation id="1033008476608128425">Краєвид 3</translation>
 <translation id="1118377629180821201">Краєвид 12</translation>
 <translation id="1158503667684816647">Більше не показувати</translation>
+<translation id="1222195720020481779">Запуск інсталятора...</translation>
 <translation id="1276145862619442150">Експрес-панелі</translation>
 <translation id="1281950884873973195">Тварина 6</translation>
 <translation id="1411638389238344450">Надіслати посилання по пошті</translation>
@@ -21,11 +22,15 @@
 <translation id="1921101374471252440">&amp;Перезавантажити зображення</translation>
 <translation id="1924750141060565109">Краєвид 15</translation>
 <translation id="19598411548897379">Загальний</translation>
+<translation id="1985669426322966465">Оновлення програми</translation>
 <translation id="2079036669923635404">Натисніть тут, щоб оновити Vivaldi до версії <ph name="VERSION" />.</translation>
 <translation id="2141974047387702305">Під час завантаження файлів оновлення сталася помилка. Будь ласка, перевірте інтернет-з'єднання та спробуйте ще раз.</translation>
+<translation id="2339641773402824483">Перевірка оновлень...</translation>
 <translation id="2441056087170876076">Монстр 2</translation>
 <translation id="2444387452209867610">Вставити нотатку</translation>
 <translation id="2486841023299517366">Тварина 4</translation>
+<translation id="2612127540243995147">Оновлення готове до встановлення. Vivaldi буде перезапущено.</translation>
+<translation id="2613387515621326337">Показати сторінку оновлення</translation>
 <translation id="2848085334714181751">Тварина 3</translation>
 <translation id="2873951654529031587">Кошик</translation>
 <translation id="292258461174562431">Монстр 4</translation>
@@ -36,9 +41,12 @@
 <translation id="3084011186245865060">Краєвид 6</translation>
 <translation id="3127383884976966729">Тварина 7</translation>
 <translation id="3156398087075132709">Нова закладка</translation>
+<translation id="3255747772218936245">Встановити оновлення</translation>
 <translation id="3259769196742189631">Перевірка на W3C</translation>
 <translation id="3302905971452834934">Монстр 1</translation>
 <translation id="3334610655141903168">(немає заголовку)</translation>
+<translation id="3372505110412186107">Версія Vivaldi <ph name="VERSION" /> є найновішою.</translation>
+<translation id="3383198080133834965">Оновлення завершене!</translation>
 <translation id="3402602684546832928">Виберіть файл закладок Opera</translation>
 <translation id="3451317331714872347">Краєвид 8</translation>
 <translation id="3457498675806041407">Підтвердити вихід</translation>
@@ -48,6 +56,7 @@
 <translation id="3542768452570884558">Відкрити посилання у новому вікні</translation>
 <translation id="3588820906588687999">Відкрити зображення в новій вкладці</translation>
 <translation id="3601066750251199488">Монстр 3</translation>
+<translation id="3680031241659195730">Доступна нова версія Vivaldi!</translation>
 <translation id="3708982624815781692">Завантаження було скасовано.</translation>
 <translation id="3732157130969736834">Помістити посилання в закладки</translation>
 <translation id="3732388226447288666">Тварина 2</translation>
@@ -56,6 +65,7 @@
 <translation id="3914946330804881301">Імпортовано з Opera</translation>
 <translation id="3921292902397893431">Монстр 8</translation>
 <translation id="3943857333388298514">Вставити</translation>
+<translation id="4005270918754737597">Пропустити цю версію</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4073157431025461511">Не показувати знову</translation>
 <translation id="4074744496918018786">Відкрити зображення в анонімному вікні</translation>
@@ -72,6 +82,7 @@
 <translation id="4677434526832593569">Тварина 8</translation>
 <translation id="474217410105706308">Вимкнути звук</translation>
 <translation id="4881695831933465202">Відкрити</translation>
+<translation id="498766871928286903"><ph name="DOWNLOADED" /> з <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
 <translation id="5014281392052865061">Імпортована Експрес-панель</translation>
 <translation id="5092656712000637858">Додати сторінку на веб-панель</translation>
 <translation id="5177818338935286353">Монстр 7</translation>
@@ -87,6 +98,7 @@
 <translation id="5648110075441906505">Відкрити зображення у новому вікні</translation>
 <translation id="5656371807944747581">Помилка оновлення!</translation>
 <translation id="5716238312826274098">Вимкнення сповіщень</translation>
+<translation id="5732584064771442623">Доступна версія Vivaldi <ph name="NEW_VERSION" /> (у вас встановлено <ph name="OLD_VERSION" />). Бажаєте завантажити зараз?</translation>
 <translation id="5770433027661640693">Краєвид 10</translation>
 <translation id="5857090052475505287">Нова тека</translation>
 <translation id="588258955323874662">Повноекранний режим</translation>
@@ -102,15 +114,19 @@
 <translation id="6538338088414940408">Відкрити посилання у фоновій вкладці</translation>
 <translation id="6551219277044048123">Додати як новий пошук...</translation>
 <translation id="6630781781151951863">Краєвид 18</translation>
+<translation id="6635049669875534328">Що нового:</translation>
 <translation id="6804831687363620480">На жаль, налаштування Opera 15+ недоступні при працюючому браузері. Для імпортування цих налаштувань до Vivaldi, збережіть свої дані і закрийте всі вікна Opera 15+. Потім натисніть "Продовжити".</translation>
+<translation id="6892812721183419409">Відкрити посилання як <ph name="USER" /></translation>
 <translation id="6896758677409633944">Копіювати</translation>
 <translation id="7086554968911045110">Краєвид 7</translation>
 <translation id="7111492742514999492">Краєвид 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7496505986576158197">Vivaldi створено за використання проекта <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> з відкритим кодом та іншого <ph name="BEGIN_LINK_OSS" />програмного забезпечення з відкритим кодом<ph name="END_LINK_OSS" />.</translation>
 <translation id="7581266044164103589">Сталася помилка при запуску інсталятора. Перевірте наявність вільного місця та пам'яті та спробуйте ще раз.</translation>
+<translation id="7658239707568436148">Скасувати</translation>
 <translation id="7715497554424665066">Ігнорувати оновлення</translation>
 <translation id="7724603315864178912">Вирізати</translation>
+<translation id="7727481996062361502">Перевірка оновлення...</translation>
 <translation id="7793738202466490491">Додати у ролі події календаря</translation>
 <translation id="7848222781052558334">Сталася помилка під час перевірки цифрового підпису завантажених файлів.</translation>
 <translation id="7865983598101744945">Підтвердіть вихід</translation>
@@ -121,9 +137,13 @@
 <translation id="8261506727792406068">Видалити</translation>
 <translation id="8331671104904436324">Відкрити у фоновій вкладці</translation>
 <translation id="8373293945112511707">Краєвид 1</translation>
+<translation id="8388552048012645975">Завантаження оновлення...</translation>
 <translation id="8427094907586191051">Краєвид 17</translation>
+<translation id="8439034818057146672">Нова версія Vivaldi готова для встановлення.</translation>
 <translation id="8446668873108041390">Виконання JavaScript через AppleScript відключено. У налаштуваннях Settings &gt; Privacy &gt; Apple Events ви можете дозволити JavaScript з Apple Events.</translation>
 <translation id="8539196077526389150">Краєвид 13</translation>
+<translation id="8562339533180097902">Закрити Vivaldi та встановити зараз</translation>
+<translation id="8567452685425968223">Розпакування оновлення...</translation>
 <translation id="8624587806981488221">&amp;Перезавантажити зображення</translation>
 <translation id="864444594187862076">Opera 15+ (Developer)</translation>
 <translation id="8651348004684669199">Додати активну вкладку</translation>
@@ -131,11 +151,13 @@
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8768970203213061953">Краєвид 14</translation>
 <translation id="8773635261052182196">Ви більше не будете отримувати повідомлення. Ви можете включити їх в налаштуваннях Vivaldi.</translation>
+<translation id="8813277370772331957">Нагадати пізніше</translation>
 <translation id="8894900864683381599">Додати посилання на веб-панель</translation>
 <translation id="8912720443398351457">Ви дійсно бажаєте вийти з Vivaldi?</translation>
 <translation id="8947109330183116400">Вибрати HTML файл закладок</translation>
 <translation id="9017566390391482291">Виберіть папку профілю Vivaldi для імпорту</translation>
 <translation id="9065203028668620118">Редагувати</translation>
+<translation id="912022491595344261">Відкрити зображення як <ph name="USER" /></translation>
 <translation id="9157539936604258187">Відкрити посилання</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
 <translation id="970294721402795299">Краєвид 16</translation>

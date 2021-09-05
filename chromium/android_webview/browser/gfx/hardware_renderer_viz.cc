@@ -12,18 +12,19 @@
 #include "android_webview/browser/gfx/aw_gl_surface.h"
 #include "android_webview/browser/gfx/aw_render_thread_context_provider.h"
 #include "android_webview/browser/gfx/display_scheduler_webview.h"
-#include "android_webview/browser/gfx/gpu_service_web_view.h"
+#include "android_webview/browser/gfx/gpu_service_webview.h"
 #include "android_webview/browser/gfx/parent_compositor_draw_constraints.h"
 #include "android_webview/browser/gfx/render_thread_manager.h"
 #include "android_webview/browser/gfx/root_frame_sink.h"
 #include "android_webview/browser/gfx/skia_output_surface_dependency_webview.h"
 #include "android_webview/browser/gfx/surfaces_instance.h"
-#include "android_webview/browser/gfx/task_queue_web_view.h"
+#include "android_webview/browser/gfx/task_queue_webview.h"
 #include "android_webview/browser/gfx/viz_compositor_thread_runner_webview.h"
 #include "android_webview/common/aw_switches.h"
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/notreached.h"
 #include "base/stl_util.h"
 #include "base/trace_event/trace_event.h"
 #include "components/viz/common/display/renderer_settings.h"
@@ -52,7 +53,7 @@ namespace android_webview {
 
 class HardwareRendererViz::OnViz : public viz::DisplayClient {
  public:
-  OnViz(OutputSurfaceProviderWebview* output_surface_provider,
+  OnViz(OutputSurfaceProviderWebView* output_surface_provider,
         const scoped_refptr<RootFrameSink>& root_frame_sink);
   ~OnViz() override;
 
@@ -103,7 +104,7 @@ class HardwareRendererViz::OnViz : public viz::DisplayClient {
 };
 
 HardwareRendererViz::OnViz::OnViz(
-    OutputSurfaceProviderWebview* output_surface_provider,
+    OutputSurfaceProviderWebView* output_surface_provider,
     const scoped_refptr<RootFrameSink>& root_frame_sink)
     : without_gpu_(root_frame_sink),
       frame_sink_id_(without_gpu_->root_frame_sink_id()),
@@ -159,8 +160,7 @@ void HardwareRendererViz::OnViz::DrawAndSwapOnViz(
 
   if (child_frame->frame) {
     DCHECK(!viz_frame_submission_);
-    without_gpu_->SubmitChildCompositorFrame(child_id.local_surface_id(),
-                                             child_frame);
+    without_gpu_->SubmitChildCompositorFrame(child_frame);
   }
 
   gfx::Size frame_size = without_gpu_->GetChildFrameSize();
@@ -276,9 +276,7 @@ HardwareRendererViz::HardwareRendererViz(
     RenderThreadManager* state,
     RootFrameSinkGetter root_frame_sink_getter,
     AwVulkanContextProvider* context_provider)
-    : HardwareRenderer(state),
-      viz_frame_submission_(features::IsUsingVizFrameSubmissionForWebView()),
-      output_surface_provider_(context_provider) {
+    : HardwareRenderer(state), output_surface_provider_(context_provider) {
   DCHECK_CALLED_ON_VALID_THREAD(render_thread_checker_);
   DCHECK(output_surface_provider_.renderer_settings().use_skia_renderer);
 
@@ -316,7 +314,8 @@ bool HardwareRendererViz::IsUsingVulkan() const {
   return output_surface_provider_.shared_context_state()->GrContextIsVulkan();
 }
 
-void HardwareRendererViz::DrawAndSwap(HardwareRendererDrawParams* params) {
+void HardwareRendererViz::DrawAndSwap(const HardwareRendererDrawParams& params,
+                                      const OverlaysParams& overlays_params) {
   TRACE_EVENT1("android_webview", "HardwareRendererViz::Draw", "vulkan",
                IsUsingVulkan());
   DCHECK_CALLED_ON_VALID_THREAD(render_thread_checker_);
@@ -324,10 +323,10 @@ void HardwareRendererViz::DrawAndSwap(HardwareRendererDrawParams* params) {
   viz::FrameTimingDetailsMap timing_details;
 
   gfx::Transform transform(gfx::Transform::kSkipInitialization);
-  transform.matrix().setColMajorf(params->transform);
+  transform.matrix().setColMajorf(params.transform);
   transform.Translate(scroll_offset_.x(), scroll_offset_.y());
 
-  gfx::Size viewport(params->width, params->height);
+  gfx::Size viewport(params.width, params.height);
   // Need to post the new transform matrix back to child compositor
   // because there is no onDraw during a Render Thread animation, and child
   // compositor might not have the tiles rasterized as the animation goes on.
@@ -339,51 +338,18 @@ void HardwareRendererViz::DrawAndSwap(HardwareRendererDrawParams* params) {
   if (!child_frame_)
     return;
 
-  // Two problems currently can cause the content-generated LocalSurfaceId
-  // to remain the same even if a frame of a new size is submitted:
-  // * The content LocalSurfaceId is currently copied from browser, not
-  //   the renderer when the renderer submits a frame
-  // * Synchronous compositor can resize the viewport in LTHI::OnDraw before
-  //   a new LocalSurfaceId is committed.
-  // Therefore we do not use the LocalSurfaceId allocated by content, and
-  // instead generate our own LocalSurfaceId here for the root renderer frame.
-  if (!renderer_root_local_surface_id_allocator_ ||
-      child_frame_->frame_sink_id != surface_id_.frame_sink_id() ||
-      layer_tree_frame_sink_id_ != child_frame_->layer_tree_frame_sink_id) {
-    renderer_root_local_surface_id_allocator_ =
-        std::make_unique<viz::ParentLocalSurfaceIdAllocator>();
-    layer_tree_frame_sink_id_ = child_frame_->layer_tree_frame_sink_id;
-    renderer_root_local_surface_id_ = viz::LocalSurfaceId();
-  }
-
-  if (!viz_frame_submission_ && child_frame_->frame) {
-    if (!renderer_root_local_surface_id_.is_valid() ||
-        child_frame_->frame->size_in_pixels() != frame_size_ ||
-        child_frame_->frame->device_scale_factor() != device_scale_factor_) {
-      renderer_root_local_surface_id_allocator_->GenerateId();
-      renderer_root_local_surface_id_ =
-          renderer_root_local_surface_id_allocator_->GetCurrentLocalSurfaceId();
-      frame_size_ = child_frame_->frame->size_in_pixels();
-      device_scale_factor_ = child_frame_->frame->device_scale_factor();
-    }
-  }
-
-  viz::SurfaceId child_surface_id =
-      viz_frame_submission_ ? child_frame_->GetSurfaceId()
-                            : viz::SurfaceId(child_frame_->frame_sink_id,
-                                             renderer_root_local_surface_id_);
+  viz::SurfaceId child_surface_id = child_frame_->GetSurfaceId();
   if (child_surface_id.is_valid() && child_surface_id != surface_id_) {
     surface_id_ = child_surface_id;
-    if (viz_frame_submission_)
-      device_scale_factor_ = child_frame_->device_scale_factor;
+    device_scale_factor_ = child_frame_->device_scale_factor;
   }
 
   if (!surface_id_.is_valid())
     return;
 
-  gfx::Rect clip(params->clip_left, params->clip_top,
-                 params->clip_right - params->clip_left,
-                 params->clip_bottom - params->clip_top);
+  gfx::Rect clip(params.clip_left, params.clip_top,
+                 params.clip_right - params.clip_left,
+                 params.clip_bottom - params.clip_top);
 
   output_surface_provider_.gl_surface()->RecalculateClipAndTransform(
       &viewport, &clip, &transform);
@@ -395,7 +361,7 @@ void HardwareRendererViz::DrawAndSwap(HardwareRendererDrawParams* params) {
   VizCompositorThreadRunnerWebView::GetInstance()->ScheduleOnVizAndBlock(
       base::BindOnce(&HardwareRendererViz::OnViz::DrawAndSwapOnViz,
                      base::Unretained(on_viz_.get()), viewport, clip, transform,
-                     surface_id_, device_scale_factor_, params->color_space,
+                     surface_id_, device_scale_factor_, params.color_space,
                      child_frame_.get()));
 
   output_surface_provider_.gl_surface()->MaybeDidPresent(
@@ -415,6 +381,11 @@ void HardwareRendererViz::DrawAndSwap(HardwareRendererDrawParams* params) {
         draw_constraints, child_frame_->frame_sink_id,
         std::move(timing_details), 0);
   }
+}
+
+void HardwareRendererViz::RemoveOverlays(
+    OverlaysParams::MergeTransactionFn merge_transaction) {
+  NOTIMPLEMENTED();
 }
 
 }  // namespace android_webview

@@ -26,9 +26,11 @@
 #include "base/process/process_handle.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
+#include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/crosapi/ash_chrome_service_impl.h"
 #include "chrome/browser/chromeos/crosapi/browser_loader.h"
 #include "chrome/browser/chromeos/crosapi/browser_util.h"
@@ -37,8 +39,8 @@
 #include "chrome/browser/component_updater/cros_component_manager.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/constants/chromeos_switches.h"
+#include "chromeos/startup/startup_switches.h"
 #include "components/prefs/pref_service.h"
 #include "components/session_manager/core/session_manager.h"
 #include "google_apis/google_api_keys.h"
@@ -197,11 +199,13 @@ bool BrowserManager::IsRunning() const {
 }
 
 void BrowserManager::SetLoadCompleteCallback(LoadCompleteCallback callback) {
+  // We only support one client waiting.
+  DCHECK(!load_complete_callback_);
   load_complete_callback_ = std::move(callback);
 }
 
 void BrowserManager::NewWindow() {
-  if (!browser_util::IsLacrosAllowed())
+  if (!browser_util::IsLacrosEnabled())
     return;
 
   if (!IsReady()) {
@@ -303,12 +307,19 @@ void BrowserManager::StartWithLogFile(base::ScopedFD logfd) {
   options.environment["GOOGLE_DEFAULT_CLIENT_SECRET"] =
       google_apis::GetOAuth2ClientSecret(google_apis::CLIENT_MAIN);
 
+  // This sets the channel for Lacros.
+  options.environment["CHROME_VERSION_EXTRA"] = "dev";
+
   options.kill_on_parent_death = true;
 
   // Paths are UTF-8 safe on Chrome OS.
   std::string user_data_dir = browser_util::GetUserDataDir().AsUTF8Unsafe();
   std::string crash_dir =
       browser_util::GetUserDataDir().Append("crash_dumps").AsUTF8Unsafe();
+
+  // Pass the locale via command line instead of via LacrosInitParams because
+  // the Lacros browser process needs it early in startup, before zygote fork.
+  std::string locale = g_browser_process->GetApplicationLocale();
 
   // Static configuration should be enabled from Lacros rather than Ash. This
   // vector should only be used for dynamic configuration.
@@ -318,7 +329,7 @@ void BrowserManager::StartWithLogFile(base::ScopedFD logfd) {
                                    "--user-data-dir=" + user_data_dir,
                                    "--enable-gpu-rasterization",
                                    "--enable-oop-rasterization",
-                                   "--lang=en-US",
+                                   "--lang=" + locale,
                                    "--enable-crashpad",
                                    "--enable-webgl-image-chromium",
                                    "--breakpad-dump-location=" + crash_dir};
@@ -347,6 +358,18 @@ void BrowserManager::StartWithLogFile(base::ScopedFD logfd) {
     // the new process.
     options.fds_to_remap.push_back(std::make_pair(logfd.get(), STDOUT_FILENO));
     options.fds_to_remap.push_back(std::make_pair(logfd.get(), STDERR_FILENO));
+  }
+
+  base::ScopedFD startup_fd =
+      browser_util::CreateStartupData(environment_provider_.get());
+  if (startup_fd.is_valid()) {
+    // Hardcoded to use FD 3 to make the ash-chrome's behavior more predictable.
+    // Lacros-chrome should not depend on the hardcoded value though. Instead
+    // it should take a look at the value passed via the command line flag.
+    constexpr int kStartupDataFD = 3;
+    argv.push_back(base::StringPrintf(
+        "--%s=%d", chromeos::switches::kCrosStartupDataFD, kStartupDataFD));
+    options.fds_to_remap.emplace_back(startup_fd.get(), kStartupDataFD);
   }
 
   // Set up Mojo channel.
@@ -430,15 +453,15 @@ void BrowserManager::OnSessionStateChanged() {
 
   // Wait for session to become active.
   auto* session_manager = session_manager::SessionManager::Get();
-  if (session_manager->session_state() != session_manager::SessionState::ACTIVE)
+  if (session_manager->session_state() !=
+      session_manager::SessionState::ACTIVE) {
+    LOG(WARNING)
+        << "Session not yet active. Lacros-chrome will not be launched yet";
     return;
+  }
 
   // Ensure this isn't run multiple times.
   session_manager::SessionManager::Get()->RemoveObserver(this);
-
-  // Must be checked after user session start because it depends on user type.
-  if (!browser_util::IsLacrosAllowed())
-    return;
 
   // May be null in tests.
   if (!component_manager_)
@@ -446,7 +469,9 @@ void BrowserManager::OnSessionStateChanged() {
 
   DCHECK(!browser_loader_);
   browser_loader_ = std::make_unique<BrowserLoader>(component_manager_);
-  if (chromeos::features::IsLacrosSupportEnabled()) {
+
+  // Must be checked after user session start because it depends on user type.
+  if (browser_util::IsLacrosEnabled()) {
     state_ = State::LOADING;
     browser_loader_->Load(base::BindOnce(&BrowserManager::OnLoadComplete,
                                          weak_factory_.GetWeakPtr()));
@@ -478,6 +503,10 @@ void BrowserManager::NotifyMojoDisconnected() {
 
 void BrowserManager::OnLacrosChromeServiceVersionReady(uint32_t version) {
   lacros_chrome_service_version_ = version;
+}
+
+void BrowserManager::SetDeviceAccountPolicy(const std::string& policy_blob) {
+  environment_provider_->SetDeviceAccountPolicy(policy_blob);
 }
 
 }  // namespace crosapi

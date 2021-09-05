@@ -31,6 +31,7 @@
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/optional.h"
+#include "services/network/public/cpp/is_potentially_trustworthy.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/security_context/insecure_request_policy.h"
 #include "third_party/blink/public/mojom/devtools/inspector_issue.mojom-blink.h"
@@ -47,7 +48,6 @@
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
-#include "third_party/blink/renderer/core/loader/address_space_feature.h"
 #include "third_party/blink/renderer/core/loader/document_loader.h"
 #include "third_party/blink/renderer/core/loader/frame_fetch_context.h"
 #include "third_party/blink/renderer/core/loader/worker_fetch_context.h"
@@ -263,7 +263,8 @@ static void MeasureStricterVersionOfIsMixedContent(Frame& frame,
           WebFeature::kMixedContentInNonHTTPSFrameThatRestrictsMixedContent);
     }
   } else if (!SecurityOrigin::IsSecure(url) &&
-             SchemeRegistry::ShouldTreatURLSchemeAsSecure(origin->Protocol())) {
+             base::Contains(url::GetSecureSchemes(),
+                            origin->Protocol().Ascii())) {
     UseCounter::Count(
         source->GetDocument(),
         WebFeature::kMixedContentInSecureFrameThatDoesNotRestrictMixedContent);
@@ -774,26 +775,6 @@ bool MixedContentChecker::ShouldAutoupgrade(
   }
 
   return true;
-}
-
-void MixedContentChecker::CheckMixedPrivatePublic(
-    LocalFrame* frame,
-    const ResourceResponse& response) {
-  if (!frame)
-    return;
-
-  LocalDOMWindow* window = frame->DomWindow();
-  base::Optional<WebFeature> feature =
-      AddressSpaceFeature(window->AddressSpace(), window->IsSecureContext(),
-                          response.AddressSpace());
-  if (!feature.has_value()) {
-    return;
-  }
-
-  // This WebFeature encompasses all private network requests.
-  UseCounter::Count(window,
-                    WebFeature::kMixedContentPrivateHostnameInPublicHostname);
-  UseCounter::Count(window, *feature);
 }
 
 void MixedContentChecker::HandleCertificateError(

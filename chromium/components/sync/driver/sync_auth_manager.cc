@@ -279,14 +279,12 @@ void SyncAuthManager::ConnectionClosed() {
   connection_open_ = false;
 }
 
-void SyncAuthManager::OnPrimaryAccountSet(
-    const CoreAccountInfo& primary_account_info) {
-  UpdateSyncAccountIfNecessary();
-}
-
-void SyncAuthManager::OnPrimaryAccountCleared(
-    const CoreAccountInfo& previous_primary_account_info) {
-  UMA_HISTOGRAM_ENUMERATION("Sync.StopSource", SIGN_OUT, STOP_SOURCE_LIMIT);
+void SyncAuthManager::OnPrimaryAccountChanged(
+    const signin::PrimaryAccountChangeEvent& event) {
+  if (event.GetEventTypeFor(signin::ConsentLevel::kSync) ==
+      signin::PrimaryAccountChangeEvent::Type::kCleared) {
+    UMA_HISTOGRAM_ENUMERATION("Sync.StopSource", SIGN_OUT, STOP_SOURCE_LIMIT);
+  }
   UpdateSyncAccountIfNecessary();
 }
 
@@ -370,7 +368,7 @@ void SyncAuthManager::OnRefreshTokenRemovedForAccount(
 
   // If we're still here, then that means Chrome is still signed in to this
   // account. Keep Sync alive but set an auth error.
-  // TODO(crbug.com/906995): Should we stop Sync in this case?
+  // TODO(crbug.com/1156584): Should we stop Sync in this case?
   DCHECK_EQ(sync_account_.account_info.account_id,
             identity_manager_->GetPrimaryAccountId());
 
@@ -399,11 +397,6 @@ void SyncAuthManager::OnRefreshTokensLoaded() {
     // let's treat it as account state change.
     account_state_changed_callback_.Run();
   }
-}
-
-void SyncAuthManager::OnUnconsentedPrimaryAccountChanged(
-    const CoreAccountInfo& unconsented_primary_account_info) {
-  UpdateSyncAccountIfNecessary();
 }
 
 bool SyncAuthManager::IsRetryingAccessTokenFetchForTest() const {

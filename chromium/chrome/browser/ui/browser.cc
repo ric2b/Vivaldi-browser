@@ -31,6 +31,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
@@ -73,6 +74,7 @@
 #include "chrome/browser/printing/background_printing_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_destroyer.h"
+#include "chrome/browser/profiles/profile_keep_alive_types.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_metrics.h"
 #include "chrome/browser/profiles/profiles_state.h"
@@ -246,7 +248,7 @@
 #include "ui/base/win/shell.h"
 #endif  // defined(OS_WIN)
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
 #include "components/session_manager/core/session_manager.h"
 #endif
@@ -336,7 +338,7 @@ const extensions::Extension* GetExtensionForOrigin(
 }
 
 bool IsOnKioskSplashScreen() {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   session_manager::SessionManager* session_manager =
       session_manager::SessionManager::Get();
   if (!session_manager)
@@ -367,10 +369,7 @@ Browser::CreateParams::CreateParams(Profile* profile, bool user_gesture)
 Browser::CreateParams::CreateParams(Type type,
                                     Profile* profile,
                                     bool user_gesture)
-    : type(type),
-      profile(profile),
-      user_gesture(user_gesture),
-      can_resize(!chrome::IsRunningInForcedAppMode()),
+    : type(type), profile(profile), user_gesture(user_gesture),
       is_vivaldi(vivaldi::IsVivaldiRunning()) {}
 
 Browser::CreateParams::CreateParams(const CreateParams& other) = default;
@@ -430,28 +429,26 @@ Browser::CreateParams Browser::CreateParams::CreateForDevTools(
 // Browser, Constructors, Creation, Showing:
 
 // static
-Browser::BrowserCreationStatus Browser::GetBrowserCreationStatusForProfile(
-    Profile* profile) {
+Browser::CreationStatus Browser::GetCreationStatusForProfile(Profile* profile) {
   if (!g_browser_process || g_browser_process->IsShuttingDown())
-    return BrowserCreationStatus::kErrorNoProcess;
+    return CreationStatus::kErrorNoProcess;
 
   if (!IncognitoModePrefs::CanOpenBrowser(profile) ||
       (profile->IsGuestSession() && !profile->IsOffTheRecord()) ||
       !profile->AllowsBrowserWindows() ||
       ProfileManager::IsProfileDirectoryMarkedForDeletion(profile->GetPath())) {
-    return BrowserCreationStatus::kErrorProfileUnsuitable;
+    return CreationStatus::kErrorProfileUnsuitable;
   }
 
   if (IsOnKioskSplashScreen())
-    return BrowserCreationStatus::kErrorLoadingKiosk;
+    return CreationStatus::kErrorLoadingKiosk;
 
-  return BrowserCreationStatus::kOk;
+  return CreationStatus::kOk;
 }
 
 // static
 Browser* Browser::Create(const CreateParams& params) {
-  CHECK_EQ(BrowserCreationStatus::kOk,
-           GetBrowserCreationStatusForProfile(params.profile));
+  CHECK_EQ(CreationStatus::kOk, GetCreationStatusForProfile(params.profile));
   return new Browser(params);
 }
 
@@ -473,6 +470,8 @@ Browser::Browser(const CreateParams& params)
       override_bounds_(params.initial_bounds),
       initial_show_state_(params.initial_show_state),
       initial_workspace_(params.initial_workspace),
+      initial_visible_on_all_workspaces_state_(
+          params.initial_visible_on_all_workspaces_state),
       is_session_restore_(params.is_session_restore),
       unload_controller_(this),
       content_setting_bubble_model_delegate_(
@@ -502,6 +501,12 @@ Browser::Browser(const CreateParams& params)
       is_vivaldi_(params.is_vivaldi),
       ext_data_(params.ext_data)
 {
+  if (!profile_->IsOffTheRecord()) {
+    profile_keep_alive_ = std::make_unique<ScopedProfileKeepAlive>(
+        params.profile->GetOriginalProfile(),
+        ProfileKeepAliveOrigin::kBrowserWindow);
+  }
+
   tab_strip_model_->AddObserver(this);
 
   location_bar_model_ = std::make_unique<LocationBarModelImpl>(
@@ -615,8 +620,8 @@ Browser::~Browser() {
   // is destroyed to make sure the chrome.windows.onRemoved event is sent.
   extension_window_controller_.reset();
 
-  // Destroy BrowserInstantController before the incongnito profile is destroyed
-  // because the InstantController destructor depends on this profile.
+  // Destroy BrowserInstantController before the incognito profile is destroyed,
+  // because its destructor depends on this profile.
   instant_controller_.reset();
 
   // The system incognito profile should not try be destroyed using
@@ -630,6 +635,9 @@ Browser::~Browser() {
   //
   // Non-primary OffTheRecord profiles should not be destroyed directly by
   // Browser (e.g. for offscreen tabs, https://crbug.com/664351).
+  //
+  // TODO(crbug.com/1153922): Use ScopedProfileKeepAlive for Incognito too,
+  // instead of separate logic for Incognito and regular profiles.
   if (profile_->IsIncognitoProfile() &&
       !BrowserList::IsOffTheRecordBrowserInUse(profile_) &&
       !profile_->IsSystemProfile()) {
@@ -890,7 +898,7 @@ bool Browser::ShouldCloseWindow() {
 
 bool Browser::TryToCloseWindow(
     bool skip_beforeunload,
-    const base::Callback<void(bool)>& on_close_confirmed) {
+    const base::RepeatingCallback<void(bool)>& on_close_confirmed) {
   cancel_download_confirmation_state_ = RESPONSE_RECEIVED;
   return unload_controller_.TryToCloseWindow(skip_beforeunload,
                                              on_close_confirmed);
@@ -922,6 +930,10 @@ void Browser::SetWindowUserTitle(const std::string& user_title) {
       SessionServiceFactory::GetForProfile(profile_);
   if (session_service)
     session_service->SetWindowUserTitle(session_id(), user_title);
+}
+
+StatusBubble* Browser::GetStatusBubbleForTesting() {
+  return GetStatusBubble();
 }
 
 void Browser::OnWindowClosing() {
@@ -1223,9 +1235,8 @@ void Browser::OnTabStripModelChanged(TabStripModel* tab_strip_model,
       break;
     }
     case TabStripModelChange::kRemoved: {
-      const bool will_be_deleted = change.GetRemove()->will_be_deleted;
       for (const auto& contents : change.GetRemove()->contents) {
-        if (will_be_deleted)
+        if (contents.will_be_deleted)
           OnTabClosing(contents.contents);
         OnTabDetached(contents.contents,
                       contents.contents == selection.old_contents);
@@ -1340,8 +1351,7 @@ void Browser::SetTopControlsGestureScrollInProgress(bool in_progress) {
 
 bool Browser::CanOverscrollContent() {
 #if defined(USE_AURA)
-  return !is_type_devtools() &&
-         base::FeatureList::IsEnabled(features::kOverscrollHistoryNavigation);
+  return !is_type_devtools();
 #else
   return false;
 #endif
@@ -1402,7 +1412,7 @@ bool Browser::PreHandleGestureEvent(content::WebContents* source,
 bool Browser::CanDragEnter(content::WebContents* source,
                            const content::DropData& data,
                            blink::DragOperationsMask operations_allowed) {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // Disallow drag-and-drop navigation for Settings windows which do not support
   // external navigation.
   if ((operations_allowed & blink::kDragOperationLink) &&
@@ -1547,16 +1557,15 @@ std::unique_ptr<content::WebContents> Browser::SwapWebContents(
 }
 
 bool Browser::ShouldShowStaleContentOnEviction(content::WebContents* source) {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   return source == tab_strip_model_->GetActiveWebContents();
 #else
   return false;
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 }
 
-bool Browser::IsFrameLowPriority(
-    const content::WebContents* web_contents,
-    const content::RenderFrameHost* render_frame_host) {
+bool Browser::IsFrameLowPriority(content::WebContents* web_contents,
+                                 content::RenderFrameHost* render_frame_host) {
   const auto* throttle_manager = subresource_filter::
       ContentSubresourceFilterThrottleManager::FromWebContents(web_contents);
   return throttle_manager &&
@@ -1648,8 +1657,9 @@ WebContents* Browser::OpenURLFromTab(WebContents* source,
   if (is_popup && navigated_or_inserted_contents) {
     auto* tracker = blocked_content::PopupTracker::CreateForWebContents(
         navigated_or_inserted_contents, source, params.disposition);
-    tracker->set_is_trusted(params.triggering_event_info !=
-                            blink::TriggeringEventInfo::kFromUntrustedEvent);
+    tracker->set_is_trusted(
+        params.triggering_event_info !=
+        blink::mojom::TriggeringEventInfo::kFromUntrustedEvent);
   }
 
   return navigated_or_inserted_contents;
@@ -2014,7 +2024,7 @@ blink::ProtocolHandlerSecurityLevel Browser::GetProtocolHandlerSecurityLevel(
     case extensions::Feature::WEB_PAGE_CONTEXT:
       return blink::ProtocolHandlerSecurityLevel::kStrict;
     case extensions::Feature::BLESSED_EXTENSION_CONTEXT:
-      return blink::ProtocolHandlerSecurityLevel::kUntrustedOrigins;
+      return blink::ProtocolHandlerSecurityLevel::kExtensionFeatures;
   }
 }
 
@@ -2035,8 +2045,8 @@ void Browser::RegisterProtocolHandler(
   if (vr::VrTabHelper::IsInVr(web_contents))
     return;
 
-  ProtocolHandler handler =
-      ProtocolHandler::CreateProtocolHandler(protocol, url);
+  ProtocolHandler handler = ProtocolHandler::CreateProtocolHandler(
+      protocol, url, GetProtocolHandlerSecurityLevel(requesting_frame));
 
   if (!handler.IsValid())
     return;
@@ -2094,8 +2104,8 @@ void Browser::UnregisterProtocolHandler(
   if (context->IsOffTheRecord())
     return;
 
-  ProtocolHandler handler =
-      ProtocolHandler::CreateProtocolHandler(protocol, url);
+  ProtocolHandler handler = ProtocolHandler::CreateProtocolHandler(
+      protocol, url, GetProtocolHandlerSecurityLevel(requesting_frame));
 
   ProtocolHandlerRegistry* registry =
       ProtocolHandlerRegistryFactory::GetForBrowserContext(context);
@@ -2363,7 +2373,8 @@ void Browser::Observe(int type,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-// Browser, translate::ContentTranslateDriver::Observer implementation:
+// Browser, translate::ContentTranslateDriver::TranslationObserver
+// implementation:
 
 void Browser::OnIsPageTranslatedChanged(content::WebContents* source) {
   DCHECK(source);
@@ -2746,11 +2757,14 @@ void Browser::RemoveScheduledUpdatesFor(WebContents* contents) {
 // Browser, Getters for UI (private):
 
 StatusBubble* Browser::GetStatusBubble() {
-  // In kiosk and exclusive app mode, we want to always hide the status bubble.
-  if (chrome::IsRunningInAppMode())
-    return NULL;
+  // In kiosk and exclusive app mode we want to always hide the status bubble.
+  if (chrome::IsRunningInAppMode() ||
+      (base::FeatureList::IsEnabled(features::kRemoveStatusBarInWebApps) &&
+       web_app::AppBrowserController::IsWebApp(this))) {
+    return nullptr;
+  }
 
-  return window_ ? window_->GetStatusBubble() : NULL;
+  return window_ ? window_->GetStatusBubble() : nullptr;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -2785,7 +2799,7 @@ void Browser::SyncHistoryWithTabs(int index) {
 // Browser, In-progress download termination handling (private):
 
 bool Browser::CanCloseWithInProgressDownloads() {
-#if defined(OS_MAC) || defined(OS_CHROMEOS)
+#if defined(OS_MAC) || BUILDFLAG(IS_CHROMEOS_ASH)
   // On Mac and ChromeOS, non-incognito and non-Guest downloads can still
   // continue after window is closed.
   if (!profile_->IsOffTheRecord() && !profile_->IsEphemeralGuestProfile())
@@ -2808,8 +2822,8 @@ bool Browser::CanCloseWithInProgressDownloads() {
   cancel_download_confirmation_state_ = WAITING_FOR_RESPONSE;
   window_->ConfirmBrowserCloseWithPendingDownloads(
       num_downloads_blocking, dialog_type,
-      base::Bind(&Browser::InProgressDownloadResponse,
-                 weak_factory_.GetWeakPtr()));
+      base::BindOnce(&Browser::InProgressDownloadResponse,
+                     weak_factory_.GetWeakPtr()));
 
   // Return false so the browser does not close.  We'll close if the user
   // confirms in the dialog.
@@ -2878,11 +2892,11 @@ void Browser::SetAsDelegate(WebContents* web_contents, bool set_delegate) {
   //    ChromeTranslateClient::FromWebContents(web_contents)->translate_driver();
   if (delegate) {
     zoom::ZoomController::FromWebContents(web_contents)->AddObserver(this);
-    //Vivaldi: content_translate_driver->AddObserver(this);
+    //Vivaldi: content_translate_driver->AddTranslationObserver(this);
     BookmarkTabHelper::FromWebContents(web_contents)->AddObserver(this);
   } else {
     zoom::ZoomController::FromWebContents(web_contents)->RemoveObserver(this);
-    //Vivaldi: content_translate_driver->RemoveObserver(this);
+    //Vivaldi: content_translate_driver->RemoveTranslationObserver(this);
     BookmarkTabHelper::FromWebContents(web_contents)->RemoveObserver(this);
   }
   if (!vivaldi::IsVivaldiRunning()) {
@@ -2891,9 +2905,9 @@ void Browser::SetAsDelegate(WebContents* web_contents, bool set_delegate) {
     translate::ContentTranslateDriver* content_translate_driver =
       ChromeTranslateClient::FromWebContents(web_contents)->translate_driver();
     if (delegate)
-      content_translate_driver->AddObserver(this);
+      content_translate_driver->AddTranslationObserver(this);
     else
-      content_translate_driver->RemoveObserver(this);
+      content_translate_driver->RemoveTranslationObserver(this);
   }
 }
 
@@ -3021,7 +3035,7 @@ bool Browser::AppBrowserSupportsWindowFeature(WindowFeature feature,
   }
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 // TODO(b/64863368): Consider Fullscreen mode.
 bool Browser::CustomTabBrowserSupportsWindowFeature(
     WindowFeature feature) const {
@@ -3053,7 +3067,7 @@ bool Browser::SupportsWindowFeatureImpl(WindowFeature feature,
     case TYPE_DEVTOOLS:
     case TYPE_APP_POPUP:
       return AppPopupBrowserSupportsWindowFeature(feature, check_can_support);
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     case TYPE_CUSTOM_TAB:
       return CustomTabBrowserSupportsWindowFeature(feature);
 #endif

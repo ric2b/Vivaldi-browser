@@ -71,6 +71,7 @@ const char kKeyDisplayName[]= "displayName";
 const char kKeyEmailAddress[] = "emailAddress";
 const char kKeyProfilePath[] = "profilePath";
 const char kKeyPublicAccount[] = "publicAccount";
+// TODO(crbug/1164090): Remove this.
 const char kKeyLegacySupervisedUser[] = "legacySupervisedUser";
 const char kKeyChildUser[] = "childUser";
 const char kKeyCanRemove[] = "canRemove";
@@ -441,9 +442,9 @@ void UserManagerScreenHandler::HandleRemoveUser(const base::ListValue* args) {
 
 void UserManagerScreenHandler::HandleLaunchGuest(const base::ListValue* args) {
   if (IsGuestModeEnabled()) {
-    profiles::SwitchToGuestProfile(
-        base::Bind(&UserManagerScreenHandler::OnSwitchToProfileComplete,
-                   weak_ptr_factory_.GetWeakPtr()));
+    profiles::SwitchToGuestProfile(base::BindRepeating(
+        &UserManagerScreenHandler::OnSwitchToProfileComplete,
+        weak_ptr_factory_.GetWeakPtr()));
   } else {
     // The UI should have prevented the user from allowing the selection of
     // guest mode.
@@ -492,8 +493,8 @@ void UserManagerScreenHandler::HandleLaunchUser(const base::ListValue* args) {
 
   profiles::SwitchToProfile(
       *profile_path, false, /* reuse any existing windows */
-      base::Bind(&UserManagerScreenHandler::OnSwitchToProfileComplete,
-                 weak_ptr_factory_.GetWeakPtr()));
+      base::BindRepeating(&UserManagerScreenHandler::OnSwitchToProfileComplete,
+                          weak_ptr_factory_.GetWeakPtr()));
 }
 
 void UserManagerScreenHandler::HandleRemoveUserWarningLoadStats(
@@ -527,9 +528,9 @@ void UserManagerScreenHandler::GatherStatistics(base::Time start_time,
                                                 Profile* profile) {
   if (profile) {
     ProfileStatisticsFactory::GetForProfile(profile)->GatherStatistics(
-        base::Bind(&UserManagerScreenHandler::RemoveUserDialogLoadStatsCallback,
-                   weak_ptr_factory_.GetWeakPtr(), profile->GetPath(),
-                   start_time));
+        base::BindRepeating(
+            &UserManagerScreenHandler::RemoveUserDialogLoadStatsCallback,
+            weak_ptr_factory_.GetWeakPtr(), profile->GetPath(), start_time));
   }
 }
 
@@ -660,6 +661,7 @@ void UserManagerScreenHandler::GetLocalizedValues(
   localized_strings->SetString("cancel", l10n_util::GetStringUTF16(IDS_CANCEL));
   localized_strings->SetString(
       "browseAsGuest", l10n_util::GetStringUTF16(IDS_BROWSE_AS_GUEST_BUTTON));
+  // TODO(crbug/1164090): Remove this.
   localized_strings->SetString("addSupervisedUser",
       l10n_util::GetStringUTF16(IDS_CREATE_LEGACY_SUPERVISED_USER_MENU_LABEL));
 
@@ -702,6 +704,7 @@ void UserManagerScreenHandler::GetLocalizedValues(
   localized_strings->SetString(
       "removeUserWarningTextSync",
       l10n_util::GetStringUTF16(IDS_LOGIN_POD_USER_REMOVE_WARNING_SYNC));
+  // TODO(crbug/1164090): Remove this.
   localized_strings->SetString("removeLegacySupervisedUserWarningText",
       l10n_util::GetStringFUTF16(
           IDS_LOGIN_POD_LEGACY_SUPERVISED_USER_REMOVE_WARNING,
@@ -803,6 +806,7 @@ void UserManagerScreenHandler::SendUserList() {
                              profiles::GetAvatarNameForProfile(profile_path));
     profile_value->SetKey(kKeyProfilePath, util::FilePathToValue(profile_path));
     profile_value->SetBoolean(kKeyPublicAccount, false);
+    // TODO(crbug/1164090): Remove this.
     profile_value->SetBoolean(kKeyLegacySupervisedUser,
                               entry->IsLegacySupervised());
     profile_value->SetBoolean(kKeyChildUser, entry->IsChild());
@@ -841,8 +845,9 @@ void UserManagerScreenHandler::ReportAuthenticationResult(
   if (success) {
     profiles::SwitchToProfile(
         authenticating_profile_path_, true,
-        base::Bind(&UserManagerScreenHandler::OnSwitchToProfileComplete,
-                   weak_ptr_factory_.GetWeakPtr()));
+        base::BindRepeating(
+            &UserManagerScreenHandler::OnSwitchToProfileComplete,
+            weak_ptr_factory_.GetWeakPtr()));
   } else {
     web_ui()->CallJavascriptFunctionUnsafe(
         "cr.ui.UserManager.showSignInError", base::Value(0),

@@ -36,12 +36,13 @@ const auto enabled_by_default_desktop_ios =
     base::FEATURE_ENABLED_BY_DEFAULT;
 #endif
 
-const auto enabled_by_default_android_ios =
-#if defined(OS_ANDROID) || defined(OS_IOS)
-    base::FEATURE_ENABLED_BY_DEFAULT;
-#else
-    base::FEATURE_DISABLED_BY_DEFAULT;
-#endif
+// Comment out this macro since it is currently not being used in this file.
+// const auto enabled_by_default_android_ios =
+// #if defined(OS_ANDROID) || defined(OS_IOS)
+//     base::FEATURE_ENABLED_BY_DEFAULT;
+// #else
+//     base::FEATURE_DISABLED_BY_DEFAULT;
+// #endif
 
 // Allows Omnibox to dynamically adjust number of offered suggestions to fill in
 // the space between Omnibox an the soft keyboard. The number of suggestions
@@ -127,11 +128,6 @@ const base::Feature kDebounceDocumentProvider{
 // This feature's main job is to contain the DemoteByType parameter.
 const base::Feature kOmniboxDemoteByType{"OmniboxDemoteByType",
                                          base::FEATURE_DISABLED_BY_DEFAULT};
-
-// A special flag, enabled by default, that can be used to disable all new
-// search features (e.g. zero suggest).
-const base::Feature kNewSearchFeatures{"OmniboxNewSearchFeatures",
-                                       base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Feature used to reduce entity latency by sharing a decoder. Param values will
 // configure other optimizations as well.
@@ -257,7 +253,8 @@ const base::Feature kLocalHistoryZeroSuggest{
 const base::Feature kOnDeviceHeadProviderIncognito{
     "OmniboxOnDeviceHeadProviderIncognito", base::FEATURE_ENABLED_BY_DEFAULT};
 const base::Feature kOnDeviceHeadProviderNonIncognito{
-    "OmniboxOnDeviceHeadProviderNonIncognito", enabled_by_default_android_ios};
+    "OmniboxOnDeviceHeadProviderNonIncognito",
+    base::FEATURE_ENABLED_BY_DEFAULT};
 
 // If enabled, changes the way Google-provided search suggestions are scored by
 // the backend. Note that this Feature is only used for triggering a server-
@@ -273,6 +270,14 @@ const base::Feature kOmniboxExperimentalSuggestScoring{
 const base::Feature kHistoryQuickProviderAblateInMemoryURLIndexCacheFile{
     "OmniboxHistoryQuickProviderAblateInMemoryURLIndexCacheFile",
     base::FEATURE_DISABLED_BY_DEFAULT};
+
+// If enabled, suggestions from a cgi param name match are scored to 0.
+const base::Feature kDisableCGIParamMatching{"OmniboxDisableCGIParamMatching",
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
+
+// If enabled, uses the native VoiceSuggestProvider. Android-specific.
+const base::Feature kNativeVoiceSuggestProvider{
+    "OmniboxNativeVoiceSuggestProvider", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // If enabled, inputs may match bookmark paths. These path matches won't
 // contribute to scoring. E.g. 'planets jupiter' can suggest a bookmark titled
@@ -305,11 +310,11 @@ const base::Feature kOmniboxSearchReadyIncognito{
 // Feature that puts a single row of buttons on suggestions with actionable
 // elements like keywords, tab-switch buttons, and Pedals.
 const base::Feature kOmniboxSuggestionButtonRow{
-    "OmniboxSuggestionButtonRow", base::FEATURE_DISABLED_BY_DEFAULT};
+    "OmniboxSuggestionButtonRow", enabled_by_default_desktop_only};
 
 // Feature used to enable Pedal suggestions.
 const base::Feature kOmniboxPedalSuggestions{"OmniboxPedalSuggestions",
-                                             base::FEATURE_DISABLED_BY_DEFAULT};
+                                             enabled_by_default_desktop_only};
 
 // Feature used to enable the keyword search button.
 const base::Feature kOmniboxKeywordSearchButton{
@@ -368,6 +373,13 @@ const base::Feature kMaybeElideToRegistrableDomain{
 // necessary.
 const base::Feature kDefaultTypedNavigationsToHttps{
     "OmniboxDefaultTypedNavigationsToHttps", base::FEATURE_DISABLED_BY_DEFAULT};
+// Parameter name used to look up the delay before falling back to the HTTP URL
+// while trying an HTTPS URL. The parameter is treated as a TimeDelta, so the
+// unit must be included in the value as well (e.g. 3s for 3 seconds).
+// - If the HTTPS load finishes successfully during this time, the timer is
+//   cleared and no more work is done.
+// - Otherwise, a new navigation to the the fallback HTTP URL is started.
+const char kDefaultTypedNavigationsToHttpsTimeoutParam[] = "timeout";
 
 // NOTE: while this is enabled by default, CCT visits are only tagged with the
 // necessary transition type if the intent launching CCT supplies the

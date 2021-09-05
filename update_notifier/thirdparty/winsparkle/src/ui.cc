@@ -25,18 +25,19 @@
 
 #include "update_notifier/thirdparty/winsparkle/src/ui.h"
 
-#include "update_notifier/thirdparty/winsparkle/src/appcast.h"
-#include "update_notifier/thirdparty/winsparkle/src/config.h"
-#include "update_notifier/thirdparty/winsparkle/src/settings.h"
-#include "update_notifier/thirdparty/winsparkle/src/threads.h"
-#include "update_notifier/thirdparty/winsparkle/src/updatedownloader.h"
-
-#include "app/vivaldi_resources.h"
+#include <Windows.h>
 
 #include "base/check.h"
 #include "base/no_destructor.h"
 #include "base/notreached.h"
 #include "ui/base/l10n/l10n_util.h"
+
+#include "app/vivaldi_resources.h"
+#include "update_notifier/thirdparty/winsparkle/src/appcast.h"
+#include "update_notifier/thirdparty/winsparkle/src/config.h"
+#include "update_notifier/thirdparty/winsparkle/src/settings.h"
+#include "update_notifier/thirdparty/winsparkle/src/threads.h"
+#include "update_notifier/thirdparty/winsparkle/src/updatedownloader.h"
 
 #define wxNO_NET_LIB
 #define wxNO_XML_LIB
@@ -259,11 +260,6 @@ struct LayoutChangesGuard {
   wxTopLevelWindow* m_win;
 };
 
-class WinsparkleTranslationsLoader : public wxResourceTranslationsLoader {
- protected:
-  WXHINSTANCE GetModule() const override { return GetModuleHandle(nullptr); }
-};
-
 /*--------------------------------------------------------------------------*
                         Base class for WinSparkle dialogs
  *--------------------------------------------------------------------------*/
@@ -293,7 +289,7 @@ class WinSparkleDialog : public wxDialog {
 WinSparkleDialog::WinSparkleDialog()
     : wxDialog(NULL,
                wxID_ANY,
-               _("Software Update"),
+               l10n_util::GetStringUTF16(IDS_UPDATE_NOTIFICATION_DIALOG_TITLE),
                wxDefaultPosition,
                wxDefaultSize,
                wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER | wxDIALOG_NO_PARENT) {
@@ -406,7 +402,7 @@ class UpdateDialog : public WinSparkleDialog {
   void OnRunInstaller(wxCommandEvent&);
 
   // Return false if the label already show the message.
-  bool SetMessage(const wxString& text, int width = MESSAGE_AREA_WIDTH);
+  bool SetMessage(const std::wstring& text, int width = MESSAGE_AREA_WIDTH);
 
   void SetBusyCursor(bool on) {
     if (on != m_showing_busy_cursor) {
@@ -441,6 +437,8 @@ class UpdateDialog : public WinSparkleDialog {
 
   bool m_showing_busy_cursor = false;
 
+  bool m_after_download_start = false;
+
   static const int RELNOTES_WIDTH = 460;
   static const int RELNOTES_HEIGHT = 200;
 };
@@ -471,8 +469,9 @@ UpdateDialog::UpdateDialog() : m_timer(this) {
 
   m_releaseNotesSizer = new wxBoxSizer(wxVERTICAL);
 
-  wxStaticText* notesLabel =
-      new wxStaticText(this, wxID_ANY, _("Release notes:"));
+  wxStaticText* notesLabel = new wxStaticText(
+      this, wxID_ANY,
+      l10n_util::GetStringUTF16(IDS_UPDATE_NOTIFICATION_REALEASE_NOTES_LABEL));
   SetBoldFont(notesLabel);
   m_releaseNotesSizer->Add(notesLabel, wxSizerFlags().Border(wxTOP, PX(10)));
   if (m_webBrowser)
@@ -487,15 +486,20 @@ UpdateDialog::UpdateDialog() : m_timer(this) {
 
   m_updateButtonsSizer = new wxBoxSizer(wxHORIZONTAL);
   m_updateButtonsSizer->Add(
-      new wxButton(this, ID_SKIP_VERSION, _("Skip this version")),
+      new wxButton(this, ID_SKIP_VERSION,
+                   l10n_util::GetStringUTF16(
+                       IDS_UPDATE_NOTIFICATION_SKIP_VERSION_LABEL)),
       wxSizerFlags().Border(wxRIGHT, PX(20)));
   m_updateButtonsSizer->AddStretchSpacer(1);
   m_updateButtonsSizer->Add(
-      new wxButton(this, ID_REMIND_LATER, _("Remind me later")),
+      new wxButton(this, ID_REMIND_LATER,
+                   l10n_util::GetStringUTF16(
+                       IDS_UPDATE_NOTIFICATION_REMIND_LATER_LABEL)),
       wxSizerFlags().Border(wxRIGHT, PX(10)));
-  m_updateButtonsSizer->Add(
-      m_installButton = new wxButton(this, ID_INSTALL, _("Install update")),
-      wxSizerFlags());
+  m_installButton = new wxButton(
+      this, ID_INSTALL,
+      l10n_util::GetStringUTF16(IDS_UPDATE_NOTIFICATION_GET_UPDATE_LABEL));
+  m_updateButtonsSizer->Add(m_installButton, wxSizerFlags());
   m_buttonSizer->Add(m_updateButtonsSizer, wxSizerFlags(1));
 
   m_closeButtonSizer = new wxBoxSizer(wxHORIZONTAL);
@@ -507,7 +511,9 @@ UpdateDialog::UpdateDialog() : m_timer(this) {
   m_runInstallerButtonSizer = new wxBoxSizer(wxHORIZONTAL);
   // TODO: make this "Install and relaunch"
   m_runInstallerButton =
-      new wxButton(this, ID_RUN_INSTALLER, _("Close Vivaldi and install now"));
+      new wxButton(this, ID_RUN_INSTALLER,
+                   l10n_util::GetStringUTF16(
+                       IDS_UPDATE_NOTIFICATION_LAUNCH_INSTALLER_LABEL));
   m_runInstallerButtonSizer->AddStretchSpacer(1);
   m_runInstallerButtonSizer->Add(m_runInstallerButton,
                                  wxSizerFlags(0).Border(wxLEFT));
@@ -589,14 +595,16 @@ void UpdateDialog::OnRunInstaller(wxCommandEvent& event) {
   SetBusyCursor(true);
   m_runInstallerButton->Disable();
 
-  m_message->SetLabel(_("Launching the installer..."));
+  m_message->SetLabel(
+      l10n_util::GetStringUTF16(IDS_UPDATE_NOTIFICATION_LAUNCHING_MESSAGE));
   g_delegate->WinsparkleLaunchInstaller();
 }
 
-bool UpdateDialog::SetMessage(const wxString& text, int width) {
-  if (m_message->GetLabel() == text)
+bool UpdateDialog::SetMessage(const std::wstring& text, int width) {
+  wxString wx_text(text);
+  if (m_message->GetLabel() == wx_text)
     return false;
-  m_message->SetLabel(text);
+  m_message->SetLabel(wx_text);
   m_message->Wrap(PX(width));
   return true;
 }
@@ -604,9 +612,11 @@ bool UpdateDialog::SetMessage(const wxString& text, int width) {
 void UpdateDialog::StateCheckingUpdates() {
   LayoutChangesGuard guard(this);
 
-  SetMessage(_("Checking for updates..."));
+  SetMessage(
+      l10n_util::GetStringUTF16(IDS_UPDATE_NOTIFICATION_CHECKING_MESSAGE));
 
-  m_closeButton->SetLabel(_("Cancel"));
+  m_closeButton->SetLabel(
+      l10n_util::GetStringUTF16(IDS_UPDATE_NOTIFICATION_CANCEL_BUTTON));
   EnablePulsing(true);
 
   HIDE(m_heading);
@@ -622,16 +632,14 @@ void UpdateDialog::StateCheckingUpdates() {
 void UpdateDialog::StateNoUpdateFound() {
   LayoutChangesGuard guard(this);
 
-  m_heading->SetLabel(_("You're up to date!"));
+  m_heading->SetLabel(
+      l10n_util::GetStringUTF16(IDS_UPDATE_NOTIFICATION_UPTODATE_TITLE));
 
-  wxString msg =
-      wxString::Format(_("%s %s is currently the newest version available."),
-                       GetConfig().app_name, GetConfig().app_version);
-
-  SetMessage(msg);
+  SetMessage(l10n_util::GetStringFUTF16(IDS_UPDATE_NOTIFICATION_UPTODATE_TEXT,
+                                        GetConfig().app_version));
 
   m_closeButton->SetLabel(
-      l10n_util::GetStringUTF8(IDS_UPDATE_NOTIFICATION_CLOSE_BUTTON));
+      l10n_util::GetStringUTF16(IDS_UPDATE_NOTIFICATION_CLOSE_BUTTON));
   m_closeButton->SetFocus();
   EnablePulsing(false);
 
@@ -651,7 +659,7 @@ void UpdateDialog::StateUpdateError(Error error) {
   LayoutChangesGuard guard(this);
 
   m_heading->SetLabel(
-      l10n_util::GetStringUTF8(IDS_UPDATE_NOTIFICATION_ERROR_TITLE));
+      l10n_util::GetStringUTF16(IDS_UPDATE_NOTIFICATION_ERROR_TITLE));
 
   int message_id = 0;
   switch (error.kind()) {
@@ -677,18 +685,18 @@ void UpdateDialog::StateUpdateError(Error error) {
       break;
   }
 
-  std::string msg =
-      message_id ? l10n_util::GetStringUTF8(message_id) : std::string();
+  std::wstring msg =
+      message_id ? l10n_util::GetStringUTF16(message_id) : std::wstring();
   if (error.kind() != Error::kCancelled) {
-    msg += "\n\n";
-    msg += l10n_util::GetStringUTF8(IDS_UPDATE_NOTIFICATION_ERROR_DETAILS);
-    msg += "\n\n";
-    msg += error.message();
+    msg += L"\n\n";
+    msg += l10n_util::GetStringUTF16(IDS_UPDATE_NOTIFICATION_ERROR_DETAILS);
+    msg += L"\n\n";
+    msg += base::UTF8ToUTF16(error.message());
   }
   SetMessage(msg);
 
   m_closeButton->SetLabel(
-      l10n_util::GetStringUTF8(IDS_UPDATE_NOTIFICATION_CLOSE_BUTTON));
+      l10n_util::GetStringUTF16(IDS_UPDATE_NOTIFICATION_CLOSE_BUTTON));
   m_closeButton->SetFocus();
   EnablePulsing(false);
 
@@ -711,24 +719,17 @@ void UpdateDialog::StateUpdateAvailable(Appcast appcast) {
   {
     LayoutChangesGuard guard(this);
 
-    const wxString appname = GetConfig().app_name;
-    wxString ver_my = GetConfig().app_version;
-    wxString ver_new = m_appcast.Version;
-    if (ver_my == ver_new) {
-      ver_my = wxString::Format("%s (%s)", ver_my, GetConfig().app_version);
-      ver_new = wxString::Format("%s (%s)", ver_new, m_appcast.Version);
-    }
-
     m_heading->SetLabel(
-        wxString::Format(_("A new version of %s is available!"), appname));
+        l10n_util::GetStringUTF16(IDS_UPDATE_NOTIFICATION_NEW_VERSION_TITLE));
 
     if (!m_appcast.HasDownload())
-      m_installButton->SetLabel(_("Get update"));
+      m_installButton->SetLabel(l10n_util::GetStringUTF16(
+          IDS_UPDATE_NOTIFICATION_SHOW_WEBSITE_LABEL));
 
-    SetMessage(wxString::Format(_("%s %s is now available (you have %s). Would "
-                                  "you like to download it now?"),
-                                appname, ver_new, ver_my),
-               showRelnotes ? RELNOTES_WIDTH : MESSAGE_AREA_WIDTH);
+    base::string16 message = l10n_util::GetStringFUTF16(
+        IDS_UPDATE_NOTIFICATION_NEW_VERSION_QUESTION,
+        base::UTF8ToUTF16(m_appcast.Version), GetConfig().app_version);
+    SetMessage(message, showRelnotes ? RELNOTES_WIDTH : MESSAGE_AREA_WIDTH);
 
     EnablePulsing(false);
 
@@ -747,16 +748,18 @@ void UpdateDialog::StateUpdateAvailable(Appcast appcast) {
   // Only show the release notes now that the layout was updated, as it may
   // take some time to load the MSIE control:
   if (showRelnotes) {
-    m_webBrowser->LoadURL(wxString(m_appcast.ReleaseNotesURL.spec()));
+    m_webBrowser->LoadURL(base::UTF8ToUTF16(m_appcast.ReleaseNotesURL.spec()));
   }
 }
 
 void UpdateDialog::StateDownloading() {
   LayoutChangesGuard guard(this);
 
-  SetMessage(_("Downloading update..."));
+  SetMessage(
+      l10n_util::GetStringUTF16(IDS_UPDATE_NOTIFICATION_DOWNLOADING_MESSAGE));
 
-  m_closeButton->SetLabel(_("Cancel"));
+  m_closeButton->SetLabel(
+      l10n_util::GetStringUTF16(IDS_UPDATE_NOTIFICATION_CANCEL_BUTTON));
   EnablePulsing(false);
 
   HIDE(m_heading);
@@ -768,11 +771,11 @@ void UpdateDialog::StateDownloading() {
   HIDE(m_updateButtonsSizer);
   MakeResizable(false);
 
+  m_after_download_start = true;
   g_delegate->WinsparkleStartDownload();
 }
 
 void UpdateDialog::DownloadProgress(DownloadReport report) {
-  wxString label;
   switch (report.kind) {
     case DownloadReport::kConnected:
       DCHECK(report.downloaded_length == 0);
@@ -784,17 +787,18 @@ void UpdateDialog::DownloadProgress(DownloadReport report) {
     case DownloadReport::kMoreData: {
       int total = report.content_length;
       int downloaded = report.downloaded_length;
+      wxString label;
       if (total) {
         if (m_progress->GetRange() != total) {
           m_progress->SetRange(total);
         }
         m_progress->SetValue(downloaded);
-        label = wxString::Format(
-            // TRANSLATORS: This is the progress of a download, e.g. "3 MB of 12
-            // MB".
-            _("%s of %s"),
-            wxFileName::GetHumanReadableSize(downloaded, "", 1, wxSIZE_CONV_SI),
-            wxFileName::GetHumanReadableSize(total, "", 1, wxSIZE_CONV_SI));
+        label = l10n_util::GetStringFUTF16(
+            IDS_UPDATE_NOTIFICATION_DOWNLOADING_PROGRESS_DETAILS,
+            wxFileName::GetHumanReadableSize(downloaded, "", 1, wxSIZE_CONV_SI)
+                .ToStdWstring(),
+            wxFileName::GetHumanReadableSize(total, "", 1, wxSIZE_CONV_SI)
+                .ToStdWstring());
       } else {
         m_progress->Pulse();
         label =
@@ -806,12 +810,16 @@ void UpdateDialog::DownloadProgress(DownloadReport report) {
       break;
     }
     case DownloadReport::kVerificationStart:
-      if (!SetMessage(_("Verifying update...")))
+      m_progress->Pulse();
+      if (!SetMessage(l10n_util::GetStringUTF16(
+              IDS_UPDATE_NOTIFICATION_VERIFYING_MESSAGE)))
         return;
       HIDE(m_progressLabel);
       break;
     case DownloadReport::kDeltaExtraction:
-      if (!SetMessage(_("Extracting update...")))
+      m_progress->Pulse();
+      if (!SetMessage(l10n_util::GetStringUTF16(
+              IDS_UPDATE_NOTIFICATION_EXTRACTING_MESSAGE)))
         return;
       break;
   }
@@ -826,7 +834,8 @@ void UpdateDialog::StateDownloaded() {
 
   LayoutChangesGuard guard(this);
 
-  SetMessage(_("Ready to install. Vivaldi will be closed and relaunched."));
+  SetMessage(
+      l10n_util::GetStringUTF16(IDS_UPDATE_NOTIFICATION_LAUNCH_INSTALLER_TEXT));
 
   m_progress->SetRange(1);
   m_progress->SetValue(1);
@@ -893,7 +902,6 @@ class App : public wxApp {
   }
 
  private:
-  bool OnInit() override;
   wxLayoutDirection GetLayoutDirection() const override;
 
   void InitUpdateDialog();
@@ -942,25 +950,9 @@ App::App() {
        MSG_STARTED_INSTALLER);
 }
 
-bool App::OnInit() {
-  if (!wxApp::OnInit())
-    return false;
-
-  wxString language = GetConfig().locale;
-  language.Replace("-", "_");
-
-  wxTranslations* trans = new wxTranslations();
-  wxTranslations::Set(trans);
-
-  trans->SetLoader(new WinsparkleTranslationsLoader());
-  trans->SetLanguage(language);
-  trans->AddCatalog("winsparkle");
-
-  return true;
-}
-
 wxLayoutDirection App::GetLayoutDirection() const {
-  wxString lang = wxTranslations::Get()->GetBestTranslation("winsparkle");
+  wxString lang = base::UTF8ToUTF16(GetConfig().locale);
+  lang.Replace("-", "_");
   const wxLanguageInfo* info = wxLocale::FindLanguageInfo(lang);
   return info ? info->LayoutDirection : wxLayout_Default;
 }
@@ -1011,6 +1003,11 @@ void App::OnDownloadProgress(wxThreadEvent& event) {
     // message was posted. Ignore it if so.
     return;
   }
+  if (!update_dialog_->m_after_download_start) {
+    // Ignore the reports from an automated download, see comments in
+    // OnDownloadResult().
+    return;
+  }
   DownloadReport report(event.GetPayload<DownloadReport>());
   update_dialog_->DownloadProgress(std::move(report));
 }
@@ -1021,6 +1018,14 @@ void App::OnDownloadResult(wxThreadEvent& event) {
     // background thread just finished preparing the installer to launch.
     // Re-open if so.
     InitUpdateDialog();
+    update_dialog_->m_after_download_start = true;
+  } else if (!update_dialog_->m_after_download_start) {
+    // The user has triggered an update check when an automatic download
+    // triggered by an earlier automated check was running. We want to show a
+    // normal version check dialog until the user approves the installation
+    // while continuing to download in the background. So just ignore the
+    // result, the delegate will be asked to resend it later.
+    return;
   }
 
   Error download_error(event.GetPayload<Error>());
@@ -1062,8 +1067,6 @@ class UIThreadAccess {
   UIThreadAccess() { EnterCriticalSection(ui_thread_lock()); }
 
   ~UIThreadAccess() { LeaveCriticalSection(ui_thread_lock()); }
-
-  winsparkle::App* App() { return GetGlobalState().active_app; }
 
   winsparkle::App& EnsureApp() {
     GlobalState& global_state = GetGlobalState();

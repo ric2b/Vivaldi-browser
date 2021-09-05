@@ -14,6 +14,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.SystemClock;
@@ -31,13 +32,13 @@ import org.chromium.base.Log;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.ShortcutHelper;
-import org.chromium.chrome.browser.ShortcutSource;
 import org.chromium.chrome.browser.WarmupManager;
 import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider;
 import org.chromium.chrome.browser.customtabs.BaseCustomTabActivity;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.firstrun.FirstRunFlowSequencer;
 import org.chromium.components.webapk.lib.client.WebApkValidator;
+import org.chromium.components.webapps.ShortcutSource;
 
 import java.lang.ref.WeakReference;
 
@@ -138,8 +139,11 @@ public class WebappLauncherActivity extends Activity {
         super.onCreate(savedInstanceState);
 
         // Close the notification tray.
-        ContextUtils.getApplicationContext().sendBroadcast(
-                new Intent(Intent.ACTION_CLOSE_SYSTEM_DIALOGS));
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.R) {
+            // https://crbug.com/1166691
+            ContextUtils.getApplicationContext().sendBroadcast(
+                    new Intent(Intent.ACTION_CLOSE_SYSTEM_DIALOGS));
+        }
 
         long createTimestamp = SystemClock.elapsedRealtime();
         Intent intent = getIntent();

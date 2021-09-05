@@ -19,6 +19,7 @@
 #include <stddef.h>
 
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/common/buildflags.h"
 #include "chrome/common/webui_url_constants.h"
 #include "content/public/common/url_constants.h"
@@ -59,14 +60,11 @@ extern const char kChromeBetaForumURL[];
 // The URL for the help center article to fix Chrome update problems.
 extern const char kChromeFixUpdateProblems[];
 
-// Link to the release notes page managed by marketing.
-extern const char kChromeReleaseNotesURL[];
-
 // General help links for Chrome, opened using various actions.
 extern const char kChromeHelpViaKeyboardURL[];
 extern const char kChromeHelpViaMenuURL[];
 extern const char kChromeHelpViaWebUIURL[];
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 extern const char kChromeOsHelpViaWebUIURL[];
 #endif
 
@@ -176,6 +174,7 @@ extern const char kLearnMoreReportingURL[];
 
 // Management URL for Chrome Supervised Users - version without scheme, used
 // for display.
+// TODO(crbug/1164090): Remove this.
 extern const char kLegacySupervisedUserManagementDisplayURL[];
 
 // The URL for the Learn More page about policies and enterprise enrollment.
@@ -208,6 +207,9 @@ extern const char kPaymentMethodsLearnMoreURL[];
 
 // "Learn more" URL for the Privacy section under Options.
 extern const char kPrivacyLearnMoreURL[];
+
+// "Learn more" URL for the privacy sandbox.
+extern const char kPrivacySandboxURL[];
 
 // The URL for the Learn More link of the non-CWS bubble.
 extern const char kRemoveNonCWSExtensionURL[];
@@ -244,22 +246,22 @@ extern const char kSyncLearnMoreURL[];
 
 extern const char kUpgradeHelpCenterBaseURL[];
 
+// The URL for the "Learn more" link for nearby share.
+extern const char kNearbyShareLearnMoreURL[];
+
 // Help center URL for who the account administrator is.
 extern const char kWhoIsMyAdministratorHelpURL[];
-
-// Link to the flash roadmap
-extern const char kChromeFlashRoadmapURL[];
 
 #if defined(OS_ANDROID)
 extern const char kAndroidAppScheme[];
 #endif
 
-#if defined(OS_ANDROID) || defined(OS_CHROMEOS)
+#if defined(OS_ANDROID) || BUILDFLAG(IS_CHROMEOS_ASH)
 // "Learn more" URL for the enhanced playback notification dialog.
 extern const char kEnhancedPlaybackNotificationLearnMoreURL[];
 #endif
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 // Help center URL for Chrome OS Account Manager.
 extern const char kAccountManagerLearnMoreURL[];
 
@@ -386,7 +388,10 @@ extern const char kTabletModeGesturesLearnMoreURL[];
 
 // The URL for the help center article about Wi-Fi sync.
 extern const char kWifiSyncLearnMoreURL[];
-#endif  // defined(OS_CHROMEOS)
+
+// The URL for contacts management in Nearby Share feature.
+extern const char kNearbyShareManageContactsURL[];
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if defined(OS_MAC)
 // "Learn more" URL for the enterprise sign-in confirmation dialog.
@@ -410,8 +415,6 @@ extern const char kChromeSyncLearnMoreURL[];
 #endif
 
 #if BUILDFLAG(ENABLE_PLUGINS)
-// The URL for the "Learn more" page for the blocked plugin infobar.
-extern const char kBlockedPluginLearnMoreURL[];
 
 // The URL for the "Learn more" page for the outdated plugin infobar.
 extern const char kOutdatedPluginLearnMoreURL[];

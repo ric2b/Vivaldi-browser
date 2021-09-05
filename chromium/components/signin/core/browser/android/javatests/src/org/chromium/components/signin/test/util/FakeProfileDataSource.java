@@ -10,30 +10,23 @@ import org.chromium.base.ObserverList;
 import org.chromium.base.ThreadUtils;
 import org.chromium.components.signin.ProfileDataSource;
 
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
 /**
- * ProfileDataSource used for testing. Use {@link #setProfileData} to specify the data to be
+ * ProfileDataSource used for testing. Use {@link #addProfileData} to specify the data to be
  * returned by {@link #getProfileDataForAccount}.
  */
 public class FakeProfileDataSource implements ProfileDataSource {
     protected final ObserverList<Observer> mObservers = new ObserverList<>();
-    private final Map<String, ProfileData> mProfileDataMap = new HashMap<>();
+    protected final Map<String, ProfileData> mProfileDataMap = new HashMap<>();
 
     public FakeProfileDataSource() {}
 
     @Override
-    public Map<String, ProfileData> getProfileDataMap() {
+    public @Nullable ProfileData getProfileDataForAccount(String accountEmail) {
         ThreadUtils.assertOnUiThread();
-        return Collections.unmodifiableMap(mProfileDataMap);
-    }
-
-    @Override
-    public @Nullable ProfileData getProfileDataForAccount(String accountId) {
-        ThreadUtils.assertOnUiThread();
-        return mProfileDataMap.get(accountId);
+        return mProfileDataMap.get(accountEmail);
     }
 
     @Override
@@ -50,23 +43,16 @@ public class FakeProfileDataSource implements ProfileDataSource {
     }
 
     /**
-     * Sets or removes ProfileData for a single account. Will notify the observers.
-     * @param profileData ProfileData to set or null to remove ProfileData from the account.
+     * Adds a {@link ProfileData} to the FakeProfileDataSource.
+     * If the account email of the {@link ProfileData} already exists, replace the old
+     * {@link ProfileData} with the given one.
      */
-    public void setProfileData(String accountId, @Nullable ProfileData profileData) {
-        ThreadUtils.assertOnUiThread();
-        if (profileData == null) {
-            mProfileDataMap.remove(accountId);
-        } else {
-            assert accountId.equals(profileData.getAccountName());
-            mProfileDataMap.put(accountId, profileData);
-        }
-        fireOnProfileDataUpdatedNotification(accountId);
-    }
-
-    private void fireOnProfileDataUpdatedNotification(String accountId) {
-        for (Observer observer : mObservers) {
-            observer.onProfileDataUpdated(accountId);
-        }
+    public void addProfileData(ProfileData profileData) {
+        ThreadUtils.runOnUiThreadBlocking(() -> {
+            mProfileDataMap.put(profileData.getAccountEmail(), profileData);
+            for (Observer observer : mObservers) {
+                observer.onProfileDataUpdated(profileData);
+            }
+        });
     }
 }

@@ -21,6 +21,7 @@
 #include "base/test/scoped_command_line.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
 #include "chrome/browser/captive_portal/captive_portal_service_factory.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
@@ -71,7 +72,7 @@
 #include "components/captive_portal/content/captive_portal_tab_helper.h"
 #endif
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/chromeos/policy/policy_cert_service.h"
@@ -83,7 +84,7 @@
 #include "chromeos/constants/chromeos_features.h"
 #include "components/policy/core/common/policy_pref_names.h"
 #include "components/user_manager/scoped_user_manager.h"
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 using content::BrowsingDataFilterBuilder;
 using testing::_;
@@ -183,7 +184,7 @@ void CheckUserAgentStringOrdering(bool mobile_device) {
   ASSERT_EQ("X11", pieces[0]);
   pieces = base::SplitStringUsingSubstr(pieces[1], " ", base::KEEP_WHITESPACE,
                                         base::SPLIT_WANT_ALL);
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // X11; CrOS armv7l 4537.56.0
   //      ^^
   ASSERT_EQ(3u, pieces.size());
@@ -727,7 +728,11 @@ TEST(ChromeContentBrowserClientTest, UserAgentMetadata) {
                                   content::IncludeAndroidModel::Exclude));
   // This makes sure no extra information is added to the platform version.
   EXPECT_EQ(metadata.platform_version.find(";"), std::string::npos);
+#if defined(OS_MAC)
+  EXPECT_EQ(metadata.platform, "macOS");
+#else
   EXPECT_EQ(metadata.platform, version_info::GetOSType());
+#endif
   EXPECT_EQ(metadata.architecture, content::GetLowEntropyCpuArchitecture());
   EXPECT_EQ(metadata.model, content::BuildModelInfo());
 }
@@ -777,7 +782,7 @@ TEST(ChromeContentBrowserClientTest, LowEntropyCpuArchitecture) {
 #endif
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 class ChromeContentSettingsRedirectTest
     : public ChromeContentBrowserClientTest {
  public:
@@ -802,7 +807,7 @@ TEST_F(ChromeContentSettingsRedirectTest, RedirectOSSettingsURL) {
   EXPECT_EQ(os_settings_url, dest_url);
 
   base::Value list(base::Value::Type::LIST);
-  list.Append(policy::SystemFeature::OS_SETTINGS);
+  list.Append(policy::SystemFeature::kOsSettings);
   testing_local_state_.Get()->Set(
       policy::policy_prefs::kSystemFeaturesDisableList, std::move(list));
 
@@ -825,7 +830,7 @@ TEST_F(ChromeContentSettingsRedirectTest, RedirectSettingsURL) {
   EXPECT_EQ(settings_url, dest_url);
 
   base::Value list(base::Value::Type::LIST);
-  list.Append(policy::SystemFeature::BROWSER_SETTINGS);
+  list.Append(policy::SystemFeature::kBrowserSettings);
   testing_local_state_.Get()->Set(
       policy::policy_prefs::kSystemFeaturesDisableList, std::move(list));
 
@@ -842,7 +847,7 @@ TEST_F(ChromeContentSettingsRedirectTest, RedirectScanningAppURL) {
   EXPECT_EQ(scanning_app_url, dest_url);
 
   base::Value list(base::Value::Type::LIST);
-  list.Append(policy::SystemFeature::SCANNING);
+  list.Append(policy::SystemFeature::kScanning);
   testing_local_state_.Get()->Set(
       policy::policy_prefs::kSystemFeaturesDisableList, std::move(list));
 
@@ -905,7 +910,7 @@ TEST_F(ChromeContentSettingsPolicyTrustAnchor, PolicyTrustAnchor) {
   EXPECT_TRUE(policy::PolicyCertServiceFactory::UsedPolicyCertificates(kEmail));
 }
 
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 class CaptivePortalCheckProcessHost : public content::MockRenderProcessHost {
  public:

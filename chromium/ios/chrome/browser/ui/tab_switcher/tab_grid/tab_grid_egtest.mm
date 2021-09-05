@@ -53,22 +53,6 @@ id<GREYMatcher> CloseAllTabsConfirmationWithNumberOfTabs(
 
 @implementation TabGridTestCase
 
-- (AppLaunchConfiguration)appConfigurationForTestCase {
-  AppLaunchConfiguration config;
-
-  // Features are enabled or disabled based on the name of the test that is
-  // running. This is done because it is inefficient to use
-  // ensureAppLaunchedWithConfiguration for each test.
-  if ([self isRunningTest:@selector(testCloseAllAndUndoCloseAll)] ||
-      [self isRunningTest:@selector
-            (testUndoCloseAllNotAvailableAfterNewTabCreation)]) {
-    config.features_disabled.push_back(kEnableCloseAllTabsConfirmation);
-  } else {
-    config.features_enabled.push_back(kEnableCloseAllTabsConfirmation);
-  }
-  return config;
-}
-
 - (void)setUp {
   [super setUp];
 
@@ -120,6 +104,11 @@ id<GREYMatcher> CloseAllTabsConfirmationWithNumberOfTabs(
 // Tests that tapping Close All shows no tabs, shows Undo button, and displays
 // the empty state. Then tests tapping Undo shows Close All button again.
 - (void)testCloseAllAndUndoCloseAll {
+  if ([ChromeEarlGrey isCloseAllTabsConfirmationEnabled]) {
+    EARL_GREY_TEST_SKIPPED(
+        @"Test disabled when Close All Tabs Confirmation feature flag is on.");
+  }
+
   [[EarlGrey selectElementWithMatcher:chrome_test_util::ShowTabsButton()]
       performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:chrome_test_util::TabGridCloseAllButton()]
@@ -146,6 +135,11 @@ id<GREYMatcher> CloseAllTabsConfirmationWithNumberOfTabs(
 // Tests that the Undo button is no longer available after tapping Close All,
 // then creating a new tab, then coming back to the tab grid.
 - (void)testUndoCloseAllNotAvailableAfterNewTabCreation {
+  if ([ChromeEarlGrey isCloseAllTabsConfirmationEnabled]) {
+    EARL_GREY_TEST_SKIPPED(
+        @"Test disabled when Close All Tabs Confirmation feature flag is on.");
+  }
+
   [[EarlGrey selectElementWithMatcher:chrome_test_util::ShowTabsButton()]
       performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:chrome_test_util::TabGridCloseAllButton()]
@@ -220,6 +214,37 @@ id<GREYMatcher> CloseAllTabsConfirmationWithNumberOfTabs(
       assertWithMatcher:grey_notVisible()];
 }
 
+// Tests the Open in New Window action on a recent tab's context menu.
+- (void)testRecentTabsContextMenuOpenInNewWindow {
+  if (![ChromeEarlGrey areMultipleWindowsSupported]) {
+    EARL_GREY_TEST_DISABLED(@"Multiple windows can't be opened.");
+  }
+
+  if (![ChromeEarlGrey isNativeContextMenusEnabled]) {
+    EARL_GREY_TEST_SKIPPED(
+        @"Test disabled when Native Context Menus feature flag is off.");
+  }
+
+  [self prepareRecentTabWithURL:_URL1 response:kResponse1];
+
+  [ChromeEarlGrey waitForForegroundWindowCount:1];
+
+  [self longPressRecentTabWithTitle:[NSString stringWithUTF8String:kTitle1]];
+
+  // Select "Open in New Window" and confirm that new tab is opened with
+  // selected URL in the new window.
+  [[EarlGrey
+      selectElementWithMatcher:chrome_test_util::OpenLinkInNewWindowButton()]
+      performAction:grey_tap()];
+  [ChromeEarlGrey waitForForegroundWindowCount:2];
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::OmniboxText(
+                                          _URL1.GetContent())]
+      assertWithMatcher:grey_notNil()];
+
+  [ChromeEarlGrey closeAllExtraWindowsAndForceRelaunchWithAppConfig:
+                      [self appConfigurationForTestCase]];
+}
+
 // Tests the Share action on a recent tab's context menu.
 - (void)testRecentTabsContextMenuShare {
   if (![ChromeEarlGrey isNativeContextMenusEnabled]) {
@@ -238,6 +263,11 @@ id<GREYMatcher> CloseAllTabsConfirmationWithNumberOfTabs(
 // It also tests that tapping on "Close x Tab(s)" on the confirmation dialog
 // displays an empty grid and tapping on "Cancel" doesn't modify the grid.
 - (void)testCloseAllTabsConfirmation {
+  if (![ChromeEarlGrey isCloseAllTabsConfirmationEnabled]) {
+    EARL_GREY_TEST_SKIPPED(
+        @"Test disabled when Close All Tabs Confirmation feature flag is off.");
+  }
+
   [[EarlGrey selectElementWithMatcher:chrome_test_util::ShowTabsButton()]
       performAction:grey_tap()];
 

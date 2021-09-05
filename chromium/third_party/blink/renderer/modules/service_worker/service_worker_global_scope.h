@@ -37,7 +37,6 @@
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
-#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/mojom/network_context.mojom-blink-forward.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/cache_storage/cache_storage.mojom-blink-forward.h"
@@ -98,8 +97,7 @@ class MODULES_EXPORT ServiceWorkerGlobalScope final
       std::unique_ptr<ServiceWorkerInstalledScriptsManager>,
       mojo::PendingRemote<mojom::blink::CacheStorage>,
       base::TimeTicks time_origin,
-      const ServiceWorkerToken& service_worker_token,
-      ukm::SourceId ukm_source_id);
+      const ServiceWorkerToken& service_worker_token);
 
   ServiceWorkerGlobalScope(
       std::unique_ptr<GlobalScopeCreationParams>,
@@ -107,8 +105,7 @@ class MODULES_EXPORT ServiceWorkerGlobalScope final
       std::unique_ptr<ServiceWorkerInstalledScriptsManager>,
       mojo::PendingRemote<mojom::blink::CacheStorage>,
       base::TimeTicks time_origin,
-      const ServiceWorkerToken& service_worker_token,
-      ukm::SourceId ukm_source_id);
+      const ServiceWorkerToken& service_worker_token);
   ~ServiceWorkerGlobalScope() override;
 
   // ExecutionContext overrides:
@@ -499,13 +496,15 @@ class MODULES_EXPORT ServiceWorkerGlobalScope final
   void NoteNewFetchEvent(const KURL& request_url);
   void NoteRespondedToFetchEvent(const KURL& request_url);
 
+  void AbortCallbackForFetchEvent(
+      int event_id,
+      mojom::blink::ServiceWorkerEventStatus status);
+
   // Dispatches the event synchronously. Enqueued by Dispatch*Event methods to
   // the event queue, and executed immediately or sometimes later.
   void StartFetchEvent(
       mojom::blink::DispatchFetchEventParamsPtr params,
       base::WeakPtr<CrossOriginResourcePolicyChecker> corp_checker,
-      mojo::PendingRemote<mojom::blink::ServiceWorkerFetchResponseCallback>
-          response_callback,
       base::Optional<base::TimeTicks> created_time,
       int event_id);
   void StartInstallEvent(int event_id);

@@ -347,6 +347,20 @@ struct ParamTraits<base::string16> {
   COMPONENT_EXPORT(IPC) static void Log(const param_type& p, std::string* l);
 };
 
+#if defined(OS_WIN) && defined(BASE_STRING16_IS_STD_U16STRING)
+template <>
+struct ParamTraits<std::wstring> {
+  typedef std::wstring param_type;
+  static void Write(base::Pickle* m, const param_type& p) {
+    m->WriteString16(base::AsStringPiece16(p));
+  }
+  static bool Read(const base::Pickle* m,
+                   base::PickleIterator* iter,
+                   param_type* r);
+  COMPONENT_EXPORT(IPC) static void Log(const param_type& p, std::string* l);
+};
+#endif
+
 template <>
 struct COMPONENT_EXPORT(IPC) ParamTraits<std::vector<char>> {
   typedef std::vector<char> param_type;
@@ -1073,8 +1087,8 @@ struct ParamTraits<util::IdType<TypeMarker, WrappedType, kInvalidValue>> {
 };
 
 template <typename TagType, typename UnderlyingType>
-struct ParamTraits<util::StrongAlias<TagType, UnderlyingType>> {
-  using param_type = util::StrongAlias<TagType, UnderlyingType>;
+struct ParamTraits<base::StrongAlias<TagType, UnderlyingType>> {
+  using param_type = base::StrongAlias<TagType, UnderlyingType>;
   static void Write(base::Pickle* m, const param_type& p) {
     WriteParam(m, p.value());
   }

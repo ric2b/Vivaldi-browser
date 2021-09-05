@@ -18,6 +18,7 @@
 #include "base/posix/safe_strerror.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/trace_event/trace_event.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/capture/mojom/image_capture_types.h"
 #include "media/capture/video/blob_utils.h"
@@ -210,6 +211,8 @@ StreamType StreamIdToStreamType(uint64_t stream_id) {
       return StreamType::kYUVInput;
     case 3:
       return StreamType::kYUVOutput;
+    case 4:
+      return StreamType::kRecordingOutput;
     default:
       return StreamType::kUnknown;
   }
@@ -225,6 +228,8 @@ std::string StreamTypeToString(StreamType stream_type) {
       return std::string("StreamType::kYUVInput");
     case StreamType::kYUVOutput:
       return std::string("StreamType::kYUVOutput");
+    case StreamType::kRecordingOutput:
+      return std::string("StreamType::kRecordingOutput");
     default:
       return std::string("Unknown StreamType value: ") +
              base::NumberToString(static_cast<int32_t>(stream_type));
@@ -271,18 +276,16 @@ CameraDeviceDelegate::CameraDeviceDelegate(
     VideoCaptureDeviceDescriptor device_descriptor,
     scoped_refptr<CameraHalDelegate> camera_hal_delegate,
     scoped_refptr<base::SingleThreadTaskRunner> ipc_task_runner,
-    CameraAppDeviceImpl* camera_app_device,
-    ClientType client_type)
+    CameraAppDeviceImpl* camera_app_device)
     : device_descriptor_(device_descriptor),
       camera_hal_delegate_(std::move(camera_hal_delegate)),
       ipc_task_runner_(std::move(ipc_task_runner)),
-      camera_app_device_(camera_app_device),
-      client_type_(client_type) {}
+      camera_app_device_(camera_app_device) {}
 
 CameraDeviceDelegate::~CameraDeviceDelegate() = default;
 
 void CameraDeviceDelegate::AllocateAndStart(
-    const VideoCaptureParams& params,
+    const base::flat_map<ClientType, VideoCaptureParams>& params,
     CameraDeviceContext* device_context) {
   DCHECK(ipc_task_runner_->BelongsToCurrentThread());
 
@@ -291,7 +294,10 @@ void CameraDeviceDelegate::AllocateAndStart(
   is_set_awb_mode_ = false;
   is_set_brightness_ = false;
   is_set_contrast_ = false;
+  is_set_exposure_compensation_ = false;
   is_set_exposure_time_ = false;
+  is_set_focus_distance_ = false;
+  is_set_iso_ = false;
   is_set_pan_ = false;
   is_set_saturation_ = false;
   is_set_sharpness_ = false;
@@ -426,6 +432,13 @@ void CameraDeviceDelegate::SetPhotoOptions(
 
   // Set the vendor tag into with given |name| and |value|. Returns true if
   // the vendor tag is set and false otherwise.
+  auto to_uint8_vector = [](int32_t value) {
+    std::vector<uint8_t> temp(sizeof(int32_t));
+    auto* temp_ptr = reinterpret_cast<int32_t*>(temp.data());
+    *temp_ptr = value;
+    return temp;
+  };
+
   auto set_vendor_int = [&](const std::string& name, bool has_field,
                             double value, bool is_set) {
     const VendorTagInfo* info =
@@ -436,11 +449,8 @@ void CameraDeviceDelegate::SetPhotoOptions(
       }
       return false;
     }
-    std::vector<uint8_t> temp(sizeof(int32_t));
-    auto* temp_ptr = reinterpret_cast<int32_t*>(temp.data());
-    *temp_ptr = value;
     request_manager_->SetRepeatingCaptureMetadata(info->tag, info->type, 1,
-                                                  std::move(temp));
+                                                  to_uint8_vector(value));
     return true;
   };
   is_set_brightness_ = set_vendor_int(kBrightness, settings->has_brightness,
@@ -524,6 +534,48 @@ void CameraDeviceDelegate::SetPhotoOptions(
     is_set_exposure_time_ = false;
   }
 
+  if (settings->has_focus_mode &&
+      settings->focus_mode == mojom::MeteringMode::MANUAL &&
+      settings->has_focus_distance) {
+    // The unit of settings is meter but it is diopter of android metadata.
+    float focus_distance_diopters_ = 1.0 / settings->focus_distance;
+    camera_3a_controller_->SetFocusDistance(false, focus_distance_diopters_);
+    is_set_focus_distance_ = true;
+  } else if (is_set_focus_distance_) {
+    camera_3a_controller_->SetFocusDistance(true, 0);
+    is_set_focus_distance_ = false;
+  }
+
+  if (settings->has_iso) {
+    request_manager_->SetRepeatingCaptureMetadata(
+        cros::mojom::CameraMetadataTag::ANDROID_SENSOR_SENSITIVITY,
+        cros::mojom::EntryType::TYPE_INT32, 1, to_uint8_vector(settings->iso));
+    is_set_iso_ = true;
+    if (!is_set_exposure_time_) {
+      LOG(WARNING) << "set iso doesn't work due to auto exposure time";
+    }
+  } else if (is_set_iso_) {
+    request_manager_->UnsetRepeatingCaptureMetadata(
+        cros::mojom::CameraMetadataTag::ANDROID_SENSOR_SENSITIVITY);
+    is_set_iso_ = false;
+  }
+
+  if (settings->has_exposure_compensation) {
+    int metadata_exposure_compensation =
+        std::round(settings->exposure_compensation / ae_compensation_step_);
+    request_manager_->SetRepeatingCaptureMetadata(
+        cros::mojom::CameraMetadataTag::
+            ANDROID_CONTROL_AE_EXPOSURE_COMPENSATION,
+        cros::mojom::EntryType::TYPE_INT32, 1,
+        to_uint8_vector(metadata_exposure_compensation));
+    is_set_exposure_compensation_ = true;
+  } else if (is_set_exposure_compensation_) {
+    request_manager_->UnsetRepeatingCaptureMetadata(
+        cros::mojom::CameraMetadataTag::
+            ANDROID_CONTROL_AE_EXPOSURE_COMPENSATION);
+    is_set_exposure_compensation_ = false;
+  }
+
   // If there is callback of SetPhotoOptions(), the streams might being
   // reconfigured and we should notify them once the reconfiguration is done.
   auto on_reconfigured_callback = base::BindOnce(
@@ -541,6 +593,18 @@ void CameraDeviceDelegate::SetPhotoOptions(
     }
   }
   result_metadata_frame_number_for_photo_state_ = current_request_frame_number_;
+}
+
+void CameraDeviceDelegate::ReconfigureStreams(
+    const base::flat_map<ClientType, VideoCaptureParams>& params) {
+  DCHECK(ipc_task_runner_->BelongsToCurrentThread());
+  chrome_capture_params_ = params;
+  if (request_manager_) {
+    // ReconfigureStreams is used for video recording. It does not require
+    // photo.
+    request_manager_->StopPreview(base::BindOnce(
+        &CameraDeviceDelegate::OnFlushed, GetWeakPtr(), false, base::nullopt));
+  }
 }
 
 void CameraDeviceDelegate::SetRotation(int rotation) {
@@ -570,11 +634,11 @@ bool CameraDeviceDelegate::MaybeReconfigureForPhotoStream(
     gfx::Size new_blob_resolution(static_cast<int32_t>(settings->width),
                                   static_cast<int32_t>(settings->height));
     request_manager_->StopPreview(
-        base::BindOnce(&CameraDeviceDelegate::OnFlushed, GetWeakPtr(),
+        base::BindOnce(&CameraDeviceDelegate::OnFlushed, GetWeakPtr(), true,
                        std::move(new_blob_resolution)));
   } else {
     request_manager_->StopPreview(base::BindOnce(
-        &CameraDeviceDelegate::OnFlushed, GetWeakPtr(), base::nullopt));
+        &CameraDeviceDelegate::OnFlushed, GetWeakPtr(), true, base::nullopt));
   }
   return true;
 }
@@ -595,7 +659,7 @@ void CameraDeviceDelegate::TakePhotoImpl() {
   // Trigger the reconfigure process if it not yet triggered.
   if (on_reconfigured_callbacks_.empty()) {
     request_manager_->StopPreview(base::BindOnce(
-        &CameraDeviceDelegate::OnFlushed, GetWeakPtr(), base::nullopt));
+        &CameraDeviceDelegate::OnFlushed, GetWeakPtr(), true, base::nullopt));
   }
   auto on_reconfigured_callback = base::BindOnce(
       [](base::WeakPtr<Camera3AController> controller,
@@ -631,6 +695,7 @@ void CameraDeviceDelegate::OnMojoConnectionError() {
 }
 
 void CameraDeviceDelegate::OnFlushed(
+    bool require_photo,
     base::Optional<gfx::Size> new_blob_resolution,
     int32_t result) {
   DCHECK(ipc_task_runner_->BelongsToCurrentThread());
@@ -642,7 +707,7 @@ void CameraDeviceDelegate::OnFlushed(
     return;
   }
   device_context_->SetState(CameraDeviceContext::State::kInitialized);
-  ConfigureStreams(true, std::move(new_blob_resolution));
+  ConfigureStreams(require_photo, std::move(new_blob_resolution));
 }
 
 void CameraDeviceDelegate::OnClosed(int32_t result) {
@@ -710,13 +775,15 @@ void CameraDeviceDelegate::Initialize() {
   DCHECK_EQ(device_context_->GetState(), CameraDeviceContext::State::kStarting);
 
   mojo::PendingRemote<cros::mojom::Camera3CallbackOps> callback_ops;
+  // Assumes the buffer_type will be the same for all |chrome_capture_params|.
   request_manager_ = std::make_unique<RequestManager>(
       callback_ops.InitWithNewPipeAndPassReceiver(),
       std::make_unique<StreamCaptureInterfaceImpl>(GetWeakPtr()),
-      device_context_, chrome_capture_params_.buffer_type,
+      device_context_,
+      chrome_capture_params_[ClientType::kPreviewClient].buffer_type,
       std::make_unique<CameraBufferFactory>(),
       base::BindRepeating(&RotateAndBlobify), ipc_task_runner_,
-      camera_app_device_, client_type_);
+      camera_app_device_);
   camera_3a_controller_ = std::make_unique<Camera3AController>(
       static_metadata_, request_manager_.get(), ipc_task_runner_);
   device_ops_->Initialize(
@@ -770,27 +837,33 @@ void CameraDeviceDelegate::ConfigureStreams(
   DCHECK_EQ(device_context_->GetState(),
             CameraDeviceContext::State::kInitialized);
 
-  // Set up context for preview stream.
-  cros::mojom::Camera3StreamPtr preview_stream =
-      cros::mojom::Camera3Stream::New();
-  preview_stream->id = static_cast<uint64_t>(StreamType::kPreviewOutput);
-  preview_stream->stream_type =
-      cros::mojom::Camera3StreamType::CAMERA3_STREAM_OUTPUT;
-  preview_stream->width =
-      chrome_capture_params_.requested_format.frame_size.width();
-  preview_stream->height =
-      chrome_capture_params_.requested_format.frame_size.height();
-  preview_stream->format =
-      cros::mojom::HalPixelFormat::HAL_PIXEL_FORMAT_YCbCr_420_888;
-  preview_stream->usage = cros::mojom::GRALLOC_USAGE_HW_COMPOSER |
-                          cros::mojom::GRALLOC_USAGE_HW_VIDEO_ENCODER;
-  preview_stream->data_space = 0;
-  preview_stream->rotation =
-      cros::mojom::Camera3StreamRotation::CAMERA3_STREAM_ROTATION_0;
-
   cros::mojom::Camera3StreamConfigurationPtr stream_config =
       cros::mojom::Camera3StreamConfiguration::New();
-  stream_config->streams.push_back(std::move(preview_stream));
+  for (const auto& param : chrome_capture_params_) {
+    // Set up context for preview stream and record stream.
+    cros::mojom::Camera3StreamPtr stream = cros::mojom::Camera3Stream::New();
+    StreamType stream_type = (param.first == ClientType::kPreviewClient)
+                                 ? StreamType::kPreviewOutput
+                                 : StreamType::kRecordingOutput;
+    // TODO(henryhsu): PreviewClient should remove HW_VIDEO_ENCODER usage when
+    // multiple streams enabled.
+    auto usage = (param.first == ClientType::kPreviewClient)
+                     ? (cros::mojom::GRALLOC_USAGE_HW_COMPOSER |
+                        cros::mojom::GRALLOC_USAGE_HW_VIDEO_ENCODER)
+                     : cros::mojom::GRALLOC_USAGE_HW_VIDEO_ENCODER;
+    stream->id = static_cast<uint64_t>(stream_type);
+    stream->stream_type = cros::mojom::Camera3StreamType::CAMERA3_STREAM_OUTPUT;
+    stream->width = param.second.requested_format.frame_size.width();
+    stream->height = param.second.requested_format.frame_size.height();
+    stream->format =
+        cros::mojom::HalPixelFormat::HAL_PIXEL_FORMAT_YCbCr_420_888;
+    stream->usage = usage;
+    stream->data_space = 0;
+    stream->rotation =
+        cros::mojom::Camera3StreamRotation::CAMERA3_STREAM_ROTATION_0;
+
+    stream_config->streams.push_back(std::move(stream));
+  }
 
   // Set up context for still capture stream. We set still capture stream to the
   // JPEG stream configuration with maximum supported resolution.
@@ -911,9 +984,9 @@ void CameraDeviceDelegate::OnConfiguredStreams(
   current_blob_resolution_.SetSize(blob_resolution.width(),
                                    blob_resolution.height());
 
-  request_manager_->SetUpStreamsAndBuffers(
-      chrome_capture_params_.requested_format, static_metadata_,
-      std::move(updated_config->streams));
+  request_manager_->SetUpStreamsAndBuffers(chrome_capture_params_,
+                                           static_metadata_,
+                                           std::move(updated_config->streams));
 
   device_context_->SetState(CameraDeviceContext::State::kStreamConfigured);
   // Kick off the preview stream.
@@ -1080,11 +1153,15 @@ void CameraDeviceDelegate::OnGotFpsRange(
     SetFpsRangeInMetadata(&settings, specified_fps_range->GetMin(),
                           specified_fps_range->GetMax());
   } else {
+    // Assumes the frame_rate will be the same for all |chrome_capture_params|.
     int32_t requested_frame_rate =
-        std::round(chrome_capture_params_.requested_format.frame_rate);
+        std::round(chrome_capture_params_[ClientType::kPreviewClient]
+                       .requested_format.frame_rate);
     bool prefer_constant_frame_rate =
-        camera_app_device_ && camera_app_device_->GetCaptureIntent() ==
-                                  cros::mojom::CaptureIntent::VIDEO_RECORD;
+        base::FeatureList::IsEnabled(
+            chromeos::features::kPreferConstantFrameRate) ||
+        (camera_app_device_ && camera_app_device_->GetCaptureIntent() ==
+                                   cros::mojom::CaptureIntent::VIDEO_RECORD);
     int32_t target_min, target_max;
     std::tie(target_min, target_max) = GetTargetFrameRateRange(
         static_metadata_, requested_frame_rate, prefer_constant_frame_rate);
@@ -1299,6 +1376,33 @@ void CameraDeviceDelegate::OnResultMetadataAvailable(
   if (awb_mode.size() == 1)
     result_metadata_.awb_mode = awb_mode[0];
 
+  result_metadata_.af_mode.reset();
+  auto af_mode = GetMetadataEntryAsSpan<uint8_t>(
+      result_metadata, cros::mojom::CameraMetadataTag::ANDROID_CONTROL_AF_MODE);
+  if (af_mode.size() == 1)
+    result_metadata_.af_mode = af_mode[0];
+
+  result_metadata_.focus_distance.reset();
+  auto focus_distance = GetMetadataEntryAsSpan<float>(
+      result_metadata,
+      cros::mojom::CameraMetadataTag::ANDROID_LENS_FOCUS_DISTANCE);
+  if (focus_distance.size() == 1)
+    result_metadata_.focus_distance = focus_distance[0];
+
+  result_metadata_.sensitivity.reset();
+  auto sensitivity = GetMetadataEntryAsSpan<int32_t>(
+      result_metadata,
+      cros::mojom::CameraMetadataTag::ANDROID_SENSOR_SENSITIVITY);
+  if (sensitivity.size() == 1)
+    result_metadata_.sensitivity = sensitivity[0];
+
+  result_metadata_.ae_compensation.reset();
+  auto ae_compensation = GetMetadataEntryAsSpan<int32_t>(
+      result_metadata,
+      cros::mojom::CameraMetadataTag::ANDROID_CONTROL_AE_EXPOSURE_COMPENSATION);
+  if (ae_compensation.size() == 1)
+    result_metadata_.ae_compensation = ae_compensation[0];
+
   result_metadata_frame_number_ = frame_number;
   // We need to wait the new result metadata for new settings.
   if (result_metadata_frame_number_ >
@@ -1468,6 +1572,93 @@ void CameraDeviceDelegate::DoGetPhotoState(
     photo_state->exposure_time->step = 1;  // 100 microseconds
     photo_state->exposure_time->current =
         result_metadata_.exposure_time.value() / (100 * kMicroToNano);
+  }
+
+  auto af_available_modes = GetMetadataEntryAsSpan<uint8_t>(
+      static_metadata_,
+      cros::mojom::CameraMetadataTag::ANDROID_CONTROL_AF_AVAILABLE_MODES);
+  bool support_manual_focus_distance = false;
+  if (af_available_modes.size() > 1 && result_metadata_.af_mode) {
+    support_manual_focus_distance = base::Contains(
+        af_available_modes,
+        static_cast<uint8_t>(
+            cros::mojom::AndroidControlAfMode::ANDROID_CONTROL_AF_MODE_OFF));
+  }
+
+  auto minimum_focus_distance = GetMetadataEntryAsSpan<float>(
+      static_metadata_,
+      cros::mojom::CameraMetadataTag::ANDROID_LENS_INFO_MINIMUM_FOCUS_DISTANCE);
+  // If the lens is fixed-focus, minimum_focus_distance will be 0.
+  if (support_manual_focus_distance && minimum_focus_distance.size() == 1 &&
+      minimum_focus_distance[0] != 0 && result_metadata_.focus_distance) {
+    photo_state->supported_focus_modes.push_back(mojom::MeteringMode::MANUAL);
+    photo_state->supported_focus_modes.push_back(
+        mojom::MeteringMode::CONTINUOUS);
+    if (result_metadata_.af_mode ==
+        static_cast<uint8_t>(
+            cros::mojom::AndroidControlAfMode::ANDROID_CONTROL_AF_MODE_OFF))
+      photo_state->current_focus_mode = mojom::MeteringMode::MANUAL;
+    else
+      photo_state->current_focus_mode = mojom::MeteringMode::CONTINUOUS;
+
+    // The unit of photo_state->focus_distance is meter and from metadata is
+    // diopter.
+    photo_state->focus_distance->min =
+        std::roundf(100.0 / minimum_focus_distance[0]) / 100.0;
+    photo_state->focus_distance->max = std::numeric_limits<double>::infinity();
+    photo_state->focus_distance->step = 0.01;
+    if (result_metadata_.focus_distance.value() == 0) {
+      photo_state->focus_distance->current =
+          std::numeric_limits<double>::infinity();
+    } else {
+      // We want to make sure |current| is a possible value of
+      // |min| + |steps(0.01)|*X.  The minimum can be divided by step(0.01). So
+      // we only need to round the value less than 0.01.
+      double meters = 1.0 / result_metadata_.focus_distance.value();
+      photo_state->focus_distance->current = std::roundf(meters * 100) / 100.0;
+    }
+  }
+
+  auto sensitivity_range = GetMetadataEntryAsSpan<int32_t>(
+      static_metadata_,
+      cros::mojom::CameraMetadataTag::ANDROID_SENSOR_INFO_SENSITIVITY_RANGE);
+  if (sensitivity_range.size() == 2 && result_metadata_.sensitivity) {
+    photo_state->iso->min = sensitivity_range[0];
+    photo_state->iso->max = sensitivity_range[1];
+    photo_state->iso->step = 1;
+    photo_state->iso->current = result_metadata_.sensitivity.value();
+  }
+
+  auto ae_compensation_step = GetMetadataEntryAsSpan<Rational>(
+      static_metadata_,
+      cros::mojom::CameraMetadataTag::ANDROID_CONTROL_AE_COMPENSATION_STEP);
+  ae_compensation_step_ = 0.0;
+  if (ae_compensation_step.size() == 1) {
+    if (ae_compensation_step[0].numerator == 0 ||
+        ae_compensation_step[0].denominator == 0) {
+      LOG(WARNING) << "AE_COMPENSATION_STEP: numerator:"
+                   << ae_compensation_step[0].numerator
+                   << "denominator:" << ae_compensation_step[0].denominator;
+    } else {
+      ae_compensation_step_ =
+          static_cast<float>(ae_compensation_step[0].numerator) /
+          static_cast<float>(ae_compensation_step[0].denominator);
+    }
+  }
+  auto ae_compensation_range = GetMetadataEntryAsSpan<int32_t>(
+      static_metadata_,
+      cros::mojom::CameraMetadataTag::ANDROID_CONTROL_AE_COMPENSATION_RANGE);
+  if (ae_compensation_step_ != 0.0 && ae_compensation_range.size() == 2) {
+    photo_state->exposure_compensation->min =
+        ae_compensation_range[0] * ae_compensation_step_;
+    photo_state->exposure_compensation->max =
+        ae_compensation_range[1] * ae_compensation_step_;
+    photo_state->exposure_compensation->step = ae_compensation_step_;
+    if (result_metadata_.ae_compensation)
+      photo_state->exposure_compensation->current =
+          result_metadata_.ae_compensation.value() * ae_compensation_step_;
+    else
+      photo_state->exposure_compensation->current = 0;
   }
 
   std::move(callback).Run(std::move(photo_state));

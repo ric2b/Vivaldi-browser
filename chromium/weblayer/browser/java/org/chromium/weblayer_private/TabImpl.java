@@ -29,6 +29,7 @@ import org.chromium.base.Callback;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
+import org.chromium.cc.input.BrowserControlsState;
 import org.chromium.components.autofill.AutofillActionModeCallback;
 import org.chromium.components.autofill.AutofillProvider;
 import org.chromium.components.browser_ui.display_cutout.DisplayCutoutController;
@@ -54,13 +55,11 @@ import org.chromium.content_public.browser.ViewEventSink;
 import org.chromium.content_public.browser.Visibility;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsObserver;
-import org.chromium.content_public.common.BrowserControlsState;
 import org.chromium.ui.base.ViewAndroidDelegate;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.url.GURL;
 import org.chromium.weblayer_private.interfaces.APICallException;
 import org.chromium.weblayer_private.interfaces.IContextMenuParams;
-import org.chromium.weblayer_private.interfaces.IDownloadCallbackClient;
 import org.chromium.weblayer_private.interfaces.IErrorPageCallbackClient;
 import org.chromium.weblayer_private.interfaces.IFaviconFetcher;
 import org.chromium.weblayer_private.interfaces.IFaviconFetcherClient;
@@ -207,27 +206,23 @@ public final class TabImpl extends ITab.Stub {
 
         @Override
         public void onBackgroundColorChanged(int color) {
-            if (WebLayerFactoryImpl.getClientMajorVersion() >= 85) {
-                try {
-                    mClient.onBackgroundColorChanged(color);
-                } catch (RemoteException e) {
-                    throw new APICallException(e);
-                }
+            try {
+                mClient.onBackgroundColorChanged(color);
+            } catch (RemoteException e) {
+                throw new APICallException(e);
             }
         }
 
         @Override
         protected void onVerticalScrollDirectionChanged(
                 boolean directionUp, float currentScrollRatio) {
-            if (WebLayerFactoryImpl.getClientMajorVersion() >= 85) {
-                try {
-                    mClient.onScrollNotification(directionUp
-                                    ? ScrollNotificationType.DIRECTION_CHANGED_UP
-                                    : ScrollNotificationType.DIRECTION_CHANGED_DOWN,
-                            currentScrollRatio);
-                } catch (RemoteException e) {
-                    throw new APICallException(e);
-                }
+            try {
+                mClient.onScrollNotification(directionUp
+                                ? ScrollNotificationType.DIRECTION_CHANGED_UP
+                                : ScrollNotificationType.DIRECTION_CHANGED_DOWN,
+                        currentScrollRatio);
+            } catch (RemoteException e) {
+                throw new APICallException(e);
             }
         }
     }
@@ -311,13 +306,8 @@ public final class TabImpl extends ITab.Stub {
         // addObserver() calls to observer when added.
         WebLayerAccessibilityUtil.get().addObserver(mAccessibilityObserver);
 
-        // MediaSession only works if the client is new enough. Sadly, passing
-        // kDisableMediaSessionAPI does not fully disable the API, so a check is also necessary
-        // before installing this observer.
-        if (WebLayerFactoryImpl.getClientMajorVersion() >= 85) {
-            mMediaSessionHelper = new MediaSessionHelper(
-                    mWebContents, MediaSessionManager.createMediaSessionHelperDelegate(this));
-        }
+        mMediaSessionHelper = new MediaSessionHelper(
+                mWebContents, MediaSessionManager.createMediaSessionHelperDelegate(this));
     }
 
     private void doInitAfterSettingContainerView() {
@@ -515,6 +505,10 @@ public final class TabImpl extends ITab.Stub {
         return mWebContents;
     }
 
+    public NavigationControllerImpl getNavigationControllerImpl() {
+        return mNavigationController;
+    }
+
     // Public for tests.
     @VisibleForTesting
     public long getNativeTab() {
@@ -541,12 +535,6 @@ public final class TabImpl extends ITab.Stub {
         mClient = client;
         mTabCallbackProxy = new TabCallbackProxy(mNativeTab, client);
         mActionModeCallback.setTabClient(mClient);
-    }
-
-    @Override
-    public void setDownloadCallbackClient(IDownloadCallbackClient client) {
-        StrictModeWorkaround.apply();
-        mProfile.setDownloadCallbackClient(client);
     }
 
     @Override
@@ -911,10 +899,6 @@ public final class TabImpl extends ITab.Stub {
 
     @CalledByNative
     private void handleCloseFromWebContents() throws RemoteException {
-        // On clients < 84 WebContents-initiated tab closing was delegated to the client; this flow
-        // should not be used, as the client will not be expecting it.
-        assert WebLayerFactoryImpl.getClientMajorVersion() >= 84;
-
         if (getBrowser() == null) return;
         getBrowser().destroyTab(this);
     }
@@ -951,14 +935,12 @@ public final class TabImpl extends ITab.Stub {
 
         TabImplJni.get().removeTabFromBrowserBeforeDestroying(mNativeTab);
 
-        if (WebLayerFactoryImpl.getClientMajorVersion() >= 84) {
-            // Notify the client that this instance is being destroyed to prevent it from calling
-            // back into this object if the embedder mistakenly tries to do so.
-            try {
-                mClient.onTabDestroyed();
-            } catch (RemoteException e) {
-                throw new APICallException(e);
-            }
+        // Notify the client that this instance is being destroyed to prevent it from calling
+        // back into this object if the embedder mistakenly tries to do so.
+        try {
+            mClient.onTabDestroyed();
+        } catch (RemoteException e) {
+            throw new APICallException(e);
         }
 
         if (mDisplayCutoutController != null) {
@@ -1101,13 +1083,12 @@ public final class TabImpl extends ITab.Stub {
     @CalledByNative
     private void showContextMenu(ContextMenuParams params, long nativeContextMenuParams)
             throws RemoteException {
-        if (WebLayerFactoryImpl.getClientMajorVersion() < 82) return;
         if (WebLayerFactoryImpl.getClientMajorVersion() < 88) {
-            mClient.showContextMenu(ObjectWrapper.wrap(params.getPageUrl()),
-                    ObjectWrapper.wrap(nonEmptyOrNull(params.getLinkUrl())),
+            mClient.showContextMenu(ObjectWrapper.wrap(params.getPageUrl().getSpec()),
+                    ObjectWrapper.wrap(nonEmptyOrNull(params.getLinkUrl().getSpec())),
                     ObjectWrapper.wrap(nonEmptyOrNull(params.getLinkText())),
                     ObjectWrapper.wrap(nonEmptyOrNull(params.getTitleText())),
-                    ObjectWrapper.wrap(nonEmptyOrNull(params.getSrcUrl())));
+                    ObjectWrapper.wrap(nonEmptyOrNull(params.getSrcUrl().getSpec())));
             return;
         }
 
@@ -1116,11 +1097,11 @@ public final class TabImpl extends ITab.Stub {
                 || (params.isVideo() && UrlUtilities.isDownloadableScheme(params.getSrcUrl())
                         && params.canSaveMedia())
                 || (params.isAnchor() && UrlUtilities.isDownloadableScheme(params.getLinkUrl()));
-        mClient.showContextMenu2(ObjectWrapper.wrap(params.getPageUrl()),
-                ObjectWrapper.wrap(nonEmptyOrNull(params.getLinkUrl())),
+        mClient.showContextMenu2(ObjectWrapper.wrap(params.getPageUrl().getSpec()),
+                ObjectWrapper.wrap(nonEmptyOrNull(params.getLinkUrl().getSpec())),
                 ObjectWrapper.wrap(nonEmptyOrNull(params.getLinkText())),
                 ObjectWrapper.wrap(nonEmptyOrNull(params.getTitleText())),
-                ObjectWrapper.wrap(nonEmptyOrNull(params.getSrcUrl())), params.isImage(),
+                ObjectWrapper.wrap(nonEmptyOrNull(params.getSrcUrl().getSpec())), params.isImage(),
                 params.isVideo(), canDownload,
                 new NativeContextMenuParamsHolder(nativeContextMenuParams));
     }

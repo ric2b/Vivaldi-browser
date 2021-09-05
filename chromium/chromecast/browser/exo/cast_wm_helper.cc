@@ -103,9 +103,10 @@ VSyncTimingManager& CastWMHelper::GetVSyncTimingManager() {
 
 void CastWMHelper::OnDragEntered(const ui::DropTargetEvent& event) {}
 
-int CastWMHelper::OnDragUpdated(const ui::DropTargetEvent& event) {
+aura::client::DragUpdateInfo CastWMHelper::OnDragUpdated(
+    const ui::DropTargetEvent& event) {
   NOTIMPLEMENTED();
-  return 0;
+  return aura::client::DragUpdateInfo();
 }
 
 void CastWMHelper::OnDragExited() {}
@@ -193,6 +194,16 @@ bool CastWMHelper::InTabletMode() const {
 double CastWMHelper::GetDefaultDeviceScaleFactor() const {
   NOTIMPLEMENTED();
   return 1.0;
+}
+
+double CastWMHelper::GetDeviceScaleFactorForWindow(aura::Window* window) const {
+  NOTIMPLEMENTED();
+  return 1.0;
+}
+
+void CastWMHelper::SetDefaultScaleCancellation(
+    bool default_scale_cancellation) {
+  NOTIMPLEMENTED();
 }
 
 void CastWMHelper::SetImeBlocked(aura::Window* window, bool ime_blocked) {

@@ -82,10 +82,11 @@
 #include "services/network/public/cpp/data_element.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/http_raw_request_response_info.h"
+#include "services/network/public/cpp/is_potentially_trustworthy.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/url_loader_completion_status.h"
+#include "services/network/public/mojom/client_security_state.mojom-shared.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
-#include "third_party/blink/public/common/loader/network_utils.h"
 #include "third_party/blink/public/common/loader/referrer_utils.h"
 #include "third_party/blink/public/platform/resource_request_blocked_reason.h"
 #include "third_party/boringssl/src/include/openssl/ssl.h"
@@ -154,6 +155,7 @@ std::unique_ptr<Network::Cookie> BuildCookie(
           .SetSecure(cookie.IsSecure())
           .SetSession(!cookie.IsPersistent())
           .SetPriority(cp)
+          .SetSameParty(cookie.IsSameParty())
           .Build();
 
   switch (cookie.SameSite()) {
@@ -402,7 +404,7 @@ String securityState(const GURL& url, const net::CertStatus& cert_status) {
   if (!url.SchemeIsCryptographic()) {
     // Some origins are considered secure even though they're not cryptographic,
     // so treat them as secure in the UI.
-    if (blink::network_utils::IsOriginSecure(url))
+    if (network::IsUrlPotentiallyTrustworthy(url))
       return Security::SecurityStateEnum::Secure;
     return Security::SecurityStateEnum::Insecure;
   }
@@ -522,14 +524,15 @@ bool GetPostData(
     return false;
   for (const auto& element : *elements) {
     // TODO(caseq): Also support blobs.
-    if (element.type() != network::mojom::DataElementType::kBytes)
+    if (element.type() != network::DataElement::Tag::kBytes)
       return false;
-    auto bytes = protocol::Binary::fromSpan(
-        reinterpret_cast<const uint8_t*>(element.bytes()), element.length());
+    const std::vector<uint8_t>& bytes =
+        element.As<network::DataElementBytes>().bytes();
     auto data_entry = protocol::Network::PostDataEntry::Create().Build();
-    data_entry->SetBytes(std::move(bytes));
+    data_entry->SetBytes(
+        protocol::Binary::fromSpan(bytes.data(), bytes.size()));
     data_entries->push_back(std::move(data_entry));
-    result->append(element.bytes(), element.length());
+    result->append(reinterpret_cast<const char*>(bytes.data()), bytes.size());
   }
   return true;
 }
@@ -1591,8 +1594,6 @@ String blockedReason(blink::ResourceRequestBlockedReason reason) {
     case blink::ResourceRequestBlockedReason::kContentType:
       return protocol::Network::BlockedReasonEnum::ContentType;
     case blink::ResourceRequestBlockedReason::kOther:
-    case blink::ResourceRequestBlockedReason::
-        kBlockedByExtensionCrbug1128174Investigation:
       return protocol::Network::BlockedReasonEnum::Other;
     case blink::ResourceRequestBlockedReason::kCollapsedByClient:
       return protocol::Network::BlockedReasonEnum::CollapsedByClient;
@@ -1775,12 +1776,14 @@ void NetworkHandler::NavigationRequestWillBeSent(
       common_params.has_user_gesture);
 }
 
-void NetworkHandler::RequestSent(const std::string& request_id,
-                                 const std::string& loader_id,
-                                 const network::ResourceRequest& request,
-                                 const char* initiator_type,
-                                 const base::Optional<GURL>& initiator_url,
-                                 base::TimeTicks timestamp) {
+void NetworkHandler::RequestSent(
+    const std::string& request_id,
+    const std::string& loader_id,
+    const network::ResourceRequest& request,
+    const char* initiator_type,
+    const base::Optional<GURL>& initiator_url,
+    const std::string& initiator_devtools_request_id,
+    base::TimeTicks timestamp) {
   if (!enabled_)
     return;
   std::unique_ptr<DictionaryValue> headers_dict(DictionaryValue::create());
@@ -1790,6 +1793,8 @@ void NetworkHandler::RequestSent(const std::string& request_id,
       Network::Initiator::Create().SetType(initiator_type).Build();
   if (initiator_url)
     initiator->SetUrl(initiator_url->spec());
+  if (initiator_devtools_request_id.size())
+    initiator->SetRequestId(initiator_devtools_request_id);
   std::string url_fragment;
   std::string url_without_fragment =
       ExtractFragment(request.url, &url_fragment);
@@ -2433,16 +2438,56 @@ DispatchResponse NetworkHandler::GetSecurityIsolationStatus(
   return Response::Success();
 }
 
+namespace {
+String BuildPrivateNetworkRequestPolicy(
+    network::mojom::PrivateNetworkRequestPolicy policy) {
+  switch (policy) {
+    case network::mojom::PrivateNetworkRequestPolicy::kAllow:
+      return protocol::Network::PrivateNetworkRequestPolicyEnum::Allow;
+    case network::mojom::PrivateNetworkRequestPolicy::
+        kBlockFromInsecureToMorePrivate:
+      return protocol::Network::PrivateNetworkRequestPolicyEnum::
+          BlockFromInsecureToMorePrivate;
+  }
+}
+String BuildIpAddressSpace(network::mojom::IPAddressSpace space) {
+  switch (space) {
+    case network::mojom::IPAddressSpace::kLocal:
+      return protocol::Network::IPAddressSpaceEnum::Local;
+    case network::mojom::IPAddressSpace::kPrivate:
+      return protocol::Network::IPAddressSpaceEnum::Private;
+    case network::mojom::IPAddressSpace::kPublic:
+      return protocol::Network::IPAddressSpaceEnum::Public;
+    case network::mojom::IPAddressSpace::kUnknown:
+      return protocol::Network::IPAddressSpaceEnum::Unknown;
+  }
+}
+Maybe<protocol::Network::ClientSecurityState> MaybeBuildClientSecurityState(
+    const network::mojom::ClientSecurityStatePtr& state) {
+  if (!state) {
+    return {};
+  }
+  return protocol::Network::ClientSecurityState::Create()
+      .SetPrivateNetworkRequestPolicy(BuildPrivateNetworkRequestPolicy(
+          state->private_network_request_policy))
+      .SetInitiatorIPAddressSpace(BuildIpAddressSpace(state->ip_address_space))
+      .SetInitiatorIsSecureContext(state->is_web_secure_context)
+      .Build();
+}
+}  // namespace
+
 void NetworkHandler::OnRequestWillBeSentExtraInfo(
     const std::string& devtools_request_id,
     const net::CookieAccessResultList& request_cookie_list,
-    const std::vector<network::mojom::HttpRawHeaderPairPtr>& request_headers) {
+    const std::vector<network::mojom::HttpRawHeaderPairPtr>& request_headers,
+    const network::mojom::ClientSecurityStatePtr& security_state) {
   if (!enabled_)
     return;
 
   frontend_->RequestWillBeSentExtraInfo(
       devtools_request_id, BuildProtocolAssociatedCookies(request_cookie_list),
-      GetRawHeaders(request_headers));
+      GetRawHeaders(request_headers),
+      MaybeBuildClientSecurityState(security_state));
 }
 
 void NetworkHandler::OnResponseReceivedExtraInfo(
@@ -2583,9 +2628,11 @@ void NetworkHandler::LoadNetworkResource(
 
     auto params = URLLoaderFactoryParamsHelper::CreateForFrame(
         frame, frame->GetLastCommittedOrigin(),
-        mojo::Clone(frame->last_committed_client_security_state()),
+        frame->GetIsolationInfoForSubresources(),
+        frame->BuildClientSecurityState(),
         /**coep_reporter=*/mojo::NullRemote(), frame->GetProcess(),
-        network::mojom::TrustTokenRedemptionPolicy::kForbid);
+        network::mojom::TrustTokenRedemptionPolicy::kForbid,
+        "NetworkHandler::LoadNetworkResource");
 
     auto factory =
         CreateNetworkFactoryForDevTools(frame->GetProcess(), std::move(params));
@@ -2616,6 +2663,68 @@ void NetworkHandler::LoadNetworkResource(
     }
   }
   callback->sendFailure(Response::ServerError("Target not supported"));
+}
+
+namespace {
+
+String GetTrustTokenOperationStatus(
+    network::mojom::TrustTokenOperationStatus status) {
+  switch (status) {
+    case network::mojom::TrustTokenOperationStatus::kOk:
+      return protocol::Network::TrustTokenOperationDone::StatusEnum::Ok;
+    case network::mojom::TrustTokenOperationStatus::kInvalidArgument:
+      return protocol::Network::TrustTokenOperationDone::StatusEnum::
+          InvalidArgument;
+    case network::mojom::TrustTokenOperationStatus::kFailedPrecondition:
+      return protocol::Network::TrustTokenOperationDone::StatusEnum::
+          FailedPrecondition;
+    case network::mojom::TrustTokenOperationStatus::kResourceExhausted:
+      return protocol::Network::TrustTokenOperationDone::StatusEnum::
+          ResourceExhausted;
+    case network::mojom::TrustTokenOperationStatus::kAlreadyExists:
+      return protocol::Network::TrustTokenOperationDone::StatusEnum::
+          AlreadyExists;
+    case network::mojom::TrustTokenOperationStatus::kUnavailable:
+      return protocol::Network::TrustTokenOperationDone::StatusEnum::
+          Unavailable;
+    case network::mojom::TrustTokenOperationStatus::kBadResponse:
+      return protocol::Network::TrustTokenOperationDone::StatusEnum::
+          BadResponse;
+    case network::mojom::TrustTokenOperationStatus::kInternalError:
+      return protocol::Network::TrustTokenOperationDone::StatusEnum::
+          InternalError;
+    case network::mojom::TrustTokenOperationStatus::kUnknownError:
+      return protocol::Network::TrustTokenOperationDone::StatusEnum::
+          UnknownError;
+    case network::mojom::TrustTokenOperationStatus::
+        kOperationSuccessfullyFulfilledLocally:
+      return protocol::Network::TrustTokenOperationDone::StatusEnum::
+          FulfilledLocally;
+  }
+}
+
+}  // namespace
+
+void NetworkHandler::OnTrustTokenOperationDone(
+    const std::string& devtools_request_id,
+    const network::mojom::TrustTokenOperationResult& result) {
+  if (!enabled_)
+    return;
+
+  Maybe<String> top_level_origin;
+  if (result.top_level_origin) {
+    top_level_origin = result.top_level_origin->Serialize();
+  }
+  Maybe<String> issuer;
+  if (result.issuer) {
+    issuer = result.issuer->Serialize();
+  }
+
+  frontend()->TrustTokenOperationDone(
+      GetTrustTokenOperationStatus(result.status),
+      GetTrustTokenOperationType(result.type), devtools_request_id,
+      std::move(top_level_origin), std::move(issuer),
+      result.issued_token_count);
 }
 
 }  // namespace protocol

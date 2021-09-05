@@ -3,6 +3,7 @@
 //
 #include "browser/menus/vivaldi_menubar.h"
 
+#include "base/bind.h"
 #include "browser/menus/vivaldi_bookmark_context_menu.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/profiles/profile.h"
@@ -108,8 +109,12 @@ void Menubar::PopulateBookmarks() {
 
   views::Widget* parent = views::Widget::GetWidgetForNativeWindow(
     browser_->window()->GetNativeWindow());
-  bookmark_menu_delegate_.reset(
-    new BookmarkMenuDelegate(browser_, browser_, parent));
+  bookmark_menu_delegate_.reset(new BookmarkMenuDelegate(
+      browser_,
+      base::BindRepeating(
+          [](content::PageNavigator* navigator) { return navigator; },
+          browser_),
+      parent));
   bookmark_menu_delegate_->Init(this,
                                 bookmark_menu_,
                                 model->bookmark_bar_node(),

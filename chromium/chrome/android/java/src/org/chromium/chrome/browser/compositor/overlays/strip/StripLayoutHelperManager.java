@@ -43,6 +43,7 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabObserver;
 import org.chromium.ui.base.LocalizationUtils;
 import org.chromium.ui.resources.ResourceManager;
+import org.chromium.url.GURL;
 
 import java.util.List;
 
@@ -51,7 +52,6 @@ import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel;
-import org.chromium.chrome.browser.tab.TabThemeColorHelper;
 import org.chromium.chrome.browser.toolbar.top.TabSwitcherActionMenuCoordinator;
 import org.chromium.components.browser_ui.widget.listmenu.ListMenuButton;
 import org.vivaldi.browser.common.VivaldiUtils;
@@ -458,7 +458,7 @@ public class StripLayoutHelperManager implements SceneOverlay {
         // strip will be recreated when themes has been changed (see VAB-2809).
         if (modelSelector.getCurrentTab() != null)
             mTabStripTreeProvider.setTabStripBackgroundColor(
-                    TabThemeColorHelper.get(modelSelector.getCurrentTab()).getColor());
+                    modelSelector.getCurrentTab().getThemeColor());
 
         mNormalHelper.setTabModel(mTabModelSelector.getModel(false),
                 tabCreatorManager.getTabCreator(false));
@@ -534,12 +534,12 @@ public class StripLayoutHelperManager implements SceneOverlay {
             }
 
             @Override
-            public void onPageLoadStarted(Tab tab, String url) {
+            public void onPageLoadStarted(Tab tab, GURL url) {
                 getStripLayoutHelper(tab.isIncognito()).tabPageLoadStarted(tab.getId());
             }
 
             @Override
-            public void onPageLoadFinished(Tab tab, String url) {
+            public void onPageLoadFinished(Tab tab, GURL url) {
                 getStripLayoutHelper(tab.isIncognito()).tabPageLoadFinished(tab.getId());
             }
 
@@ -576,8 +576,7 @@ public class StripLayoutHelperManager implements SceneOverlay {
             @Override
             public void onObservingDifferentTab(Tab tab, boolean hint) {
                 if (tab != null && !tab.isBeingRestored())
-                    mTabStripTreeProvider.setTabStripBackgroundColor(
-                            TabThemeColorHelper.getColor(tab));
+                    mTabStripTreeProvider.setTabStripBackgroundColor(tab.getThemeColor());
             }
         };
 

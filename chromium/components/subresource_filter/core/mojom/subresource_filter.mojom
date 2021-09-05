@@ -13,8 +13,14 @@ enum ActivationLevel {
 };
 
 // Enumerates which ads violations are recorded for a page.
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused. Please update the enum named
+// AdsViolations in enums.xml when adding a new entry here.
 enum AdsViolation {
     kMobileAdDensityByHeightAbove30,
+    kHeavyAdsInterventionAtHostLimit,
+    kLargeStickyAd,
+    kOverlayPopupAd,
 };
 
 struct ActivationState {
@@ -83,4 +89,8 @@ interface SubresourceFilterHost {
   // evaluating subresource loads in its allowLoad method. The time metrics are
   // equal to zero if performance measurements were disabled for the load.
   SetDocumentLoadStatistics(DocumentLoadStatistics statistics);
+
+  // Called when a render frame detects an ads violation. It is used to record
+  // ads violations within the ads intervention manager.
+  OnAdsViolationTriggered(AdsViolation violation);
 };

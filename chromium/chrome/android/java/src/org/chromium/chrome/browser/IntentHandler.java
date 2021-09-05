@@ -53,6 +53,7 @@ import org.chromium.chrome.browser.webapps.WebappActivity;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.components.external_intents.ExternalNavigationHandler;
+import org.chromium.components.externalauth.ExternalAuthUtils;
 import org.chromium.content_public.browser.BrowserStartupController;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.common.ContentUrlConstants;
@@ -286,6 +287,7 @@ public class IntentHandler {
             GOOGLECHROME_SCHEME + "://navigate?url=";
 
     private static boolean sTestIntentsEnabled;
+    private static boolean sTestForceIntentSenderChromeToTrue;
 
     private final IntentHandlerDelegate mDelegate;
     private final Activity mActivity;
@@ -355,6 +357,17 @@ public class IntentHandler {
     @VisibleForTesting
     public static void setTestIntentsEnabled(boolean enabled) {
         sTestIntentsEnabled = enabled;
+    }
+
+    /**
+     * If |value| is true, wasIntentSenderChrome() does no checks and always returns true. For this
+     * to have any effect, you also need to supply EXTRA_IS_OPENED_BY_CHROME with a value of true in
+     * the intent. This method is intended for tests to avoid triggering the chooser for which
+     * chrome to open.
+     */
+    @VisibleForTesting
+    public static void setForceIntentSenderChromeToTrue(boolean value) {
+        sTestForceIntentSenderChromeToTrue = value;
     }
 
     public IntentHandler(Activity activity, IntentHandlerDelegate delegate) {
@@ -1024,6 +1037,8 @@ public class IntentHandler {
      * @return Whether an intent originates from Chrome.
      */
     public static boolean wasIntentSenderChrome(Intent intent) {
+        if (sTestForceIntentSenderChromeToTrue) return true;
+
         if (intent == null) return false;
 
         PendingIntent token = fetchAuthenticationTokenFromIntent(intent);
@@ -1061,7 +1076,7 @@ public class IntentHandler {
         if (isChromeToken(token)) {
             return true;
         }
-        if (AppHooks.get().getExternalAuthUtils().isGoogleSigned(token.getCreatorPackage())) {
+        if (ExternalAuthUtils.getInstance().isGoogleSigned(token.getCreatorPackage())) {
             return true;
         }
         return false;

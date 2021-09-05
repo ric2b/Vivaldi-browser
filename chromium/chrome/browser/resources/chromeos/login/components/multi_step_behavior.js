@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// <include src="../../../../../../ui/login/display_manager.js">
+
 /**
  * @fileoverview
  * 'MultiStepBehavior' is a behavior that simplifies defining and handling
@@ -90,7 +92,14 @@ var MultiStepBehavior = {
     // Only set uiStep to defaultUIStep if it is not set yet.
     if (!this.uiStep) {
       this.setUIStep(this.defaultUIStep());
+    } else {
+      this.showUIStep_(this.uiStep);
     }
+  },
+
+  onBeforeHide() {
+    if (this.uiStep)
+      this.hideUIStep_(this.uiStep);
   },
 
   /**
@@ -101,23 +110,41 @@ var MultiStepBehavior = {
     return this.stepElements_[this.defaultUIStep()][0];
   },
 
+  /*
+   * Method that applys a function to all elements of a step (default to
+   * current step).
+   */
+  applyToStepElements(func, step = this.uiStep) {
+    for (let element of this.stepElements_[step] || []) {
+      func(element);
+    }
+  },
+
   setUIStep(step) {
     if (this.uiStep) {
       if (this.uiStep == step)
         return;
-      for (let element of this.stepElements_[this.uiStep] || []) {
-        cr.ui.login.invokePolymerMethod(element, 'onBeforeHide');
-        element.hidden = true;
-      }
+      this.hideUIStep_(this.uiStep);
     }
     this.uiStep = step;
-    for (let element of this.stepElements_[this.uiStep] || []) {
+    this.showUIStep_(this.uiStep);
+  },
+
+  showUIStep_(step) {
+    for (let element of this.stepElements_[step] || []) {
       cr.ui.login.invokePolymerMethod(element, 'onBeforeShow');
       element.hidden = false;
       // Trigger show() if element is an oobe-dialog
       if (element.show && typeof element.show === 'function') {
         element.show();
       }
+    }
+  },
+
+  hideUIStep_(step) {
+    for (let element of this.stepElements_[step] || []) {
+      cr.ui.login.invokePolymerMethod(element, 'onBeforeHide');
+      element.hidden = true;
     }
   },
 
@@ -148,6 +175,7 @@ var MultiStepBehavior = {
  * @typedef {{
  *   setUIStep: function(string),
  *   onBeforeShow: function(),
+ *   onBeforeHide: function(),
  * }}
  */
 MultiStepBehavior.Proto;

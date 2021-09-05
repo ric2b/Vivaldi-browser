@@ -15,9 +15,11 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "chrome/browser/profiles/profiles_state.h"
+#include "chrome/common/extensions/api/omnibox.h"
 #include "chrome/grit/generated_resources.h"
 #include "extensions/browser/device_local_account_util.h"
 #include "extensions/common/api/incognito.h"
+#include "extensions/common/api/shared_module.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/manifest.h"
 #include "extensions/common/manifest_constants.h"
@@ -113,7 +115,7 @@ const char* const kSafeManifestEntries[] = {
     // emk::kEventRules,
 
     // Shared Modules configuration: Allow other extensions to access resources.
-    emk::kExport,
+    ::extensions::api::shared_module::ManifestKeys::kExport,
 
     emk::kExternallyConnectable,
 
@@ -131,7 +133,7 @@ const char* const kSafeManifestEntries[] = {
     emk::kIcons,
 
     // Shared Modules configuration: Import resources from another extension.
-    emk::kImport,
+    ::extensions::api::shared_module::ManifestKeys::kImport,
 
     ::extensions::api::incognito::ManifestKeys::kIncognito,
 
@@ -185,7 +187,7 @@ const char* const kSafeManifestEntries[] = {
     // A bit risky as the extensions sees all keystrokes entered into the
     // omnibox after the search key matches, but generally we deem URLs fair
     // game.
-    emk::kOmnibox,
+    ::extensions::api::omnibox::ManifestKeys::kOmnibox,
 
     // Special-cased in IsSafeForPublicSession(). Subject to permission
     // restrictions.
@@ -217,14 +219,14 @@ const char* const kSafeManifestEntries[] = {
     // Just a display string.
     emk::kShortName,
 
-    // Doc missing. Declared as a feature, but unused.
-    // emk::kSignature,
+    // Deprecated manifest key.
+    // "signature",
 
     // Network access.
     emk::kSockets,
 
-    // Just provides dictionaries, no access to content.
-    emk::kSpellcheck,
+    // Deprecated manifest key.
+    // "spellcheck",
 
     // (Note: Using string literal since extensions::manifest_keys only has
     // constants for sub-keys.)

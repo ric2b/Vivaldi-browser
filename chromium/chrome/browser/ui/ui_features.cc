@@ -4,7 +4,13 @@
 
 #include "chrome/browser/ui/ui_features.h"
 
+#include "build/chromeos_buildflags.h"
+
 namespace features {
+
+// Enables Chrome Labs menu in the toolbar. See https://crbug.com/1145666
+const base::Feature kChromeLabs{"ChromeLabs",
+                                base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables showing the EV certificate details in the Page Info bubble.
 const base::Feature kEvDetailsInPageInfo{"EvDetailsInPageInfo",
@@ -52,12 +58,16 @@ const base::Feature kScrollableTabStrip{"ScrollableTabStrip",
 const base::Feature kScrollableTabStripButtons{
     "ScrollableTabStripButtons", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Hosts some content in a side panel. https://crbug.com/1141224
+// Hosts some content in a side panel. https://crbug.com/1149995
 const base::Feature kSidePanel{"SidePanel", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Revamp of profiles. https://crbug.com/1108289
-const base::Feature kProfilesUIRevamp{"ProfilesUIRevamp",
-                                      base::FEATURE_DISABLED_BY_DEFAULT};
+// Updated managed profile sign-in popup. https://crbug.com/1141224
+const base::Feature kSyncConfirmationUpdatedText{
+    "SyncConfirmationUpdatedText", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Sign-in functionality in the profile creation flow. https://crbug.com/1126913
+const base::Feature kSignInProfileCreation{"SignInProfileCreation",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Automatically create groups for users based on domain.
 // https://crbug.com/1128703
@@ -77,6 +87,13 @@ const base::Feature kTabGroupsCollapseFreezing{
 const base::Feature kTabGroupsFeedback{"TabGroupsFeedback",
                                        base::FEATURE_ENABLED_BY_DEFAULT};
 
+// Directly controls the "new" badge (as opposed to old "master switch"; see
+// https://crbug.com/1169907 for master switch deprecation and
+// https://crbug.com/968587 for the feature itself)
+// https://crbug.com/1173792
+const base::Feature kTabGroupsNewBadgePromo{"TabGroupsNewBadgePromo",
+                                            base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables popup cards containing tab information when hovering over a tab.
 // https://crbug.com/910739
 const base::Feature kTabHoverCards{"TabHoverCards",
@@ -95,8 +112,16 @@ const base::Feature kTabHoverCardImages{"TabHoverCardImages",
 const base::Feature kTabOutlinesInLowContrastThemes{
     "TabOutlinesInLowContrastThemes", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enables searching tabs across multiple windows.
+// Enables searching tabs across multiple windows. This feature launch is
+// staggered to release to ChromeOS first and other platforms later. Tab Search
+// is enabled by default on ChromeOS following its launch on the platform.
+// TODO(crbug.com/1137558): Remove this after launch to the remaining desktop
+// platforms.
+#if defined(OS_CHROMEOS)
+const base::Feature kTabSearch{"TabSearch", base::FEATURE_ENABLED_BY_DEFAULT};
+#else
 const base::Feature kTabSearch{"TabSearch", base::FEATURE_DISABLED_BY_DEFAULT};
+#endif  // defined(OS_CHROMEOS)
 
 // Enables the tab search submit feedback button.
 const base::Feature kTabSearchFeedback{"TabSearchFeedback",
@@ -127,7 +152,7 @@ const base::Feature kWebFooterExperiment{"WebFooterExperiment",
 const base::Feature kWebUITabStrip{"WebUITabStrip",
                                    base::FEATURE_DISABLED_BY_DEFAULT};
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 // Enables a warning about connecting to hidden WiFi networks.
 // https://crbug.com/903908
 const base::Feature kHiddenNetworkWarning{"HiddenNetworkWarning",
@@ -136,6 +161,6 @@ const base::Feature kHiddenNetworkWarning{"HiddenNetworkWarning",
 // Enables a separate group of settings (speed, button swap, and acceleration)
 // for pointing sticks (such as TrackPoints).
 const base::Feature kSeparatePointingStickSettings{
-    "SeparatePointingStickSettings", base::FEATURE_DISABLED_BY_DEFAULT};
-#endif  // defined(OS_CHROMEOS)
+    "SeparatePointingStickSettings", base::FEATURE_ENABLED_BY_DEFAULT};
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 }  // namespace features

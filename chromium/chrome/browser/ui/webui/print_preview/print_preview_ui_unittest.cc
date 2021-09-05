@@ -190,23 +190,26 @@ TEST_F(PrintPreviewUIUnitTest, ShouldCancelRequest) {
   ASSERT_TRUE(preview_ui);
   preview_ui->SetPreviewUIId();
 
-  // Test with invalid UI ID.
-  const int32_t kInvalidId = -5;
-  EXPECT_TRUE(preview_ui->ShouldCancelRequest({0, kInvalidId}));
+  // Test the initial state.
+  EXPECT_TRUE(PrintPreviewUI::ShouldCancelRequest(
+      *preview_ui->GetIDForPrintPreviewUI(), 0));
 
   const int kFirstRequestId = 1000;
   const int kSecondRequestId = 1001;
-  const int32_t preview_id = preview_ui->GetIDForPrintPreviewUI().value();
 
   // Test with kFirstRequestId.
   preview_ui->OnPrintPreviewRequest(kFirstRequestId);
-  EXPECT_FALSE(preview_ui->ShouldCancelRequest({kFirstRequestId, preview_id}));
-  EXPECT_TRUE(preview_ui->ShouldCancelRequest({kSecondRequestId, preview_id}));
+  EXPECT_FALSE(PrintPreviewUI::ShouldCancelRequest(
+      *preview_ui->GetIDForPrintPreviewUI(), kFirstRequestId));
+  EXPECT_TRUE(PrintPreviewUI::ShouldCancelRequest(
+      *preview_ui->GetIDForPrintPreviewUI(), kSecondRequestId));
 
   // Test with kSecondRequestId.
   preview_ui->OnPrintPreviewRequest(kSecondRequestId);
-  EXPECT_TRUE(preview_ui->ShouldCancelRequest({kFirstRequestId, preview_id}));
-  EXPECT_FALSE(preview_ui->ShouldCancelRequest({kSecondRequestId, preview_id}));
+  EXPECT_TRUE(PrintPreviewUI::ShouldCancelRequest(
+      *preview_ui->GetIDForPrintPreviewUI(), kFirstRequestId));
+  EXPECT_FALSE(PrintPreviewUI::ShouldCancelRequest(
+      *preview_ui->GetIDForPrintPreviewUI(), kSecondRequestId));
 }
 
 TEST_F(PrintPreviewUIUnitTest, ParseDataPath) {

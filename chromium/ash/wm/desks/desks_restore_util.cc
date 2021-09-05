@@ -38,7 +38,7 @@ PrefService* GetPrimaryUserPrefService() {
 bool IsValidDeskIndex(int desk_index) {
   return desk_index >= 0 &&
          desk_index < int{DesksController::Get()->desks().size()} &&
-         desk_index < int{desks_util::kMaxNumberOfDesks};
+         desk_index < int{desks_util::GetMaxNumberOfDesks()};
 }
 
 }  // namespace
@@ -46,7 +46,7 @@ bool IsValidDeskIndex(int desk_index) {
 void RegisterProfilePrefs(PrefRegistrySimple* registry) {
   constexpr int kDefaultActiveDeskIndex = 0;
   registry->RegisterListPref(prefs::kDesksNamesList);
-  if (features::IsDesksRestoreEnabled()) {
+  if (features::IsBentoEnabled()) {
     registry->RegisterIntegerPref(prefs::kDesksActiveDesk,
                                   kDefaultActiveDeskIndex);
   }
@@ -69,7 +69,7 @@ void RestorePrimaryUserDesks() {
 
   // If we don't have any restore data, or the list is corrupt for some reason,
   // abort.
-  if (!restore_size || restore_size > desks_util::kMaxNumberOfDesks)
+  if (!restore_size || restore_size > desks_util::GetMaxNumberOfDesks())
     return;
 
   auto* desks_controller = DesksController::Get();
@@ -91,7 +91,7 @@ void RestorePrimaryUserDesks() {
   }
 
   // Restore an active desk for the primary user.
-  if (features::IsDesksRestoreEnabled()) {
+  if (features::IsBentoEnabled()) {
     const int active_desk_index =
         primary_user_prefs->GetInteger(prefs::kDesksActiveDesk);
 
@@ -104,7 +104,7 @@ void RestorePrimaryUserDesks() {
   }
 }
 
-void UpdatePrimaryUserDesksPrefs() {
+void UpdatePrimaryUserDeskNamesPrefs() {
   if (g_pause_desks_prefs_updates)
     return;
 
@@ -131,8 +131,7 @@ void UpdatePrimaryUserDesksPrefs() {
 }
 
 void UpdatePrimaryUserActiveDeskPrefs(int active_desk_index) {
-  DCHECK(features::IsDesksRestoreEnabled());
-  DCHECK(Shell::Get()->session_controller()->IsUserPrimary());
+  DCHECK(features::IsBentoEnabled());
   DCHECK(IsValidDeskIndex(active_desk_index));
   if (g_pause_desks_prefs_updates)
     return;

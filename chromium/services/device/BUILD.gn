@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/config/chromeos/ui_mode.gni")
+import("//build/config/chromeos/ui_mode.gni")
 import("//build/config/features.gni")
 import("//testing/test.gni")
 
@@ -64,7 +65,7 @@ source_set("lib") {
     ]
   }
 
-  if (is_ash && use_dbus) {
+  if (is_chromeos_ash && use_dbus) {
     deps += [
       "//services/device/bluetooth:bluetooth_system",
       "//services/device/media_transfer_protocol",
@@ -75,7 +76,7 @@ source_set("lib") {
     deps += [ "//services/device/serial" ]
   }
 
-  if (is_lacros) {
+  if (is_chromeos_lacros) {
     deps += [
       "//chromeos/crosapi/mojom",
       "//chromeos/lacros",
@@ -161,6 +162,7 @@ source_set("tests") {
     "//base/test:test_support",
     "//base/third_party/dynamic_annotations",
     "//build:chromeos_buildflags",
+    "//components/variations",
     "//device/base/synchronization",
     "//mojo/public/cpp/bindings",
     "//net",
@@ -183,7 +185,7 @@ source_set("tests") {
     sources += [ "generic_sensor/platform_sensor_provider_unittest_android.cc" ]
   }
 
-  if (is_ash) {
+  if (is_chromeos_ash) {
     sources += [ "geolocation/wifi_data_provider_chromeos_unittest.cc" ]
   }
 
@@ -195,12 +197,12 @@ source_set("tests") {
     ]
   }
 
-  if (is_linux && use_udev) {
+  if ((is_linux || is_chromeos_lacros) && use_udev) {
     sources +=
         [ "generic_sensor/platform_sensor_and_provider_unittest_linux.cc" ]
   }
 
-  if ((is_linux || is_lacros) && use_dbus) {
+  if ((is_linux || is_chromeos_lacros) && use_dbus) {
     sources += [
       "battery/battery_status_manager_linux_unittest.cc",
       "geolocation/wifi_data_provider_linux_unittest.cc",
@@ -208,17 +210,19 @@ source_set("tests") {
     deps += [ "//dbus:test_support" ]
   }
 
-  if (is_ash) {
+  if (is_chromeos_ash) {
     sources += [
       "fingerprint/fingerprint_chromeos_unittest.cc",
       "generic_sensor/platform_sensor_chromeos_unittest.cc",
       "generic_sensor/platform_sensor_provider_chromeos_unittest.cc",
+      "usb/usb_service_linux_unittest.cc",
     ]
     deps += [
       "//chromeos/components/sensors:sensors",
       "//chromeos/components/sensors:test_support",
       "//chromeos/dbus:test_support",
       "//chromeos/dbus/biod:test_support",
+      "//chromeos/dbus/permission_broker",
       "//chromeos/network:test_support",
       "//services/device/bluetooth:bluetooth_system_tests",
       "//services/device/fingerprint",
@@ -242,8 +246,10 @@ source_set("tests") {
     sources += [
       "battery/battery_monitor_impl_unittest.cc",
       "hid/hid_manager_unittest.cc",
+      "public/cpp/hid/hid_blocklist_unittest.cc",
     ]
     deps += [
+      "//components/variations:test_support",
       "//services/device/battery",
       "//services/device/hid:mocks",
       "//services/device/public/cpp/hid",
@@ -358,6 +364,7 @@ source_set("tests") {
       "geolocation/win/fake_status_changed_event_args_winrt.cc",
       "geolocation/win/fake_status_changed_event_args_winrt.h",
       "geolocation/win/location_provider_winrt_unittest.cc",
+      "hid/hid_preparsed_data_unittest.cc",
     ]
 
     # Needed for "generic_sensor/platform_sensor_and_provider_unittest_win.cc"

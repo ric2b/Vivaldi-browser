@@ -46,7 +46,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
-<histogram name="Power.BacklightLevelOnAC" units="%" expires_after="2021-04-25">
+<histogram name="Power.BacklightLevelOnAC" units="%" expires_after="2021-06-27">
   <owner>tbroch@chromium.org</owner>
   <summary>
     The level of the backlight as a percentage when the user is on AC. Sampled
@@ -55,7 +55,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Power.BacklightLevelOnBattery" units="%"
-    expires_after="2021-05-02">
+    expires_after="2021-07-04">
   <owner>tbroch@chromium.org</owner>
   <summary>
     The level of the backlight as a percentage when the user is on battery.
@@ -64,7 +64,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Power.BatteryChargeHealth" units="%"
-    expires_after="2021-04-04">
+    expires_after="2021-06-06">
   <owner>tbroch@chromium.org</owner>
   <summary>
     Chrome OS battery charge health percentage. Sampled once when device starts
@@ -73,7 +73,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Power.BatteryDischargeRate" units="mW"
-    expires_after="2021-03-15">
+    expires_after="2021-05-16">
   <owner>tbroch@chromium.org</owner>
   <summary>
     Chrome OS battery discharge rate in mW sampled every 30 seconds while the
@@ -82,7 +82,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Power.BatteryDischargeRateWhileSuspended" units="mW"
-    expires_after="2021-04-04">
+    expires_after="2021-06-06">
   <owner>tbroch@chromium.org</owner>
   <summary>
     Chrome OS battery discharge rate in mW while the system was suspended,
@@ -102,7 +102,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
-<histogram name="Power.BatteryPercentDrop" units="%" expires_after="2021-04-04">
+<histogram name="Power.BatteryPercentDrop" units="%" expires_after="2021-06-06">
   <owner>ryansturm@chromium.org</owner>
   <owner>tbansal@chromium.org</owner>
   <summary>
@@ -127,7 +127,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Power.BatteryRemainingAtEndOfSessionOnBattery" units="%"
-    expires_after="2021-04-04">
+    expires_after="2021-06-20">
   <owner>tbroch@chromium.org</owner>
   <summary>
     Chrome OS remaining battery charge as percent of the maximum battery charge,
@@ -136,7 +136,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Power.BatteryRemainingAtStartOfSessionOnAC" units="%"
-    expires_after="2021-04-11">
+    expires_after="2021-06-20">
   <owner>tbroch@chromium.org</owner>
   <summary>
     Chrome OS remaining battery charge as percent of the maximum battery charge,
@@ -154,7 +154,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Power.BatteryRemainingWhenChargeStarts" units="%"
-    expires_after="2021-04-04">
+    expires_after="2021-06-06">
   <owner>tbroch@chromium.org</owner>
   <summary>
     Chrome OS remaining battery charge as percent of the maximum battery charge,
@@ -357,7 +357,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Power.ExternalDisplayOpenResult"
-    enum="ExternalDisplayOpenResult" expires_after="2021-03-28">
+    enum="ExternalDisplayOpenResult" expires_after="2021-05-30">
   <owner>tbroch@chromium.org</owner>
   <summary>
     The result of attempting to open an I2C device to control an external
@@ -367,7 +367,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Power.FirmwareResumeTimeOnAC" units="ms"
-    expires_after="2021-04-25">
+    expires_after="2021-06-27">
   <owner>tbroch@chromium.org</owner>
   <summary>
     The time that the firmware took to resume the Chrome OS device from
@@ -376,7 +376,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Power.FirmwareResumeTimeOnBattery" units="ms"
-    expires_after="2021-04-25">
+    expires_after="2021-06-27">
   <owner>tbroch@chromium.org</owner>
   <summary>
     The time that the firmware took to resume the Chrome OS device from
@@ -517,6 +517,24 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </token>
 </histogram>
 
+<histogram name="Power.ForegroundRadio.Wakeups.Cell.30Seconds"
+    enum="RadioSignalLevel" expires_after="2021-07-03">
+  <owner>eseckler@chromium.org</owner>
+  <owner>khokhlov@chromium.org</owner>
+  <owner>skyostil@chromium.org</owner>
+  <summary>
+    Counts the number of radio wakeups while Chrome is the foreground app, the
+    device is on battery power and connection type is cellular. Values are
+    distributed across buckets according to the radio signal quality.
+
+    Caveat: signal quality is measured at the end of 30-sec period, so it might
+    not reflect the quality during the entire period.
+
+    Only supported on Android. Disabled by default. Please supply the
+    ForegroundRadioStateCountWakeups feature flag to turn this metric on.
+  </summary>
+</histogram>
+
 <histogram name="Power.ForegroundRadio.{Direction}KiB.{NetworkType}.30Seconds"
     enum="RadioSignalLevel" expires_after="2021-07-03">
   <owner>eseckler@chromium.org</owner>
@@ -547,7 +565,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histogram name="Power.IdleScreenDimCountDaily" units="count"
     expires_after="M100">
   <owner>tbroch@chromium.org</owner>
-  <owner>jiameng@chromium.org</owner>
+  <owner>napper@chromium.org</owner>
   <summary>
     Number of times that that the screen has been dimmed in response to user
     inactivity, reported daily. The count is accumulated through the day,
@@ -562,7 +580,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histogram name="Power.IdleScreenOffCountDaily" units="count"
     expires_after="M100">
   <owner>tbroch@chromium.org</owner>
-  <owner>jiameng@chromium.org</owner>
+  <owner>napper@chromium.org</owner>
   <summary>
     Number of times that that the screen has been turned off in response to user
     inactivity, reported daily. The count is accumulated through the day,
@@ -575,9 +593,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Power.IdleSuspendCountDaily" units="count"
-    expires_after="2021-04-04">
+    expires_after="2021-06-06">
   <owner>tbroch@chromium.org</owner>
-  <owner>jiameng@chromium.org</owner>
+  <owner>napper@chromium.org</owner>
   <summary>
     Number of times that that the system has suspended in response to user
     inactivity, reported daily. The count is accumulated through the day,
@@ -591,7 +609,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Power.IdleTimeAfterDimOnAC" units="ms" expires_after="M100">
   <owner>tbroch@chromium.org</owner>
-  <owner>jiameng@chromium.org</owner>
+  <owner>napper@chromium.org</owner>
   <summary>
     Chrome OS user idle time since the screen dimmed sampled when the user
     becomes active again if the device runs on AC.
@@ -601,7 +619,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histogram name="Power.IdleTimeAfterDimOnBattery" units="ms"
     expires_after="M100">
   <owner>tbroch@chromium.org</owner>
-  <owner>jiameng@chromium.org</owner>
+  <owner>napper@chromium.org</owner>
   <summary>
     Chrome OS user idle time since the screen dimmed sampled when the user
     becomes active again if the device runs on battery.
@@ -611,7 +629,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histogram name="Power.IdleTimeAfterScreenOffOnAC" units="ms"
     expires_after="M100">
   <owner>tbroch@chromium.org</owner>
-  <owner>jiameng@chromium.org</owner>
+  <owner>napper@chromium.org</owner>
   <summary>
     Chrome OS user idle time since the screen turned off sampled when the user
     becomes active again if the device runs on AC.
@@ -621,7 +639,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histogram name="Power.IdleTimeAfterScreenOffOnBattery" units="ms"
     expires_after="M100">
   <owner>tbroch@chromium.org</owner>
-  <owner>jiameng@chromium.org</owner>
+  <owner>napper@chromium.org</owner>
   <summary>
     Chrome OS user idle time since the screen turned off sampled when the user
     becomes active again if the device runs on battery.
@@ -630,16 +648,16 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Power.IdleTimeOnAC" units="ms" expires_after="M100">
   <owner>tbroch@chromium.org</owner>
-  <owner>jiameng@chromium.org</owner>
+  <owner>napper@chromium.org</owner>
   <summary>
     Chrome OS user idle time sampled when the user becomes active again if the
     device runs on AC.
   </summary>
 </histogram>
 
-<histogram name="Power.IdleTimeOnBattery" units="ms" expires_after="2021-04-11">
+<histogram name="Power.IdleTimeOnBattery" units="ms" expires_after="2021-06-13">
   <owner>tbroch@chromium.org</owner>
-  <owner>jiameng@chromium.org</owner>
+  <owner>napper@chromium.org</owner>
   <summary>
     Chrome OS user idle time sampled when the user becomes active again if the
     device runs on battery.
@@ -647,7 +665,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Power.KernelResumeTimeOnAC" units="ms"
-    expires_after="2021-04-11">
+    expires_after="2021-06-13">
   <owner>tbroch@chromium.org</owner>
   <summary>
     The time that the kernel took to resume the Chrome OS device from
@@ -674,7 +692,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Power.KernelSuspendTimeOnBattery" units="ms"
-    expires_after="2021-04-18">
+    expires_after="2021-06-20">
   <owner>tbroch@chromium.org</owner>
   <summary>
     The time that the kernel took to suspend-to-RAM the Chrome OS device when
@@ -692,7 +710,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Power.LengthOfSession" units="seconds"
-    expires_after="2021-04-11">
+    expires_after="2021-06-13">
   <owner>tbroch@chromium.org</owner>
   <summary>
     The length of time, in seconds, that a user spent in a single session.
@@ -702,7 +720,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Power.LidClosedSuspendCountDaily" units="count"
-    expires_after="2021-04-04">
+    expires_after="2021-06-06">
   <owner>tbroch@chromium.org</owner>
   <summary>
     Number of times that that the system has suspended in response to its lid
@@ -726,7 +744,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Power.Mac.AppleSMCOpened" enum="BooleanSuccess"
-    expires_after="2021-04-18">
+    expires_after="2021-06-20">
   <owner>lgrey@chromium.org</owner>
   <summary>
     When metrics collection started, records true if a handle to the System
@@ -766,7 +784,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Power.Mac.IsOnBattery2" enum="BooleanOnBattery"
-    expires_after="2021-04-25">
+    expires_after="2021-06-27">
   <owner>avi@chromium.org</owner>
   <owner>lgrey@chromium.org</owner>
   <summary>
@@ -797,7 +815,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histogram name="Power.NumberOfAlsAdjustmentsPerSession" units="units"
     expires_after="M100">
   <owner>tbroch@chromium.org</owner>
-  <owner>jiameng@chromium.org</owner>
+  <owner>napper@chromium.org</owner>
   <summary>
     The number of times that the Automatic Light Sensor (ALS) adjusted the
     brightness during a session. Values for this metric are clamped to 10k
@@ -842,7 +860,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Power.PowerButtonPressInLaptopMode"
-    enum="PowerButtonPressType" expires_after="2021-04-18">
+    enum="PowerButtonPressType" expires_after="2021-06-20">
   <owner>minch@chromium.org</owner>
   <owner>xdai@chromium.org</owner>
   <summary>
@@ -853,7 +871,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Power.PowerButtonPressInTabletMode"
-    enum="PowerButtonPressType" expires_after="2021-04-04">
+    enum="PowerButtonPressType" expires_after="2021-06-06">
   <owner>minch@chromium.org</owner>
   <owner>xdai@chromium.org</owner>
   <summary>
@@ -864,7 +882,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Power.PowerSupplyMaxPower" units="W"
-    expires_after="2021-04-04">
+    expires_after="2021-06-27">
   <owner>bleung@chromium.org</owner>
   <owner>tbroch@chromium.org</owner>
   <summary>
@@ -885,7 +903,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Power.PowerSupplyType" enum="PowerSupplyType"
-    expires_after="2021-04-11">
+    expires_after="2021-06-27">
   <owner>bleung@chromium.org</owner>
   <owner>tbroch@chromium.org</owner>
   <summary>
@@ -905,14 +923,14 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Power.SmartCharging.Messages" enum="SmartChargingMessages"
-    expires_after="2020-12-31">
+    expires_after="2021-11-15">
   <owner>thanhdng@chromium.org</owner>
-  <owner>jiameng@chromium.org</owner>
+  <owner>napper@chromium.org</owner>
   <summary>Type of messages that are reported by smart charging.</summary>
 </histogram>
 
 <histogram name="Power.SuspendAttempt" enum="SuspendAttempt"
-    expires_after="2021-04-04">
+    expires_after="2021-06-06">
   <owner>tbroch@chromium.org</owner>
   <summary>
     The number of suspend attempts on Chrome OS. Samples are reported before
@@ -922,7 +940,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Power.SuspendAttemptsBeforeCancel" units="units"
-    expires_after="2021-04-04">
+    expires_after="2021-06-06">
   <owner>tbroch@chromium.org</owner>
   <summary>
     The number of suspend attempts performed for a single suspend request (e.g.
@@ -933,7 +951,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Power.SuspendAttemptsBeforeSuccess" units="units"
-    expires_after="2021-04-04">
+    expires_after="2021-06-06">
   <owner>tbroch@chromium.org</owner>
   <summary>
     The number of suspend attempts performed for a single suspend request (e.g.
@@ -943,7 +961,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Power.SuspendResult" enum="SuspendResult"
-    expires_after="2021-04-04">
+    expires_after="2021-06-06">
   <owner>tbroch@chromium.org</owner>
   <summary>
     The results of suspend attempts on Chrome OS. Samples are reported after
@@ -971,7 +989,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histogram name="Power.UserBrightnessAdjustmentsPerSessionOnAC" units="units"
     expires_after="M100">
   <owner>tbroch@chromium.org</owner>
-  <owner>jiameng@chromium.org</owner>
+  <owner>napper@chromium.org</owner>
   <summary>
     The number of times that the user adjusted the brightness during a session
     when on AC. Values for this metric are clamped to 10k count, so the last
@@ -980,9 +998,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Power.UserBrightnessAdjustmentsPerSessionOnBattery"
-    units="units" expires_after="2021-04-18">
+    units="units" expires_after="2021-06-20">
   <owner>tbroch@chromium.org</owner>
-  <owner>jiameng@chromium.org</owner>
+  <owner>napper@chromium.org</owner>
   <summary>
     The number of times that the user adjusted the brightness during a session
     when on battery. Values for this metric are clamped to 10k count, so the
@@ -991,8 +1009,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="PowerML.DimImminent.Action" enum="PowerMLDimImminentAction"
-    expires_after="2021-04-18">
-  <owner>jiameng@chromium.org</owner>
+    expires_after="2021-06-20">
+  <owner>napper@chromium.org</owner>
+  <owner>thanhdng@chromium.org</owner>
   <summary>
     What happens when UserActivityManager receives a screen dim imminent
     notification. Only applicable to Chrome OS.
@@ -1000,8 +1019,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="PowerML.ModelDim.Result" enum="PowerMLFinalResult"
-    expires_after="2021-04-18">
-  <owner>jiameng@chromium.org</owner>
+    expires_after="2021-06-20">
+  <owner>napper@chromium.org</owner>
+  <owner>thanhdng@chromium.org</owner>
   <summary>
     What happens after screen is dimmed following model instruction. Only
     applicable to Chrome OS.
@@ -1009,8 +1029,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="PowerML.ModelNoDim.Result" enum="PowerMLFinalResult"
-    expires_after="2021-04-18">
-  <owner>jiameng@chromium.org</owner>
+    expires_after="2021-06-20">
+  <owner>napper@chromium.org</owner>
+  <owner>thanhdng@chromium.org</owner>
   <summary>
     What happens after screen dim is deferred following model instruction. Only
     applicable to Chrome OS.
@@ -1018,8 +1039,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="PowerML.NonModelDim.Result" enum="PowerMLFinalResult"
-    expires_after="2021-03-15">
-  <owner>jiameng@chromium.org</owner>
+    expires_after="2021-05-16">
+  <owner>napper@chromium.org</owner>
+  <owner>thanhdng@chromium.org</owner>
   <summary>
     What happens after screen is dimmed by powerd by ignoring the model
     instruction. Only applicable to Chrome OS.
@@ -1028,7 +1050,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="PowerML.PreviousEventLogging.Result"
     enum="PowerMLPreviousEventLoggingResult" expires_after="2020-12-13">
-  <owner>jiameng@chromium.org</owner>
+  <owner>napper@chromium.org</owner>
+  <owner>thanhdng@chromium.org</owner>
   <summary>
     Status of logging previous idle event after a screen dim imminent signal is
     received. Only applicable to Chrome OS.
@@ -1040,7 +1063,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     expires_after="2021-04-25">
   <owner>alanlxl@chromium.org</owner>
   <owner>amoylan@chromium.org</owner>
-  <owner>jiameng@chromium.org</owner>
+  <owner>napper@chromium.org</owner>
   <summary>
     Records the event (various failures or success) of loading smart dim
     component. Only applicable to Chrome OS.
@@ -1051,7 +1074,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     enum="PowerMLSmartDimComponentVersionType" expires_after="2021-04-25">
   <owner>alanlxl@chromium.org</owner>
   <owner>amoylan@chromium.org</owner>
-  <owner>jiameng@chromium.org</owner>
+  <owner>napper@chromium.org</owner>
   <summary>
     Records the type of expected version (default, experimental or empty) used
     by smart dim component installer. Only applicable to Chrome OS.
@@ -1062,7 +1085,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     enum="PowerMLSmartDimComponentWorkerType" expires_after="2021-04-25">
   <owner>alanlxl@chromium.org</owner>
   <owner>amoylan@chromium.org</owner>
-  <owner>jiameng@chromium.org</owner>
+  <owner>napper@chromium.org</owner>
   <summary>
     Records the worker type that is used by smart dim ml agent to make a
     decision. Only applicable to Chrome OS.
@@ -1070,9 +1093,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="PowerML.SmartDimModel.RequestCanceledDuration" units="ms"
-    expires_after="2021-04-18">
+    expires_after="2021-06-20">
   <owner>amoylan@chromium.org</owner>
-  <owner>jiameng@chromium.org</owner>
+  <owner>napper@chromium.org</owner>
   <owner>napper@chromium.org</owner>
   <owner>pmalani@chromium.org</owner>
   <summary>
@@ -1082,9 +1105,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="PowerML.SmartDimModel.RequestCompleteDuration" units="ms"
-    expires_after="2021-04-18">
+    expires_after="2021-06-20">
   <owner>amoylan@chromium.org</owner>
-  <owner>jiameng@chromium.org</owner>
+  <owner>napper@chromium.org</owner>
   <owner>napper@chromium.org</owner>
   <owner>pmalani@chromium.org</owner>
   <summary>
@@ -1094,8 +1117,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="PowerML.SmartDimModel.Result"
-    enum="PowerMLSmartDimModelResult" expires_after="2021-04-11">
-  <owner>jiameng@chromium.org</owner>
+    enum="PowerMLSmartDimModelResult" expires_after="2021-06-13">
+  <owner>napper@chromium.org</owner>
+  <owner>thanhdng@chromium.org</owner>
   <summary>
     This is the status code returned by the model when calculating a user
     inactivity score. If it is any value other than 0 (success), then some issue
@@ -1106,8 +1130,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="PowerML.SmartDimParameter.Result"
-    enum="PowerMLSmartDimParameterResult" expires_after="2021-04-18">
-  <owner>jiameng@chromium.org</owner>
+    enum="PowerMLSmartDimParameterResult" expires_after="2021-06-20">
+  <owner>napper@chromium.org</owner>
+  <owner>thanhdng@chromium.org</owner>
   <summary>
     The result of parsing the dim threshold parameter value. Only applicable to
     Chrome OS.

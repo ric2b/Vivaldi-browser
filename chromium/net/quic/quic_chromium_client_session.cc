@@ -863,7 +863,6 @@ QuicChromiumClientSession::QuicChromiumClientSession(
           headers_include_h2_stream_dependency),
       max_allowed_push_id_(max_allowed_push_id),
       attempted_zero_rtt_(false),
-      num_pings_sent_(0),
       num_migrations_(0),
       last_key_update_reason_(quic::KeyUpdateReason::kInvalid),
       push_promise_index_(std::move(push_promise_index)) {
@@ -1865,7 +1864,8 @@ void QuicChromiumClientSession::OnConnectionClosed(
     UMA_HISTOGRAM_COUNTS_100(
         "Net.QuicSession.MaxConsecutiveRtoWithForwardProgress",
         connection()->GetStats().max_consecutive_rto_with_forward_progress);
-    UMA_HISTOGRAM_COUNTS_1000("Net.QuicSession.NumPingsSent", num_pings_sent_);
+    UMA_HISTOGRAM_COUNTS_1000("Net.QuicSession.NumPingsSent",
+                              connection()->GetStats().ping_frames_sent);
     UMA_HISTOGRAM_LONG_TIMES_100(
         "Net.QuicSession.ConnectionDuration",
         tick_clock_->NowTicks() - connect_timing_.connect_end);
@@ -2180,7 +2180,28 @@ void QuicChromiumClientSession::OnMigrationTimeout(size_t num_sockets) {
                       quic::ConnectionCloseBehavior::SILENT_CLOSE);
 }
 
+// TODO(renjietang): Deprecate this method once IETF QUIC supports connection
+// migration.
 void QuicChromiumClientSession::OnProbeSucceeded(
+    NetworkChangeNotifier::NetworkHandle network,
+    const quic::QuicSocketAddress& peer_address,
+    const quic::QuicSocketAddress& self_address,
+    std::unique_ptr<DatagramClientSocket> socket,
+    std::unique_ptr<QuicChromiumPacketWriter> writer,
+    std::unique_ptr<QuicChromiumPacketReader> reader) {
+  if (current_migration_cause_ == CHANGE_PORT_ON_PATH_DEGRADING) {
+    DCHECK(allow_port_migration_);
+    OnPortMigrationProbeSucceeded(network, peer_address, self_address,
+                                  std::move(socket), std::move(writer),
+                                  std::move(reader));
+    return;
+  }
+  OnConnectionMigrationProbeSucceeded(network, peer_address, self_address,
+                                      std::move(socket), std::move(writer),
+                                      std::move(reader));
+}
+
+void QuicChromiumClientSession::OnPortMigrationProbeSucceeded(
     NetworkChangeNotifier::NetworkHandle network,
     const quic::QuicSocketAddress& peer_address,
     const quic::QuicSocketAddress& self_address,
@@ -2196,9 +2217,65 @@ void QuicChromiumClientSession::OnProbeSucceeded(
                       return NetLogProbingResultParams(network, &peer_address,
                                                        /*is_success=*/true);
                     });
+  // TODO(crbug.com/1151419): Use the name Port migration in histogram.
+  LogProbeResultToHistogram(current_migration_cause_, true);
 
-  if (!allow_port_migration_ &&
-      network == NetworkChangeNotifier::kInvalidNetworkHandle)
+  // Remove |this| as the old packet writer's delegate. Write error on old
+  // writers will be ignored.
+  // Set |this| to listen on socket write events on the packet writer
+  // that was used for probing.
+  static_cast<QuicChromiumPacketWriter*>(connection()->writer())
+      ->set_delegate(nullptr);
+  writer->set_delegate(this);
+  connection()->SetSelfAddress(self_address);
+
+  if (!migrate_idle_session_ && !HasActiveRequestStreams()) {
+    // If idle sessions won't be migrated, close the connection.
+    CloseSessionOnErrorLater(
+        ERR_NETWORK_CHANGED,
+        quic::QUIC_CONNECTION_MIGRATION_NO_MIGRATABLE_STREAMS,
+        quic::ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET);
+    return;
+  }
+
+  if (migrate_idle_session_ && CheckIdleTimeExceedsIdleMigrationPeriod())
+    return;
+
+  // Migrate to the probed socket immediately: socket, writer and reader will
+  // be acquired by connection and used as default on success.
+  if (!MigrateToSocket(std::move(socket), std::move(reader),
+                       std::move(writer))) {
+    LogMigrateToSocketStatus(false);
+    net_log_.AddEvent(
+        NetLogEventType::QUIC_CONNECTION_MIGRATION_FAILURE_AFTER_PROBING);
+    return;
+  }
+
+  LogMigrateToSocketStatus(true);
+
+  // Notify the connection that migration succeeds after probing.
+  connection()->OnSuccessfulMigration();
+  num_migrations_++;
+  HistogramAndLogMigrationSuccess(connection_id());
+}
+
+void QuicChromiumClientSession::OnConnectionMigrationProbeSucceeded(
+    NetworkChangeNotifier::NetworkHandle network,
+    const quic::QuicSocketAddress& peer_address,
+    const quic::QuicSocketAddress& self_address,
+    std::unique_ptr<DatagramClientSocket> socket,
+    std::unique_ptr<QuicChromiumPacketWriter> writer,
+    std::unique_ptr<QuicChromiumPacketReader> reader) {
+  DCHECK(socket);
+  DCHECK(writer);
+  DCHECK(reader);
+
+  net_log_.AddEvent(NetLogEventType::QUIC_SESSION_CONNECTIVITY_PROBING_FINISHED,
+                    [&] {
+                      return NetLogProbingResultParams(network, &peer_address,
+                                                       /*is_success=*/true);
+                    });
+  if (network == NetworkChangeNotifier::kInvalidNetworkHandle)
     return;
 
   LogProbeResultToHistogram(current_migration_cause_, true);
@@ -2240,8 +2317,7 @@ void QuicChromiumClientSession::OnProbeSucceeded(
   LogMigrateToSocketStatus(true);
 
   // Notify the connection that migration succeeds after probing.
-  if (connection()->IsPathDegrading())
-    connection()->OnSuccessfulMigrationAfterProbing();
+  connection()->OnSuccessfulMigration();
 
   net_log_.AddEventWithInt64Params(
       NetLogEventType::QUIC_CONNECTION_MIGRATION_SUCCESS_AFTER_PROBING,
@@ -2506,7 +2582,7 @@ void QuicChromiumClientSession::OnWriteUnblocked() {
   if (send_packet_after_migration_) {
     send_packet_after_migration_ = false;
     if (!connection()->writer()->IsWriteBlocked()) {
-      SendPing();
+      connection()->SendPing();
     }
   }
 }
@@ -3494,11 +3570,6 @@ bool QuicChromiumClientSession::ValidateStatelessReset(
     return false;
   }
   return true;
-}
-
-void QuicChromiumClientSession::SendPing() {
-  QuicSpdyClientSessionBase::SendPing();
-  ++num_pings_sent_;
 }
 
 }  // namespace net

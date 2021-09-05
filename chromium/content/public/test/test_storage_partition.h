@@ -23,7 +23,7 @@ class AppCacheService;
 class BackgroundSyncContext;
 class DevToolsBackgroundServicesContext;
 class DOMStorageContext;
-class NativeFileSystemEntryFactory;
+class FileSystemAccessEntryFactory;
 class PlatformNotificationContext;
 class ServiceWorkerContext;
 
@@ -85,6 +85,8 @@ class TestStoragePartition : public StoragePartition {
   }
   storage::FileSystemContext* GetFileSystemContext() override;
 
+  FontAccessContext* GetFontAccessContext() override;
+
   void set_background_sync_context(BackgroundSyncContext* context) {
     background_sync_context_ = context;
   }
@@ -102,7 +104,7 @@ class TestStoragePartition : public StoragePartition {
 
   storage::mojom::IndexedDBControl& GetIndexedDBControl() override;
 
-  NativeFileSystemEntryFactory* GetNativeFileSystemEntryFactory() override;
+  FileSystemAccessEntryFactory* GetFileSystemAccessEntryFactory() override;
 
   void set_service_worker_context(ServiceWorkerContext* context) {
     service_worker_context_ = context;
@@ -120,6 +122,7 @@ class TestStoragePartition : public StoragePartition {
     cache_storage_context_ = context;
   }
   CacheStorageContext* GetCacheStorageContext() override;
+  CacheStorageContextImpl* GetCacheStorageContextImplForTesting() override;
 
   void set_generated_code_cache_context(GeneratedCodeCacheContext* context) {
     generated_code_cache_context_ = context;

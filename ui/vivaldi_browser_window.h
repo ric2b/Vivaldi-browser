@@ -89,11 +89,6 @@ class VivaldiAutofillBubbleHandler : public autofill::AutofillBubbleHandler {
       autofill::SaveCardBubbleController* controller,
       bool is_user_gesture) override;
 
-  // Shows the sign in promo bubble from the avatar button.
-  autofill::SaveCardBubbleView* ShowSaveCardSignInPromoBubble(
-      content::WebContents* contents,
-      autofill::SaveCardBubbleController* controller) override;
-
   autofill::LocalCardMigrationBubble* ShowLocalCardMigrationBubble(
       content::WebContents* web_contents,
       autofill::LocalCardMigrationBubbleController* controller,
@@ -104,8 +99,6 @@ class VivaldiAutofillBubbleHandler : public autofill::AutofillBubbleHandler {
       autofill::SaveUPIBubbleController* controller) override;
 
   void OnPasswordSaved() override {}
-
-  void HideSignInPromo() override {}
 
  private:
   DISALLOW_COPY_AND_ASSIGN(VivaldiAutofillBubbleHandler);
@@ -264,7 +257,7 @@ class VivaldiBrowserWindow final
   void ConfirmBrowserCloseWithPendingDownloads(
       int download_count,
       Browser::DownloadCloseType dialog_type,
-      const base::Callback<void(bool)>& callback) override;
+      base::OnceCallback<void(bool)> callback) override;
   void UserChangedTheme(BrowserThemeChangeType theme_change_type) override {}
   void VivaldiShowWebsiteSettingsAt(
       Profile* profile,

@@ -5,7 +5,6 @@
 #import "ios/chrome/browser/ui/omnibox/omnibox_view_controller.h"
 
 #include "base/bind.h"
-#include "base/feature_list.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/strings/sys_string_conversions.h"
@@ -20,7 +19,6 @@
 #include "ios/chrome/browser/ui/omnibox/omnibox_text_change_delegate.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_text_field_delegate.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_constants.h"
-#include "ios/chrome/browser/ui/ui_feature_flags.h"
 #include "ios/chrome/browser/ui/util/ui_util.h"
 #include "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/whats_new/default_browser_utils.h"
@@ -498,12 +496,22 @@ const CGFloat kClearButtonSize = 28.0f;
 
   // Cancel original menu opening.
   UIMenuController* menuController = [UIMenuController sharedMenuController];
+#if !defined(__IPHONE_13_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_13_0
   [menuController setMenuVisible:NO animated:NO];
 
   // Reset where it should open below text field and reopen it.
   menuController.arrowDirection = UIMenuControllerArrowUp;
+
   [menuController setTargetRect:self.textField.frame inView:self.textField];
   [menuController setMenuVisible:YES animated:YES];
+#else
+  [menuController hideMenu];
+
+  // Reset where it should open below text field and reopen it.
+  menuController.arrowDirection = UIMenuControllerArrowUp;
+
+  [menuController showMenuFromView:self.textField rect:self.textField.frame];
+#endif
 
   self.showingEditMenu = NO;
 }
@@ -543,11 +551,9 @@ const CGFloat kClearButtonSize = 28.0f;
 
 #if defined(__IPHONE_13_4)
   if (@available(iOS 13.4, *)) {
-    if (base::FeatureList::IsEnabled(kPointerSupport)) {
       clearButton.pointerInteractionEnabled = YES;
       clearButton.pointerStyleProvider =
           CreateLiftEffectCirclePointerStyleProvider();
-    }
   }
 #endif  // defined(__IPHONE_13_4)
 

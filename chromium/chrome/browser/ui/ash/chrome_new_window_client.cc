@@ -27,11 +27,11 @@
 #include "chrome/browser/chromeos/file_manager/path_util.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/web_applications/chrome_camera_app_ui_delegate.h"
-#include "chrome/browser/extensions/api/terminal/terminal_extension_helper.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
+#include "chrome/browser/ui/ash/launcher/app_window_base.h"
 #include "chrome/browser/ui/ash/launcher/app_window_launcher_item_controller.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
@@ -69,7 +69,6 @@
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
 #include "ui/aura/window.h"
-#include "ui/base/base_window.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/display/types/display_constants.h"
@@ -416,14 +415,12 @@ void ChromeNewWindowClient::OpenDownloadsFolder() {
 
 void ChromeNewWindowClient::OpenCrosh() {
   Profile* profile = ProfileManager::GetActiveUserProfile();
-  GURL crosh_url = extensions::TerminalExtensionHelper::GetCroshURL(profile);
-  if (!crosh_url.is_valid())
-    return;
   chrome::ScopedTabbedBrowserDisplayer displayer(profile);
   Browser* browser = displayer.browser();
   content::WebContents* page = browser->OpenURL(content::OpenURLParams(
-      crosh_url, content::Referrer(), WindowOpenDisposition::NEW_FOREGROUND_TAB,
-      ui::PAGE_TRANSITION_GENERATED, false));
+      GURL(chrome::kChromeUIUntrustedCroshURL), content::Referrer(),
+      WindowOpenDisposition::NEW_FOREGROUND_TAB, ui::PAGE_TRANSITION_GENERATED,
+      false));
   browser->window()->Show();
   browser->window()->Activate();
   page->Focus();

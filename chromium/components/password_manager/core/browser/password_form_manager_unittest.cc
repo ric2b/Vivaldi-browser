@@ -72,6 +72,7 @@ using base::ASCIIToUTF16;
 using testing::_;
 using testing::AllOf;
 using testing::Contains;
+using testing::DoAll;
 using testing::ElementsAre;
 using testing::IsEmpty;
 using testing::Mock;
@@ -248,7 +249,7 @@ class MockFormSaver : public StubFormSaver {
   ~MockFormSaver() override = default;
 
   // FormSaver:
-  MOCK_METHOD1(PermanentlyBlacklist, PasswordForm(PasswordStore::FormDigest));
+  MOCK_METHOD1(Blocklist, PasswordForm(PasswordStore::FormDigest));
   MOCK_METHOD3(Save,
                void(PasswordForm pending,
                     const std::vector<const PasswordForm*>& matches,
@@ -619,11 +620,11 @@ TEST_P(PasswordFormManagerTest, GenerationOnNewAndConfirmPasswordFields) {
 #endif
 }
 
-TEST_P(PasswordFormManagerTest, AutofillWithBlacklistedMatch) {
+TEST_P(PasswordFormManagerTest, AutofillWithBlocklistedMatch) {
   PasswordFormFillData fill_data;
   EXPECT_CALL(driver_, FillPasswordForm(_)).WillOnce(SaveArg<0>(&fill_data));
   fetcher_->SetNonFederated({&saved_match_});
-  fetcher_->SetBlacklisted(true);
+  fetcher_->SetBlocklisted(true);
   fetcher_->NotifyFetchCompleted();
 
   task_environment_.FastForwardUntilNoTasksRemain();
@@ -1269,20 +1270,19 @@ TEST_P(PasswordFormManagerTest, UpdatePasswordValueMultiplePasswordFields) {
   CheckPendingCredentials(expected, saved_form);
 }
 
-TEST_P(PasswordFormManagerTest, PermanentlyBlacklist) {
+TEST_P(PasswordFormManagerTest, Blocklist) {
   fetcher_->NotifyFetchCompleted();
 
   MockFormSaver& form_saver = MockFormSaver::Get(form_manager_.get());
 
-  PasswordForm actual_blacklisted_form =
-      password_manager_util::MakeNormalizedBlacklistedForm(
+  PasswordForm actual_blocklisted_form =
+      password_manager_util::MakeNormalizedBlocklistedForm(
           PasswordStore::FormDigest(observed_form_));
-  EXPECT_CALL(form_saver,
-              PermanentlyBlacklist(PasswordStore::FormDigest(observed_form_)))
-      .WillOnce(Return(actual_blacklisted_form));
+  EXPECT_CALL(form_saver, Blocklist(PasswordStore::FormDigest(observed_form_)))
+      .WillOnce(Return(actual_blocklisted_form));
 
-  form_manager_->PermanentlyBlacklist();
-  EXPECT_TRUE(form_manager_->IsBlacklisted());
+  form_manager_->Blocklist();
+  EXPECT_TRUE(form_manager_->IsBlocklisted());
 }
 
 TEST_P(PasswordFormManagerTest, Clone) {
@@ -1989,7 +1989,7 @@ TEST_P(PasswordFormManagerTest, HTTPAuthPasswordOverridden) {
   EXPECT_EQ(new_password, updated_form.password_value);
 }
 
-TEST_P(PasswordFormManagerTest, BlacklistHttpAuthCredentials) {
+TEST_P(PasswordFormManagerTest, BlocklistHttpAuthCredentials) {
   PasswordForm http_auth_form = parsed_observed_form_;
   http_auth_form.signon_realm += "my-auth-realm";
   http_auth_form.scheme = PasswordForm::Scheme::kBasic;
@@ -2003,9 +2003,8 @@ TEST_P(PasswordFormManagerTest, BlacklistHttpAuthCredentials) {
   ASSERT_TRUE(form_manager_->ProvisionallySaveHttpAuthForm(http_auth_form));
 
   // Simulate that the user clicks never.
-  PasswordForm blacklisted_form;
-  EXPECT_CALL(form_saver,
-              PermanentlyBlacklist(PasswordStore::FormDigest(http_auth_form)));
+  PasswordForm blocklisted_form;
+  EXPECT_CALL(form_saver, Blocklist(PasswordStore::FormDigest(http_auth_form)));
   form_manager_->OnNeverClicked();
 }
 
@@ -2072,10 +2071,10 @@ TEST_P(PasswordFormManagerTest, iOSUsingFieldDataManagerData) {
   field_data_manager->UpdateFieldDataMap(
       observed_form_.fields[1].unique_renderer_id,
       base::UTF8ToUTF16("typed_username"), FieldPropertiesFlags::kUserTyped);
-  field_data_manager->UpdateFieldDataWithAutofilledValue(
+  field_data_manager->UpdateFieldDataMap(
       observed_form_.fields[2].unique_renderer_id,
       base::UTF8ToUTF16("autofilled_pw"),
-      FieldPropertiesFlags::kAutofilledOnPageLoad);
+      FieldPropertiesFlags::kAutofilledOnUserTrigger);
 
   form_manager_->UpdateObservedFormDataWithFieldDataManagerInfo(
       field_data_manager.get());
@@ -2085,10 +2084,10 @@ TEST_P(PasswordFormManagerTest, iOSUsingFieldDataManagerData) {
   EXPECT_EQ(form_manager_->observed_form()->fields[1].properties_mask,
             FieldPropertiesFlags::kUserTyped);
 
-  EXPECT_EQ(form_manager_->observed_form()->fields[2].value,
+  EXPECT_EQ(form_manager_->observed_form()->fields[2].typed_value,
             base::UTF8ToUTF16("autofilled_pw"));
   EXPECT_EQ(form_manager_->observed_form()->fields[2].properties_mask,
-            FieldPropertiesFlags::kAutofilledOnPageLoad);
+            FieldPropertiesFlags::kAutofilledOnUserTrigger);
 }
 
 #endif  // defined(OS_IOS)
@@ -2099,8 +2098,8 @@ TEST_P(PasswordFormManagerTest, UsernameFirstFlow) {
   feature_list.InitAndEnableFeature(features::kUsernameFirstFlow);
 
   CreateFormManager(observed_form_only_password_fields_);
-  fetcher_->NotifyFetchCompleted();
-  const base::string16 possible_username = ASCIIToUTF16("possible_username");
+  SetNonFederatedAndNotifyFetchCompleted({&saved_match_});
+  const base::string16 possible_username = ASCIIToUTF16("test@example.com");
   PossibleUsernameData possible_username_data(
       saved_match_.signon_realm, autofill::FieldRendererId(1),
       possible_username, base::Time::Now(), 0 /* driver_id */);
@@ -2118,7 +2117,8 @@ TEST_P(PasswordFormManagerTest, UsernameFirstFlow) {
 #else
   // Local heuristics on Android for username first flow are not supported, so
   // the username should not be taken from the username form.
-  EXPECT_TRUE(form_manager_->GetPendingCredentials().username_value.empty());
+  EXPECT_EQ(saved_match_.username_value,
+            form_manager_->GetPendingCredentials().username_value);
 #endif  // !defined(OS_ANDROID)
 }
 
@@ -2393,8 +2393,8 @@ class MockPasswordSaveManager : public PasswordSaveManager {
                void(const PasswordForm&,
                     const autofill::FormData*,
                     const PasswordForm&));
-  MOCK_METHOD1(PermanentlyBlacklist, void(const PasswordStore::FormDigest&));
-  MOCK_METHOD1(Unblacklist, void(const PasswordStore::FormDigest&));
+  MOCK_METHOD1(Blocklist, void(const PasswordStore::FormDigest&));
+  MOCK_METHOD1(Unblocklist, void(const PasswordStore::FormDigest&));
   MOCK_METHOD1(PresaveGeneratedPassword, void(PasswordForm));
   MOCK_METHOD2(GeneratedPasswordAccepted,
                void(PasswordForm, base::WeakPtr<PasswordManagerDriver>));
@@ -2581,15 +2581,15 @@ TEST_F(PasswordFormManagerTestWithMockedSaver,
   form_manager_->OnUpdatePasswordFromPrompt(password);
 }
 
-TEST_F(PasswordFormManagerTestWithMockedSaver, PermanentlyBlacklist) {
+TEST_F(PasswordFormManagerTestWithMockedSaver, Blocklist) {
   fetcher_->NotifyFetchCompleted();
-  PasswordForm actual_blacklisted_form =
-      password_manager_util::MakeNormalizedBlacklistedForm(
+  PasswordForm actual_blocklisted_form =
+      password_manager_util::MakeNormalizedBlocklistedForm(
           PasswordStore::FormDigest(observed_form_));
   EXPECT_CALL(*mock_password_save_manager(),
-              PermanentlyBlacklist(PasswordStore::FormDigest(observed_form_)));
-  form_manager_->PermanentlyBlacklist();
-  EXPECT_TRUE(form_manager_->IsBlacklisted());
+              Blocklist(PasswordStore::FormDigest(observed_form_)));
+  form_manager_->Blocklist();
+  EXPECT_TRUE(form_manager_->IsBlocklisted());
 }
 
 TEST_F(PasswordFormManagerTestWithMockedSaver, MoveCredentialsToAccountStore) {
@@ -2809,8 +2809,8 @@ TEST_F(PasswordFormManagerTestWithMockedSaver, UsernameFirstFlow) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitAndEnableFeature(features::kUsernameFirstFlow);
   CreateFormManager(observed_form_only_password_fields_);
-  fetcher_->NotifyFetchCompleted();
-  const base::string16 possible_username = ASCIIToUTF16("possible_username");
+  SetNonFederatedAndNotifyFetchCompleted({&saved_match_});
+  const base::string16 possible_username = ASCIIToUTF16("test@example.org");
   PossibleUsernameData possible_username_data(
       saved_match_.signon_realm, autofill::FieldRendererId(1u),
       possible_username, base::Time::Now(), 0 /* driver_id */);

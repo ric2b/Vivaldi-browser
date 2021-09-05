@@ -12,6 +12,12 @@
 namespace chromeos {
 namespace cros_healthd {
 
+FakeCrosHealthdService::RoutineUpdateParams::RoutineUpdateParams(
+    int32_t id,
+    mojom::DiagnosticRoutineCommandEnum command,
+    bool include_output)
+    : id(id), command(command), include_output(include_output) {}
+
 FakeCrosHealthdService::FakeCrosHealthdService() = default;
 FakeCrosHealthdService::~FakeCrosHealthdService() = default;
 
@@ -55,6 +61,8 @@ void FakeCrosHealthdService::GetRoutineUpdate(
     mojom::DiagnosticRoutineCommandEnum command,
     bool include_output,
     GetRoutineUpdateCallback callback) {
+  routine_update_params_ =
+      FakeCrosHealthdService::RoutineUpdateParams(id, command, include_output);
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(
@@ -67,7 +75,7 @@ void FakeCrosHealthdService::GetRoutineUpdate(
 }
 
 void FakeCrosHealthdService::RunUrandomRoutine(
-    uint32_t length_seconds,
+    mojom::NullableUint32Ptr length_seconds,
     RunUrandomRoutineCallback callback) {
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE,
@@ -110,7 +118,7 @@ void FakeCrosHealthdService::RunAcPowerRoutine(
 }
 
 void FakeCrosHealthdService::RunCpuCacheRoutine(
-    uint32_t length_seconds,
+    mojom::NullableUint32Ptr length_seconds,
     RunCpuCacheRoutineCallback callback) {
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE,
@@ -119,7 +127,7 @@ void FakeCrosHealthdService::RunCpuCacheRoutine(
 }
 
 void FakeCrosHealthdService::RunCpuStressRoutine(
-    uint32_t length_seconds,
+    mojom::NullableUint32Ptr length_seconds,
     RunCpuStressRoutineCallback callback) {
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE,
@@ -128,7 +136,7 @@ void FakeCrosHealthdService::RunCpuStressRoutine(
 }
 
 void FakeCrosHealthdService::RunFloatingPointAccuracyRoutine(
-    uint32_t length_seconds,
+    mojom::NullableUint32Ptr length_seconds,
     RunFloatingPointAccuracyRoutineCallback callback) {
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE,
@@ -166,8 +174,7 @@ void FakeCrosHealthdService::RunDiskReadRoutine(
 }
 
 void FakeCrosHealthdService::RunPrimeSearchRoutine(
-    uint32_t length_seconds,
-    uint64_t max_num,
+    mojom::NullableUint32Ptr length_seconds,
     RunPrimeSearchRoutineCallback callback) {
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE,
@@ -245,6 +252,16 @@ void FakeCrosHealthdService::RunCaptivePortalRoutine(
 
 void FakeCrosHealthdService::RunHttpFirewallRoutine(
     RunHttpFirewallRoutineCallback callback) {
+  std::move(callback).Run(run_routine_response_.Clone());
+}
+
+void FakeCrosHealthdService::RunHttpsFirewallRoutine(
+    RunHttpsFirewallRoutineCallback callback) {
+  std::move(callback).Run(run_routine_response_.Clone());
+}
+
+void FakeCrosHealthdService::RunHttpsLatencyRoutine(
+    RunHttpsLatencyRoutineCallback callback) {
   std::move(callback).Run(run_routine_response_.Clone());
 }
 
@@ -379,6 +396,11 @@ void FakeCrosHealthdService::RunLanConnectivityRoutineForTesting(
     chromeos::network_diagnostics::mojom::NetworkDiagnosticsRoutines::
         LanConnectivityCallback callback) {
   network_diagnostics_routines_->LanConnectivity(std::move(callback));
+}
+
+base::Optional<FakeCrosHealthdService::RoutineUpdateParams>
+FakeCrosHealthdService::GetRoutineUpdateParams() const {
+  return routine_update_params_;
 }
 
 }  // namespace cros_healthd

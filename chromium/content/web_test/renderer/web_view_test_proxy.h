@@ -25,7 +25,6 @@
 #include "third_party/blink/public/web/web_history_commit_type.h"
 #include "third_party/blink/public/web/web_navigation_policy.h"
 #include "third_party/blink/public/web/web_view_client.h"
-#include "third_party/blink/public/web/web_widget_client.h"
 
 namespace blink {
 class WebLocalFrame;
@@ -71,9 +70,9 @@ class WebViewTestProxy : public RenderViewImpl {
       const blink::WebString& frame_name,
       blink::WebNavigationPolicy policy,
       network::mojom::WebSandboxFlags sandbox_flags,
-      const blink::FeaturePolicyFeatureState&,
       const blink::SessionStorageNamespaceId& session_storage_namespace_id,
-      bool& consumed_user_gesture) override;
+      bool& consumed_user_gesture,
+      const base::Optional<blink::WebImpression>& impression) override;
   void PrintPage(blink::WebLocalFrame* frame) override;
   blink::WebString AcceptLanguages() override;
 

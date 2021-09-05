@@ -55,10 +55,14 @@ mojom::VRDisplayInfoPtr CreateFakeVRDisplayInfo() {
 
 // OpenXrDevice must not take ownership of the OpenXrStatics passed in.
 // The OpenXrStatics object is owned by IsolatedXRRuntimeProvider.
-OpenXrDevice::OpenXrDevice(OpenXrStatics* openxr_statics)
+OpenXrDevice::OpenXrDevice(
+    OpenXrStatics* openxr_statics,
+    VizContextProviderFactoryAsync context_provider_factory_async)
     : VRDeviceBase(device::mojom::XRDeviceId::OPENXR_DEVICE_ID),
       instance_(openxr_statics->GetXrInstance()),
       extension_helper_(instance_, openxr_statics->GetExtensionEnumeration()),
+      context_provider_factory_async_(
+          std::move(context_provider_factory_async)),
       weak_ptr_factory_(this) {
   mojom::VRDisplayInfoPtr display_info = CreateFakeVRDisplayInfo();
   SetVRDisplayInfo(std::move(display_info));
@@ -87,13 +91,29 @@ void OpenXrDevice::EnsureRenderLoop() {
     auto on_info_changed = base::BindRepeating(&OpenXrDevice::SetVRDisplayInfo,
                                                weak_ptr_factory_.GetWeakPtr());
     render_loop_ = std::make_unique<OpenXrRenderLoop>(
-        std::move(on_info_changed), instance_, extension_helper_);
+        std::move(on_info_changed), context_provider_factory_async_, instance_,
+        extension_helper_);
   }
 }
 
 void OpenXrDevice::RequestSession(
     mojom::XRRuntimeSessionOptionsPtr options,
     mojom::XRRuntime::RequestSessionCallback callback) {
+  // Check feature support and reject session request if we cannot fulfil it
+  // TODO(https://crbug.com/995377): Currently OpenXR features are declared
+  // statically, but we may only know a runtime's true support for a feature
+  // dynamically
+  const bool anchorsRequired = base::Contains(
+      options->required_features, device::mojom::XRSessionFeature::ANCHORS);
+  const bool anchorsSupported =
+      extension_helper_.ExtensionEnumeration()->ExtensionSupported(
+          XR_MSFT_SPATIAL_ANCHOR_EXTENSION_NAME);
+  if (anchorsRequired && !anchorsSupported) {
+    // Reject session request
+    std::move(callback).Run(nullptr, mojo::NullRemote());
+    return;
+  }
+
   EnsureRenderLoop();
 
   if (!render_loop_->IsRunning()) {

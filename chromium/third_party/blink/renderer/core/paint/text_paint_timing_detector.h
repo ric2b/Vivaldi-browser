@@ -9,7 +9,6 @@
 #include <queue>
 #include <set>
 
-#include "third_party/blink/public/web/web_widget_client.h"
 #include "third_party/blink/renderer/core/dom/dom_node_ids.h"
 #include "third_party/blink/renderer/core/paint/paint_timing_detector.h"
 #include "third_party/blink/renderer/core/paint/text_element_timing.h"
@@ -48,8 +47,8 @@ class TextRecord : public base::SupportsWeakPtr<TextRecord> {
   base::TimeTicks paint_time = base::TimeTicks();
 };
 
-class CORE_EXPORT LargestTextPaintManager {
-  DISALLOW_NEW();
+class CORE_EXPORT LargestTextPaintManager final
+    : public GarbageCollected<LargestTextPaintManager> {
   using TextRecordSetComparator = bool (*)(const base::WeakPtr<TextRecord>&,
                                            const base::WeakPtr<TextRecord>&);
   using TextRecordSet =
@@ -174,9 +173,7 @@ class CORE_EXPORT TextRecordsManager {
   // candidate.
   void ReportLargestIgnoredText();
 
-  inline bool IsRecordingLargestTextPaint() const {
-    return ltp_manager_.has_value();
-  }
+  inline bool IsRecordingLargestTextPaint() const { return ltp_manager_; }
 
   void Trace(Visitor*) const;
 
@@ -199,7 +196,7 @@ class CORE_EXPORT TextRecordsManager {
   // LCP computations, even if the size of the text itself is not 0. They are
   // considered invisible objects by Largest Contentful Paint.
   Deque<std::unique_ptr<TextRecord>> size_zero_texts_queued_for_paint_time_;
-  base::Optional<LargestTextPaintManager> ltp_manager_;
+  Member<LargestTextPaintManager> ltp_manager_;
   Member<TextElementTiming> text_element_timing_;
 };
 
@@ -247,21 +244,21 @@ class CORE_EXPORT TextPaintTimingDetector final
     return records_manager_.UpdateCandidate();
   }
   void ReportLargestIgnoredText();
-  void ReportSwapTime(base::TimeTicks timestamp);
+  void ReportPresentationTime(base::TimeTicks timestamp);
   void Trace(Visitor*) const;
 
  private:
   friend class LargestContentfulPaintCalculatorTest;
 
-  void RegisterNotifySwapTime(
+  void RegisterNotifyPresentationTime(
       PaintTimingCallbackManager::LocalThreadCallback callback);
 
   TextRecordsManager records_manager_;
 
   Member<PaintTimingCallbackManager> callback_manager_;
 
-  // Make sure that at most one swap promise is ongoing.
-  bool awaiting_swap_promise_ = false;
+  // Make sure that at most one presentation promise is ongoing.
+  bool awaiting_presentation_promise_ = false;
 
   bool need_update_timing_at_frame_end_ = false;
 

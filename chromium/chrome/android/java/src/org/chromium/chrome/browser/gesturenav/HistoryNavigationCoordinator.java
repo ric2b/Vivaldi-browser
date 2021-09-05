@@ -19,9 +19,9 @@ import org.chromium.chrome.browser.ActivityTabProvider.ActivityTabTabObserver;
 import org.chromium.chrome.browser.SwipeRefreshHandler;
 import org.chromium.chrome.browser.compositor.CompositorViewHolder;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManagerImpl;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.PauseResumeWithNativeObserver;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.widget.InsetObserverView;
@@ -81,7 +81,6 @@ public class HistoryNavigationCoordinator
             Runnable onBackPressed, LayoutManagerImpl layoutManager,
             Consumer<Tab> showHistoryManager, String historyMenu,
             Supplier<BottomSheetController> bottomSheetControllerSupplier) {
-        if (!isFeatureFlagEnabled()) return null;
         HistoryNavigationCoordinator coordinator = new HistoryNavigationCoordinator();
         coordinator.init(window, lifecycleDispatcher, compositorViewHolder, tabProvider,
                 insetObserverView, backShouldCloseTab, onBackPressed, layoutManager,
@@ -202,10 +201,6 @@ public class HistoryNavigationCoordinator
         };
     }
 
-    private static boolean isFeatureFlagEnabled() {
-        return ChromeFeatureList.isEnabled(ChromeFeatureList.OVERSCROLL_HISTORY_NAVIGATION);
-    }
-
     /**
      * @return {@code} true if the feature is enabled.
      */
@@ -248,7 +243,7 @@ public class HistoryNavigationCoordinator
                         ? createDelegate(mTab, mBackShouldCloseTab, mOnBackPressed,
                                 mShowHistoryManager, mHistoryMenu, mBottomSheetControllerSupplier)
                         : HistoryNavigationDelegate.DEFAULT;
-                initNavigationHandler(delegate);
+                initNavigationHandler(delegate, webContents);
             }
         }
         if (mTab != null) SwipeRefreshHandler.from(mTab).setNavigationCoordinator(this);
@@ -259,7 +254,8 @@ public class HistoryNavigationCoordinator
      * @param delegate {@link HistoryNavigationDelegate} providing info and a factory method.
      * @param webContents A new WebContents object.
      */
-    private void initNavigationHandler(HistoryNavigationDelegate delegate) {
+    private void initNavigationHandler(
+            HistoryNavigationDelegate delegate, WebContents webContents) {
         if (mNavigationHandler == null) {
             PropertyModel model =
                     new PropertyModel.Builder(GestureNavigationProperties.ALL_KEYS).build();
@@ -275,9 +271,11 @@ public class HistoryNavigationCoordinator
             mNavigationHandler.setDelegate(delegate);
             mDelegate = delegate;
 
+            Profile profile = webContents != null ? Profile.fromWebContents(webContents)
+                                                  : Profile.getLastUsedRegularProfile();
             mNavigationSheet = NavigationSheet.isEnabled()
                     ? NavigationSheet.create(mNavigationLayout, mNavigationLayout.getContext(),
-                            mDelegate.getBottomSheetController())
+                            mDelegate.getBottomSheetController(), profile)
                     : NavigationSheet.DUMMY;
             mNavigationSheet.setDelegate(mDelegate.createSheetDelegate());
         }

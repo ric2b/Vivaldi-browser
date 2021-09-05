@@ -12,7 +12,7 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
-#include "base/util/type_safety/strong_alias.h"
+#include "base/types/strong_alias.h"
 #include "mojo/public/cpp/bindings/message.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/load_flags.h"
@@ -20,7 +20,6 @@
 #include "services/network/cors/cors_url_loader.h"
 #include "services/network/cors/preflight_controller.h"
 #include "services/network/crash_keys.h"
-#include "services/network/cross_origin_read_blocking_exception_for_plugin.h"
 #include "services/network/network_context.h"
 #include "services/network/network_service.h"
 #include "services/network/public/cpp/cors/cors.h"
@@ -44,7 +43,7 @@ namespace cors {
 
 namespace {
 
-using IsConsistent = ::util::StrongAlias<class IsConsistentTag, bool>;
+using IsConsistent = ::base::StrongAlias<class IsConsistentTag, bool>;
 
 // Record, for requests with associated Trust Tokens operations of operation
 // types requiring initiators to have the Trust Tokens Feature Policy feature
@@ -189,6 +188,7 @@ CorsURLLoaderFactory::CorsURLLoaderFactory(
       ignore_isolated_world_origin_(params->ignore_isolated_world_origin),
       trust_token_redemption_policy_(params->trust_token_redemption_policy),
       isolation_info_(params->isolation_info),
+      debug_tag_(params->debug_tag),
       origin_access_list_(origin_access_list) {
   DCHECK(context_);
   DCHECK(origin_access_list_);
@@ -404,7 +404,6 @@ bool CorsURLLoaderFactory::IsValidRequest(const ResourceRequest& request,
   switch (initiator_lock_compatibility) {
     case InitiatorLockCompatibility::kCompatibleLock:
     case InitiatorLockCompatibility::kBrowserProcess:
-    case InitiatorLockCompatibility::kExcludedCorbForPlugin:
     case InitiatorLockCompatibility::kAllowedRequestInitiatorForPlugin:
       break;
 
@@ -426,12 +425,19 @@ bool CorsURLLoaderFactory::IsValidRequest(const ResourceRequest& request,
 
     case InitiatorLockCompatibility::kIncorrectLock:
       // Requests from the renderer need to always specify a correct initiator.
-      NOTREACHED();
+      NOTREACHED() << "request_initiator_origin_lock_ = "
+                   << request_initiator_origin_lock_.value_or(
+                          url::Origin::Create(GURL("https://no-lock.com")))
+                   << "; request.request_initiator = "
+                   << request.request_initiator.value_or(url::Origin::Create(
+                          GURL("https://no-initiator.com")));
       if (base::FeatureList::IsEnabled(
               features::kRequestInitiatorSiteLockEnfocement)) {
         url::debug::ScopedOriginCrashKey initiator_lock_crash_key(
             debug::GetRequestInitiatorOriginLockCrashKey(),
             base::OptionalOrNullptr(request_initiator_origin_lock_));
+        base::debug::ScopedCrashKeyString debug_tag_crash_key(
+            debug::GetFactoryDebugTagCrashKey(), debug_tag_);
         mojo::ReportBadMessage(
             "CorsURLLoaderFactory: lock VS initiator mismatch");
         return false;
@@ -512,12 +518,6 @@ CorsURLLoaderFactory::VerifyRequestInitiatorLockWithPluginCheck(
 
   InitiatorLockCompatibility result = VerifyRequestInitiatorLock(
       request_initiator_origin_lock, request_initiator);
-
-  if (result == InitiatorLockCompatibility::kIncorrectLock &&
-      CrossOriginReadBlockingExceptionForPlugin::ShouldAllowForPlugin(
-          process_id)) {
-    result = InitiatorLockCompatibility::kExcludedCorbForPlugin;
-  }
 
   if (result == InitiatorLockCompatibility::kIncorrectLock &&
       request_initiator.has_value() &&

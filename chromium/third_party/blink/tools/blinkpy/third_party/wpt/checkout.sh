@@ -9,7 +9,7 @@ cd $DIR
 
 TARGET_DIR=$DIR/wpt
 REMOTE_REPO="https://github.com/web-platform-tests/wpt.git"
-WPT_HEAD=326f137f2c3d23cd72b7163707def783f0a1e15b
+WPT_HEAD=f333959abe07e6c4cfb388f4f7a03a0a109b38a5
 
 function clone {
   # Remove existing repo if already exists.
@@ -27,7 +27,7 @@ function reduce {
   # xargs on some platforms, so we remove those directories first.
   rm -fr html css
   # Remove all except white-listed.
-  comm -23 <(find . -type f | sort) <(cat ../WPTIncludeList | sort) | xargs -d '\n' -n 1 rm
+  comm -23 <(find . -type f -o -type l | sort) <(cat ../WPTIncludeList | sort) | xargs -d '\n' -n 1 rm
   find . -empty -type d -delete
 }
 

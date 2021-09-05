@@ -4,7 +4,7 @@
 
 import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {PDFMetrics, UserAction} from '../metrics.js';
+import {record, UserAction} from '../metrics.js';
 import {PAGE_SHADOW, Viewport} from '../viewport.js';
 
 /** @enum {string} */
@@ -173,18 +173,18 @@ Polymer({
       if (e.type === 'pointerup') {
         this.dispatchEvent(new CustomEvent('stroke-added'));
         if (e.pointerType === 'mouse') {
-          PDFMetrics.record(UserAction.ANNOTATE_STROKE_DEVICE_MOUSE);
+          record(UserAction.ANNOTATE_STROKE_DEVICE_MOUSE);
         } else if (e.pointerType === 'pen') {
-          PDFMetrics.record(UserAction.ANNOTATE_STROKE_DEVICE_PEN);
+          record(UserAction.ANNOTATE_STROKE_DEVICE_PEN);
         } else if (e.pointerType === 'touch') {
-          PDFMetrics.record(UserAction.ANNOTATE_STROKE_DEVICE_TOUCH);
+          record(UserAction.ANNOTATE_STROKE_DEVICE_TOUCH);
         }
         if (this.tool_.tool === 'eraser') {
-          PDFMetrics.record(UserAction.ANNOTATE_STROKE_TOOL_ERASER);
+          record(UserAction.ANNOTATE_STROKE_TOOL_ERASER);
         } else if (this.tool_.tool === 'pen') {
-          PDFMetrics.record(UserAction.ANNOTATE_STROKE_TOOL_PEN);
+          record(UserAction.ANNOTATE_STROKE_TOOL_PEN);
         } else if (this.tool_.tool === 'highlighter') {
-          PDFMetrics.record(UserAction.ANNOTATE_STROKE_TOOL_HIGHLIGHTER);
+          record(UserAction.ANNOTATE_STROKE_TOOL_HIGHLIGHTER);
         }
       }
     }
@@ -224,7 +224,7 @@ Polymer({
     this.ink_.addUndoStateListener(
         e => this.dispatchEvent(
             new CustomEvent('undo-state-changed', {detail: e})));
-    this.ink_.setPDF(data);
+    await this.ink_.setPDF(data);
     this.state_ = State.ACTIVE;
     this.viewportChanged();
     // Wait for the next task to avoid a race where Ink drops the background

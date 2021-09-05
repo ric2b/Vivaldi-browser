@@ -131,12 +131,12 @@ void AddResourceIcon(const gfx::ImageSkia* skia_image, void* data) {
 
 void ShowExtensionInstallDialogImpl(
     ExtensionInstallPromptShowParams* show_params,
-    const ExtensionInstallPrompt::DoneCallback& done_callback,
+    ExtensionInstallPrompt::DoneCallback done_callback,
     std::unique_ptr<ExtensionInstallPrompt::Prompt> prompt) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   ExtensionInstallDialogView* dialog = new ExtensionInstallDialogView(
       show_params->profile(), show_params->GetParentWebContents(),
-      done_callback, std::move(prompt));
+      std::move(done_callback), std::move(prompt));
   constrained_window::CreateBrowserModalDialogViews(
       dialog, show_params->GetParentWindow())
       ->Show();
@@ -193,11 +193,11 @@ void AddPermissions(ExtensionInstallPrompt::Prompt* prompt,
 ExtensionInstallDialogView::ExtensionInstallDialogView(
     Profile* profile,
     content::PageNavigator* navigator,
-    const ExtensionInstallPrompt::DoneCallback& done_callback,
+    ExtensionInstallPrompt::DoneCallback done_callback,
     std::unique_ptr<ExtensionInstallPrompt::Prompt> prompt)
     : profile_(profile),
       navigator_(navigator),
-      done_callback_(done_callback),
+      done_callback_(std::move(done_callback)),
       prompt_(std::move(prompt)),
       title_(prompt_->GetDialogTitle()),
       scroll_view_(nullptr),
@@ -207,7 +207,7 @@ ExtensionInstallDialogView::ExtensionInstallDialogView(
 
   extensions::ExtensionRegistry* extension_registry =
       extensions::ExtensionRegistry::Get(profile_);
-  extension_registry_observer_.Add(extension_registry);
+  extension_registry_observation_.Observe(extension_registry);
 
   int buttons = prompt_->GetDialogButtons();
   DCHECK(buttons & ui::DIALOG_BUTTON_CANCEL);
@@ -220,6 +220,10 @@ ExtensionInstallDialogView::ExtensionInstallDialogView(
   if (prompt_->requires_parent_permission())
     default_button = ui::DIALOG_BUTTON_OK;
 #endif
+
+  SetModalType(ui::MODAL_TYPE_WINDOW);
+  set_fixed_width(views::LayoutProvider::Get()->GetDistanceMetric(
+      views::DISTANCE_MODAL_DIALOG_PREFERRED_WIDTH));
 
   SetDefaultButton(default_button);
   SetButtons(buttons);
@@ -263,13 +267,6 @@ void ExtensionInstallDialogView::SetInstallButtonDelayForTesting(
 
 void ExtensionInstallDialogView::ResizeWidget() {
   GetWidget()->SetSize(GetWidget()->non_client_view()->GetPreferredSize());
-}
-
-gfx::Size ExtensionInstallDialogView::CalculatePreferredSize() const {
-  const int width = ChromeLayoutProvider::Get()->GetDistanceMetric(
-                        views::DISTANCE_MODAL_DIALOG_PREFERRED_WIDTH) -
-                    margins().width();
-  return gfx::Size(width, GetHeightForWidth(width));
 }
 
 void ExtensionInstallDialogView::VisibilityChanged(views::View* starting_from,
@@ -398,6 +395,10 @@ bool ExtensionInstallDialogView::IsDialogButtonEnabled(
   return true;
 }
 
+base::string16 ExtensionInstallDialogView::GetAccessibleWindowTitle() const {
+  return title_;
+}
+
 void ExtensionInstallDialogView::CloseDialog() {
   GetWidget()->Close();
 }
@@ -417,16 +418,9 @@ void ExtensionInstallDialogView::OnShutdown(
   extensions::ExtensionRegistry* extension_registry =
       extensions::ExtensionRegistry::Get(profile_);
   DCHECK_EQ(extension_registry, registry);
-  extension_registry_observer_.Remove(extension_registry);
+  DCHECK(extension_registry_observation_.IsObservingSource(extension_registry));
+  extension_registry_observation_.Reset();
   CloseDialog();
-}
-
-base::string16 ExtensionInstallDialogView::GetAccessibleWindowTitle() const {
-  return title_;
-}
-
-ui::ModalType ExtensionInstallDialogView::GetModalType() const {
-  return ui::MODAL_TYPE_WINDOW;
 }
 
 void ExtensionInstallDialogView::LinkClicked() {
@@ -549,5 +543,5 @@ void ExtensionInstallDialogView::UpdateInstallResultHistogram(bool accepted)
 // static
 ExtensionInstallPrompt::ShowDialogCallback
 ExtensionInstallPrompt::GetDefaultShowDialogCallback() {
-  return base::Bind(&ShowExtensionInstallDialogImpl);
+  return base::BindRepeating(&ShowExtensionInstallDialogImpl);
 }

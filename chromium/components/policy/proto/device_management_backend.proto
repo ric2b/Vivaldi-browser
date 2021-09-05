@@ -363,6 +363,7 @@ message PolicyFetchRequest {
   //   google/chromeos/user => ChromeSettingsProto
   //   google/chromeos/publicaccount => ChromeSettingsProto
   //   google/chrome/machine-level-user => ChromeSettingsProto
+  //   google/chrome/machine-level-user-ios => ChromeSettingsProto
   //   google/chrome/extension => ExternalPolicyData
   //   google/chrome/machine-level-extension => ExternalPolicyData
   //   google/chromeos/signinextension => ExternalPolicyData
@@ -1810,10 +1811,9 @@ message ChromeUserProfileInfo {
   // the profile. Empty when in incognito mode
   optional string name = 2;
 
-  // A boolean to indicates if it's a full report which contains all Profile
-  // details. Only activated Profile is able to upload full report, idle Profile
-  // only uploads its |id| and |name|.
-  optional bool is_full_report = 3;
+  // Indicates if the profile contains all details. Only active profiles can
+  // upload all needed details, idle profiles only upload |id| and |name|.
+  optional bool is_detail_available = 3;
 
   // Gaia account information if the Profile is signed in.
   optional ChromeSignedInUser chrome_signed_in_user = 4;
@@ -1923,6 +1923,10 @@ message ChromeDesktopReportRequest {
   // information. When list is empty or unset, the report should contains all
   // information.
   repeated PartialReportType partial_report_types = 10;
+  // Public key that can be used for attesting the machine.
+  optional string machine_attestation_key = 11;
+  // A string that represents the device model.
+  optional string device_model = 12;
 }
 
 // Report user level status on Chrome OS platform. Chrome OS equivalent of
@@ -2716,6 +2720,8 @@ message RegisterBrowserRequest {
   // Device identifier for helping identify non-Chrome OS devices.
   // TODO(crbug.com/1105938): This will also replace the machine_name field.
   optional BrowserDeviceIdentifier browser_device_identifier = 4;
+  // The device model, e.g., iPad6,11
+  optional string device_model = 5;
 }
 
 // Gets an enrollment token to a managed Google Play account for using it with
@@ -2846,8 +2852,7 @@ message TpmVersionInfo {
   optional string vendor_specific = 6;
 }
 
-// Contains status of the TPM unit.  These fields come from GetTpmStatusReply
-// proto message from Chrome OS side (dbus/cryptohome/rpc.proto).
+// Contains status of the TPM unit.
 message TpmStatusInfo {
   optional bool enabled = 1;
   optional bool owned = 2;
@@ -2937,6 +2942,7 @@ message ExtensionInstallReportLogEvent {
     CRX_FETCH_URL_EMPTY = 25;
     CRX_FETCH_URL_INVALID = 26;
     OVERRIDDEN_BY_SETTINGS = 27;
+    REPLACED_BY_SYSTEM_APP = 28;
   }
 
   //  Stage of extension installing process. See InstallStageTracker::Stage for
@@ -2960,7 +2966,7 @@ message ExtensionInstallReportLogEvent {
     USER_TYPE_REGULAR = 1;
     USER_TYPE_GUEST = 2;
     USER_TYPE_PUBLIC_ACCOUNT = 3;
-    USER_TYPE_SUPERVISED = 4;
+    USER_TYPE_SUPERVISED_DEPRECATED = 4;
     USER_TYPE_KIOSK_APP = 5;
     USER_TYPE_CHILD = 6;
     USER_TYPE_ARC_KIOSK_APP = 7;
@@ -3481,6 +3487,17 @@ enum HashingAlgorithm {
 
   SHA1 = 1;
   SHA256 = 2;
+
+  // Do not hash the input data - assume it is input to the signature algorithm.
+  // The client supports this starting with M-89.
+  //
+  // For SigningAlgorithm RSA_PKCS1_V1_5, the client will perform PKCS#1 v1.5
+  // padding on |data_to_sign|. |data_to_sign| is expected to already contain a
+  // PKCS#1 DigestInfo prefix - the client will not attempt to add such a
+  // prefix. Also |data_to_sign| must be shorter than (key_size-11) bytes. If no
+  // other key size was specified in the
+  // RequiredClientCertificateFor{User,Device} policy, 2048 bytes is assumed.
+  NO_HASH = 3;
 }
 
 // Signing Algorithm for Client Certificate Provisioning Flow.
@@ -3584,6 +3601,17 @@ message ClientCertificateProvisioningResponse {
     INCONSISTENT_DATA = 4;
     // The backend does not accept the public key sent by the client.
     BAD_PUBLIC_KEY = 5;
+    // The leaf CA certificate specified by the admin is invalid.
+    BAD_CA_CERTIFICATE_SPECIFIED = 6;
+    // The certificate received from the certificate enrollment agent cannot be
+    // parsed or is not issued by the leaf CA certificate specified by the
+    // admin.
+    BAD_CLIENT_CERTIFICATE_RECEIVED = 7;
+    // The CSR signature provided by the client is invalid.
+    INVALID_CSR_SIGNATURE = 8;
+    // A certificate signing request for the same public key has already been
+    // sent.
+    CSR_ALREADY_SENT = 9;
   }
 
   // If filled, the request can currently not be processed and the client

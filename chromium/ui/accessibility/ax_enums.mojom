@@ -252,7 +252,8 @@ enum Role {
   kNote,
   kPane,
   kParagraph,
-  kPdfActionableHighlight, // PDF specific highlight role.
+  kPdfActionableHighlight,
+  kPdfRoot,
   kPluginObject,
   kPopUpButton,
   kPortal,
@@ -274,7 +275,6 @@ enum Role {
   kSearchBox,
   kSection,
   kSlider,
-  kSliderThumb,
   kSpinButton,
   kSplitter,
   kStaticText,
@@ -302,7 +302,6 @@ enum Role {
   kTreeItem,
   kUnknown,
   kVideo,
-  kWebArea,
   kWebView,
   kWindow,
 };
@@ -1009,7 +1008,6 @@ enum AriaCurrentState {
   kPage,
   kStep,
   kLocation,
-  kUnclippedLocation,
   kDate,
   kTime,
 };

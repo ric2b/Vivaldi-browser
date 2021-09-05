@@ -14,13 +14,13 @@
 
 #include "base/check_op.h"
 #include "base/command_line.h"
-#include "base/containers/flat_set.h"
+#include "base/containers/contains.h"
+#include "base/containers/fixed_flat_set.h"
 #include "base/feature_list.h"
 #include "base/lazy_instance.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
 #include "base/notreached.h"
-#include "base/stl_util.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "net/base/mime_sniffer.h"
@@ -248,12 +248,14 @@ void BlockResponseHeaders(
 // disclosure of "application/zip" even though Chrome doesn't have built-in
 // support for this resource type.  And CORB also wants to protect
 // "application/pdf" even though Chrome happens to support this resource type.
-base::flat_set<std::string>& GetNeverSniffedMimeTypes() {
-  static base::NoDestructor<base::flat_set<std::string>> s_types{{
+const auto& GetNeverSniffedMimeTypes() {
+  static constexpr auto kNeverSniffedMimeTypes = base::MakeFixedFlatSet<
+      base::StringPiece>({
+      // clang-format off
       // The types below (zip, protobuf, etc.) are based on most commonly used
       // content types according to HTTP Archive - see:
       // https://github.com/whatwg/fetch/issues/860#issuecomment-457330454
-            "application/gzip",
+      "application/gzip",
       "application/x-gzip",
       "application/x-protobuf",
       "application/zip",
@@ -308,15 +310,16 @@ base::flat_set<std::string>& GetNeverSniffedMimeTypes() {
       "multipart/byteranges",
       // TODO(lukasza): https://crbug.com/802836#c11: Add
       // application/signed-exchange.
-  }};
+      // clang-format on
+  });
 
   // All items need to be lower-case, to support case-insensitive comparisons
   // later.
-  DCHECK(std::all_of(
-      s_types->begin(), s_types->end(),
-      [](const std::string& s) { return s == base::ToLowerASCII(s); }));
+  DCHECK(std::all_of(kNeverSniffedMimeTypes.begin(),
+                     kNeverSniffedMimeTypes.end(),
+                     [](const auto& s) { return s == base::ToLowerASCII(s); }));
 
-  return *s_types;
+  return kNeverSniffedMimeTypes;
 }
 
 }  // namespace
@@ -482,10 +485,6 @@ SniffingResult CrossOriginReadBlocking::SniffForJSON(base::StringPiece data) {
       // Whitespace is ignored (outside of string literals)
       if (c == ' ' || c == '\t' || c == '\r' || c == '\n')
         continue;
-    } else {
-      // Inside string literals, control characters should result in rejection.
-      if ((c >= 0 && c < 32) || c == 127)
-        return kNo;
     }
 
     switch (state) {
@@ -841,7 +840,8 @@ CrossOriginReadBlocking::ResponseAnalyzer::ShouldBlockBasedOnHeaders(
           request_url, request_url, request_initiator, response,
           kOverreachingRequestMode, request_initiator_origin_lock,
           network::mojom::RequestDestination::kEmpty,
-          CrossOriginEmbedderPolicy())) {
+          CrossOriginEmbedderPolicy(),
+          /*reporter=*/nullptr)) {
     // Ignore mime types and/or sniffing and have CORB block all responses with
     // COR*P* header.
     return kBlock;

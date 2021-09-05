@@ -21,6 +21,7 @@
 #include "base/task/thread_pool.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "content/browser/bad_message.h"
 #include "content/browser/webauth/authenticator_environment_impl.h"
 #include "content/browser/webauth/virtual_authenticator_request_delegate.h"
@@ -46,6 +47,7 @@
 #include "device/fido/fido_constants.h"
 #include "device/fido/fido_parsing_utils.h"
 #include "device/fido/fido_transport_protocol.h"
+#include "device/fido/filter.h"
 #include "device/fido/get_assertion_request_handler.h"
 #include "device/fido/make_credential_request_handler.h"
 #include "device/fido/public_key.h"
@@ -57,7 +59,6 @@
 #include "net/der/parse_values.h"
 #include "net/der/parser.h"
 #include "services/network/public/cpp/is_potentially_trustworthy.h"
-#include "third_party/blink/public/common/loader/network_utils.h"
 #include "url/url_constants.h"
 #include "url/url_util.h"
 
@@ -94,29 +95,6 @@ const char kU2fRegisterType[] = "navigator.id.finishEnrollment";
 
 namespace {
 
-// AttestationPromptResult enumerates events related to attestation prompts.
-// These values are recorded in an UMA histogram and so should not be
-// reassigned.
-enum class AttestationPromptResult {
-  // kQueried indicates that the embedder was queried in order to determine
-  // whether attestation information should be returned to the origin.
-  kQueried = 0,
-  // kTimeout indicates that a timeout occurred while awaiting the result of an
-  // attestation query.
-  kTimeout = 1,
-  // kAllowed indicates that the query to the embedder was resolved positively.
-  // (E.g. the user clicked to allow, or the embedded allowed immediately by
-  // policy.)
-  kAllowed = 2,
-  // kBlocked indicates that the query to the embedder was resolved negatively.
-  // (E.g. the user clicked to block, or closed the dialog.)
-  kBlocked = 3,
-  // kAbandoned indications that the user closed the tab or navigated away while
-  // the attestation prompt was showing.
-  kAbandoned = 4,
-  kMaxValue = kAbandoned,
-};
-
 // Validates whether the given origin is authorized to use the provided App
 // ID value, mostly according to the rules in
 // https://fidoalliance.org/specs/fido-u2f-v1.2-ps-20170411/fido-appid-and-facets-v1.2-ps-20170411.html#determining-if-a-caller-s-facetid-is-authorized-for-an-appid.
@@ -142,7 +120,8 @@ base::Optional<std::string> ProcessAppIdExtension(std::string appid,
   // Webauthn is only supported on secure origins and |ValidateEffectiveDomain|
   // has already checked this property of |origin| before this call. Thus this
   // step is moot.
-  DCHECK(blink::network_utils::IsOriginSecure(origin.GetURL()));
+  // TODO(https://crbug.com/1158302): Use IsOriginPotentiallyTrustworthy?
+  DCHECK(network::IsUrlPotentiallyTrustworthy(origin.GetURL()));
 
   // Step 2: "If the AppID is null or empty, the client must set the AppID to be
   // the FacetID of the caller, and the operation may proceed without additional
@@ -165,8 +144,6 @@ base::Optional<std::string> ProcessAppIdExtension(std::string appid,
   GURL appid_url = GURL(appid);
   if (!appid_url.is_valid() || appid_url.scheme() != url::kHttpsScheme ||
       appid_url.scheme_piece() != origin.scheme()) {
-    WebAuthRequestSecurityChecker::ReportSecurityCheckFailure(
-        RelyingPartySecurityCheckFailure::kAppIdExtensionInvalid);
     return base::nullopt;
   }
 
@@ -201,9 +178,6 @@ base::Optional<std::string> ProcessAppIdExtension(std::string appid,
     return appid;
   }
 
-  WebAuthRequestSecurityChecker::ReportSecurityCheckFailure(
-      RelyingPartySecurityCheckFailure::kAppIdExtensionDomainMismatch);
-
   return base::nullopt;
 }
 
@@ -222,7 +196,7 @@ device::CtapGetAssertionRequest CreateCtapGetAssertionRequest(
     const std::string& client_data_json,
     const blink::mojom::PublicKeyCredentialRequestOptionsPtr& options,
     base::Optional<std::string> app_id,
-    bool is_incognito) {
+    bool is_off_the_record) {
   device::CtapGetAssertionRequest request_parameter(options->relying_party_id,
                                                     client_data_json);
 
@@ -246,7 +220,7 @@ device::CtapGetAssertionRequest CreateCtapGetAssertionRequest(
   if (options->large_blob_write) {
     request_parameter.large_blob_key = true;
   }
-  request_parameter.is_incognito_mode = is_incognito;
+  request_parameter.is_off_the_record_context = is_off_the_record;
   return request_parameter;
 }
 
@@ -551,7 +525,7 @@ void IsUserVerifyingPlatformAuthenticatorAvailableImpl(
   std::move(callback).Run(IsUVPlatformAuthenticatorAvailable(
       discovery_factory->win_webauthn_api()));
   return;
-#elif defined(OS_CHROMEOS)
+#elif BUILDFLAG(IS_CHROMEOS_ASH)
   if (browser_context->IsOffTheRecord()) {
     std::move(callback).Run(false);
     return;
@@ -563,7 +537,6 @@ void IsUserVerifyingPlatformAuthenticatorAvailableImpl(
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE, {base::TaskPriority::USER_BLOCKING, base::MayBlock()},
       base::BindOnce(&IsUVPlatformAuthenticatorAvailable), std::move(callback));
-  return;
 #else
   std::move(callback).Run(false);
   return;
@@ -651,12 +624,12 @@ std::unique_ptr<device::FidoDiscoveryFactory> MakeDiscoveryFactory(
   }
 #endif  // defined(OS_WIN)
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   if (base::FeatureList::IsEnabled(device::kWebAuthCrosPlatformAuthenticator)) {
     discovery_factory->set_generate_request_id_callback(
         request_delegate->GetGenerateRequestIdCallback(render_frame_host));
   }
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   return discovery_factory;
 }
@@ -856,6 +829,24 @@ void AuthenticatorCommon::MakeCredential(
   options->relying_party.id = std::move(*rp_id);
   request_delegate_->SetRelyingPartyId(relying_party_id_);
 
+  device::fido_filter::MaybeInitialize();
+  switch (device::fido_filter::Evaluate(
+      device::fido_filter::Operation::MAKE_CREDENTIAL, relying_party_id_,
+      /*device=*/base::nullopt,
+      /*id=*/base::nullopt)) {
+    case device::fido_filter::Action::ALLOW:
+      break;
+    case device::fido_filter::Action::NO_ATTESTATION:
+      // This will be handled by the request handler.
+      break;
+    case device::fido_filter::Action::BLOCK:
+      InvokeCallbackAndCleanup(
+          std::move(callback),
+          blink::mojom::AuthenticatorStatus::NOT_ALLOWED_ERROR, nullptr,
+          Focus::kDontCheck);
+      return;
+  }
+
   base::Optional<std::string> appid_exclude;
   if (options->appid_exclude) {
     appid_exclude =
@@ -992,10 +983,6 @@ void AuthenticatorCommon::MakeCredential(
   if (origin_is_crypto_token_extension || disable_ui_)
     request_delegate_->DisableUI();
 
-  UMA_HISTOGRAM_COUNTS_100(
-      "WebAuthentication.MakeCredentialExcludeCredentialsCount",
-      options->exclude_credentials.size());
-
   ctap_make_credential_request_ = device::CtapMakeCredentialRequest(
       client_data_json_, options->relying_party, options->user,
       device::PublicKeyCredentialParams(options->public_key_parameters));
@@ -1016,7 +1003,7 @@ void AuthenticatorCommon::MakeCredential(
   }
   make_credential_options_->large_blob_support = options->large_blob_enable;
   ctap_make_credential_request_->app_id = std::move(appid_exclude);
-  ctap_make_credential_request_->is_incognito_mode =
+  ctap_make_credential_request_->is_off_the_record_context =
       browser_context()->IsOffTheRecord();
   // On dual protocol CTAP2/U2F devices, force credential creation over U2F.
   ctap_make_credential_request_->is_u2f_only = origin_is_crypto_token_extension;
@@ -1128,6 +1115,17 @@ void AuthenticatorCommon::GetAssertion(
                 client_data::kGetType, caller_origin_.Serialize(),
                 options->challenge, is_cross_origin);
 
+  device::fido_filter::MaybeInitialize();
+  if (device::fido_filter::Evaluate(
+          device::fido_filter::Operation::GET_ASSERTION, relying_party_id_,
+          /*device=*/base::nullopt,
+          /*id=*/base::nullopt) == device::fido_filter::Action::BLOCK) {
+    InvokeCallbackAndCleanup(
+        std::move(callback),
+        blink::mojom::AuthenticatorStatus::NOT_ALLOWED_ERROR);
+    return;
+  }
+
   // Cryptotoken requests should be proxied without UI.
   if (origin_is_crypto_token_extension || disable_ui_)
     request_delegate_->DisableUI();
@@ -1171,10 +1169,6 @@ void AuthenticatorCommon::GetAssertion(
     }
     requested_extensions_.insert(RequestExtension::kLargeBlobWrite);
   }
-
-  UMA_HISTOGRAM_COUNTS_100(
-      "WebAuthentication.CredentialRequestAllowCredentialsCount",
-      options->allow_credentials.size());
 
   DCHECK(get_assertion_response_callback_.is_null());
   get_assertion_response_callback_ = std::move(callback);
@@ -1409,13 +1403,18 @@ void AuthenticatorCommon::OnRegisterResponse(
       DCHECK(response_data.has_value());
       DCHECK(authenticator);
 
-      auto transport_used = authenticator->AuthenticatorTransport();
+      const base::Optional<device::FidoTransportProtocol> transport_used =
+          authenticator->AuthenticatorTransport();
+      bool is_transport_used_internal = false;
+      bool is_transport_used_cable = false;
       if (transport_used) {
         request_delegate_->UpdateLastTransportUsed(*transport_used);
+        is_transport_used_internal =
+            (*transport_used == device::FidoTransportProtocol::kInternal);
+        is_transport_used_cable =
+            (*transport_used ==
+             device::FidoTransportProtocol::kCloudAssistedBluetoothLowEnergy);
       }
-      bool is_transport_used_internal =
-          transport_used &&
-          *transport_used == device::FidoTransportProtocol::kInternal;
 
       const auto attestation =
           ctap_make_credential_request_->attestation_preference;
@@ -1426,7 +1425,7 @@ void AuthenticatorCommon::OnRegisterResponse(
 
       // cryptotoken checks the attestation blocklist itself.
       if (!origin_is_crypto_token_extension &&
-          device::DoesMatchWebAuthAttestationBlockedDomains(caller_origin_) &&
+          response_data->attestation_should_be_filtered &&
           !request_delegate_->ShouldPermitIndividualAttestation(
               relying_party_id_)) {
         attestation_erasure =
@@ -1455,10 +1454,13 @@ void AuthenticatorCommon::OnRegisterResponse(
         // not approved by the authenticator, then any attestation is stripped.
         attestation_erasure =
             AttestationErasureOption::kEraseAttestationAndAaguid;
+      } else if (is_transport_used_cable) {
+        // Attestation is not returned when caBLEv2 is used, but the AAGUID is
+        // maintained.
+        attestation_erasure =
+            AttestationErasureOption::kEraseAttestationButIncludeAaguid;
       } else if (attestation !=
                  device::AttestationConveyancePreference::kNone) {
-        UMA_HISTOGRAM_ENUMERATION("WebAuthentication.AttestationPromptResult",
-                                  AttestationPromptResult::kQueried);
         awaiting_attestation_response_ = true;
         request_delegate_->ShouldReturnAttestation(
             relying_party_id_, authenticator,
@@ -1508,8 +1510,6 @@ void AuthenticatorCommon::OnRegisterResponseAttestationDecided(
 
   AttestationErasureOption attestation_erasure;
   if (!attestation_permitted) {
-    UMA_HISTOGRAM_ENUMERATION("WebAuthentication.AttestationPromptResult",
-                              AttestationPromptResult::kBlocked);
     if (is_transport_used_internal) {
       // For internal (platform) authenticators, we do not erase the
       // AAGUID from authenticatorData even if the user declines to
@@ -1521,8 +1521,6 @@ void AuthenticatorCommon::OnRegisterResponseAttestationDecided(
           AttestationErasureOption::kEraseAttestationAndAaguid;
     }
   } else {
-    UMA_HISTOGRAM_ENUMERATION("WebAuthentication.AttestationPromptResult",
-                              AttestationPromptResult::kAllowed);
     attestation_erasure = AttestationErasureOption::kIncludeAttestation;
   }
 
@@ -1704,8 +1702,6 @@ void AuthenticatorCommon::SignalFailureToRequestDelegate(
 void AuthenticatorCommon::OnTimeout() {
   DCHECK(request_delegate_);
   if (awaiting_attestation_response_) {
-    UMA_HISTOGRAM_ENUMERATION("WebAuthentication.AttestationPromptResult",
-                              AttestationPromptResult::kTimeout);
     awaiting_attestation_response_ = false;
   }
 
@@ -1758,8 +1754,6 @@ void AuthenticatorCommon::InvokeCallbackAndCleanup(
 
 void AuthenticatorCommon::Cleanup() {
   if (awaiting_attestation_response_) {
-    UMA_HISTOGRAM_ENUMERATION("WebAuthentication.AttestationPromptResult",
-                              AttestationPromptResult::kAbandoned);
     awaiting_attestation_response_ = false;
   }
 

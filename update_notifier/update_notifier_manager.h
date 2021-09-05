@@ -14,6 +14,7 @@
 #include "base/strings/string16.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/synchronization/waitable_event_watcher.h"
+#include "base/win/scoped_handle.h"
 
 #include "update_notifier/thirdparty/winsparkle/src/appcast.h"
 #include "update_notifier/thirdparty/winsparkle/src/error.h"
@@ -36,6 +37,7 @@ class UpdateNotifierManager : public winsparkle::UIDelegate {
   bool RunNotifier();
 
   void StartUpdateCheck(bool with_ui);
+  static bool IsSilentDownload();
   static void OnNotificationAcceptance();
 
  private:
@@ -47,15 +49,17 @@ class UpdateNotifierManager : public winsparkle::UIDelegate {
   // See comments for download_job_id_.
   using JobId = unsigned;
 
+  void InitEvents();
+  bool SendCheckUpdatesEvent();
   void OnEventTriggered(base::WaitableEvent* waitable_event);
 
   bool IsNotifierAlreadyRunning();
-  bool IsNotifierEnabled();
 
   void CheckForUpdatesPeriodically(bool force_check);
   void OnUpdateCheckResult(std::unique_ptr<winsparkle::Appcast> appcast,
                            winsparkle::Error error);
   void StartDownload();
+  void EnsureOldDownloadsDeleted();
   void OnUpdateDownloadReport(JobId job_id, winsparkle::DownloadReport report);
   void OnUpdateDownloadResult(
       JobId job_id,
@@ -70,16 +74,16 @@ class UpdateNotifierManager : public winsparkle::UIDelegate {
   void WinsparkleLaunchInstaller() override;
   void WinsparkleOnUIClose() override;
 
-  base::FilePath exe_path_;
+  // The directory containing the notifier executable. Normally it is deduced
+  // from the path of the current executable, but it can be altered for
+  // debugging.
+  base::FilePath exe_dir_;
 
-  HANDLE already_exists_ = NULL;
+  base::win::ScopedHandle uniqueness_check_event_;
 
   std::unique_ptr<UpdateNotifierWindow> update_notifier_window_;
   scoped_refptr<base::SingleThreadTaskRunner> main_thread_runner_;
   base::RunLoop run_loop_;
-
-  std::unique_ptr<base::WaitableEvent> global_restart_event_;
-  base::WaitableEventWatcher global_restart_event_watch_;
 
   std::unique_ptr<base::WaitableEvent> global_quit_event_;
   base::WaitableEventWatcher global_quit_event_watch_;

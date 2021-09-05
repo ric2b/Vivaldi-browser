@@ -21,6 +21,7 @@
 #include "chrome/browser/extensions/api/developer_private/inspectable_views_finder.h"
 #include "chrome/browser/extensions/api/extension_action/extension_action_api.h"
 #include "chrome/browser/extensions/error_console/error_console.h"
+#include "chrome/browser/extensions/extension_allowlist.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/scripting_permissions_modifier.h"
@@ -31,6 +32,7 @@
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
+#include "chrome/grit/google_chrome_strings.h"
 #include "content/public/browser/render_frame_host.h"
 #include "extensions/browser/extension_error.h"
 #include "extensions/browser/extension_icon_placeholder.h"
@@ -505,6 +507,11 @@ void ExtensionInfoGenerator::CreateExtensionInfoHelper(
       blocklist_text = IDS_EXTENSIONS_BLOCKLISTED_POTENTIALLY_UNWANTED;
       break;
     default:
+      if (extension_system_->extension_service()
+              ->allowlist()
+              ->ShouldDisplayWarning(extension.id())) {
+        blocklist_text = IDS_EXTENSIONS_BLOCKLISTED_NOT_ALLOWLISTED;
+      }
       break;
   }
   if (blocklist_text != -1) {
@@ -512,6 +519,8 @@ void ExtensionInfoGenerator::CreateExtensionInfoHelper(
         new std::string(l10n_util::GetStringUTF8(blocklist_text)));
   }
 
+  ExtensionManagement* extension_management =
+      ExtensionManagementFactory::GetForBrowserContext(browser_context_);
   Profile* profile = Profile::FromBrowserContext(browser_context_);
 
   // ControlledInfo.
@@ -627,12 +636,12 @@ void ExtensionInfoGenerator::CreateExtensionInfoHelper(
 
   // Location.
   if (extension.location() == Manifest::INTERNAL &&
-      ManifestURL::UpdatesFromGallery(&extension)) {
+      extension_management->UpdatesFromWebstore(extension)) {
     info->location = developer::LOCATION_FROM_STORE;
   } else if (Manifest::IsUnpackedLocation(extension.location())) {
     info->location = developer::LOCATION_UNPACKED;
   } else if (Manifest::IsExternalLocation(extension.location()) &&
-             ManifestURL::UpdatesFromGallery(&extension)) {
+             extension_management->UpdatesFromWebstore(extension)) {
     info->location = developer::LOCATION_THIRD_PARTY;
   } else {
     info->location = developer::LOCATION_UNKNOWN;
@@ -710,7 +719,8 @@ void ExtensionInfoGenerator::CreateExtensionInfoHelper(
 
   info->type = GetExtensionType(extension.manifest()->type());
 
-  info->update_url = ManifestURL::GetUpdateURL(&extension).spec();
+  info->update_url =
+      extension_management->GetEffectiveUpdateURL(extension).spec();
 
   info->user_may_modify =
       management_policy->UserMayModifySettings(&extension, nullptr);

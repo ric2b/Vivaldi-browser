@@ -197,7 +197,6 @@ void MojoDecryptorService::OnDecryptDone(DecryptCallback callback,
   DVLOG_IF(3, status == Status::kSuccess) << __func__;
 
   if (!buffer) {
-    DCHECK_NE(status, Status::kSuccess);
     std::move(callback).Run(status, nullptr);
     return;
   }
@@ -235,8 +234,9 @@ void MojoDecryptorService::OnAudioRead(DecryptAndDecodeAudioCallback callback,
   }
 
   decryptor_->DecryptAndDecodeAudio(
-      std::move(buffer), base::Bind(&MojoDecryptorService::OnAudioDecoded,
-                                    weak_this_, base::Passed(&callback)));
+      std::move(buffer),
+      base::BindRepeating(&MojoDecryptorService::OnAudioDecoded, weak_this_,
+                          base::Passed(&callback)));
 }
 
 void MojoDecryptorService::OnVideoRead(DecryptAndDecodeVideoCallback callback,
@@ -247,8 +247,9 @@ void MojoDecryptorService::OnVideoRead(DecryptAndDecodeVideoCallback callback,
   }
 
   decryptor_->DecryptAndDecodeVideo(
-      std::move(buffer), base::Bind(&MojoDecryptorService::OnVideoDecoded,
-                                    weak_this_, base::Passed(&callback)));
+      std::move(buffer),
+      base::BindRepeating(&MojoDecryptorService::OnVideoDecoded, weak_this_,
+                          base::Passed(&callback)));
 }
 
 void MojoDecryptorService::OnReaderFlushDone(StreamType stream_type) {

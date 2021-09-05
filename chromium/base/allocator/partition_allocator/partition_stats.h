@@ -26,9 +26,9 @@ struct ThreadCacheStats {
   // Cache fill details:
   uint64_t cache_fill_count;
   uint64_t cache_fill_hits;
-  uint64_t cache_fill_misses;
-  uint64_t cache_fill_bucket_full;
-  uint64_t cache_fill_too_large;
+  uint64_t cache_fill_misses;  // Object too large.
+
+  uint64_t batch_fill_count;  // Number of central allocator requests.
 
   // Memory cost:
   uint64_t bucket_total_memory;

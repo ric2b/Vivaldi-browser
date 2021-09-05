@@ -221,7 +221,12 @@ bool NativeWindowOcclusionTrackerWin::IsWindowVisibleAndFullyOpaque(
   if (IsIconic(hwnd))
     return false;
 
-  LONG ex_styles = GetWindowLong(hwnd, GWL_EXSTYLE);
+  LONG styles = ::GetWindowLong(hwnd, GWL_STYLE);
+  // Ignore popup windows since they're transient.
+  if (styles & WS_POPUP)
+    return false;
+
+  LONG ex_styles = ::GetWindowLong(hwnd, GWL_EXSTYLE);
   // Filter out "transparent" windows, windows where the mouse clicks fall
   // through them.
   if (ex_styles & WS_EX_TRANSPARENT)
@@ -336,8 +341,19 @@ void NativeWindowOcclusionTrackerWin::OnDisplayStateChanged(bool display_on) {
   display_on_ = display_on;
   // Display changing to on will cause a foreground window change,
   // which will trigger an occlusion calculation on its own.
-  if (!display_on_)
+  if (!display_on_) {
     MarkNonIconicWindowsOccluded();
+  } else {
+    // NOTE(andre@vivaldi.com) : Update occlusionstate for all non-minimized
+    // windows. See VB-75959. This was introduced with:
+    // https://source.chromium.org/chromium/chromium/src/+/d2852ba3a19e0074a8c5372acff50e1757b1fdcc 
+    for (const auto& root_window_hwnd_pair : hwnd_root_window_map_) {
+      root_window_hwnd_pair.second->GetHost()->SetNativeWindowOcclusionState(
+          IsIconic(root_window_hwnd_pair.first)
+              ? Window::OcclusionState::HIDDEN
+              : Window::OcclusionState::VISIBLE);
+    }
+  }
 }
 
 void NativeWindowOcclusionTrackerWin::MarkNonIconicWindowsOccluded() {
@@ -418,6 +434,8 @@ void NativeWindowOcclusionTrackerWin::WindowOcclusionCalculator::
     DisableOcclusionTrackingForWindow(HWND hwnd) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   root_window_hwnds_occlusion_state_.erase(hwnd);
+  if (moving_window_ == hwnd)
+    moving_window_ = 0;
   if (root_window_hwnds_occlusion_state_.empty()) {
     UnregisterEventHooks();
     if (occlusion_update_timer_.IsRunning())
@@ -694,6 +712,10 @@ bool NativeWindowOcclusionTrackerWin::WindowOcclusionCalculator::
     return true;
   }
 
+  // Ignore moving windows when deciding if windows under it are occluded.
+  if (hwnd == moving_window_)
+    return true;
+
   // Check if |hwnd| is a root window; if so, we're done figuring out
   // if it's occluded because we've seen all the windows "over" it.
   auto it = root_window_hwnds_occlusion_state_.find(hwnd);
@@ -739,6 +761,10 @@ void NativeWindowOcclusionTrackerWin::WindowOcclusionCalculator::
   if (id_object != OBJID_WINDOW)
     return;
 
+  // We generally ignore events for poup windows, except for when the taskbar
+  // is hidden, in which case we recalculate occlusion.
+  bool calculate_occlusion = !(::GetWindowLong(hwnd, GWL_STYLE) & WS_POPUP);
+
   // Detect if either the alt tab view or the task list thumbnail is being
   // shown. If so, mark all non-hidden windows as occluded, and remember that
   // we're in the showing_thumbnails state. This lasts until we get told that
@@ -767,26 +793,40 @@ void NativeWindowOcclusionTrackerWin::WindowOcclusionCalculator::
     if (hwnd_class_name == "MultitaskingViewFrame" ||
         hwnd_class_name == "TaskListThumbnailWnd") {
       showing_thumbnails_ = false;
-      // Let occlusion calculation fix occlusion state.
+      // Let occlusion calculation fix occlusion state, even though hwnd might
+      // be a popup window.
+      calculate_occlusion = true;
+    }
+  }
+  // Don't continually calculate occlusion while a window is moving (unless it's
+  // a root window), but instead once at the beginning and once at the end.
+  // Remember the window being moved so if it's a root window, we can ignore
+  // it when deciding if windows under it are occluded.
+  else if (event == EVENT_SYSTEM_MOVESIZESTART) {
+    moving_window_ = hwnd;
+  } else if (event == EVENT_SYSTEM_MOVESIZEEND) {
+    moving_window_ = 0;
+  } else if (moving_window_ != 0) {
+    if (event == EVENT_OBJECT_LOCATIONCHANGE ||
+        event == EVENT_OBJECT_STATECHANGE) {
+      // Ignore move events if it's not a root window that's being moved. If it
+      // is a root window, we want to calculate occlusion to support tab
+      // dragging to windows that were occluded when the drag was started but
+      // are no longer occluded.
+      if (root_window_hwnds_occlusion_state_.find(hwnd) ==
+          root_window_hwnds_occlusion_state_.end()) {
+        return;
+      }
+    } else {
+      // If we get an event that isn't a location/state change, then we probably
+      // missed the movesizeend notification, or got events out of order. In
+      // that case, we want to go back to normal occlusion calculation.
+      moving_window_ = 0;
     }
   }
 
-  // Don't continually calculate occlusion while a window is moving, but rather
-  // once at the beginning and once at the end.
-  if (event == EVENT_SYSTEM_MOVESIZESTART) {
-    window_is_moving_ = true;
-  } else if (event == EVENT_SYSTEM_MOVESIZEEND) {
-    window_is_moving_ = false;
-  } else if (window_is_moving_) {
-    if (event == EVENT_OBJECT_LOCATIONCHANGE ||
-        event == EVENT_OBJECT_STATECHANGE) {
-      return;
-    }
-    // If we get an event that isn't a location/state change, then we probably
-    // missed the movesizeend notification, or got events out of order. In
-    // that case, we want to go back to calculating occlusion.
-    window_is_moving_ = false;
-  }
+  if (!calculate_occlusion)
+    return;
 
   // ProcessEventHookCallback is called from the task_runner's PeekMessage
   // call, on the task runner's thread, but before the task_tracker thread sets

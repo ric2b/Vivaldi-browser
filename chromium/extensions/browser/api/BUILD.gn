@@ -39,6 +39,117 @@ source_set("api") {
     "//base",
     "//content/public/browser",
     "//content/public/common",
+    "//extensions/common",
+    "//ipc",
+  ]
+
+  # TODO(crbug/1158984): remove these deps. The core API system should not
+  # include specific API implementations; these should instead be moved to
+  # api_implementations below (and only included in the final Chrome target).
+  public_deps += [
+    "//extensions/browser/api/activity_log",
+    "//extensions/browser/api/alarms",
+    "//extensions/browser/api/app_current_window_internal",
+    "//extensions/browser/api/app_runtime",
+    "//extensions/browser/api/app_window",
+    "//extensions/browser/api/audio",
+    "//extensions/browser/api/automation_internal",
+    "//extensions/browser/api/bluetooth",
+    "//extensions/browser/api/bluetooth_low_energy",
+    "//extensions/browser/api/bluetooth_socket",
+    "//extensions/browser/api/cast_channel",
+    "//extensions/browser/api/declarative",
+    "//extensions/browser/api/declarative_content",
+    "//extensions/browser/api/declarative_net_request",
+    "//extensions/browser/api/declarative_webrequest",
+    "//extensions/browser/api/display_source",
+    "//extensions/browser/api/dns",
+    "//extensions/browser/api/feedback_private",
+    "//extensions/browser/api/file_handlers",
+    "//extensions/browser/api/file_system",
+    "//extensions/browser/api/hid",
+    "//extensions/browser/api/idle",
+    "//extensions/browser/api/management",
+    "//extensions/browser/api/messaging",
+    "//extensions/browser/api/metrics_private",
+    "//extensions/browser/api/mime_handler_private",
+    "//extensions/browser/api/networking_private",
+    "//extensions/browser/api/power",
+    "//extensions/browser/api/printer_provider",
+    "//extensions/browser/api/printer_provider_internal",
+    "//extensions/browser/api/runtime",
+    "//extensions/browser/api/serial",
+    "//extensions/browser/api/socket",
+    "//extensions/browser/api/sockets_tcp",
+    "//extensions/browser/api/sockets_tcp_server",
+    "//extensions/browser/api/sockets_udp",
+    "//extensions/browser/api/system_cpu",
+    "//extensions/browser/api/system_display",
+    "//extensions/browser/api/system_info",
+    "//extensions/browser/api/system_memory",
+    "//extensions/browser/api/system_network",
+    "//extensions/browser/api/system_storage",
+    "//extensions/browser/api/test",
+    "//extensions/browser/api/usb",
+    "//extensions/browser/api/virtual_keyboard_private",
+    "//extensions/browser/api/web_request",
+  ]
+
+  deps = [
+    "//base:i18n",
+    "//build:chromeos_buildflags",
+    "//components/keyed_service/content:content",
+    "//extensions/browser:browser_sources",
+    "//extensions/common/api",
+    "//extensions/strings",
+    "//services/device/public/cpp/hid",
+    "//services/device/public/mojom",
+  ]
+
+  # TODO(michaelpg): Move these deps to the individual APIs that require them.
+  deps += [
+    "//components/onc",
+    "//components/storage_monitor",
+    "//device/bluetooth",
+  ]
+
+  if (is_chromeos_ash) {
+    sources += [
+      "lock_screen_data/data_item.cc",
+      "lock_screen_data/data_item.h",
+      "lock_screen_data/lock_screen_data_api.cc",
+      "lock_screen_data/lock_screen_data_api.h",
+      "lock_screen_data/lock_screen_item_storage.cc",
+      "lock_screen_data/lock_screen_item_storage.h",
+      "lock_screen_data/lock_screen_value_store_migrator.h",
+      "lock_screen_data/lock_screen_value_store_migrator_impl.cc",
+      "lock_screen_data/lock_screen_value_store_migrator_impl.h",
+      "lock_screen_data/operation_result.h",
+      "media_perception_private/conversion_utils.cc",
+      "media_perception_private/conversion_utils.h",
+      "media_perception_private/media_perception_api_delegate.h",
+      "media_perception_private/media_perception_api_manager.cc",
+      "media_perception_private/media_perception_api_manager.h",
+      "media_perception_private/media_perception_private_api.cc",
+      "media_perception_private/media_perception_private_api.h",
+    ]
+
+    deps += [
+      "//chromeos",
+      "//chromeos/dbus",
+      "//chromeos/dbus/media_analytics",
+      "//chromeos/dbus/media_analytics:media_perception_proto",
+      "//chromeos/dbus/permission_broker",
+      "//chromeos/dbus/upstart",
+      "//chromeos/login/login_state",
+      "//chromeos/services/media_perception/public/mojom",
+      "//chromeos/services/media_perception/public/mojom:mojom_js_data_deps",
+    ]
+  }
+}
+
+group("api_implementations") {
+  public_deps = [
     "//extensions/browser/api/activity_log",
     "//extensions/browser/api/alarms",
     "//extensions/browser/api/app_current_window_internal",
@@ -86,69 +197,16 @@ source_set("api") {
     "//extensions/browser/api/usb",
     "//extensions/browser/api/virtual_keyboard_private",
     "//extensions/browser/api/web_request",
-    "//extensions/common",
-    "//ipc",
-  ]
-
-  deps = [
-    "//base:i18n",
-    "//build:chromeos_buildflags",
-    "//components/keyed_service/content:content",
-    "//extensions/browser:browser_sources",
-    "//extensions/common/api",
-    "//extensions/strings",
-    "//services/device/public/cpp/hid",
-    "//services/device/public/mojom",
-  ]
-
-  # TODO(michaelpg): Move these deps to the individual APIs that require them.
-  deps += [
-    "//components/onc",
-    "//components/storage_monitor",
-    "//device/bluetooth",
   ]
 
   if (is_chromeos_ash) {
-    sources += [
-      "lock_screen_data/data_item.cc",
-      "lock_screen_data/data_item.h",
-      "lock_screen_data/lock_screen_data_api.cc",
-      "lock_screen_data/lock_screen_data_api.h",
-      "lock_screen_data/lock_screen_item_storage.cc",
-      "lock_screen_data/lock_screen_item_storage.h",
-      "lock_screen_data/lock_screen_value_store_migrator.h",
-      "lock_screen_data/lock_screen_value_store_migrator_impl.cc",
-      "lock_screen_data/lock_screen_value_store_migrator_impl.h",
-      "lock_screen_data/operation_result.h",
-      "media_perception_private/conversion_utils.cc",
-      "media_perception_private/conversion_utils.h",
-      "media_perception_private/media_perception_api_delegate.h",
-      "media_perception_private/media_perception_api_manager.cc",
-      "media_perception_private/media_perception_api_manager.h",
-      "media_perception_private/media_perception_private_api.cc",
-      "media_perception_private/media_perception_private_api.h",
-    ]
-
     public_deps += [
       "//extensions/browser/api/cec_private",
       "//extensions/browser/api/clipboard",
       "//extensions/browser/api/diagnostics",
-      "//extensions/browser/api/system_power_source",
       "//extensions/browser/api/virtual_keyboard",
       "//extensions/browser/api/vpn_provider",
       "//extensions/browser/api/webcam_private",
-    ]
-
-    deps += [
-      "//chromeos",
-      "//chromeos/dbus",
-      "//chromeos/dbus/media_analytics",
-      "//chromeos/dbus/media_analytics:media_perception_proto",
-      "//chromeos/dbus/permission_broker",
-      "//chromeos/dbus/upstart",
-      "//chromeos/login/login_state",
-      "//chromeos/services/media_perception/public/mojom",
-      "//chromeos/services/media_perception/public/mojom:mojom_js_data_deps",
     ]
   }
 }

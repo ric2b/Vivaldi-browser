@@ -42,6 +42,28 @@
 
 namespace blink {
 
+namespace {
+
+bool IsAudioBufferDetached(AudioBuffer* buffer) {
+  bool is_buffer_detached = false;
+  for (unsigned channel = 0; channel < buffer->numberOfChannels(); ++channel) {
+    if (buffer->getChannelData(channel)->buffer()->IsDetached()) {
+      is_buffer_detached = true;
+      break;
+    }
+  }
+
+  return is_buffer_detached;
+}
+
+bool BufferTopologyMatches(AudioBuffer* buffer_1, AudioBuffer* buffer_2) {
+  return (buffer_1->numberOfChannels() == buffer_2->numberOfChannels()) &&
+         (buffer_1->length() == buffer_2->length()) &&
+         (buffer_1->sampleRate() == buffer_2->sampleRate());
+}
+
+}  // namespace
+
 ScriptProcessorHandler::ScriptProcessorHandler(
     AudioNode& node,
     float sample_rate,
@@ -110,6 +132,14 @@ void ScriptProcessorHandler::Initialize() {
 }
 
 void ScriptProcessorHandler::Process(uint32_t frames_to_process) {
+  // The main thread might be accessing the shared buffers. If so, silience
+  // the output and return.
+  MutexTryLocker try_locker(process_event_lock_);
+  if (!try_locker.Locked()) {
+    Output(0).Bus()->Zero();
+    return;
+  }
+
   // Discussion about inputs and outputs:
   // As in other AudioNodes, ScriptProcessorNode uses an AudioBus for its input
   // and output (see inputBus and outputBus below).  Additionally, there is a
@@ -181,47 +211,26 @@ void ScriptProcessorHandler::Process(uint32_t frames_to_process) {
   buffer_read_write_index_ =
       (buffer_read_write_index_ + frames_to_process) % BufferSize();
 
-  // m_bufferReadWriteIndex will wrap back around to 0 when the current input
-  // and output buffers are full.
-  // When this happens, fire an event and swap buffers.
+  // Fire an event and swap buffers when |buffer_read_write_index_| wraps back
+  // around to 0. It means the current input and output buffers are full.
   if (!buffer_read_write_index_) {
-    // Avoid building up requests on the main thread to fire process events when
-    // they're not being handled.  This could be a problem if the main thread is
-    // very busy doing other things and is being held up handling previous
-    // requests.  The audio thread can't block on this lock, so we call
-    // tryLock() instead.
-    MutexTryLocker try_locker(process_event_lock_);
-    if (!try_locker.Locked()) {
-      // We're late in handling the previous request. The main thread must be
-      // very busy.  The best we can do is clear out the buffer ourself here.
-      shared_output_buffer->Zero();
+    if (Context()->HasRealtimeConstraint()) {
+      // For a realtime context, fire an event and do not wait.
+      PostCrossThreadTask(
+          *task_runner_, FROM_HERE,
+          CrossThreadBindOnce(&ScriptProcessorHandler::FireProcessEvent,
+                              AsWeakPtr(), double_buffer_index_));
     } else {
-      // With the realtime context, execute the script code asynchronously
-      // and do not wait.
-      if (Context()->HasRealtimeConstraint()) {
-        // Fire the event on the main thread with the appropriate buffer
-        // index.
-        PostCrossThreadTask(
-            *task_runner_, FROM_HERE,
-            CrossThreadBindOnce(&ScriptProcessorHandler::FireProcessEvent,
-                                AsWeakPtr(), double_buffer_index_));
-      } else {
-        // If this node is in the offline audio context, use the
-        // waitable event to synchronize to the offline rendering thread.
-        std::unique_ptr<base::WaitableEvent> waitable_event =
-            std::make_unique<base::WaitableEvent>();
-
-        PostCrossThreadTask(
-            *task_runner_, FROM_HERE,
-            CrossThreadBindOnce(
-                &ScriptProcessorHandler::FireProcessEventForOfflineAudioContext,
-                AsWeakPtr(), double_buffer_index_,
-                CrossThreadUnretained(waitable_event.get())));
-
-        // Okay to block the offline audio rendering thread since it is
-        // not the actual audio device thread.
-        waitable_event->Wait();
-      }
+      // For an offline context, wait until the script execution is finished.
+      std::unique_ptr<base::WaitableEvent> waitable_event =
+          std::make_unique<base::WaitableEvent>();
+      PostCrossThreadTask(
+          *task_runner_, FROM_HERE,
+          CrossThreadBindOnce(
+              &ScriptProcessorHandler::FireProcessEventForOfflineAudioContext,
+              AsWeakPtr(), double_buffer_index_,
+              CrossThreadUnretained(waitable_event.get())));
+      waitable_event->Wait();
     }
 
     SwapBuffers();
@@ -348,6 +357,12 @@ ScriptProcessorNode::ScriptProcessorNode(BaseAudioContext& context,
     input_buffers_.push_back(input_buffer);
     output_buffers_.push_back(output_buffer);
   }
+
+  external_input_buffer_ = AudioBuffer::Create(
+      number_of_input_channels, buffer_size, sample_rate);
+  external_output_buffer_ = AudioBuffer::Create(
+      number_of_output_channels, buffer_size, sample_rate);
+
   SetHandler(ScriptProcessorHandler::Create(
       *this, sample_rate, buffer_size, number_of_input_channels,
       number_of_output_channels, input_buffers_, output_buffers_));
@@ -440,19 +455,15 @@ ScriptProcessorNode* ScriptProcessorNode::Create(
     case 0:
       // Choose an appropriate size.  For an AudioContext, we need to
       // choose an appropriate size based on the callback buffer size.
-      // For OfflineAudioContext, there's no callback buffer size, so
-      // just use the minimum valid buffer size.
       if (context.HasRealtimeConstraint()) {
-        // TODO(crbug.com/854229): Due to the incompatible constructor between
-        // AudioDestinationNode and RealtimeAudioDestinationNode, casting
-        // directly from |destination()| is impossible. This is a temporary
-        // workaround until the refactoring is completed.
         RealtimeAudioDestinationHandler& destination_handler =
             static_cast<RealtimeAudioDestinationHandler&>(
                 context.destination()->GetAudioDestinationHandler());
         buffer_size =
             ChooseBufferSize(destination_handler.GetCallbackBufferSize());
       } else {
+        // For OfflineAudioContext, there's no callback buffer size, so
+        // just use the minimum valid buffer size.
         buffer_size = 256;
       }
       break;
@@ -489,11 +500,62 @@ uint32_t ScriptProcessorNode::bufferSize() const {
 
 void ScriptProcessorNode::DispatchEvent(double playback_time,
                                         uint32_t double_buffer_index) {
-  AudioBuffer* input_buffer = input_buffers_.at(double_buffer_index).Get();
-  AudioBuffer* output_buffer = output_buffers_.at(double_buffer_index).Get();
-  DCHECK(output_buffer);
+  DCHECK(IsMainThread());
+
+  AudioBuffer* backing_input_buffer =
+      input_buffers_.at(double_buffer_index).Get();
+
+  // The backing buffer can be nullptr, when the number of input channels is 0.
+  if (backing_input_buffer) {
+    // Also the author code might have transferred |external_input_buffer| to
+    // other threads or replaced it with a different AudioBuffer object. Then
+    // re-create a new buffer instance.
+    if (IsAudioBufferDetached(external_input_buffer_) ||
+        !BufferTopologyMatches(backing_input_buffer,
+                               external_input_buffer_)) {
+      external_input_buffer_ = AudioBuffer::Create(
+          backing_input_buffer->numberOfChannels(),
+          backing_input_buffer->length(),
+          backing_input_buffer->sampleRate());
+    }
+
+    for (unsigned channel = 0;
+         channel < backing_input_buffer->numberOfChannels(); ++channel) {
+      const float* source = static_cast<float*>(
+          backing_input_buffer->getChannelData(channel)->buffer()->Data());
+      float* destination = static_cast<float*>(
+          external_input_buffer_->getChannelData(channel)->buffer()->Data());
+      memcpy(destination, source,
+             backing_input_buffer->length() * sizeof(float));
+    }
+  }
+
   AudioNode::DispatchEvent(*AudioProcessingEvent::Create(
-      input_buffer, output_buffer, playback_time));
+      external_input_buffer_, external_output_buffer_, playback_time));
+
+  AudioBuffer* backing_output_buffer =
+      output_buffers_.at(double_buffer_index).Get();
+
+  if (backing_output_buffer) {
+    if (IsAudioBufferDetached(external_output_buffer_) ||
+        !BufferTopologyMatches(backing_output_buffer,
+                               external_output_buffer_)) {
+      external_output_buffer_ = AudioBuffer::Create(
+          backing_output_buffer->numberOfChannels(),
+          backing_output_buffer->length(),
+          backing_output_buffer->sampleRate());
+    }
+
+    for (unsigned channel = 0;
+         channel < backing_output_buffer->numberOfChannels(); ++channel) {
+      const float* source = static_cast<float*>(
+          external_output_buffer_->getChannelData(channel)->buffer()->Data());
+      float* destination = static_cast<float*>(
+          backing_output_buffer->getChannelData(channel)->buffer()->Data());
+      memcpy(destination, source,
+             backing_output_buffer->length() * sizeof(float));
+    }
+  }
 }
 
 bool ScriptProcessorNode::HasPendingActivity() const {
@@ -512,6 +574,8 @@ bool ScriptProcessorNode::HasPendingActivity() const {
 void ScriptProcessorNode::Trace(Visitor* visitor) const {
   visitor->Trace(input_buffers_);
   visitor->Trace(output_buffers_);
+  visitor->Trace(external_input_buffer_);
+  visitor->Trace(external_output_buffer_);
   AudioNode::Trace(visitor);
 }
 

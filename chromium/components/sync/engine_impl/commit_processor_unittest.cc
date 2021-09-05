@@ -95,15 +95,12 @@ TEST_F(CommitProcessorTest, ShouldGatherNigoriOnlyContribution) {
       .WillOnce(ReturnContributionWithEntries(/*num_entries=*/1));
 
   // No user types should be gathered and combined with NIGORI.
-  EXPECT_CALL(sharing_message_contributor_, GetContribution(_)).Times(0);
-  EXPECT_CALL(bookmark_contributor_, GetContribution(_)).Times(0);
-  EXPECT_CALL(preference_contributor_, GetContribution(_)).Times(0);
+  EXPECT_CALL(sharing_message_contributor_, GetContribution).Times(0);
+  EXPECT_CALL(bookmark_contributor_, GetContribution).Times(0);
+  EXPECT_CALL(preference_contributor_, GetContribution).Times(0);
 
-  EXPECT_THAT(
-      processor_.GatherCommitContributions(/*max_entries=*/kMaxEntries,
-                                           /*cookie_jar_mismatch=*/false,
-                                           /*cookie_jar_empty=*/false),
-      UnorderedElementsAre(Pair(NIGORI, HasNumEntries(1))));
+  EXPECT_THAT(processor_.GatherCommitContributions(/*max_entries=*/kMaxEntries),
+              UnorderedElementsAre(Pair(NIGORI, HasNumEntries(1))));
 }
 
 TEST_F(CommitProcessorTest, ShouldGatherPriorityUserTypesOnlyContribution) {
@@ -113,15 +110,12 @@ TEST_F(CommitProcessorTest, ShouldGatherPriorityUserTypesOnlyContribution) {
       .WillOnce(ReturnContributionWithEntries(kNumReturnedEntries));
 
   // Non-priority user types shouldn't even be gathered.
-  EXPECT_CALL(bookmark_contributor_, GetContribution(_)).Times(0);
-  EXPECT_CALL(preference_contributor_, GetContribution(_)).Times(0);
+  EXPECT_CALL(bookmark_contributor_, GetContribution).Times(0);
+  EXPECT_CALL(preference_contributor_, GetContribution).Times(0);
 
-  EXPECT_THAT(
-      processor_.GatherCommitContributions(/*max_entries=*/kMaxEntries,
-                                           /*cookie_jar_mismatch=*/false,
-                                           /*cookie_jar_empty=*/false),
-      UnorderedElementsAre(
-          Pair(SHARING_MESSAGE, HasNumEntries(kNumReturnedEntries))));
+  EXPECT_THAT(processor_.GatherCommitContributions(/*max_entries=*/kMaxEntries),
+              UnorderedElementsAre(
+                  Pair(SHARING_MESSAGE, HasNumEntries(kNumReturnedEntries))));
 }
 
 TEST_F(CommitProcessorTest, ShouldGatherRegularUserTypes) {
@@ -139,14 +133,11 @@ TEST_F(CommitProcessorTest, ShouldGatherRegularUserTypes) {
   // Preferences should also be gathered, but no entries are produced in this
   // test. The precise argument depends on the iteration order so it's not
   // verified in this test.
-  EXPECT_CALL(preference_contributor_, GetContribution(_));
+  EXPECT_CALL(preference_contributor_, GetContribution);
 
-  EXPECT_THAT(
-      processor_.GatherCommitContributions(/*max_entries=*/kMaxEntries,
-                                           /*cookie_jar_mismatch=*/false,
-                                           /*cookie_jar_empty=*/false),
-      UnorderedElementsAre(
-          Pair(BOOKMARKS, HasNumEntries(kNumReturnedBookmarks))));
+  EXPECT_THAT(processor_.GatherCommitContributions(/*max_entries=*/kMaxEntries),
+              UnorderedElementsAre(
+                  Pair(BOOKMARKS, HasNumEntries(kNumReturnedBookmarks))));
 }
 
 TEST_F(CommitProcessorTest, ShouldGatherMultipleRegularUserTypes) {
@@ -155,18 +146,15 @@ TEST_F(CommitProcessorTest, ShouldGatherMultipleRegularUserTypes) {
 
   // Return |kNumReturnedBookmarks| bookmarks and |kNumReturnedPreferences|
   // preferences.
-  EXPECT_CALL(bookmark_contributor_, GetContribution(_))
+  EXPECT_CALL(bookmark_contributor_, GetContribution)
       .WillOnce(ReturnContributionWithEntries(kNumReturnedBookmarks));
-  EXPECT_CALL(preference_contributor_, GetContribution(_))
+  EXPECT_CALL(preference_contributor_, GetContribution)
       .WillOnce(ReturnContributionWithEntries(kNumReturnedPreferences));
 
-  EXPECT_THAT(
-      processor_.GatherCommitContributions(/*max_entries=*/kMaxEntries,
-                                           /*cookie_jar_mismatch=*/false,
-                                           /*cookie_jar_empty=*/false),
-      UnorderedElementsAre(
-          Pair(BOOKMARKS, HasNumEntries(kNumReturnedBookmarks)),
-          Pair(PREFERENCES, HasNumEntries(kNumReturnedPreferences))));
+  EXPECT_THAT(processor_.GatherCommitContributions(/*max_entries=*/kMaxEntries),
+              UnorderedElementsAre(
+                  Pair(BOOKMARKS, HasNumEntries(kNumReturnedBookmarks)),
+                  Pair(PREFERENCES, HasNumEntries(kNumReturnedPreferences))));
 }
 
 TEST_F(CommitProcessorTest, ShouldContinueGatheringPriorityContributions) {
@@ -177,39 +165,32 @@ TEST_F(CommitProcessorTest, ShouldContinueGatheringPriorityContributions) {
       .WillOnce(ReturnContributionWithEntries(kMaxEntries));
 
   // Non-priority user types shouldn't even be gathered.
-  EXPECT_CALL(bookmark_contributor_, GetContribution(_)).Times(0);
-  EXPECT_CALL(preference_contributor_, GetContribution(_)).Times(0);
+  EXPECT_CALL(bookmark_contributor_, GetContribution).Times(0);
+  EXPECT_CALL(preference_contributor_, GetContribution).Times(0);
 
   EXPECT_THAT(
-      processor_.GatherCommitContributions(/*max_entries=*/kMaxEntries,
-                                           /*cookie_jar_mismatch=*/false,
-                                           /*cookie_jar_empty=*/false),
+      processor_.GatherCommitContributions(/*max_entries=*/kMaxEntries),
       UnorderedElementsAre(Pair(SHARING_MESSAGE, HasNumEntries(kMaxEntries))));
 
   // Now, return only |kNumReturnedSharingMessages| bookmarks (all that's left).
-  EXPECT_CALL(sharing_message_contributor_, GetContribution(_))
+  EXPECT_CALL(sharing_message_contributor_, GetContribution)
       .WillOnce(ReturnContributionWithEntries(kNumReturnedSharingMessages));
 
   EXPECT_THAT(
-      processor_.GatherCommitContributions(/*max_entries=*/kMaxEntries,
-                                           /*cookie_jar_mismatch=*/false,
-                                           /*cookie_jar_empty=*/false),
+      processor_.GatherCommitContributions(/*max_entries=*/kMaxEntries),
       UnorderedElementsAre(
           Pair(SHARING_MESSAGE, HasNumEntries(kNumReturnedSharingMessages))));
 
   // There are no contributions left, do not return any further and do not even
   // call the contributor.
-  EXPECT_CALL(sharing_message_contributor_, GetContribution(_)).Times(0);
+  EXPECT_CALL(sharing_message_contributor_, GetContribution).Times(0);
   // At the same time, the other contributors should get called now (don't
   // return anything in this test).
-  EXPECT_CALL(bookmark_contributor_, GetContribution(_)).Times(1);
-  EXPECT_CALL(preference_contributor_, GetContribution(_)).Times(1);
+  EXPECT_CALL(bookmark_contributor_, GetContribution).Times(1);
+  EXPECT_CALL(preference_contributor_, GetContribution).Times(1);
 
-  EXPECT_THAT(
-      processor_.GatherCommitContributions(/*max_entries=*/kMaxEntries,
-                                           /*cookie_jar_mismatch=*/false,
-                                           /*cookie_jar_empty=*/false),
-      IsEmpty());
+  EXPECT_THAT(processor_.GatherCommitContributions(/*max_entries=*/kMaxEntries),
+              IsEmpty());
 }
 
 TEST_F(CommitProcessorTest, ShouldContinueGatheringRegularContributions) {
@@ -220,31 +201,23 @@ TEST_F(CommitProcessorTest, ShouldContinueGatheringRegularContributions) {
       .WillOnce(ReturnContributionWithEntries(kMaxEntries));
 
   EXPECT_THAT(
-      processor_.GatherCommitContributions(/*max_entries=*/kMaxEntries,
-                                           /*cookie_jar_mismatch=*/false,
-                                           /*cookie_jar_empty=*/false),
+      processor_.GatherCommitContributions(/*max_entries=*/kMaxEntries),
       UnorderedElementsAre(Pair(BOOKMARKS, HasNumEntries(kMaxEntries))));
 
   // Now, return only |kNumReturnedBookmarks| bookmarks (all that's left).
-  EXPECT_CALL(bookmark_contributor_, GetContribution(_))
+  EXPECT_CALL(bookmark_contributor_, GetContribution)
       .WillOnce(ReturnContributionWithEntries(kNumReturnedBookmarks));
 
-  EXPECT_THAT(
-      processor_.GatherCommitContributions(/*max_entries=*/kMaxEntries,
-                                           /*cookie_jar_mismatch=*/false,
-                                           /*cookie_jar_empty=*/false),
-      UnorderedElementsAre(
-          Pair(BOOKMARKS, HasNumEntries(kNumReturnedBookmarks))));
+  EXPECT_THAT(processor_.GatherCommitContributions(/*max_entries=*/kMaxEntries),
+              UnorderedElementsAre(
+                  Pair(BOOKMARKS, HasNumEntries(kNumReturnedBookmarks))));
 
   // There are no contributions left, do not return any further and do not even
   // call the contributor.
-  EXPECT_CALL(bookmark_contributor_, GetContribution(_)).Times(0);
+  EXPECT_CALL(bookmark_contributor_, GetContribution).Times(0);
 
-  EXPECT_THAT(
-      processor_.GatherCommitContributions(/*max_entries=*/kMaxEntries,
-                                           /*cookie_jar_mismatch=*/false,
-                                           /*cookie_jar_empty=*/false),
-      IsEmpty());
+  EXPECT_THAT(processor_.GatherCommitContributions(/*max_entries=*/kMaxEntries),
+              IsEmpty());
 }
 
 TEST_F(CommitProcessorTest,
@@ -254,21 +227,16 @@ TEST_F(CommitProcessorTest,
       .WillOnce(ReturnContributionWithEntries(kMaxEntries));
 
   EXPECT_THAT(
-      processor_.GatherCommitContributions(/*max_entries=*/kMaxEntries,
-                                           /*cookie_jar_mismatch=*/false,
-                                           /*cookie_jar_empty=*/false),
+      processor_.GatherCommitContributions(/*max_entries=*/kMaxEntries),
       UnorderedElementsAre(Pair(BOOKMARKS, HasNumEntries(kMaxEntries))));
 
   // There are no contributions left, do not return any further.
   // GetContribution() should however get called since |processor| cannot tell
   // that there are no left.
-  EXPECT_CALL(bookmark_contributor_, GetContribution(_));
+  EXPECT_CALL(bookmark_contributor_, GetContribution);
 
-  EXPECT_THAT(
-      processor_.GatherCommitContributions(/*max_entries=*/kMaxEntries,
-                                           /*cookie_jar_mismatch=*/false,
-                                           /*cookie_jar_empty=*/false),
-      IsEmpty());
+  EXPECT_THAT(processor_.GatherCommitContributions(/*max_entries=*/kMaxEntries),
+              IsEmpty());
 }
 
 TEST_F(CommitProcessorTest, ShouldGatherFirstPriorityThenOtherUserTypes) {
@@ -280,16 +248,14 @@ TEST_F(CommitProcessorTest, ShouldGatherFirstPriorityThenOtherUserTypes) {
   EXPECT_CALL(sharing_message_contributor_, GetContribution(kMaxEntries))
       .WillOnce(ReturnContributionWithEntries(kNumReturnedSharingMessages))
       .RetiresOnSaturation();
-  EXPECT_CALL(bookmark_contributor_, GetContribution(_))
+  EXPECT_CALL(bookmark_contributor_, GetContribution)
       .WillOnce(ReturnContributionWithEntries(kNumReturnedBookmarks));
-  EXPECT_CALL(preference_contributor_, GetContribution(_))
+  EXPECT_CALL(preference_contributor_, GetContribution)
       .WillOnce(ReturnContributionWithEntries(kNumReturnedPreferences));
 
   // The first call should return only the priority types.
   EXPECT_THAT(
-      processor_.GatherCommitContributions(/*max_entries=*/kMaxEntries,
-                                           /*cookie_jar_mismatch=*/false,
-                                           /*cookie_jar_empty=*/false),
+      processor_.GatherCommitContributions(/*max_entries=*/kMaxEntries),
       UnorderedElementsAre(
           Pair(SHARING_MESSAGE, HasNumEntries(kNumReturnedSharingMessages))));
 
@@ -299,13 +265,10 @@ TEST_F(CommitProcessorTest, ShouldGatherFirstPriorityThenOtherUserTypes) {
       .Times(0);
 
   // The second call should return all the other types.
-  EXPECT_THAT(
-      processor_.GatherCommitContributions(/*max_entries=*/kMaxEntries,
-                                           /*cookie_jar_mismatch=*/false,
-                                           /*cookie_jar_empty=*/false),
-      UnorderedElementsAre(
-          Pair(BOOKMARKS, HasNumEntries(kNumReturnedBookmarks)),
-          Pair(PREFERENCES, HasNumEntries(kNumReturnedPreferences))));
+  EXPECT_THAT(processor_.GatherCommitContributions(/*max_entries=*/kMaxEntries),
+              UnorderedElementsAre(
+                  Pair(BOOKMARKS, HasNumEntries(kNumReturnedBookmarks)),
+                  Pair(PREFERENCES, HasNumEntries(kNumReturnedPreferences))));
 }
 
 }  // namespace

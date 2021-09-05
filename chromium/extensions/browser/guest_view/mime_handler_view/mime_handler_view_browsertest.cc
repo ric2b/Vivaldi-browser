@@ -38,6 +38,7 @@
 #include "extensions/browser/guest_view/mime_handler_view/mime_handler_view_guest.h"
 #include "extensions/browser/guest_view/mime_handler_view/test_mime_handler_view_guest.h"
 #include "extensions/browser/process_manager.h"
+#include "extensions/common/constants.h"
 #include "extensions/common/guest_view/extensions_guest_view_messages.h"
 #include "extensions/common/mojom/guest_view.mojom.h"
 #include "extensions/test/result_catcher.h"
@@ -57,9 +58,6 @@ using guest_view::GuestViewManager;
 using guest_view::GuestViewManagerDelegate;
 using guest_view::TestGuestViewManager;
 using guest_view::TestGuestViewManagerFactory;
-
-// The test extension id is set by the key value in the manifest.
-const char kExtensionId[] = "oickdpebdnfbgkcaoklfcdhjniefkcji";
 
 class MimeHandlerViewTest : public extensions::ExtensionApiTest {
  public:
@@ -117,7 +115,8 @@ class MimeHandlerViewTest : public extensions::ExtensionApiTest {
     if (!extension)
       return nullptr;
 
-    CHECK_EQ(std::string(kExtensionId), extension->id());
+    EXPECT_EQ(std::string(extension_misc::kMimeHandlerPrivateTestExtensionId),
+              extension->id());
 
     return extension;
   }
@@ -125,7 +124,7 @@ class MimeHandlerViewTest : public extensions::ExtensionApiTest {
   void RunTestWithUrl(const GURL& url) {
     // Use the testing subclass of MimeHandlerViewGuest.
     GetGuestViewManager()->RegisterTestGuestViewType<MimeHandlerViewGuest>(
-        base::Bind(&TestMimeHandlerViewGuest::Create));
+        base::BindRepeating(&TestMimeHandlerViewGuest::Create));
 
     const extensions::Extension* extension = LoadTestExtension();
     ASSERT_TRUE(extension);
@@ -583,7 +582,7 @@ IN_PROC_BROWSER_TEST_F(MimeHandlerViewTest, AdoptNodeInOnLoadDoesNotCrash) {
 IN_PROC_BROWSER_TEST_F(MimeHandlerViewTest, DoNotLoadInSandboxedFrame) {
   // Use the testing subclass of MimeHandlerViewGuest.
   GetGuestViewManager()->RegisterTestGuestViewType<MimeHandlerViewGuest>(
-      base::Bind(&TestMimeHandlerViewGuest::Create));
+      base::BindRepeating(&TestMimeHandlerViewGuest::Create));
 
   const extensions::Extension* extension = LoadTestExtension();
   ASSERT_TRUE(extension);

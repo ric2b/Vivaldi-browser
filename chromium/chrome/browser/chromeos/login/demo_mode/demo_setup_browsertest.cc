@@ -67,10 +67,6 @@ namespace chromeos {
 
 namespace {
 
-constexpr char kIsConfirmationDialogHiddenQuery[] =
-    "!document.querySelector('.cr-dialog-container') || "
-    "!!document.querySelector('.cr-dialog-container').hidden";
-
 constexpr char kDefaultNetworkServicePath[] = "/service/eth1";
 constexpr char kDefaultNetworkName[] = "eth1";
 
@@ -127,7 +123,7 @@ std::string ScreenToContentQuery(OobeScreenId screen) {
   if (screen == EulaView::kScreenId)
     return "$('oobe-eula-md')";
   if (screen == ArcTermsOfServiceScreenView::kScreenId)
-    return "$('arc-tos-root')";
+    return "$('arc-tos')";
   if (screen == DemoSetupScreenView::kScreenId)
     return "$('demo-setup')";
   NOTREACHED() << "This OOBE screen is not a part of Demo Mode setup flow";
@@ -152,7 +148,8 @@ class DemoSetupTestBase : public OobeBaseTest {
     update_engine_client()->set_update_check_result(
         UpdateEngineClient::UPDATE_RESULT_FAILED);
     DisableConfirmationDialogAnimations();
-    branded_build_override_ = WizardController::ForceBrandedBuildForTesting();
+    branded_build_override_ =
+        WizardController::ForceBrandedBuildForTesting(true);
     DisconnectAllNetworks();
   }
 
@@ -164,8 +161,14 @@ class DemoSetupTestBase : public OobeBaseTest {
     return test::OobeJS().GetBool(query);
   }
 
-  bool IsConfirmationDialogShown() {
-    return !test::OobeJS().GetBool(kIsConfirmationDialogHiddenQuery);
+  void IsConfirmationDialogShown() {
+    test::OobeJS().ExpectAttributeEQ(
+        "open", {"connect", "demoModeConfirmationDialog"}, true);
+  }
+
+  void IsConfirmationDialogHidden() {
+    test::OobeJS().ExpectAttributeEQ(
+        "open", {"connect", "demoModeConfirmationDialog"}, false);
   }
 
   // TODO(michaelpg): Replace this with IsScreenDialogElementVisible, which is
@@ -258,11 +261,11 @@ class DemoSetupTestBase : public OobeBaseTest {
   }
 
   void ClickOkOnConfirmationDialog() {
-    test::ExecuteOobeJS("document.querySelector('.cr-dialog-ok').click();");
+    test::OobeJS().TapOnPath({"connect", "okButton"});
   }
 
   void ClickCancelOnConfirmationDialog() {
-    test::ExecuteOobeJS("document.querySelector('.cr-dialog-cancel').click();");
+    test::OobeJS().TapOnPath({"connect", "cancelButton"});
   }
 
   // Simulates `button` click on a specified OOBE `screen`. Can be used for
@@ -482,48 +485,68 @@ class DemoSetupArcSupportedTest : public DemoSetupTestBase {
 
 IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest,
                        ShowConfirmationDialogAndProceed) {
-  EXPECT_FALSE(IsConfirmationDialogShown());
+  IsConfirmationDialogHidden();
 
   InvokeDemoModeWithAccelerator();
-  EXPECT_TRUE(IsConfirmationDialogShown());
+  IsConfirmationDialogShown();
 
   ClickOkOnConfirmationDialog();
 
-  WaitForJsCondition(kIsConfirmationDialogHiddenQuery);
   EXPECT_TRUE(IsScreenShown(DemoPreferencesScreenView::kScreenId));
 }
 
+// TODO(crbug.com/1150349): Flaky on ChromeOS ASAN.
+#if defined(ADDRESS_SANITIZER)
+#define MAYBE_ShowConfirmationDialogAndCancel \
+  DISABLED_ShowConfirmationDialogAndCancel
+#else
+#define MAYBE_ShowConfirmationDialogAndCancel ShowConfirmationDialogAndCancel
+#endif
 IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest,
-                       ShowConfirmationDialogAndCancel) {
-  EXPECT_FALSE(IsConfirmationDialogShown());
+                       MAYBE_ShowConfirmationDialogAndCancel) {
+  IsConfirmationDialogHidden();
 
   InvokeDemoModeWithAccelerator();
-  EXPECT_TRUE(IsConfirmationDialogShown());
+  IsConfirmationDialogShown();
 
   ClickCancelOnConfirmationDialog();
+  IsConfirmationDialogHidden();
 
-  WaitForJsCondition(kIsConfirmationDialogHiddenQuery);
   EXPECT_FALSE(IsScreenShown(DemoPreferencesScreenView::kScreenId));
 }
 
-IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest, InvokeWithTaps) {
+// TODO(crbug.com/1150349): Flaky on ChromeOS ASAN.
+#if defined(ADDRESS_SANITIZER)
+#define MAYBE_InvokeWithTaps DISABLED_InvokeWithTaps
+#else
+#define MAYBE_InvokeWithTaps InvokeWithTaps
+#endif
+IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest, MAYBE_InvokeWithTaps) {
   // Use fake time to avoid flakiness.
   SetFakeTimeForMultiTapDetector(base::Time::UnixEpoch());
-  EXPECT_FALSE(IsConfirmationDialogShown());
+  IsConfirmationDialogHidden();
 
   MultiTapOobeContainer(10);
-  EXPECT_TRUE(IsConfirmationDialogShown());
+  IsConfirmationDialogShown();
 }
 
+// TODO(crbug.com/1150349): Flaky on ChromeOS ASAN.
+#if defined(ADDRESS_SANITIZER)
+#define MAYBE_DoNotInvokeWithNonConsecutiveTaps \
+  DISABLED_DoNotInvokeWithNonConsecutiveTaps
+#else
+#define MAYBE_DoNotInvokeWithNonConsecutiveTaps \
+  DoNotInvokeWithNonConsecutiveTaps
+#endif
 IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest,
-                       DoNotInvokeWithNonConsecutiveTaps) {
+                       MAYBE_DoNotInvokeWithNonConsecutiveTaps) {
   // Use fake time to avoid flakiness.
   const base::Time kFakeTime = base::Time::UnixEpoch();
   SetFakeTimeForMultiTapDetector(kFakeTime);
-  EXPECT_FALSE(IsConfirmationDialogShown());
+  IsConfirmationDialogHidden();
 
   MultiTapOobeContainer(5);
-  EXPECT_FALSE(IsConfirmationDialogShown());
+  IsConfirmationDialogHidden();
 
   // Advance time to make interval in between taps longer than expected by
   // multi-tap gesture detector.
@@ -531,10 +554,17 @@ IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest,
                                  base::TimeDelta::FromMilliseconds(500));
 
   MultiTapOobeContainer(5);
-  EXPECT_FALSE(IsConfirmationDialogShown());
+  IsConfirmationDialogHidden();
 }
 
-IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest, OnlineSetupFlowSuccess) {
+// TODO(crbug.com/1150349): Flaky on ChromeOS ASAN.
+#if defined(ADDRESS_SANITIZER)
+#define MAYBE_OnlineSetupFlowSuccess DISABLED_OnlineSetupFlowSuccess
+#else
+#define MAYBE_OnlineSetupFlowSuccess OnlineSetupFlowSuccess
+#endif
+IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest,
+                       MAYBE_OnlineSetupFlowSuccess) {
   // Simulate successful online setup.
   enrollment_helper_.ExpectEnrollmentMode(
       policy::EnrollmentConfig::MODE_ATTESTATION);
@@ -739,8 +769,16 @@ IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest, OnlineSetupFlowErrorDefault) {
   EXPECT_FALSE(StartupUtils::IsDeviceRegistered());
 }
 
+// TODO(crbug.com/1150349): Flaky on ChromeOS ASAN.
+#if defined(ADDRESS_SANITIZER)
+#define MAYBE_OnlineSetupFlowErrorPowerwashRequired \
+  DISABLED_OnlineSetupFlowErrorPowerwashRequired
+#else
+#define MAYBE_OnlineSetupFlowErrorPowerwashRequired \
+  OnlineSetupFlowErrorPowerwashRequired
+#endif
 IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest,
-                       OnlineSetupFlowErrorPowerwashRequired) {
+                       MAYBE_OnlineSetupFlowErrorPowerwashRequired) {
   // Simulate online setup failure that requires powerwash.
   enrollment_helper_.ExpectEnrollmentMode(
       policy::EnrollmentConfig::MODE_ATTESTATION);
@@ -937,8 +975,14 @@ IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest, OfflineSetupFlowSuccess) {
   EXPECT_TRUE(StartupUtils::IsDeviceRegistered());
 }
 
+// TODO(crbug.com/1150349): Flaky on ChromeOS ASAN.
+#if defined(ADDRESS_SANITIZER)
+#define MAYBE_OfflineSetupFlowErrorDefault DISABLED_OfflineSetupFlowErrorDefault
+#else
+#define MAYBE_OfflineSetupFlowErrorDefault OfflineSetupFlowErrorDefault
+#endif
 IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest,
-                       OfflineSetupFlowErrorDefault) {
+                       MAYBE_OfflineSetupFlowErrorDefault) {
   // Simulate offline setup failure.
   enrollment_helper_.ExpectOfflineEnrollmentError(
       policy::EnrollmentStatus::ForStatus(
@@ -1068,7 +1112,14 @@ IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest,
   EXPECT_FALSE(StartupUtils::IsDeviceRegistered());
 }
 
-IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest, NextDisabledOnNetworkScreen) {
+// TODO(crbug.com/1150349): Flaky on ChromeOS ASAN.
+#if defined(ADDRESS_SANITIZER)
+#define MAYBE_NextDisabledOnNetworkScreen DISABLED_NextDisabledOnNetworkScreen
+#else
+#define MAYBE_NextDisabledOnNetworkScreen NextDisabledOnNetworkScreen
+#endif
+IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest,
+                       MAYBE_NextDisabledOnNetworkScreen) {
   SimulateNetworkDisconnected();
   SkipToScreen(NetworkScreenView::kScreenId);
   EXPECT_FALSE(IsScreenDialogElementEnabled(NetworkScreenView::kScreenId,
@@ -1120,7 +1171,13 @@ IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest, BackOnNetworkScreen) {
   EXPECT_TRUE(IsScreenShown(DemoPreferencesScreenView::kScreenId));
 }
 
-IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest, BackOnArcTermsScreen) {
+// TODO(crbug.com/1150349): Flaky on ChromeOS ASAN.
+#if defined(ADDRESS_SANITIZER)
+#define MAYBE_BackOnArcTermsScreen DISABLED_BackOnArcTermsScreen
+#else
+#define MAYBE_BackOnArcTermsScreen BackOnArcTermsScreen
+#endif
+IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest, MAYBE_BackOnArcTermsScreen) {
   // User cannot go to ARC ToS screen without accepting eula - simulate that.
   StartupUtils::MarkEulaAccepted();
 
@@ -1132,7 +1189,13 @@ IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest, BackOnArcTermsScreen) {
   OobeScreenWaiter(NetworkScreenView::kScreenId).Wait();
 }
 
-IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest, BackOnErrorScreen) {
+// TODO(crbug.com/1150349): Flaky on ChromeOS ASAN.
+#if defined(ADDRESS_SANITIZER)
+#define MAYBE_BackOnErrorScreen DISABLED_BackOnErrorScreen
+#else
+#define MAYBE_BackOnErrorScreen BackOnErrorScreen
+#endif
+IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest, MAYBE_BackOnErrorScreen) {
   SkipToErrorDialog();
 
   ClickScreenDialogButton(DemoSetupScreenView::kScreenId,
@@ -1142,7 +1205,13 @@ IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest, BackOnErrorScreen) {
   OobeScreenWaiter(WelcomeView::kScreenId).Wait();
 }
 
-IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest, RetryOnErrorScreen) {
+// TODO(crbug.com/1150349): Flaky on ChromeOS ASAN.
+#if defined(ADDRESS_SANITIZER)
+#define MAYBE_RetryOnErrorScreen DISABLED_RetryOnErrorScreen
+#else
+#define MAYBE_RetryOnErrorScreen RetryOnErrorScreen
+#endif
+IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest, MAYBE_RetryOnErrorScreen) {
   SkipToErrorDialog();
 
   // We need to create another mock after showing error dialog.
@@ -1274,19 +1343,19 @@ class DemoSetupArcUnsupportedTest : public DemoSetupTestBase {
 };
 
 IN_PROC_BROWSER_TEST_F(DemoSetupArcUnsupportedTest, DoNotStartWithAccelerator) {
-  EXPECT_FALSE(IsConfirmationDialogShown());
+  IsConfirmationDialogHidden();
 
   InvokeDemoModeWithAccelerator();
 
-  EXPECT_FALSE(IsConfirmationDialogShown());
+  IsConfirmationDialogHidden();
 }
 
 IN_PROC_BROWSER_TEST_F(DemoSetupArcUnsupportedTest, DoNotInvokeWithTaps) {
-  EXPECT_FALSE(IsConfirmationDialogShown());
+  IsConfirmationDialogHidden();
 
   InvokeDemoModeWithTaps();
 
-  EXPECT_FALSE(IsConfirmationDialogShown());
+  IsConfirmationDialogHidden();
 }
 
 // Demo setup tests related to Force Re-Enrollment.

@@ -81,10 +81,10 @@ Polymer({
     },
 
     /**
-     * False if VPN is disabled by policy.
+     * True if VPN is prohibited by policy.
      * @private {boolean}
      */
-    vpnIsEnabled_: {
+    vpnIsProhibited_: {
       type: Boolean,
       value: false,
     },
@@ -131,6 +131,27 @@ Polymer({
      */
     cellularSetupDialogPageName_: String,
 
+    /** @private {boolean} */
+    showESimProfileRenameDialog_: {
+      type: Boolean,
+      value: false,
+    },
+
+    /** @private {boolean} */
+    showESimRemoveProfileDialog_: {
+      type: Boolean,
+      value: false,
+    },
+
+    /**
+     * Iccid of an esim profile, used in internet detail menu.
+     * @private {string}
+     */
+    esimProfileIccid_: {
+      type: String,
+      value: '',
+    },
+
     /** @private {!Map<string, Element>} */
     focusConfig_: {
       type: Object,
@@ -167,6 +188,8 @@ Polymer({
     'show-detail': 'onShowDetail_',
     'show-known-networks': 'onShowKnownNetworks_',
     'show-networks': 'onShowNetworks_',
+    'show-esim-profile-rename-dialog': 'onShowESimProfileRenameDialog_',
+    'show-esim-remove-profile-dialog': 'onShowESimRemoveProfileDialog_'
   },
 
   /** @private  {?settings.InternetPageBrowserProxy} */
@@ -228,6 +251,7 @@ Polymer({
       // e.g. chrome://settings/internet/networks?type=WiFi
       const queryParams = settings.Router.getInstance().getQueryParameters();
       const type = queryParams.get('type');
+      this.showCellularSetupDialog_ = !!queryParams.get('showCellularSetup');
       if (type) {
         this.subpageType_ = OncMojo.getNetworkTypeFromString(type);
       }
@@ -382,6 +406,34 @@ Polymer({
   },
 
   /**
+   * @param {!CustomEvent<!{iccid: string}>} event
+   * @private
+   */
+  onShowESimProfileRenameDialog_(event) {
+    this.esimProfileIccid_ = event.detail.iccid;
+    this.showESimProfileRenameDialog_ = true;
+  },
+
+  /** @private */
+  onCloseESimProfileRenameDialog_() {
+    this.showESimProfileRenameDialog_ = false;
+  },
+
+  /**
+   * @param {!CustomEvent<!{iccid: string}>} event
+   * @private
+   */
+  onShowESimRemoveProfileDialog_(event) {
+    this.esimProfileIccid_ = event.detail.iccid;
+    this.showESimRemoveProfileDialog_ = true;
+  },
+
+  /** @private */
+  onCloseESimRemoveProfileDialog_() {
+    this.showESimRemoveProfileDialog_ = false;
+  },
+
+  /**
    * @param {!CustomEvent<chromeos.networkConfig.mojom.NetworkType>} event
    * @private
    */
@@ -451,9 +503,9 @@ Polymer({
     }
 
     const vpn = this.deviceStates[mojom.NetworkType.kVPN];
-    this.vpnIsEnabled_ = !!vpn &&
+    this.vpnIsProhibited_ = !!vpn &&
         vpn.deviceState ===
-            chromeos.networkConfig.mojom.DeviceStateType.kEnabled;
+            chromeos.networkConfig.mojom.DeviceStateType.kProhibited;
 
     if (this.detailType_ && !this.deviceStates[this.detailType_]) {
       // If the device type associated with the current network has been
@@ -490,7 +542,7 @@ Polymer({
 
   /** @private */
   onAddVPNTap_() {
-    if (this.vpnIsEnabled_) {
+    if (!this.vpnIsProhibited_) {
       this.showConfig_(
           true /* configAndConnect */,
           chromeos.networkConfig.mojom.NetworkType.kVPN);

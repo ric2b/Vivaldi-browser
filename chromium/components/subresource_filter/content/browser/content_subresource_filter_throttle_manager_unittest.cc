@@ -183,18 +183,16 @@ class TestSubresourceFilterClient : public SubresourceFilterClient {
 
   // SubresourceFilterClient:
   void ShowNotification() override { ++disallowed_notification_count_; }
-  mojom::ActivationLevel OnPageActivationComputed(
-      content::NavigationHandle* navigation_handle,
-      mojom::ActivationLevel effective_activation_level,
-      ActivationDecision* decision) override {
-    return effective_activation_level;
-  }
   void OnAdsViolationTriggered(
       content::RenderFrameHost* rfh,
       mojom::AdsViolation triggered_violation) override {}
   const scoped_refptr<safe_browsing::SafeBrowsingDatabaseManager>
   GetSafeBrowsingDatabaseManager() override {
     return database_manager_;
+  }
+  subresource_filter::ProfileInteractionManager* GetProfileInteractionManager()
+      override {
+    return nullptr;
   }
   void OnReloadRequested() override {}
 
@@ -993,7 +991,7 @@ TEST_P(ContentSubresourceFilterThrottleManagerTest,
 }
 
 // If the RenderFrame determines that the frame is an ad, and the frame changes
-// processes, then the new frame host should still be considered an ad.
+// processes, then the frame should still be considered an ad.
 TEST_P(ContentSubresourceFilterThrottleManagerTest,
        AdTagCarriesAcrossProcesses) {
   content::IsolateAllSitesForTesting(base::CommandLine::ForCurrentProcess());
@@ -1023,7 +1021,6 @@ TEST_P(ContentSubresourceFilterThrottleManagerTest,
   EXPECT_NE(initial_subframe, final_subframe);
 
   EXPECT_TRUE(throttle_manager()->IsFrameTaggedAsAd(final_subframe));
-  EXPECT_FALSE(throttle_manager()->IsFrameTaggedAsAd(initial_subframe));
   ExpectActivationSignalForFrame(final_subframe, true /* expect_activation */,
                                  true /* is_ad_subframe */);
 }

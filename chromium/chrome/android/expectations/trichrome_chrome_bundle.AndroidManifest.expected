@@ -1,5 +1,6 @@
 <?xml version="1.0" ?>
 <manifest
+    android:isolatedSplits="true"
     package="org.chromium.chrome.stable"
     platformBuildVersionCode="30"
     platformBuildVersionName="11"
@@ -12,6 +13,11 @@
   <permission android:label="Debug web pages" android:name="$PACKAGE.permission.DEBUG" android:protectionLevel="signature"/>
   <permission android:name="$PACKAGE.permission.READ_WRITE_BOOKMARK_FOLDERS" android:protectionLevel="signatureOrSystem"/>
   <permission android:name="$PACKAGE.permission.TRANSLATE" android:protectionLevel="signature"/>
+  <queries>  # DIFF-ANCHOR: 0c3a615d
+    <intent>  # DIFF-ANCHOR: 28c960ba
+      <action android:name="android.media.browse.MediaBrowserService"/>
+    </intent>  # DIFF-ANCHOR: 28c960ba
+  </queries>  # DIFF-ANCHOR: 0c3a615d
   <uses-feature android:name="android.hardware.camera" android:required="false"/>
   <uses-feature android:name="android.hardware.location.gps" android:required="false"/>
   <uses-feature android:name="android.hardware.microphone" android:required="false"/>
@@ -67,13 +73,14 @@
   <application
       android:allowAudioPlaybackCapture="false"
       android:allowBackup="false"
+      android:appComponentFactory="org.chromium.chrome.browser.base.SplitCompatAppComponentFactory"
       android:extractNativeLibs="false"
       android:icon="@drawable/ic_launcher"
       android:label="@string/app_name"
       android:largeHeap="false"
       android:manageSpaceActivity="@string/manage_space_activity"
       android:multiArch="true"
-      android:name="org.chromium.chrome.browser.ChromeApplication"
+      android:name="org.chromium.chrome.browser.base.SplitChromeApplication"
       android:networkSecurityConfig="@xml/network_security_config"
       android:roundIcon="@drawable/ic_launcher_round"
       android:supportsRtl="true"
@@ -252,21 +259,6 @@
         <category android:name="com.google.intent.category.DAYDREAM"/>
       </intent-filter>  # DIFF-ANCHOR: dea53031
     </activity>  # DIFF-ANCHOR: 44266a6a
-    <activity  # DIFF-ANCHOR: 70dc8b5c
-        android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize|uiMode|density"
-        android:exported="false"
-        android:hardwareAccelerated="false"
-        android:name="org.chromium.chrome.browser.customtabs.PaymentHandlerActivity"
-        android:resizeableActivity="true"
-        android:supportsPictureInPicture="true"
-        android:theme="@style/Theme.Chromium.Activity.Translucent"
-        android:windowSoftInputMode="adjustResize">
-      <intent-filter>  # DIFF-ANCHOR: dea53031
-        <action android:name="org.chromium.chrome.browser.dummy.action"/>
-        <category android:name="com.google.intent.category.CARDBOARD"/>
-        <category android:name="com.google.intent.category.DAYDREAM"/>
-      </intent-filter>  # DIFF-ANCHOR: dea53031
-    </activity>  # DIFF-ANCHOR: 70dc8b5c
     <activity  # DIFF-ANCHOR: 4d923622
         android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize|uiMode|density"
         android:exported="false"
@@ -576,14 +568,11 @@
       </intent-filter>  # DIFF-ANCHOR: 9c5197e9
     </activity>  # DIFF-ANCHOR: aea75380
     <activity  # DIFF-ANCHOR: a1fac31f
-        android:exported="false"
+        android:exported="true"
         android:label="@string/cablev2_activity_title"
         android:name="org.chromium.chrome.browser.webauth.authenticator.CableAuthenticatorActivity"
+        android:permission="com.google.android.gms.auth.cryptauth.permission.CABLEV2_SERVER_LINK"
         android:theme="@style/Theme.Chromium.Activity.Fullscreen">
-      <intent-filter>  # DIFF-ANCHOR: 5873407a
-        <action android:name="android.hardware.usb.action.USB_ACCESSORY_ATTACHED"/>
-      </intent-filter>  # DIFF-ANCHOR: 5873407a
-      <meta-data android:name="android.hardware.usb.action.USB_ACCESSORY_ATTACHED" android:resource="@xml/phone_as_a_security_key_accessory_filter"/>
     </activity>  # DIFF-ANCHOR: a1fac31f
     <activity  # DIFF-ANCHOR: 1d9b4077
         android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
@@ -1040,14 +1029,6 @@
         android:exported="false"
         android:name="org.chromium.chrome.browser.incognito.IncognitoNotificationService">
     </service>  # DIFF-ANCHOR: a651602a
-    <service  # DIFF-ANCHOR: bd027029
-        android:exported="false"
-        android:name="org.chromium.chrome.browser.invalidation.ChromeBrowserSyncAdapterService">
-      <intent-filter>  # DIFF-ANCHOR: 3e31084a
-        <action android:name="android.content.SyncAdapter"/>
-      </intent-filter>  # DIFF-ANCHOR: 3e31084a
-      <meta-data android:name="android.content.SyncAdapter" android:resource="@xml/syncadapter"/>
-    </service>  # DIFF-ANCHOR: bd027029
     <service  # DIFF-ANCHOR: 4f8e62ea
         android:exported="false"
         android:name="org.chromium.chrome.browser.media.MediaCaptureNotificationService">

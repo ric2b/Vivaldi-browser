@@ -244,11 +244,13 @@ const auto ${arg1_value} = arg1_value_maybe_enum.value();
                                    cg_context.attribute.idl_type))
         return
 
-    for index, argument in enumerate(cg_context.function_like.arguments):
-        name = name_style.arg_f("arg{}_{}", index + 1, argument.identifier)
+    for argument in cg_context.function_like.arguments:
+        name = name_style.arg_f("arg{}_{}", argument.index + 1,
+                                argument.identifier)
         if argument.is_variadic:
             code_node.register_code_symbol(
-                make_v8_to_blink_value_variadic(name, "${info}", index,
+                make_v8_to_blink_value_variadic(name, "${info}",
+                                                argument.index,
                                                 argument.idl_type))
         else:
             v8_value = "${{info}}[{}]".format(argument.index)
@@ -256,8 +258,7 @@ const auto ${arg1_value} = arg1_value_maybe_enum.value();
                 make_v8_to_blink_value(name,
                                        v8_value,
                                        argument.idl_type,
-                                       argument_index=index,
-                                       default_value=argument.default_value,
+                                       argument=argument,
                                        cg_context=cg_context))
 
 
@@ -1442,34 +1443,18 @@ def make_steps_of_ce_reactions(cg_context):
             or cg_context.named_property_setter
             or cg_context.named_property_deleter)
 
-    T = TextNode
-
-    nodes = []
-
-    ext_attrs = cg_context.member_like.extended_attributes
-    if "CustomElementCallbacks" in ext_attrs or "Reflect" in ext_attrs:
-        if "CustomElementCallbacks" in ext_attrs:
-            nodes.append(T("// [CustomElementCallbacks]"))
-        elif "Reflect" in ext_attrs:
-            nodes.append(T("// [Reflect]"))
-        nodes.append(
-            T("V0CustomElementProcessingStack::CallbackDeliveryScope "
-              "v0_custom_element_scope;"))
-        nodes[-1].accumulate(
-            CodeGenAccumulator.require_include_headers([
-                "third_party/blink/renderer/core/html/custom/v0_custom_element_processing_stack.h"
-            ]))
-
-    if "CEReactions" in ext_attrs:
-        nodes.append(T("// [CEReactions]"))
-        nodes.append(T("CEReactionsScope ce_reactions_scope;"))
-        nodes[-1].accumulate(
-            CodeGenAccumulator.require_include_headers([
-                "third_party/blink/renderer/core/html/custom/ce_reactions_scope.h"
-            ]))
-
-    if not nodes:
+    if "CEReactions" not in cg_context.member_like.extended_attributes:
         return None
+
+    nodes = [
+        TextNode("// [CEReactions]"),
+        TextNode("CEReactionsScope ce_reactions_scope;"),
+    ]
+
+    nodes[-1].accumulate(
+        CodeGenAccumulator.require_include_headers([
+            "third_party/blink/renderer/core/html/custom/ce_reactions_scope.h"
+        ]))
 
     # CEReactions scope is not tolerant of V8 exception, so it's necessary to
     # invoke custom element reactions before throwing an exception.  Thus, put
@@ -1812,12 +1797,12 @@ EventListener* event_handler = JSEventHandler::CreateOrNull(
                 has_cereactions = True
             elif key == "Reflect":
                 has_reflect = True
-            elif key in ("Affects", "CustomElementCallbacks", "DeprecateAs",
-                         "Exposed", "LogActivity", "LogAllWorlds", "Measure",
-                         "MeasureAs", "ReflectEmpty", "ReflectInvalid",
-                         "ReflectMissing", "ReflectOnly",
-                         "RuntimeCallStatsCounter", "RuntimeEnabled",
-                         "SecureContext", "URL", "Unscopable"):
+            elif key in ("Affects", "DeprecateAs", "Exposed", "LogActivity",
+                         "LogAllWorlds", "Measure", "MeasureAs",
+                         "ReflectEmpty", "ReflectInvalid", "ReflectMissing",
+                         "ReflectOnly", "RuntimeCallStatsCounter",
+                         "RuntimeEnabled", "SecureContext", "URL",
+                         "Unscopable"):
                 pass
             else:
                 return None
@@ -2435,7 +2420,7 @@ if (${info}.ShouldThrowOnError()) {
             "blink_property_value",
             "${v8_property_value}",
             cg_context.indexed_property_setter.arguments[1].idl_type,
-            argument_index=2))
+            argument=cg_context.indexed_property_setter.arguments[1]))
 
     body.extend([
         TextNode("""\
@@ -2797,7 +2782,7 @@ if (!is_creating) {
             "blink_property_value",
             "${v8_property_value}",
             cg_context.named_property_setter.arguments[1].idl_type,
-            argument_index=2))
+            argument=cg_context.named_property_setter.arguments[1]))
 
     if "Custom" in cg_context.named_property_setter.extended_attributes:
         text = _format(
@@ -5199,9 +5184,9 @@ def make_install_interface_template(cg_context, function_name, class_name,
     ])
 
     if class_like.identifier == "CSSStyleDeclaration":
-        css_properties = filter(
-            lambda attr: "CSSProperty" in attr.extended_attributes,
-            class_like.attributes)
+        css_properties = list(
+            filter(lambda attr: "CSSProperty" in attr.extended_attributes,
+                   class_like.attributes))
         if css_properties:
             prop_name_list = "".join(
                 map(lambda attr: "\"{}\", ".format(attr.identifier),
@@ -5228,8 +5213,9 @@ def make_install_interface_template(cg_context, function_name, class_name,
 // https://heycam.github.io/webidl/#es-DOMException-specialness
 {
   v8::Local<v8::FunctionTemplate> intrinsic_error_prototype_interface_template =
-      v8::FunctionTemplate::New(${isolate});
-  intrinsic_error_prototype_interface_template->RemovePrototype();
+      v8::FunctionTemplate::New(${isolate}, nullptr, v8::Local<v8::Value>(),
+                                v8::Local<v8::Signature>(), 0,
+                                v8::ConstructorBehavior::kThrow);
   intrinsic_error_prototype_interface_template->SetIntrinsicDataProperty(
       V8AtomicString(${isolate}, "prototype"), v8::kErrorPrototype);
   ${interface_function_template}->Inherit(
@@ -5237,7 +5223,7 @@ def make_install_interface_template(cg_context, function_name, class_name,
 }
 """))
 
-    if class_like.identifier == "NativeFileSystemDirectoryIterator":
+    if class_like.identifier == "FileSystemDirectoryIterator":
         body.append(
             T("""\
 // Temporary @@asyncIterator support for FileSystemDirectoryHandle
@@ -5245,8 +5231,9 @@ def make_install_interface_template(cg_context, function_name, class_name,
 {
   v8::Local<v8::FunctionTemplate>
       intrinsic_iterator_prototype_interface_template =
-      v8::FunctionTemplate::New(${isolate});
-  intrinsic_iterator_prototype_interface_template->RemovePrototype();
+      v8::FunctionTemplate::New(${isolate}, nullptr, v8::Local<v8::Value>(),
+                                v8::Local<v8::Signature>(), 0,
+                                v8::ConstructorBehavior::kThrow);
   intrinsic_iterator_prototype_interface_template->SetIntrinsicDataProperty(
       V8AtomicString(${isolate}, "prototype"), v8::kAsyncIteratorPrototype);
   ${interface_function_template}->Inherit(
@@ -5272,8 +5259,9 @@ ${instance_object_template}->MarkAsUndetectable();
 {
   v8::Local<v8::FunctionTemplate>
       intrinsic_iterator_prototype_interface_template =
-      v8::FunctionTemplate::New(${isolate});
-  intrinsic_iterator_prototype_interface_template->RemovePrototype();
+      v8::FunctionTemplate::New(${isolate}, nullptr, v8::Local<v8::Value>(),
+                                v8::Local<v8::Signature>(), 0,
+                                v8::ConstructorBehavior::kThrow);
   intrinsic_iterator_prototype_interface_template->SetIntrinsicDataProperty(
       V8AtomicString(${isolate}, "prototype"), v8::kIteratorPrototype);
   ${interface_function_template}->Inherit(
@@ -5637,12 +5625,14 @@ ${instance_object} = ${v8_context}->Global()->GetPrototype().As<v8::Object>();\
         pattern,
         install_func="IDLMemberInstaller::InstallOperations",
         table_name=table_name)
-    entries = filter(lambda entry: not entry.no_alloc_direct_callback_name,
-                     operation_entries)
+    entries = list(
+        filter(lambda entry: not entry.no_alloc_direct_callback_name,
+               operation_entries))
     install_properties(table_name, entries, _make_operation_registration_table,
                        installer_call_text)
-    entries = filter(lambda entry: entry.no_alloc_direct_callback_name,
-                     operation_entries)
+    entries = list(
+        filter(lambda entry: entry.no_alloc_direct_callback_name,
+               operation_entries))
     install_properties(table_name, entries, _make_operation_registration_table,
                        installer_call_text)
 

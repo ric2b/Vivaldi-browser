@@ -20,6 +20,7 @@
 #include "base/notreached.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
+#include "build/chromeos_buildflags.h"
 #include "skia/ext/skia_utils_base.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/clipboard/clipboard_constants.h"
@@ -37,12 +38,13 @@ namespace ui {
 
 namespace {
 
+using InstanceRegistry = std::set<const ClipboardNonBacked*, std::less<>>;
 // Returns the registry which tracks all instances of ClipboardNonBacked in
 // existence. This allows us to determine if any arbitrary Clipboard pointer in
 // fact points to a ClipboardNonBacked instance. Only if a pointer exists in
 // this registry is it safe to cast to ClipboardNonBacked*.
-std::set<const ClipboardNonBacked*>* GetInstanceRegistry() {
-  static base::NoDestructor<std::set<const ClipboardNonBacked*>> registry;
+InstanceRegistry* GetInstanceRegistry() {
+  static base::NoDestructor<InstanceRegistry> registry;
   return registry.get();
 }
 
@@ -246,7 +248,7 @@ class ClipboardInternal {
     auto* data = GetData();
     if (!policy_controller || !data)
       return true;
-    return policy_controller->IsDataReadAllowed(data->source(), data_dst);
+    return policy_controller->IsClipboardReadAllowed(data->source(), data_dst);
   }
 
  private:
@@ -349,7 +351,7 @@ ClipboardData* ClipboardDataBuilder::current_data_ = nullptr;
 
 // linux-chromeos uses non-backed clipboard by default, but supports ozone x11
 // with flag --use-system-clipbboard.
-#if !defined(OS_CHROMEOS) || !BUILDFLAG(OZONE_PLATFORM_X11)
+#if !BUILDFLAG(IS_CHROMEOS_ASH) || !BUILDFLAG(OZONE_PLATFORM_X11)
 // Clipboard factory method.
 Clipboard* Clipboard::Create() {
   return new ClipboardNonBacked;
@@ -359,7 +361,11 @@ Clipboard* Clipboard::Create() {
 // static
 ClipboardNonBacked* ClipboardNonBacked::GetForCurrentThread() {
   auto* clipboard = Clipboard::GetForCurrentThread();
-  CHECK(IsRegisteredInstance(clipboard));  // Ensure type safety.
+
+  // Ensure type safety. In tests the instance may not be registered.
+  if (!IsRegisteredInstance(clipboard))
+    return nullptr;
+
   return static_cast<ClipboardNonBacked*>(clipboard);
 }
 
@@ -514,7 +520,7 @@ void ClipboardNonBacked::ReadText(ClipboardBuffer buffer,
   RecordRead(ClipboardFormatMetric::kText);
   clipboard_internal_->ReadText(result);
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   ClipboardMonitor::GetInstance()->NotifyClipboardDataRead();
 #endif
 }
@@ -530,7 +536,7 @@ void ClipboardNonBacked::ReadAsciiText(ClipboardBuffer buffer,
   RecordRead(ClipboardFormatMetric::kText);
   clipboard_internal_->ReadAsciiText(result);
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   ClipboardMonitor::GetInstance()->NotifyClipboardDataRead();
 #endif
 }
@@ -549,7 +555,7 @@ void ClipboardNonBacked::ReadHTML(ClipboardBuffer buffer,
   RecordRead(ClipboardFormatMetric::kHtml);
   clipboard_internal_->ReadHTML(markup, src_url, fragment_start, fragment_end);
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   ClipboardMonitor::GetInstance()->NotifyClipboardDataRead();
 #endif
 }
@@ -577,7 +583,7 @@ void ClipboardNonBacked::ReadRTF(ClipboardBuffer buffer,
   RecordRead(ClipboardFormatMetric::kRtf);
   clipboard_internal_->ReadRTF(result);
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   ClipboardMonitor::GetInstance()->NotifyClipboardDataRead();
 #endif
 }
@@ -595,7 +601,7 @@ void ClipboardNonBacked::ReadImage(ClipboardBuffer buffer,
   RecordRead(ClipboardFormatMetric::kImage);
   std::move(callback).Run(clipboard_internal_->ReadImage());
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   ClipboardMonitor::GetInstance()->NotifyClipboardDataRead();
 #endif
 }
@@ -612,7 +618,7 @@ void ClipboardNonBacked::ReadCustomData(ClipboardBuffer buffer,
   RecordRead(ClipboardFormatMetric::kCustomData);
   clipboard_internal_->ReadCustomData(type, result);
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   ClipboardMonitor::GetInstance()->NotifyClipboardDataRead();
 #endif
 }
@@ -628,7 +634,7 @@ void ClipboardNonBacked::ReadBookmark(const DataTransferEndpoint* data_dst,
   RecordRead(ClipboardFormatMetric::kBookmark);
   clipboard_internal_->ReadBookmark(title, url);
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   ClipboardMonitor::GetInstance()->NotifyClipboardDataRead();
 #endif
 }
@@ -644,13 +650,13 @@ void ClipboardNonBacked::ReadData(const ClipboardFormatType& format,
   RecordRead(ClipboardFormatMetric::kData);
   clipboard_internal_->ReadData(format.GetName(), result);
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   ClipboardMonitor::GetInstance()->NotifyClipboardDataRead();
 #endif
 }
 
 bool ClipboardNonBacked::IsSelectionBufferAvailable() const {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   return false;
 #else
   return true;

@@ -14,7 +14,6 @@
 #include "components/translate/core/browser/translate_download_manager.h"
 #include "components/translate/core/browser/translate_driver.h"
 #include "components/translate/core/browser/translate_manager.h"
-#include "components/translate/core/browser/translate_metrics_logger.h"
 #include "components/translate/core/browser/translate_prefs.h"
 #include "components/translate/core/common/translate_constants.h"
 #include "components/variations/variations_associated_data.h"
@@ -164,6 +163,12 @@ void TranslateUIDelegate::UpdateOriginalLanguageIndex(size_t language_index) {
 
   UMA_HISTOGRAM_BOOLEAN(kModifyOriginalLang, true);
   original_language_index_ = language_index;
+
+  std::string language_code = "und";
+  if (language_index < GetNumberOfLanguages())
+    language_code = GetLanguageCodeAt(language_index);
+  translate_manager_->GetActiveTranslateMetricsLogger()->LogSourceLanguage(
+      language_code);
 }
 
 void TranslateUIDelegate::UpdateOriginalLanguage(
@@ -186,6 +191,9 @@ void TranslateUIDelegate::UpdateTargetLanguageIndex(size_t language_index) {
   DCHECK_LT(language_index, GetNumberOfLanguages());
   UMA_HISTOGRAM_BOOLEAN(kModifyTargetLang, true);
   target_language_index_ = language_index;
+
+  translate_manager_->GetActiveTranslateMetricsLogger()->LogTargetLanguage(
+      GetLanguageCodeAt(language_index));
 }
 
 void TranslateUIDelegate::UpdateTargetLanguage(
@@ -305,22 +313,22 @@ void TranslateUIDelegate::SetLanguageBlocked(bool value) {
   UMA_HISTOGRAM_BOOLEAN(kNeverTranslateLang, value);
 }
 
-bool TranslateUIDelegate::IsSiteBlacklisted() const {
+bool TranslateUIDelegate::IsSiteOnNeverPromptList() const {
   std::string host = GetPageHost();
-  return !host.empty() && prefs_->IsSiteBlacklisted(host);
+  return !host.empty() && prefs_->IsSiteOnNeverPromptList(host);
 }
 
-bool TranslateUIDelegate::CanBlacklistSite() const {
+bool TranslateUIDelegate::CanAddToNeverPromptList() const {
   return !GetPageHost().empty();
 }
 
-void TranslateUIDelegate::SetSiteBlacklist(bool value) {
+void TranslateUIDelegate::SetNeverPrompt(bool value) {
   std::string host = GetPageHost();
   if (host.empty())
     return;
 
   if (value) {
-    prefs_->BlacklistSite(host);
+    prefs_->AddSiteToNeverPromptList(host);
     if (translate_manager_) {
       // Translation has been blocked for this site. Capture that in the metrics
       // Note that we don't capture a language being unblocked... which is not
@@ -329,15 +337,15 @@ void TranslateUIDelegate::SetSiteBlacklist(bool value) {
           metrics::TranslateEventProto::USER_NEVER_TRANSLATE_SITE);
     }
   } else {
-    prefs_->RemoveSiteFromBlacklist(host);
+    prefs_->RemoveSiteFromNeverPromptList(host);
   }
 
   UMA_HISTOGRAM_BOOLEAN(kNeverTranslateSite, value);
 }
 
 bool TranslateUIDelegate::ShouldAlwaysTranslate() const {
-  return prefs_->IsLanguagePairWhitelisted(GetOriginalLanguageCode(),
-                                           GetTargetLanguageCode());
+  return prefs_->IsLanguagePairOnAlwaysTranslateList(GetOriginalLanguageCode(),
+                                                     GetTargetLanguageCode());
 }
 
 bool TranslateUIDelegate::ShouldAlwaysTranslateBeCheckedByDefault() const {
@@ -360,7 +368,7 @@ void TranslateUIDelegate::SetAlwaysTranslate(bool value) {
   const std::string& original_lang = GetOriginalLanguageCode();
   const std::string& target_lang = GetTargetLanguageCode();
   if (value) {
-    prefs_->WhitelistLanguagePair(original_lang, target_lang);
+    prefs_->AddLanguagePairToAlwaysTranslateList(original_lang, target_lang);
     // A default translation mapping has been accepted for this language.
     // Capture that in the metrics. Note that we don't capture a language being
     // unmapped... which is not the same as accepting some other translation
@@ -370,7 +378,8 @@ void TranslateUIDelegate::SetAlwaysTranslate(bool value) {
           metrics::TranslateEventProto::USER_ALWAYS_TRANSLATE_LANGUAGE);
     }
   } else {
-    prefs_->RemoveLanguagePairFromWhitelist(original_lang, target_lang);
+    prefs_->RemoveLanguagePairFromAlwaysTranslateList(original_lang,
+                                                      target_lang);
   }
 
   UMA_HISTOGRAM_BOOLEAN(kAlwaysTranslateLang, value);
@@ -385,6 +394,13 @@ std::string TranslateUIDelegate::GetPageHost() const {
 void TranslateUIDelegate::OnUIClosedByUser() {
   if (translate_manager_)
     translate_manager_->GetActiveTranslateMetricsLogger()->LogUIChange(false);
+}
+
+void TranslateUIDelegate::ReportUIInteraction(UIInteraction ui_interaction) {
+  if (translate_manager_) {
+    translate_manager_->GetActiveTranslateMetricsLogger()->LogUIInteraction(
+        ui_interaction);
+  }
 }
 
 }  // namespace translate

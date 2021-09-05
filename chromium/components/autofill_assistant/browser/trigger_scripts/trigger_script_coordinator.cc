@@ -4,10 +4,13 @@
 
 #include "components/autofill_assistant/browser/trigger_scripts/trigger_script_coordinator.h"
 
+#include <array>
 #include <map>
+#include <string>
 
 #include "base/numerics/clamped_math.h"
 #include "components/autofill_assistant/browser/client_context.h"
+#include "components/autofill_assistant/browser/features.h"
 #include "components/autofill_assistant/browser/protocol_utils.h"
 #include "components/autofill_assistant/browser/url_utils.h"
 #include "components/ukm/content/source_url_recorder.h"
@@ -19,33 +22,25 @@
 
 namespace {
 
-const char kScriptParameterDebugBundleId[] = "DEBUG_BUNDLE_ID";
-const char kScriptParameterDebugBundleVersion[] = "DEBUG_BUNDLE_VERSION";
-const char kScriptParameterDebugSocketId[] = "DEBUG_SOCKET_ID";
+constexpr std::array<const char*, 5> kWhitelistedScriptParameters = {
+    "DEBUG_BUNDLE_ID", "DEBUG_BUNDLE_VERSION", "DEBUG_SOCKET_ID",
+    "FALLBACK_BUNDLE_ID", "FALLBACK_BUNDLE_VERSION"};
 
 std::map<std::string, std::string> ExtractDebugScriptParameters(
     const autofill_assistant::TriggerContext& trigger_context) {
   std::map<std::string, std::string> debug_script_parameters;
-  auto debug_bundle_id =
-      trigger_context.GetParameter(kScriptParameterDebugBundleId);
-  auto debug_bundle_version =
-      trigger_context.GetParameter(kScriptParameterDebugBundleVersion);
-  auto debug_socket_id =
-      trigger_context.GetParameter(kScriptParameterDebugSocketId);
-
-  if (debug_bundle_id) {
-    debug_script_parameters.insert(
-        {kScriptParameterDebugBundleId, *debug_bundle_id});
-  }
-  if (debug_bundle_version) {
-    debug_script_parameters.insert(
-        {kScriptParameterDebugBundleVersion, *debug_bundle_version});
-  }
-  if (debug_socket_id) {
-    debug_script_parameters.insert(
-        {kScriptParameterDebugSocketId, *debug_socket_id});
+  for (const char* parameter : kWhitelistedScriptParameters) {
+    auto value = trigger_context.GetParameter(parameter);
+    if (value) {
+      debug_script_parameters.insert({parameter, *value});
+    }
   }
   return debug_script_parameters;
+}
+
+bool IsDialogOnboardingEnabled() {
+  return base::FeatureList::IsEnabled(
+      autofill_assistant::features::kAutofillAssistantDialogOnboarding);
 }
 
 }  // namespace
@@ -53,15 +48,18 @@ std::map<std::string, std::string> ExtractDebugScriptParameters(
 namespace autofill_assistant {
 
 TriggerScriptCoordinator::TriggerScriptCoordinator(
-    Client* client,
+    content::WebContents* web_contents,
+    WebsiteLoginManager* website_login_manager,
+    base::RepeatingCallback<bool(void)> is_first_time_user_callback,
     std::unique_ptr<WebController> web_controller,
     std::unique_ptr<ServiceRequestSender> request_sender,
     const GURL& get_trigger_scripts_server,
     std::unique_ptr<StaticTriggerConditions> static_trigger_conditions,
     std::unique_ptr<DynamicTriggerConditions> dynamic_trigger_conditions,
     ukm::UkmRecorder* ukm_recorder)
-    : content::WebContentsObserver(client->GetWebContents()),
-      client_(client),
+    : content::WebContentsObserver(web_contents),
+      website_login_manager_(website_login_manager),
+      is_first_time_user_callback_(std::move(is_first_time_user_callback)),
       request_sender_(std::move(request_sender)),
       get_trigger_scripts_server_(get_trigger_scripts_server),
       web_controller_(std::move(web_controller)),
@@ -128,7 +126,7 @@ void TriggerScriptCoordinator::OnGetTriggerScripts(
       initial_trigger_condition_evaluations_;
 
   Metrics::RecordLiteScriptShownToUser(
-      ukm_recorder_, client_->GetWebContents(),
+      ukm_recorder_, web_contents(), UNSPECIFIED_TRIGGER_UI_TYPE,
       Metrics::LiteScriptShownToUser::LITE_SCRIPT_RUNNING);
   StartCheckingTriggerConditions();
 }
@@ -139,7 +137,7 @@ void TriggerScriptCoordinator::PerformTriggerScriptAction(
     case TriggerScriptProto::NOT_NOW:
       if (visible_trigger_script_ != -1) {
         Metrics::RecordLiteScriptShownToUser(
-            ukm_recorder_, client_->GetWebContents(),
+            ukm_recorder_, web_contents(), GetTriggerUiTypeForVisibleScript(),
             Metrics::LiteScriptShownToUser::LITE_SCRIPT_NOT_NOW);
         trigger_scripts_[visible_trigger_script_]
             ->waiting_for_precondition_no_longer_true(true);
@@ -162,14 +160,66 @@ void TriggerScriptCoordinator::PerformTriggerScriptAction(
         NOTREACHED();
         return;
       }
-      // Do not hide the trigger script here, to facilitate a smooth transition
-      // to the regular flow.
-      StopCheckingTriggerConditions();
-      NotifyOnTriggerScriptFinished(
-          Metrics::LiteScriptFinishedState::LITE_SCRIPT_PROMPT_SUCCEEDED);
+      for (Observer& observer : observers_) {
+        observer.OnOnboardingRequested(IsDialogOnboardingEnabled());
+      }
       return;
     case TriggerScriptProto::UNDEFINED:
       return;
+  }
+}
+
+void TriggerScriptCoordinator::OnOnboardingFinished(bool onboardingShown,
+                                                    OnboardingResult result) {
+  // TODO(b/174445633): Replace -1 with a constant like kTriggerScriptNotVisible
+  // at all relevant places
+  if (visible_trigger_script_ != -1) {
+    TriggerUIType trigger_ui_type = GetTriggerUiTypeForVisibleScript();
+    if (onboardingShown) {
+      switch (result) {
+        case OnboardingResult::DISMISSED:
+          Metrics::RecordLiteScriptOnboarding(
+              ukm_recorder_, web_contents(), trigger_ui_type,
+              Metrics::LiteScriptOnboarding::
+                  LITE_SCRIPT_ONBOARDING_SEEN_AND_DISMISSED);
+          break;
+        case OnboardingResult::REJECTED:
+          Metrics::RecordLiteScriptOnboarding(
+              ukm_recorder_, web_contents(), trigger_ui_type,
+              Metrics::LiteScriptOnboarding::
+                  LITE_SCRIPT_ONBOARDING_SEEN_AND_REJECTED);
+          break;
+        case OnboardingResult::NAVIGATION:
+          Metrics::RecordLiteScriptOnboarding(
+              ukm_recorder_, web_contents(), trigger_ui_type,
+              Metrics::LiteScriptOnboarding::
+                  LITE_SCRIPT_ONBOARDING_SEEN_AND_INTERRUPTED_BY_NAVIGATION);
+          break;
+        case OnboardingResult::ACCEPTED:
+          Metrics::RecordLiteScriptOnboarding(
+              ukm_recorder_, web_contents(), trigger_ui_type,
+              Metrics::LiteScriptOnboarding::
+                  LITE_SCRIPT_ONBOARDING_SEEN_AND_ACCEPTED);
+          break;
+      }
+    } else {
+      Metrics::RecordLiteScriptOnboarding(
+          ukm_recorder_, web_contents(), trigger_ui_type,
+          Metrics::LiteScriptOnboarding::
+              LITE_SCRIPT_ONBOARDING_ALREADY_ACCEPTED);
+    }
+
+    if (result == OnboardingResult::ACCEPTED) {
+      // Do not hide the trigger script here, to facilitate a smooth
+      // transition to the regular flow.
+      StopCheckingTriggerConditions();
+      NotifyOnTriggerScriptFinished(
+          trigger_ui_type,
+          Metrics::LiteScriptFinishedState::LITE_SCRIPT_PROMPT_SUCCEEDED);
+    } else if (!IsDialogOnboardingEnabled()) {
+      Stop(Metrics::LiteScriptFinishedState::
+               LITE_SCRIPT_BOTTOMSHEET_ONBOARDING_REJECTED);
+    }
   }
 }
 
@@ -180,7 +230,7 @@ void TriggerScriptCoordinator::OnBottomSheetClosedWithSwipe() {
     return;
   }
   Metrics::RecordLiteScriptShownToUser(
-      ukm_recorder_, client_->GetWebContents(),
+      ukm_recorder_, web_contents(), GetTriggerUiTypeForVisibleScript(),
       Metrics::LiteScriptShownToUser::LITE_SCRIPT_SWIPE_DISMISSED);
   PerformTriggerScriptAction(trigger_scripts_[visible_trigger_script_]
                                  ->AsProto()
@@ -191,8 +241,8 @@ bool TriggerScriptCoordinator::OnBackButtonPressed() {
   if (visible_trigger_script_ == -1) {
     return false;
   }
-  if (client_->GetWebContents()->GetController().CanGoBack()) {
-    client_->GetWebContents()->GetController().GoBack();
+  if (web_contents()->GetController().CanGoBack()) {
+    web_contents()->GetController().GoBack();
   }
   // We need to handle this event, because by default the bottom sheet will
   // close when the back button is pressed.
@@ -221,9 +271,11 @@ void TriggerScriptCoordinator::OnProactiveHelpSettingChanged(
 }
 
 void TriggerScriptCoordinator::Stop(Metrics::LiteScriptFinishedState state) {
+  VLOG(2) << "Stopping with status " << state;
+  TriggerUIType trigger_ui_type = GetTriggerUiTypeForVisibleScript();
   HideTriggerScript();
   StopCheckingTriggerConditions();
-  NotifyOnTriggerScriptFinished(state);
+  NotifyOnTriggerScriptFinished(trigger_ui_type, state);
 }
 
 void TriggerScriptCoordinator::AddObserver(Observer* observer) {
@@ -260,6 +312,14 @@ void TriggerScriptCoordinator::DidFinishNavigation(
   if (!url_utils::IsInDomainOrSubDomain(GetCurrentURL(), deeplink_url_) &&
       !url_utils::IsInDomainOrSubDomain(GetCurrentURL(),
                                         additional_allowed_domains_)) {
+#ifndef NDEBUG
+    VLOG(2) << "Unexpected navigation to " << GetCurrentURL();
+    VLOG(2) << "List of allowed domains:";
+    VLOG(2) << "\t" << deeplink_url_.host();
+    for (const auto& domain : additional_allowed_domains_) {
+      VLOG(2) << "\t" << domain;
+    }
+#endif
     Stop(Metrics::LiteScriptFinishedState::LITE_SCRIPT_PROMPT_FAILED_NAVIGATE);
     return;
   }
@@ -291,9 +351,11 @@ void TriggerScriptCoordinator::OnEffectiveVisibilityChanged() {
     // script that was shown before is still available, hence we need to fetch
     // it again.
     DCHECK(visible_trigger_script_ == -1);
+    VLOG(2) << "Restarting after tab became visible again";
     Start(deeplink_url_, std::move(trigger_context_));
   } else {
     // Hide UI on tab switch.
+    VLOG(2) << "Pausing after tab became invisible or non-interactable";
     StopCheckingTriggerConditions();
     HideTriggerScript();
   }
@@ -306,7 +368,7 @@ void TriggerScriptCoordinator::OnEffectiveVisibilityChanged() {
 void TriggerScriptCoordinator::WebContentsDestroyed() {
   if (!finished_state_recorded_) {
     Metrics::RecordLiteScriptFinished(
-        ukm_recorder_, client_->GetWebContents(),
+        ukm_recorder_, web_contents(), GetTriggerUiTypeForVisibleScript(),
         visible_trigger_script_ == -1
             ? Metrics::LiteScriptFinishedState::
                   LITE_SCRIPT_WEB_CONTENTS_DESTROYED_WHILE_INVISIBLE
@@ -324,7 +386,8 @@ void TriggerScriptCoordinator::StartCheckingTriggerConditions() {
         trigger_script->AsProto());
   }
   static_trigger_conditions_->Init(
-      client_, deeplink_url_, trigger_context_.get(),
+      website_login_manager_, is_first_time_user_callback_, deeplink_url_,
+      trigger_context_.get(),
       base::BindOnce(&TriggerScriptCoordinator::CheckDynamicTriggerConditions,
                      weak_ptr_factory_.GetWeakPtr()));
 }
@@ -347,10 +410,13 @@ void TriggerScriptCoordinator::ShowTriggerScript(int index) {
     return;
   }
 
-  Metrics::RecordLiteScriptShownToUser(
-      ukm_recorder_, client_->GetWebContents(),
-      Metrics::LiteScriptShownToUser::LITE_SCRIPT_SHOWN_TO_USER);
   visible_trigger_script_ = index;
+  // GetTriggerUiTypeForVisibleScript() requires visible_trigger_script_ to be
+  // set first thing.
+
+  Metrics::RecordLiteScriptShownToUser(
+      ukm_recorder_, web_contents(), GetTriggerUiTypeForVisibleScript(),
+      Metrics::LiteScriptShownToUser::LITE_SCRIPT_SHOWN_TO_USER);
   auto proto = trigger_scripts_[index]->AsProto().user_interface();
   for (Observer& observer : observers_) {
     observer.OnTriggerScriptShown(proto);
@@ -384,6 +450,7 @@ void TriggerScriptCoordinator::OnDynamicTriggerConditionsEvaluated(
     return;
   }
 
+  VLOG(3) << "Evaluating trigger conditions...";
   std::vector<bool> evaluated_trigger_conditions;
   for (const auto& trigger_script : trigger_scripts_) {
     evaluated_trigger_conditions.emplace_back(
@@ -395,7 +462,7 @@ void TriggerScriptCoordinator::OnDynamicTriggerConditionsEvaluated(
   if (visible_trigger_script_ != -1 &&
       !evaluated_trigger_conditions[visible_trigger_script_]) {
     Metrics::RecordLiteScriptShownToUser(
-        ukm_recorder_, client_->GetWebContents(),
+        ukm_recorder_, web_contents(), GetTriggerUiTypeForVisibleScript(),
         Metrics::LiteScriptShownToUser::
             LITE_SCRIPT_HIDE_ON_TRIGGER_CONDITION_NO_LONGER_TRUE);
     HideTriggerScript();
@@ -461,16 +528,26 @@ void TriggerScriptCoordinator::RunOutOfScheduleTriggerConditionCheck() {
 }
 
 void TriggerScriptCoordinator::NotifyOnTriggerScriptFinished(
+    TriggerUIType trigger_ui_type,
     Metrics::LiteScriptFinishedState state) {
   if (!finished_state_recorded_) {
     finished_state_recorded_ = true;
-    Metrics::RecordLiteScriptFinished(ukm_recorder_, client_->GetWebContents(),
-                                      state);
+    Metrics::RecordLiteScriptFinished(ukm_recorder_, web_contents(),
+                                      trigger_ui_type, state);
   }
 
   for (Observer& observer : observers_) {
     observer.OnTriggerScriptFinished(state);
   }
+}
+
+TriggerUIType TriggerScriptCoordinator::GetTriggerUiTypeForVisibleScript()
+    const {
+  if (visible_trigger_script_ >= 0 &&
+      static_cast<size_t>(visible_trigger_script_) < trigger_scripts_.size()) {
+    return trigger_scripts_[visible_trigger_script_]->trigger_ui_type();
+  }
+  return UNSPECIFIED_TRIGGER_UI_TYPE;
 }
 
 GURL TriggerScriptCoordinator::GetCurrentURL() const {

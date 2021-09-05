@@ -40,6 +40,7 @@ class AutofillField : public FormFieldData {
   };
 
   AutofillField();
+  explicit AutofillField(const FormFieldData& field);
   AutofillField(const FormFieldData& field, const base::string16& unique_name);
   virtual ~AutofillField();
 
@@ -49,10 +50,16 @@ class AutofillField : public FormFieldData {
   static std::unique_ptr<AutofillField> CreateForPasswordManagerUpload(
       FieldSignature field_signature);
 
+  // Unique names are not stable across dynamic change. Use renderer IDs instead
+  // if possible.
+  // TODO(crbug/896689): Remove unique_name.
   const base::string16& unique_name() const { return unique_name_; }
 
   ServerFieldType heuristic_type() const { return heuristic_type_; }
   ServerFieldType server_type() const { return server_type_; }
+  bool server_type_prediction_is_override() const {
+    return server_type_prediction_is_override_;
+  }
   const std::vector<
       AutofillQueryResponse::FormSuggestion::FieldSuggestion::FieldPrediction>&
   server_predictions() const {
@@ -75,6 +82,10 @@ class AutofillField : public FormFieldData {
   // Setters for the detected types.
   void set_heuristic_type(ServerFieldType type);
   void set_server_type(ServerFieldType type);
+  // Setter for the indicator that the server prediction is an override.
+  void set_server_type_prediction_is_override(bool is_override) {
+    server_type_prediction_is_override_ = is_override;
+  }
   void add_possible_types_validities(
       const ServerFieldTypeValidityStateMap& possible_types_validities);
   void set_server_predictions(
@@ -182,6 +193,14 @@ class AutofillField : public FormFieldData {
     return password_requirements_;
   }
 
+  // Getter and Setter methods for |state_is_a_matching_type_|.
+  void set_state_is_a_matching_type(bool value = true) {
+    state_is_a_matching_type_ = value;
+  }
+  const bool& state_is_a_matching_type() const {
+    return state_is_a_matching_type_;
+  }
+
   // For each type in |possible_types_| that's missing from
   // |possible_types_validities_|, will add it to the
   // |possible_types_validities_| and will set its validity to UNVALIDATED. This
@@ -203,6 +222,9 @@ class AutofillField : public FormFieldData {
 
   // The type of the field, as determined by the Autofill server.
   ServerFieldType server_type_ = NO_SERVER_DATA;
+
+  // Indicates if the server type prediction is an override.
+  bool server_type_prediction_is_override_ = false;
 
   // The possible types of the field, as determined by the Autofill server,
   // including |server_type_| as the first item.
@@ -274,6 +296,9 @@ class AutofillField : public FormFieldData {
   // triggered the vote.
   AutofillUploadContents::Field::VoteType vote_type_ =
       AutofillUploadContents::Field::NO_INFORMATION;
+
+  // Denotes if |ADDRESS_HOME_STATE| should be added to |possible_types_|.
+  bool state_is_a_matching_type_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(AutofillField);
 };

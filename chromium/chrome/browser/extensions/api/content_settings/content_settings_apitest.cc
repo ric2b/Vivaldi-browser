@@ -41,7 +41,6 @@
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/test_extension_registry_observer.h"
-#include "extensions/common/scoped_worker_based_extensions_channel.h"
 
 namespace extensions {
 
@@ -96,9 +95,6 @@ class ExtensionContentSettingsApiTest : public ExtensionApiTest {
                                      ContentSettingsType::JAVASCRIPT));
     EXPECT_EQ(CONTENT_SETTING_BLOCK,
               map->GetContentSetting(example_url, example_url,
-                                     ContentSettingsType::PLUGINS));
-    EXPECT_EQ(CONTENT_SETTING_BLOCK,
-              map->GetContentSetting(example_url, example_url,
                                      ContentSettingsType::POPUPS));
     EXPECT_EQ(CONTENT_SETTING_ASK,
               map->GetContentSetting(example_url, example_url,
@@ -127,8 +123,6 @@ class ExtensionContentSettingsApiTest : public ExtensionApiTest {
     EXPECT_EQ(
         CONTENT_SETTING_BLOCK,
         map->GetContentSetting(url, url, ContentSettingsType::JAVASCRIPT));
-    EXPECT_EQ(CONTENT_SETTING_BLOCK,
-              map->GetContentSetting(url, url, ContentSettingsType::PLUGINS));
     EXPECT_EQ(CONTENT_SETTING_ALLOW,
               map->GetContentSetting(url, url, ContentSettingsType::POPUPS));
     EXPECT_EQ(
@@ -165,8 +159,6 @@ class ExtensionContentSettingsApiTest : public ExtensionApiTest {
     EXPECT_EQ(
         CONTENT_SETTING_ALLOW,
         map->GetContentSetting(url, url, ContentSettingsType::JAVASCRIPT));
-    EXPECT_EQ(CONTENT_SETTING_BLOCK,
-              map->GetContentSetting(url, url, ContentSettingsType::PLUGINS));
     EXPECT_EQ(CONTENT_SETTING_BLOCK,
               map->GetContentSetting(url, url, ContentSettingsType::POPUPS));
     EXPECT_EQ(
@@ -205,8 +197,6 @@ class ExtensionContentSettingsApiTest : public ExtensionApiTest {
     content_settings.push_back(
         map->GetContentSetting(url, url, ContentSettingsType::JAVASCRIPT));
     content_settings.push_back(
-        map->GetContentSetting(url, url, ContentSettingsType::PLUGINS));
-    content_settings.push_back(
         map->GetContentSetting(url, url, ContentSettingsType::POPUPS));
     content_settings.push_back(
         map->GetContentSetting(url, url, ContentSettingsType::GEOLOCATION));
@@ -231,14 +221,6 @@ class ExtensionContentSettingsApiTest : public ExtensionApiTest {
 class ExtensionContentSettingsApiLazyTest
     : public ExtensionContentSettingsApiTest,
       public testing::WithParamInterface<ContextType> {
- public:
-  ExtensionContentSettingsApiLazyTest() {
-    // Service Workers are currently only available on certain channels, so set
-    // the channel for those tests.
-    if (GetParam() == ContextType::kServiceWorker)
-      current_channel_ = std::make_unique<ScopedWorkerBasedExtensionsChannel>();
-  }
-
  protected:
   bool RunLazyTest(const std::string& extension_name) {
     int browser_test_flags = kFlagNone;
@@ -248,8 +230,6 @@ class ExtensionContentSettingsApiLazyTest
     return RunExtensionTestWithFlagsAndArg(extension_name, nullptr,
                                            browser_test_flags, kFlagNone);
   }
-
-  std::unique_ptr<ScopedWorkerBasedExtensionsChannel> current_channel_;
 };
 
 INSTANTIATE_TEST_SUITE_P(EventPage,
@@ -259,28 +239,7 @@ INSTANTIATE_TEST_SUITE_P(ServiceWorker,
                          ExtensionContentSettingsApiLazyTest,
                          ::testing::Values(ContextType::kServiceWorker));
 
-class ExtensionContentSettingsApiTestWithStandardFeatures
-    : public ExtensionContentSettingsApiLazyTest {
- public:
-  ExtensionContentSettingsApiTestWithStandardFeatures() {
-    scoped_feature_list_.InitAndEnableFeature(
-        content_settings::kDisallowWildcardsInPluginContentSettings);
-  }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
-INSTANTIATE_TEST_SUITE_P(EventPage,
-                         ExtensionContentSettingsApiTestWithStandardFeatures,
-                         ::testing::Values(ContextType::kEventPage));
-
-INSTANTIATE_TEST_SUITE_P(ServiceWorker,
-                         ExtensionContentSettingsApiTestWithStandardFeatures,
-                         ::testing::Values(ContextType::kServiceWorker));
-
-IN_PROC_BROWSER_TEST_P(ExtensionContentSettingsApiTestWithStandardFeatures,
-                       Standard) {
+IN_PROC_BROWSER_TEST_P(ExtensionContentSettingsApiLazyTest, Standard) {
   CheckContentSettingsDefault();
 
   const char kExtensionPath[] = "content_settings/standard";
@@ -384,34 +343,12 @@ IN_PROC_BROWSER_TEST_P(ExtensionContentSettingsApiLazyTest,
       "ContentSettings.ExtensionNonEmbeddedSettingSet", 2);
 }
 
-class ExtensionContentSettingsApiTestWithPluginsApiDisabled
-    : public ExtensionContentSettingsApiLazyTest {
- public:
-  ExtensionContentSettingsApiTestWithPluginsApiDisabled() {
-    scoped_feature_list_.InitAndEnableFeature(
-        content_settings::kDisallowWildcardsInPluginContentSettings);
-  }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
-INSTANTIATE_TEST_SUITE_P(EventPage,
-                         ExtensionContentSettingsApiTestWithPluginsApiDisabled,
-                         ::testing::Values(ContextType::kEventPage));
-
-INSTANTIATE_TEST_SUITE_P(ServiceWorker,
-                         ExtensionContentSettingsApiTestWithPluginsApiDisabled,
-                         ::testing::Values(ContextType::kServiceWorker));
-
-IN_PROC_BROWSER_TEST_P(ExtensionContentSettingsApiTestWithPluginsApiDisabled,
-                       PluginsApiTest) {
+IN_PROC_BROWSER_TEST_P(ExtensionContentSettingsApiLazyTest, PluginsApiTest) {
   constexpr char kExtensionPath[] = "content_settings/disablepluginsapi";
   EXPECT_TRUE(RunLazyTest(kExtensionPath)) << message_;
 }
 
-IN_PROC_BROWSER_TEST_P(ExtensionContentSettingsApiTestWithPluginsApiDisabled,
-                       ConsoleErrorTest) {
+IN_PROC_BROWSER_TEST_P(ExtensionContentSettingsApiLazyTest, ConsoleErrorTest) {
   constexpr char kExtensionPath[] = "content_settings/disablepluginsapi";
   const extensions::Extension* extension =
       LoadExtension(test_data_dir_.AppendASCII(kExtensionPath));

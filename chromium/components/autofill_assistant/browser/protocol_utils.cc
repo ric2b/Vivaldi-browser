@@ -8,6 +8,7 @@
 
 #include "base/feature_list.h"
 #include "base/logging.h"
+#include "components/autofill_assistant/browser/actions/action_delegate_util.h"
 #include "components/autofill_assistant/browser/actions/click_action.h"
 #include "components/autofill_assistant/browser/actions/collect_user_data_action.h"
 #include "components/autofill_assistant/browser/actions/configure_bottom_sheet_action.h"
@@ -17,9 +18,11 @@
 #include "components/autofill_assistant/browser/actions/get_element_status_action.h"
 #include "components/autofill_assistant/browser/actions/highlight_element_action.h"
 #include "components/autofill_assistant/browser/actions/navigate_action.h"
+#include "components/autofill_assistant/browser/actions/perform_on_single_element_action.h"
 #include "components/autofill_assistant/browser/actions/popup_message_action.h"
 #include "components/autofill_assistant/browser/actions/presave_generated_password_action.h"
 #include "components/autofill_assistant/browser/actions/prompt_action.h"
+#include "components/autofill_assistant/browser/actions/release_elements_action.h"
 #include "components/autofill_assistant/browser/actions/save_generated_password_action.h"
 #include "components/autofill_assistant/browser/actions/select_option_action.h"
 #include "components/autofill_assistant/browser/actions/set_attribute_action.h"
@@ -40,6 +43,7 @@
 #include "components/autofill_assistant/browser/actions/wait_for_dom_action.h"
 #include "components/autofill_assistant/browser/actions/wait_for_navigation_action.h"
 #include "components/autofill_assistant/browser/service.pb.h"
+#include "components/autofill_assistant/browser/web/web_controller.h"
 #include "url/gurl.h"
 
 namespace autofill_assistant {
@@ -119,10 +123,15 @@ std::string ProtocolUtils::CreateInitialScriptActionsRequest(
     const std::string& global_payload,
     const std::string& script_payload,
     const ClientContextProto& client_context,
-    const std::map<std::string, std::string>& script_parameters) {
+    const std::map<std::string, std::string>& script_parameters,
+    const base::Optional<ScriptStoreConfig>& script_store_config) {
   ScriptActionRequestProto request_proto;
   InitialScriptActionsRequestProto* initial_request_proto =
       request_proto.mutable_initial_request();
+  if (script_store_config.has_value()) {
+    *initial_request_proto->mutable_script_store_config() =
+        *script_store_config;
+  }
   InitialScriptActionsRequestProto::QueryProto* query =
       initial_request_proto->mutable_query();
   query->add_script_path(script_path);
@@ -233,6 +242,100 @@ std::unique_ptr<Action> ProtocolUtils::CreateAction(ActionDelegate* delegate,
       return std::make_unique<PresaveGeneratedPasswordAction>(delegate, action);
     case ActionProto::ActionInfoCase::kGetElementStatus:
       return std::make_unique<GetElementStatusAction>(delegate, action);
+    case ActionProto::ActionInfoCase::kScrollIntoView:
+      return PerformOnSingleElementAction::WithClientId(
+          delegate, action, action.scroll_into_view().client_id(),
+          base::BindOnce(&WebController::ScrollIntoView,
+                         delegate->GetWebController()->GetWeakPtr()));
+    case ActionProto::ActionInfoCase::kWaitForDocumentToBecomeInteractive:
+      return PerformOnSingleElementAction::WithOptionalClientIdTimed(
+          delegate, action,
+          action.wait_for_document_to_become_interactive().client_id(),
+          base::BindOnce(&ActionDelegate::WaitUntilDocumentIsInReadyState,
+                         delegate->GetWeakPtr(),
+                         base::TimeDelta::FromMilliseconds(
+                             action.wait_for_document_to_become_interactive()
+                                 .timeout_in_ms()),
+                         DOCUMENT_INTERACTIVE));
+    case ActionProto::ActionInfoCase::kWaitForDocumentToBecomeComplete:
+      return PerformOnSingleElementAction::WithOptionalClientIdTimed(
+          delegate, action,
+          action.wait_for_document_to_become_complete().client_id(),
+          base::BindOnce(&ActionDelegate::WaitUntilDocumentIsInReadyState,
+                         delegate->GetWeakPtr(),
+                         base::TimeDelta::FromMilliseconds(
+                             action.wait_for_document_to_become_complete()
+                                 .timeout_in_ms()),
+                         DOCUMENT_COMPLETE));
+    case ActionProto::ActionInfoCase::kSendClickEvent:
+      return PerformOnSingleElementAction::WithClientId(
+          delegate, action, action.send_click_event().client_id(),
+          base::BindOnce(&ActionDelegate::ClickOrTapElement,
+                         delegate->GetWeakPtr(), ClickType::CLICK));
+    case ActionProto::ActionInfoCase::kSendTapEvent:
+      return PerformOnSingleElementAction::WithClientId(
+          delegate, action, action.send_tap_event().client_id(),
+          base::BindOnce(&ActionDelegate::ClickOrTapElement,
+                         delegate->GetWeakPtr(), ClickType::TAP));
+    case ActionProto::ActionInfoCase::kJsClick:
+      return PerformOnSingleElementAction::WithClientId(
+          delegate, action, action.js_click().client_id(),
+          base::BindOnce(&ActionDelegate::ClickOrTapElement,
+                         delegate->GetWeakPtr(), ClickType::JAVASCRIPT));
+    case ActionProto::ActionInfoCase::kSendKeystrokeEvents:
+      return PerformOnSingleElementAction::WithClientId(
+          delegate, action, action.send_keystroke_events().client_id(),
+          base::BindOnce(
+              &action_delegate_util::PerformWithTextValue, delegate,
+              action.send_keystroke_events().value(),
+              base::BindOnce(&WebController::SendTextInput,
+                             delegate->GetWebController()->GetWeakPtr(),
+                             action.send_keystroke_events().delay_in_ms())));
+    case ActionProto::ActionInfoCase::kSendChangeEvent:
+      return PerformOnSingleElementAction::WithClientId(
+          delegate, action, action.send_change_event().client_id(),
+          base::BindOnce(&WebController::SendChangeEvent,
+                         delegate->GetWebController()->GetWeakPtr()));
+    case ActionProto::ActionInfoCase::kSetElementAttribute: {
+      std::vector<std::string> attributes;
+      for (const auto& attribute : action.set_element_attribute().attribute()) {
+        attributes.emplace_back(attribute);
+      }
+      return PerformOnSingleElementAction::WithClientId(
+          delegate, action, action.set_element_attribute().client_id(),
+          base::BindOnce(&action_delegate_util::PerformWithTextValue, delegate,
+                         action.set_element_attribute().value(),
+                         base::BindOnce(&ActionDelegate::SetAttribute,
+                                        delegate->GetWeakPtr(), attributes)));
+    }
+    case ActionProto::ActionInfoCase::kSelectFieldValue:
+      return PerformOnSingleElementAction::WithClientId(
+          delegate, action, action.select_field_value().client_id(),
+          base::BindOnce(&WebController::SelectFieldValue,
+                         delegate->GetWebController()->GetWeakPtr()));
+    case ActionProto::ActionInfoCase::kFocusField:
+      return PerformOnSingleElementAction::WithClientId(
+          delegate, action, action.focus_field().client_id(),
+          base::BindOnce(&WebController::FocusField,
+                         delegate->GetWebController()->GetWeakPtr()));
+    case ActionProto::ActionInfoCase::kWaitForElementToBecomeStable:
+      return PerformOnSingleElementAction::WithClientIdTimed(
+          delegate, action,
+          action.wait_for_element_to_become_stable().client_id(),
+          base::BindOnce(&ActionDelegate::WaitUntilElementIsStable,
+                         delegate->GetWeakPtr(),
+                         action.wait_for_element_to_become_stable()
+                             .stable_check_max_rounds(),
+                         base::TimeDelta::FromMilliseconds(
+                             action.wait_for_element_to_become_stable()
+                                 .stable_check_interval_ms())));
+    case ActionProto::ActionInfoCase::kCheckElementIsOnTop:
+      return PerformOnSingleElementAction::WithClientId(
+          delegate, action, action.check_element_is_on_top().client_id(),
+          base::BindOnce(&WebController::CheckOnTop,
+                         delegate->GetWebController()->GetWeakPtr()));
+    case ActionProto::ActionInfoCase::kReleaseElements:
+      return std::make_unique<ReleaseElementsAction>(delegate, action);
     case ActionProto::ActionInfoCase::ACTION_INFO_NOT_SET: {
       VLOG(1) << "Encountered action with ACTION_INFO_NOT_SET";
       return std::make_unique<UnsupportedAction>(delegate, action);
@@ -323,7 +426,13 @@ bool ProtocolUtils::ParseTriggerScripts(
     return false;
   }
 
-  for (const auto& trigger_script_proto : response_proto.trigger_scripts()) {
+  for (auto& trigger_script_proto : *response_proto.mutable_trigger_scripts()) {
+    if (trigger_script_proto.user_interface().scroll_to_hide()) {
+      // Turn off viewport resizing when scroll to hide is on as it causes
+      // issues.
+      trigger_script_proto.mutable_user_interface()->set_resize_visual_viewport(
+          false);
+    }
     trigger_scripts->emplace_back(
         std::make_unique<TriggerScript>(trigger_script_proto));
   }

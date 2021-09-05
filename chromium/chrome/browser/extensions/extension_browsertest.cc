@@ -23,6 +23,7 @@
 #include "base/task/post_task.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
@@ -76,7 +77,7 @@
 #include "extensions/common/switches.h"
 #include "extensions/common/value_builder.h"
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chromeos/constants/chromeos_switches.h"
 #endif
 
@@ -164,7 +165,7 @@ void ExtensionProtocolTestResourcesHandler(const base::FilePath& test_dir_root,
 
 ExtensionBrowserTest::ExtensionBrowserTest()
     :
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
       set_chromeos_user_(true),
 #endif
       // Default channel is STABLE but override with UNKNOWN so that unlaunched
@@ -253,7 +254,7 @@ void ExtensionBrowserTest::SetUpCommandLine(base::CommandLine* command_line) {
         new ScopedInstallVerifierBypassForTest());
   }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   if (set_chromeos_user_) {
     // This makes sure that we create the Default profile first, with no
     // ExtensionService and then the real profile with one, as we do when
@@ -272,8 +273,8 @@ void ExtensionBrowserTest::SetUpOnMainThread() {
         test_extension_cache_.get());
   }
 
-  test_protocol_handler_ = base::Bind(&ExtensionProtocolTestResourcesHandler,
-                                      GetTestResourcesParentDir());
+  test_protocol_handler_ = base::BindRepeating(
+      &ExtensionProtocolTestResourcesHandler, GetTestResourcesParentDir());
   SetExtensionProtocolTestHandler(&test_protocol_handler_);
 }
 
@@ -317,7 +318,9 @@ const Extension* ExtensionBrowserTest::LoadExtensionWithInstallParam(
   loader.set_ignore_manifest_warnings(flags & kFlagIgnoreManifestWarnings);
   loader.set_allow_incognito_access(flags & kFlagEnableIncognito);
   loader.set_allow_file_access(flags & kFlagEnableFileAccess);
-  loader.set_install_param(install_param);
+  if (!install_param.empty()) {
+    loader.set_install_param(install_param);
+  }
 
   // Note: Rely on the default value to wait for renderers unless otherwise
   // specified.

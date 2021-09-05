@@ -45,12 +45,13 @@
 #import "ios/chrome/browser/ui/download/pass_kit_coordinator.h"
 #import "ios/chrome/browser/ui/find_bar/find_bar_controller_ios.h"
 #import "ios/chrome/browser/ui/find_bar/find_bar_coordinator.h"
+#import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_mediator.h"
+#import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_scene_agent.h"
 #import "ios/chrome/browser/ui/infobars/infobar_feature.h"
+#import "ios/chrome/browser/ui/main/scene_state_browser_agent.h"
 #import "ios/chrome/browser/ui/open_in/open_in_mediator.h"
 #import "ios/chrome/browser/ui/overlays/overlay_container_coordinator.h"
-#import "ios/chrome/browser/ui/page_info/features.h"
 #import "ios/chrome/browser/ui/page_info/page_info_coordinator.h"
-#import "ios/chrome/browser/ui/page_info/page_info_legacy_coordinator.h"
 #import "ios/chrome/browser/ui/passwords/password_breach_coordinator.h"
 #import "ios/chrome/browser/ui/print/print_controller.h"
 #import "ios/chrome/browser/ui/qr_generator/qr_generator_coordinator.h"
@@ -73,6 +74,7 @@
 #import "ios/chrome/browser/web/print_tab_helper.h"
 #import "ios/chrome/browser/web/repost_form_tab_helper.h"
 #import "ios/chrome/browser/web/repost_form_tab_helper_delegate.h"
+#import "ios/chrome/browser/web/web_navigation_browser_agent.h"
 #include "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/web_state_list/web_state_list_observer_bridge.h"
 #include "ui/base/l10n/l10n_util_mac.h"
@@ -104,6 +106,9 @@
 
 // Mediator between OpenIn TabHelper and OpenIn UI.
 @property(nonatomic, strong) OpenInMediator* openInMediator;
+
+// Mediator for incognito reauth.
+@property(nonatomic, strong) IncognitoReauthMediator* incognitoAuthMediator;
 
 // =================================================
 // Child Coordinators, listed in alphabetical order.
@@ -227,6 +232,7 @@
   [self startBrowserContainer];
   [self createViewController];
   [self startChildCoordinators];
+  [self startMediators];
   [self installDelegatesForAllWebStates];
   [self installDelegatesForBrowser];
   [self addWebStateListObserver];
@@ -307,6 +313,8 @@
       browserContainerViewController:self.browserContainerCoordinator
                                          .viewController
                           dispatcher:self.dispatcher];
+  WebNavigationBrowserAgent::FromBrowser(self.browser)
+      ->SetDelegate(_viewController);
 }
 
 // Shuts down the BrowserViewController.
@@ -467,6 +475,22 @@
 
   [self.defaultBrowserPromoCoordinator stop];
   self.defaultBrowserPromoCoordinator = nil;
+}
+
+// Starts mediators owned by this coordinator.
+- (void)startMediators {
+  if (self.browser->GetBrowserState()->IsOffTheRecord()) {
+    IncognitoReauthSceneAgent* reauthAgent = [IncognitoReauthSceneAgent
+        agentFromScene:SceneStateBrowserAgent::FromBrowser(self.browser)
+                           ->GetSceneState()];
+
+    self.incognitoAuthMediator =
+        [[IncognitoReauthMediator alloc] initWithConsumer:self.viewController
+                                              reauthAgent:reauthAgent];
+  }
+
+  self.viewController.reauthHandler =
+      HandlerForProtocol(self.dispatcher, IncognitoReauthCommands);
 }
 
 #pragma mark - ActivityServiceCommands
@@ -675,19 +699,7 @@
 
 #pragma mark - PageInfoCommands
 
-- (void)legacyShowPageInfoForOriginPoint:(CGPoint)originPoint {
-  PageInfoLegacyCoordinator* pageInfoCoordinator =
-      [[PageInfoLegacyCoordinator alloc]
-          initWithBaseViewController:self.viewController
-                             browser:self.browser];
-  pageInfoCoordinator.presentationProvider = self.viewController;
-  pageInfoCoordinator.originPoint = originPoint;
-  self.pageInfoCoordinator = pageInfoCoordinator;
-  [self.pageInfoCoordinator start];
-}
-
 - (void)showPageInfo {
-  DCHECK(base::FeatureList::IsEnabled(kPageInfoRefactoring));
   PageInfoCoordinator* pageInfoCoordinator = [[PageInfoCoordinator alloc]
       initWithBaseViewController:self.viewController
                          browser:self.browser];

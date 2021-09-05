@@ -342,6 +342,88 @@ void MouseSettings::Apply(const MouseSettings& mouse_settings,
   }
 }
 
+PointingStickSettings::PointingStickSettings() = default;
+
+PointingStickSettings::PointingStickSettings(
+    const PointingStickSettings& other) = default;
+
+PointingStickSettings& PointingStickSettings::operator=(
+    const PointingStickSettings& other) {
+  if (&other != this) {
+    sensitivity_ = other.sensitivity_;
+  }
+  return *this;
+}
+
+void PointingStickSettings::SetSensitivity(int value) {
+  sensitivity_ = value;
+}
+
+int PointingStickSettings::GetSensitivity() const {
+  return *sensitivity_;
+}
+
+bool PointingStickSettings::IsSensitivitySet() const {
+  return sensitivity_.has_value();
+}
+
+void PointingStickSettings::SetPrimaryButtonRight(bool right) {
+  primary_button_right_ = right;
+}
+
+bool PointingStickSettings::GetPrimaryButtonRight() const {
+  return primary_button_right_.value();
+}
+
+bool PointingStickSettings::IsPrimaryButtonRightSet() const {
+  return primary_button_right_.has_value();
+}
+
+void PointingStickSettings::SetAcceleration(bool enabled) {
+  acceleration_ = enabled;
+}
+
+bool PointingStickSettings::GetAcceleration() const {
+  return *acceleration_;
+}
+
+bool PointingStickSettings::IsAccelerationSet() const {
+  return acceleration_.has_value();
+}
+
+bool PointingStickSettings::Update(const PointingStickSettings& settings) {
+  bool updated = false;
+  if (UpdateIfHasValue(settings.sensitivity_, &sensitivity_))
+    updated = true;
+  if (UpdateIfHasValue(settings.primary_button_right_,
+                       &primary_button_right_)) {
+    updated = true;
+  }
+  if (UpdateIfHasValue(settings.acceleration_, &acceleration_))
+    updated = true;
+  return updated;
+}
+
+// static
+void PointingStickSettings::Apply(
+    const PointingStickSettings& pointing_stick_settings,
+    InputDeviceSettings* input_device_settings) {
+  if (!input_device_settings)
+    return;
+  if (pointing_stick_settings.sensitivity_.has_value()) {
+    input_device_settings->SetPointingStickSensitivity(
+        pointing_stick_settings.sensitivity_.value());
+  }
+  if (pointing_stick_settings.primary_button_right_.has_value()) {
+    input_device_settings->SetPointingStickPrimaryButtonRight(
+        pointing_stick_settings.primary_button_right_.value());
+  }
+  if (pointing_stick_settings.acceleration_.has_value()) {
+    input_device_settings->SetPointingStickAcceleration(
+        pointing_stick_settings.acceleration_.value());
+  }
+}
+
 // static
 bool InputDeviceSettings::ForceKeyboardDrivenUINavigation() {
   if (policy::EnrollmentRequisitionManager::IsRemoraRequisition() ||

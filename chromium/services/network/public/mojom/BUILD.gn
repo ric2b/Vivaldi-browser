@@ -123,7 +123,10 @@ mojom("mojom_network_isolation_key") {
   generate_java = true
   sources = [ "network_isolation_key.mojom" ]
 
-  public_deps = [ "//url/mojom:url_mojom_origin" ]
+  public_deps = [
+    ":mojom_schemeful_site",
+    "//url/mojom:url_mojom_origin",
+  ]
 
   if (!is_ios) {
     export_class_attribute_blink = "BLINK_PLATFORM_EXPORT"
@@ -162,6 +165,7 @@ mojom("url_loader_base") {
     "mutable_network_traffic_annotation_tag.mojom",
     "mutable_partial_network_traffic_annotation_tag.mojom",
     "trust_tokens.mojom",
+    "web_bundle_handle.mojom",
   ]
 
   public_deps = [
@@ -511,6 +515,7 @@ mojom("mojom") {
     "url_response_head.mojom",
     "web_client_hints_types.mojom",
     "web_sandbox_flags.mojom",
+    "x_frame_options.mojom",
   ]
 
   public_deps = [
@@ -545,11 +550,11 @@ mojom("mojom") {
 
   # This is only needed on desktop linux, but the defines make this difficult
   # because IS_CHROMECAST is not available in build/build_config.h.
-  if (is_linux || is_lacros) {
+  if (is_linux || is_chromeos_lacros) {
     enabled_features += [ "needs_crypt_config" ]
   }
 
-  if (is_android || is_ash) {
+  if (is_android || is_chromeos_ash) {
     enabled_features += [ "network_change_notifier_in_browser" ]
   }
 
@@ -580,6 +585,10 @@ mojom("mojom") {
           cpp = "::network::ResourceRequest::TrustedParams"
         },
         {
+          mojom = "network.mojom.WebBundleTokenParams"
+          cpp = "::network::ResourceRequest::WebBundleTokenParams"
+        },
+        {
           mojom = "network.mojom.URLRequest"
           cpp = "::network::ResourceRequest"
         },
@@ -596,6 +605,26 @@ mojom("mojom") {
         {
           mojom = "network.mojom.RequestPriority"
           cpp = "::net::RequestPriority"
+        },
+        {
+          mojom = "network.mojom.DataElementBytes"
+          cpp = "::network::DataElementBytes"
+          move_only = true
+        },
+        {
+          mojom = "network.mojom.DataElementDataPipe"
+          cpp = "::network::DataElementDataPipe"
+          move_only = true
+        },
+        {
+          mojom = "network.mojom.DataElementChunkedDataPipe"
+          cpp = "::network::DataElementChunkedDataPipe"
+          move_only = true
+        },
+        {
+          mojom = "network.mojom.DataElementFile"
+          cpp = "::network::DataElementFile"
+          move_only = true
         },
         {
           mojom = "network.mojom.DataElement"

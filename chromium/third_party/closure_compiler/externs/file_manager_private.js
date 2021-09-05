@@ -181,9 +181,8 @@ chrome.fileManagerPrivate.TaskResult = {
   MESSAGE_SENT: 'message_sent',
   FAILED: 'failed',
   EMPTY: 'empty',
-  FAILED_PLUGIN_VM_TASK_DIRECTORY_NOT_SHARED:
-      'failed_plugin_vm_task_directory_not_shared',
-  FAILED_PLUGIN_VM_TASK_EXTERNAL_DRIVE: 'failed_plugin_vm_task_external_drive',
+  FAILED_PLUGIN_VM_DIRECTORY_NOT_SHARED:
+      'failed_plugin_vm_directory_not_shared',
 };
 
 /** @enum {string} */
@@ -268,6 +267,8 @@ chrome.fileManagerPrivate.CrostiniEventType = {
   DISABLE: 'disable',
   SHARE: 'share',
   UNSHARE: 'unshare',
+  DROP_FAILED_PLUGIN_VM_DIRECTORY_NOT_SHARED:
+      'drop_failed_plugin_vm_directory_not_shared',
 };
 
 /**
@@ -1197,6 +1198,12 @@ chrome.fileManagerPrivate.toggleAddedToHoldingSpace = function(entries, added, c
  */
 chrome.fileManagerPrivate.getHoldingSpaceState = function(callback) {};
 
+/**
+ * Returns true via `callback` if tablet mode is enabled, false otherwise.
+ * @param {function(boolean): void} callback
+ */
+chrome.fileManagerPrivate.isTabletModeEnabled = function(callback) {};
+
 /** @type {!ChromeEvent} */
 chrome.fileManagerPrivate.onMountCompleted;
 
@@ -1229,3 +1236,6 @@ chrome.fileManagerPrivate.onAppsUpdated;
 
 /** @type {!ChromeEvent} */
 chrome.fileManagerPrivate.onCrostiniChanged;
+
+/** @type {!ChromeEvent} */
+chrome.fileManagerPrivate.onTabletModeChanged;

@@ -57,8 +57,8 @@ class UiDelegate {
   // Returns the current bubble / tooltip message.
   virtual std::string GetBubbleMessage() const = 0;
 
-  // Returns the current contextual information. May be null if empty.
-  virtual const Details* GetDetails() const = 0;
+  // Returns the current contextual information. May be empty.
+  virtual std::vector<Details> GetDetails() const = 0;
 
   // Returns the current info box data. May be null if empty.
   virtual const InfoBox* GetInfoBox() const = 0;
@@ -179,6 +179,7 @@ class UiDelegate {
 
   // Reports a fatal error to Autofill Assistant, which should then stop.
   virtual void OnFatalError(const std::string& error_message,
+                            bool show_feedback_chip,
                             Metrics::DropOutReason reason) = 0;
 
   // Reports that Autofill Assistant should be Stopped.

@@ -33,11 +33,8 @@
 
 #ifdef VIVALDI_BUILD
 #include "app/vivaldi_apptools.h"
-#include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/browser_finder.h"
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
 #include "content/browser/web_contents/web_contents_impl.h"
-#include "extensions/buildflags/buildflags.h"
 #include "ui/content/vivaldi_tab_check.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)

@@ -21,6 +21,7 @@ import org.chromium.base.FeatureList;
 import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.omnibox.LocationBarDataProvider;
@@ -32,7 +33,9 @@ import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.translate.TranslateBridge;
 import org.chromium.chrome.browser.util.VoiceRecognitionUtil;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetControllerProvider;
 import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.components.prefs.PrefService;
 import org.chromium.components.user_prefs.UserPrefs;
@@ -61,10 +64,33 @@ public class VoiceRecognitionHandler {
     // This language is only returned for queries handled by Assistant.
     @VisibleForTesting
     static final String VOICE_QUERY_RESULT_LANGUAGES = "android.speech.extra.LANGUAGE";
+    // Extra containing an identifier for the current Assistant experiment. This is only populated
+    // for intents initiated via the toolbar button, and is not populated for internal Chrome URLs.
+    @VisibleForTesting
+    static final String EXTRA_EXPERIMENT_ID = "com.android.chrome.voice.EXPERIMENT_ID";
+    // The parameter from the ASSISTANT_INTENT_EXPERIMENT_ID feature that configures the experiment
+    // ID attached via the EXTRA_EXPERIMENT_ID extra.
+    @VisibleForTesting
+    static final String ASSISTANT_EXPERIMENT_ID_PARAM_NAME = "experiment_id";
     // Extra containing the URL of the current page. This is only populated for intents initiated
     // via the toolbar button, and is not populated for internal Chrome URLs.
     @VisibleForTesting
     static final String EXTRA_PAGE_URL = "com.android.chrome.voice.PAGE_URL";
+    // Extra containing the original language code of the current page. This is only populated for
+    // pages that are translatable and only for intents initiated via the toolbar button.
+    @VisibleForTesting
+    static final String EXTRA_TRANSLATE_ORIGINAL_LANGUAGE =
+            "com.android.chrome.voice.TRANSLATE_ORIGINAL_LANGUAGE";
+    // Extra containing the current language code of the current page. This is only populated for
+    // pages that are translatable and only for intents initiated via the toolbar button.
+    @VisibleForTesting
+    static final String EXTRA_TRANSLATE_CURRENT_LANGUAGE =
+            "com.android.chrome.voice.TRANSLATE_CURRENT_LANGUAGE";
+    // Extra containing the user's default target language code. This is only populated for pages
+    // that are translatable and only for intents initiated via the toolbar button.
+    @VisibleForTesting
+    static final String EXTRA_TRANSLATE_TARGET_LANGUAGE =
+            "com.android.chrome.voice.TRANSLATE_TARGET_LANGUAGE";
     // Extra containing a string that represents the action taken by Assistant after being opened
     // for voice transcription. See AssistantActionPerformed, below.
     @VisibleForTesting
@@ -73,7 +99,8 @@ public class VoiceRecognitionHandler {
     private final Delegate mDelegate;
     private Long mQueryStartTimeMs;
     private WebContentsObserver mVoiceSearchWebContentsObserver;
-    private AssistantVoiceSearchService mAssistantVoiceSearchService;
+    private Supplier<AssistantVoiceSearchService> mAssistantVoiceSearchServiceSupplier;
+    private TranslateBridgeWrapper mTranslateBridgeWrapper;
 
     // VoiceInteractionEventSource defined in tools/metrics/histograms/enums.xml.
     // Do not reorder or remove items, only add new items before HISTOGRAM_BOUNDARY.
@@ -155,6 +182,45 @@ public class VoiceRecognitionHandler {
     }
 
     /**
+     * Wraps our usage of the static methods in the {@link TranslateBridge} into a class that can be
+     * mocked for testing.
+     */
+    public static class TranslateBridgeWrapper {
+        /**
+         * Returns true iff the current tab can be manually translated.
+         * Logging should only be performed when this method is called to show the translate menu
+         * item.
+         */
+        public boolean canManuallyTranslate(Tab tab) {
+            return TranslateBridge.canManuallyTranslate(tab, /*menuLogging=*/false);
+        }
+
+        /**
+         * Returns the original language code of the given tab. Empty string if no language was
+         * detected yet.
+         */
+        public String getOriginalLanguage(Tab tab) {
+            return TranslateBridge.getOriginalLanguage(tab);
+        }
+
+        /**
+         * Returns the current language code of the given tab. Empty string if no language was
+         * detected yet.
+         */
+        public String getCurrentLanguage(Tab tab) {
+            return TranslateBridge.getCurrentLanguage(tab);
+        }
+
+        /**
+         * Returns the best target language based on what the Translate Service knows about the
+         * user.
+         */
+        public String getTargetLanguage() {
+            return TranslateBridge.getTargetLanguage();
+        }
+    }
+
+    /**
      * A storage class that holds voice recognition string matches and confidence scores.
      */
     public static class VoiceResult {
@@ -201,14 +267,11 @@ public class VoiceRecognitionHandler {
         }
     }
 
-    public VoiceRecognitionHandler(Delegate delegate) {
+    public VoiceRecognitionHandler(Delegate delegate,
+            Supplier<AssistantVoiceSearchService> assistantVoiceSearchServiceSupplier) {
         mDelegate = delegate;
-    }
-
-    /** Set the AssistantVoiceSearchService for this class. */
-    public void setAssistantVoiceSearchService(
-            AssistantVoiceSearchService assistantVoiceSearchService) {
-        mAssistantVoiceSearchService = assistantVoiceSearchService;
+        mAssistantVoiceSearchServiceSupplier = assistantVoiceSearchServiceSupplier;
+        mTranslateBridgeWrapper = new TranslateBridgeWrapper();
     }
 
     /**
@@ -583,16 +646,18 @@ public class VoiceRecognitionHandler {
      */
     private boolean startAGSAForAssistantVoiceSearch(
             Activity activity, WindowAndroid windowAndroid, @VoiceInteractionSource int source) {
-        if (mAssistantVoiceSearchService == null) return false;
+        AssistantVoiceSearchService assistantVoiceSearchService =
+                mAssistantVoiceSearchServiceSupplier.get();
+        if (assistantVoiceSearchService == null) return false;
 
-        if (mAssistantVoiceSearchService.canRequestAssistantVoiceSearch()
-                && mAssistantVoiceSearchService.needsEnabledCheck()) {
+        if (assistantVoiceSearchService.canRequestAssistantVoiceSearch()
+                && assistantVoiceSearchService.needsEnabledCheck()) {
             mDelegate.clearOmniboxFocus();
             AssistantVoiceSearchConsentUi.show(windowAndroid,
                     SharedPreferencesManager.getInstance(), new SettingsLauncherImpl(),
-                    (useAssistant) -> {
+                    BottomSheetControllerProvider.from(windowAndroid), (useAssistant) -> {
                         // Notify the service about the consent completion.
-                        mAssistantVoiceSearchService.onAssistantConsentDialogComplete(useAssistant);
+                        assistantVoiceSearchService.onAssistantConsentDialogComplete(useAssistant);
 
                         if (useAssistant) {
                             if (!startAGSAForAssistantVoiceSearch(
@@ -609,15 +674,25 @@ public class VoiceRecognitionHandler {
         }
 
         // Report the client's eligibility for Assistant voice search.
-        mAssistantVoiceSearchService.reportUserEligibility();
-        if (!mAssistantVoiceSearchService.shouldRequestAssistantVoiceSearch()) return false;
+        assistantVoiceSearchService.reportUserEligibility();
+        if (!assistantVoiceSearchService.shouldRequestAssistantVoiceSearch()) return false;
 
-        Intent intent = mAssistantVoiceSearchService.getAssistantVoiceSearchIntent();
+        Intent intent = assistantVoiceSearchService.getAssistantVoiceSearchIntent();
 
         if (shouldAddPageUrl(source)) {
             String url = getUrl();
             if (url != null) {
                 intent.putExtra(EXTRA_PAGE_URL, url);
+            }
+        }
+
+        if (source == VoiceInteractionSource.TOOLBAR && FeatureList.isInitialized()) {
+            if (ChromeFeatureList.isEnabled(ChromeFeatureList.ASSISTANT_INTENT_TRANSLATE_INFO)) {
+                boolean attached = attachTranslateExtras(intent);
+                recordTranslateExtrasAttachResult(attached);
+            }
+            if (ChromeFeatureList.isEnabled(ChromeFeatureList.ASSISTANT_INTENT_EXPERIMENT_ID)) {
+                attachAssistantExperimentId(intent);
             }
         }
 
@@ -661,6 +736,58 @@ public class VoiceRecognitionHandler {
         GURL pageUrl = currentTab.getUrl();
         if (!UrlUtilities.isHttpOrHttps(pageUrl)) return null;
         return pageUrl.getSpec();
+    }
+
+    /** Adds an Extra used to indicate to Assistant which experiment arm the user is in. */
+    private void attachAssistantExperimentId(Intent intent) {
+        String experimentId = ChromeFeatureList.getFieldTrialParamByFeature(
+                ChromeFeatureList.ASSISTANT_INTENT_EXPERIMENT_ID,
+                ASSISTANT_EXPERIMENT_ID_PARAM_NAME);
+        if (!TextUtils.isEmpty(experimentId)) {
+            intent.putExtra(EXTRA_EXPERIMENT_ID, experimentId);
+        }
+    }
+
+    /**
+     * Includes translate information, if available, as Extras in the given Assistant intent.
+     *
+     * @return True if the Extras were attached successfully (page was translatable, languages
+     *         detected, etc), false otherwise.
+     */
+    private boolean attachTranslateExtras(Intent intent) {
+        LocationBarDataProvider locationBarDataProvider = mDelegate.getLocationBarDataProvider();
+        Tab currentTab = locationBarDataProvider != null ? locationBarDataProvider.getTab() : null;
+        if (currentTab == null || currentTab.isIncognito()
+                || !mTranslateBridgeWrapper.canManuallyTranslate(currentTab)) {
+            return false;
+        }
+
+        // The page's URL is used to ensure the Translate intent doesn't translate the wrong page.
+        String url = getUrl();
+        // The presence of original and current language fields are used to indicate whether the
+        // page is translated and/or is translatable. Only include them if they are both available.
+        String originalLanguageCode = mTranslateBridgeWrapper.getOriginalLanguage(currentTab);
+        String currentLanguageCode = mTranslateBridgeWrapper.getCurrentLanguage(currentTab);
+        if (TextUtils.isEmpty(url) || TextUtils.isEmpty(originalLanguageCode)
+                || TextUtils.isEmpty(currentLanguageCode)) {
+            return false;
+        }
+
+        intent.putExtra(EXTRA_TRANSLATE_ORIGINAL_LANGUAGE, originalLanguageCode);
+        intent.putExtra(EXTRA_TRANSLATE_CURRENT_LANGUAGE, currentLanguageCode);
+
+        // If ASSISTANT_INTENT_PAGE_URL is enabled, the URL may have already been added.
+        if (!intent.hasExtra(EXTRA_PAGE_URL)) {
+            intent.putExtra(EXTRA_PAGE_URL, url);
+        }
+
+        // The target language is not necessary for Assistant to decide whether to show the
+        // translate UI.
+        String targetLanguageCode = mTranslateBridgeWrapper.getTargetLanguage();
+        if (!TextUtils.isEmpty(targetLanguageCode)) {
+            intent.putExtra(EXTRA_TRANSLATE_TARGET_LANGUAGE, targetLanguageCode);
+        }
+        return true;
     }
 
     /**
@@ -845,6 +972,19 @@ public class VoiceRecognitionHandler {
         String actionSuffix = getHistogramSuffixForAction(action);
         RecordHistogram.recordMediumTimesHistogram(
                 "VoiceInteraction.QueryDuration.Android." + actionSuffix, openDurationMs);
+    }
+
+    /** Records whether translate information was successfully attached to an Assistant intent. */
+    @VisibleForTesting
+    protected void recordTranslateExtrasAttachResult(boolean result) {
+        RecordHistogram.recordBooleanHistogram(
+                "VoiceInteraction.AssistantIntent.TranslateExtrasAttached", result);
+    }
+
+    /** Allows for overriding the TranslateBridgeWrapper for test purposes. */
+    @VisibleForTesting
+    protected void setTranslateBridgeWrapper(TranslateBridgeWrapper wrapper) {
+        mTranslateBridgeWrapper = wrapper;
     }
 
     /**

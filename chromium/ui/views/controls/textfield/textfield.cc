@@ -21,6 +21,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
@@ -68,7 +69,9 @@
 #include "base/win/win_util.h"
 #endif
 
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// of lacros-chrome is complete.
+#if defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
 #include "ui/base/ime/linux/text_edit_command_auralinux.h"
 #include "ui/base/ime/linux/text_edit_key_bindings_delegate_auralinux.h"
 #endif
@@ -77,7 +80,7 @@
 #include "ui/base/x/x11_util.h"  // nogncheck
 #endif
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ui/aura/window.h"
 #include "ui/wm/core/ime_util_chromeos.h"
 #endif
@@ -91,6 +94,11 @@
 #include "ui/base/ui_base_features.h"
 #include "ui/ozone/public/ozone_platform.h"
 #include "ui/ozone/public/platform_gl_egl_utility.h"
+#endif
+
+#if defined(OS_CHROMEOS)
+#include "ui/base/ime/chromeos/extension_ime_util.h"
+#include "ui/base/ime/chromeos/input_method_manager.h"
 #endif
 
 namespace views {
@@ -128,6 +136,9 @@ ui::TextEditCommand GetCommandForKeyEvent(const ui::KeyEvent& event) {
     return ui::TextEditCommand::INVALID_COMMAND;
 
   const bool shift = event.IsShiftDown();
+#if defined(OS_APPLE)
+  const bool command = event.IsCommandDown();
+#endif
   const bool control = event.IsControlDown() || event.IsCommandDown();
   const bool alt = event.IsAltDown() || event.IsAltGrDown();
   switch (event.key_code()) {
@@ -172,21 +183,54 @@ ui::TextEditCommand GetCommandForKeyEvent(const ui::KeyEvent& event) {
       return control ? ui::TextEditCommand::MOVE_WORD_LEFT_AND_MODIFY_SELECTION
                      : ui::TextEditCommand::MOVE_LEFT_AND_MODIFY_SELECTION;
     case ui::VKEY_HOME:
+      if (shift) {
+        return ui::TextEditCommand::
+            MOVE_TO_BEGINNING_OF_LINE_AND_MODIFY_SELECTION;
+      }
+#if defined(OS_APPLE)
+      return ui::TextEditCommand::SCROLL_TO_BEGINNING_OF_DOCUMENT;
+#else
+      return ui::TextEditCommand::MOVE_TO_BEGINNING_OF_LINE;
+#endif
+    case ui::VKEY_END:
+      if (shift)
+        return ui::TextEditCommand::MOVE_TO_END_OF_LINE_AND_MODIFY_SELECTION;
+#if defined(OS_APPLE)
+      return ui::TextEditCommand::SCROLL_TO_END_OF_DOCUMENT;
+#else
+      return ui::TextEditCommand::MOVE_TO_END_OF_LINE;
+#endif
+    case ui::VKEY_UP:
+#if defined(OS_APPLE)
+      if (control && shift) {
+        return ui::TextEditCommand::
+            MOVE_PARAGRAPH_BACKWARD_AND_MODIFY_SELECTION;
+      }
+      if (command)
+        return ui::TextEditCommand::MOVE_TO_BEGINNING_OF_DOCUMENT;
       return shift ? ui::TextEditCommand::
                          MOVE_TO_BEGINNING_OF_LINE_AND_MODIFY_SELECTION
-                   : ui::TextEditCommand::MOVE_TO_BEGINNING_OF_LINE;
-    case ui::VKEY_END:
-      return shift
-                 ? ui::TextEditCommand::MOVE_TO_END_OF_LINE_AND_MODIFY_SELECTION
-                 : ui::TextEditCommand::MOVE_TO_END_OF_LINE;
-    case ui::VKEY_UP:
+                   : ui::TextEditCommand::MOVE_UP;
+#else
       return shift ? ui::TextEditCommand::
                          MOVE_TO_BEGINNING_OF_LINE_AND_MODIFY_SELECTION
                    : ui::TextEditCommand::INVALID_COMMAND;
+#endif
     case ui::VKEY_DOWN:
+#if defined(OS_APPLE)
+      if (control && shift) {
+        return ui::TextEditCommand::MOVE_PARAGRAPH_FORWARD_AND_MODIFY_SELECTION;
+      }
+      if (command)
+        return ui::TextEditCommand::MOVE_TO_END_OF_DOCUMENT;
+      return shift
+                 ? ui::TextEditCommand::MOVE_TO_END_OF_LINE_AND_MODIFY_SELECTION
+                 : ui::TextEditCommand::MOVE_DOWN;
+#else
       return shift
                  ? ui::TextEditCommand::MOVE_TO_END_OF_LINE_AND_MODIFY_SELECTION
                  : ui::TextEditCommand::INVALID_COMMAND;
+#endif
     case ui::VKEY_BACK:
       if (!control) {
 #if defined(OS_WIN)
@@ -216,6 +260,12 @@ ui::TextEditCommand GetCommandForKeyEvent(const ui::KeyEvent& event) {
         return ui::TextEditCommand::COPY;
       return (shift && !control) ? ui::TextEditCommand::PASTE
                                  : ui::TextEditCommand::INVALID_COMMAND;
+    case ui::VKEY_PRIOR:
+      return control ? ui::TextEditCommand::SCROLL_PAGE_UP
+                     : ui::TextEditCommand::INVALID_COMMAND;
+    case ui::VKEY_NEXT:
+      return control ? ui::TextEditCommand::SCROLL_PAGE_DOWN
+                     : ui::TextEditCommand::INVALID_COMMAND;
     default:
       return ui::TextEditCommand::INVALID_COMMAND;
   }
@@ -585,6 +635,7 @@ gfx::HorizontalAlignment Textfield::GetHorizontalAlignment() const {
 
 void Textfield::SetHorizontalAlignment(gfx::HorizontalAlignment alignment) {
   GetRenderText()->SetHorizontalAlignment(alignment);
+
   OnPropertyChanged(&model_ + kTextfieldHorizontalAlignment,
                     kPropertyEffectsNone);
 }
@@ -765,7 +816,9 @@ bool Textfield::OnMousePressed(const ui::MouseEvent& event) {
 #endif
   }
 
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// of lacros-chrome is complete.
+#if defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
   if (!handled && !had_focus && event.IsOnlyMiddleMouseButton())
     RequestFocusWithPointer(ui::EventPointerType::kMouse);
 #endif
@@ -812,7 +865,9 @@ bool Textfield::OnKeyPressed(const ui::KeyEvent& event) {
   if (!textfield)
     return handled;
 
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// of lacros-chrome is complete.
+#if defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
   ui::TextEditKeyBindingsDelegateAuraLinux* delegate =
       ui::GetTextEditKeyBindingsDelegate();
   std::vector<ui::TextEditCommandAuraLinux> commands;
@@ -966,7 +1021,9 @@ void Textfield::AboutToRequestFocusFromTabTraversal(bool reverse) {
 }
 
 bool Textfield::SkipDefaultKeyEventProcessing(const ui::KeyEvent& event) {
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// of lacros-chrome is complete.
+#if defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
   // Skip any accelerator handling that conflicts with custom keybindings.
   ui::TextEditKeyBindingsDelegateAuraLinux* delegate =
       ui::GetTextEditKeyBindingsDelegate();
@@ -1189,10 +1246,10 @@ void Textfield::OnBlur() {
 
   if (GetInputMethod()) {
     GetInputMethod()->DetachTextInputClient(this);
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     wm::RestoreWindowBoundsOnClientFocusLost(
         GetNativeView()->GetToplevelWindow());
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
   }
   StopBlinkingCursor();
   cursor_view_->SetVisible(false);
@@ -1276,7 +1333,7 @@ void Textfield::WriteDragDataForView(View* sender,
           .context(),
       label.size()));
   constexpr gfx::Vector2d kOffset(-15, 0);
-  gfx::ImageSkia image(gfx::ImageSkiaRep(bitmap, raster_scale));
+  gfx::ImageSkia image = gfx::ImageSkia::CreateFromBitmap(bitmap, raster_scale);
   data->provider().SetDragImage(image, kOffset);
   if (controller_)
     controller_->OnWriteDragData(data);
@@ -1515,7 +1572,8 @@ void Textfield::ClearCompositionText() {
   OnAfterUserAction();
 }
 
-void Textfield::InsertText(const base::string16& new_text) {
+void Textfield::InsertText(const base::string16& new_text,
+                           InsertTextCursorBehavior cursor_behavior) {
   base::string16 filtered_new_text;
   std::copy_if(new_text.begin(), new_text.end(),
                std::back_inserter(filtered_new_text), IsValidCharToInsert);
@@ -1524,6 +1582,7 @@ void Textfield::InsertText(const base::string16& new_text) {
       filtered_new_text.empty())
     return;
 
+  // TODO(crbug.com/1155331): Handle |cursor_behavior| correctly.
   OnBeforeUserAction();
   skip_input_method_cancel_composition_ = true;
   model_->InsertText(filtered_new_text);
@@ -1686,6 +1745,7 @@ void Textfield::OnInputMethodChanged() {}
 
 bool Textfield::ChangeTextDirectionAndLayoutAlignment(
     base::i18n::TextDirection direction) {
+  DCHECK_NE(direction, base::i18n::UNKNOWN_DIRECTION);
   // Restore text directionality mode when the indicated direction matches the
   // current forced mode; otherwise, force the mode indicated. This helps users
   // manage BiDi text layout without getting stuck in forced LTR or RTL modes.
@@ -1696,7 +1756,13 @@ bool Textfield::ChangeTextDirectionAndLayoutAlignment(
   const bool modes_match = new_mode == render_text->directionality_mode();
   render_text->SetDirectionalityMode(modes_match ? gfx::DIRECTIONALITY_FROM_TEXT
                                                  : new_mode);
-  SetHorizontalAlignment(default_rtl ? gfx::ALIGN_RIGHT : gfx::ALIGN_LEFT);
+  // Do not reset horizontal alignment to left/right if it has been set to
+  // center, or if it depends on the text direction and that direction has not
+  // been modified.
+  bool dir_from_text =
+      modes_match && GetHorizontalAlignment() == gfx::ALIGN_TO_HEAD;
+  if (!dir_from_text && GetHorizontalAlignment() != gfx::ALIGN_CENTER)
+    SetHorizontalAlignment(default_rtl ? gfx::ALIGN_RIGHT : gfx::ALIGN_LEFT);
   SchedulePaint();
   return true;
 }
@@ -1713,10 +1779,10 @@ void Textfield::ExtendSelectionAndDelete(size_t before, size_t after) {
 }
 
 void Textfield::EnsureCaretNotInRect(const gfx::Rect& rect_in_screen) {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   aura::Window* top_level_window = GetNativeView()->GetToplevelWindow();
   wm::EnsureWindowNotInRect(top_level_window, rect_in_screen);
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 }
 
 bool Textfield::IsTextEditCommandEnabled(ui::TextEditCommand command) const {
@@ -1796,6 +1862,10 @@ bool Textfield::IsTextEditCommandEnabled(ui::TextEditCommand command) const {
     case ui::TextEditCommand::MOVE_PAGE_UP_AND_MODIFY_SELECTION:
     case ui::TextEditCommand::MOVE_UP:
     case ui::TextEditCommand::MOVE_UP_AND_MODIFY_SELECTION:
+    case ui::TextEditCommand::SCROLL_TO_BEGINNING_OF_DOCUMENT:
+    case ui::TextEditCommand::SCROLL_TO_END_OF_DOCUMENT:
+    case ui::TextEditCommand::SCROLL_PAGE_DOWN:
+    case ui::TextEditCommand::SCROLL_PAGE_UP:
 // On Mac, the textfield should respond to Up/Down arrows keys and
 // PageUp/PageDown.
 #if defined(OS_APPLE)
@@ -1833,7 +1903,7 @@ bool Textfield::ShouldDoLearning() {
   return false;
 }
 
-#if defined(OS_WIN) || defined(OS_CHROMEOS)
+#if defined(OS_WIN) || BUILDFLAG(IS_CHROMEOS_ASH)
 // TODO(https://crbug.com/952355): Implement this method to support Korean IME
 // reconversion feature on native text fields (e.g. find bar).
 bool Textfield::SetCompositionFromExistingText(
@@ -1849,7 +1919,7 @@ bool Textfield::SetCompositionFromExistingText(
 }
 #endif
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 gfx::Range Textfield::GetAutocorrectRange() const {
   return model_->autocorrect_range();
 }
@@ -1868,15 +1938,26 @@ gfx::Rect Textfield::GetAutocorrectCharacterBounds() const {
   return rect;
 }
 
-bool Textfield::SetAutocorrectRange(const base::string16& autocorrect_text,
-                                    const gfx::Range& range) {
-  base::UmaHistogramEnumeration("InputMethod.Assistive.Autocorrect.Count",
-                                TextInputClient::SubClass::kTextField);
-  return model_->SetAutocorrectRange(autocorrect_text, range);
-}
+bool Textfield::SetAutocorrectRange(const gfx::Range& range) {
+  if (!range.is_empty()) {
+    base::UmaHistogramEnumeration("InputMethod.Assistive.Autocorrect.Count",
+                                  TextInputClient::SubClass::kTextField);
 
-void Textfield::ClearAutocorrectRange() {
-  model_->SetAutocorrectRange(base::string16(), gfx::Range());
+#if defined(OS_CHROMEOS)
+    auto* input_method_manager =
+        chromeos::input_method::InputMethodManager::Get();
+    if (input_method_manager &&
+        chromeos::extension_ime_util::IsExperimentalMultilingual(
+            input_method_manager->GetActiveIMEState()
+                ->GetCurrentInputMethod()
+                .id())) {
+      base::UmaHistogramEnumeration(
+          "InputMethod.MultilingualExperiment.Autocorrect.Count",
+          TextInputClient::SubClass::kTextField);
+    }
+#endif
+  }
+  return model_->SetAutocorrectRange(range);
 }
 #endif
 
@@ -2025,6 +2106,8 @@ void Textfield::ExecuteTextEditCommand(ui::TextEditCommand command) {
     case ui::TextEditCommand::MOVE_TO_BEGINNING_OF_PARAGRAPH:
     case ui::TextEditCommand::MOVE_UP:
     case ui::TextEditCommand::MOVE_PAGE_UP:
+    case ui::TextEditCommand::SCROLL_TO_BEGINNING_OF_DOCUMENT:
+    case ui::TextEditCommand::SCROLL_PAGE_UP:
       model_->MoveCursor(gfx::FIELD_BREAK, begin, gfx::SELECTION_NONE);
       break;
     case ui::TextEditCommand::MOVE_TO_BEGINNING_OF_LINE_AND_MODIFY_SELECTION:
@@ -2047,6 +2130,8 @@ void Textfield::ExecuteTextEditCommand(ui::TextEditCommand command) {
     case ui::TextEditCommand::MOVE_TO_END_OF_PARAGRAPH:
     case ui::TextEditCommand::MOVE_DOWN:
     case ui::TextEditCommand::MOVE_PAGE_DOWN:
+    case ui::TextEditCommand::SCROLL_TO_END_OF_DOCUMENT:
+    case ui::TextEditCommand::SCROLL_PAGE_DOWN:
       model_->MoveCursor(gfx::FIELD_BREAK, end, gfx::SELECTION_NONE);
       break;
     case ui::TextEditCommand::MOVE_TO_END_OF_LINE_AND_MODIFY_SELECTION:
@@ -2185,7 +2270,7 @@ void Textfield::RequestFocusForGesture(const ui::GestureEventDetails& details) {
     ShowVirtualKeyboardIfEnabled();
 }
 
-views::PropertyChangedSubscription Textfield::AddTextChangedCallback(
+base::CallbackListSubscription Textfield::AddTextChangedCallback(
     views::PropertyChangedCallback callback) {
   return AddPropertyChangedCallback(&model_ + kTextfieldText,
                                     std::move(callback));
@@ -2256,7 +2341,9 @@ bool Textfield::PasteSelectionClipboard() {
 }
 
 void Textfield::UpdateSelectionClipboard() {
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// of lacros-chrome is complete.
+#if defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
   if (text_input_type_ != ui::TEXT_INPUT_TYPE_PASSWORD) {
     ui::ScopedClipboardWriter(ui::ClipboardBuffer::kSelection)
         .WriteText(GetSelectedText());

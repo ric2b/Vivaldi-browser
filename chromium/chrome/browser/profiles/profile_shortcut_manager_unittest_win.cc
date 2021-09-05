@@ -315,7 +315,7 @@ class ProfileShortcutManagerTest : public testing::Test {
     ASSERT_TRUE(profile_attributes_storage_->
                     GetProfileAttributesWithPath(profile_path, &entry));
     ASSERT_NE(entry->GetLocalProfileName(), new_profile_name);
-    entry->SetLocalProfileName(new_profile_name);
+    entry->SetLocalProfileName(new_profile_name, /*is_default_name=*/false);
     task_environment_.RunUntilIdle();
   }
 
@@ -739,12 +739,10 @@ TEST_F(ProfileShortcutManagerTest, HasProfileShortcuts) {
     void set_has_shortcuts(bool value) { has_shortcuts = value; }
   } result = { false };
 
-  const base::Callback<void(bool)> callback =
-      base::Bind(&HasShortcutsResult::set_has_shortcuts,
-                 base::Unretained(&result));
-
   // Profile 2 should have a shortcut initially.
-  profile_shortcut_manager_->HasProfileShortcuts(profile_2_path_, callback);
+  profile_shortcut_manager_->HasProfileShortcuts(
+      profile_2_path_, base::BindOnce(&HasShortcutsResult::set_has_shortcuts,
+                                      base::Unretained(&result)));
   task_environment_.RunUntilIdle();
   EXPECT_TRUE(result.has_shortcuts);
 
@@ -753,7 +751,9 @@ TEST_F(ProfileShortcutManagerTest, HasProfileShortcuts) {
       GetDefaultShortcutPathForProfile(profile_2_name_);
   ASSERT_TRUE(base::DeleteFile(profile_2_shortcut_path));
   EXPECT_FALSE(base::PathExists(profile_2_shortcut_path));
-  profile_shortcut_manager_->HasProfileShortcuts(profile_2_path_, callback);
+  profile_shortcut_manager_->HasProfileShortcuts(
+      profile_2_path_, base::BindOnce(&HasShortcutsResult::set_has_shortcuts,
+                                      base::Unretained(&result)));
   task_environment_.RunUntilIdle();
   EXPECT_FALSE(result.has_shortcuts);
 }
@@ -798,7 +798,7 @@ TEST_F(ProfileShortcutManagerTest, ProfileShortcutsWithSystemLevelShortcut) {
   EXPECT_FALSE(ProfileShortcutExistsAtDefaultPath(profile_3_name_));
 
   const base::string16 new_profile_3_name = L"New Name 3";
-  entry_3->SetLocalProfileName(new_profile_3_name);
+  entry_3->SetLocalProfileName(new_profile_3_name, /*is_default_name=*/false);
   task_environment_.RunUntilIdle();
   EXPECT_FALSE(ProfileShortcutExistsAtDefaultPath(profile_3_name_));
   EXPECT_FALSE(ProfileShortcutExistsAtDefaultPath(new_profile_3_name));
@@ -808,7 +808,7 @@ TEST_F(ProfileShortcutManagerTest, ProfileShortcutsWithSystemLevelShortcut) {
   ProfileAttributesEntry* entry_2;
   ASSERT_TRUE(profile_attributes_storage_->
                   GetProfileAttributesWithPath(profile_2_path_, &entry_2));
-  entry_2->SetLocalProfileName(new_profile_2_name);
+  entry_2->SetLocalProfileName(new_profile_2_name, /*is_default_name=*/false);
   task_environment_.RunUntilIdle();
   EXPECT_FALSE(ProfileShortcutExistsAtDefaultPath(profile_2_name_));
   ValidateProfileShortcut(FROM_HERE, new_profile_2_name, profile_2_path_);

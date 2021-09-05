@@ -32,13 +32,13 @@ VivaldiInvalidationService::VivaldiInvalidationService(Profile* profile)
 VivaldiInvalidationService::~VivaldiInvalidationService() {}
 
 void VivaldiInvalidationService::RegisterInvalidationHandler(
-    syncer::InvalidationHandler* handler) {
+    invalidation::InvalidationHandler* handler) {
   invalidator_registrar_.RegisterHandler(handler);
 }
 
 bool VivaldiInvalidationService::UpdateInterestedTopics(
-    syncer::InvalidationHandler* handler,
-    const syncer::TopicSet& legacy_topic_set) {
+    invalidation::InvalidationHandler* handler,
+    const invalidation::TopicSet& legacy_topic_set) {
   std::set<invalidation::TopicData> topic_set;
   for (const auto& topic_name : legacy_topic_set) {
     topic_set.insert(invalidation::TopicData(
@@ -48,11 +48,11 @@ bool VivaldiInvalidationService::UpdateInterestedTopics(
 }
 
 void VivaldiInvalidationService::UnregisterInvalidationHandler(
-    syncer::InvalidationHandler* handler) {
+    invalidation::InvalidationHandler* handler) {
   invalidator_registrar_.UnregisterHandler(handler);
 }
 
-syncer::InvalidatorState VivaldiInvalidationService::GetInvalidatorState()
+invalidation::InvalidatorState VivaldiInvalidationService::GetInvalidatorState()
     const {
   return invalidator_registrar_.GetInvalidatorState();
 }
@@ -73,12 +73,12 @@ void VivaldiInvalidationService::RequestDetailedStatus(
 }
 
 void VivaldiInvalidationService::PerformInvalidation(
-    const syncer::TopicInvalidationMap& invalidation_map) {
+    const invalidation::TopicInvalidationMap& invalidation_map) {
   invalidator_registrar_.DispatchInvalidationsToHandlers(invalidation_map);
 }
 
 void VivaldiInvalidationService::UpdateInvalidatorState(
-    syncer::InvalidatorState state) {
+    invalidation::InvalidatorState state) {
   invalidator_registrar_.UpdateInvalidatorState(state);
 }
 

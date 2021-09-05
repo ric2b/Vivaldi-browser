@@ -6,6 +6,7 @@
 
 #include "third_party/blink/renderer/bindings/core/v8/module_record.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_value.h"
+#include "third_party/blink/renderer/core/loader/modulescript/module_script_creation_params.h"
 #include "third_party/blink/renderer/core/script/module_record_resolver.h"
 
 namespace blink {
@@ -27,7 +28,7 @@ class EmptyModuleRecordResolver final : public ModuleRecordResolver {
     return nullptr;
   }
 
-  v8::Local<v8::Module> Resolve(const String& specifier,
+  v8::Local<v8::Module> Resolve(const ModuleRequest& module_request,
                                 v8::Local<v8::Module> referrer,
                                 ExceptionState&) override {
     NOTREACHED();
@@ -100,7 +101,7 @@ void DummyModulator::FetchDescendantsForInlineScript(
   NOTREACHED();
 }
 
-ModuleScript* DummyModulator::GetFetchedModuleScript(const KURL&) {
+ModuleScript* DummyModulator::GetFetchedModuleScript(const KURL&, ModuleType) {
   NOTREACHED();
   return nullptr;
 }
@@ -137,12 +138,13 @@ void DummyModulator::RegisterImportMap(const ImportMap*,
   NOTREACHED();
 }
 
-bool DummyModulator::IsAcquiringImportMaps() const {
+Modulator::AcquiringImportMapsState
+DummyModulator::GetAcquiringImportMapsState() const {
   NOTREACHED();
-  return true;
+  return AcquiringImportMapsState::kAcquiring;
 }
 
-void DummyModulator::ClearIsAcquiringImportMaps() {
+void DummyModulator::SetAcquiringImportMapsState(AcquiringImportMapsState) {
   NOTREACHED();
 }
 
@@ -169,9 +171,14 @@ Vector<ModuleRequest> DummyModulator::ModuleRequestsFromModuleRecord(
   return Vector<ModuleRequest>();
 }
 
+ModuleType DummyModulator::ModuleTypeFromRequest(
+    const ModuleRequest& module_request) const {
+  return ModuleType::kJavaScript;
+}
+
 ModuleScriptFetcher* DummyModulator::CreateModuleScriptFetcher(
     ModuleScriptCustomFetchType,
-    util::PassKey<ModuleScriptLoader> pass_key) {
+    base::PassKey<ModuleScriptLoader> pass_key) {
   NOTREACHED();
   return nullptr;
 }

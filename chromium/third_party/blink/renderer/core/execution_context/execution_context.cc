@@ -29,6 +29,7 @@
 
 #include "base/metrics/histogram_macros.h"
 #include "third_party/blink/public/common/feature_policy/document_policy_features.h"
+#include "third_party/blink/public/mojom/devtools/inspector_issue.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/feature_policy/feature_policy_feature.mojom-blink.h"
 #include "third_party/blink/public/mojom/feature_policy/policy_disposition.mojom-blink.h"
 #include "third_party/blink/public/platform/task_type.h"
@@ -184,6 +185,33 @@ unsigned ExecutionContext::ContextLifecycleStateObserverCountForTesting()
 bool ExecutionContext::SharedArrayBufferTransferAllowed() const {
   return RuntimeEnabledFeatures::SharedArrayBufferEnabled(this) ||
          CrossOriginIsolatedCapability();
+}
+
+bool ExecutionContext::CheckSharedArrayBufferTransferAllowedAndReport() {
+  const bool allowed = SharedArrayBufferTransferAllowed();
+  // File an issue if the transfer is prohibited, or if it will be prohibited
+  // in the future, and the problem is encountered for the first time in this
+  // execution context. This preserves postMessage performance during the
+  // transition period.
+  if (!allowed || (!has_filed_shared_array_buffer_transfer_issue_ &&
+                   !CrossOriginIsolatedCapability())) {
+    has_filed_shared_array_buffer_transfer_issue_ = true;
+    auto source_location = SourceLocation::Capture(this);
+    auto details = mojom::blink::InspectorIssueDetails::New();
+    auto issue_details =
+        mojom::blink::SharedArrayBufferTransferIssueDetails::New();
+    issue_details->is_warning = allowed;
+    auto mojo_source_location = network::mojom::blink::SourceLocation::New();
+    mojo_source_location->url = source_location->Url();
+    mojo_source_location->line = source_location->LineNumber();
+    mojo_source_location->column = source_location->ColumnNumber();
+    issue_details->source_location = std::move(mojo_source_location);
+    details->sab_transfer_details = std::move(issue_details);
+    AddInspectorIssue(mojom::blink::InspectorIssueInfo::New(
+        mojom::blink::InspectorIssueCode::kSharedArrayBufferTransferIssue,
+        std::move(details)));
+  }
+  return allowed;
 }
 
 void ExecutionContext::AddConsoleMessageImpl(mojom::ConsoleMessageSource source,
@@ -355,46 +383,57 @@ String ExecutionContext::OutgoingReferrer() const {
 }
 
 void ExecutionContext::ParseAndSetReferrerPolicy(
-    const String& policies,
-    bool support_legacy_keywords,
-    bool from_meta_tag_with_list_of_policies) {
+    const String& policy,
+    const ReferrerPolicySource source) {
   network::mojom::ReferrerPolicy referrer_policy;
+  bool policy_is_valid = false;
 
-  if (!SecurityPolicy::ReferrerPolicyFromHeaderValue(
-          policies,
-          support_legacy_keywords ? kSupportReferrerPolicyLegacyKeywords
-                                  : kDoNotSupportReferrerPolicyLegacyKeywords,
-          &referrer_policy)) {
-    AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
-        mojom::ConsoleMessageSource::kRendering,
-        mojom::ConsoleMessageLevel::kError,
-        "Failed to set referrer policy: The value '" + policies +
-            "' is not one of " +
-            (support_legacy_keywords
-                 ? "'always', 'default', 'never', 'origin-when-crossorigin', "
-                 : "") +
-            "'no-referrer', 'no-referrer-when-downgrade', 'origin', "
-            "'origin-when-cross-origin', 'same-origin', 'strict-origin', "
-            "'strict-origin-when-cross-origin', or 'unsafe-url'. The referrer "
-            "policy "
-            "has been left unchanged."));
+  if (source == kPolicySourceHttpHeader) {
+    policy_is_valid = SecurityPolicy::ReferrerPolicyFromHeaderValue(
+        policy, kDoNotSupportReferrerPolicyLegacyKeywords, &referrer_policy);
+  } else if (source == kPolicySourceMetaTag) {
+    policy_is_valid = (SecurityPolicy::ReferrerPolicyFromString(
+        policy, kSupportReferrerPolicyLegacyKeywords, &referrer_policy));
+  } else {
+    NOTREACHED();
     return;
   }
 
-  SetReferrerPolicy(referrer_policy, from_meta_tag_with_list_of_policies);
+  if (policy_is_valid) {
+    SetReferrerPolicy(referrer_policy);
+  } else {
+    String error_reason;
+    if (source == kPolicySourceMetaTag && policy.Contains(',')) {
+      // Only a single token is permitted for Meta-specified policies
+      // (https://crbug.com/1093914).
+      error_reason =
+          "A policy specified by a meta element must contain only one token.";
+    } else {
+      error_reason =
+          "The value '" + policy + "' is not one of " +
+          ((source == kPolicySourceMetaTag)
+               ? "'always', 'default', 'never', 'origin-when-crossorigin', "
+               : "") +
+          "'no-referrer', 'no-referrer-when-downgrade', 'origin', "
+          "'origin-when-cross-origin', 'same-origin', 'strict-origin', "
+          "'strict-origin-when-cross-origin', or 'unsafe-url'.";
+    }
+
+    AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
+        mojom::ConsoleMessageSource::kRendering,
+        mojom::ConsoleMessageLevel::kError,
+        "Failed to set referrer policy: " + error_reason +
+            " The referrer policy has been left unchanged."));
+  }
 }
 
 void ExecutionContext::SetReferrerPolicy(
-    network::mojom::ReferrerPolicy referrer_policy,
-    bool from_meta_tag_with_list_of_policies) {
+    network::mojom::ReferrerPolicy referrer_policy) {
   // When a referrer policy has already been set, the latest value takes
   // precedence.
   UseCounter::Count(this, WebFeature::kSetReferrerPolicy);
   if (referrer_policy_ != network::mojom::ReferrerPolicy::kDefault)
     UseCounter::Count(this, WebFeature::kResetReferrerPolicy);
-
-  if (!from_meta_tag_with_list_of_policies)
-    referrer_policy_but_for_meta_tags_with_lists_of_policies_ = referrer_policy;
 
   referrer_policy_ = referrer_policy;
 }
@@ -479,7 +518,7 @@ bool ExecutionContext::IsFeatureEnabled(
     const String& source_file) const {
   // The default value for any feature should be true unless restricted by
   // document policy
-  if (!RuntimeEnabledFeatures::DocumentPolicyEnabled(this))
+  if (!RuntimeEnabledFeatures::DocumentPolicyEnabled())
     return true;
 
   SecurityContext::FeatureStatus status =

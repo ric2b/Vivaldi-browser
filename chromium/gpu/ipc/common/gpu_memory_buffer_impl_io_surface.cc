@@ -12,6 +12,7 @@
 #include "gpu/ipc/common/gpu_memory_buffer_support.h"
 #include "ui/gfx/buffer_format_util.h"
 #include "ui/gfx/mac/io_surface.h"
+#include "ui/gfx/mac/io_surface_hdr_metadata.h"
 
 namespace gpu {
 namespace {
@@ -24,7 +25,7 @@ const int kMaxCrashDumps = 10;
 uint32_t LockFlags(gfx::BufferUsage usage) {
   switch (usage) {
     case gfx::BufferUsage::GPU_READ_CPU_READ_WRITE:
-    case gfx::BufferUsage::SCANOUT_VEA_READ_CAMERA_AND_CPU_READ_WRITE:
+    case gfx::BufferUsage::VEA_READ_CAMERA_AND_CPU_READ_WRITE:
       // The AvoidSync call has the property that it will not preserve the
       // previous contents of the buffer if those contents were written by a
       // GPU.
@@ -143,6 +144,11 @@ void GpuMemoryBufferImplIOSurface::SetColorSpace(
     return;
   color_space_ = color_space;
   IOSurfaceSetColorSpace(io_surface_, color_space);
+}
+
+void GpuMemoryBufferImplIOSurface::SetHDRMetadata(
+    const gfx::HDRMetadata& hdr_metadata) {
+  IOSurfaceSetHDRMetadata(io_surface_, hdr_metadata);
 }
 
 gfx::GpuMemoryBufferType GpuMemoryBufferImplIOSurface::GetType() const {

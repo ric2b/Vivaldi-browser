@@ -23,7 +23,6 @@
 #include "content/browser/navigation_subresource_loader_params.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/browser/service_worker/service_worker_main_resource_handle.h"
-#include "content/browser/service_worker/service_worker_main_resource_handle_core.h"
 #include "content/browser/storage_partition_impl.h"
 #include "content/browser/url_loader_factory_params_helper.h"
 #include "content/browser/web_contents/web_contents_impl.h"
@@ -341,7 +340,8 @@ void WorkerScriptFetchInitiator::CreateScriptLoader(
     network::mojom::URLLoaderFactoryParamsPtr factory_params =
         URLLoaderFactoryParamsHelper::CreateForWorker(
             factory_process, request_initiator, trusted_isolation_info,
-            /*coep_reporter=*/mojo::NullRemote());
+            /*coep_reporter=*/mojo::NullRemote(),
+            /*debug_tag=*/"WorkerScriptFetchInitiator::CreateScriptLoader");
 
     mojo::PendingReceiver<network::mojom::URLLoaderFactory>
         default_factory_receiver =

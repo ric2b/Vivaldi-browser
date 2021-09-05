@@ -6,11 +6,13 @@
 #define CHROME_BROWSER_ANDROID_WEBAPPS_ADD_TO_HOMESCREEN_INSTALLER_H_
 
 #include "base/callback_forward.h"
-#include "chrome/browser/android/webapps/add_to_homescreen_params.h"
+#include "components/webapps/browser/android/add_to_homescreen_params.h"
 
 namespace content {
 class WebContents;
 }
+
+namespace webapps {
 
 // Helper class for installing a web app or an Android native app and recording
 // related UMA.
@@ -52,5 +54,7 @@ class AddToHomescreenInstaller {
   AddToHomescreenInstaller(const AddToHomescreenInstaller&) = delete;
   AddToHomescreenInstaller& operator=(const AddToHomescreenInstaller&) = delete;
 };
+
+}  // namespace webapps
 
 #endif  // CHROME_BROWSER_ANDROID_WEBAPPS_ADD_TO_HOMESCREEN_INSTALLER_H_

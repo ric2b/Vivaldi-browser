@@ -9,11 +9,12 @@
 #include "base/power_monitor/power_observer.h"
 #include "base/scoped_observer.h"
 #include "chrome/browser/banners/app_banner_manager.h"
-#include "chrome/browser/engagement/site_engagement_observer.h"
 #include "chrome/browser/ui/browser_tab_strip_tracker.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/web_applications/components/web_app_id.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/site_engagement/content/site_engagement_observer.h"
+#include "content/public/browser/web_contents_observer.h"
 
 class Profile;
 class Browser;
@@ -28,10 +29,11 @@ namespace web_app {
 // A per-profile keyed service, responsible for all Web Applications-related
 // metrics recording (UMA histograms and UKM keyed by web-apps).
 class WebAppMetrics : public KeyedService,
-                      public SiteEngagementObserver,
+                      public site_engagement::SiteEngagementObserver,
                       public BrowserListObserver,
                       public TabStripModelObserver,
-                      public banners::AppBannerManager::Observer,
+                      public webapps::AppBannerManager::Observer,
+                      public content::WebContentsObserver,
                       public base::PowerObserver {
  public:
   static WebAppMetrics* Get(Profile* profile);
@@ -46,7 +48,7 @@ class WebAppMetrics : public KeyedService,
       content::WebContents* web_contents,
       const GURL& url,
       double score,
-      SiteEngagementService::EngagementType engagement_type) override;
+      site_engagement::EngagementType engagement_type) override;
 
   // BrowserListObserver:
   void OnBrowserNoLongerActive(Browser* browser) override;
@@ -66,8 +68,11 @@ class WebAppMetrics : public KeyedService,
                                     const AppId& previous_app_id,
                                     const AppId& new_app_id);
 
-  // banners::AppBannerManager::Observer:
+  // webapps::AppBannerManager::Observer:
   void OnInstallableWebAppStatusUpdated() override;
+
+  // content::WebContentsObserver:
+  void WebContentsDestroyed() override;
 
   // Browser activation causes flaky tests. Call observer methods directly.
   void RemoveBrowserListObserverForTesting();
@@ -91,11 +96,10 @@ class WebAppMetrics : public KeyedService,
   Profile* const profile_;
 
   BrowserTabStripTracker browser_tab_strip_tracker_;
-  ScopedObserver<banners::AppBannerManager, banners::AppBannerManager::Observer>
+  ScopedObserver<webapps::AppBannerManager, webapps::AppBannerManager::Observer>
       app_banner_manager_observer_{this};
 
   base::WeakPtrFactory<WebAppMetrics> weak_ptr_factory_{this};
-
 };
 
 }  // namespace web_app

@@ -5,7 +5,6 @@
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_view_controller.h"
 
 #include "base/check_op.h"
-#include "base/feature_list.h"
 #include "base/ios/block_types.h"
 #import "base/mac/foundation_util.h"
 #include "base/metrics/user_metrics.h"
@@ -13,20 +12,21 @@
 #include "base/notreached.h"
 #include "base/numerics/ranges.h"
 #import "base/numerics/safe_conversions.h"
-#include "ios/chrome/browser/drag_and_drop/drag_and_drop_flag.h"
 #include "ios/chrome/browser/procedural_block_types.h"
+#import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_commands.h"
+#import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_view.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_cell.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_constants.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_drag_drop_handler.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_empty_view.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_image_data_source.h"
-#import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_item.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_layout.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/horizontal_layout.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/plus_sign_cell.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/transitions/grid_transition_layout.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_switcher_item.h"
 #import "ios/chrome/browser/ui/thumb_strip/thumb_strip_feature.h"
-#include "ios/chrome/browser/ui/ui_feature_flags.h"
+#include "ios/chrome/browser/ui/util/rtl_geometry.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 
@@ -55,8 +55,11 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
                                   UICollectionViewDropDelegate>
 // A collection view of items in a grid format.
 @property(nonatomic, weak) UICollectionView* collectionView;
+// A view to obscure incognito content when the user isn't authorized to
+// see it.
+@property(nonatomic, strong) IncognitoReauthView* blockingView;
 // The local model backing the collection view.
-@property(nonatomic, strong) NSMutableArray<GridItem*>* items;
+@property(nonatomic, strong) NSMutableArray<TabSwitcherItem*>* items;
 // Identifier of the selected item. This value is disregarded if |self.items| is
 // empty. This bookkeeping is done to set the correct selection on
 // |-viewWillAppear:|.
@@ -66,14 +69,6 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 // ID of the last item to be inserted. This is used to track if the active tab
 // was newly created when building the animation layout for transitions.
 @property(nonatomic, copy) NSString* lastInsertedItemID;
-// The gesture recognizer used for interactive item reordering.
-@property(nonatomic, strong)
-    UILongPressGestureRecognizer* itemReorderRecognizer;
-// The touch location of an interactively reordering item, expressed as an
-// offset from its center. This is subtracted from the location that is passed
-// to -updateInteractiveMovementTargetPosition: so that the moving item will
-// keep them same relative location to the user's touch.
-@property(nonatomic, assign) CGPoint itemReorderTouchPoint;
 // Animator to show or hide the empty state.
 @property(nonatomic, strong) UIViewPropertyAnimator* emptyStateAnimator;
 // The current layout for the tab switcher.
@@ -82,12 +77,6 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 @property(nonatomic, strong) GridLayout* gridLayout;
 // The layout for the thumb strip.
 @property(nonatomic, strong) HorizontalLayout* horizontalLayout;
-// The layout used while the grid is being reordered.
-@property(nonatomic, strong) UICollectionViewLayout* reorderingLayout;
-// The layout used while the thumb strip is being reordered.
-@property(nonatomic, strong) UICollectionViewLayout* horizontalReorderingLayout;
-// YES if, when reordering is enabled, the order of the cells has changed.
-@property(nonatomic, assign) BOOL hasChangedOrder;
 // By how much the user scrolled past the view's content size. A negative value
 // means the user hasn't scrolled past the end of the scroll view.
 @property(nonatomic, assign, readonly) CGFloat offsetPastEndOfScrollView;
@@ -112,7 +101,7 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 
 - (instancetype)init {
   if (self = [super init]) {
-    _items = [[NSMutableArray<GridItem*> alloc] init];
+    _items = [[NSMutableArray<TabSwitcherItem*> alloc] init];
     _showsSelectionUpdates = YES;
   }
   return self;
@@ -156,35 +145,14 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
   // behavior. Multiple selection will not actually be possible since
   // |-collectionView:shouldSelectItemAtIndexPath:| returns NO.
   collectionView.allowsMultipleSelection = YES;
-
-  if (DragAndDropIsEnabled()) {
-    collectionView.dragDelegate = self;
-    collectionView.dropDelegate = self;
-    collectionView.dragInteractionEnabled = YES;
-  } else {
-    self.reorderingLayout = [[GridReorderingLayout alloc] init];
-    if (IsThumbStripEnabled()) {
-      self.horizontalReorderingLayout =
-          [[HorizontalReorderingLayout alloc] init];
-    }
-    self.itemReorderRecognizer = [[UILongPressGestureRecognizer alloc]
-        initWithTarget:self
-                action:@selector(handleItemReorderingWithGesture:)];
-    // The collection view cells will by default get touch events in parallel
-    // with the reorder recognizer. When this happens, long-pressing on a
-    // non-selected cell will cause the selected cell to briefly become
-    // unselected and then selected again. To avoid this, the recognizer delays
-    // touchesBegan: calls until it fails to recognize a long-press.
-    self.itemReorderRecognizer.delaysTouchesBegan = YES;
-    [collectionView addGestureRecognizer:self.itemReorderRecognizer];
-  }
+  collectionView.dragDelegate = self;
+  collectionView.dropDelegate = self;
+  collectionView.dragInteractionEnabled = YES;
 
 #if defined(__IPHONE_13_4)
   if (@available(iOS 13.4, *)) {
-    if (base::FeatureList::IsEnabled(kPointerSupport)) {
       self.pointerInteractionCells =
           [NSHashTable<UICollectionViewCell*> weakObjectsHashTable];
-    }
   }
 #endif  // defined(__IPHONE_13_4)
 }
@@ -305,9 +273,13 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
     [self animateEmptyStateIn];
     return;
   }
+  UICollectionViewScrollPosition scrollPosition =
+      (self.currentLayout == self.horizontalLayout)
+          ? UICollectionViewScrollPositionCenteredHorizontally
+          : UICollectionViewScrollPositionTop;
   [self.collectionView selectItemAtIndexPath:CreateIndexPath(self.selectedIndex)
                                     animated:NO
-                              scrollPosition:UICollectionViewScrollPositionTop];
+                              scrollPosition:scrollPosition];
   // Update the delegate, in case it wasn't set when |items| was populated.
   [self.delegate gridViewController:self didChangeItemCount:self.items.count];
   [self removeEmptyStateAnimated:NO];
@@ -353,7 +325,7 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
     if (itemIndex >= self.items.count)
       itemIndex = self.items.count - 1;
 
-    GridItem* item = self.items[itemIndex];
+    TabSwitcherItem* item = self.items[itemIndex];
     cell =
         [collectionView dequeueReusableCellWithReuseIdentifier:kCellIdentifier
                                                   forIndexPath:indexPath];
@@ -362,13 +334,12 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
     GridCell* gridCell = base::mac::ObjCCastStrict<GridCell>(cell);
     [self configureCell:gridCell withItem:item];
   }
-  // Set the z index of cells so that lower rows are superposed during
-  // transitions between grid and horizontal layouts.
-  cell.layer.zPosition = itemIndex;
+  // Set the z index of cells so that lower rows are moving behind the upper
+  // rows during transitions between grid and horizontal layouts.
+  cell.layer.zPosition = self.items.count - itemIndex;
 
 #if defined(__IPHONE_13_4)
   if (@available(iOS 13.4, *)) {
-    if (base::FeatureList::IsEnabled(kPointerSupport)) {
       if (![self.pointerInteractionCells containsObject:cell]) {
         [cell addInteraction:[[UIPointerInteraction alloc]
                                  initWithDelegate:self]];
@@ -376,36 +347,9 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
         // the number of reusable cells in memory.
         [self.pointerInteractionCells addObject:cell];
       }
-    }
   }
 #endif  // defined(__IPHONE_13_4)
   return cell;
-}
-
-- (BOOL)collectionView:(UICollectionView*)collectionView
-    canMoveItemAtIndexPath:(NSIndexPath*)indexPath {
-  if ([self isIndexPathForPlusSignCell:indexPath]) {
-    // The PlusSignCell is at the end of the collection and should not be moved.
-    return NO;
-  }
-  return indexPath && self.items.count > 1;
-}
-
-- (void)collectionView:(UICollectionView*)collectionView
-    moveItemAtIndexPath:(NSIndexPath*)sourceIndexPath
-            toIndexPath:(NSIndexPath*)destinationIndexPath {
-  NSUInteger source = base::checked_cast<NSUInteger>(sourceIndexPath.item);
-  NSUInteger destination =
-      base::checked_cast<NSUInteger>(destinationIndexPath.item);
-  // Update |items| before informing the delegate, so the state of the UI
-  // is correctly represented before any updates occur.
-  GridItem* item = self.items[source];
-  [self.items removeObjectAtIndex:source];
-  [self.items insertObject:item atIndex:destination];
-  self.hasChangedOrder = YES;
-  [self.delegate gridViewController:self
-                  didMoveItemWithID:item.identifier
-                            toIndex:destination];
 }
 
 #pragma mark - UICollectionViewDelegate
@@ -468,7 +412,7 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
     // Return an empty array because the plus sign cell should not be dragged.
     return @[];
   }
-  GridItem* item = self.items[indexPath.item];
+  TabSwitcherItem* item = self.items[indexPath.item];
   return @[ [self.dragDropHandler dragItemForItemWithID:item.identifier] ];
 }
 
@@ -593,16 +537,6 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 #pragma mark - GridCellDelegate
 
 - (void)closeButtonTappedForCell:(GridCell*)cell {
-  if (!DragAndDropIsEnabled()) {
-    // Disable the reordering recognizer to cancel any in-flight reordering. The
-    // DCHECK below ensures that the gesture is re-enabled after being cancelled
-    // in |-handleItemReorderingWithGesture:|.
-    if (self.itemReorderRecognizer.state != UIGestureRecognizerStatePossible) {
-      self.itemReorderRecognizer.enabled = NO;
-      DCHECK(self.itemReorderRecognizer.enabled);
-    }
-  }
-
   [self.delegate gridViewController:self
                  didCloseItemWithID:cell.itemIdentifier];
   // Record when a tab is closed via the X.
@@ -610,14 +544,49 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
       base::UserMetricsAction("MobileTabGridCloseControlTapped"));
 }
 
+#pragma mark - IncognitoReauthConsumer
+
+- (void)setItemsRequireAuthentication:(BOOL)require {
+  self.contentNeedsAuthentication = require;
+  [self.delegate gridViewController:self
+      contentNeedsAuthenticationChanged:require];
+
+  if (require) {
+    if (!self.blockingView) {
+      self.blockingView = [[IncognitoReauthView alloc] init];
+      self.blockingView.translatesAutoresizingMaskIntoConstraints = NO;
+      self.blockingView.layer.zPosition = FLT_MAX;
+      // No need to show tab switcher button when already in the tab switcher.
+      self.blockingView.tabSwitcherButton.hidden = YES;
+
+      [self.blockingView.authenticateButton
+                 addTarget:self.handler
+                    action:@selector(authenticateIncognitoContent)
+          forControlEvents:UIControlEventTouchUpInside];
+    }
+
+    [self.view addSubview:self.blockingView];
+    self.blockingView.alpha = 1;
+    AddSameConstraints(self.collectionView.frameLayoutGuide, self.blockingView);
+  } else {
+    [UIView animateWithDuration:0.2
+        animations:^{
+          self.blockingView.alpha = 0;
+        }
+        completion:^(BOOL finished) {
+          [self.blockingView removeFromSuperview];
+        }];
+  }
+}
+
 #pragma mark - GridConsumer
 
-- (void)populateItems:(NSArray<GridItem*>*)items
+- (void)populateItems:(NSArray<TabSwitcherItem*>*)items
        selectedItemID:(NSString*)selectedItemID {
 #ifndef NDEBUG
   // Consistency check: ensure no IDs are duplicated.
   NSMutableSet<NSString*>* identifiers = [[NSMutableSet alloc] init];
-  for (GridItem* item in items) {
+  for (TabSwitcherItem* item in items) {
     [identifiers addObject:item.identifier];
   }
   CHECK_EQ(identifiers.count, items.count);
@@ -639,7 +608,7 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
   [self updateFractionVisibleOfLastItem];
 }
 
-- (void)insertItem:(GridItem*)item
+- (void)insertItem:(TabSwitcherItem*)item
            atIndex:(NSUInteger)index
     selectedItemID:(NSString*)selectedItemID {
   // Consistency check: |item|'s ID is not in |items|.
@@ -661,31 +630,26 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
         deselectItemAtIndexPath:CreateIndexPath([self
                                     indexOfItemWithID:previouslySelectedItemID])
                        animated:YES];
+    UICollectionViewScrollPosition scrollPosition =
+        (self.currentLayout == self.horizontalLayout)
+            ? UICollectionViewScrollPositionCenteredHorizontally
+            : UICollectionViewScrollPositionNone;
     [self.collectionView
         selectItemAtIndexPath:CreateIndexPath(self.selectedIndex)
                      animated:YES
-               scrollPosition:UICollectionViewScrollPositionNone];
+               scrollPosition:scrollPosition];
     [self.delegate gridViewController:self didChangeItemCount:self.items.count];
     [self updateFractionVisibleOfLastItem];
   };
   [self performModelUpdates:modelUpdates
                 collectionViewUpdates:collectionViewUpdates
       collectionViewUpdatesCompletion:completion];
+
+  [self updateVisibleCellZIndex];
 }
 
 - (void)removeItemWithID:(NSString*)removedItemID
           selectedItemID:(NSString*)selectedItemID {
-  if (!DragAndDropIsEnabled()) {
-    // Disable the reordering recognizer to cancel any in-flight reordering. The
-    // DCHECK below ensures that the gesture is re-enabled after being cancelled
-    // in |-handleItemReorderingWithGesture:|.
-    if (self.itemReorderRecognizer.state != UIGestureRecognizerStatePossible &&
-        self.itemReorderRecognizer.state != UIGestureRecognizerStateCancelled) {
-      self.itemReorderRecognizer.enabled = NO;
-      DCHECK(self.itemReorderRecognizer.enabled);
-    }
-  }
-
   NSUInteger index = [self indexOfItemWithID:removedItemID];
   auto modelUpdates = ^{
     [self.items removeObjectAtIndex:index];
@@ -711,6 +675,8 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
   [self performModelUpdates:modelUpdates
                 collectionViewUpdates:collectionViewUpdates
       collectionViewUpdatesCompletion:completion];
+
+  [self updateVisibleCellZIndex];
 }
 
 - (void)selectItemWithID:(NSString*)selectedItemID {
@@ -727,7 +693,7 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
              scrollPosition:UICollectionViewScrollPositionNone];
 }
 
-- (void)replaceItemID:(NSString*)itemID withItem:(GridItem*)item {
+- (void)replaceItemID:(NSString*)itemID withItem:(TabSwitcherItem*)item {
   if ([self indexOfItemWithID:itemID] == NSNotFound)
     return;
   // Consistency check: |item|'s ID is either |itemID| or not in |items|.
@@ -748,7 +714,7 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
   if (fromIndex == toIndex)
     return;
   auto modelUpdates = ^{
-    GridItem* item = self.items[fromIndex];
+    TabSwitcherItem* item = self.items[fromIndex];
     [self.items removeObjectAtIndex:fromIndex];
     [self.items insertObject:item atIndex:toIndex];
   };
@@ -765,6 +731,8 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
   [self performModelUpdates:modelUpdates
                 collectionViewUpdates:collectionViewUpdates
       collectionViewUpdatesCompletion:completion];
+
+  [self updateVisibleCellZIndex];
 }
 
 #pragma mark - LayoutSwitcher
@@ -782,7 +750,9 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
       break;
   }
   auto completionBlock = ^(BOOL completed, BOOL finished) {
-    completion(completed, finished);
+    if (completion) {
+      completion(completed, finished);
+    }
     self.collectionView.scrollEnabled = YES;
     self.currentLayout = nextLayout;
   };
@@ -816,9 +786,13 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 - (CGFloat)offsetPastEndOfScrollView {
   CGFloat offset;
   if (self.currentLayout == self.horizontalLayout) {
-    offset = self.collectionView.contentOffset.x +
-             self.collectionView.frame.size.width -
-             self.collectionView.contentSize.width;
+    if (UseRTLLayout()) {
+      offset = -self.collectionView.contentOffset.x;
+    } else {
+      offset = self.collectionView.contentOffset.x +
+               self.collectionView.frame.size.width -
+               self.collectionView.contentSize.width;
+    }
   } else {
     DCHECK_EQ(self.gridLayout, self.currentLayout);
     offset = self.collectionView.contentOffset.y +
@@ -879,9 +853,10 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 // Returns the index in |self.items| of the first item whose identifier is
 // |identifier|.
 - (NSUInteger)indexOfItemWithID:(NSString*)identifier {
-  auto selectedTest = ^BOOL(GridItem* item, NSUInteger index, BOOL* stop) {
-    return [item.identifier isEqualToString:identifier];
-  };
+  auto selectedTest =
+      ^BOOL(TabSwitcherItem* item, NSUInteger index, BOOL* stop) {
+        return [item.identifier isEqualToString:identifier];
+      };
   return [self.items indexOfObjectPassingTest:selectedTest];
 }
 
@@ -889,7 +864,7 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 // asynchronously with information from |item|. Updates the |cell|'s theme to
 // this view controller's theme. This view controller becomes the delegate for
 // the cell.
-- (void)configureCell:(GridCell*)cell withItem:(GridItem*)item {
+- (void)configureCell:(GridCell*)cell withItem:(TabSwitcherItem*)item {
   DCHECK(cell);
   DCHECK(item);
   cell.delegate = self;
@@ -929,6 +904,14 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 
   NSUInteger index = base::checked_cast<NSUInteger>(indexPath.item);
   DCHECK_LT(index, self.items.count);
+
+  // crbug.com/1163238: In the wild, the above DCHECK condition is hit. This
+  // might be a case of the UI sending touch events after the model has updated.
+  // In this case, just no-op; if the user has to tap again to activate a tab,
+  // that's better than a crash.
+  if (index >= self.items.count)
+    return;
+
   NSString* itemID = self.items[index].identifier;
   [self.delegate gridViewController:self didSelectItemWithID:itemID];
 }
@@ -976,102 +959,17 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
       1 - offset / kScrollThresholdForPlusSignButtonHide, 0, 1);
 }
 
-#pragma mark - Custom Gesture-based Reordering
-
-// Handle the long-press gesture used to reorder cells in the collection view.
-- (void)handleItemReorderingWithGesture:(UIGestureRecognizer*)gesture {
-  DCHECK(gesture == self.itemReorderRecognizer);
-  CGPoint location = [gesture locationInView:self.collectionView];
-  switch (gesture.state) {
-    case UIGestureRecognizerStateBegan: {
-      NSIndexPath* path =
-          [self.collectionView indexPathForItemAtPoint:location];
-      BOOL moving =
-          [self.collectionView beginInteractiveMovementForItemAtIndexPath:path];
-      if (!moving) {
-        gesture.enabled = NO;
-      } else {
-        base::RecordAction(
-            base::UserMetricsAction("MobileTabGridBeganReordering"));
-        CGPoint cellCenter =
-            [self.collectionView cellForItemAtIndexPath:path].center;
-        self.itemReorderTouchPoint =
-            CGPointMake(location.x - cellCenter.x, location.y - cellCenter.y);
-        // Switch to the reordering layout.
-        if (IsThumbStripEnabled() &&
-            self.currentLayout == self.horizontalLayout) {
-          [self.collectionView
-              setCollectionViewLayout:self.horizontalReorderingLayout
-                             animated:YES];
-        } else {
-          [self.collectionView setCollectionViewLayout:self.reorderingLayout
-                                              animated:YES];
-        }
-        // Immediately update the position of the moving item; otherwise, the
-        // collection view may relayout its subviews and briefly show the moving
-        // item at position (0,0).
-        [self updateItemReorderingForPosition:location];
-      }
-      break;
-    }
-    case UIGestureRecognizerStateChanged:
-      // Offset the location so it's the touch point that moves, not the cell
-      // center.
-      [self updateItemReorderingForPosition:location];
-      break;
-    case UIGestureRecognizerStateEnded: {
-      self.itemReorderTouchPoint = CGPointZero;
-      // End the interactive movement and transition the layout back to the
-      // defualt layout. These can't be simultaneous, because that will produce
-      // a copy of the moving cell in its final position while it animates from
-      // under thr user's touch. In order to fire the animated switch to the
-      // defualt layout at the correct time, a CATransaction is used to wrap the
-      // -endInteractiveMovement call which will generate the animations on the
-      // moving cell. The -setCollectionViewLayout: call can then be added as a
-      // completion block.
-      [CATransaction begin];
-      // Note: The completion block must be added *before* any animations are
-      // added in the transaction.
-      [CATransaction setCompletionBlock:^{
-        [self.collectionView setCollectionViewLayout:self.currentLayout
-                                            animated:YES];
-      }];
-      [self.collectionView endInteractiveMovement];
-      [self recordInteractiveReordering];
-      [CATransaction commit];
-      break;
-    }
-    case UIGestureRecognizerStateCancelled:
-      self.itemReorderTouchPoint = CGPointZero;
-      [self.collectionView cancelInteractiveMovement];
-      [self recordInteractiveReordering];
-      [self.collectionView setCollectionViewLayout:self.currentLayout
-                                          animated:YES];
-      // Re-enable cancelled gesture.
-      gesture.enabled = YES;
-      break;
-    case UIGestureRecognizerStatePossible:
-    case UIGestureRecognizerStateFailed:
-      NOTREACHED() << "Unexpected long-press recognizer state";
+// Updates the ZIndex of the visible cells to have the cells of the upper rows
+// be above the cell of the lower rows.
+- (void)updateVisibleCellZIndex {
+  for (NSIndexPath* indexPath in self.collectionView
+           .indexPathsForVisibleItems) {
+    // Set the z index of cells so that lower rows are moving behind the upper
+    // rows during transitions between grid and horizontal layouts.
+    UICollectionViewCell* cell =
+        [self.collectionView cellForItemAtIndexPath:indexPath];
+    cell.layer.zPosition = self.items.count - indexPath.item;
   }
-}
-
-- (void)updateItemReorderingForPosition:(CGPoint)position {
-  CGPoint targetLocation =
-      CGPointMake(position.x - self.itemReorderTouchPoint.x,
-                  position.y - self.itemReorderTouchPoint.y);
-
-  [self.collectionView updateInteractiveMovementTargetPosition:targetLocation];
-}
-
-- (void)recordInteractiveReordering {
-  if (self.hasChangedOrder) {
-    base::RecordAction(base::UserMetricsAction("MobileTabGridReordered"));
-  } else {
-    base::RecordAction(
-        base::UserMetricsAction("MobileTabGridEndedWithoutReordering"));
-  }
-  self.hasChangedOrder = NO;
 }
 
 @end

@@ -13,7 +13,7 @@
 #include "ash/style/ash_color_provider.h"
 #include "ash/style/scoped_light_mode_as_default.h"
 #include "ash/system/holding_space/holding_space_item_view.h"
-#include "ash/system/tray/tray_popup_utils.h"
+#include "ash/system/holding_space/holding_space_util.h"
 #include "base/containers/adapters.h"
 #include "base/i18n/rtl.h"
 #include "ui/compositor/canvas_painter.h"
@@ -39,9 +39,9 @@ namespace {
 constexpr int kDragImageItemViewCornerRadius = 8;
 constexpr int kDragImageItemViewElevation = 2;
 constexpr int kDragImageItemChipViewIconSize = 24;
-constexpr gfx::Insets kDragImageItemChipViewInsets(0, 13);
+constexpr gfx::Insets kDragImageItemChipViewInsets(8, 8, 8, /*right=*/12);
 constexpr gfx::Size kDragImageItemChipViewPreferredSize(160, 40);
-constexpr int kDragImageItemChipViewSpacing = 13;
+constexpr int kDragImageItemChipViewSpacing = 8;
 constexpr gfx::Size kDragImageItemScreenshotViewPreferredSize(104, 80);
 constexpr gfx::Insets kDragImageOverflowBadgeInsets = gfx::Insets(0, 8);
 constexpr gfx::Size kDragImageOverflowBadgeMinimumSize(24, 24);
@@ -155,12 +155,18 @@ class DragImageItemView : public views::View {
   }
 
   void OnPaintBackground(gfx::Canvas* canvas) override {
+    // NOTE: The contents bounds are shrunk by a single pixel to avoid
+    // painting the background outside content bounds as might otherwise occur
+    // due to pixel rounding. Failure to do so could result in white paint
+    // artifacts.
+    gfx::RectF bounds(GetContentsBounds());
+    bounds.Inset(gfx::InsetsF(0.5f));
+
     cc::PaintFlags flags;
     flags.setAntiAlias(true);
     flags.setColor(SK_ColorWHITE);
     flags.setLooper(gfx::CreateShadowDrawLooper(GetShadowDetails().values));
-    canvas->DrawRoundRect(GetContentsBounds(), kDragImageItemViewCornerRadius,
-                          flags);
+    canvas->DrawRoundRect(bounds, kDragImageItemViewCornerRadius, flags);
   }
 
  private:
@@ -204,19 +210,14 @@ class DragImageItemChipView : public DragImageItemView {
         RoundedImageView::Alignment::kCenter));
     icon->SetPreferredSize(gfx::Size(kDragImageItemChipViewIconSize,
                                      kDragImageItemChipViewIconSize));
-    icon->SetImage(item->image().image_skia(), icon->GetPreferredSize());
+    icon->SetImage(item->image().GetImageSkia(icon->GetPreferredSize()));
 
     // Label.
-    auto* label = AddChildView(std::make_unique<views::Label>(item->text()));
+    ScopedLightModeAsDefault scoped_light_mode;
+    auto* label = AddChildView(CreateLabel(LabelStyle::kChip, item->text()));
     label->SetElideBehavior(gfx::ElideBehavior::ELIDE_MIDDLE);
     label->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
     layout->SetFlexForView(label, 1);
-
-    TrayPopupUtils::SetLabelFontList(
-        label, TrayPopupUtils::FontStyle::kDetailedViewLabel);
-    ScopedLightModeAsDefault scoped_light_mode;
-    label->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
-        AshColorProvider::ContentLayerType::kTextColorPrimary));
   }
 };
 
@@ -245,7 +246,7 @@ class DragImageItemScreenshotView : public DragImageItemView {
     auto* image = AddChildView(std::make_unique<RoundedImageView>(
         kDragImageItemViewCornerRadius, RoundedImageView::Alignment::kCenter));
     image->SetPreferredSize(kDragImageItemScreenshotViewPreferredSize);
-    image->SetImage(item->image().image_skia(), image->GetPreferredSize());
+    image->SetImage(item->image().GetImageSkia(image->GetPreferredSize()));
   }
 };
 
@@ -290,11 +291,9 @@ class DragImageOverflowBadge : public views::View {
         views::BoxLayout::MainAxisAlignment::kCenter);
 
     // Label.
-    auto* label = AddChildView(std::make_unique<views::Label>());
-    label->SetText(base::UTF8ToUTF16(base::NumberToString(count)));
+    auto* label = AddChildView(CreateLabel(LabelStyle::kBadge));
     label->SetEnabledColor(gfx::kGoogleGrey200);
-    TrayPopupUtils::SetLabelFontList(label,
-                                     TrayPopupUtils::FontStyle::kSmallTitle);
+    label->SetText(base::UTF8ToUTF16(base::NumberToString(count)));
   }
 };
 
@@ -325,7 +324,7 @@ class DragImageView : public views::View {
                           /*clear_color=*/SK_ColorTRANSPARENT, is_pixel_canvas)
             .context(),
         size()));
-    return gfx::ImageSkia(gfx::ImageSkiaRep(bitmap, scale));
+    return gfx::ImageSkia::CreateFromBitmap(bitmap, scale);
   }
 
   // Returns the drag offset to use when rendering this view as a drag image.

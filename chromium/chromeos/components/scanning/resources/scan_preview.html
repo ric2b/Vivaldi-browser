@@ -1,52 +1,104 @@
 <style include="scanning-shared scanning-fonts">
-  /* Styles part of the string returned by getHelperTextHtml_(). */
-  #boldHelperText {
-    font-weight: bold;
-  }
-
   #helperText {
     @apply --scanning-helper-text-font;
     color: var(--scanning-helper-text-color);
+    margin: auto;
     text-align: center;
     width: 60%;
   }
 
-  #progressText {
+  #helpOrProgress {
+    display: flex;
+    /* Calculate a height that results in a Letter aspect ratio (1:1.2941). */
+    height: calc(1.2941 * var(--left-panel-width));
+  }
+
+  #progressText,
+  #cancelingText {
     @apply --scanning-progress-text-font;
     color: var(--scanning-progress-text-color);
   }
 
-  #scanProgress {
+  #scanProgress,
+  #cancelingProgress {
+    margin: auto;
     text-align: center;
-    width: 60%;
+    width: 70%;
   }
 
   .preview {
-    align-items: center;
-    border: 1px solid var(--google-grey-200);
     border-radius: 4px;
-    display: flex;
-    /* TODO(michaelcheco): Replace with correct height for
-     * preview container. */
-    height: 420px;
-    justify-content: center;
+    max-height: calc(100vh - var(--panel-container-margin-top));
+    outline: none;
+    overflow-y: auto;
+  }
+
+  .preview:focus {
+    box-shadow: 0 0 0 2px rgba(var(--google-blue-600-rgb), .4);
+  }
+
+  .preview::-webkit-scrollbar {
+    -webkit-appearance: none;
+    width: 4px;
+  }
+
+  .preview::-webkit-scrollbar-thumb {
+    background-color: rgba(0, 0, 0, 0.5);
+  }
+
+  .preview-item {
+    border: 1px solid var(--google-grey-300);
+    border-radius: 4px;
+    /* Subtract 2px for the border. */
+    width: calc(100% - 2px);
+  }
+
+  .scanned-image {
+    display: block;
+  }
+
+  /* Add top margin to all but the first scanned image. */
+  .scanned-image:nth-of-type(n+2) {
+    margin-top: 8px;
   }
 
   paper-progress {
-    --paper-progress-active-color: var(--google-blue-600);
-    --paper-progress-container-color: var(--google-blue-200);
     border-radius: 4px;
     height: 4px;
     margin-top: 12px;
-    width: 256px;
+    width: 100%;
+  }
+
+  #scanProgressBar {
+    --paper-progress-active-color: var(--google-blue-600);
+    --paper-progress-container-color: var(--google-blue-200);
+  }
+
+  #cancelingProgressBar {
+    --paper-progress-active-color: var(--google-grey-refresh-500);
+    --paper-progress-container-color: var(--google-grey-200);
   }
 </style>
-<div class="preview">
-  <div id="helperText" hidden$="[[shouldHideHelperText_(appState)]]">
-    <span inner-h-t-m-l="[[getHelperTextHtml_()]]"></span>
+<div id="previewDiv" class="preview" aria-label="[[previewAriaLabel_]]"
+    tabindex="0">
+  <div id="helpOrProgress" class="preview-item" hidden$="[[showScannedImages_]]"
+      aria-hidden="true">
+    <div id="helperText" hidden$="[[!showHelperText_]]">
+      [[i18n('scanPreviewHelperText')]]
+    </div>
+    <div id="scanProgress" hidden$="[[!showScanProgress_]]">
+      <span id="progressText">[[progressTextString_]]</span>
+      <paper-progress id="scanProgressBar" value="[[progressPercent]]">
+      </paper-progress>
+    </div>
+    <div id="cancelingProgress" hidden$="[[!showCancelingProgress_]]">
+      <span id="cancelingText">[[i18n('cancelingScanningText')]]</span>
+      <paper-progress id="cancelingProgressBar" indeterminate></paper-progress>
+    </div>
   </div>
-  <div id="scanProgress" hidden$="[[shouldHideProgress_(appState)]]">
-    <span id="progressText">[[getProgressTextString_(pageNumber)]]</span>
-    <paper-progress value="[[progressPercent]]"></paper-progress>
+  <div id="scannedImages" hidden$="[[!showScannedImages_]]" aria-hidden="true">
+    <template is="dom-repeat" items="[[objectUrls]]" as="url">
+      <img class="preview-item scanned-image" src="[[url]]">
+    </template>
   </div>
 </div>

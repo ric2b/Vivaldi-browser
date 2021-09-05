@@ -27,6 +27,7 @@ SWITCHES_EXPORT extern const char kDisableVivaldi[];
 SWITCHES_EXPORT extern const char kRunningVivaldi[];
 
 SWITCHES_EXPORT extern const char kVivaldiPlatformMedia[];
+SWITCHES_EXPORT extern const char kVivaldiSilentUpdate[];
 SWITCHES_EXPORT extern const char kVivaldiUpdateURL[];
 #if defined(COMPONENT_BUILD)
 SWITCHES_EXPORT extern const char kLaunchUpdater[];

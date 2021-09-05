@@ -18,6 +18,9 @@
 #include "content/public/browser/web_contents.h"
 #import "ui/base/cocoa/focus_tracker.h"
 
+#include "app/vivaldi_apptools.h"
+#include "browser/menus/vivaldi_render_view_context_menu.h"
+
 ChromeWebContentsViewDelegateMac::ChromeWebContentsViewDelegateMac(
     content::WebContents* web_contents)
     : ContextMenuDelegate(web_contents),
@@ -129,8 +132,13 @@ ChromeWebContentsViewDelegateMac::CreateRenderViewContextMenu(
   gfx::NativeView parent_view =
       GetActiveRenderWidgetHostView()->GetNativeView();
 
+  if (::vivaldi::IsVivaldiRunning() &&
+      ::vivaldi::VivaldiRenderViewContextMenu::Supports(params)) {
+    return vivaldi::VivaldiRenderViewContextMenu::Create(focused_frame, params);
+  } else {
   return new RenderViewContextMenuMacCocoa(focused_frame, params,
                                            parent_view.GetNativeNSView());
+  }
 }
 
 content::RenderWidgetHostView*

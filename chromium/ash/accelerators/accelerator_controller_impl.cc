@@ -75,7 +75,7 @@
 #include "ash/wm/overview/overview_session.h"
 #include "ash/wm/screen_pinning_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
-#include "ash/wm/window_cycle_controller.h"
+#include "ash/wm/window_cycle/window_cycle_controller.h"
 #include "ash/wm/window_positioning_utils.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
@@ -83,13 +83,13 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/containers/contains.h"
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/optional.h"
-#include "base/stl_util.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
@@ -98,6 +98,8 @@
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "chromeos/ui/vector_icons/vector_icons.h"
 #include "components/user_manager/user_type.h"
+#include "ui/aura/client/aura_constants.h"
+#include "ui/aura/env.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/accelerators/accelerator_manager.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -283,7 +285,7 @@ void HandleCycleBackwardMRU(const ui::Accelerator& accelerator) {
     base::RecordAction(base::UserMetricsAction("Accel_PrevWindow_Tab"));
 
   Shell::Get()->window_cycle_controller()->HandleCycleWindow(
-      WindowCycleController::BACKWARD);
+      WindowCycleController::WindowCyclingDirection::kBackward);
 }
 
 void HandleCycleForwardMRU(const ui::Accelerator& accelerator) {
@@ -291,7 +293,7 @@ void HandleCycleForwardMRU(const ui::Accelerator& accelerator) {
     base::RecordAction(base::UserMetricsAction("Accel_NextWindow_Tab"));
 
   Shell::Get()->window_cycle_controller()->HandleCycleWindow(
-      WindowCycleController::FORWARD);
+      WindowCycleController::WindowCyclingDirection::kForward);
 }
 
 void HandleActivateDesk(const ui::Accelerator& accelerator) {
@@ -792,12 +794,24 @@ void HandleTakePartialScreenshot() {
       /*draw_overlay_immediately=*/true);
 }
 
-void HandleTakeScreenshot() {
+void HandleTakeScreenshot(ui::KeyboardCode key_code) {
   base::RecordAction(UserMetricsAction("Accel_Take_Screenshot"));
-  if (!features::IsCaptureModeEnabled())
+  if (!features::IsCaptureModeEnabled()) {
     Shell::Get()->screenshot_controller()->TakeScreenshotForAllRootWindows();
-  else
-    CaptureModeController::Get()->CaptureScreenshotsOfAllDisplays();
+    return;
+  }
+
+  // If it is the snip key, toggle capture mode.
+  auto* capture_mode_controller = CaptureModeController::Get();
+  if (key_code == ui::VKEY_SNAPSHOT) {
+    if (capture_mode_controller->IsActive())
+      capture_mode_controller->Stop();
+    else
+      capture_mode_controller->Start(CaptureModeEntryType::kSnipKey);
+    return;
+  }
+
+  capture_mode_controller->CaptureScreenshotsOfAllDisplays();
 }
 
 void HandleToggleSystemTrayBubbleInternal(bool focus_message_center) {
@@ -847,8 +861,22 @@ void HandleSwitchIme(const ui::Accelerator& accelerator) {
   Shell::Get()->ime_controller()->SwitchImeWithAccelerator(accelerator);
 }
 
-bool CanHandleToggleAppList(const ui::Accelerator& accelerator,
-                            const ui::Accelerator& previous_accelerator) {
+bool CanHandleToggleAppList(
+    const ui::Accelerator& accelerator,
+    const ui::Accelerator& previous_accelerator,
+    const std::set<ui::KeyboardCode>& currently_pressed_keys) {
+  for (auto key : currently_pressed_keys) {
+    // The AppList accelerator is triggered on search(VKEY_LWIN) key release.
+    // Sometimes users will press and release the search key while holding other
+    // keys in an attempt to trigger a different accelerator. We should not
+    // toggle the AppList in that case. Check for VKEY_SHIFT because this is
+    // used to show fullscreen app list.
+    if (key != ui::VKEY_LWIN && key != ui::VKEY_SHIFT &&
+        key != ui::VKEY_BROWSER_SEARCH) {
+      return false;
+    }
+  }
+
   if (accelerator.key_code() == ui::VKEY_LWIN) {
     // If something else was pressed between the Search key (LWIN)
     // being pressed and released, then ignore the release of the
@@ -1158,7 +1186,7 @@ bool CanHandleToggleCapsLock(
       return false;
   }
 
-  // This shortcust is set to be trigger on release. Either the current
+  // This shortcut is set to be trigger on release. Either the current
   // accelerator is a Search release or Alt release.
   if (accelerator.key_code() == ui::VKEY_LWIN &&
       accelerator.key_state() == ui::Accelerator::KeyState::RELEASED) {
@@ -1194,6 +1222,15 @@ void HandleToggleCapsLock() {
   base::RecordAction(UserMetricsAction("Accel_Toggle_Caps_Lock"));
   ImeControllerImpl* ime_controller = Shell::Get()->ime_controller();
   ime_controller->SetCapsLockEnabled(!ime_controller->IsCapsLockEnabled());
+}
+
+bool CanHandleToggleClipboardHistory() {
+  return chromeos::features::IsClipboardHistoryEnabled();
+}
+
+void HandleToggleClipboardHistory() {
+  DCHECK(Shell::Get()->clipboard_history_controller());
+  Shell::Get()->clipboard_history_controller()->ShowMenuByAccelerator();
 }
 
 bool CanHandleToggleDictation() {
@@ -1653,9 +1690,18 @@ AcceleratorControllerImpl::AcceleratorControllerImpl()
   Init();
 
   ParseSideVolumeButtonLocationInfo();
+
+  // Let AcceleratorHistory be a PreTargetHandler on aura::Env to ensure that it
+  // receives KeyEvents and MouseEvents. In some cases Shell PreTargetHandlers
+  // will handle Events before AcceleratorHistory gets to see them. This
+  // interferes with Accelerator processing. See https://crbug.com/1174603.
+  aura::Env::GetInstance()->AddPreTargetHandler(
+      accelerator_history_.get(), ui::EventTarget::Priority::kAccessibility);
 }
 
-AcceleratorControllerImpl::~AcceleratorControllerImpl() = default;
+AcceleratorControllerImpl::~AcceleratorControllerImpl() {
+  aura::Env::GetInstance()->RemovePreTargetHandler(accelerator_history_.get());
+}
 
 void AcceleratorControllerImpl::Register(
     const std::vector<ui::Accelerator>& accelerators,
@@ -1800,6 +1846,7 @@ void AcceleratorControllerImpl::Init() {
     actions_allowed_in_pinned_mode_.insert(
         kActionsAllowedInAppModeOrPinnedMode[i]);
   }
+
   for (size_t i = 0; i < kActionsAllowedInPinnedModeLength; ++i)
     actions_allowed_in_pinned_mode_.insert(kActionsAllowedInPinnedMode[i]);
   for (size_t i = 0; i < kActionsAllowedInAppModeLength; ++i)
@@ -1954,11 +2001,15 @@ bool AcceleratorControllerImpl::CanPerformAction(
       return CanHandleCycleUser();
     case TOGGLE_APP_LIST:
     case TOGGLE_APP_LIST_FULLSCREEN:
-      return CanHandleToggleAppList(accelerator, previous_accelerator);
+      return CanHandleToggleAppList(
+          accelerator, previous_accelerator,
+          accelerator_history_->currently_pressed_keys());
     case TOGGLE_CAPS_LOCK:
       return CanHandleToggleCapsLock(
           accelerator, previous_accelerator,
           accelerator_history_->currently_pressed_keys());
+    case TOGGLE_CLIPBOARD_HISTORY:
+      return CanHandleToggleClipboardHistory();
     case TOGGLE_DICTATION:
       return CanHandleToggleDictation();
     case TOGGLE_DOCKED_MAGNIFIER:
@@ -2329,7 +2380,7 @@ void AcceleratorControllerImpl::PerformAction(
       HandleTakePartialScreenshot();
       break;
     case TAKE_SCREENSHOT:
-      HandleTakeScreenshot();
+      HandleTakeScreenshot(accelerator.key_code());
       break;
     case TAKE_WINDOW_SCREENSHOT:
       HandleTakeWindowScreenshot();
@@ -2342,6 +2393,9 @@ void AcceleratorControllerImpl::PerformAction(
       break;
     case TOGGLE_CAPS_LOCK:
       HandleToggleCapsLock();
+      break;
+    case TOGGLE_CLIPBOARD_HISTORY:
+      HandleToggleClipboardHistory();
       break;
     case TOGGLE_DICTATION:
       HandleToggleDictation();

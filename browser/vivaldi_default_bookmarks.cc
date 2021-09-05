@@ -8,6 +8,7 @@
 #include "base/task/thread_pool.h"
 #include "base/values.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/prefs/pref_service.h"
@@ -16,6 +17,7 @@
 
 #include "components/bookmarks/vivaldi_bookmark_kit.h"
 #include "components/bookmarks/vivaldi_partners.h"
+#include "components/locale/locale_kit.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 namespace vivaldi_default_bookmarks {
@@ -40,8 +42,6 @@ constexpr bool kAllowPartnerRemoval = false;
 // about locale-based partners.
 constexpr bool kUpdateLocaleBasedPartners = false;
 
-const char kFallbackLocaleFile[] = "en-US.json";
-
 const char kChildrenKey[] = "children";
 const char kNameKey[] = "name";
 const char kDescriptionKey[] = "description";
@@ -52,10 +52,14 @@ const char kVersionKey[] = "version";
 
 const char kBookmarksFolderName[] = "Bookmarks";
 
+base::StringPiece bookmark_locales[] = {
+#include "components/bookmarks/bookmark_locales.inc"
+};
+
 struct DefaultBookmarkItem {
   std::string title;
   std::string nickname;
-  std::string guid;
+  base::GUID guid;
   std::string thumbnail;
   std::string description;
   GURL url;
@@ -91,17 +95,15 @@ class BookmarkUpdater {
   const Stats& stats() const { return stats_; }
 
  private:
-  void UpdateRecursively(
-      const std::vector<DefaultBookmarkItem>& default_items,
-      const BookmarkNode* parent_node);
+  void UpdateRecursively(const std::vector<DefaultBookmarkItem>& default_items,
+                         const BookmarkNode* parent_node);
 
   void FindExistingPartners(const BookmarkNode* top_node);
 
   // Find existing bookmark node and update it or add a new one. Return null
   // if item's children should be skipped.
-  const BookmarkNode* UpdateOrAdd(
-      const DefaultBookmarkItem& default_item,
-      const BookmarkNode* parent_node);
+  const BookmarkNode* UpdateOrAdd(const DefaultBookmarkItem& default_item,
+                                  const BookmarkNode* parent_node);
   void UpdatePartnerNode(const DefaultBookmarkItem& item,
                          const BookmarkNode* node);
   const BookmarkNode* AddPartnerNode(const DefaultBookmarkItem& item,
@@ -109,10 +111,10 @@ class BookmarkUpdater {
 
   const DefaultBookmarkTree* default_bookmark_tree_;
   BookmarkModel* model_;
-  base::flat_set<std::string> deleted_partner_guids_;
+  base::flat_set<base::GUID> deleted_partner_guids_;
 
-  std::map<std::string, const BookmarkNode*> guid_node_map_;
-  std::map<std::string, const BookmarkNode*> existing_partner_bookmarks_;
+  std::map<base::GUID, const BookmarkNode*> guid_node_map_;
+  std::map<base::GUID, const BookmarkNode*> existing_partner_bookmarks_;
   Stats stats_;
 };
 
@@ -267,29 +269,14 @@ void DefaultBookmarkParser::ParseJson(base::Value default_bookmarks_value) {
 }
 
 base::Optional<base::Value> ReadDefaultBookmarks(std::string locale) {
-
   vivaldi_partners::AssetReader reader;
-  base::Optional<base::Value> default_bookmarks_value =
-      reader.ReadJson(locale + ".json");
-  if (!default_bookmarks_value) {
-    if (reader.is_not_found()) {
-      LOG(WARNING) << "missing default bookmarks file " << reader.GetPath();
-      default_bookmarks_value = reader.ReadJson(kFallbackLocaleFile);
-      if (!default_bookmarks_value) {
-        if (reader.is_not_found()) {
-          LOG(ERROR) << "missing fallback bookmark file " << reader.GetPath();
-        }
-      }
-    }
-  }
-  return default_bookmarks_value;
+  return reader.ReadJson(locale + ".json");
 }
 
 BookmarkUpdater::BookmarkUpdater(
     const DefaultBookmarkTree* default_bookmark_tree,
     BookmarkModel* model)
-    : default_bookmark_tree_(default_bookmark_tree), model_(model) {
-}
+    : default_bookmark_tree_(default_bookmark_tree), model_(model) {}
 
 void BookmarkUpdater::SetDeletedPartners(PrefService* prefs) {
   const base::Value* deleted_partners =
@@ -300,7 +287,7 @@ void BookmarkUpdater::SetDeletedPartners(PrefService* prefs) {
     return;
   }
 
-  std::vector<std::string> ids;
+  std::vector<base::GUID> ids;
   ids.reserve(deleted_partners->GetList().size());
   bool has_locale_based_ids = false;
   for (const base::Value& value : deleted_partners->GetList()) {
@@ -309,28 +296,35 @@ void BookmarkUpdater::SetDeletedPartners(PrefService* prefs) {
                  << " contains non-string entry";
       continue;
     }
-    std::string guid = value.GetString();
-    if (vivaldi_partners::MapLocaleIdToGUID(guid)) {
+    base::GUID partner_id = base::GUID::ParseCaseInsensitive(value.GetString());
+    if (!partner_id.is_valid()) {
+      LOG(ERROR) << vivaldiprefs::kBookmarksDeletedPartners
+                 << " contains an entry that is not a valid GUID - "
+                 << value.GetString();
+      continue;
+    }
+    if (vivaldi_partners::MapLocaleIdToGUID(partner_id)) {
       has_locale_based_ids = true;
     }
-    ids.push_back(std::move(guid));
+    ids.push_back(std::move(partner_id));
   }
   if (has_locale_based_ids && kUpdateLocaleBasedPartners) {
     base::Value new_list(base::Value::Type::LIST);
-    for (const std::string& guid : ids) {
-      new_list.Append(base::Value(guid));
+    for (const base::GUID& guid : ids) {
+      new_list.Append(base::Value(guid.AsLowercaseString()));
     }
     prefs->Set(vivaldiprefs::kBookmarksDeletedPartners, new_list);
   }
 
-  deleted_partner_guids_ = base::flat_set<std::string>(std::move(ids));
+  deleted_partner_guids_ = base::flat_set<base::GUID>(std::move(ids));
 }
 
-void AddBookmarkGuids(const std::vector<DefaultBookmarkItem>& default_items,std::vector<std::string>* guids) {
-   for (const DefaultBookmarkItem& item : default_items) {
-     guids->push_back(item.guid);
-     AddBookmarkGuids(item.children, guids);
-   }
+void AddBookmarkGuids(const std::vector<DefaultBookmarkItem>& default_items,
+                      std::vector<base::GUID>& guids) {
+  for (const DefaultBookmarkItem& item : default_items) {
+    guids.push_back(item.guid);
+    AddBookmarkGuids(item.children, guids);
+  }
 }
 
 void BookmarkUpdater::RunCleanUpdate() {
@@ -344,15 +338,14 @@ void BookmarkUpdater::RunCleanUpdate() {
                     model_->bookmark_bar_node());
 
   if (kAllowPartnerRemoval) {
-    std::vector<std::string> defined_guid_vector;
-    AddBookmarkGuids(default_bookmark_tree_->top_items, &defined_guid_vector);
-    base::flat_set<std::string> defined_guid_set(
-        std::move(defined_guid_vector));
+    std::vector<base::GUID> defined_guid_vector;
+    AddBookmarkGuids(default_bookmark_tree_->top_items, defined_guid_vector);
+    base::flat_set<base::GUID> defined_guid_set(std::move(defined_guid_vector));
     // A range loop cannot be used as we remove elements from the map not to
     // keep pointers to deleted nodes.
     for (auto i = existing_partner_bookmarks_.begin();
          i != existing_partner_bookmarks_.end();) {
-      const std::string& partner_id = i->first;
+      const base::GUID& partner_id = i->first;
       if (!defined_guid_set.contains(partner_id)) {
         const BookmarkNode* node = i->second;
         if (!model_->is_permanent_node(node)) {
@@ -375,7 +368,7 @@ void BookmarkUpdater::FindExistingPartners(const BookmarkNode* top_node) {
   ui::TreeNodeIterator<const BookmarkNode> iterator(top_node);
   while (iterator.has_next()) {
     const BookmarkNode* node = iterator.Next();
-    std::string guid = node->guid();
+    base::GUID guid = node->guid();
 
     // If the guid was for a former locale-specific partner id, adjust it to
     // locale-independent one as guid_node_map_ is used to check for presence of
@@ -389,8 +382,8 @@ void BookmarkUpdater::FindExistingPartners(const BookmarkNode* top_node) {
               << " adjusted_guid=" << guid;
     }
 
-    std::string partner_id = vivaldi_bookmark_kit::GetPartner(node);
-    if (partner_id.empty())
+    base::GUID partner_id = vivaldi_bookmark_kit::GetPartner(node);
+    if (!partner_id.is_valid())
       continue;
     if (vivaldi_partners::MapLocaleIdToGUID(partner_id)) {
       VLOG(2) << "Old locale-based partner id "
@@ -502,7 +495,8 @@ const BookmarkNode* BookmarkUpdater::AddPartnerNode(
   } else {
     VLOG(2) << "Adding url " << item.title << " guid=" << item.guid;
     node = model_->AddURL(parent_node, index, title, item.url,
-                          custom_meta.map(), base::nullopt, item.guid);
+                          custom_meta.map(), base::nullopt,
+                          item.guid);
     stats_.added_urls++;
   }
   return node;
@@ -533,7 +527,7 @@ void BookmarkUpdater::UpdatePartnerNode(const DefaultBookmarkItem& item,
   }
 
   vivaldi_bookmark_kit::CustomMetaInfo custom_meta;
-  const BookmarkNode::MetaInfoMap *old_meta_info = node->GetMetaInfoMap();
+  const BookmarkNode::MetaInfoMap* old_meta_info = node->GetMetaInfoMap();
   if (old_meta_info) {
     custom_meta.SetMap(*old_meta_info);
   }
@@ -638,10 +632,12 @@ void UpdatePartnersInModel(Profile* profile,
               << " updated_folders=" << stats.updated_folders
               << " updated_urls=" << stats.updated_urls
               << " removed=" << stats.removed
-              << " skipped=" << skipped;
+              << " skipped=" << skipped
+              << " locale=" << locale;
 
     if (stats.failed_updates) {
-      LOG(ERROR) << " failed_updates=" << stats.failed_updates;
+      LOG(ERROR) << " failed_updates=" << stats.failed_updates
+                 << " locale=" << locale;
       break;
     }
 
@@ -651,7 +647,7 @@ void UpdatePartnersInModel(Profile* profile,
   } while (false);
 
   if (callback) {
-    std::move(callback).Run(ok, no_version);
+    std::move(callback).Run(ok, no_version, locale);
   }
 }
 
@@ -667,28 +663,42 @@ void UpdatePartnersFromDefaults(
                      std::move(default_bookmarks_value), std::move(callback)));
 }
 
+std::string GetBookmarkLocale(Profile* profile) {
+  PrefService* prefs = profile->GetPrefs();
+  std::string locale = prefs->GetString(vivaldiprefs::kBookmarksLanguage);
+  if (!locale.empty()) {
+    // Check if the locale is still a valid one.
+    auto* i = std::find(std::begin(bookmark_locales),
+                        std::end(bookmark_locales), locale);
+    if (i != std::end(bookmark_locales))
+      return locale;
+  }
+  locale = locale_kit::FindBestMatchingLocale(
+      bookmark_locales, g_browser_process->GetApplicationLocale());
+  DCHECK(!locale.empty());
+  if (!locale.empty()) {
+    prefs->SetString(vivaldiprefs::kBookmarksLanguage, locale);
+  }
+  return locale;
+}
+
 }  // namespace
 
-void UpdatePartners(Profile* profile,
-                    const std::string& locale,
-                    UpdateCallback callback) {
-  if (locale.length() != 2 && locale.length() != 5) {
-    LOG(WARNING) << "unexpected locale format: " << locale;
-  }
-
+void UpdatePartners(Profile* profile, UpdateCallback callback) {
   // A guest session cannot have persistent bookmarks and must not trigger
   // this call.
   if (profile->IsGuestSession()) {
     LOG(ERROR) << "Attempt to update bookmarks from a guest window";
-
-    // This invokes callback later with an error flag.
-    profile = nullptr;
-  } else {
-    // Allow to upgrade bookmarks even with a private profile as a command line
-    // switch can trigger the first window in Vivaldi to be incognito one. So
-    // get the original recording profile.
-    profile = profile->GetOriginalProfile();
+    std::move(callback).Run(false, false, std::string());
+    return;
   }
+
+  // Allow to upgrade bookmarks even with a private profile as a command line
+  // switch can trigger the first window in Vivaldi to be incognito one. So
+  // get the original recording profile.
+  profile = profile->GetOriginalProfile();
+
+  std::string locale = GetBookmarkLocale(profile);
 
   // Unretained() is safe as recording profiles are not deleted until shutdown.
   base::ThreadPool::PostTaskAndReplyWithResult(

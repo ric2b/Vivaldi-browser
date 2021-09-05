@@ -6,6 +6,7 @@
 
 #include "base/strings/string_number_conversions.h"
 #include "base/trace_event/trace_event.h"
+#include "build/chromeos_buildflags.h"
 #include "ui/base/buildflags.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/base/ui_base_features.h"
@@ -23,7 +24,7 @@
 #include "ui/events/platform/platform_event_source.h"
 #include "ui/events/platform/x11/x11_event_source.h"
 #include "ui/events/x/x11_event_translation.h"
-#include "ui/events/x/x11_window_event_manager.h"
+#include "ui/gfx/x/x11_window_event_manager.h"
 #include "ui/platform_window/common/platform_window_defaults.h"
 #include "ui/platform_window/extensions/workspace_extension_delegate.h"
 #include "ui/platform_window/extensions/x11_extension_delegate.h"
@@ -108,11 +109,11 @@ ui::XWindow::Configuration ConvertInitPropertiesToXWindowConfig(
 }
 
 // Coalesce touch/mouse events if needed
-bool CoalesceEventsIfNeeded(x11::Event* const xev,
+bool CoalesceEventsIfNeeded(const x11::Event& xev,
                             EventType type,
                             x11::Event* out) {
-  if (xev->As<x11::MotionNotifyEvent>() ||
-      (xev->As<x11::Input::DeviceEvent>() &&
+  if (xev.As<x11::MotionNotifyEvent>() ||
+      (xev.As<x11::Input::DeviceEvent>() &&
        (type == ui::ET_TOUCH_MOVED || type == ui::ET_MOUSE_MOVED ||
         type == ui::ET_MOUSE_DRAGGED))) {
     return ui::CoalescePendingMotionEvents(xev, out) > 0;
@@ -224,8 +225,9 @@ bool X11Window::IsVisible() const {
 }
 
 void X11Window::PrepareForShutdown() {
+  connection()->RemoveEventObserver(this);
   DCHECK(X11EventSource::HasInstance());
-  X11EventSource::GetInstance()->RemoveXEventDispatcher(this);
+  X11EventSource::GetInstance()->RemovePlatformEventDispatcher(this);
 }
 
 void X11Window::SetBounds(const gfx::Rect& bounds) {
@@ -536,63 +538,37 @@ void X11Window::SetX11ExtensionDelegate(X11ExtensionDelegate* delegate) {
   x11_extension_delegate_ = delegate;
 }
 
-bool X11Window::HandleAsAtkEvent(x11::Event* x11_event, bool transient) {
+bool X11Window::HandleAsAtkEvent(const x11::Event& x11_event, bool transient) {
 #if !BUILDFLAG(USE_ATK)
   // TODO(crbug.com/1014934): Support ATK in Ozone/X11.
   NOTREACHED();
   return false;
 #else
-  DCHECK(x11_event);
-  if (!x11_extension_delegate_ || !x11_event->As<x11::KeyEvent>())
+  if (!x11_extension_delegate_ || !x11_event.As<x11::KeyEvent>())
     return false;
   auto atk_key_event = AtkKeyEventFromXEvent(x11_event);
   return x11_extension_delegate_->OnAtkKeyEvent(atk_key_event.get(), transient);
 #endif
 }
 
-// CheckCanDispatchNextPlatformEvent is called by X11EventSource so that
-// X11Window (XEventDispatcher implementation) can inspect |xev| and determine
-// whether it should be dispatched by this window once it gets translated into a
-// PlatformEvent.
-void X11Window::CheckCanDispatchNextPlatformEvent(x11::Event* xev) {
-  if (is_shutting_down_)
-    return;
-  if (XWindow::IsTargetedBy(*xev)) {
-    current_xevent_ = xev;
-    return;
-  }
-  if (XWindow::IsTransientWindowTargetedBy(*xev)) {
-    current_xevent_ = xev;
-    current_xevent_target_transient_ = true;
-  }
-}
-
-void X11Window::PlatformEventDispatchFinished() {
-  current_xevent_ = nullptr;
-  current_xevent_target_transient_ = false;
-}
-
-PlatformEventDispatcher* X11Window::GetPlatformEventDispatcher() {
-  return this;
-}
-
-bool X11Window::DispatchXEvent(x11::Event* xev) {
-  auto* prop = xev->As<x11::PropertyNotifyEvent>();
+void X11Window::OnEvent(const x11::Event& xev) {
+  auto* prop = xev.As<x11::PropertyNotifyEvent>();
   auto* target_current_context = drag_drop_client_->target_current_context();
   if (prop && target_current_context &&
       prop->window == target_current_context->source_window()) {
-    return target_current_context->DispatchPropertyNotifyEvent(*prop);
+    target_current_context->DispatchPropertyNotifyEvent(*prop);
   }
 
-  if (!XWindow::IsTargetedBy(*xev))
-    return false;
-  XWindow::ProcessEvent(xev);
-  return true;
+  if (XWindow::IsTargetedBy(xev))
+    XWindow::OnEvent(xev);
 }
 
 bool X11Window::CanDispatchEvent(const PlatformEvent& xev) {
+  if (is_shutting_down_)
+    return false;
   DCHECK_NE(window(), x11::Window::None);
-  return !!current_xevent_;
+  auto* dispatching_event = connection()->dispatching_event();
+  return dispatching_event && XWindow::IsTargetedBy(*dispatching_event);
 }
 
 uint32_t X11Window::DispatchEvent(const PlatformEvent& event) {
@@ -601,27 +577,30 @@ uint32_t X11Window::DispatchEvent(const PlatformEvent& event) {
 
   DCHECK_NE(window(), x11::Window::None);
   DCHECK(event);
-  DCHECK(current_xevent_);
+
+  auto& current_xevent = *connection()->dispatching_event();
 
   if (event->IsMouseEvent())
     X11WindowManager::GetInstance()->MouseOnWindow(this);
 #if BUILDFLAG(USE_ATK)
   // TODO(crbug.com/1014934): Support ATK in Ozone/X11.
-  if (HandleAsAtkEvent(current_xevent_, current_xevent_target_transient_))
+  bool current_xevent_target_transient =
+      XWindow::IsTransientWindowTargetedBy(current_xevent);
+  if (HandleAsAtkEvent(current_xevent, current_xevent_target_transient))
     return POST_DISPATCH_STOP_PROPAGATION;
 #endif
 
-  DispatchUiEvent(event, current_xevent_);
+  DispatchUiEvent(event, current_xevent);
   return POST_DISPATCH_STOP_PROPAGATION;
 }
 
-void X11Window::DispatchUiEvent(ui::Event* event, x11::Event* xev) {
+void X11Window::DispatchUiEvent(ui::Event* event, const x11::Event& xev) {
   auto* window_manager = X11WindowManager::GetInstance();
   DCHECK(window_manager);
 
   // Process X11-specific bits
-  if (XWindow::IsTargetedBy(*xev))
-    XWindow::ProcessEvent(xev);
+  if (XWindow::IsTargetedBy(xev))
+    XWindow::OnEvent(xev);
 
   // If |event| is a located event (mouse, touch, etc) and another X11 window
   // is set as the current located events grabber, the |event| must be
@@ -643,9 +622,7 @@ void X11Window::DispatchUiEvent(ui::Event* event, x11::Event* xev) {
 
   x11::Event last_xev;
   std::unique_ptr<ui::Event> last_motion;
-  bool coalesced = !VivaldiDispatchIsRecursive &&
-    CoalesceEventsIfNeeded(xev, event->type(), &last_xev);
-  if (coalesced) {
+  if (!VivaldiDispatchIsRecursive && CoalesceEventsIfNeeded(xev, event->type(), &last_xev)) {
     last_motion = ui::BuildEventFromXEvent(last_xev);
     event = last_motion.get();
   }
@@ -679,8 +656,9 @@ void X11Window::DispatchUiEvent(ui::Event* event, x11::Event* xev) {
 void X11Window::OnXWindowCreated() {
   X11WindowManager::GetInstance()->AddWindow(this);
 
+  connection()->AddEventObserver(this);
   DCHECK(X11EventSource::HasInstance());
-  X11EventSource::GetInstance()->AddXEventDispatcher(this);
+  X11EventSource::GetInstance()->AddPlatformEventDispatcher(this);
 
   x11_window_move_client_ =
       std::make_unique<ui::X11DesktopWindowMoveClient>(this);
@@ -776,18 +754,18 @@ void X11Window::OnXWindowLostPointerGrab() {
     x11_extension_delegate_->OnLostMouseGrab();
 }
 
-void X11Window::OnXWindowSelectionEvent(x11::Event* xev) {
+void X11Window::OnXWindowSelectionEvent(const x11::SelectionNotifyEvent& xev) {
   if (x_event_delegate_)
     x_event_delegate_->OnXWindowSelectionEvent(xev);
   DCHECK(drag_drop_client_);
-  drag_drop_client_->OnSelectionNotify(*xev->As<x11::SelectionNotifyEvent>());
+  drag_drop_client_->OnSelectionNotify(xev);
 }
 
-void X11Window::OnXWindowDragDropEvent(x11::Event* xev) {
+void X11Window::OnXWindowDragDropEvent(const x11::ClientMessageEvent& xev) {
   if (x_event_delegate_)
     x_event_delegate_->OnXWindowDragDropEvent(xev);
   DCHECK(drag_drop_client_);
-  drag_drop_client_->HandleXdndEvent(*xev->As<x11::ClientMessageEvent>());
+  drag_drop_client_->HandleXdndEvent(xev);
 }
 
 base::Optional<gfx::Size> X11Window::GetMinimumSizeForXWindow() {
@@ -800,8 +778,10 @@ base::Optional<gfx::Size> X11Window::GetMaximumSizeForXWindow() {
 
 void X11Window::GetWindowMaskForXWindow(const gfx::Size& size,
                                         SkPath* window_mask) {
-  if (x11_extension_delegate_)
-    x11_extension_delegate_->GetWindowMask(size, window_mask);
+  base::Optional<SkPath> path =
+      platform_window_delegate_->GetWindowMaskForWindowShape(size);
+  if (path.has_value())
+    *window_mask = path.value();
 }
 
 void X11Window::DispatchHostWindowDragMovement(
@@ -898,7 +878,8 @@ void X11Window::UpdateCursor(
 }
 
 void X11Window::OnBeginForeignDrag(x11::Window window) {
-  source_window_events_ = std::make_unique<ui::XScopedEventSelector>(
+  notified_enter_ = false;
+  source_window_events_ = std::make_unique<x11::XScopedEventSelector>(
       window, x11::EventMask::PropertyChange);
 }
 
@@ -916,10 +897,8 @@ void X11Window::OnBeforeDragLeave() {
 
 int X11Window::PerformDrop() {
   WmDropHandler* drop_handler = GetWmDropHandler(*this);
-  if (!drop_handler)
+  if (!drop_handler || !notified_enter_)
     return DragDropTypes::DRAG_NONE;
-
-  DCHECK(notified_enter_);
 
   // The drop data has been supplied on entering the window.  The drop handler
   // should have it since then.
@@ -960,7 +939,7 @@ void X11Window::QuitDragLoop() {
 
 gfx::Size X11Window::AdjustSizeForDisplay(
     const gfx::Size& requested_size_in_pixels) {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // We do not need to apply the workaround for the ChromeOS.
   return requested_size_in_pixels;
 #else

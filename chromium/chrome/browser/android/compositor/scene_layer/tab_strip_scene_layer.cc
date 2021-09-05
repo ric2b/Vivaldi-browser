@@ -15,7 +15,7 @@
 
 // Vivaldi
 #include "app/vivaldi_apptools.h"
-#include "chrome/browser/android/color_helpers.h"
+#include "ui/android/color_helpers.h"
 
 using base::android::JavaParamRef;
 using base::android::JavaRef;
@@ -142,6 +142,11 @@ void TabStripSceneLayer::UpdateTabStripLayer(JNIEnv* env,
     DCHECK(layer()->children()[background_index] == tab_strip_layer_);
     layer()->InsertChild(tab_strip_layer_, background_index);
   }
+
+  // Note(david@vivaldi.com): This will indicate a property change of
+  // the |tab_strip_layer_| which makes sure that any changes are correclty
+  // drawn.
+  tab_strip_layer_->SetSubtreePropertyChanged();
 }
 
 void TabStripSceneLayer::UpdateNewTabButton(
@@ -368,7 +373,7 @@ void TabStripSceneLayer::SetTabStripBackgroundColor(
     const JavaParamRef<jobject>& jobj,
     jint java_color,
     jboolean use_light) {
-  base::Optional<SkColor> color = JavaColorToOptionalSkColor(java_color);
+  base::Optional<SkColor> color = ui::JavaColorToOptionalSkColor(java_color);
   if (color) {
     tab_strip_layer_->SetBackgroundColor(*color);
     use_light_foreground_on_background = use_light;

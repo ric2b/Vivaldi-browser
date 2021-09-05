@@ -1,0 +1,35 @@
+title=Snippet Filters Tutorial
+description=How to write snippet filters.
+template=article
+product_id=abp
+category=Customization & Settings
+hide_browser_selector=1
+
+
+<style type="text/css">
+  th, tr:nth-child(even) {
+        background-color: #ececec;
+  }
+  td, th {
+        padding-left: 8px;
+        padding-right: 8px;
+        border: 1px;
+  }
+  thead {
+        font-weight: bold;
+  }
+</style>
+
+{{{include "./build/docs/snippet-filter-tutorial.md"}}}
+
+{{#functions}}
+
+**{{name}}**
+
+Since: {{since}}
+
+{{{description}}}
+
+{{>params}}
+
+{{/functions}}

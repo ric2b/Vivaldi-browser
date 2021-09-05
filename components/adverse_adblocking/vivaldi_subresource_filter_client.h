@@ -53,28 +53,19 @@ class VivaldiSubresourceFilterClient
   // SubresourceFilterClient:
   void ShowNotification() override;
 
-  subresource_filter::mojom::ActivationLevel OnPageActivationComputed(
-    content::NavigationHandle* navigation_handle,
-    subresource_filter::mojom::ActivationLevel initial_activation_level,
-    subresource_filter::ActivationDecision* decision) override;
-
   void OnAdsViolationTriggered(
       content::RenderFrameHost* rfh,
       subresource_filter::mojom::AdsViolation triggered_violation) override;
   const scoped_refptr<safe_browsing::SafeBrowsingDatabaseManager>
   GetSafeBrowsingDatabaseManager() override;
+  subresource_filter::ProfileInteractionManager* GetProfileInteractionManager()
+      override;
   void OnReloadRequested() override;
 
   void SetAdblockList(AdverseAdFilterListService* list) {
     adblock_list_ = list;
   }
   AdverseAdFilterListService* adblock_list() { return adblock_list_; }
-
-  void ToggleForceActivationInCurrentWebContents(bool force_activation);
-
-  bool did_show_ui_for_navigation() const {
-    return chrome_subresource_filter_client_->did_show_ui_for_navigation();
-  }
 
  private:
 

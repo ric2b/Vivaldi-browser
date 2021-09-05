@@ -32,7 +32,7 @@ class ToggleButton;
 class MediaDialogView : public views::BubbleDialogDelegateView,
                         public MediaDialogDelegate,
                         public MediaNotificationContainerObserver,
-                        public speech::SODAInstaller::Observer {
+                        public speech::SodaInstaller::Observer {
  public:
   static views::Widget* ShowDialog(views::View* anchor_view,
                                    MediaNotificationService* service,
@@ -92,15 +92,15 @@ class MediaDialogView : public views::BubbleDialogDelegateView,
   void WindowClosing() override;
 
   // views::Button::PressedCallback
-  void LiveCaptionButtonPressed(const ui::Event& event);
+  void OnLiveCaptionButtonPressed();
 
   void ToggleLiveCaption(bool enabled);
   void UpdateBubbleSize();
 
-  // SODAInstaller::Observer overrides:
-  void OnSODAInstalled() override;
-  void OnSODAError() override;
-  void OnSODAProgress(int progress) override;
+  // SodaInstaller::Observer overrides:
+  void OnSodaInstalled() override;
+  void OnSodaError() override;
+  void OnSodaProgress(int progress) override;
 
   MediaNotificationService* const service_;
 

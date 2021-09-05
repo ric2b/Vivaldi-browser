@@ -158,6 +158,10 @@ void HungPagesTableModel::RenderProcessExited(
 
 void HungPagesTableModel::RenderWidgetHostDestroyed(
     content::RenderWidgetHost* widget_host) {
+  DCHECK(widget_observer_.IsObserving(render_widget_host_));
+  widget_observer_.Remove(widget_host);
+  render_widget_host_ = nullptr;
+
   // Notify the delegate.
   delegate_->TabDestroyed();
   // WARNING: we've likely been deleted.
@@ -426,12 +430,6 @@ void HungRendererDialogView::WindowClosing() {
 }
 
 void HungRendererDialogView::ForceCrashHungRenderer() {
-  auto* render_widget_host = hung_pages_table_model_->GetRenderWidgetHost();
-  bool currently_unresponsive =
-      render_widget_host && render_widget_host->IsCurrentlyUnresponsive();
-  UMA_HISTOGRAM_BOOLEAN("Stability.RendererUnresponsiveBeforeTermination",
-                        currently_unresponsive);
-
   content::RenderProcessHost* rph =
       hung_pages_table_model_->GetRenderWidgetHost()->GetProcess();
   if (rph) {

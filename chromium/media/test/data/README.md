@@ -186,6 +186,14 @@ AV1 data that contains frames with `show_existing_frame=1`.
 This is the same as 00000592.ivf in
 https://people.xiph.org/~tterribe/av1/samples-all/
 
+#### blackwhite\_yuv444p-frame.av1.ivf
+The first frame of blackwhite\_yuv444p.mp4 coded in AV1 by the following command.
+`ffmpeg -i blackwhite_yuv444p.mp4 -strict -2 -vcodec av1 -vframes 1 blackwhite_yuv444p-frame.av1.ivf`
+
+#### av1-film\_grain.ivf
+AV1 data where film grain feature is used.
+This is the same as av1-1-b8-23-film\_grain-50.ivf in
+[libaom test vectors]:https://aomedia.googlesource.com/aom/+/master/test/test_vectors.cc
 
 ### Alpha Channel
 
@@ -297,6 +305,17 @@ mp4edit.exe --insert moov/trak/mdia/minf/stbl/stsd/vp09:smdm.bin \
             vp9-hdr-init-segment.mp4 fixed.mp4
 
 smdm.bin and coll.bin generated with program from https://crbug.com/1123430#c5.
+
+#### bear-320x180-10bit-frame-\{0,1,2,3\}.h264
+The first four frames of the H.264 version of bear-av1-320x180-10bit.mp4 created
+using the following command.
+`ffmpeg -i bear-av1-320x180-10bit.mp4 -vcodec h264 -vframes 4 bear-320x180-10bit-4frames.h264`
+The file is then split into bitstreams each of which contains a single frame, so
+that they contain frames as below.
+bear-320x180-10bit-frame-0.h264: SPS+PPS+Single IDR
+bear-320x180-10bit-frame-1.h264: B
+bear-320x180-10bit-frame-2.h264: B
+bear-320x180-10bit-frame-3.h264: P
 
 ### AAC test data from MPEG-DASH demoplayer (44100 Hz, stereo)
 Duration of each packet is (1024/44100 Hz), approximately 23.22 ms.
@@ -887,6 +906,13 @@ Created using "avconv -i bear-vp9.webm -vcodec copy -an -f ivf bear-vp9.ivf".
 Manually dumped from libvpx with bear-vp9.ivf and test-25fps.vp9. See
 vp9_parser_unittest.cc for description of their format.
 
+
+### H264 decoder test files:
+
+#### blackwhite\_yuv444p-frame.h264
+The first frame of blackwhite_yuv444p.mp4 by the following command.
+`ffmpeg -i blackwhite_yuv444p.mp4 -vcodec copy -vframes 1 blackwhite_yuv444p-frame.h264`
+
 ### HEVC parser/decoder test files:
 
 #### bear.hevc
@@ -902,6 +928,21 @@ SPS and PPS from bear.hevc for h265_decoder_unittest.cc.
 #### bear-frame\{0,1,2,3,4,5\}.hevc
 Single IDR, P, B, B, B, P frames respectively from bear.hevc for
 h265_decoder_unittest.cc.
+
+#### bear-320x180-10bit-frame-\{0,1,2,3\}.hevc
+The first four frames of the HEVC version of bear-av1-320x180-10bit.mp4 created
+using the following command.
+`ffmpeg -i bear-av1-320x180-10bit.mp4 -vcodec hevc -vframes 4 bear-320x180-10bit-4frames.hevc`
+The file is then split into bitstreams each of which contains a single frame, so
+that they contain frames as below.
+bear-320x180-10bit-frame-0.hevc: SPS+PPS+Single IDR
+bear-320x180-10bit-frame-1.hevc: B
+bear-320x180-10bit-frame-2.hevc: B
+bear-320x180-10bit-frame-3.hevc: P
+
+#### blackwhite\_yuv444p-frame.hevc
+The first frame of blackwhite_yuv444p.mp4 coded in HEVC by the following command.
+`ffmpeg -i blackwhite_yuv444p.mp4 -vcodec hevc -vframes 1 blackwhite_yuv444p-frame.hevc`
 
 ###  WebM files for testing multiple tracks.
 

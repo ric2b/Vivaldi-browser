@@ -22,6 +22,7 @@ import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.browser.tabmodel.NextTabPolicy.NextTabPolicySupplier;
 import org.chromium.chrome.browser.tabmodel.TabPersistentStore.TabPersistentStoreObserver;
 import org.chromium.ui.base.WindowAndroid;
+import org.chromium.url.GURL;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -88,8 +89,8 @@ public class TabModelSelectorImpl extends TabModelSelectorBase implements TabMod
         };
         mIsUndoSupported = supportUndo;
         mIsTabbedActivityForSync = isTabbedActivity;
-        mTabSaver = new TabPersistentStore(
-                persistencePolicy, this, tabCreatorManager, persistentStoreObserver);
+        mTabSaver = new TabPersistentStore(persistencePolicy, this, tabCreatorManager);
+        mTabSaver.addObserver(persistentStoreObserver);
         mOrderController = new TabModelOrderControllerImpl(this);
         mNextTabPolicySupplier = nextTabPolicySupplier;
         mAsyncTabParamsManager = asyncTabParamsManager;
@@ -183,13 +184,13 @@ public class TabModelSelectorImpl extends TabModelSelectorBase implements TabMod
             }
 
             @Override
-            public void onPageLoadStarted(Tab tab, String url) {
+            public void onPageLoadStarted(Tab tab, GURL url) {
                 String previousUrl = tab.getUrlString();
                 mTabContentManager.invalidateTabThumbnail(tab.getId(), previousUrl);
             }
 
             @Override
-            public void onPageLoadFinished(Tab tab, String url) {
+            public void onPageLoadFinished(Tab tab, GURL url) {
                 tab.getId();
             }
 

@@ -26,7 +26,7 @@
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/chrome_select_file_policy.h"
-#include "chrome/browser/ui/webui/settings_utils.h"
+#include "chrome/browser/ui/webui/settings/settings_utils.h"
 #include "chrome/browser/ui/webui/settings/site_settings_helper.h"
 #include "chrome/common/importer/importer_data_types.h"
 #include "chrome/common/pref_names.h"
@@ -248,6 +248,10 @@ void ImportDataGetProfilesFunction::Finished() {
 
     profile->name = base::UTF16ToUTF8(source_profile.importer_name);
     profile->index = i;
+    if (source_profile.profile.length() > 0) {
+      // NOTE(tomas@vivaldi.com): VB-76639 To distinguish firefox profiles
+      profile->name += " " + base::UTF16ToUTF8(source_profile.profile);
+    }
 
     profile->history = ((browser_services & importer::HISTORY) != 0);
     profile->favorites = ((browser_services & importer::FAVORITES) != 0);
@@ -257,16 +261,26 @@ void ImportDataGetProfilesFunction::Finished() {
     profile->search = ((browser_services & importer::SEARCH_ENGINES) != 0);
     profile->notes = ((browser_services & importer::NOTES) != 0);
     profile->speeddial = ((browser_services & importer::SPEED_DIAL) != 0);
+    profile->email = ((browser_services & importer::EMAIL) != 0);
 
     profile->supports_standalone_import =
         (source_profile.importer_type == importer::TYPE_OPERA ||
-         source_profile.importer_type == importer::TYPE_VIVALDI);
+         source_profile.importer_type == importer::TYPE_VIVALDI ||
+         source_profile.importer_type == importer::TYPE_EDGE_CHROMIUM ||
+         source_profile.importer_type == importer::TYPE_BRAVE);
 
     profile->profile_path =
 #if defined(OS_WIN)
         base::UTF16ToUTF8(source_profile.source_path.value());
 #else
         source_profile.source_path.value();
+#endif  // defined(OS_WIN)
+
+    profile->mail_path =
+#if defined(OS_WIN)
+        base::UTF16ToUTF8(source_profile.mail_path.value());
+#else
+        source_profile.mail_path.value();
 #endif  // defined(OS_WIN)
     profile->has_default_install = !source_profile.source_path.empty();
 
@@ -386,12 +400,23 @@ ExtensionFunction::ResponseAction ImportDataStartImportFunction::Run() {
     path = path.AppendASCII("bookmarks.adr");
     return HandleChooseBookmarksFileOrFolder(dialog_title, "adr", path, true);
   } else if ((importer_type_ == importer::TYPE_OPERA ||
+              importer_type_ == importer::TYPE_EDGE_CHROMIUM ||
+              importer_type_ == importer::TYPE_BRAVE ||
               importer_type_ == importer::TYPE_VIVALDI) &&
              ids[6] == "false") {
-    dialog_title =
-        l10n_util::GetStringUTF16(importer_type_ == importer::TYPE_VIVALDI
-                                      ? IDS_IMPORT_VIVALDI_PROFILE_TITLE
-                                      : IDS_IMPORT_OPERA_PROFILE_TITLE);
+    if (importer_type_ == importer::TYPE_OPERA) {
+      dialog_title =
+          l10n_util::GetStringUTF16(IDS_IMPORT_OPERA_PROFILE_TITLE);
+    } else if (importer_type_ == importer::TYPE_EDGE_CHROMIUM) {
+      dialog_title =
+          l10n_util::GetStringUTF16(IDS_IMPORT_EDGE_CHROMIUM_PROFILE_TITLE);
+    } else if (importer_type_ == importer::TYPE_BRAVE) {
+      dialog_title =
+          l10n_util::GetStringUTF16(IDS_IMPORT_BRAVE_PROFILE_TITLE);
+    } else if (importer_type_ == importer::TYPE_VIVALDI) {
+      dialog_title =
+          l10n_util::GetStringUTF16(IDS_IMPORT_VIVALDI_PROFILE_TITLE);
+    }
     return HandleChooseBookmarksFileOrFolder(dialog_title, "ini", path, false);
   } else {
     if (imported_items_) {
@@ -400,7 +425,7 @@ ExtensionFunction::ResponseAction ImportDataStartImportFunction::Run() {
       LOG(WARNING) << "There were no settings to import from '"
                    << source_profile.importer_name << "'.";
     }
-    return RespondNow(ArgumentList(Results::Create("Ok")));
+    return RespondNow(ArgumentList(Results::Create("Ok", "")));
   }
 }
 
@@ -442,7 +467,7 @@ void ImportDataStartImportFunction::FileSelectionCanceled(void* params) {
   namespace Results = vivaldi::import_data::StartImport::Results;
 
   DCHECK(!params);
-  Respond(ArgumentList(Results::Create("Cancel")));
+  Respond(ArgumentList(Results::Create("Cancel", "")));
 
   Release();  // Balanced in HandleChooseBookmarksFileOrFolder()
 }
@@ -458,7 +483,7 @@ void ImportDataStartImportFunction::FileSelected(const base::FilePath& path,
   source_profile.importer_type = importer_type_;
 
   StartImport(source_profile);
-  Respond(ArgumentList(Results::Create("Ok")));
+  Respond(ArgumentList(Results::Create("Ok", path.AsUTF8Unsafe())));
 
   Release();  // Balanced in HandleChooseBookmarksFileOrFolder()
 }

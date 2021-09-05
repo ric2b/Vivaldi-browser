@@ -365,13 +365,14 @@ net::HttpStatusCode LoopbackServer::HandleCommand(
     } else if (!throttled_datatypes_in_request.Empty()) {
       DLOG(WARNING) << "Throttled datatypes: "
                     << ModelTypeSetToString(throttled_datatypes_in_request);
-      response->set_error_code(sync_pb::SyncEnums::PARTIAL_FAILURE);
-      response->mutable_error()->set_error_type(
-          sync_pb::SyncEnums::PARTIAL_FAILURE);
+      response->set_error_code(sync_pb::SyncEnums::THROTTLED);
+      response->mutable_error()->set_error_type(sync_pb::SyncEnums::THROTTLED);
       for (ModelType type : throttled_datatypes_in_request) {
         response->mutable_error()->add_error_data_type_ids(
             syncer::GetSpecificsFieldNumberFromModelType(type));
       }
+      // Avoid tests waiting too long after throttling is disabled.
+      response->mutable_client_command()->set_throttle_delay_seconds(1);
     } else {
       UMA_HISTOGRAM_ENUMERATION(
           "Sync.Local.RequestTypeOnError", message.message_contents(),
@@ -910,24 +911,33 @@ bool LoopbackServer::ScheduleSaveStateToFile() {
 
 bool LoopbackServer::LoadStateFromFile() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  if (!base::PathExists(persistent_file_)) {
-    LOG(WARNING) << "Loopback sync persistent state file does not exist.";
+
+  // Ensures local sync file can be opened, read, and is not being written to.
+  // Also makes sure file will not be written to during serialization.
+  base::File state_file(persistent_file_, base::File::FLAG_OPEN |
+                                              base::File::FLAG_READ |
+                                              base::File::FLAG_EXCLUSIVE_WRITE);
+  base::File::Error state_file_error = state_file.error_details();
+
+  if (state_file_error != base::File::FILE_OK) {
+    UMA_HISTOGRAM_ENUMERATION("Sync.Local.ReadPlatformFileError",
+                              -state_file_error, -base::File::FILE_ERROR_MAX);
+    LOG(ERROR)
+        << "Loopback sync cannot read the persistent state file with error "
+        << base::File::ErrorToString(state_file_error);
     return false;
   }
+
   std::string serialized;
   if (base::ReadFileToString(persistent_file_, &serialized)) {
     sync_pb::LoopbackServerProto proto;
     if (serialized.length() > 0 && proto.ParseFromString(serialized)) {
       return DeSerializeState(proto);
     }
-    LOG(ERROR) << "Loopback sync can not parse the persistent state file.";
+    LOG(ERROR) << "Loopback sync cannot parse the persistent state file.";
     return false;
   }
-  // TODO(pastarmovj): Try to understand what is the issue e.g. file already
-  // open, no access rights etc. and decide if better course of action is
-  // available instead of giving up and wiping the global state on the next
-  // write.
-  LOG(ERROR) << "Loopback sync can not read the persistent state file.";
+  LOG(ERROR) << "Loopback sync cannot read the persistent state file.";
   return false;
 }
 

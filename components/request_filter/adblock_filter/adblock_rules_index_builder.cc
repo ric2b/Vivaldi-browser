@@ -45,8 +45,9 @@ using RulesIndexOffset = flatbuffers::Offset<flat::RulesIndex>;
 using MutableRulesList = std::vector<std::pair<RuleIdOffset, int>>;
 using SourceChecksums = std::vector<SourceChecksumOffset>;
 
-using CosmeticRuleTreeNodeOffset = flatbuffers::Offset<flat::CosmeticRulesNode>;
-using CosmeticRuleTree = std::vector<CosmeticRuleTreeNodeOffset>;
+using ContentInjectionTreeNodeOffset =
+    flatbuffers::Offset<flat::ContentInjectionRulesNode>;
+using ContentInjectionRuleTree = std::vector<ContentInjectionTreeNodeOffset>;
 
 using MutableNGramMap = url_pattern_index::
     ClosedHashMap<NGram, MutableRulesList, NGramHashTableProber>;
@@ -66,19 +67,55 @@ struct RuleId {
   uint32_t rule_nr;
 };
 
-struct CosmeticRuleForDomain {
-  CosmeticRuleForDomain(RuleId rule_id, bool allow_for_domain)
+struct ContentInjectionRuleForDomain {
+  ContentInjectionRuleForDomain(RuleId rule_id, bool allow_for_domain)
       : rule_id(rule_id), allow_for_domain(allow_for_domain) {}
   RuleId rule_id;
   bool allow_for_domain;
 };
 
-struct CosmeticRuleTreeNode {
-  std::map<std::string, CosmeticRuleForDomain> rules_from_selectors;
-  std::map<std::string, CosmeticRuleTreeNode> subdomains;
+template <class T>
+struct RuleType {};
+
+template <>
+struct RuleType<flat::CosmeticRule> {
+  static constexpr flat::ContentInjectionRuleType value =
+      flat::ContentInjectionRuleType_COSMETIC;
 };
 
-std::string GetNGramSearchString(const flat::FilterRule& rule) {
+template <>
+struct RuleType<flat::ScriptletInjectionRule> {
+  static constexpr flat::ContentInjectionRuleType value =
+      flat::ContentInjectionRuleType_SCRIPTLET_INJECTION;
+};
+
+struct ContentInjectionRuleTreeNode {
+  std::map<const flat::CosmeticRule*,
+           ContentInjectionRuleForDomain,
+           ContentInjectionRuleBodyCompare>
+      rule_from_cosmetic_rule_body;
+  std::map<const flat::ScriptletInjectionRule*,
+           ContentInjectionRuleForDomain,
+           ContentInjectionRuleBodyCompare>
+      rule_from_scriptlet_injection_rule_body;
+  std::map<std::string, ContentInjectionRuleTreeNode> subdomains;
+
+  std::map<const flat::CosmeticRule*,
+           ContentInjectionRuleForDomain,
+           ContentInjectionRuleBodyCompare>&
+  GetMap(const flat::CosmeticRule* rule) {
+    return rule_from_cosmetic_rule_body;
+  }
+
+  std::map<const flat::ScriptletInjectionRule*,
+           ContentInjectionRuleForDomain,
+           ContentInjectionRuleBodyCompare>&
+  GetMap(const flat::ScriptletInjectionRule* rule) {
+    return rule_from_scriptlet_injection_rule_body;
+  }
+};
+
+std::string GetNGramSearchString(const flat::RequestFilterRule& rule) {
   if (rule.pattern_type() == flat::PatternType_REGEXP)
     return rule.ngram_search_string()->str();
   if ((rule.options() & flat::OptionFlag_IS_CASE_SENSITIVE))
@@ -87,7 +124,7 @@ std::string GetNGramSearchString(const flat::FilterRule& rule) {
 }
 
 void AddRuleToMap(IndexBuildData* build_data,
-                  const flat::FilterRule& rule,
+                  const flat::RequestFilterRule& rule,
                   RuleIdOffset rule_id) {
   size_t min_list_size = std::numeric_limits<size_t>::max();
   NGram best_ngram = 0;
@@ -209,92 +246,113 @@ void SaveIndex(std::unique_ptr<flatbuffers::FlatBufferBuilder> index_builder,
                       index_path)));
 }
 
-void AddRuleToCosmetiCRulesTreeNode(CosmeticRuleTreeNode* node,
-                                    const std::string& selector,
-                                    const RuleId& rule_id,
-                                    bool allow) {
-  // If we have two rules for the same selector+domain combination, allow rules
-  // take precedence. Otherwise, avoid duplicates.
-  const auto& existing_rule = node->rules_from_selectors.find(selector);
-  if (existing_rule != node->rules_from_selectors.end()) {
-    if (existing_rule->second.allow_for_domain || !allow)
+template <class T>
+void AddRuleToContentInjectionRulesTreeNode(ContentInjectionRuleTreeNode* node,
+                                            const T* rule,
+                                            const RuleId& rule_id,
+                                            bool allow) {
+  auto& map = node->GetMap(rule);
+  // If we have two rules for the same body+domain combination, allow rules take
+  // precedence. Otherwise, avoid duplicates.
+  const auto& existing_rule = map.find(rule);
+  if (existing_rule != map.end()) {
+    if (!allow || existing_rule->second.allow_for_domain)
       return;
-    node->rules_from_selectors.erase(existing_rule);
+    map.erase(existing_rule);
   }
 
-  node->rules_from_selectors.insert(
-      {selector, CosmeticRuleForDomain(rule_id, allow)});
+  map.insert({rule, ContentInjectionRuleForDomain(rule_id, allow)});
 }
 
-void AddRuleToCosmeticRuleTreeNodeSubdomain(
-    CosmeticRuleTreeNode* node,
+template <class T>
+void AddRuleToContentInjectionRuleTreeNodeSubdomain(
+    ContentInjectionRuleTreeNode* node,
     std::vector<base::StringPiece>::const_reverse_iterator domain_piece,
     std::vector<base::StringPiece>::const_reverse_iterator domain_end,
-    const std::string& selector,
+    const T* rule,
     const RuleId& rule_id,
     bool allow) {
   if (domain_piece == domain_end) {
-    AddRuleToCosmetiCRulesTreeNode(node, selector, rule_id, allow);
+    AddRuleToContentInjectionRulesTreeNode(node, rule, rule_id, allow);
     return;
   }
 
   std::string domain_piece_str = std::string(*(domain_piece++));
-  AddRuleToCosmeticRuleTreeNodeSubdomain(&node->subdomains[domain_piece_str],
-                                         domain_piece, domain_end, selector,
-                                         rule_id, allow);
+  AddRuleToContentInjectionRuleTreeNodeSubdomain(
+      &node->subdomains[domain_piece_str], domain_piece, domain_end, rule,
+      rule_id, allow);
 }
 
-void AddRuleToCosmeticRulesTree(CosmeticRuleTreeNode* root,
-                                const flat::CosmeticRule* rule,
-                                const RuleId& rule_id) {
-  const std::string selector = rule->selector()->str();
+template <class T>
+void AddRuleToContentInjectionRulesTree(ContentInjectionRuleTreeNode* root,
+                                        const T* rule,
+                                        const RuleId& rule_id) {
+  flat::ContentInjectionRuleType rule_type = RuleType<T>::value;
   // Rules without included domains are generic
-  if (!rule->domains_included()) {
-    AddRuleToCosmetiCRulesTreeNode(root, selector, rule_id,
-                                   rule->is_allow_rule());
+  if (!rule->core()->domains_included()) {
+    AddRuleToContentInjectionRulesTreeNode(root, rule, rule_id,
+                                           rule->core()->is_allow_rule());
   }
 
-  if (rule->domains_excluded()) {
-    for (const auto* domain : *rule->domains_excluded()) {
+  if (rule->core()->domains_excluded()) {
+    // Excluded domains for scriptlet injection allow rules should be discarded
+    // at parsing time.
+    DCHECK(rule_type != flat::ContentInjectionRuleType_SCRIPTLET_INJECTION ||
+           !rule->core()->is_allow_rule());
+    for (const auto* domain : *rule->core()->domains_excluded()) {
       std::string domain_str(domain->str());  // NOTE(jarle): Needed to fix
                                               // VB-65773.
       const auto domain_pieces = base::SplitStringPiece(
           domain_str, ".", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
-      AddRuleToCosmeticRuleTreeNodeSubdomain(root, domain_pieces.rbegin(),
-                                             domain_pieces.rend(), selector,
-                                             rule_id, !rule->is_allow_rule());
+      AddRuleToContentInjectionRuleTreeNodeSubdomain(
+          root, domain_pieces.rbegin(), domain_pieces.rend(), rule, rule_id,
+          !rule->core()->is_allow_rule());
     }
   }
 
-  if (rule->domains_included()) {
-    for (const auto* domain : *rule->domains_included()) {
+  if (rule->core()->domains_included()) {
+    for (const auto* domain : *rule->core()->domains_included()) {
       std::string domain_str(domain->str());  // NOTE(jarle): Needed to fix
                                               // VB-65773.
       const auto domain_pieces = base::SplitStringPiece(
           domain_str, ".", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
-      AddRuleToCosmeticRuleTreeNodeSubdomain(root, domain_pieces.rbegin(),
-                                             domain_pieces.rend(), selector,
-                                             rule_id, rule->is_allow_rule());
+      AddRuleToContentInjectionRuleTreeNodeSubdomain(
+          root, domain_pieces.rbegin(), domain_pieces.rend(), rule, rule_id,
+          rule->core()->is_allow_rule());
     }
   }
 }
 
-void AddNodeToFlatCosmeticRuleTree(
+template <class T>
+void AddRuleIdsToList(
     flatbuffers::FlatBufferBuilder* builder,
-    CosmeticRuleTree* tree,
-    const CosmeticRuleTreeNode& node,
+    const std::map<const T*,
+                   ContentInjectionRuleForDomain,
+                   ContentInjectionRuleBodyCompare>& ids_map,
+    std::vector<flatbuffers::Offset<flat::ContentInjectionRuleForDomain>>*
+        rules_for_domain) {
+  for (const auto& rule : ids_map) {
+    RuleIdOffset rule_id = flat::CreateRuleId(
+        *builder, rule.second.rule_id.source_id, rule.second.rule_id.rule_nr);
+    rules_for_domain->push_back(flat::CreateContentInjectionRuleForDomain(
+        *builder, rule_id, RuleType<T>::value, rule.second.allow_for_domain));
+  }
+}
+
+void AddNodeToFlatContentInjectionRuleTree(
+    flatbuffers::FlatBufferBuilder* builder,
+    ContentInjectionRuleTree* tree,
+    const ContentInjectionRuleTreeNode& node,
     base::Optional<size_t> first_child_node_index) {
-  std::vector<flatbuffers::Offset<flat::CosmeticRuleForDomain>>
+  std::vector<flatbuffers::Offset<flat::ContentInjectionRuleForDomain>>
       rules_for_domain;
 
   std::vector<flatbuffers::Offset<flatbuffers::String>> subdomains;
 
-  for (const auto& rule : node.rules_from_selectors) {
-    RuleIdOffset rule_id = flat::CreateRuleId(
-        *builder, rule.second.rule_id.source_id, rule.second.rule_id.rule_nr);
-    rules_for_domain.push_back(flat::CreateCosmeticRuleForDomain(
-        *builder, rule_id, rule.second.allow_for_domain));
-  }
+  AddRuleIdsToList(builder, node.rule_from_cosmetic_rule_body,
+                   &rules_for_domain);
+  AddRuleIdsToList(builder, node.rule_from_scriptlet_injection_rule_body,
+                   &rules_for_domain);
 
   DCHECK(first_child_node_index || node.subdomains.empty());
 
@@ -305,22 +363,22 @@ void AddNodeToFlatCosmeticRuleTree(
   auto rules_for_domain_offset = builder->CreateVector(rules_for_domain);
   auto subdomains_offset = builder->CreateVector(subdomains);
 
-  tree->push_back(flat::CreateCosmeticRulesNode(
+  tree->push_back(flat::CreateContentInjectionRulesNode(
       *builder, rules_for_domain_offset,
       first_child_node_index ? first_child_node_index.value() : UINT32_MAX,
       subdomains_offset));
 }
 
-size_t AddNodeDescendantsToFlatCosmeticRuleTree(
+size_t AddNodeDescendantsToFlatContentInjectionRuleTree(
     flatbuffers::FlatBufferBuilder* builder,
-    CosmeticRuleTree* tree,
-    const CosmeticRuleTreeNode& node) {
-  std::map<const CosmeticRuleTreeNode*, base::Optional<size_t>>
+    ContentInjectionRuleTree* tree,
+    const ContentInjectionRuleTreeNode& node) {
+  std::map<const ContentInjectionRuleTreeNode*, base::Optional<size_t>>
       first_child_node_index_for_children;
   for (const auto& child : node.subdomains) {
     if (!child.second.subdomains.empty())
       first_child_node_index_for_children.insert(
-          {&child.second, AddNodeDescendantsToFlatCosmeticRuleTree(
+          {&child.second, AddNodeDescendantsToFlatContentInjectionRuleTree(
                               builder, tree, child.second)});
     else
       first_child_node_index_for_children.insert(
@@ -330,7 +388,7 @@ size_t AddNodeDescendantsToFlatCosmeticRuleTree(
   size_t first_child_node_index = tree->size();
 
   for (const auto& child : node.subdomains) {
-    AddNodeToFlatCosmeticRuleTree(
+    AddNodeToFlatContentInjectionRuleTree(
         builder, tree, child.second,
         first_child_node_index_for_children.at(&child.second));
   }
@@ -338,13 +396,15 @@ size_t AddNodeDescendantsToFlatCosmeticRuleTree(
   return first_child_node_index;
 }
 
-size_t BuildFlatCosmeticRuleTree(flatbuffers::FlatBufferBuilder* builder,
-                                 CosmeticRuleTree* tree,
-                                 const CosmeticRuleTreeNode& root) {
+size_t BuildFlatContentInjectionRuleTree(
+    flatbuffers::FlatBufferBuilder* builder,
+    ContentInjectionRuleTree* tree,
+    const ContentInjectionRuleTreeNode& root) {
   size_t first_child_node_index =
-      AddNodeDescendantsToFlatCosmeticRuleTree(builder, tree, root);
+      AddNodeDescendantsToFlatContentInjectionRuleTree(builder, tree, root);
   size_t root_node_index = tree->size();
-  AddNodeToFlatCosmeticRuleTree(builder, tree, root, first_child_node_index);
+  AddNodeToFlatContentInjectionRuleTree(builder, tree, root,
+                                        first_child_node_index);
   return root_node_index;
 }
 
@@ -366,23 +426,27 @@ void BuildAndSaveIndex(
 
   // Generic cosmetic block rules that are not cancelled by any other rule on
   // any domain.
-  std::map<std::string, RuleId> default_cosmetic_block_rules;
-  // List of all selectors that are potentilly unblocked on some domains, used
-  // to build |default_cosmetic_block_rules|.
-  std::set<std::string> cosmetic_allow_selectors;
-  CosmeticRuleTreeNode cosmetic_rules_tree;
+  std::map<const flat::CosmeticRule*, RuleId, ContentInjectionRuleBodyCompare>
+      default_cosmetic_block_rules;
+  // List of all rules with selectors that are potentilly unblocked on some
+  // domains, used to build |default_cosmetic_block_rules|.
+  std::set<const flat::CosmeticRule*, ContentInjectionRuleBodyCompare>
+      cosmetic_allow_selectors;
+  ContentInjectionRuleTreeNode content_injection_rules_tree;
 
   for (const auto& rules_buffer : rules_buffers) {
     source_checksums.push_back(flat::CreateSourceChecksum(
         *builder, rules_buffer.first,
         builder->CreateString(rules_buffer.second->checksum())));
     for (flatbuffers::uoffset_t i = 0;
-         i < rules_buffer.second->rules_list()->filter_rules_list()->size();
+         i <
+         rules_buffer.second->rules_list()->request_filter_rules_list()->size();
          i++) {
       RuleIdOffset rule_id =
           flat::CreateRuleId(*builder, rules_buffer.first, i);
       const auto* rule =
-          rules_buffer.second->rules_list()->filter_rules_list()->Get(i);
+          rules_buffer.second->rules_list()->request_filter_rules_list()->Get(
+              i);
 
       DCHECK((rule->options() & flat::OptionFlag_IS_CSP_RULE) ||
              rule->activation_types() != 0 || rule->resource_types() != 0);
@@ -404,30 +468,39 @@ void BuildAndSaveIndex(
       const auto* rule =
           rules_buffer.second->rules_list()->cosmetic_rules_list()->Get(i);
 
-      const std::string selector = rule->selector()->str();
-
       // Domain exclusions on block rules have the same effect as allow rules.
-      if (rule->is_allow_rule() || rule->domains_excluded()) {
-        auto matching_block = default_cosmetic_block_rules.find(selector);
+      if (rule->core()->is_allow_rule() || rule->core()->domains_excluded()) {
+        auto matching_block = default_cosmetic_block_rules.find(rule);
         if (matching_block != default_cosmetic_block_rules.end()) {
-          AddRuleToCosmeticRulesTree(
-              &cosmetic_rules_tree,
-              rules_buffers.at(matching_block->second.source_id)
-                  ->rules_list()
-                  ->cosmetic_rules_list()
-                  ->Get(matching_block->second.rule_nr),
-              matching_block->second);
+          AddRuleToContentInjectionRulesTree(&content_injection_rules_tree,
+                                             matching_block->first,
+                                             matching_block->second);
           default_cosmetic_block_rules.erase(matching_block);
         }
-        cosmetic_allow_selectors.insert(selector);
-      } else if (!rule->is_allow_rule() && !rule->domains_included() &&
-                 !rule->domains_excluded() &&
-                 !cosmetic_allow_selectors.count(selector)) {
-        default_cosmetic_block_rules.insert({selector, rule_id});
+        cosmetic_allow_selectors.insert(rule);
+      } else if (!rule->core()->is_allow_rule() &&
+                 !rule->core()->domains_included() &&
+                 !rule->core()->domains_excluded() &&
+                 !cosmetic_allow_selectors.count(rule)) {
+        default_cosmetic_block_rules.insert({rule, rule_id});
         continue;
       }
 
-      AddRuleToCosmeticRulesTree(&cosmetic_rules_tree, rule, rule_id);
+      AddRuleToContentInjectionRulesTree(&content_injection_rules_tree, rule,
+                                         rule_id);
+    }
+
+    for (flatbuffers::uoffset_t i = 0;
+         i < rules_buffer.second->rules_list()
+                 ->scriptlet_injection_rules_list()
+                 ->size();
+         i++) {
+      RuleId rule_id(rules_buffer.first, i);
+      const auto* rule = rules_buffer.second->rules_list()
+                             ->scriptlet_injection_rules_list()
+                             ->Get(i);
+      AddRuleToContentInjectionRulesTree(&content_injection_rules_tree, rule,
+                                         rule_id);
     }
   }
 
@@ -443,16 +516,18 @@ void BuildAndSaveIndex(
   auto default_stylesheet_offset =
       builder->CreateString(BuildStyleSheet(default_cosmetic_block_rules));
 
-  CosmeticRuleTree flat_cosmetic_rules_tree;
-  size_t root_index = BuildFlatCosmeticRuleTree(
-      builder.get(), &flat_cosmetic_rules_tree, cosmetic_rules_tree);
-  auto flat_cosmetic_rule_tree_offset =
-      builder->CreateVector(flat_cosmetic_rules_tree);
+  ContentInjectionRuleTree flat_content_injection_rules_tree;
+  size_t root_index = BuildFlatContentInjectionRuleTree(
+      builder.get(), &flat_content_injection_rules_tree,
+      content_injection_rules_tree);
+  auto flat_content_injection_rule_tree_offset =
+      builder->CreateVector(flat_content_injection_rules_tree);
 
   auto rule_index_offset = flat::CreateRulesIndex(
       *builder, source_checksums_offset, activation_rules_map_offset,
       before_request_map_offset, headers_received_map_offset,
-      default_stylesheet_offset, root_index, flat_cosmetic_rule_tree_offset);
+      default_stylesheet_offset, root_index,
+      flat_content_injection_rule_tree_offset);
 
   flat::FinishRulesIndexBuffer(*builder, rule_index_offset);
 

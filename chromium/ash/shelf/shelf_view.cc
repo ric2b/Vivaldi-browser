@@ -47,10 +47,10 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/containers/adapters.h"
+#include "base/containers/contains.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/ranges.h"
-#include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/timer/timer.h"
 #include "chromeos/constants/chromeos_switches.h"
@@ -497,12 +497,16 @@ void ShelfView::AnnounceShelfItemNotificationBadge(views::View* button) {
                                                /*send_native_event=*/true);
 }
 
+bool ShelfView::LocationInsideVisibleShelfItemBounds(
+    const gfx::Point& location) const {
+  return visible_shelf_item_bounds_union_.Contains(location);
+}
+
 bool ShelfView::ShouldHideTooltip(const gfx::Point& cursor_location) const {
   // There are thin gaps between launcher buttons but the tooltip shouldn't hide
   // in the gaps, but the tooltip should hide if the mouse moved totally outside
   // of the buttons area.
-
-  return !visible_shelf_item_bounds_union_.Contains(cursor_location);
+  return !LocationInsideVisibleShelfItemBounds(cursor_location);
 }
 
 const std::vector<aura::Window*> ShelfView::GetOpenWindowsForView(
@@ -637,6 +641,14 @@ views::FocusTraversable* ShelfView::GetPaneFocusTraversable() {
 
 const char* ShelfView::GetClassName() const {
   return "ShelfView";
+}
+
+void ShelfView::OnThemeChanged() {
+  views::AccessiblePaneView::OnThemeChanged();
+  if (!separator_)
+    return;
+  separator_->SetColor(AshColorProvider::Get()->GetContentLayerColor(
+      AshColorProvider::ContentLayerType::kSeparatorColor));
 }
 
 void ShelfView::GetAccessibleNodeData(ui::AXNodeData* node_data) {

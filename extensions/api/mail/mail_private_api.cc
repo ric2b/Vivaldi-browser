@@ -88,7 +88,8 @@ std::string StringTypeToString(const base::FilePath::StringType& str) {
 std::vector<base::FilePath::StringType> FindMailFiles(
     base::FilePath file_path) {
   base::FileEnumerator file_enumerator(
-      file_path, true, base::FileEnumerator::FILES, FILE_PATH_LITERAL("*.*"));
+      file_path, true, base::FileEnumerator::FILES, FILE_PATH_LITERAL("*"),
+      base::FileEnumerator::FolderSearchPolicy::ALL);
 
   std::vector<base::FilePath::StringType> string_paths;
   for (base::FilePath locale_file_path = file_enumerator.Next();
@@ -333,22 +334,15 @@ ExtensionFunction::ResponseAction MailPrivateReadFunction::Run() {
       vivaldi::mail_private::Read::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  std::vector<std::string>& string_paths = params->paths;
-  std::string file_name = params->file_name;
-
-  Profile* profile = Profile::FromBrowserContext(browser_context());
-  base::FilePath file_path = profile->GetPath();
-
-  file_path = file_path.Append(kMailDirectory);
-
-  size_t count = string_paths.size();
-
-  for (size_t i = 0; i < count; i++) {
-    file_path = file_path.AppendASCII(string_paths[i]);
+  base::FilePath file_path = base::FilePath::FromUTF8Unsafe(params->file_name);
+  if (!file_path.IsAbsolute()) {
+    return RespondNow(Error(base::StringPrintf(
+        "Path must be absolute %s", file_path.AsUTF8Unsafe().c_str())));
   }
 
-  if (file_name.length() > 0) {
-    file_path = file_path.AppendASCII(file_name);
+  if (!base::PathExists(file_path)) {
+    return RespondNow(Error(base::StringPrintf(
+        "File path does not exist %s", file_path.AsUTF8Unsafe().c_str())));
   }
 
   base::PostTaskAndReplyWithResult(
@@ -362,15 +356,15 @@ ExtensionFunction::ResponseAction MailPrivateReadFunction::Run() {
 
 void MailPrivateReadFunction::OnFinished(ReadFileResult result) {
   if (result.success == true) {
-    Respond(ArgumentList(
-        extensions::vivaldi::mail_private::Read::Results::Create(result.raw)));
+    Respond(
+        OneArgument(base::Value(base::as_bytes(base::make_span(result.raw)))));
   } else {
     Respond(Error(base::StringPrintf("Error reading file")));
   }
 }
-ExtensionFunction::ResponseAction MailPrivateReadBufferFunction::Run() {
-  std::unique_ptr<vivaldi::mail_private::ReadBuffer::Params> params(
-      vivaldi::mail_private::ReadBuffer::Params::Create(*args_));
+ExtensionFunction::ResponseAction MailPrivateReadM3MessageFunction::Run() {
+  std::unique_ptr<vivaldi::mail_private::ReadM3Message::Params> params(
+      vivaldi::mail_private::ReadM3Message::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
   std::vector<std::string>& string_paths = params->paths;
@@ -395,12 +389,12 @@ ExtensionFunction::ResponseAction MailPrivateReadBufferFunction::Run() {
       FROM_HERE,
       {base::ThreadPool(), base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::BindOnce(&Read, file_path),
-      base::BindOnce(&MailPrivateReadBufferFunction::OnFinished, this));
+      base::BindOnce(&MailPrivateReadM3MessageFunction::OnFinished, this));
 
   return RespondLater();
 }
 
-void MailPrivateReadBufferFunction::OnFinished(ReadFileResult result) {
+void MailPrivateReadM3MessageFunction::OnFinished(ReadFileResult result) {
   if (result.success == true) {
     Respond(
         OneArgument(base::Value(base::as_bytes(base::make_span(result.raw)))));

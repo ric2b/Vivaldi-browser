@@ -133,8 +133,10 @@ typedef NS_ENUM(NSInteger, ReauthenticationReason) {
   if (self.tableView.editing) {
     // If password or username value was changed show confirmation dialog before
     // saving password. Editing mode will be exited only if user confirm saving.
-    if (self.password.password != self.passwordTextItem.textFieldValue ||
-        self.password.username != self.usernameTextItem.textFieldValue) {
+    if (![self.password.password
+            isEqualToString:self.passwordTextItem.textFieldValue] ||
+        ![self.password.username
+            isEqualToString:self.usernameTextItem.textFieldValue]) {
       [self.handler showPasswordEditDialogWithOrigin:self.password.origin];
     } else {
       [self passwordEditingConfirmed];
@@ -183,6 +185,10 @@ typedef NS_ENUM(NSInteger, ReauthenticationReason) {
     [model addItem:[self federationItem]
         toSectionWithIdentifier:SectionIdentifierPassword];
   }
+}
+
+- (BOOL)showCancelDuringEditing {
+  return YES;
 }
 
 #pragma mark - Items
@@ -356,14 +362,14 @@ typedef NS_ENUM(NSInteger, ReauthenticationReason) {
   if (![menu isMenuVisible]) {
     menu.menuItems = [self menuItemsForItemType:itemType];
 
-    if (@available(iOS 13, *)) {
-      [menu showMenuFromView:tableView
-                        rect:[tableView rectForRowAtIndexPath:indexPath]];
-    } else {
-      [menu setTargetRect:[tableView rectForRowAtIndexPath:indexPath]
-                   inView:tableView];
-      [menu setMenuVisible:YES animated:YES];
-    }
+#if !defined(__IPHONE_13_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_13_0
+    [menu setTargetRect:[tableView rectForRowAtIndexPath:indexPath]
+                 inView:tableView];
+    [menu setMenuVisible:YES animated:YES];
+#else
+    [menu showMenuFromView:tableView
+                      rect:[tableView rectForRowAtIndexPath:indexPath]];
+#endif
   }
 }
 

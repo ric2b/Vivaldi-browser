@@ -56,7 +56,7 @@ class NavigationURLLoaderTest : public testing::Test {
       NavigationURLLoaderDelegate* delegate) {
     mojom::BeginNavigationParamsPtr begin_params =
         mojom::BeginNavigationParams::New(
-            MSG_ROUTING_NONE /* initiator_routing_id */,
+            base::nullopt /* initiator_frame_token */,
             std::string() /* headers */, net::LOAD_NORMAL,
             false /* skip_service_worker */,
             blink::mojom::RequestContextType::LOCATION,
@@ -68,7 +68,6 @@ class NavigationURLLoaderTest : public testing::Test {
             std::string() /* searchable_form_encoding */,
             GURL() /* client_side_redirect_url */,
             base::nullopt /* devtools_initiator_info */,
-            false /* force_ignore_site_for_cookies */,
             nullptr /* trust_token_params */, base::nullopt /* impression */,
             base::TimeTicks() /* renderer_before_unload_start */,
             base::TimeTicks() /* renderer_before_unload_end */);

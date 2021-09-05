@@ -8,27 +8,50 @@
 
 #include <algorithm>
 
+#include "base/memory/ptr_util.h"
 #include "base/rand_util.h"
 #include "components/sync/base/syncer_error.h"
 #include "components/sync/engine/cycle/model_neutral_state.h"
 #include "components/sync/engine/polling_constants.h"
 
-using base::TimeDelta;
-
 namespace syncer {
 
+namespace {
+
+// This calculates approx. last_delay * kBackoffMultiplyFactor +/- last_delay
+// * kBackoffJitterFactor. |jitter_sign| must be -1 or 1 and determines whether
+// the jitter in the delay will be positive or negative.
+base::TimeDelta GetDelayImpl(base::TimeDelta last_delay, int jitter_sign) {
+  DCHECK(jitter_sign == -1 || jitter_sign == 1);
+
+  if (last_delay >= kMaxBackoffTime)
+    return kMaxBackoffTime;
+
+  const base::TimeDelta backoff =
+      std::max(base::TimeDelta::FromSeconds(1),
+               last_delay * kBackoffMultiplyFactor) +
+      jitter_sign * kBackoffJitterFactor * last_delay;
+
+  // Clamp backoff between 1 second and |kMaxBackoffTime|.
+  return std::max(base::TimeDelta::FromSeconds(1),
+                  std::min(backoff, kMaxBackoffTime));
+}
+
+}  // namespace
+
 // static
-BackoffDelayProvider* BackoffDelayProvider::FromDefaults() {
-  return new BackoffDelayProvider(
-      TimeDelta::FromSeconds(kInitialBackoffRetrySeconds),
-      TimeDelta::FromSeconds(kInitialBackoffImmediateRetrySeconds));
+std::unique_ptr<BackoffDelayProvider> BackoffDelayProvider::FromDefaults() {
+  // base::WrapUnique() used because the constructor is private.
+  return base::WrapUnique(new BackoffDelayProvider(
+      kInitialBackoffRetryTime, kInitialBackoffImmediateRetryTime));
 }
 
 // static
-BackoffDelayProvider* BackoffDelayProvider::WithShortInitialRetryOverride() {
-  return new BackoffDelayProvider(
-      TimeDelta::FromSeconds(kInitialBackoffShortRetrySeconds),
-      TimeDelta::FromSeconds(kInitialBackoffImmediateRetrySeconds));
+std::unique_ptr<BackoffDelayProvider>
+BackoffDelayProvider::WithShortInitialRetryOverride() {
+  // base::WrapUnique() used because the constructor is private.
+  return base::WrapUnique(new BackoffDelayProvider(
+      kInitialBackoffShortRetryTime, kInitialBackoffImmediateRetryTime));
 }
 
 BackoffDelayProvider::BackoffDelayProvider(
@@ -39,31 +62,14 @@ BackoffDelayProvider::BackoffDelayProvider(
 
 BackoffDelayProvider::~BackoffDelayProvider() {}
 
-TimeDelta BackoffDelayProvider::GetDelay(const base::TimeDelta& last_delay) {
-  if (last_delay.InSeconds() >= kMaxBackoffSeconds)
-    return TimeDelta::FromSeconds(kMaxBackoffSeconds);
-
-  // This calculates approx. base_delay_seconds * 2 +/- base_delay_seconds / 2
-  int64_t backoff_s =
-      std::max(static_cast<int64_t>(1),
-               last_delay.InSeconds() * kBackoffRandomizationFactor);
-
-  // Flip a coin to randomize backoff interval by +/- 50%.
-  int rand_sign = base::RandInt(0, 1) * 2 - 1;
-
-  // Truncation is adequate for rounding here.
-  backoff_s =
-      backoff_s +
-      (rand_sign * (last_delay.InSeconds() / kBackoffRandomizationFactor));
-
-  // Cap the backoff interval.
-  backoff_s = std::max(static_cast<int64_t>(1),
-                       std::min(backoff_s, kMaxBackoffSeconds));
-
-  return TimeDelta::FromSeconds(backoff_s);
+base::TimeDelta BackoffDelayProvider::GetDelay(
+    const base::TimeDelta& last_delay) {
+  // Flip a coin to randomize backoff interval by +/- kBackoffJitterFactor.
+  const int jitter_sign = base::RandInt(0, 1) * 2 - 1;
+  return GetDelayImpl(last_delay, jitter_sign);
 }
 
-TimeDelta BackoffDelayProvider::GetInitialDelay(
+base::TimeDelta BackoffDelayProvider::GetInitialDelay(
     const ModelNeutralState& state) const {
   // NETWORK_CONNECTION_UNAVAILABLE implies we did not receive HTTP response
   // from server because of some network error. If network is unavailable then
@@ -109,6 +115,12 @@ TimeDelta BackoffDelayProvider::GetInitialDelay(
     return short_initial_backoff_;
 
   return default_initial_backoff_;
+}
+
+base::TimeDelta BackoffDelayProvider::GetDelayForTesting(
+    base::TimeDelta last_delay,
+    int jitter_sign) {
+  return GetDelayImpl(last_delay, jitter_sign);
 }
 
 }  // namespace syncer

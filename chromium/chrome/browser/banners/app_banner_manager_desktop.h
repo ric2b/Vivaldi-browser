@@ -24,7 +24,7 @@ namespace web_app {
 enum class InstallResultCode;
 }
 
-namespace banners {
+namespace webapps {
 class TestAppBannerManagerDesktop;
 
 // Manages web app banners for desktop platforms.
@@ -62,6 +62,7 @@ class AppBannerManagerDesktop
       const base::string16& platform) const override;
   bool IsRelatedNonWebAppInstalled(
       const blink::Manifest::RelatedApplication& related_app) const override;
+  bool IsWebAppConsideredInstalled() const override;
 
   // Called when the web app install initiated by a banner has completed.
   virtual void DidFinishCreatingWebApp(const web_app::AppId& app_id,
@@ -85,7 +86,7 @@ class AppBannerManagerDesktop
   void OnEngagementEvent(content::WebContents* web_contents,
                          const GURL& url,
                          double score,
-                         SiteEngagementService::EngagementType type) override;
+                         site_engagement::EngagementType type) override;
 
   // web_app::AppRegistrarObserver:
   void OnWebAppInstalled(const web_app::AppId& app_id) override;
@@ -105,6 +106,6 @@ class AppBannerManagerDesktop
   DISALLOW_COPY_AND_ASSIGN(AppBannerManagerDesktop);
 };
 
-}  // namespace banners
+}  // namespace webapps
 
 #endif  // CHROME_BROWSER_BANNERS_APP_BANNER_MANAGER_DESKTOP_H_

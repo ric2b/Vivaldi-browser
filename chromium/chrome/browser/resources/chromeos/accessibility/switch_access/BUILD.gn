@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/chromeos/ui_mode.gni")
 import("//build/config/features.gni")
 import(
     "//chrome/browser/resources/chromeos/accessibility/common/run_jsbundler.gni")
@@ -10,7 +11,7 @@ import("//chrome/test/base/js2gtest.gni")
 import("//testing/test.gni")
 import("//third_party/closure_compiler/compile_js.gni")
 
-assert(is_chromeos)
+assert(is_chromeos_ash)
 
 switch_access_dir =
     "$root_out_dir/resources/chromeos/accessibility/switch_access"
@@ -27,6 +28,7 @@ run_jsbundler("switch_access_copied_files") {
   sources = [
     "action_manager.js",
     "auto_scan_manager.js",
+    "background.html",
     "background.js",
     "cache.js",
     "commands.js",
@@ -61,6 +63,7 @@ run_jsbundler("switch_access_copied_files") {
     "menu_manager.js",
     "metrics.js",
     "navigation_manager.js",
+    "navigator.js",
     "nodes/back_button_node.js",
     "nodes/basic_node.js",
     "nodes/combo_box_node.js",
@@ -149,6 +152,7 @@ js_type_check("closure_compile") {
     ":metrics",
     ":modal_dialog_node",
     ":navigation_manager",
+    ":navigator",
     ":preference_manager",
     ":slider_node",
     ":switch_access",
@@ -175,6 +179,7 @@ js_library("action_manager") {
     ":switch_access_constants",
     ":switch_access_node",
     "../common:array_util",
+    "../common:constants",
   ]
   externs_list = [ "$externs_path/automation.js" ]
 }
@@ -348,6 +353,14 @@ js_library("navigation_manager") {
     "../common:event_handler",
     "../common:repeated_event_handler",
   ]
+  externs_list = [
+    "$externs_path/accessibility_private.js",
+    "$externs_path/automation.js",
+  ]
+}
+
+js_library("navigator") {
+  deps = [ ":basic_node" ]
   externs_list = [
     "$externs_path/accessibility_private.js",
     "$externs_path/automation.js",

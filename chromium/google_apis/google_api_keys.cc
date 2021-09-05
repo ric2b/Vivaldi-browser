@@ -95,12 +95,6 @@
 #define GOOGLE_API_KEY_SODA DUMMY_API_TOKEN
 #endif
 
-// API key for the DevTools frontend to use for surveys. Note there is no
-// public API to replace this functionality.
-#if !defined(GOOGLE_API_KEY_DEVTOOLS_SURVEYS)
-#define GOOGLE_API_KEY_DEVTOOLS_SURVEYS DUMMY_API_TOKEN
-#endif
-
 // These are used as shortcuts for developers and users providing
 // OAuth credentials via preprocessor defines or environment
 // variables.  If set, they will be used to replace any of the client
@@ -153,11 +147,6 @@ class APIKeyCache {
         GOOGLE_API_KEY_SODA, STRINGIZE_NO_EXPANSION(GOOGLE_API_KEY_SODA),
         nullptr, std::string(), environment.get(), command_line, gaia_config);
 
-    api_key_devtools_surveys_ = CalculateKeyValue(
-        GOOGLE_API_KEY_DEVTOOLS_SURVEYS,
-        STRINGIZE_NO_EXPANSION(GOOGLE_API_KEY_DEVTOOLS_SURVEYS), nullptr,
-        std::string(), environment.get(), command_line, gaia_config);
-
     metrics_key_ = CalculateKeyValue(
         GOOGLE_METRICS_SIGNING_KEY,
         STRINGIZE_NO_EXPANSION(GOOGLE_METRICS_SIGNING_KEY), nullptr,
@@ -180,13 +169,13 @@ class APIKeyCache {
     // written.
     client_ids_[CLIENT_MAIN] = CalculateKeyValue(
         GOOGLE_CLIENT_ID_MAIN, STRINGIZE_NO_EXPANSION(GOOGLE_CLIENT_ID_MAIN),
-        switches::kOAuth2ClientID, default_client_id, environment.get(),
+        ::switches::kOAuth2ClientID, default_client_id, environment.get(),
         command_line, gaia_config);
-    client_secrets_[CLIENT_MAIN] =
-        CalculateKeyValue(GOOGLE_CLIENT_SECRET_MAIN,
-                          STRINGIZE_NO_EXPANSION(GOOGLE_CLIENT_SECRET_MAIN),
-                          switches::kOAuth2ClientSecret, default_client_secret,
-                          environment.get(), command_line, gaia_config);
+    client_secrets_[CLIENT_MAIN] = CalculateKeyValue(
+        GOOGLE_CLIENT_SECRET_MAIN,
+        STRINGIZE_NO_EXPANSION(GOOGLE_CLIENT_SECRET_MAIN),
+        ::switches::kOAuth2ClientSecret, default_client_secret,
+        environment.get(), command_line, gaia_config);
 
     client_ids_[CLIENT_CLOUD_PRINT] = CalculateKeyValue(
         GOOGLE_CLIENT_ID_CLOUD_PRINT,
@@ -217,16 +206,13 @@ class APIKeyCache {
   }
 
   std::string api_key() const { return api_key_; }
-#if defined(OS_IOS)
+#if defined(OS_IOS) || defined(OS_FUCHSIA)
   void set_api_key(const std::string& api_key) { api_key_ = api_key; }
 #endif
   std::string api_key_non_stable() const { return api_key_non_stable_; }
   std::string api_key_remoting() const { return api_key_remoting_; }
   std::string api_key_sharing() const { return api_key_sharing_; }
   std::string api_key_soda() const { return api_key_soda_; }
-  std::string api_key_devtools_surveys() const {
-    return api_key_devtools_surveys_;
-  }
 
   std::string metrics_key() const { return metrics_key_; }
 
@@ -314,10 +300,12 @@ class APIKeyCache {
     }
 
     if (key_value == DUMMY_API_TOKEN) {
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING) && !defined(OS_FUCHSIA)
       // No key should be unset in an official build except the
       // GOOGLE_DEFAULT_* keys.  The default keys don't trigger this
       // check as their "unset" value is not DUMMY_API_TOKEN.
+      // Exclude Fuchsia to match BUILD.gn.
+      // TODO(crbug.com/1171510): Update Fuchsia exclusion when bug is fixed.
       CHECK(false);
 #endif
       if (default_if_unset.size() > 0) {
@@ -338,7 +326,6 @@ class APIKeyCache {
   std::string api_key_remoting_;
   std::string api_key_sharing_;
   std::string api_key_soda_;
-  std::string api_key_devtools_surveys_;
   std::string metrics_key_;
   std::string client_ids_[CLIENT_NUM_ITEMS];
   std::string client_secrets_[CLIENT_NUM_ITEMS];
@@ -371,11 +358,7 @@ std::string GetSodaAPIKey() {
   return g_api_key_cache.Get().api_key_soda();
 }
 
-std::string GetDevtoolsSurveysAPIKey() {
-  return g_api_key_cache.Get().api_key_devtools_surveys();
-}
-
-#if defined(OS_IOS)
+#if defined(OS_IOS) || defined(OS_FUCHSIA)
 void SetAPIKey(const std::string& api_key) {
   g_api_key_cache.Get().set_api_key(api_key);
 }

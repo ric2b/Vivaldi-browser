@@ -13,17 +13,8 @@
         min-height: var(--settings-row-min-height);
       }
 
-      .bullet-line.three-line {
-        min-height: var(--settings-row-three-line-min-height);
-      }
-
       .bullet-line > div {
         padding-inline-start: var(--cr-radio-button-size);
-      }
-
-      settings-collapse-radio-button {
-        --settings-collapse-toggle-min-height:
-            var(--settings-row-three-line-min-height);
       }
 
       settings-collapse-radio-button:not(:first-of-type) {
@@ -41,6 +32,10 @@
       settings-toggle-button {
         padding-inline-end: 0;
         padding-inline-start: 0;
+      }
+
+      settings-toggle-button:not([disabled]) {
+        pointer-events: all;
       }
 
       #safeBrowsingEnhanced .bullet-line:last-of-type {
@@ -93,9 +88,9 @@
                 $i18n{safeBrowsingEnhancedBulFour}
               </div>
             </div>
-            <div class="bullet-line three-line last-collapse-item">
+            <div class="bullet-line last-collapse-item">
               <iron-icon icon="settings20:data"></iron-icon>
-              <div class="secondary">
+              <div class="secondary cr-padded-text">
                 $i18n{safeBrowsingEnhancedBulFive}
               </div>
             </div>
@@ -116,9 +111,9 @@
                   $i18n{safeBrowsingStandardBulOne}
               </div>
             </div>
-            <div class="bullet-line three-line">
+            <div class="bullet-line">
               <iron-icon icon="settings20:data"></iron-icon>
-              <div class="secondary">
+              <div class="secondary cr-padded-text">
                   $i18n{safeBrowsingStandardBulTwo}
               </div>
             </div>
@@ -137,7 +132,7 @@
                 pref="{{prefs.generated.password_leak_detection}}"
                 sub-label="[[getPasswordsLeakToggleSubLabel_(
                               prefs.profile.password_manager_leak_detection.*,
-                              syncStatus.*)]]">
+                              prefs.generated.password_leak_detection.*)]]">
             </settings-toggle-button>
           </div>
         </settings-collapse-radio-button>

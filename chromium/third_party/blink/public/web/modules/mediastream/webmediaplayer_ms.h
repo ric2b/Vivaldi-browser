@@ -101,7 +101,8 @@ class BLINK_MODULES_EXPORT WebMediaPlayerMS
 
   WebMediaPlayer::LoadTiming Load(LoadType load_type,
                                   const WebMediaPlayerSource& source,
-                                  CorsMode cors_mode) override;
+                                  CorsMode cors_mode,
+                                  bool is_cache_disabled) override;
 
   // WebSurfaceLayerBridgeObserver implementation.
   void OnWebLayerUpdated() override;
@@ -117,8 +118,8 @@ class BLINK_MODULES_EXPORT WebMediaPlayerMS
   void SetVolume(double volume) override;
   void SetLatencyHint(double seconds) override;
   void SetPreservesPitch(bool preserves_pitch) override;
+  void SetAutoplayInitiated(bool autoplay_initiated) override;
   void OnRequestPictureInPicture() override;
-  void OnPictureInPictureAvailabilityChanged(bool available) override;
   void SetSinkId(const WebString& sink_id,
                  WebSetSinkIdCompleteCallback completion_callback) override;
   void SetPreload(WebMediaPlayer::Preload preload) override;
@@ -179,13 +180,6 @@ class BLINK_MODULES_EXPORT WebMediaPlayerMS
   void OnFrameClosed() override;
   void OnFrameShown() override;
   void OnIdleTimeout() override;
-  void OnPlay() override;
-  void OnPause() override;
-  void OnMuted(bool muted) override;
-  void OnSeekForward(double seconds) override;
-  void OnSeekBackward(double seconds) override;
-  void OnEnterPictureInPicture() override;
-  void OnExitPictureInPicture() override;
   void OnSetAudioSink(const std::string& sink_id) override;
   void OnVolumeMultiplierUpdate(double multiplier) override;
   void OnBecamePersistentVideo(bool value) override;

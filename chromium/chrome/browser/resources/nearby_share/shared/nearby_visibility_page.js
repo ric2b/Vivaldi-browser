@@ -33,14 +33,16 @@ Polymer({
   listeners: {'next': 'onNext_', 'manage-contacts': 'onManageContacts_'},
 
   onNext_() {
+    const contactVisibility = /** @type {NearbyContactVisibilityElement} */
+        (this.$.contactVisibility);
+    contactVisibility.saveVisibilityAndAllowedContacts();
     this.set('settings.enabled', true);
     this.fire('onboarding-complete');
   },
 
   /** @private */
   onManageContacts_() {
-    // TODO(vecore): this is not a final link
-    window.open('https://contacts.google.com', '_blank');
+    window.open(this.i18n('nearbyShareManageContactsUrl'), '_blank');
   },
 
 });

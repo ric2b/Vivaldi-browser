@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import 'chrome://resources/cr_elements/icons.m.js';
+import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 import './data_point.js';
 import './diagnostics_card.js';
 import './diagnostics_shared_css.js';
@@ -10,9 +12,11 @@ import './routine_section.js';
 import './strings.m.js';
 
 import {I18nBehavior} from 'chrome://resources/js/i18n_behavior.m.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {MemoryUsage, RoutineName, SystemDataProviderInterface} from './diagnostics_types.js'
+import {MemoryUsage, RoutineType, SystemDataProviderInterface} from './diagnostics_types.js'
+import {convertKibToGibDecimalString} from './diagnostics_utils.js';
 import {getSystemDataProvider} from './mojo_interface_provider.js';
 
 /**
@@ -39,12 +43,12 @@ Polymer({
   memoryUsageObserverReceiver_: null,
 
   properties: {
-    /** @private {!Array<!RoutineName>} */
+    /** @private {!Array<!RoutineType>} */
     routines_: {
       type: Array,
       value: () => {
         return [
-          RoutineName.kMemory,
+          chromeos.diagnostics.mojom.RoutineType.kMemory,
         ];
       }
     },
@@ -53,6 +57,13 @@ Polymer({
     memoryUsage_: {
       type: Object,
     },
+
+    /** @type {boolean} */
+    isTestRunning: {
+      type: Boolean,
+      value: false,
+      notify: true,
+    }
   },
 
   /** @override */
@@ -95,5 +106,19 @@ Polymer({
    */
   getTotalUsedMemory_(memoryUsage) {
     return memoryUsage.totalMemoryKib - memoryUsage.availableMemoryKib;
-  }
+  },
+
+  /**
+   * Calculates total available memory from MemoryUsage object.
+   * @return {string}
+   * @protected
+   */
+  getAvailableMemory_() {
+    // Note: The storage value is converted to GiB but we still display "GB" to
+    // the user since this is the convention memory manufacturers use.
+    return loadTimeData.getStringF(
+        'memoryAvailable',
+        convertKibToGibDecimalString(this.memoryUsage_.availableMemoryKib, 2),
+        convertKibToGibDecimalString(this.memoryUsage_.totalMemoryKib, 2));
+  },
 });

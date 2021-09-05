@@ -69,7 +69,6 @@ class CORE_EXPORT HTMLLinkElement final : public HTMLElement,
   DOMTokenList& relList() const {
     return static_cast<DOMTokenList&>(*rel_list_);
   }
-  String Scope() const { return scope_; }
 
   const AtomicString& GetType() const;
 
@@ -162,10 +161,6 @@ class CORE_EXPORT HTMLLinkElement final : public HTMLElement,
   // From LinkLoaderClient
   void LinkLoaded() override;
   void LinkLoadingErrored() override;
-  void DidStartLinkPrerender() override;
-  void DidStopLinkPrerender() override;
-  void DidSendLoadForLinkPrerender() override;
-  void DidSendDOMContentLoadedForLinkPrerender() override;
   scoped_refptr<base::SingleThreadTaskRunner> GetLoadingTaskRunner() override;
 
   Member<LinkResource> link_;
@@ -181,7 +176,6 @@ class CORE_EXPORT HTMLLinkElement final : public HTMLElement,
   Vector<gfx::Size> icon_sizes_;
   Member<RelList> rel_list_;
   LinkRelAttribute rel_attribute_;
-  String scope_;
   Member<DOMTokenList> resources_;
   HashSet<KURL> valid_resource_urls_;
 

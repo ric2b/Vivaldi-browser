@@ -75,6 +75,102 @@ constexpr const char* GetVizBreakdownName(VizBreakdown stage) {
   }
 }
 
+// Returns the name of the event dispatch breakdown of EventLatency histograms
+// between `start_stage` and `end_stage`.
+constexpr const char* GetEventLatencyDispatchBreakdownName(
+    EventMetrics::DispatchStage start_stage,
+    EventMetrics::DispatchStage end_stage) {
+  switch (start_stage) {
+    case EventMetrics::DispatchStage::kGenerated:
+      DCHECK_EQ(end_stage,
+                EventMetrics::DispatchStage::kArrivedInRendererCompositor);
+      return "GenerationToRendererCompositor";
+    case EventMetrics::DispatchStage::kArrivedInRendererCompositor:
+      switch (end_stage) {
+        case EventMetrics::DispatchStage::kRendererCompositorStarted:
+          return "RendererCompositorQueueingDelay";
+        case EventMetrics::DispatchStage::kRendererMainStarted:
+          return "RendererCompositorToMain";
+        default:
+          NOTREACHED();
+          return nullptr;
+      }
+    case EventMetrics::DispatchStage::kRendererCompositorStarted:
+      DCHECK_EQ(end_stage,
+                EventMetrics::DispatchStage::kRendererCompositorFinished);
+      return "RendererCompositorProcessing";
+    case EventMetrics::DispatchStage::kRendererCompositorFinished:
+      DCHECK_EQ(end_stage, EventMetrics::DispatchStage::kRendererMainStarted);
+      return "RendererCompositorToMain";
+    case EventMetrics::DispatchStage::kRendererMainStarted:
+      DCHECK_EQ(end_stage, EventMetrics::DispatchStage::kRendererMainFinished);
+      return "RendererMainProcessing";
+    case EventMetrics::DispatchStage::kRendererMainFinished:
+      NOTREACHED();
+      return nullptr;
+  }
+}
+
+// Returns the name of EventLatency breakdown between `dispatch_stage` and
+// `compositor_stage`.
+constexpr const char* GetEventLatencyDispatchToCompositorBreakdownName(
+    EventMetrics::DispatchStage dispatch_stage,
+    CompositorFrameReporter::StageType compositor_stage) {
+  switch (dispatch_stage) {
+    case EventMetrics::DispatchStage::kRendererCompositorFinished:
+      switch (compositor_stage) {
+        case CompositorFrameReporter::StageType::
+            kBeginImplFrameToSendBeginMainFrame:
+          return "RendererCompositorFinishedToBeginImplFrame";
+        case CompositorFrameReporter::StageType::kSendBeginMainFrameToCommit:
+          return "RendererCompositorFinishedToSendBeginMainFrame";
+        case CompositorFrameReporter::StageType::kCommit:
+          return "RendererCompositorFinishedToCommit";
+        case CompositorFrameReporter::StageType::kEndCommitToActivation:
+          return "RendererCompositorFinishedToEndCommit";
+        case CompositorFrameReporter::StageType::kActivation:
+          return "RendererCompositorFinishedToActivation";
+        case CompositorFrameReporter::StageType::
+            kEndActivateToSubmitCompositorFrame:
+          return "RendererCompositorFinishedToEndActivate";
+        case CompositorFrameReporter::StageType::
+            kSubmitCompositorFrameToPresentationCompositorFrame:
+          return "RendererCompositorFinishedToSubmitCompositorFrame";
+        default:
+          NOTREACHED();
+          return nullptr;
+      }
+      break;
+    case EventMetrics::DispatchStage::kRendererMainFinished:
+      switch (compositor_stage) {
+        case CompositorFrameReporter::StageType::
+            kBeginImplFrameToSendBeginMainFrame:
+          return "RendererMainFinishedToBeginImplFrame";
+        case CompositorFrameReporter::StageType::kSendBeginMainFrameToCommit:
+          return "RendererMainFinishedToSendBeginMainFrame";
+        case CompositorFrameReporter::StageType::kCommit:
+          return "RendererMainFinishedToCommit";
+        case CompositorFrameReporter::StageType::kEndCommitToActivation:
+          return "RendererMainFinishedToEndCommit";
+        case CompositorFrameReporter::StageType::kActivation:
+          return "RendererMainFinishedToActivation";
+        case CompositorFrameReporter::StageType::
+            kEndActivateToSubmitCompositorFrame:
+          return "RendererMainFinishedToEndActivate";
+        case CompositorFrameReporter::StageType::
+            kSubmitCompositorFrameToPresentationCompositorFrame:
+          return "RendererMainFinishedToSubmitCompositorFrame";
+        default:
+          NOTREACHED();
+          return nullptr;
+      }
+      break;
+    default:
+      NOTREACHED();
+      return nullptr;
+  }
+}
+
 // Names for CompositorFrameReporter::StageType, which should be updated in case
 // of changes to the enum.
 constexpr const char* GetStageName(int stage_type_index,
@@ -293,6 +389,10 @@ CompositorFrameReporter::CompositorFrameReporter(
 
 std::unique_ptr<CompositorFrameReporter>
 CompositorFrameReporter::CopyReporterAtBeginImplStage() {
+  // If |this| reporter is dependent on another reporter to decide about partial
+  // update, then |this| should not have any such dependents.
+  DCHECK(!partial_update_decider_);
+
   if (stage_history_.empty() ||
       stage_history_.front().stage_type !=
           StageType::kBeginImplFrameToSendBeginMainFrame ||
@@ -309,11 +409,11 @@ CompositorFrameReporter::CopyReporterAtBeginImplStage() {
       StageType::kBeginImplFrameToSendBeginMainFrame;
   new_reporter->current_stage_.start_time = stage_history_.front().start_time;
   new_reporter->set_tick_clock(tick_clock_);
-  new_reporter->cloned_from_ = weak_factory_.GetWeakPtr();
 
-  // TODO(https://crbug.com/1127872) Check |cloned_to_| is null before replacing
-  // it.
-  cloned_to_ = new_reporter->GetWeakPtr();
+  // Set up the new reporter so that it depends on |this| for partial update
+  // information.
+  new_reporter->SetPartialUpdateDecider(weak_factory_.GetWeakPtr());
+
   return new_reporter;
 }
 
@@ -434,21 +534,34 @@ void CompositorFrameReporter::TerminateReporter() {
     case FrameTerminationStatus::kReplacedByNewReporter:
       EnableReportType(FrameReportType::kDroppedFrame);
       break;
-    case FrameTerminationStatus::kDidNotProduceFrame:
-      if (frame_skip_reason_.has_value() &&
-          frame_skip_reason() == FrameSkippedReason::kNoDamage) {
-        // If this reporter was cloned, and the cloned repoter was marked as
+    case FrameTerminationStatus::kDidNotProduceFrame: {
+      const bool no_update_from_main =
+          frame_skip_reason_.has_value() &&
+          frame_skip_reason() == FrameSkippedReason::kNoDamage;
+      const bool no_update_from_compositor =
+          !has_partial_update_ && frame_skip_reason_.has_value() &&
+          frame_skip_reason() == FrameSkippedReason::kWaitingOnMain;
+
+      if (no_update_from_main) {
+        // If this reporter was cloned, and the cloned reporter was marked as
         // containing 'partial update' (i.e. missing desired updates from the
         // main-thread), but this reporter terminated with 'no damage', then
-        // reset the 'partial update' flag from the cloned reporter.
-        if (cloned_to_ && cloned_to_->has_partial_update())
-          cloned_to_->set_has_partial_update(false);
-      } else {
-        // If no frames were produced, it was not due to no-damage, then it is a
-        // dropped frame.
+        // reset the 'partial update' flag from the cloned reporter (as well as
+        // other depending reporters).
+        while (!partial_update_dependents_.empty()) {
+          auto dependent = partial_update_dependents_.front();
+          if (dependent)
+            dependent->set_has_partial_update(false);
+          partial_update_dependents_.pop();
+        }
+      } else if (!no_update_from_compositor) {
+        // If rather main thread has damage or compositor thread has partial
+        // damage, then it's a dropped frame.
         EnableReportType(FrameReportType::kDroppedFrame);
       }
+
       break;
+    }
     case FrameTerminationStatus::kUnknown:
       break;
   }
@@ -485,6 +598,11 @@ void CompositorFrameReporter::TerminateReporter() {
     dropped_frame_counter_->OnEndFrame(args_,
                                        IsDroppedFrameAffectingSmoothness());
   }
+
+  if (discarded_partial_update_dependents_count_ > 0)
+    UMA_HISTOGRAM_CUSTOM_COUNTS(
+        "Graphics.Smoothness.Diagnostic.DiscardedDependentCount",
+        discarded_partial_update_dependents_count_, 1, 1000, 50);
 }
 
 void CompositorFrameReporter::EndCurrentStage(base::TimeTicks end_time) {
@@ -671,7 +789,7 @@ void CompositorFrameReporter::ReportCompositorLatencyHistogram(
 
 void CompositorFrameReporter::ReportEventLatencyHistograms() const {
   for (const auto& event_metrics : events_metrics_) {
-    DCHECK_NE(event_metrics, nullptr);
+    DCHECK(event_metrics);
     const std::string histogram_base_name =
         GetEventLatencyHistogramBaseName(*event_metrics);
     const int event_type_index = static_cast<int>(event_metrics->type());
@@ -682,13 +800,17 @@ void CompositorFrameReporter::ReportEventLatencyHistograms() const {
     const int histogram_base_index =
         event_type_index * kEventLatencyScrollTypeCount + scroll_type_index;
 
+    const base::TimeTicks generated_timestamp =
+        event_metrics->GetDispatchStageTimestamp(
+            EventMetrics::DispatchStage::kGenerated);
+
     // For scroll events, report total latency up to gpu-swap-begin. This is
     // useful in comparing new EventLatency metrics with LatencyInfo-based
     // scroll event latency metrics.
     if (event_metrics->scroll_type() &&
         !viz_breakdown_.swap_timings.is_null()) {
       const base::TimeDelta swap_begin_latency =
-          viz_breakdown_.swap_timings.swap_start - event_metrics->time_stamp();
+          viz_breakdown_.swap_timings.swap_start - generated_timestamp;
       const std::string swap_begin_histogram_name =
           histogram_base_name + ".TotalLatencyToSwapBegin";
       // Note: There's a 1:1 mapping between `histogram_base_index` and
@@ -711,8 +833,8 @@ void CompositorFrameReporter::ReportEventLatencyHistograms() const {
     // event's arrival in the browser.
     auto stage_it =
         std::find_if(stage_history_.begin(), stage_history_.end(),
-                     [&event_metrics](const StageData& stage) {
-                       return stage.start_time > event_metrics->time_stamp();
+                     [generated_timestamp](const StageData& stage) {
+                       return stage.start_time > generated_timestamp;
                      });
     // TODO(crbug.com/1079116): Ideally, at least the start time of
     // SubmitCompositorFrameToPresentationCompositorFrame stage should be
@@ -725,7 +847,7 @@ void CompositorFrameReporter::ReportEventLatencyHistograms() const {
       continue;
 
     const base::TimeDelta b2r_latency =
-        stage_it->start_time - event_metrics->time_stamp();
+        stage_it->start_time - generated_timestamp;
     const std::string b2r_histogram_name =
         histogram_base_name + ".BrowserToRendererCompositor";
     // Note: There's a 1:1 mapping between `histogram_base_index` and
@@ -744,7 +866,7 @@ void CompositorFrameReporter::ReportEventLatencyHistograms() const {
       // Total latency is calculated since the event timestamp.
       const base::TimeTicks start_time =
           stage_it->stage_type == StageType::kTotalLatency
-              ? event_metrics->time_stamp()
+              ? generated_timestamp
               : stage_it->start_time;
       const base::TimeDelta latency = stage_it->end_time - start_time;
       const int stage_type_index = static_cast<int>(stage_it->stage_type);
@@ -851,7 +973,7 @@ void CompositorFrameReporter::ReportCompositorLatencyTraceEvents() const {
                    FrameTerminationStatus::kDidNotProduceFrame) {
           state = ChromeFrameReporter::STATE_NO_UPDATE_DESIRED;
         } else {
-          state = has_partial_update()
+          state = has_partial_update_
                       ? ChromeFrameReporter::STATE_PRESENTED_PARTIAL
                       : ChromeFrameReporter::STATE_PRESENTED_ALL;
         }
@@ -901,36 +1023,83 @@ void CompositorFrameReporter::ReportCompositorLatencyTraceEvents() const {
 }
 
 void CompositorFrameReporter::ReportEventLatencyTraceEvents() const {
+  // TODO(mohsen): This function is becoming large and there is concerns about
+  // having this in the compositor critical path. crbug.com/1072740 is
+  // considering doing the reporting off-thread, but as a short-term solution,
+  // we should investigate whether we can skip this function entirely if tracing
+  // is off and whether that has any positive impact or not.
   for (const auto& event_metrics : events_metrics_) {
+    const base::TimeTicks generated_timestamp =
+        event_metrics->GetDispatchStageTimestamp(
+            EventMetrics::DispatchStage::kGenerated);
+
     const auto trace_id = TRACE_ID_LOCAL(event_metrics.get());
     TRACE_EVENT_NESTABLE_ASYNC_BEGIN_WITH_TIMESTAMP1(
-        "cc,input", "EventLatency", trace_id, event_metrics->time_stamp(),
-        "event", event_metrics->GetTypeName());
+        "cc,input", "EventLatency", trace_id, generated_timestamp, "event",
+        event_metrics->GetTypeName());
 
-    // Find the first stage that happens after the event's arrival in the
-    // browser.
-    auto stage_it =
-        std::find_if(stage_history_.begin(), stage_history_.end(),
-                     [&event_metrics](const StageData& stage) {
-                       return stage.start_time > event_metrics->time_stamp();
-                     });
+    // Event dispatch stages.
+    EventMetrics::DispatchStage dispatch_stage =
+        EventMetrics::DispatchStage::kGenerated;
+    base::TimeTicks dispatch_timestamp =
+        event_metrics->GetDispatchStageTimestamp(dispatch_stage);
+    while (dispatch_stage != EventMetrics::DispatchStage::kMaxValue) {
+      DCHECK(!dispatch_timestamp.is_null());
+
+      // Find the end dispatch stage.
+      auto end_stage = static_cast<EventMetrics::DispatchStage>(
+          static_cast<int>(dispatch_stage) + 1);
+      base::TimeTicks end_timestamp =
+          event_metrics->GetDispatchStageTimestamp(end_stage);
+      while (end_timestamp.is_null() &&
+             end_stage != EventMetrics::DispatchStage::kMaxValue) {
+        end_stage = static_cast<EventMetrics::DispatchStage>(
+            static_cast<int>(end_stage) + 1);
+        end_timestamp = event_metrics->GetDispatchStageTimestamp(end_stage);
+      }
+      if (end_timestamp.is_null())
+        break;
+
+      const char* breakdown_name =
+          GetEventLatencyDispatchBreakdownName(dispatch_stage, end_stage);
+      TRACE_EVENT_NESTABLE_ASYNC_BEGIN_WITH_TIMESTAMP0(
+          "cc,input", breakdown_name, trace_id, dispatch_timestamp);
+      TRACE_EVENT_NESTABLE_ASYNC_END_WITH_TIMESTAMP0("cc,input", breakdown_name,
+                                                     trace_id, end_timestamp);
+
+      dispatch_stage = end_stage;
+      dispatch_timestamp = end_timestamp;
+    }
+
+    // Find the first compositor stage that happens after the final dispatch
+    // stage.
+    auto stage_it = std::find_if(stage_history_.begin(), stage_history_.end(),
+                                 [dispatch_timestamp](const StageData& stage) {
+                                   return stage.start_time > dispatch_timestamp;
+                                 });
     // TODO(crbug.com/1079116): Ideally, at least the start time of
     // SubmitCompositorFrameToPresentationCompositorFrame stage should be
-    // greater than the event time stamp, but apparently, this is not always the
-    // case (see crbug.com/1093698). For now, skip to the next event in such
-    // cases. Hopefully, the work to reduce discrepancies between the new
-    // EventLatency and the old Event.Latency metrics would fix this issue. If
-    // not, we need to reconsider investigating this issue.
+    // greater than the final event dispatch timestamp, but apparently, this is
+    // not always the case (see crbug.com/1093698). For now, skip to the next
+    // event in such cases. Hopefully, the work to reduce discrepancies between
+    // the new EventLatency and the old Event.Latency metrics would fix this
+    // issue. If not, we need to reconsider investigating this issue.
     if (stage_it == stage_history_.end())
       continue;
 
+    DCHECK(dispatch_stage ==
+               EventMetrics::DispatchStage::kRendererCompositorFinished ||
+           dispatch_stage ==
+               EventMetrics::DispatchStage::kRendererMainFinished);
+    const char* d2c_breakdown_name =
+        GetEventLatencyDispatchToCompositorBreakdownName(dispatch_stage,
+                                                         stage_it->stage_type);
     TRACE_EVENT_NESTABLE_ASYNC_BEGIN_WITH_TIMESTAMP0(
-        "cc,input", "BrowserToRendererCompositor", trace_id,
-        event_metrics->time_stamp());
+        "cc,input", d2c_breakdown_name, trace_id, dispatch_timestamp);
     TRACE_EVENT_NESTABLE_ASYNC_END_WITH_TIMESTAMP0(
-        "cc,input", "BrowserToRendererCompositor", trace_id,
-        stage_it->start_time);
+        "cc,input", d2c_breakdown_name, trace_id, stage_it->start_time);
 
+    // Compositor stages.
     for (; stage_it != stage_history_.end(); ++stage_it) {
       const int stage_type_index = static_cast<int>(stage_it->stage_type);
       CHECK_LT(stage_type_index, static_cast<int>(StageType::kStageTypeCount));
@@ -1089,8 +1258,41 @@ base::WeakPtr<CompositorFrameReporter> CompositorFrameReporter::GetWeakPtr() {
 
 void CompositorFrameReporter::AdoptReporter(
     std::unique_ptr<CompositorFrameReporter> reporter) {
-  DCHECK_EQ(cloned_to_.get(), reporter.get());
-  own_cloned_to_ = std::move(reporter);
+  // If |this| reporter is dependent on another reporter to decide about partial
+  // update, then |this| should not have any such dependents.
+  DCHECK(!partial_update_decider_);
+  DCHECK(!partial_update_dependents_.empty());
+  owned_partial_update_dependents_.push(std::move(reporter));
+  DiscardOldPartialUpdateReporters();
+}
+
+void CompositorFrameReporter::SetPartialUpdateDecider(
+    base::WeakPtr<CompositorFrameReporter> decider) {
+  DCHECK(decider);
+  has_partial_update_ = true;
+  partial_update_decider_ = decider;
+  decider->partial_update_dependents_.push(GetWeakPtr());
+  DCHECK(partial_update_dependents_.empty());
+}
+
+void CompositorFrameReporter::DiscardOldPartialUpdateReporters() {
+  DCHECK_LE(owned_partial_update_dependents_.size(),
+            partial_update_dependents_.size());
+  while (owned_partial_update_dependents_.size() > 300u) {
+    auto& dependent = owned_partial_update_dependents_.front();
+    dependent->set_has_partial_update(false);
+    partial_update_dependents_.pop();
+    owned_partial_update_dependents_.pop();
+    discarded_partial_update_dependents_count_++;
+  }
+}
+
+bool CompositorFrameReporter::MightHavePartialUpdate() const {
+  return !!partial_update_decider_;
+}
+
+size_t CompositorFrameReporter::GetPartialUpdateDependentsCount() const {
+  return partial_update_dependents_.size();
 }
 
 }  // namespace cc

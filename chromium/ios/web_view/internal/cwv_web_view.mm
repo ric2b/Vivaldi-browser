@@ -123,10 +123,9 @@ WEB_STATE_USER_DATA_KEY_IMPL(WebViewHolder)
   std::unique_ptr<ios_web_view::WebViewJavaScriptDialogPresenter>
       _javaScriptDialogPresenter;
   // Stores the script command callbacks with subscriptions.
-  std::unordered_map<
-      std::string,
-      std::pair<web::WebState::ScriptCommandCallback,
-                std::unique_ptr<web::WebState::ScriptCommandSubscription>>>
+  std::unordered_map<std::string,
+                     std::pair<web::WebState::ScriptCommandCallback,
+                               base::CallbackListSubscription>>
       _scriptCommandCallbacks;
   CRWSessionStorage* _cachedSessionStorage;
 }
@@ -524,16 +523,21 @@ BOOL gChromeLongPressAndForceTouchHandlingEnabled = YES;
 }
 
 - (void)webState:(web::WebState*)webState
-    contextMenuConfigurationForLinkWithURL:(const GURL&)linkURL
-                         completionHandler:
-                             (void (^)(UIContextMenuConfiguration*))
-                                 completionHandler API_AVAILABLE(ios(13.0)) {
+    contextMenuConfigurationForParams:(const web::ContextMenuParams&)params
+                      previewProvider:
+                          (UIContextMenuContentPreviewProvider)previewProvider
+                    completionHandler:
+                        (void (^)(UIContextMenuConfiguration*))completionHandler
+    API_AVAILABLE(ios(13.0)) {
   SEL selector = @selector(webView:
       contextMenuConfigurationForLinkWithURL:completionHandler:);
   if ([_UIDelegate respondsToSelector:selector]) {
     [_UIDelegate webView:self
-        contextMenuConfigurationForLinkWithURL:net::NSURLWithGURL(linkURL)
+        contextMenuConfigurationForLinkWithURL:net::NSURLWithGURL(
+                                                   params.link_url)
                              completionHandler:completionHandler];
+  } else {
+    completionHandler(nil);
   }
 }
 
@@ -650,11 +654,6 @@ BOOL gChromeLongPressAndForceTouchHandlingEnabled = YES;
       initWithPrefService:_configuration.browserState->GetPrefs()
                  webState:_webState.get()];
   JsAutofillManager* JSAutofillManager = [[JsAutofillManager alloc] init];
-  JsSuggestionManager* JSSuggestionManager =
-      base::mac::ObjCCastStrict<JsSuggestionManager>(
-          [_webState->GetJSInjectionReceiver()
-              instanceOfClass:[JsSuggestionManager class]]);
-  [JSSuggestionManager setWebFramesManager:_webState->GetWebFramesManager()];
 
   auto passwordManagerClient =
       ios_web_view::WebViewPasswordManagerClient::Create(
@@ -680,7 +679,6 @@ BOOL gChromeLongPressAndForceTouchHandlingEnabled = YES;
              autofillClient:std::move(autofillClient)
               autofillAgent:autofillAgent
           JSAutofillManager:JSAutofillManager
-        JSSuggestionManager:JSSuggestionManager
             passwordManager:std::move(passwordManager)
       passwordManagerClient:std::move(passwordManagerClient)
       passwordManagerDriver:std::move(passwordManagerDriver)

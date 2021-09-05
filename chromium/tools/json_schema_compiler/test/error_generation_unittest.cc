@@ -174,7 +174,8 @@ TEST(JsonSchemaCompilerErrorTest, UnableToPopulateArray) {
     std::unique_ptr<base::ListValue> params_value =
         List(std::make_unique<Value>(5), std::make_unique<Value>(false));
     EXPECT_TRUE(EqualsUtf16(
-        "expected integer, got boolean; unable to populate array 'integers'",
+        "Error at key 'integers': Parsing array failed at index 1: expected "
+        "integer, got boolean",
         GetPopulateError<errors::ChoiceType::Integers>(*params_value)));
   }
 }
@@ -300,29 +301,11 @@ TEST(JsonSchemaCompilerErrorTest, OptionalUnableToPopulateArray) {
     base::string16 error;
     EXPECT_FALSE(errors::OptionalChoiceType::Integers::Populate(*params_value,
                                                                 &out, &error));
-    EXPECT_TRUE(EqualsUtf16(
-        "expected integer, got boolean; unable to populate array 'integers'",
-        error));
+    EXPECT_TRUE(
+        EqualsUtf16("Error at key 'integers': Parsing array failed at index 1: "
+                    "expected integer, got boolean",
+                    error));
     EXPECT_EQ(NULL, out.as_integer.get());
-  }
-}
-
-TEST(JsonSchemaCompilerErrorTest, MultiplePopulationErrors) {
-  {
-    std::unique_ptr<base::DictionaryValue> value =
-        Dictionary("TheArray", std::make_unique<Value>(5));
-    errors::ArrayObject out;
-    base::string16 error;
-    EXPECT_FALSE(errors::ArrayObject::Populate(*value, &out, &error));
-    EXPECT_TRUE(EqualsUtf16("'TheArray': expected list, got integer",
-        error));
-    EXPECT_EQ(NULL, out.the_array.get());
-
-    EXPECT_FALSE(errors::ArrayObject::Populate(*value, &out, &error));
-    EXPECT_TRUE(EqualsUtf16("'TheArray': expected list, got integer; "
-        "'TheArray': expected list, got integer",
-        error));
-    EXPECT_EQ(NULL, out.the_array.get());
   }
 }
 

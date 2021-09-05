@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "third_party/blink/public/common/feature_policy/feature_policy.h"
+#include "third_party/blink/public/common/frame/frame_visual_properties.h"
 #include "third_party/blink/public/mojom/frame/tree_scope_type.mojom-blink.h"
 #include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom-blink.h"
 #include "third_party/blink/public/platform/web_rect.h"
@@ -181,7 +182,7 @@ WebLocalFrame* WebRemoteFrameImpl::CreateLocalChild(
     WebFrame* opener,
     std::unique_ptr<blink::WebPolicyContainer> policy_container) {
   auto* child = MakeGarbageCollected<WebLocalFrameImpl>(
-      util::PassKey<WebRemoteFrameImpl>(), scope, client, interface_registry,
+      base::PassKey<WebRemoteFrameImpl>(), scope, client, interface_registry,
       frame_token);
   auto* owner = MakeGarbageCollected<RemoteFrameOwner>(
       frame_policy, frame_owner_properties, frame_owner_element_type);
@@ -216,6 +217,31 @@ void WebRemoteFrameImpl::InitializeCoreFrame(
       frame_client_.Get(), page, owner, parent_frame, previous_sibling_frame,
       insert_type, GetFrameToken(), window_agent_factory, interface_registry_,
       associated_interface_provider_));
+
+  // If this is not a top-level frame, we need to send FrameVisualProperties to
+  // the remote renderer process. Some of the properties are inherited from the
+  // WebFrameWidget containing this frame, and this is true for regular frames
+  // in the frame tree as well as for portals, which are not in the frame tree;
+  // hence the code to traverse up through FrameOwner.
+  WebFrameWidget* ancestor_widget = nullptr;
+  if (parent) {
+    while (parent && !parent->IsWebLocalFrame())
+      parent = parent->Parent();
+    if (parent) {
+      ancestor_widget =
+          To<WebLocalFrameImpl>(parent)->LocalRoot()->FrameWidget();
+    }
+  } else if (owner && owner->IsLocal()) {
+    ancestor_widget =
+        WebLocalFrameImpl::FromFrame(To<HTMLFrameOwnerElement>(owner)
+                                         ->GetDocument()
+                                         .GetFrame()
+                                         ->LocalFrameRoot())
+            ->FrameWidget();
+  }
+  if (ancestor_widget)
+    InitializeFrameVisualProperties(ancestor_widget, View());
+
   GetFrame()->CreateView();
   frame_->Tree().SetName(name);
 }
@@ -251,14 +277,30 @@ WebRemoteFrame* WebRemoteFrameImpl::CreateRemoteChild(
 }
 
 void WebRemoteFrameImpl::SetCcLayer(cc::Layer* layer,
-                                    bool prevent_contents_opaque_changes,
                                     bool is_surface_layer) {
-  GetFrame()->SetCcLayer(layer, prevent_contents_opaque_changes,
-                         is_surface_layer);
+  GetFrame()->SetCcLayer(layer, is_surface_layer);
 }
 
 void WebRemoteFrameImpl::SetCoreFrame(RemoteFrame* frame) {
   frame_ = frame;
+}
+
+void WebRemoteFrameImpl::InitializeFrameVisualProperties(
+    WebFrameWidget* ancestor_widget,
+    WebView* web_view) {
+  FrameVisualProperties visual_properties;
+  visual_properties.zoom_level = web_view->ZoomLevel();
+  visual_properties.page_scale_factor = ancestor_widget->PageScaleInMainFrame();
+  visual_properties.is_pinch_gesture_active =
+      ancestor_widget->PinchGestureActiveInMainFrame();
+  visual_properties.screen_info = ancestor_widget->GetOriginalScreenInfo();
+  visual_properties.visible_viewport_size =
+      ancestor_widget->VisibleViewportSizeInDIPs();
+  const WebVector<gfx::Rect>& window_segments =
+      ancestor_widget->WindowSegments();
+  visual_properties.root_widget_window_segments.assign(window_segments.begin(),
+                                                       window_segments.end());
+  GetFrame()->InitializeFrameVisualProperties(visual_properties);
 }
 
 WebRemoteFrameImpl* WebRemoteFrameImpl::FromFrame(RemoteFrame& frame) {
@@ -289,12 +331,10 @@ void WebRemoteFrameImpl::SetReplicatedName(const WebString& name,
   GetFrame()->SetReplicatedName(name, unique_name);
 }
 
-void WebRemoteFrameImpl::SetReplicatedFeaturePolicyHeaderAndOpenerPolicies(
-    const ParsedFeaturePolicy& parsed_header,
-    const FeaturePolicyFeatureState& opener_feature_state) {
+void WebRemoteFrameImpl::SetReplicatedFeaturePolicyHeader(
+    const ParsedFeaturePolicy& parsed_header) {
   DCHECK(GetFrame());
-  GetFrame()->SetReplicatedFeaturePolicyHeaderAndOpenerPolicies(
-      parsed_header, opener_feature_state);
+  GetFrame()->SetReplicatedFeaturePolicyHeader(parsed_header);
 }
 
 void WebRemoteFrameImpl::AddReplicatedContentSecurityPolicyHeader(
@@ -348,6 +388,15 @@ void WebRemoteFrameImpl::SetHadStickyUserActivationBeforeNavigation(
   GetFrame()->SetHadStickyUserActivationBeforeNavigation(value);
 }
 
+void WebRemoteFrameImpl::EnableAutoResize(const gfx::Size& min_size,
+                                          const gfx::Size& max_size) {
+  GetFrame()->EnableAutoResize(min_size, max_size);
+}
+
+void WebRemoteFrameImpl::DisableAutoResize() {
+  GetFrame()->DisableAutoResize();
+}
+
 v8::Local<v8::Object> WebRemoteFrameImpl::GlobalProxy() const {
   return GetFrame()
       ->GetWindowProxy(DOMWrapperWorld::MainWorld())
@@ -358,8 +407,25 @@ WebRect WebRemoteFrameImpl::GetCompositingRect() {
   return GetFrame()->View()->GetCompositingRect();
 }
 
+void WebRemoteFrameImpl::SynchronizeVisualProperties() {
+  GetFrame()->SynchronizeVisualProperties();
+}
+
+void WebRemoteFrameImpl::ResendVisualProperties() {
+  GetFrame()->ResendVisualProperties();
+}
+
+float WebRemoteFrameImpl::GetCompositingScaleFactor() {
+  return GetFrame()->View()->GetCompositingScaleFactor();
+}
+
 WebString WebRemoteFrameImpl::UniqueName() const {
   return GetFrame()->UniqueName();
+}
+
+const FrameVisualProperties&
+WebRemoteFrameImpl::GetPendingVisualPropertiesForTesting() const {
+  return GetFrame()->GetPendingVisualPropertiesForTesting();
 }
 
 WebRemoteFrameImpl::WebRemoteFrameImpl(

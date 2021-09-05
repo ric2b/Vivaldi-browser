@@ -22,7 +22,9 @@
 <link rel="import" href="../../router.html">
 <link rel="import" href="../device_page/device_page.html">
 <link rel="import" href="../internet_page/internet_page.html">
+<link rel="import" href="../kerberos_page/kerberos_page.html">
 <link rel="import" href="../multidevice_page/multidevice_page.html">
+<link rel="import" href="../on_startup_page/on_startup_page.html">
 
 <dom-module id="os-settings-page">
   <template>
@@ -160,6 +162,12 @@
             </os-settings-people-page>
           </settings-section>
         </template>
+        <template is="dom-if" if="[[showKerberosSection]]" restamp>
+          <settings-section page-title="$i18n{kerberosPageTitle}"
+              section="kerberos">
+            <settings-kerberos-page></settings-kerberos-page>
+          </settings-section>
+        </template>
         <settings-section page-title="$i18n{devicePageTitle}"
             section="device">
           <settings-device-page prefs="{{prefs}}"
@@ -178,6 +186,13 @@
           <os-settings-search-page prefs="{{prefs}}">
           </os-settings-search-page>
         </settings-section>
+        <template is="dom-if" if="[[isAccountManagementFlowsV2Enabled_]]">
+          <settings-section page-title="$i18n{privacyPageTitle}"
+              section="osPrivacy">
+            <os-settings-privacy-page prefs="{{prefs}}">
+            </os-settings-privacy-page>
+          </settings-section>
+        </template>
         <settings-section page-title="$i18n{appsPageTitle}" section="apps">
           <os-settings-apps-page
               prefs="{{prefs}}"
@@ -193,6 +208,13 @@
             <settings-crostini-page prefs="{{prefs}}"
                 allow-crostini="[[allowCrostini_]]">
             </settings-crostini-page>
+          </settings-section>
+        </template>
+        <template is="dom-if" if="[[showStartup]]">
+          <settings-section page-title="$i18n{onStartupPageTitle}"
+              section="onstartup">
+            <settings-on-startup-page prefs="{{prefs}}">
+            </settings-on-startup-page>
           </settings-section>
         </template>
       </div>
@@ -222,11 +244,13 @@
             <settings-date-time-page prefs="{{prefs}}">
             </settings-date-time-page>
           </settings-section>
-          <settings-section page-title="$i18n{privacyPageTitle}"
-              section="osPrivacy">
-            <os-settings-privacy-page prefs="{{prefs}}">
-            </os-settings-privacy-page>
-          </settings-section>
+          <template is="dom-if" if="[[!isAccountManagementFlowsV2Enabled_]]">
+            <settings-section page-title="$i18n{privacyPageTitle}"
+                section="osPrivacy">
+              <os-settings-privacy-page prefs="{{prefs}}">
+              </os-settings-privacy-page>
+            </settings-section>
+          </template>
           <settings-section page-title="$i18n{osLanguagesPageTitle}"
               section="osLanguages">
             <os-settings-languages-section prefs="{{prefs}}">

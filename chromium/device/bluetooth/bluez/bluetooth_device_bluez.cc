@@ -153,6 +153,7 @@ BluetoothDeviceBlueZ::BluetoothDeviceBlueZ(
   UpdateServiceData();
   UpdateManufacturerData();
   UpdateAdvertisingDataFlags();
+  UpdateServiceUUIDs();
 }
 
 BluetoothDeviceBlueZ::~BluetoothDeviceBlueZ() {
@@ -374,19 +375,7 @@ bool BluetoothDeviceBlueZ::IsConnecting() const {
 }
 
 BluetoothDevice::UUIDSet BluetoothDeviceBlueZ::GetUUIDs() const {
-  bluez::BluetoothDeviceClient::Properties* properties =
-      bluez::BluezDBusManager::Get()->GetBluetoothDeviceClient()->GetProperties(
-          object_path_);
-  DCHECK(properties);
-
-  UUIDSet uuids;
-  const std::vector<std::string>& dbus_uuids = properties->uuids.value();
-  for (const std::string& dbus_uuid : dbus_uuids) {
-    device::BluetoothUUID uuid(dbus_uuid);
-    DCHECK(uuid.IsValid());
-    uuids.insert(std::move(uuid));
-  }
-  return uuids;
+  return device_uuids_.GetUUIDs();
 }
 
 base::Optional<int8_t> BluetoothDeviceBlueZ::GetInquiryRSSI() const {
@@ -658,7 +647,7 @@ void BluetoothDeviceBlueZ::GetServiceRecords(
                      std::move(error_callback)));
 }
 
-#if BUILDFLAG(IS_ASH)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 void BluetoothDeviceBlueZ::ExecuteWrite(
     base::OnceClosure callback,
     ExecuteWriteErrorCallback error_callback) {
@@ -716,6 +705,28 @@ void BluetoothDeviceBlueZ::UpdateAdvertisingDataFlags() {
   // "The Flags field may be zero or more octets long." However, only the first
   // byte of that is needed because there is only 5 bits of data defined there.
   advertising_data_flags_ = properties->advertising_data_flags.value()[0];
+}
+
+void BluetoothDeviceBlueZ::UpdateServiceUUIDs() {
+  bluez::BluetoothDeviceClient::Properties* properties =
+      bluez::BluezDBusManager::Get()->GetBluetoothDeviceClient()->GetProperties(
+          object_path_);
+  if (!properties)
+    return;
+
+  UUIDList uuids;
+  for (const std::string& dbus_uuid : properties->uuids.value()) {
+    device::BluetoothUUID uuid(dbus_uuid);
+    DCHECK(uuid.IsValid());
+    uuids.push_back(std::move(uuid));
+  }
+
+  device_uuids_.ReplaceServiceUUIDs(uuids);
+}
+
+void BluetoothDeviceBlueZ::SetAdvertisedUUIDs(
+    const BluetoothDevice::UUIDList& uuids) {
+  device_uuids_.ReplaceAdvertisedUUIDs(uuids);
 }
 
 BluetoothPairingBlueZ* BluetoothDeviceBlueZ::BeginPairing(
@@ -879,7 +890,7 @@ void BluetoothDeviceBlueZ::OnGetServiceRecordsError(
   std::move(error_callback).Run(code);
 }
 
-#if BUILDFLAG(IS_ASH)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 void BluetoothDeviceBlueZ::OnExecuteWriteError(
     ExecuteWriteErrorCallback error_callback,
     const std::string& error_name,

@@ -119,7 +119,7 @@ bool AutofillPaymentApp::HasEnrolledInstrument() const {
 void AutofillPaymentApp::RecordUse() {
   // Record the use of the credit card.
   payment_request_delegate_->GetPersonalDataManager()->RecordUseOf(
-      credit_card_);
+      &credit_card_);
 }
 
 bool AutofillPaymentApp::NeedsInstallation() const {
@@ -193,7 +193,8 @@ void AutofillPaymentApp::OnFullCardRequestSucceeded(
     GenerateBasicCardResponse();
 }
 
-void AutofillPaymentApp::OnFullCardRequestFailed() {
+void AutofillPaymentApp::OnFullCardRequestFailed(
+    autofill::payments::FullCardRequest::FailureType failure_type) {
   // The user may have cancelled the unmask or something has gone wrong (e.g.,
   // the network request failed). In all cases, reset the |delegate_| so another
   // request can start.

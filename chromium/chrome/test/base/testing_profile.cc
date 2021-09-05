@@ -9,6 +9,7 @@
 #include "base/base_paths.h"
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/containers/contains.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/macros.h"
@@ -16,12 +17,12 @@
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
-#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/test_file_util.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/autocomplete/in_memory_url_index_factory.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/background_fetch/background_fetch_delegate_factory.h"
@@ -85,6 +86,7 @@
 #include "components/prefs/pref_notifier_impl.h"
 #include "components/prefs/testing_pref_store.h"
 #include "components/security_interstitials/content/stateful_ssl_host_state_delegate.h"
+#include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/identity_test_utils.h"
 #include "components/sync/test/model/fake_sync_change_processor.h"
 #include "components/sync/test/model/sync_error_factory_mock.h"
@@ -127,7 +129,7 @@
 #include "extensions/browser/extension_system.h"
 #endif
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/chromeos/arc/session/arc_service_launcher.h"
 #include "chrome/browser/chromeos/net/delay_network_call.h"
 #include "chrome/browser/chromeos/policy/user_cloud_policy_manager_chromeos.h"
@@ -178,7 +180,7 @@ std::unique_ptr<KeyedService> BuildPersonalDataManagerInstanceFor(
 }  // namespace
 
 // static
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 // Must be kept in sync with
 // ChromeBrowserMainPartsChromeos::PreEarlyInitialization.
 const char TestingProfile::kTestUserProfileDir[] = "test-user";
@@ -191,8 +193,10 @@ bool TestingProfile::SetScopedFeatureListForEphemeralGuestProfiles(
     base::test::ScopedFeatureList& scoped_feature_list,
     bool enabled) {
 // This feature is now only supported on Windows, Linux, and Mac.
+// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// of lacros-chrome is complete.
 #if defined(OS_WIN) || defined(OS_MAC) || \
-    (defined(OS_LINUX) && !defined(OS_CHROMEOS))
+    (defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
   if (enabled)
     scoped_feature_list.InitAndEnableFeature(
         features::kEnableEphemeralGuestProfilesOnDesktop);
@@ -202,8 +206,8 @@ bool TestingProfile::SetScopedFeatureListForEphemeralGuestProfiles(
   return true;
 #else
   return false;
-#endif  // defined(OS_WIN) || defined(OS_MAC) || (defined(OS_LINUX) &&
-        // !defined(OS_CHROMEOS))
+#endif  // defined(OS_WIN) || defined(OS_MAC) || (defined(OS_LINUX) ||
+        // BUILDFLAG(IS_CHROMEOS_LACROS))
 }
 
 TestingProfile::TestingProfile() : TestingProfile(base::FilePath()) {}
@@ -252,11 +256,11 @@ TestingProfile::TestingProfile(
     bool allows_browser_windows,
     base::Optional<bool> is_new_profile,
     const std::string& supervised_user_id,
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     std::unique_ptr<policy::UserCloudPolicyManagerChromeOS> policy_manager,
 #else
     std::unique_ptr<policy::UserCloudPolicyManager> policy_manager,
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
     std::unique_ptr<policy::PolicyService> policy_service,
     TestingFactories testing_factories,
     const std::string& profile_name,
@@ -390,7 +394,7 @@ void TestingProfile::Init() {
   if (!base::PathExists(profile_path_))
     base::CreateDirectory(profile_path_);
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // Initialize |chromeos::AccountManager|.
   chromeos::AccountManagerFactory* factory =
       g_browser_process->platform_part()->GetAccountManagerFactory();
@@ -629,6 +633,12 @@ bool TestingProfile::IsOffTheRecord() const {
   return original_profile_;
 }
 
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+bool TestingProfile::IsMainProfile() const {
+  return false;
+}
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
+
 const Profile::OTRProfileID& TestingProfile::GetOTRProfileID() const {
   DCHECK(IsOffTheRecord());
   return *otr_profile_id_;
@@ -866,7 +876,7 @@ TestingProfile::GetPolicySchemaRegistryService() {
   return schema_registry_service_.get();
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 policy::UserCloudPolicyManagerChromeOS*
 TestingProfile::GetUserCloudPolicyManagerChromeOS() {
   return user_cloud_policy_manager_.get();
@@ -880,7 +890,7 @@ TestingProfile::GetActiveDirectoryPolicyManager() {
 policy::UserCloudPolicyManager* TestingProfile::GetUserCloudPolicyManager() {
   return user_cloud_policy_manager_.get();
 }
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 policy::ProfilePolicyConnector* TestingProfile::GetProfilePolicyConnector() {
   return profile_policy_connector_.get();
@@ -899,7 +909,7 @@ void TestingProfile::set_last_selected_directory(const base::FilePath& path) {
   last_selected_directory_ = path;
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 void TestingProfile::ChangeAppLocale(const std::string& locale,
                                      AppLocaleChangedVia via) {
   requested_locale_ = locale;
@@ -929,6 +939,12 @@ void TestingProfile::SetCreationTimeForTesting(base::Time creation_time) {
 
 PrefService* TestingProfile::GetOffTheRecordPrefs() {
   return nullptr;
+}
+
+bool TestingProfile::IsSignedIn() {
+  signin::IdentityManager* identity_manager =
+      IdentityManagerFactory::GetForProfile(this);
+  return identity_manager && identity_manager->HasPrimaryAccount();
 }
 
 storage::SpecialStoragePolicy* TestingProfile::GetSpecialStoragePolicy() {
@@ -1007,15 +1023,6 @@ Profile::ExitType TestingProfile::GetLastSessionExitType() const {
   return last_session_exited_cleanly_ ? EXIT_NORMAL : EXIT_CRASHED;
 }
 
-void TestingProfile::ConfigureNetworkContextParams(
-    bool in_memory,
-    const base::FilePath& relative_partition_path,
-    network::mojom::NetworkContextParams* network_context_params,
-    network::mojom::CertVerifierCreationParams* cert_verifier_creation_params) {
-  network_context_params->user_agent = GetUserAgent();
-  network_context_params->accept_language = "en-us,en";
-}
-
 TestingProfile::Builder::Builder()
     : build_called_(false),
       delegate_(nullptr),
@@ -1063,7 +1070,7 @@ void TestingProfile::Builder::SetSupervisedUserId(
   supervised_user_id_ = supervised_user_id;
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 void TestingProfile::Builder::SetUserCloudPolicyManagerChromeOS(
     std::unique_ptr<policy::UserCloudPolicyManagerChromeOS>
         user_cloud_policy_manager) {

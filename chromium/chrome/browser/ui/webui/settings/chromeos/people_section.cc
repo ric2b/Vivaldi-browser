@@ -17,11 +17,11 @@
 #include "chrome/browser/chromeos/account_manager/account_manager_util.h"
 #include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_utils.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/supervised_user/supervised_user_service.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/webui/chromeos/sync/os_sync_handler.h"
-#include "chrome/browser/ui/webui/plural_string_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/account_manager_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/fingerprint_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/kerberos_accounts_handler.h"
@@ -53,6 +53,7 @@
 #include "services/network/public/mojom/content_security_policy.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
+#include "ui/chromeos/devicetype_utils.h"
 #include "ui/chromeos/resources/grit/ui_chromeos_resources.h"
 
 namespace chromeos {
@@ -60,82 +61,108 @@ namespace settings {
 namespace {
 
 const std::vector<SearchConcept>& GetPeopleSearchConcepts() {
-  static const base::NoDestructor<std::vector<SearchConcept>> tags({
-      {IDS_OS_SETTINGS_TAG_PEOPLE,
-       mojom::kPeopleSectionPath,
-       mojom::SearchResultIcon::kAvatar,
-       mojom::SearchResultDefaultRank::kMedium,
-       mojom::SearchResultType::kSection,
-       {.section = mojom::Section::kPeople}},
-      {IDS_OS_SETTINGS_TAG_LOCK_SCREEN_PIN_OR_PASSWORD,
-       mojom::kSecurityAndSignInSubpagePath,
-       mojom::SearchResultIcon::kLock,
-       mojom::SearchResultDefaultRank::kMedium,
-       mojom::SearchResultType::kSetting,
-       {.setting = mojom::Setting::kChangeAuthPin},
-       {IDS_OS_SETTINGS_TAG_LOCK_SCREEN_PIN_OR_PASSWORD_ALT1,
-        SearchConcept::kAltTagEnd}},
-      {IDS_OS_SETTINGS_TAG_USERNAMES_AND_PHOTOS,
-       mojom::kManageOtherPeopleSubpagePath,
-       mojom::SearchResultIcon::kAvatar,
-       mojom::SearchResultDefaultRank::kMedium,
-       mojom::SearchResultType::kSetting,
-       {.setting = mojom::Setting::kShowUsernamesAndPhotosAtSignIn},
-       {IDS_OS_SETTINGS_TAG_USERNAMES_AND_PHOTOS_ALT1,
-        IDS_OS_SETTINGS_TAG_USERNAMES_AND_PHOTOS_ALT2,
-        SearchConcept::kAltTagEnd}},
-      {IDS_OS_SETTINGS_TAG_PEOPLE_ACCOUNTS,
-       mojom::kMyAccountsSubpagePath,
-       mojom::SearchResultIcon::kAvatar,
-       mojom::SearchResultDefaultRank::kMedium,
-       mojom::SearchResultType::kSubpage,
-       {.subpage = mojom::Subpage::kMyAccounts}},
-      {IDS_OS_SETTINGS_TAG_PEOPLE_ACCOUNTS_ADD,
-       mojom::kMyAccountsSubpagePath,
-       mojom::SearchResultIcon::kAvatar,
-       mojom::SearchResultDefaultRank::kMedium,
-       mojom::SearchResultType::kSetting,
-       {.setting = mojom::Setting::kAddAccount}},
-      {IDS_OS_SETTINGS_TAG_RESTRICT_SIGN_IN_REMOVE,
-       mojom::kManageOtherPeopleSubpagePath,
-       mojom::SearchResultIcon::kAvatar,
-       mojom::SearchResultDefaultRank::kMedium,
-       mojom::SearchResultType::kSetting,
-       {.setting = mojom::Setting::kRemoveFromUserAllowlist}},
-      {IDS_OS_SETTINGS_TAG_GUEST_BROWSING,
-       mojom::kManageOtherPeopleSubpagePath,
-       mojom::SearchResultIcon::kAvatar,
-       mojom::SearchResultDefaultRank::kMedium,
-       mojom::SearchResultType::kSetting,
-       {.setting = mojom::Setting::kGuestBrowsing}},
-      {IDS_OS_SETTINGS_TAG_LOCK_SCREEN_WHEN_WAKING,
-       mojom::kSecurityAndSignInSubpagePath,
-       mojom::SearchResultIcon::kLock,
-       mojom::SearchResultDefaultRank::kMedium,
-       mojom::SearchResultType::kSetting,
-       {.setting = mojom::Setting::kLockScreen},
-       {IDS_OS_SETTINGS_TAG_LOCK_SCREEN_WHEN_WAKING_ALT1,
-        SearchConcept::kAltTagEnd}},
-      {IDS_OS_SETTINGS_TAG_RESTRICT_SIGN_IN,
-       mojom::kManageOtherPeopleSubpagePath,
-       mojom::SearchResultIcon::kAvatar,
-       mojom::SearchResultDefaultRank::kMedium,
-       mojom::SearchResultType::kSetting,
-       {.setting = mojom::Setting::kRestrictSignIn},
-       {IDS_OS_SETTINGS_TAG_RESTRICT_SIGN_IN_ALT1, SearchConcept::kAltTagEnd}},
-      {IDS_OS_SETTINGS_TAG_LOCK_SCREEN,
-       mojom::kSecurityAndSignInSubpagePath,
-       mojom::SearchResultIcon::kLock,
-       mojom::SearchResultDefaultRank::kMedium,
-       mojom::SearchResultType::kSubpage,
-       {.subpage = mojom::Subpage::kSecurityAndSignIn}},
-      {IDS_OS_SETTINGS_TAG_RESTRICT_SIGN_IN_ADD,
-       mojom::kManageOtherPeopleSubpagePath,
-       mojom::SearchResultIcon::kAvatar,
-       mojom::SearchResultDefaultRank::kMedium,
-       mojom::SearchResultType::kSetting,
-       {.setting = mojom::Setting::kAddToUserAllowlist}},
-  });
+  static const base::NoDestructor<std::vector<SearchConcept>> tags([] {
+    std::vector<SearchConcept> all_tags({
+        {IDS_OS_SETTINGS_TAG_PEOPLE_ACCOUNTS,
+         mojom::kMyAccountsSubpagePath,
+         mojom::SearchResultIcon::kAvatar,
+         mojom::SearchResultDefaultRank::kMedium,
+         mojom::SearchResultType::kSubpage,
+         {.subpage = mojom::Subpage::kMyAccounts}},
+    });
+
+    if (chromeos::features::IsAccountManagementFlowsV2Enabled()) {
+      all_tags.insert(all_tags.end(),
+                      {{IDS_OS_SETTINGS_TAG_PEOPLE_V2,
+                        mojom::kPeopleSectionPath,
+                        mojom::SearchResultIcon::kAvatar,
+                        mojom::SearchResultDefaultRank::kMedium,
+                        mojom::SearchResultType::kSection,
+                        {.section = mojom::Section::kPeople}},
+                       {IDS_OS_SETTINGS_TAG_PEOPLE_ACCOUNTS_ADD_V2,
+                        mojom::kMyAccountsSubpagePath,
+                        mojom::SearchResultIcon::kAvatar,
+                        mojom::SearchResultDefaultRank::kMedium,
+                        mojom::SearchResultType::kSetting,
+                        {.setting = mojom::Setting::kAddAccount}}});
+    } else {
+      all_tags.insert(
+          all_tags.end(),
+          {
+              {IDS_OS_SETTINGS_TAG_PEOPLE,
+               mojom::kPeopleSectionPath,
+               mojom::SearchResultIcon::kAvatar,
+               mojom::SearchResultDefaultRank::kMedium,
+               mojom::SearchResultType::kSection,
+               {.section = mojom::Section::kPeople}},
+              {IDS_OS_SETTINGS_TAG_PEOPLE_ACCOUNTS_ADD,
+               mojom::kMyAccountsSubpagePath,
+               mojom::SearchResultIcon::kAvatar,
+               mojom::SearchResultDefaultRank::kMedium,
+               mojom::SearchResultType::kSetting,
+               {.setting = mojom::Setting::kAddAccount}},
+              {IDS_OS_SETTINGS_TAG_USERNAMES_AND_PHOTOS,
+               mojom::kManageOtherPeopleSubpagePath,
+               mojom::SearchResultIcon::kAvatar,
+               mojom::SearchResultDefaultRank::kMedium,
+               mojom::SearchResultType::kSetting,
+               {.setting = mojom::Setting::kShowUsernamesAndPhotosAtSignIn},
+               {IDS_OS_SETTINGS_TAG_USERNAMES_AND_PHOTOS_ALT1,
+                IDS_OS_SETTINGS_TAG_USERNAMES_AND_PHOTOS_ALT2,
+                SearchConcept::kAltTagEnd}},
+              {IDS_OS_SETTINGS_TAG_RESTRICT_SIGN_IN_REMOVE,
+               mojom::kManageOtherPeopleSubpagePath,
+               mojom::SearchResultIcon::kAvatar,
+               mojom::SearchResultDefaultRank::kMedium,
+               mojom::SearchResultType::kSetting,
+               {.setting = mojom::Setting::kRemoveFromUserAllowlist}},
+              {IDS_OS_SETTINGS_TAG_GUEST_BROWSING,
+               mojom::kManageOtherPeopleSubpagePath,
+               mojom::SearchResultIcon::kAvatar,
+               mojom::SearchResultDefaultRank::kMedium,
+               mojom::SearchResultType::kSetting,
+               {.setting = mojom::Setting::kGuestBrowsing}},
+              {IDS_OS_SETTINGS_TAG_RESTRICT_SIGN_IN,
+               mojom::kManageOtherPeopleSubpagePath,
+               mojom::SearchResultIcon::kAvatar,
+               mojom::SearchResultDefaultRank::kMedium,
+               mojom::SearchResultType::kSetting,
+               {.setting = mojom::Setting::kRestrictSignIn},
+               {IDS_OS_SETTINGS_TAG_RESTRICT_SIGN_IN_ALT1,
+                SearchConcept::kAltTagEnd}},
+              {IDS_OS_SETTINGS_TAG_RESTRICT_SIGN_IN_ADD,
+               mojom::kManageOtherPeopleSubpagePath,
+               mojom::SearchResultIcon::kAvatar,
+               mojom::SearchResultDefaultRank::kMedium,
+               mojom::SearchResultType::kSetting,
+               {.setting = mojom::Setting::kAddToUserAllowlist}},
+              {IDS_OS_SETTINGS_TAG_LOCK_SCREEN_PIN_OR_PASSWORD,
+               mojom::kSecurityAndSignInSubpagePath,
+               mojom::SearchResultIcon::kLock,
+               mojom::SearchResultDefaultRank::kMedium,
+               mojom::SearchResultType::kSetting,
+               {.setting = mojom::Setting::kChangeAuthPin},
+               {IDS_OS_SETTINGS_TAG_LOCK_SCREEN_PIN_OR_PASSWORD_ALT1,
+                SearchConcept::kAltTagEnd}},
+              {IDS_OS_SETTINGS_TAG_LOCK_SCREEN_WHEN_WAKING,
+               mojom::kSecurityAndSignInSubpagePath,
+               mojom::SearchResultIcon::kLock,
+               mojom::SearchResultDefaultRank::kMedium,
+               mojom::SearchResultType::kSetting,
+               {.setting = mojom::Setting::kLockScreen},
+               {IDS_OS_SETTINGS_TAG_LOCK_SCREEN_WHEN_WAKING_ALT1,
+                SearchConcept::kAltTagEnd}},
+              {IDS_OS_SETTINGS_TAG_LOCK_SCREEN,
+               mojom::kSecurityAndSignInSubpagePath,
+               mojom::SearchResultIcon::kLock,
+               mojom::SearchResultDefaultRank::kMedium,
+               mojom::SearchResultType::kSubpage,
+               {.subpage = mojom::Subpage::kSecurityAndSignIn}},
+          });
+    }
+    return all_tags;
+  }());
+
   return *tags;
 }
 
@@ -307,22 +334,27 @@ const std::vector<SearchConcept>& GetParentalSearchConcepts() {
   return *tags;
 }
 
-void AddAccountManagerPageStrings(content::WebUIDataSource* html_source) {
+void AddAccountManagerPageStrings(content::WebUIDataSource* html_source,
+                                  Profile* profile) {
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
-      {"accountManagerDescription", IDS_SETTINGS_ACCOUNT_MANAGER_DESCRIPTION},
+      {"accountManagerPrimaryAccountDescription",
+       IDS_SETTINGS_ACCOUNT_MANAGER_PRIMARY_ACCOUNT_DESCRIPTION},
       {"accountManagerChildDescription",
        IDS_SETTINGS_ACCOUNT_MANAGER_CHILD_DESCRIPTION},
       {"accountManagerChildFirstMessage",
        IDS_SETTINGS_ACCOUNT_MANAGER_CHILD_FIRST_MESSAGE},
       {"accountManagerChildSecondMessage",
        IDS_SETTINGS_ACCOUNT_MANAGER_CHILD_SECOND_MESSAGE},
-      {"accountListHeader", IDS_SETTINGS_ACCOUNT_MANAGER_LIST_HEADER},
+      {"accountManagerSecondaryAccountDescription",
+       IDS_SETTINGS_ACCOUNT_MANAGER_SECONDARY_ACCOUNTS_DESCRIPTION},
+      {"accountListTooltip", IDS_SETTINGS_ACCOUNT_MANAGER_LIST_TOOLTIP},
+      {"accountListTooltipNoSecondaryAccounts",
+       IDS_SETTINGS_ACCOUNT_MANAGER_LIST_TOOLTIP_NO_SECONDARY_ACCOUNTS},
       {"accountManagerPrimaryAccountTooltip",
        IDS_SETTINGS_ACCOUNT_MANAGER_PRIMARY_ACCOUNT_TOOLTIP},
       {"accountManagerEducationAccountLabel",
        IDS_SETTINGS_ACCOUNT_MANAGER_EDUCATION_ACCOUNT},
       {"removeAccountLabel", IDS_SETTINGS_ACCOUNT_MANAGER_REMOVE_ACCOUNT_LABEL},
-      {"addAccountLabel", IDS_SETTINGS_ACCOUNT_MANAGER_ADD_ACCOUNT_LABEL},
       {"addSchoolAccountLabel",
        IDS_SETTINGS_ACCOUNT_MANAGER_ADD_SCHOOL_ACCOUNT_LABEL},
       {"accountManagerSecondaryAccountsDisabledText",
@@ -352,6 +384,34 @@ void AddAccountManagerPageStrings(content::WebUIDataSource* html_source) {
 
   html_source->AddString("accountManagerLearnMoreUrl",
                          chrome::kAccountManagerLearnMoreURL);
+  html_source->AddLocalizedString(
+      "accountManagerManagementDescription",
+      profile->IsChild() ? IDS_SETTINGS_ACCOUNT_MANAGER_MANAGEMENT_STATUS_CHILD
+                         : IDS_SETTINGS_ACCOUNT_MANAGER_MANAGEMENT_STATUS);
+  html_source->AddString("accountManagerChromeUIManagementURL",
+                         base::UTF8ToUTF16(chrome::kChromeUIManagementURL));
+
+  if (chromeos::features::IsAccountManagementFlowsV2Enabled()) {
+    static constexpr webui::LocalizedString kLocalizedStringsV2[] = {
+        {"addAccountLabel", IDS_SETTINGS_ACCOUNT_MANAGER_ADD_ACCOUNT_LABEL_V2},
+        {"accountListHeader", IDS_SETTINGS_ACCOUNT_MANAGER_LIST_HEADER_V2},
+        {"accountListHeaderChild",
+         IDS_SETTINGS_ACCOUNT_MANAGER_LIST_HEADER_CHILD},
+    };
+    AddLocalizedStringsBulk(html_source, kLocalizedStringsV2);
+
+    html_source->AddString(
+        "accountManagerDescription",
+        l10n_util::GetStringFUTF16(IDS_SETTINGS_ACCOUNT_MANAGER_DESCRIPTION_V2,
+                                   ui::GetChromeOSDeviceName()));
+  } else {
+    static constexpr webui::LocalizedString kLocalizedStringsV1[] = {
+        {"accountManagerDescription", IDS_SETTINGS_ACCOUNT_MANAGER_DESCRIPTION},
+        {"addAccountLabel", IDS_SETTINGS_ACCOUNT_MANAGER_ADD_ACCOUNT_LABEL},
+        {"accountListHeader", IDS_SETTINGS_ACCOUNT_MANAGER_LIST_HEADER},
+    };
+    AddLocalizedStringsBulk(html_source, kLocalizedStringsV1);
+  }
 }
 
 void AddLockScreenPageStrings(content::WebUIDataSource* html_source,
@@ -666,7 +726,10 @@ PeopleSection::PeopleSection(
     FetchAccounts();
   }
 
-  if (kerberos_credentials_manager_) {
+  // No Kerberos search tags are registered here if Kerberos settings are in a
+  // separate section.
+  if (kerberos_credentials_manager_ &&
+      !chromeos::features::IsKerberosSettingsSectionEnabled()) {
     // Kerberos search tags are added/removed dynamically.
     kerberos_credentials_manager_->AddObserver(this);
     OnKerberosEnabledStateChanged();
@@ -691,7 +754,8 @@ PeopleSection::PeopleSection(
 
   // Fingerprint search tags are added if necessary. Remove fingerprint search
   // tags update dynamically during a user session.
-  if (AreFingerprintSettingsAllowed()) {
+  if (AreFingerprintSettingsAllowed() &&
+      !chromeos::features::IsAccountManagementFlowsV2Enabled()) {
     updater.AddSearchTags(GetFingerprintSearchConcepts());
 
     fingerprint_pref_change_registrar_.Init(pref_service_);
@@ -704,8 +768,10 @@ PeopleSection::PeopleSection(
 }
 
 PeopleSection::~PeopleSection() {
-  if (kerberos_credentials_manager_)
+  if (kerberos_credentials_manager_ &&
+      !chromeos::features::IsKerberosSettingsSectionEnabled()) {
     kerberos_credentials_manager_->RemoveObserver(this);
+  }
 
   if (chromeos::features::IsSplitSettingsSyncEnabled() && sync_service_)
     sync_service_->RemoveObserver(this);
@@ -731,9 +797,39 @@ void PeopleSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
   };
   AddLocalizedStringsBulk(html_source, kLocalizedStrings);
 
+  user_manager::User* user = ProfileHelper::Get()->GetUserByProfile(profile());
+  DCHECK(user);
+
+  if (chromeos::features::IsAccountManagementFlowsV2Enabled()) {
+    html_source->AddLocalizedString("osPeoplePageTitle",
+                                    IDS_OS_SETTINGS_PEOPLE_V2);
+
+    // This string is not used if the flag is disabled.
+    html_source->AddString("osProfileName", l10n_util::GetStringFUTF16(
+                                                IDS_OS_SETTINGS_PROFILE_NAME,
+                                                user->GetGivenName()));
+    html_source->AddString(
+        "accountManagerPageTitle",
+        l10n_util::GetStringFUTF16(IDS_SETTINGS_ACCOUNT_MANAGER_PAGE_TITLE_V2,
+                                   user->GetGivenName()));
+  } else {
+    static constexpr webui::LocalizedString kAccountManagerStrings[] = {
+        {"osPeoplePageTitle", IDS_OS_SETTINGS_PEOPLE},
+        {"accountManagerPageTitle", IDS_SETTINGS_ACCOUNT_MANAGER_PAGE_TITLE},
+    };
+    AddLocalizedStringsBulk(html_source, kAccountManagerStrings);
+  }
+
   // Toggles the Chrome OS Account Manager submenu in the People section.
   html_source->AddBoolean("isAccountManagerEnabled",
                           account_manager_ != nullptr);
+  html_source->AddBoolean(
+      "isAccountManagementFlowsV2Enabled",
+      chromeos::features::IsAccountManagementFlowsV2Enabled());
+  html_source->AddBoolean(
+      "isDeviceAccountManaged",
+      user->IsActiveDirectoryUser() ||
+          profile()->GetProfilePolicyConnector()->IsManaged());
 
   if (chromeos::features::ShouldUseBrowserSyncConsent()) {
     static constexpr webui::LocalizedString kTurnOffStrings[] = {
@@ -770,7 +866,7 @@ void PeopleSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
       "driveSuggestAvailable",
       base::FeatureList::IsEnabled(omnibox::kDocumentProvider));
 
-  AddAccountManagerPageStrings(html_source);
+  AddAccountManagerPageStrings(html_source, profile());
   KerberosAccountsHandler::AddLoadTimeKerberosStrings(
       html_source, kerberos_credentials_manager_);
   AddLockScreenPageStrings(html_source, profile()->GetPrefs());
@@ -796,11 +892,6 @@ void PeopleSection::AddHandlers(content::WebUI* web_ui) {
   web_ui->AddMessageHandler(
       std::make_unique<::settings::ProfileInfoHandler>(profile()));
 
-  auto plural_string_handler = std::make_unique<PluralStringHandler>();
-  plural_string_handler->AddLocalizedString("profileLabel",
-                                            IDS_OS_SETTINGS_PROFILE_LABEL);
-  web_ui->AddMessageHandler(std::move(plural_string_handler));
-
   if (account_manager_) {
     web_ui->AddMessageHandler(
         std::make_unique<chromeos::settings::AccountManagerUIHandler>(
@@ -823,12 +914,16 @@ void PeopleSection::AddHandlers(content::WebUI* web_ui) {
             profile()));
   }
 
-  std::unique_ptr<chromeos::settings::KerberosAccountsHandler>
-      kerberos_accounts_handler =
-          KerberosAccountsHandler::CreateIfKerberosEnabled(profile());
-  if (kerberos_accounts_handler) {
-    // Note that the UI is enabled only if Kerberos is enabled.
-    web_ui->AddMessageHandler(std::move(kerberos_accounts_handler));
+  // No Kerberos handler is created/added here if Kerberos settings are in a
+  // separate section.
+  if (!chromeos::features::IsKerberosSettingsSectionEnabled()) {
+    std::unique_ptr<chromeos::settings::KerberosAccountsHandler>
+        kerberos_accounts_handler =
+            KerberosAccountsHandler::CreateIfKerberosEnabled(profile());
+    if (kerberos_accounts_handler) {
+      // Note that the UI is enabled only if Kerberos is enabled.
+      web_ui->AddMessageHandler(std::move(kerberos_accounts_handler));
+    }
   }
 }
 

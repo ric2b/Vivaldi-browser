@@ -6,7 +6,6 @@
 #define CHROMEOS_CONSTANTS_CHROMEOS_SWITCHES_H_
 
 #include "base/component_export.h"
-#include "chromeos/dbus/constants/dbus_switches.h"
 
 namespace chromeos {
 namespace switches {
@@ -41,6 +40,8 @@ COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kArcDisableAppSync[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kArcDisableGmsCoreCache[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kArcDisableLocaleSync[];
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
+extern const char kArcDisableMediaStoreMaintenance[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kArcDisableSystemDefaultApps[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
@@ -92,6 +93,8 @@ extern const char kDisableMachineCertRequest[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kDisableMultiDisplayLayout[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kDisableNewZIPUnpacker[];
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
+extern const char kDisableOOBEChromeVoxHintTimerForTesting[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kDisablePerUserTimezone[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kDisableRollbackOption[];
@@ -169,6 +172,8 @@ COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kHomedir[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kIgnoreArcVmDevConf[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kIgnoreUserProfileMappingForTests[];
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
+extern const char kInstallLogFastUploadForTests[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kKernelnextRestrictVMs[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kLacrosChromeAdditionalArgs[];
@@ -208,6 +213,7 @@ COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kShelfHoverPreviews[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kShelfHotseat[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kShowLoginDevOverlay[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kShowOobeDevOverlay[];
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS) extern const char kEnableOobeTestAPI[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const char kOobeScreenshotDirectory[];
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
@@ -279,6 +285,10 @@ COMPONENT_EXPORT(CHROMEOS_CONSTANTS) bool ShouldOobeUseTabletModeFirstRun();
 // Auto Update Expiration is reached. This should only be used for testing.
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 bool IsAueReachedForUpdateRequiredForTest();
+
+// Returns true if the OOBE ChromeVox hint timer is disabled for testing.
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
+bool IsOOBEChromeVoxHintTimerDisabledForTesting();
 
 }  // namespace switches
 }  // namespace chromeos

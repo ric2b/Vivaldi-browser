@@ -22,11 +22,19 @@ class PrefChangeRegistrar;
 class PrefRegistrySimple;
 class PrefService;
 
+namespace aura {
+class Window;
+}  // namespace aura
+
 namespace ax {
 namespace mojom {
 enum class Gesture;
 }  // namespace mojom
 }  // namespace ax
+
+namespace chromeos {
+enum class Sound;
+}
 
 namespace gfx {
 class Point;
@@ -285,7 +293,7 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
   // Plays an earcon. Earcons are brief and distinctive sounds that indicate
   // that their mapped event has occurred. The |sound_key| enums can be found in
   // chromeos/audio/chromeos_sounds.h.
-  void PlayEarcon(int sound_key);
+  void PlayEarcon(chromeos::Sound sound_key);
 
   // Initiates play of shutdown sound. Returns the TimeDelta duration.
   base::TimeDelta PlayShutdownSound();
@@ -339,6 +347,14 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
   // (as used by Switch Access).
   void StartPointScanning();
 
+  // Sets a window to take a11y focus. This is for windows that need to work
+  // with accessibility clients that consume accessibility APIs, but cannot take
+  // real focus themselves. This is meant for temporary UIs, such as capture
+  // mode and should be set back to null when exiting those UIs, so a11y can
+  // focus windows with real focus. Destroying |a11y_override_window| will also
+  // set the a11y override window back to null.
+  void SetA11yOverrideWindow(aura::Window* a11y_override_window);
+
   // AccessibilityController:
   void SetClient(AccessibilityControllerClient* client) override;
   void SetDarkenScreen(bool darken) override;
@@ -351,14 +367,19 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
   void SetSelectToSpeakState(SelectToSpeakState state) override;
   void SetSelectToSpeakEventHandlerDelegate(
       SelectToSpeakEventHandlerDelegate* delegate) override;
-  void ShowSelectToSpeakPanel(const gfx::Rect& anchor, bool is_paused) override;
+  void ShowSelectToSpeakPanel(const gfx::Rect& anchor,
+                              bool is_paused,
+                              double speech_rate) override;
   void HideSelectToSpeakPanel() override;
+  void OnSelectToSpeakPanelAction(SelectToSpeakPanelAction action,
+                                  double value) override;
   void HideSwitchAccessBackButton() override;
   void HideSwitchAccessMenu() override;
   void ShowSwitchAccessBackButton(const gfx::Rect& anchor) override;
   void ShowSwitchAccessMenu(const gfx::Rect& anchor,
                             std::vector<std::string> actions_to_show) override;
-  void ActivatePointScan() override;
+  void StartPointScan() override;
+  void StopPointScan() override;
   void SetDictationActive(bool is_active) override;
   void ToggleDictationFromSource(DictationToggleSource source) override;
   void HandleAutoclickScrollableBoundsFound(
@@ -370,6 +391,8 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
   bool IsAccessibilityFeatureVisibleInTrayMenu(
       const std::string& path) override;
   void DisablePolicyRecommendationRestorerForTesting() override;
+  void SuspendSwitchAccessKeyHandling(bool suspend) override;
+  void EnableChromeVoxVolumeSlideGesture() override;
 
   // SessionObserver:
   void OnSigninScreenPrefServiceInitialized(PrefService* prefs) override;
@@ -384,6 +407,10 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
   SelectToSpeakMenuBubbleController*
   GetSelectToSpeakMenuBubbleControllerForTest() {
     return select_to_speak_bubble_controller_.get();
+  }
+
+  bool enable_chromevox_volume_slide_gesture() {
+    return enable_chromevox_volume_slide_gesture_;
   }
 
  private:
@@ -476,11 +503,15 @@ class ASH_EXPORT AccessibilityControllerImpl : public AccessibilityController,
   // Used to force the backlights off to darken the screen.
   std::unique_ptr<ScopedBacklightsForcedOff> scoped_backlights_forced_off_;
 
+  // True if ChromeVox should enable its volume slide gesture.
+  bool enable_chromevox_volume_slide_gesture_ = true;
+
   base::ObserverList<AccessibilityObserver> observers_;
 
   // The pref service of the currently active user or the signin profile before
   // user logs in. Can be null in ash_unittests.
   PrefService* active_user_prefs_ = nullptr;
+
   // This has to be the first one to be destroyed so we don't get updates about
   // any prefs during destruction.
   std::unique_ptr<PrefChangeRegistrar> pref_change_registrar_;

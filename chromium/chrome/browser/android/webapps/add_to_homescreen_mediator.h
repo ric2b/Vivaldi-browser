@@ -13,14 +13,18 @@
 #include "base/strings/string16.h"
 #include "chrome/browser/android/webapps/add_to_homescreen_data_fetcher.h"
 #include "chrome/browser/android/webapps/add_to_homescreen_installer.h"
-#include "chrome/browser/android/webapps/add_to_homescreen_params.h"
 #include "chrome/browser/banners/app_banner_manager.h"
+#include "components/webapps/browser/android/add_to_homescreen_params.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "url/gurl.h"
 
 namespace content {
 class WebContents;
 }
+
+namespace webapps {
+
+struct ShortcutInfo;
 class AddToHomescreenInstaller;
 
 // AddToHomescreenMediator is the C++ counterpart of
@@ -36,7 +40,7 @@ class AddToHomescreenMediator : public AddToHomescreenDataFetcher::Observer {
       const base::android::JavaParamRef<jobject>& java_ref);
 
   void StartForAppBanner(
-      base::WeakPtr<banners::AppBannerManager> weak_manager,
+      base::WeakPtr<AppBannerManager> weak_manager,
       std::unique_ptr<AddToHomescreenParams> params,
       base::RepeatingCallback<void(AddToHomescreenInstaller::Event,
                                    const AddToHomescreenParams&)>
@@ -90,7 +94,7 @@ class AddToHomescreenMediator : public AddToHomescreenDataFetcher::Observer {
   // Points to the Java reference.
   base::android::ScopedJavaGlobalRef<jobject> java_ref_;
 
-  base::WeakPtr<banners::AppBannerManager> weak_app_banner_manager_;
+  base::WeakPtr<AppBannerManager> weak_app_banner_manager_;
 
   // Fetches data required to add a shortcut.
   std::unique_ptr<AddToHomescreenDataFetcher> data_fetcher_;
@@ -106,5 +110,7 @@ class AddToHomescreenMediator : public AddToHomescreenDataFetcher::Observer {
   AddToHomescreenMediator(const AddToHomescreenMediator&) = delete;
   AddToHomescreenMediator& operator=(const AddToHomescreenMediator&) = delete;
 };
+
+}  // namespace webapps
 
 #endif  // CHROME_BROWSER_ANDROID_WEBAPPS_ADD_TO_HOMESCREEN_MEDIATOR_H_

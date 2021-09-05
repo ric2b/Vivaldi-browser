@@ -18,29 +18,22 @@
 #include "base/optional.h"
 #include "base/sequenced_task_runner.h"
 #include "base/synchronization/lock.h"
+#include "base/task/cancelable_task_tracker.h"
 #include "base/time/clock.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/navigation_predictor/navigation_predictor_keyed_service.h"
-#include "components/optimization_guide/hints_component_info.h"
-#include "components/optimization_guide/hints_fetcher.h"
-#include "components/optimization_guide/optimization_guide_decider.h"
-#include "components/optimization_guide/optimization_guide_service_observer.h"
+#include "components/optimization_guide/content/optimization_guide_decider.h"
+#include "components/optimization_guide/core/hints_component_info.h"
+#include "components/optimization_guide/core/hints_fetcher.h"
+#include "components/optimization_guide/core/optimization_hints_component_observer.h"
 #include "components/optimization_guide/proto/hints.pb.h"
 #include "components/optimization_guide/proto/models.pb.h"
 #include "net/nqe/effective_connection_type.h"
 #include "services/network/public/cpp/network_quality_tracker.h"
 
-namespace base {
-class FilePath;
-}  // namespace base
-
 namespace content {
 class NavigationHandle;
 }  // namespace content
-
-namespace leveldb_proto {
-class ProtoDatabaseProvider;
-}  // namespace leveldb_proto
 
 namespace network {
 class SharedURLLoaderFactory;
@@ -51,7 +44,7 @@ class HintCache;
 class HintsFetcherFactory;
 class OptimizationFilter;
 class OptimizationMetadata;
-class OptimizationGuideService;
+class OptimizationGuideStore;
 enum class OptimizationTargetDecision;
 enum class OptimizationTypeDecision;
 class StoreUpdateData;
@@ -63,18 +56,14 @@ class PrefService;
 class Profile;
 
 class OptimizationGuideHintsManager
-    : public optimization_guide::OptimizationGuideServiceObserver,
+    : public optimization_guide::OptimizationHintsComponentObserver,
       public network::NetworkQualityTracker::EffectiveConnectionTypeObserver,
       public NavigationPredictorKeyedService::Observer {
  public:
   OptimizationGuideHintsManager(
-      const std::vector<optimization_guide::proto::OptimizationType>&
-          optimization_types_at_initialization,
-      optimization_guide::OptimizationGuideService* optimization_guide_service,
       Profile* profile,
-      const base::FilePath& profile_path,
       PrefService* pref_service,
-      leveldb_proto::ProtoDatabaseProvider* database_provider,
+      optimization_guide::OptimizationGuideStore* hint_store,
       optimization_guide::TopHostProvider* top_host_provider,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory);
 
@@ -83,7 +72,12 @@ class OptimizationGuideHintsManager
   // Unhooks the observer to |optimization_guide_service_|.
   void Shutdown();
 
-  // optimization_guide::OptimizationGuideServiceObserver implementation:
+  // Returns the OptimizationGuideDecision from |optimization_type_decision|.
+  static optimization_guide::OptimizationGuideDecision
+  GetOptimizationGuideDecisionFromOptimizationTypeDecision(
+      optimization_guide::OptimizationTypeDecision optimization_type_decision);
+
+  // optimization_guide::OptimizationHintsComponentObserver implementation:
   void OnHintsComponentAvailable(
       const optimization_guide::HintsComponentInfo& info) override;
 
@@ -164,6 +158,9 @@ class OptimizationGuideHintsManager
   // Notifies |this| that a navigation with redirect chain
   // |navigation_redirect_chain| has finished.
   void OnNavigationFinish(const std::vector<GURL>& navigation_redirect_chain);
+
+  // Returns the persistent store for |this|.
+  optimization_guide::OptimizationGuideStore* hint_store();
 
   // Add hints to the cache with the provided metadata. For testing only.
   void AddHintForTesting(
@@ -378,10 +375,6 @@ class OptimizationGuideHintsManager
       const GURL& navigation_url,
       optimization_guide::proto::OptimizationType optimization_type);
 
-  // The OptimizationGuideService that this guide is listening to. Not owned.
-  optimization_guide::OptimizationGuideService* const
-      optimization_guide_service_;
-
   // The information of the latest component delivered by
   // |optimization_guide_service_|.
   base::Optional<optimization_guide::HintsComponentInfo> hints_component_info_;
@@ -426,6 +419,9 @@ class OptimizationGuideHintsManager
 
   // Background thread where hints processing should be performed.
   scoped_refptr<base::SequencedTaskRunner> background_task_runner_;
+
+  // Task tracker used to track hints component processing tasks.
+  base::CancelableTaskTracker hints_component_processing_task_tracker_;
 
   // A reference to the profile. Not owned.
   Profile* profile_ = nullptr;

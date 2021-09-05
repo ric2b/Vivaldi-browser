@@ -6,13 +6,17 @@
 #include <string>
 #include <utility>
 
+#include "base/containers/fixed_flat_map.h"
 #include "base/i18n/case_conversion.h"
+#include "base/json/json_string_value_serializer.h"
 #include "base/notreached.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
+#include "base/strings/utf_string_conversion_utils.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/values.h"
 #include "components/request_filter/adblock_filter/parse_utils.h"
 
 namespace adblock_filter {
@@ -37,26 +41,28 @@ enum class OptionType {
   kRedirect,
 };
 
-const std::map<base::StringPiece, OptionType> kOptionMap{
-    {"third-party", OptionType::kThirdParty},
-    {"match-case", OptionType::kMatchCase},
-    {"domain", OptionType::kDomain},
-    {"host", OptionType::kHost},
-    {"csp", OptionType::kCSP},
-    {"rewrite", OptionType::kRewrite},
-    {"redirect", OptionType::kRedirect}};
+constexpr auto kOptionMap =
+    base::MakeFixedFlatMap<base::StringPiece, OptionType>(
+        {{"third-party", OptionType::kThirdParty},
+         {"match-case", OptionType::kMatchCase},
+         {"domain", OptionType::kDomain},
+         {"host", OptionType::kHost},
+         {"csp", OptionType::kCSP},
+         {"rewrite", OptionType::kRewrite},
+         {"redirect", OptionType::kRedirect}});
 
 struct ActivationTypeDetails {
   int type;
   bool allow_only;
 };
 
-const std::map<base::StringPiece, ActivationTypeDetails> kActivationStringMap{
-    {"popup", {FilterRule::kPopup, false}},
-    {"document", {FilterRule::kDocument, false}},
-    {"elemhide", {FilterRule::kElementHide, true}},
-    {"generichide", {FilterRule::kGenericHide, true}},
-    {"genericblock", {FilterRule::kGenericBlock, true}}};
+constexpr auto kActivationStringMap =
+    base::MakeFixedFlatMap<base::StringPiece, ActivationTypeDetails>(
+        {{"popup", {RequestFilterRule::kPopup, false}},
+         {"document", {RequestFilterRule::kDocument, false}},
+         {"elemhide", {RequestFilterRule::kElementHide, true}},
+         {"generichide", {RequestFilterRule::kGenericHide, true}},
+         {"genericblock", {RequestFilterRule::kGenericBlock, true}}});
 
 bool GetMetadata(base::StringPiece comment,
                  const std::string& tag_name,
@@ -70,8 +76,8 @@ bool GetMetadata(base::StringPiece comment,
 }
 }  // namespace
 
-RuleParser::RuleParser(ParseResult* parse_result)
-    : parse_result_(parse_result) {}
+RuleParser::RuleParser(ParseResult* parse_result, bool allow_abp_snippets)
+    : parse_result_(parse_result), allow_abp_snippets_(allow_abp_snippets) {}
 RuleParser::~RuleParser() = default;
 
 RuleParser::Result RuleParser::Parse(base::StringPiece rule_string) {
@@ -104,84 +110,223 @@ RuleParser::Result RuleParser::Parse(base::StringPiece rule_string) {
     return kComment;
   }
 
+  size_t selector_separator_2 = base::StringPiece::npos;
   size_t maybe_selector_separator = rule_string.find('#');
   if (maybe_selector_separator != base::StringPiece::npos) {
-    CosmeticRule rule;
-    Result result =
-        MaybeParseCosmeticRule(rule_string, maybe_selector_separator, &rule);
+    selector_separator_2 = rule_string.find('#', maybe_selector_separator + 1);
+  }
+
+  if (selector_separator_2 != base::StringPiece::npos) {
+    ContentInjectionRuleCore content_injection_rule_core;
+    base::StringPiece body = rule_string.substr(selector_separator_2 + 1);
+    Result result = IsContentInjectionRule(
+        rule_string, maybe_selector_separator, &content_injection_rule_core);
     switch (result) {
-      case Result::kCosmeticRule:
-        parse_result_->cosmetic_rules.push_back(std::move(rule));
+      case Result::kCosmeticRule: {
+        if (!ParseCosmeticRule(body, std::move(content_injection_rule_core)))
+          return Result::kError;
         return result;
-      case Result::kFilterRule:
+      }
+      case Result::kScriptletInjectionRule: {
+        if (!ParseScriptletInjectionRule(
+                body, std::move(content_injection_rule_core)))
+          return Result::kError;
+        return result;
+      }
+      case Result::kRequestFilterRule:
         break;
       default:
         return result;
     }
   }
 
-  FilterRule rule;
-  Result result = ParseFilterRule(rule_string, &rule);
-  if (result != kFilterRule)
+  RequestFilterRule rule;
+  Result result = ParseRequestFilterRule(rule_string, &rule);
+  if (result != kRequestFilterRule)
     return result;
 
-  parse_result_->filter_rules.push_back(std::move(rule));
+  parse_result_->request_filter_rules.push_back(std::move(rule));
   return result;
 }
 
-// Element hiding rules: hostname##element
-// Element hiding allow rules: hostname#@#element
-// Some blockers use special rules using one of those formats
-// - hostname#?#element
-// - hostname#$#element
-// - hostname#%#element
-// or a combination of @ and those symbols.
-// Those are meant to handle custom selectors or additional functionality from
-// those blockers. We don't support any of those custom selectors or
-// functionalities for the time being.
+// clang-format off
+/*
+abp = AdBlock Plus
+adg = AdGuard
+uBO = uBlock Origin
 
-// We return kFilterRule to indicate that this is not after all a cosmetic rule.
-RuleParser::Result RuleParser::MaybeParseCosmeticRule(
+ spearator | hostnames optional | meaning
+-----------------------------------------
+ ##        | depends on body    | regular cosmetic rule or any uBO extended rule
+ #@#       | depends on body    | regular cosmetic exception rule or any uBO extended allow rule
+ #?#       | abp: no, adg : yes | abp or adg cosmetic rule with extended CSS selectors
+ #@?#      | yes                | adg cosmetic exception rule wth extended CSS selectors
+ #$#       | no                 | abp snippet rule
+ #$#       | yes                | adg CSS injection rule
+ #@$#      | yes                | adg CSS injection exception rule
+ #$?#      | yes                | adg CSS injection rule with extended selectors
+ #@$?#     | yes                | adg CSS injection exception rule with extended selectors
+ #%#       | yes                | adg javascript injection rule
+ #@%#      | yes                | adg javascript injection exception rule
+*/
+// clang-format on
+
+RuleParser::Result RuleParser::IsContentInjectionRule(
     base::StringPiece rule_string,
     size_t separator,
-    CosmeticRule* rule) {
-  size_t separator2 = rule_string.find('#', separator + 1);
+    ContentInjectionRuleCore* core) {
+  // This assumes we have another '#' separator to look forward to.Under that
+  // assumption, the following parsing code is safe until it encounters the
+  // second separator.
+  DCHECK(rule_string.find('#', separator + 1) != base::StringPiece::npos);
 
-  if (separator2 == base::StringPiece::npos || separator2 - separator > 4)
-    return Result::kFilterRule;
+  size_t position = separator + 1;
+  if (rule_string[position] == '@') {
+    core->is_allow_rule = true;
+    position++;
+  }
 
-  for (size_t position = separator + 1; position < separator2; position++) {
-    switch (rule_string[position]) {
-      case '@':
-        if (position == separator + 1) {
-          rule->is_allow_rule = true;
-        } else {
-          return Result::kError;
-        }
-        break;
-      case '$':
-      case '?':
-        return Result::kUnsupported;
-      default:
-        return Result::kFilterRule;
+  Result result = Result::kCosmeticRule;
+  if (rule_string[position] == '%' || rule_string[position] == '?') {
+    // "#%...", "#@%...", "#?..." or "#@?..."
+    result = Result::kUnsupported;
+    position++;
+  } else if (rule_string[position] == '$') {
+    // "#$..." or "#@$..."
+    if (!allow_abp_snippets_) {
+      // Assume that if abp snippet rules are not allowed, we are dealing with
+      // an adg CSS injection rule and vice-versa
+      result = Result::kUnsupported;
+    } else if (core->is_allow_rule) {
+      // Snippet rules exceptions are not a thing.
+      result = Result::kError;
+    } else {
+      result = Result::kScriptletInjectionRule;
+    }
+    position++;
+
+    if (rule_string[position] == '?') {
+      // "#$?..." or "#@$?..."
+      if (allow_abp_snippets_) {
+        // adg rules in abp-specific rule file is considered an error.
+        result = Result::kError;
+      }
+      position++;
     }
   }
 
-  rule->selector = std::string(rule_string.substr(separator2 + 1));
-  // Rules should consist of a list of selectors. No actual CSS rules allowed.
-  if (rule->selector.empty() ||
-      rule->selector.find_first_of('{') != base::StringPiece::npos ||
-      rule->selector.find_first_of('}') != base::StringPiece::npos)
-    return Result::kError;
+  if (rule_string[position] != '#') {
+    // If we haven't reached the second separator at this point, we have an
+    // unexpected character sequence. Better try parsing this as a request
+    // filter rule.
+    return Result::kRequestFilterRule;
+  }
 
   if (!ParseDomains(rule_string.substr(0, separator), ",",
-                    &rule->included_domains, &rule->excluded_domains))
+                    &core->included_domains, &core->excluded_domains))
     return Result::kError;
-  return Result::kCosmeticRule;
+  if (result == Result::kScriptletInjectionRule &&
+      core->included_domains.empty())
+    return Result::kError;
+
+  return result;
 }
 
-RuleParser::Result RuleParser::ParseFilterRule(base::StringPiece rule_string,
-                                               FilterRule* rule) {
+bool RuleParser::ParseCosmeticRule(base::StringPiece body,
+                                   ContentInjectionRuleCore rule_core) {
+  // Rules should consist of a list of selectors. No actual CSS rules allowed.
+  if (body.empty() || body.find('{') != base::StringPiece::npos ||
+      body.find('}') != base::StringPiece::npos)
+    return false;
+
+  CosmeticRule rule;
+  rule.selector = std::string(body);
+  rule.core = std::move(rule_core);
+  parse_result_->cosmetic_rules.push_back(std::move(rule));
+  return true;
+}
+
+bool RuleParser::ParseScriptletInjectionRule(
+    base::StringPiece body,
+    ContentInjectionRuleCore rule_core) {
+  for (base::StringPiece injection : base::SplitStringPiece(
+           body, ";", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY)) {
+    ScriptletInjectionRule rule;
+    rule.core = rule_core.Clone();
+    // Use this name to signal an abp snippet filter.
+    rule.scriptlet_name = kAbpSnippetsScriptletName;
+
+    bool escaped = false;
+    bool in_quotes = false;
+    bool after_quotes = false;
+    bool parsing_code_point = false;
+    std::string code_point_str;
+    base::Value arguments(base::Value::Type::LIST);
+    std::string argument;
+
+    for (const char c : injection) {
+      if (parsing_code_point) {
+        code_point_str += c;
+        if (code_point_str.length() == 4) {
+          parsing_code_point = false;
+          uint32_t code_point;
+          if (!base::HexStringToUInt(code_point_str, &code_point))
+            continue;
+          base::WriteUnicodeCharacter(code_point, &argument);
+        }
+      } else if (escaped) {
+        switch (c) {
+          case 'n':
+            argument += '\n';
+            break;
+          case 'r':
+            argument += '\r';
+            break;
+          case 't':
+            argument += '\t';
+            break;
+          case 'u':
+            code_point_str.clear();
+            parsing_code_point = true;
+            break;
+          default:
+            argument += c;
+        }
+      } else if (c == '\\') {
+        escaped = true;
+      } else if (c == '\'') {
+        in_quotes = !in_quotes;
+        after_quotes = !in_quotes;
+      } else if (in_quotes || base::IsAsciiWhitespace(c)) {
+        argument += c;
+      } else if (!argument.empty() || after_quotes) {
+        arguments.Append(std::move(argument));
+      }
+
+      if (c != '\'')
+        after_quotes = false;
+    }
+
+    if (!argument.empty() || after_quotes) {
+      arguments.Append(std::move(argument));
+    }
+
+    // Can happen if we have an argument string containing only a '\\' or a '\''
+    if (arguments.GetList().size() == 0)
+      continue;
+
+    std::string serialized_arguments;
+    JSONStringValueSerializer(&serialized_arguments).Serialize(arguments);
+    rule.arguments.push_back(std::move(serialized_arguments));
+    parse_result_->scriptlet_injection_rules.push_back(std::move(rule));
+  }
+
+  return true;
+}
+
+RuleParser::Result RuleParser::ParseRequestFilterRule(
+    base::StringPiece rule_string,
+    RequestFilterRule* rule) {
   // TODO(julien): Add optional support for plain hostnames
 
   if (base::StartsWith(rule_string, "@@")) {
@@ -197,6 +342,11 @@ RuleParser::Result RuleParser::ParseFilterRule(base::StringPiece rule_string,
   if (rule_string[0] != '/' || rule_string.back() != '/') {
     options_start = rule_string.rfind('$');
   }
+  if (options_start != base::StringPiece::npos && options_start != 0 &&
+      rule_string[options_start - 1] == '$') {
+    // AdGuard HTML filtering rules use $$ as separator
+    return kUnsupported;
+  }
 
   base::StringPiece options_string;
   if (options_start != base::StringPiece::npos)
@@ -204,8 +354,8 @@ RuleParser::Result RuleParser::ParseFilterRule(base::StringPiece rule_string,
 
   // Even if the options string is empty, there is some common setup code
   // that we want to run.
-  Result result = ParseFilterRuleOptions(options_string, rule);
-  if (result != kFilterRule)
+  Result result = ParseRequestFilterRuleOptions(options_string, rule);
+  if (result != kRequestFilterRule)
     return result;
 
   base::StringPiece pattern = rule_string.substr(0, options_start);
@@ -214,10 +364,10 @@ RuleParser::Result RuleParser::ParseFilterRule(base::StringPiece rule_string,
       pattern.length() > 1) {
     pattern.remove_prefix(1);
     pattern.remove_suffix(1);
-    rule->pattern_type = FilterRule::kRegex;
+    rule->pattern_type = RequestFilterRule::kRegex;
     rule->pattern = std::string(pattern);
     rule->ngram_search_string = BuildNgramSearchString(pattern);
-    return kFilterRule;
+    return kRequestFilterRule;
   }
 
   bool process_hostname = false;
@@ -232,20 +382,20 @@ RuleParser::Result RuleParser::ParseFilterRule(base::StringPiece rule_string,
       return kUnsupported;
 
     process_hostname = true;
-    rule->anchor_type.set(FilterRule::kAnchorHost);
+    rule->anchor_type.set(RequestFilterRule::kAnchorHost);
   } else if (base::StartsWith(pattern, "|")) {
-    rule->anchor_type.set(FilterRule::kAnchorStart);
+    rule->anchor_type.set(RequestFilterRule::kAnchorStart);
     pattern.remove_prefix(1);
   }
 
   if (base::StartsWith(pattern, "*")) {
     // Starting with a wildcard makes anchoring at the start meaningless
     pattern.remove_prefix(1);
-    rule->anchor_type.reset(FilterRule::kAnchorHost);
-    rule->anchor_type.reset(FilterRule::kAnchorStart);
+    rule->anchor_type.reset(RequestFilterRule::kAnchorHost);
+    rule->anchor_type.reset(RequestFilterRule::kAnchorStart);
 
-    // Only try to find a hostname in hostname anchored patterns if the pattern
-    // starts with *. or without a wildcard.
+    // Only try to find a hostname in hostname anchored patterns if the
+    // pattern starts with *. or without a wildcard.
     if (!base::StartsWith(pattern, ".")) {
       process_hostname = false;
     }
@@ -258,18 +408,18 @@ RuleParser::Result RuleParser::ParseFilterRule(base::StringPiece rule_string,
 
   if (base::EndsWith(pattern, "|")) {
     pattern.remove_suffix(1);
-    rule->anchor_type.set(FilterRule::kAnchorEnd);
+    rule->anchor_type.set(RequestFilterRule::kAnchorEnd);
   }
 
   // We had a pattern of the form "|*|", which is equivalent to "*"
   if (pattern.empty()) {
-    rule->anchor_type.reset(FilterRule::kAnchorEnd);
+    rule->anchor_type.reset(RequestFilterRule::kAnchorEnd);
   }
 
   if (base::EndsWith(pattern, "*")) {
     // Ending with a wildcard makes anchoring at the end meaningless
     pattern.remove_suffix(1);
-    rule->anchor_type.reset(FilterRule::kAnchorEnd);
+    rule->anchor_type.reset(RequestFilterRule::kAnchorEnd);
     maybe_pure_host = false;
   }
 
@@ -279,7 +429,7 @@ RuleParser::Result RuleParser::ParseFilterRule(base::StringPiece rule_string,
   }
 
   if (pattern.find_first_of("*") != base::StringPiece::npos) {
-    rule->pattern_type = FilterRule::kWildcarded;
+    rule->pattern_type = RequestFilterRule::kWildcarded;
   }
 
   if (!process_hostname) {
@@ -291,7 +441,7 @@ RuleParser::Result RuleParser::ParseFilterRule(base::StringPiece rule_string,
           base::UTF16ToUTF8(base::i18n::FoldCase(base::UTF8ToUTF16(pattern)));
       rule->pattern = std::string(pattern);
     }
-    return kFilterRule;
+    return kRequestFilterRule;
   }
 
   // The pattern was (nominally) anchored, so see if we have a hostname to
@@ -331,7 +481,7 @@ RuleParser::Result RuleParser::ParseFilterRule(base::StringPiece rule_string,
       rule->host = validation_url.host();
       // TODO(julien): Match host-specific rules using a trie, so that
       // pure host rules don't require extra pattern-matching.
-      // return kFilterRule;
+      // return kRequestFilterRule;
     }
     canonicalized_pattern += validation_url.host();
     if (validation_url.has_port()) {
@@ -354,20 +504,21 @@ RuleParser::Result RuleParser::ParseFilterRule(base::StringPiece rule_string,
         base::UTF16ToUTF8(base::i18n::FoldCase(base::UTF8ToUTF16(pattern)));
   }
 
-  return kFilterRule;
+  return kRequestFilterRule;
 }
 
-RuleParser::Result RuleParser::ParseFilterRuleOptions(base::StringPiece options,
-                                                      FilterRule* rule) {
+RuleParser::Result RuleParser::ParseRequestFilterRuleOptions(
+    base::StringPiece options,
+    RequestFilterRule* rule) {
   if (!options.empty()) {
     DCHECK_EQ('$', options[0]);
     options.remove_prefix(1);
   }
 
-  std::bitset<FilterRule::kTypeCount> types_set;
-  std::bitset<FilterRule::kTypeCount> types_unset;
-  std::bitset<FilterRule::kActivationCount> activations_set;
-  std::bitset<FilterRule::kActivationCount> activations_unset;
+  std::bitset<RequestFilterRule::kTypeCount> types_set;
+  std::bitset<RequestFilterRule::kTypeCount> types_unset;
+  std::bitset<RequestFilterRule::kActivationCount> activations_set;
+  std::bitset<RequestFilterRule::kActivationCount> activations_unset;
   for (base::StringPiece option : base::SplitStringPiece(
            options, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY)) {
     bool invert = false;
@@ -379,7 +530,7 @@ RuleParser::Result RuleParser::ParseFilterRuleOptions(base::StringPiece options,
     size_t option_name_end = option.find('=');
     base::StringPiece option_name = option.substr(0, option_name_end);
 
-    auto type_option = kTypeStringMap.find(option_name);
+    auto* type_option = kTypeStringMap.find(option_name);
     if (type_option != kTypeStringMap.end()) {
       if (invert)
         types_unset.set(type_option->second);
@@ -388,7 +539,7 @@ RuleParser::Result RuleParser::ParseFilterRuleOptions(base::StringPiece options,
       continue;
     }
 
-    auto activation_option = kActivationStringMap.find(option_name);
+    auto* activation_option = kActivationStringMap.find(option_name);
     if (activation_option != kActivationStringMap.end()) {
       if (activation_option->second.allow_only && !rule->is_allow_rule)
         return kError;
@@ -399,15 +550,15 @@ RuleParser::Result RuleParser::ParseFilterRuleOptions(base::StringPiece options,
       continue;
     }
 
-    auto other_option = kOptionMap.find(option_name);
+    auto* other_option = kOptionMap.find(option_name);
     if (other_option == kOptionMap.end())
       return kUnsupported;
 
     OptionType option_type = other_option->second;
 
     if (option_type == OptionType::kThirdParty) {
-      rule->party.set(invert ? FilterRule::kFirstParty
-                             : FilterRule::kThirdParty);
+      rule->party.set(invert ? RequestFilterRule::kFirstParty
+                             : RequestFilterRule::kThirdParty);
       continue;
     }
 
@@ -515,7 +666,7 @@ RuleParser::Result RuleParser::ParseFilterRuleOptions(base::StringPiece options,
   if (rule->party.none())
     rule->party.set();
 
-  return kFilterRule;
+  return kRequestFilterRule;
 }
 
 bool RuleParser::MaybeParseMetadata(base::StringPiece comment) {

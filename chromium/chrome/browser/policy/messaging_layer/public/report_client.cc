@@ -10,34 +10,42 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/containers/queue.h"
+#include "base/feature_list.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/singleton.h"
 #include "base/path_service.h"
 #include "base/strings/strcat.h"
 #include "base/task/post_task.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/net/system_network_context_manager.h"
+#include "chrome/browser/policy/messaging_layer/encryption/verification.h"
 #include "chrome/browser/policy/messaging_layer/public/report_queue.h"
 #include "chrome/browser/policy/messaging_layer/public/report_queue_configuration.h"
+#include "chrome/browser/policy/messaging_layer/storage/storage_configuration.h"
 #include "chrome/browser/policy/messaging_layer/storage/storage_module.h"
 #include "chrome/browser/policy/messaging_layer/util/status.h"
 #include "chrome/browser/policy/messaging_layer/util/status_macros.h"
 #include "chrome/browser/policy/messaging_layer/util/statusor.h"
 #include "chrome/browser/policy/messaging_layer/util/task_runner_context.h"
+#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/common/chrome_paths.h"
 #include "components/enterprise/browser/controller/browser_dm_token_storage.h"
 #include "components/policy/core/common/cloud/cloud_policy_client_registration_helper.h"
+#include "components/policy/core/common/cloud/cloud_policy_manager.h"
 #include "components/policy/core/common/cloud/device_management_service.h"
+#include "components/policy/core/common/cloud/machine_level_user_cloud_policy_manager.h"
+#include "components/policy/core/common/cloud/user_cloud_policy_manager.h"
 #include "components/policy/proto/record.pb.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
-#ifdef OS_CHROMEOS
+#if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/login/users/chrome_user_manager.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
@@ -51,101 +59,85 @@ namespace reporting {
 
 namespace {
 
-// policy::CloudPolicyClient is needed by the UploadClient, but is built in two
-// different ways for ChromeOS and non-ChromeOS browsers.
+// policy::CloudPolicyClient is needed by the UploadClient, but is retrieved in
+// two different ways for ChromeOS and non-ChromeOS browsers.
 // NOT THREAD SAFE - these functions must be called on the main thread.
 // TODO(chromium:1078512) Wrap CloudPolicyClient in a new object so that its
-// methods, constructor, and destructor are accessed on the correct thread.
-#ifdef OS_CHROMEOS
-void BuildCloudPolicyClient(
-    base::OnceCallback<
-        void(StatusOr<std::unique_ptr<policy::CloudPolicyClient>>)> build_cb) {
-  auto* const browser_policy_connector =
-      g_browser_process->browser_policy_connector();
-  if (!browser_policy_connector) {
-    std::move(build_cb).Run(
-        Status(error::FAILED_PRECONDITION, "This is not a managed device."));
-    return;
-  }
-
-  policy::DeviceManagementService* const device_management_service =
-      browser_policy_connector->device_management_service();
-  if (!device_management_service) {
-    std::move(build_cb).Run(
-        Status(error::FAILED_PRECONDITION, "This is not a managed device."));
-    return;
-  }
-
-  if (!chromeos::DeviceSettingsService::IsInitialized()) {
-    chromeos::DeviceSettingsService::Initialize();
-  }
-  const enterprise_management::PolicyData* policy_data =
-      chromeos::DeviceSettingsService::Get()->policy_data();
-  if (!policy_data || !policy_data->has_request_token() ||
-      !policy_data->has_device_id()) {
-    std::move(build_cb).Run(
-        Status(error::UNAVAILABLE, "PolicyData is unavailable."));
-    return;
-  }
-
-  scoped_refptr<network::SharedURLLoaderFactory>
-      signin_profile_url_loader_factory =
-          g_browser_process->system_network_context_manager()
-              ->GetSharedURLLoaderFactory();
-
-  auto* user_manager_ptr = g_browser_process->platform_part()->user_manager();
-  auto* primary_user = user_manager_ptr->GetPrimaryUser();
-  auto dm_token_getter = chromeos::GetDeviceDMTokenForUserPolicyGetter(
-      primary_user->GetAccountId());
-
-  auto client = std::make_unique<policy::CloudPolicyClient>(
-      device_management_service, signin_profile_url_loader_factory,
-      dm_token_getter);
-
-  std::vector<std::string> affiliation_ids(
-      policy_data->user_affiliation_ids().begin(),
-      policy_data->user_affiliation_ids().end());
-  client->SetupRegistration(policy_data->request_token(),
-                            policy_data->device_id(), affiliation_ids);
-  if (!client->is_registered()) {
-    std::move(build_cb).Run(
-        Status(error::UNAVAILABLE, "Unable to start CloudPolicyClient."));
-    return;
-  }
-  std::move(build_cb).Run(std::move(client));
-}
+// methods and retrieval are accessed on the correct thread.
+void GetCloudPolicyClient(
+    base::OnceCallback<void(StatusOr<policy::CloudPolicyClient*>)>
+        get_client_cb) {
+#if defined(OS_CHROMEOS)
+  policy::CloudPolicyManager* cloud_policy_manager =
+      g_browser_process->platform_part()
+          ->browser_policy_connector_chromeos()
+          ->GetDeviceCloudPolicyManager();
+#elif defined(OS_ANDROID)
+  // Android doesn't have access to a device level CloudPolicyClient, so get the
+  // PrimaryUserProfile CloudPolicyClient.
+  policy::CloudPolicyManager* cloud_policy_manager =
+      ProfileManager::GetPrimaryUserProfile()->GetUserCloudPolicyManager();
 #else
-void BuildCloudPolicyClient(
-    base::OnceCallback<
-        void(StatusOr<std::unique_ptr<policy::CloudPolicyClient>>)> build_cb) {
-  policy::DeviceManagementService* const device_management_service =
+  policy::CloudPolicyManager* cloud_policy_manager =
       g_browser_process->browser_policy_connector()
-          ->device_management_service();
-
-  scoped_refptr<network::SharedURLLoaderFactory>
-      signin_profile_url_loader_factory =
-          g_browser_process->system_network_context_manager()
-              ->GetSharedURLLoaderFactory();
-
-  auto client = std::make_unique<policy::CloudPolicyClient>(
-      device_management_service, signin_profile_url_loader_factory,
-      policy::CloudPolicyClient::DeviceDMTokenCallback());
-
-  policy::DMToken browser_dm_token =
-      policy::BrowserDMTokenStorage::Get()->RetrieveDMToken();
-  std::string client_id =
-      policy::BrowserDMTokenStorage::Get()->RetrieveClientId();
-
-  client->SetupRegistration(browser_dm_token.value(), client_id,
-                            std::vector<std::string>());
-  std::move(build_cb).Run(std::move(client));
-}
+          ->machine_level_user_cloud_policy_manager();
 #endif
+  if (cloud_policy_manager == nullptr) {
+    std::move(get_client_cb)
+        .Run(
+            Status(error::FAILED_PRECONDITION, "This is not a managed device"));
+    return;
+  }
+  auto* cloud_policy_client = cloud_policy_manager->core()->client();
+  if (cloud_policy_client == nullptr) {
+    std::move(get_client_cb)
+        .Run(Status(error::FAILED_PRECONDITION,
+                    "Cloud Policy Client is not available"));
+    return;
+  }
+  std::move(get_client_cb).Run(cloud_policy_client);
+}
 
 const base::FilePath::CharType kReportingDirectory[] =
     FILE_PATH_LITERAL("reporting");
 
 }  // namespace
+
+// Uploader is passed to Storage in order to upload messages using the
+// UploadClient.
+class ReportingClient::Uploader : public Storage::UploaderInterface {
+ public:
+  using UploadCallback =
+      base::OnceCallback<Status(std::unique_ptr<std::vector<EncryptedRecord>>)>;
+
+  static StatusOr<std::unique_ptr<Uploader>> Create(
+      UploadCallback upload_callback);
+
+  ~Uploader() override;
+  Uploader(const Uploader& other) = delete;
+  Uploader& operator=(const Uploader& other) = delete;
+
+  void ProcessRecord(EncryptedRecord data,
+                     base::OnceCallback<void(bool)> processed_cb) override;
+  void ProcessGap(SequencingInformation start,
+                  uint64_t count,
+                  base::OnceCallback<void(bool)> processed_cb) override;
+
+  void Completed(bool need_encryption_key, Status final_status) override;
+
+ private:
+  explicit Uploader(UploadCallback upload_callback_);
+
+  static void RunUpload(
+      UploadCallback upload_callback,
+      std::unique_ptr<std::vector<EncryptedRecord>> encrypted_records);
+
+  UploadCallback upload_callback_;
+
+  bool completed_{false};
+  std::unique_ptr<std::vector<EncryptedRecord>> encrypted_records_;
+  scoped_refptr<base::SequencedTaskRunner> sequenced_task_runner_;
+};
 
 ReportingClient::Uploader::Uploader(UploadCallback upload_callback)
     : upload_callback_(std::move(upload_callback)),
@@ -207,7 +199,8 @@ void ReportingClient::Uploader::ProcessGap(
           std::move(processed_cb)));
 }
 
-void ReportingClient::Uploader::Completed(Status final_status) {
+void ReportingClient::Uploader::Completed(bool need_encryption_key,
+                                          Status final_status) {
   if (!final_status.ok()) {
     // No work to do - something went wrong with storage and it no longer wants
     // to upload the records. Let the records die with |this|.
@@ -219,6 +212,10 @@ void ReportingClient::Uploader::Completed(Status final_status) {
     return;
   }
   completed_ = true;
+
+  if (need_encryption_key) {
+    // Attach encryption key information.
+  }
 
   sequenced_task_runner_->PostTask(
       FROM_HERE,
@@ -243,17 +240,7 @@ void ReportingClient::Uploader::RunUpload(
 }
 
 ReportingClient::Configuration::Configuration() = default;
-ReportingClient::Configuration::~Configuration() {
-  if (cloud_policy_client) {
-    base::PostTask(
-        FROM_HERE, {content::BrowserThread::UI},
-        base::BindOnce(
-            [](std::unique_ptr<policy::CloudPolicyClient> cloud_policy_client) {
-              cloud_policy_client.reset();
-            },
-            std::move(cloud_policy_client)));
-  }
-}
+ReportingClient::Configuration::~Configuration() = default;
 
 ReportingClient::InitializationStateTracker::InitializationStateTracker()
     : sequenced_task_runner_(base::ThreadPool::CreateSequencedTaskRunner({})) {}
@@ -359,7 +346,7 @@ ReportingClient::CreateReportQueueRequest::create_cb() {
 }
 
 ReportingClient::InitializingContext::InitializingContext(
-    BuildCloudPolicyClientCallback build_client_cb,
+    GetCloudPolicyClientCallback get_client_cb,
     Storage::StartUploadCb start_upload_cb,
     UpdateConfigurationCallback update_config_cb,
     InitCompleteCallback init_complete_cb,
@@ -368,7 +355,7 @@ ReportingClient::InitializingContext::InitializingContext(
     scoped_refptr<base::SequencedTaskRunner> sequenced_task_runner)
     : TaskRunnerContext<Status>(std::move(init_complete_cb),
                                 sequenced_task_runner),
-      build_client_cb_(std::move(build_client_cb)),
+      get_client_cb_(std::move(get_client_cb)),
       start_upload_cb_(std::move(start_upload_cb)),
       update_config_cb_(std::move(update_config_cb)),
       init_state_tracker_(init_state_tracker),
@@ -407,20 +394,19 @@ void ReportingClient::InitializingContext::ConfigureCloudPolicyClient() {
   base::PostTask(
       FROM_HERE, {content::BrowserThread::UI},
       base::BindOnce(
-          [](BuildCloudPolicyClientCallback build_client_cb,
-             base::OnceCallback<void(
-                 StatusOr<std::unique_ptr<policy::CloudPolicyClient>>)>
+          [](GetCloudPolicyClientCallback get_client_cb,
+             base::OnceCallback<void(StatusOr<policy::CloudPolicyClient*>)>
                  on_client_configured) {
-            std::move(build_client_cb).Run(std::move(on_client_configured));
+            std::move(get_client_cb).Run(std::move(on_client_configured));
           },
-          std::move(build_client_cb_),
+          std::move(get_client_cb_),
           base::BindOnce(&ReportingClient::InitializingContext::
                              OnCloudPolicyClientConfigured,
                          base::Unretained(this))));
 }
 
 void ReportingClient::InitializingContext::OnCloudPolicyClientConfigured(
-    StatusOr<std::unique_ptr<policy::CloudPolicyClient>> client_result) {
+    StatusOr<policy::CloudPolicyClient*> client_result) {
   if (!client_result.ok()) {
     Complete(Status(error::FAILED_PRECONDITION,
                     base::StrCat({"Unable to build CloudPolicyClient: ",
@@ -442,7 +428,10 @@ void ReportingClient::InitializingContext::ConfigureStorageModule() {
 
   base::FilePath reporting_path = user_data_dir.Append(kReportingDirectory);
   StorageModule::Create(
-      Storage::Options().set_directory(reporting_path),
+      StorageOptions()
+          .set_directory(reporting_path)
+          .set_signature_verification_public_key(
+              SignatureVerifier::VerificationKey()),
       std::move(start_upload_cb_), base::MakeRefCounted<EncryptionModule>(),
       base::BindOnce(
           &ReportingClient::InitializingContext::OnStorageModuleConfigured,
@@ -470,6 +459,8 @@ void ReportingClient::InitializingContext::CreateUploadClient() {
   UploadClient::Create(
       std::move(client_config_->cloud_policy_client),
       base::BindRepeating(&StorageModule::ReportSuccess,
+                          client_config_->storage),
+      base::BindRepeating(&StorageModule::UpdateEncryptionKey,
                           client_config_->storage),
       base::BindOnce(&InitializingContext::OnUploadClientCreated,
                      base::Unretained(this)));
@@ -510,7 +501,7 @@ ReportingClient::ReportingClient()
     : create_request_queue_(SharedQueue<CreateReportQueueRequest>::Create()),
       init_state_tracker_(
           ReportingClient::InitializationStateTracker::Create()),
-      build_cloud_policy_client_cb_(base::BindOnce(&BuildCloudPolicyClient)) {}
+      build_cloud_policy_client_cb_(base::BindOnce(&GetCloudPolicyClient)) {}
 
 ReportingClient::~ReportingClient() = default;
 
@@ -521,12 +512,30 @@ ReportingClient* ReportingClient::GetInstance() {
 void ReportingClient::CreateReportQueue(
     std::unique_ptr<ReportQueueConfiguration> config,
     CreateReportQueueCallback create_cb) {
+  if (!IsEncryptedReportingPipelineEnabled()) {
+    Status not_enabled = Status(
+        error::FAILED_PRECONDITION,
+        "The Encrypted Reporting Pipeline is not enabled. Please enable it on "
+        "the command line using --enable-features=EncryptedReportingPipeline");
+    VLOG(1) << not_enabled;
+    std::move(create_cb).Run(not_enabled);
+    return;
+  }
   auto* instance = GetInstance();
   instance->create_request_queue_->Push(
       CreateReportQueueRequest(std::move(config), std::move(create_cb)),
       base::BindOnce(&ReportingClient::OnPushComplete,
                      base::Unretained(instance)));
 }
+
+// static
+bool ReportingClient::IsEncryptedReportingPipelineEnabled() {
+  return base::FeatureList::IsEnabled(kEncryptedReportingPipeline);
+}
+
+// static
+const base::Feature ReportingClient::kEncryptedReportingPipeline{
+    "EncryptedReportingPipeline", base::FEATURE_DISABLED_BY_DEFAULT};
 
 void ReportingClient::OnPushComplete() {
   init_state_tracker_->GetInitState(
@@ -628,21 +637,20 @@ ReportingClient::BuildUploader(Priority priority) {
   DCHECK(instance->upload_client_);
   return Uploader::Create(
       base::BindOnce(&UploadClient::EnqueueUpload,
-                     base::Unretained(instance->upload_client_.get())));
+                     base::Unretained(instance->upload_client_.get()),
+                     !instance->config_->storage->has_encryption_key()));
 }
 
 ReportingClient::TestEnvironment::TestEnvironment(
-    std::unique_ptr<policy::CloudPolicyClient> client)
+    policy::CloudPolicyClient* client)
     : saved_build_cloud_policy_client_cb_(std::move(
           ReportingClient::GetInstance()->build_cloud_policy_client_cb_)) {
-  ReportingClient::GetInstance()
-      ->build_cloud_policy_client_cb_ = base::BindOnce(
-      [](std::unique_ptr<policy::CloudPolicyClient> client,
-         base::OnceCallback<void(
-             StatusOr<std::unique_ptr<policy::CloudPolicyClient>>)> build_cb) {
-        std::move(build_cb).Run(std::move(client));
-      },
-      std::move(client));
+  ReportingClient::GetInstance()->build_cloud_policy_client_cb_ =
+      base::BindOnce(
+          [](policy::CloudPolicyClient* client,
+             base::OnceCallback<void(StatusOr<policy::CloudPolicyClient*>)>
+                 build_cb) { std::move(build_cb).Run(std::move(client)); },
+          std::move(client));
 }
 
 ReportingClient::TestEnvironment::~TestEnvironment() {

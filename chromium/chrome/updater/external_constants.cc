@@ -6,6 +6,7 @@
 #include "chrome/updater/external_constants_impl.h"
 
 #include "chrome/updater/constants.h"
+#include "chrome/updater/updater_branding.h"
 #include "url/gurl.h"
 
 namespace updater {
@@ -19,10 +20,12 @@ class DefaultExternalConstants : public ExternalConstants {
 
   // Overrides of ExternalConstants:
   std::vector<GURL> UpdateURL() const override {
-    return std::vector<GURL>{GURL(kUpdaterJSONDefaultUrl)};
+    return std::vector<GURL>{GURL(UPDATE_CHECK_URL)};
   }
 
   bool UseCUP() const override { return true; }
+
+  int InitialDelay() const override { return kInitialDelay; }
 };
 
 }  // namespace

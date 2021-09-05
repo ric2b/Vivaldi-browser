@@ -9,7 +9,7 @@
 
 #include <memory>
 
-#include "base/stl_util.h"
+#include "base/containers/contains.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -78,7 +78,7 @@ bool IsNodeOffscreen(const AXTree& tree, int32_t id) {
 
 class TestAXTreeObserver : public AXTreeObserver {
  public:
-  TestAXTreeObserver(AXTree* tree)
+  explicit TestAXTreeObserver(AXTree* tree)
       : tree_(tree), tree_data_changed_(false), root_changed_(false) {
     tree_->AddObserver(this);
   }
@@ -2056,7 +2056,7 @@ TEST(AXTreeTest, UnignoredChildIteratorIncrementDecrementPastEnd) {
   tree_update.nodes.resize(2);
 
   tree_update.nodes[0].id = 1;
-  tree_update.nodes[0].role = ax::mojom::Role::kWebArea;
+  tree_update.nodes[0].role = ax::mojom::Role::kRootWebArea;
   tree_update.nodes[0].child_ids = {2};
 
   tree_update.nodes[1].id = 2;
@@ -2131,7 +2131,7 @@ TEST(AXTreeTest, UnignoredChildIteratorIgnoredContainerSiblings) {
   tree_update.nodes.resize(7);
 
   tree_update.nodes[0].id = 1;
-  tree_update.nodes[0].role = ax::mojom::Role::kWebArea;
+  tree_update.nodes[0].role = ax::mojom::Role::kRootWebArea;
   tree_update.nodes[0].child_ids = {2, 4, 6};
 
   tree_update.nodes[1].id = 2;
@@ -4841,6 +4841,34 @@ TEST(AXTreeTest, TestIsInListMarker) {
 
   AXNode* inline_node2 = tree.GetFromId(8);
   ASSERT_EQ(false, inline_node2->IsInListMarker());
+}
+
+TEST(AXTreeTest, UpdateFromOutOfSyncTree) {
+  ui::AXNodeData empty_document;
+  empty_document.id = 1;
+  empty_document.role = ax::mojom::Role::kRootWebArea;
+  ui::AXTreeUpdate empty_document_initial_update;
+  empty_document_initial_update.root_id = empty_document.id;
+  empty_document_initial_update.nodes.push_back(empty_document);
+
+  AXTree tree;
+  EXPECT_TRUE(tree.Unserialize(empty_document_initial_update));
+
+  ui::AXNodeData root;
+  root.id = 3;
+  root.role = ax::mojom::Role::kRootWebArea;
+  root.child_ids = {1};
+
+  ui::AXNodeData div;
+  div.id = 1;
+  div.role = ax::mojom::Role::kGenericContainer;
+
+  ui::AXTreeUpdate first_update;
+  first_update.root_id = root.id;
+  first_update.node_id_to_clear = root.id;
+  first_update.nodes = {root, div};
+
+  EXPECT_TRUE(tree.Unserialize(first_update));
 }
 
 }  // namespace ui

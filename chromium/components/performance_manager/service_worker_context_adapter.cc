@@ -62,7 +62,7 @@ void ServiceWorkerContextAdapter::RunningServiceWorker::Subscribe(
 void ServiceWorkerContextAdapter::RunningServiceWorker::Unsubscribe() {
   DCHECK(scoped_observation_.IsObserving());
 
-  scoped_observation_.RemoveObservation();
+  scoped_observation_.Reset();
 }
 
 void ServiceWorkerContextAdapter::RunningServiceWorker::RenderProcessExited(
@@ -131,10 +131,10 @@ ServiceWorkerContextAdapter::FinishedExternalRequest(
   return content::ServiceWorkerExternalRequestResult::kOk;
 }
 
-void ServiceWorkerContextAdapter::CountExternalRequestsForTest(
-    const url::Origin& origin,
-    CountExternalRequestsCallback callback) {
+size_t ServiceWorkerContextAdapter::CountExternalRequestsForTest(
+    const url::Origin& origin) {
   NOTIMPLEMENTED();
+  return 0u;
 }
 
 bool ServiceWorkerContextAdapter::MaybeHasRegistrationForOrigin(
@@ -184,7 +184,7 @@ void ServiceWorkerContextAdapter::ClearAllServiceWorkersForTest(
 void ServiceWorkerContextAdapter::StartWorkerForScope(
     const GURL& scope,
     StartWorkerCallback info_callback,
-    base::OnceClosure failure_callback) {
+    StartWorkerFailureCallback failure_callback) {
   NOTIMPLEMENTED();
 }
 

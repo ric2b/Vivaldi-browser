@@ -305,8 +305,7 @@ class RequestFilterProxyingURLLoaderFactory
   std::map<int32_t, uint64_t> network_request_id_to_filtered_request_id_;
 
   // Notifies the proxy that the browser context has been shutdown.
-  std::unique_ptr<KeyedServiceShutdownNotifier::Subscription>
-      shutdown_notifier_;
+  base::CallbackListSubscription shutdown_notifier_subscription_;
 
   base::WeakPtrFactory<RequestFilterProxyingURLLoaderFactory> weak_factory_{
       this};

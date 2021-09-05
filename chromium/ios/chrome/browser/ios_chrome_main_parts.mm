@@ -13,6 +13,7 @@
 #include "base/metrics/user_metrics.h"
 #include "base/path_service.h"
 #include "base/sequenced_task_runner.h"
+#include "base/strings/sys_string_conversions.h"
 #include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "base/time/default_tick_clock.h"
@@ -20,8 +21,8 @@
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/flags_ui/pref_service_flags_storage.h"
 #include "components/heap_profiling/in_process/heap_profiler_controller.h"
+#include "components/language/core/browser/language_usage_metrics.h"
 #include "components/language/core/browser/pref_names.h"
-#include "components/language_usage_metrics/language_usage_metrics.h"
 #include "components/metrics/call_stack_profile_builder.h"
 #include "components/metrics/call_stack_profile_metrics_provider.h"
 #include "components/metrics/expired_histogram_util.h"
@@ -77,6 +78,19 @@
 #endif
 
 namespace {
+
+// Sets |level| value for NSURLFileProtectionKey key for the URL with given
+// |local_state_path|.
+void SetProtectionLevel(const base::FilePath& file_path, id level) {
+  NSString* file_path_string = base::SysUTF8ToNSString(file_path.value());
+  NSURL* file_path_url = [NSURL fileURLWithPath:file_path_string
+                                    isDirectory:NO];
+  NSError* error = nil;
+  BOOL protection_set = [file_path_url setResourceValue:level
+                                                 forKey:NSURLFileProtectionKey
+                                                  error:&error];
+  DCHECK(protection_set) << base::SysNSStringToUTF8(error.localizedDescription);
+}
 
 #if BUILDFLAG(USE_ALLOCATOR_SHIM)
 // Do not install allocator shim on iOS 13.4 due to high crash volume on this
@@ -193,6 +207,19 @@ void IOSChromeMainParts::PreCreateThreads() {
   metrics::EnableExpiryChecker(::kExpiredHistogramsHashes,
                                ::kNumExpiredHistograms);
 
+  // TODO(crbug.com/1164533): Remove code below some time after February 2021.
+  NSString* const kRemoveProtectionFromPrefFileKey =
+      @"RemoveProtectionFromPrefKey";
+  if ([NSUserDefaults.standardUserDefaults
+          boolForKey:kRemoveProtectionFromPrefFileKey]) {
+    // Restore default protection level when user is no longer in the
+    // experimental group.
+    SetProtectionLevel(local_state_path,
+                       NSFileProtectionCompleteUntilFirstUserAuthentication);
+    [NSUserDefaults.standardUserDefaults
+        removeObjectForKey:kRemoveProtectionFromPrefFileKey];
+  }
+
   application_context_->PreCreateThreads();
 }
 
@@ -240,10 +267,10 @@ void IOSChromeMainParts::PreMainMessageLoopRun() {
 #endif  // BUILDFLAG(ENABLE_RLZ)
 
   TranslateServiceIOS::Initialize();
-  language_usage_metrics::LanguageUsageMetrics::RecordAcceptLanguages(
+  language::LanguageUsageMetrics::RecordAcceptLanguages(
       last_used_browser_state->GetPrefs()->GetString(
           language::prefs::kAcceptLanguages));
-  language_usage_metrics::LanguageUsageMetrics::RecordApplicationLanguage(
+  language::LanguageUsageMetrics::RecordApplicationLanguage(
       application_context_->GetApplicationLocale());
 
   // Request new variations seed information from server.

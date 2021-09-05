@@ -15,11 +15,11 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/containers/contains.h"
 #include "base/files/file_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/optional.h"
-#include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/values.h"
@@ -411,11 +411,11 @@ bool RemoveExtensionSettingsPoliciesExtension(
 void GetMasterPreferencesExtensions(JsonParserAPI* json_parser,
                                     std::vector<ExtensionPolicyFile>* policies,
                                     base::WaitableEvent* done) {
-  std::set<base::FilePath> exe_paths;
-  ListChromeExePaths(&exe_paths);
+  std::set<base::FilePath> chrome_exe_directories;
+  ListChromeExeDirectories(&chrome_exe_directories);
 
   std::map<base::FilePath, std::string> files_read;
-  for (const base::FilePath& path : exe_paths) {
+  for (const base::FilePath& path : chrome_exe_directories) {
     const base::FilePath& master_preferences(
         path.Append(kMasterPreferencesFileName));
     if (!base::PathExists(master_preferences))

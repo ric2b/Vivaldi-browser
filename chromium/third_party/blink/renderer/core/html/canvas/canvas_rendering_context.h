@@ -46,14 +46,6 @@ class CanvasImageSource;
 class HTMLCanvasElement;
 class ImageBitmap;
 
-constexpr const char* kSRGBCanvasColorSpaceName = "srgb";
-constexpr const char* kRec2020CanvasColorSpaceName = "rec2020";
-constexpr const char* kP3CanvasColorSpaceName = "p3";
-
-constexpr const char* kRGBA8CanvasPixelFormatName = "uint8";
-constexpr const char* kBGRA8CanvasPixelFormatName = "uint8";
-constexpr const char* kF16CanvasPixelFormatName = "float16";
-
 class CORE_EXPORT CanvasRenderingContext : public ScriptWrappable,
                                            public Thread::TaskObserver {
   USING_PRE_FINALIZER(CanvasRenderingContext, Dispose);
@@ -90,16 +82,17 @@ class CORE_EXPORT CanvasRenderingContext : public ScriptWrappable,
   };
 
   void RecordUKMCanvasRenderingAPI(CanvasRenderingAPI canvasRenderingAPI);
+  void RecordUKMCanvasDrawnToRenderingAPI(
+      CanvasRenderingAPI canvasRenderingAPI);
 
   static ContextType ContextTypeFromId(const String& id);
   static ContextType ResolveContextTypeAliases(ContextType);
 
   CanvasRenderingContextHost* Host() const { return host_; }
 
-  WTF::String ColorSpaceAsString() const;
-  WTF::String PixelFormatAsString() const;
-
-  const CanvasColorParams& ColorParams() const { return color_params_; }
+  const CanvasColorParams& CanvasRenderingContextColorParams() const {
+    return color_params_;
+  }
 
   virtual scoped_refptr<StaticBitmapImage> GetImage() = 0;
   virtual ContextType GetContextType() const = 0;

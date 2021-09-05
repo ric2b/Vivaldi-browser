@@ -9,6 +9,7 @@
 
 #include "ash/public/cpp/new_window_delegate.h"
 #include "ash/public/cpp/wallpaper_controller.h"
+#include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/memory/singleton.h"
 #include "base/memory/weak_ptr.h"
@@ -135,6 +136,18 @@ ArcIntentHelperBridge::~ArcIntentHelperBridge() {
 void ArcIntentHelperBridge::OnIconInvalidated(const std::string& package_name) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   icon_loader_.InvalidateIcons(package_name);
+}
+
+void ArcIntentHelperBridge::OnIntentFiltersUpdated(
+    std::vector<IntentFilter> filters) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  intent_filters_.clear();
+
+  for (auto& filter : filters)
+    intent_filters_[filter.package_name()].push_back(std::move(filter));
+
+  for (auto& observer : observer_list_)
+    observer.OnIntentFiltersUpdated(base::nullopt);
 }
 
 void ArcIntentHelperBridge::OnOpenDownloads() {
@@ -353,6 +366,33 @@ void ArcIntentHelperBridge::HandleCameraResult(
   instance->HandleCameraResult(intent_id, action, data, std::move(callback));
 }
 
+void ArcIntentHelperBridge::SendNewCaptureBroadcast(bool is_video,
+                                                    std::string file_path) {
+  auto* arc_service_manager = arc::ArcServiceManager::Get();
+  arc::mojom::IntentHelperInstance* instance = nullptr;
+
+  if (arc_service_manager) {
+    instance = ARC_GET_INSTANCE_FOR_METHOD(
+        arc_service_manager->arc_bridge_service()->intent_helper(),
+        SendBroadcast);
+  }
+  if (!instance) {
+    LOG(ERROR) << "Failed to get instance for SendBroadcast().";
+    return;
+  }
+
+  std::string action =
+      is_video ? "org.chromium.arc.intent_helper.ACTION_SEND_NEW_VIDEO"
+               : "org.chromium.arc.intent_helper.ACTION_SEND_NEW_PICTURE";
+  base::DictionaryValue value;
+  value.SetString("file_path", file_path);
+  std::string extras;
+  base::JSONWriter::Write(value, &extras);
+
+  instance->SendBroadcast(action, "org.chromium.arc.intent_helper",
+                          /*cls=*/std::string(), extras);
+}
+
 // static
 bool ArcIntentHelperBridge::IsIntentHelperPackage(
     const std::string& package_name) {
@@ -370,18 +410,6 @@ ArcIntentHelperBridge::FilterOutIntentHelper(
     handlers_filtered.push_back(std::move(handler));
   }
   return handlers_filtered;
-}
-
-void ArcIntentHelperBridge::OnIntentFiltersUpdated(
-    std::vector<IntentFilter> filters) {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  intent_filters_.clear();
-
-  for (auto& filter : filters)
-    intent_filters_[filter.package_name()].push_back(std::move(filter));
-
-  for (auto& observer : observer_list_)
-    observer.OnIntentFiltersUpdated(base::nullopt);
 }
 
 const std::vector<IntentFilter>&

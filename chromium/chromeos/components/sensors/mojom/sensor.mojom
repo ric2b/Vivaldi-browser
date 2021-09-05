@@ -18,6 +18,9 @@ const string kScale = "scale";
 const string kSamplingFrequencyAvailable = "sampling_frequency_available";
 const string kLocation = "location";
 
+// The attribute name to get the device name in SensorDevice::GetAttributes.
+const string kDeviceName = "name";
+
 const string kLocationBase = "base";
 const string kLocationLid = "lid";
 const string kLocationCamera = "camera";
@@ -44,8 +47,11 @@ enum DeviceType {
   COUNT = 4,
   MAGN = 5,
   ANGL = 6,
-  ACPI_ALS = 7,
-  BARO = 8,
+  BARO = 7,
+  ACCEL_UNCALIBRATED = 8,
+  ANGLVEL_UNCALIBRATED = 9,
+  MAGN_UNCALIBRATED = 10,
+  MAX = 11,
 };
 
 enum ObserverErrorType {
@@ -101,6 +107,7 @@ interface SensorDevice {
   // Gets the |attr_names| attributes of this device into |values| as strings.
   // When an attribute cannot be read, its value in |values| is set to null.
   // |values| and |attr_names| always have the same size.
+  // Device name (|kDeviceName|) is also an attribute that can be requested.
   GetAttributes@1(array<string> attr_names) => (array<string?> values);
 
   // Sets the frequency in Hz of the device before starting to read samples.

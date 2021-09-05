@@ -9,7 +9,9 @@
 #include <string>
 #include <vector>
 
+#include "base/optional.h"
 #include "chrome/browser/web_applications/components/install_manager.h"
+#include "chrome/browser/web_applications/components/system_web_app_types.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/browser/web_applications/components/web_app_id.h"
 #include "chrome/browser/web_applications/components/web_application_info.h"
@@ -107,6 +109,12 @@ struct ExternalInstallOptions {
   // Whether the app should be reinstalled even if it is already installed.
   bool force_reinstall = false;
 
+  // Whether we should update the app if the browser's binary milestone number
+  // goes from less the milestone specified to greater or equal than the
+  // milestone specified. For example, if this value is 89 then we update the
+  // app on all browser upgrades from <89 to >=89. The update happens only once.
+  base::Optional<int> force_reinstall_for_milestone;
+
   // Whether we should wait for all app windows being closed before reinstalling
   // the placeholder.
   bool wait_for_windows_closed = false;
@@ -152,6 +160,9 @@ struct ExternalInstallOptions {
   // A factory callback that returns a unique_ptr<WebApplicationInfo> to be used
   // as the app's installation metadata.
   WebApplicationInfoFactory app_info_factory;
+
+  // The type of SystemWebApp, if this app is a System Web App.
+  base::Optional<SystemAppType> system_app_type = base::nullopt;
 };
 
 std::ostream& operator<<(std::ostream& out,

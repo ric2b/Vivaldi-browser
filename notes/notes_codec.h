@@ -9,6 +9,7 @@
 #include <set>
 #include <string>
 
+#include "base/guid.h"
 #include "base/hash/md5.h"
 #include "base/strings/string16.h"
 #include "notes/note_node.h"
@@ -156,7 +157,7 @@ class NotesCodec {
 
   // Contains the GUID of each of the nodes found in the file. Used to determine
   // if we have duplicates.
-  std::set<std::string> guids_;
+  std::set<base::GUID> guids_;
 
   // MD5 context used to compute MD5 hash of all notes data.
   base::MD5Context md5_context_;

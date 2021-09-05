@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/views/frame/browser_non_client_frame_view.h"
 
 #include "base/metrics/histogram_macros.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/avatar_menu.h"
@@ -17,7 +18,7 @@
 #include "chrome/browser/ui/view_ids.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
-#include "chrome/browser/ui/views/web_apps/web_app_frame_toolbar_view.h"
+#include "chrome/browser/ui/views/web_apps/frame_toolbar/web_app_frame_toolbar_view.h"
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/grit/theme_resources.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -30,6 +31,7 @@
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/scoped_canvas.h"
 #include "ui/views/background.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 #include "ui/views/window/hit_test_utils.h"
 
 #if defined(OS_WIN)
@@ -52,8 +54,9 @@ BrowserNonClientFrameView::BrowserNonClientFrameView(BrowserFrame* frame,
         GetProfileAttributesStorage().AddObserver(this);
   }
   if (browser_view_->tabstrip()) {
-    DCHECK(!tab_strip_observer_.IsObserving(browser_view_->tabstrip()));
-    tab_strip_observer_.Add(browser_view_->tabstrip());
+    DCHECK(
+        !tab_strip_observation_.IsObservingSource(browser_view_->tabstrip()));
+    tab_strip_observation_.Observe(browser_view_->tabstrip());
   }
 }
 
@@ -300,13 +303,13 @@ bool BrowserNonClientFrameView::DoesIntersectRect(const views::View* target,
   }
 
   bool should_leave_to_top_container = false;
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
   // In immersive mode, the caption buttons container is reparented to the
   // TopContainerView and hence |rect| should not be claimed here.  See
-  // BrowserNonClientFrameViewAsh::OnImmersiveRevealStarted().
+  // BrowserNonClientFrameViewChromeOS::OnImmersiveRevealStarted().
   should_leave_to_top_container =
       browser_view_->immersive_mode_controller()->IsRevealed();
-#endif  // defined(OS_CHROMEOS)
+#endif
 
   if (!browser_view_->IsTabStripVisible()) {
     // Claim |rect| if it is above the top of the topmost client area view.
@@ -398,3 +401,6 @@ const ui::ThemeProvider* BrowserNonClientFrameView::GetFrameThemeProvider()
   // into the view hierarchy.
   return frame_->GetThemeProvider();
 }
+
+BEGIN_METADATA(BrowserNonClientFrameView, views::NonClientFrameView)
+END_METADATA

@@ -104,7 +104,7 @@ public class AutofillAssistantUiController {
     @CalledByNative
     private static AutofillAssistantUiController create(ChromeActivity activity,
             boolean allowTabSwitching, long nativeUiController,
-            @Nullable AssistantOnboardingCoordinator onboardingCoordinator) {
+            @Nullable BaseOnboardingCoordinator onboardingCoordinator) {
         BottomSheetController sheetController =
                 BottomSheetControllerProvider.from(activity.getWindowAndroid());
         assert activity != null;
@@ -124,8 +124,7 @@ public class AutofillAssistantUiController {
 
     private AutofillAssistantUiController(ChromeActivity activity, BottomSheetController controller,
             TabObscuringHandler tabObscuringHandler, boolean allowTabSwitching,
-            long nativeUiController,
-            @Nullable AssistantOnboardingCoordinator onboardingCoordinator) {
+            long nativeUiController, @Nullable BaseOnboardingCoordinator onboardingCoordinator) {
         mNativeUiController = nativeUiController;
         mActivity = activity;
         mCoordinator = new AssistantCoordinator(activity, controller, tabObscuringHandler,
@@ -337,9 +336,10 @@ public class AutofillAssistantUiController {
      */
     @CalledByNative
     private AssistantChip createActionButton(int icon, String text, int actionIndex,
-            boolean disabled, boolean sticky, boolean visible) {
-        AssistantChip chip =
-                AssistantChip.createHairlineAssistantChip(icon, text, disabled, sticky, visible);
+            boolean disabled, boolean sticky, boolean visible,
+            @Nullable String contentDescription) {
+        AssistantChip chip = AssistantChip.createHairlineAssistantChip(
+                icon, text, disabled, sticky, visible, contentDescription);
         chip.setSelectedListener(() -> safeNativeOnUserActionSelected(actionIndex));
         return chip;
     }
@@ -349,9 +349,10 @@ public class AutofillAssistantUiController {
      */
     @CalledByNative
     private AssistantChip createHighlightedActionButton(int icon, String text, int actionIndex,
-            boolean disabled, boolean sticky, boolean visible) {
-        AssistantChip chip =
-                AssistantChip.createHighlightedAssistantChip(icon, text, disabled, sticky, visible);
+            boolean disabled, boolean sticky, boolean visible,
+            @Nullable String contentDescription) {
+        AssistantChip chip = AssistantChip.createHighlightedAssistantChip(
+                icon, text, disabled, sticky, visible, contentDescription);
         chip.setSelectedListener(() -> safeNativeOnUserActionSelected(actionIndex));
         return chip;
     }
@@ -363,9 +364,10 @@ public class AutofillAssistantUiController {
      */
     @CalledByNative
     private AssistantChip createCancelButton(int icon, String text, int actionIndex,
-            boolean disabled, boolean sticky, boolean visible) {
-        AssistantChip chip =
-                AssistantChip.createHairlineAssistantChip(icon, text, disabled, sticky, visible);
+            boolean disabled, boolean sticky, boolean visible,
+            @Nullable String contentDescription) {
+        AssistantChip chip = AssistantChip.createHairlineAssistantChip(
+                icon, text, disabled, sticky, visible, contentDescription);
         chip.setSelectedListener(() -> safeNativeOnCancelButtonClicked(actionIndex));
         return chip;
     }
@@ -374,11 +376,25 @@ public class AutofillAssistantUiController {
      * Adds a close action button to the chip list, which shuts down Autofill Assistant.
      */
     @CalledByNative
-    private AssistantChip createCloseButton(
-            int icon, String text, boolean disabled, boolean sticky, boolean visible) {
-        AssistantChip chip =
-                AssistantChip.createHairlineAssistantChip(icon, text, disabled, sticky, visible);
+    private AssistantChip createCloseButton(int icon, String text, boolean disabled, boolean sticky,
+            boolean visible, @Nullable String contentDescription) {
+        AssistantChip chip = AssistantChip.createHairlineAssistantChip(
+                icon, text, disabled, sticky, visible, contentDescription);
         chip.setSelectedListener(() -> safeNativeOnCloseButtonClicked());
+        return chip;
+    }
+
+    /**
+     * Creates a feedback button button. It shows the feedback form and then *directly* executes
+     * {@code actionIndex}.
+     */
+    @CalledByNative
+    private AssistantChip createFeedbackButton(int icon, String text, int actionIndex,
+            boolean disabled, boolean sticky, boolean visible,
+            @Nullable String contentDescription) {
+        AssistantChip chip = AssistantChip.createHairlineAssistantChip(
+                icon, text, disabled, sticky, visible, contentDescription);
+        chip.setSelectedListener(() -> safeNativeOnFeedbackButtonClicked(actionIndex));
         return chip;
     }
 
@@ -459,6 +475,13 @@ public class AutofillAssistantUiController {
         }
     }
 
+    private void safeNativeOnFeedbackButtonClicked(int index) {
+        if (mNativeUiController != 0) {
+            AutofillAssistantUiControllerJni.get().onFeedbackButtonClicked(
+                    mNativeUiController, AutofillAssistantUiController.this, index);
+        }
+    }
+
     private void safeNativeOnKeyboardVisibilityChanged(boolean visible) {
         if (mNativeUiController != 0) {
             AutofillAssistantUiControllerJni.get().onKeyboardVisibilityChanged(
@@ -501,6 +524,8 @@ public class AutofillAssistantUiController {
                 long nativeUiControllerAndroid, AutofillAssistantUiController caller, int index);
         void onCloseButtonClicked(
                 long nativeUiControllerAndroid, AutofillAssistantUiController caller);
+        void onFeedbackButtonClicked(
+                long nativeUiControllerAndroid, AutofillAssistantUiController caller, int index);
         void onKeyboardVisibilityChanged(long nativeUiControllerAndroid,
                 AutofillAssistantUiController caller, boolean visible);
         void setVisible(long nativeUiControllerAndroid, AutofillAssistantUiController caller,

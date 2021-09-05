@@ -15,6 +15,7 @@
 #include "base/barrier_closure.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/containers/contains.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/metrics/histogram_functions.h"
@@ -22,7 +23,6 @@
 #include "base/numerics/safe_conversions.h"
 #include "base/optional.h"
 #include "base/single_thread_task_runner.h"
-#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
@@ -431,12 +431,12 @@ class LocalStorageImpl::StorageAreaHolder final
 
   LocalStorageImpl* context_;
   url::Origin origin_;
-  std::unique_ptr<StorageAreaImpl> area_;
   // Holds the same value as |area_|. The reason for this is that
   // during destruction of the StorageAreaImpl instance we might still get
   // called and need access  to the StorageAreaImpl instance. The unique_ptr
   // could already be null, but this field should still be valid.
   StorageAreaImpl* area_ptr_;
+  std::unique_ptr<StorageAreaImpl> area_;
   bool deleted_old_data_ = false;
   bool has_bindings_ = false;
 };
@@ -479,11 +479,8 @@ LocalStorageImpl::LocalStorageImpl(
       ->RegisterDumpProviderWithSequencedTaskRunner(
           this, "LocalStorage", task_runner, MemoryDumpProvider::Options());
 
-  if (receiver) {
+  if (receiver)
     control_receiver_.Bind(std::move(receiver));
-    control_receiver_.set_disconnect_handler(base::BindOnce(
-        &LocalStorageImpl::ShutdownAndDelete, base::Unretained(this)));
-  }
 }
 
 void LocalStorageImpl::BindStorageArea(
@@ -585,13 +582,17 @@ void LocalStorageImpl::FlushOriginForTesting(const url::Origin& origin) {
   it->second->storage_area()->ScheduleImmediateCommit();
 }
 
-void LocalStorageImpl::ShutdownAndDelete() {
+void LocalStorageImpl::ShutDown(base::OnceClosure callback) {
   DCHECK_NE(connection_state_, CONNECTION_SHUTDOWN);
+  DCHECK(callback);
+
+  control_receiver_.reset();
+  shutdown_complete_callback_ = std::move(callback);
 
   // Nothing to do if no connection to the database was ever finished.
   if (connection_state_ != CONNECTION_FINISHED) {
     connection_state_ = CONNECTION_SHUTDOWN;
-    OnShutdownComplete(leveldb::Status::OK());
+    OnShutdownComplete();
     return;
   }
 
@@ -600,9 +601,8 @@ void LocalStorageImpl::ShutdownAndDelete() {
   // Flush any uncommitted data.
   for (const auto& it : areas_) {
     auto* area = it.second->storage_area();
-    LOCAL_HISTOGRAM_BOOLEAN(
-        "LocalStorageContext.ShutdownAndDelete.MaybeDroppedChanges",
-        area->has_pending_load_tasks());
+    LOCAL_HISTOGRAM_BOOLEAN("LocalStorageContext.ShutDown.MaybeDroppedChanges",
+                            area->has_pending_load_tasks());
     area->ScheduleImmediateCommit();
     // TODO(dmurph): Monitor the above histogram, and if dropping changes is
     // common then handle that here.
@@ -612,7 +612,7 @@ void LocalStorageImpl::ShutdownAndDelete() {
   // Respect the content policy settings about what to
   // keep and what to discard.
   if (force_keep_session_state_) {
-    OnShutdownComplete(leveldb::Status::OK());
+    OnShutdownComplete();
     return;  // Keep everything.
   }
 
@@ -621,7 +621,7 @@ void LocalStorageImpl::ShutdownAndDelete() {
         base::BindOnce(&LocalStorageImpl::OnGotStorageUsageForShutdown,
                        base::Unretained(this)));
   } else {
-    OnShutdownComplete(leveldb::Status::OK());
+    OnShutdownComplete();
   }
 }
 
@@ -796,7 +796,16 @@ void LocalStorageImpl::RunWhenConnected(base::OnceClosure callback) {
   std::move(callback).Run();
 }
 
+void LocalStorageImpl::PurgeAllStorageAreas() {
+  for (const auto& it : areas_)
+    it.second->storage_area()->CancelAllPendingRequests();
+  areas_.clear();
+}
+
 void LocalStorageImpl::InitiateConnection(bool in_memory_only) {
+  if (connection_state_ == CONNECTION_SHUTDOWN)
+    return;
+
   DCHECK_EQ(connection_state_, CONNECTION_IN_PROGRESS);
 
   if (!directory_.empty() && directory_.IsAbsolute() && !in_memory_only) {
@@ -893,6 +902,9 @@ void LocalStorageImpl::OnGotDatabaseVersion(leveldb::Status status,
 }
 
 void LocalStorageImpl::OnConnectionFinished() {
+  if (connection_state_ == CONNECTION_SHUTDOWN)
+    return;
+
   DCHECK_EQ(connection_state_, CONNECTION_IN_PROGRESS);
   // If connection was opened successfully, reset tried_to_recreate_during_open_
   // to enable recreating the database on future errors.
@@ -911,11 +923,12 @@ void LocalStorageImpl::OnConnectionFinished() {
 }
 
 void LocalStorageImpl::DeleteAndRecreateDatabase(const char* histogram_name) {
+  if (connection_state_ == CONNECTION_SHUTDOWN)
+    return;
+
   // We're about to set database_ to null, so delete the StorageAreaImpls
   // that might still be using the old database.
-  for (const auto& it : areas_)
-    it.second->storage_area()->CancelAllPendingRequests();
-  areas_.clear();
+  PurgeAllStorageAreas();
 
   // Reset state to be in process of connecting. This will cause requests for
   // StorageAreas to be queued until the connection is complete.
@@ -1075,15 +1088,24 @@ void LocalStorageImpl::OnGotStorageUsageForShutdown(
 
   if (!origins_to_delete.empty()) {
     DeleteOrigins(database_.get(), std::move(origins_to_delete),
-                  base::BindOnce(&LocalStorageImpl::OnShutdownComplete,
+                  base::BindOnce(&LocalStorageImpl::OnOriginsDeleted,
                                  base::Unretained(this)));
   } else {
-    OnShutdownComplete(leveldb::Status::OK());
+    OnShutdownComplete();
   }
 }
 
-void LocalStorageImpl::OnShutdownComplete(leveldb::Status status) {
-  delete this;
+void LocalStorageImpl::OnOriginsDeleted(leveldb::Status status) {
+  OnShutdownComplete();
+}
+
+void LocalStorageImpl::OnShutdownComplete() {
+  DCHECK(shutdown_complete_callback_);
+  // Flush any final tasks on the DB task runner before invoking the callback.
+  PurgeAllStorageAreas();
+  database_.reset();
+  leveldb_task_runner_->PostTaskAndReply(
+      FROM_HERE, base::DoNothing(), std::move(shutdown_complete_callback_));
 }
 
 void LocalStorageImpl::GetStatistics(size_t* total_cache_size,

@@ -12,21 +12,23 @@ import static org.junit.Assert.assertTrue;
 
 import static org.chromium.content_public.browser.test.util.TestThreadUtils.runOnUiThreadBlocking;
 
+import android.content.Intent;
 import android.net.Uri;
+import android.os.Bundle;
 import android.os.SystemClock;
-import android.support.test.InstrumentationRegistry;
 import android.webkit.WebResourceResponse;
 
+import androidx.fragment.app.Fragment;
 import androidx.test.filters.SmallTest;
 
 import org.hamcrest.Matchers;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CallbackHelper;
+import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
@@ -74,17 +76,34 @@ public class NavigationTest {
     private static final String STREAM_HTML = "<html>foobar</html>";
     private static final String STREAM_INNER_BODY = "foobar";
 
-    private static boolean sShouldTrackPageInitiated;
+    // A URL with a custom scheme/host that is handled by WebLayer Shell.
+    private static final String CUSTOM_SCHEME_URL_WITH_DEFAULT_EXTERNAL_HANDLER =
+            "weblayer://weblayertest/intent";
+    // An intent that opens Chrome to view a specified URL.
+    private static final String INTENT_TO_CHROME_URL =
+            "intent://play.google.com/store/apps/details?id=com.facebook.katana/#Intent;scheme=https;action=android.intent.action.VIEW;package=com.android.chrome;end";
 
-    private static class Callback extends NavigationCallback {
-        public static class NavigationCallbackHelper extends CallbackHelper {
+    // An IntentInterceptor that simply drops intents to ensure that intent launches don't interfere
+    // with running of tests.
+    private class IntentInterceptor implements InstrumentationActivity.IntentInterceptor {
+        @Override
+        public void interceptIntent(
+                Fragment fragment, Intent intent, int requestCode, Bundle options) {}
+    }
+
+    private class Callback extends NavigationCallback {
+        public class NavigationCallbackHelper extends CallbackHelper {
             private Uri mUri;
             private boolean mIsSameDocument;
             private int mHttpStatusCode;
             private List<Uri> mRedirectChain;
             private @LoadError int mLoadError;
             private @NavigationState int mNavigationState;
+            private boolean mIsKnownProtocol;
             private boolean mIsPageInitiatedNavigation;
+            private boolean mIsServedFromBackForwardCache;
+            private boolean mIsFormSubmission;
+            private Uri mReferrer;
 
             public void notifyCalled(Navigation navigation) {
                 mUri = navigation.getUri();
@@ -93,8 +112,15 @@ public class NavigationTest {
                 mRedirectChain = navigation.getRedirectChain();
                 mLoadError = navigation.getLoadError();
                 mNavigationState = navigation.getState();
-                if (sShouldTrackPageInitiated) {
-                    mIsPageInitiatedNavigation = navigation.isPageInitiated();
+                mIsPageInitiatedNavigation = navigation.isPageInitiated();
+                mIsServedFromBackForwardCache = navigation.isServedFromBackForwardCache();
+
+                int majorVersion = TestThreadUtils.runOnUiThreadBlockingNoException(
+                        () -> WebLayer.getSupportedMajorVersion(mActivityTestRule.getActivity()));
+                if (majorVersion >= 89) {
+                    mIsKnownProtocol = navigation.isKnownProtocol();
+                    mIsFormSubmission = navigation.isFormSubmission();
+                    mReferrer = navigation.getReferrer();
                 }
                 notifyCalled();
             }
@@ -133,13 +159,28 @@ public class NavigationTest {
                 return mNavigationState;
             }
 
+            public boolean isKnownProtocol() {
+                return mIsKnownProtocol;
+            }
+
+            public boolean isServedFromBackForwardCache() {
+                return mIsServedFromBackForwardCache;
+            }
+
             public boolean isPageInitiated() {
-                assert sShouldTrackPageInitiated;
                 return mIsPageInitiatedNavigation;
+            }
+
+            public boolean isFormSubmission() {
+                return mIsFormSubmission;
+            }
+
+            public Uri getReferrer() {
+                return mReferrer;
             }
         }
 
-        public static class UriCallbackHelper extends CallbackHelper {
+        public class UriCallbackHelper extends CallbackHelper {
             private Uri mUri;
 
             public void notifyCalled(Uri uri) {
@@ -152,7 +193,7 @@ public class NavigationTest {
             }
         }
 
-        public static class NavigationCallbackValueRecorder {
+        public class NavigationCallbackValueRecorder {
             private List<String> mObservedValues =
                     Collections.synchronizedList(new ArrayList<String>());
 
@@ -170,7 +211,7 @@ public class NavigationTest {
             }
         }
 
-        public static class FirstContentfulPaintCallbackHelper extends CallbackHelper {
+        public class FirstContentfulPaintCallbackHelper extends CallbackHelper {
             private long mNavigationStartMillis;
             private long mFirstContentfulPaintMs;
 
@@ -189,7 +230,7 @@ public class NavigationTest {
             }
         }
 
-        public static class LargestContentfulPaintCallbackHelper extends CallbackHelper {
+        public class LargestContentfulPaintCallbackHelper extends CallbackHelper {
             private long mNavigationStartMillis;
             private long mLargestContentfulPaintMs;
 
@@ -288,16 +329,6 @@ public class NavigationTest {
 
     private final Callback mCallback = new Callback();
 
-    @Before
-    public void setUp() throws Throwable {
-        TestThreadUtils.runOnUiThreadBlocking(() -> {
-            sShouldTrackPageInitiated =
-                    WebLayer.getSupportedMajorVersion(
-                            InstrumentationRegistry.getTargetContext().getApplicationContext())
-                    >= 86;
-        });
-    }
-
     @Test
     @SmallTest
     public void testNavigationEvents() throws Exception {
@@ -319,7 +350,6 @@ public class NavigationTest {
         assertEquals(mCallback.onCompletedCallback.getHttpStatusCode(), 200);
     }
 
-    @MinWebLayerVersion(85)
     @Test
     @SmallTest
     public void testOldPageNoLongerRendered() throws Exception {
@@ -584,6 +614,43 @@ public class NavigationTest {
         assertEquals(mCallback.onFailedCallback.getNavigationState(), NavigationState.FAILED);
     }
 
+    @MinWebLayerVersion(89)
+    @Test
+    @SmallTest
+    public void testIsKnownProtocol() throws Exception {
+        InstrumentationActivity activity = mActivityTestRule.launchShellWithUrl(URL1);
+        IntentInterceptor intentInterceptor = new IntentInterceptor();
+        activity.setIntentInterceptor(intentInterceptor);
+        setNavigationCallback(activity);
+
+        // Test various known protocol cases.
+        String httpUrl = mActivityTestRule.getTestDataURL("simple_page.html");
+        mActivityTestRule.navigateAndWait(httpUrl);
+        assertEquals(true, mCallback.onStartedCallback.isKnownProtocol());
+        assertEquals(true, mCallback.onCompletedCallback.isKnownProtocol());
+
+        mActivityTestRule.navigateAndWait("about:blank");
+        assertEquals(true, mCallback.onStartedCallback.isKnownProtocol());
+        assertEquals(true, mCallback.onCompletedCallback.isKnownProtocol());
+
+        String dataUrl = "data:text,foo";
+        mActivityTestRule.navigateAndWait(dataUrl);
+        assertEquals(true, mCallback.onStartedCallback.isKnownProtocol());
+        assertEquals(true, mCallback.onCompletedCallback.isKnownProtocol());
+
+        // Test external protocol cases.
+        mActivityTestRule.navigateAndWaitForFailure(activity.getTab(), INTENT_TO_CHROME_URL,
+                /*waitForPaint=*/false);
+        assertEquals(false, mCallback.onStartedCallback.isKnownProtocol());
+        assertEquals(false, mCallback.onFailedCallback.isKnownProtocol());
+
+        mActivityTestRule.navigateAndWaitForFailure(activity.getTab(),
+                CUSTOM_SCHEME_URL_WITH_DEFAULT_EXTERNAL_HANDLER,
+                /*waitForPaint=*/false);
+        assertEquals(false, mCallback.onStartedCallback.isKnownProtocol());
+        assertEquals(false, mCallback.onFailedCallback.isKnownProtocol());
+    }
+
     @Test
     @SmallTest
     public void testRepostConfirmation() throws Exception {
@@ -819,7 +886,6 @@ public class NavigationTest {
 
     @Test
     @SmallTest
-    @MinWebLayerVersion(84)
     public void testSetUserAgentString() throws Exception {
         TestWebServer testServer = TestWebServer.start();
         InstrumentationActivity activity = mActivityTestRule.launchShellWithUrl(null);
@@ -901,7 +967,6 @@ public class NavigationTest {
 
     @Test
     @SmallTest
-    @MinWebLayerVersion(85)
     public void testSkippedNavigationEntry() throws Exception {
         InstrumentationActivity activity = mActivityTestRule.launchShellWithUrl(URL1);
         setNavigationCallback(activity);
@@ -928,7 +993,6 @@ public class NavigationTest {
 
     @Test
     @SmallTest
-    @MinWebLayerVersion(85)
     public void testIndexOutOfBounds() throws Exception {
         InstrumentationActivity activity = mActivityTestRule.launchShellWithUrl(null);
         runOnUiThreadBlocking(() -> {
@@ -954,7 +1018,6 @@ public class NavigationTest {
 
     @Test
     @SmallTest
-    @MinWebLayerVersion(86)
     public void testPageInitiated() throws Exception {
         InstrumentationActivity activity = mActivityTestRule.launchShellWithUrl(null);
         setNavigationCallback(activity);
@@ -968,7 +1031,6 @@ public class NavigationTest {
 
     @Test
     @SmallTest
-    @MinWebLayerVersion(86)
     public void testPageInitiatedFromClient() throws Exception {
         InstrumentationActivity activity = mActivityTestRule.launchShellWithUrl(URL1);
         setNavigationCallback(activity);
@@ -984,7 +1046,6 @@ public class NavigationTest {
     // This is a regression test for https://crbug.com/1121388.
     @Test
     @SmallTest
-    @MinWebLayerVersion(85)
     public void testDestroyTabWithModalDialog() throws Exception {
         // Load a page with a form.
         InstrumentationActivity activity =
@@ -1037,7 +1098,6 @@ public class NavigationTest {
      */
     @Test
     @SmallTest
-    @MinWebLayerVersion(86)
     public void testDestroyTabInNavigationFailed() throws Throwable {
         InstrumentationActivity activity = mActivityTestRule.launchShellWithUrl(null);
         CallbackHelper callbackHelper = new CallbackHelper();
@@ -1087,7 +1147,6 @@ public class NavigationTest {
 
     @Test
     @SmallTest
-    @MinWebLayerVersion(87)
     public void testWebResponse() throws Exception {
         InstrumentationActivity activity = mActivityTestRule.launchShellWithUrl(URL1);
         // The code asserts that when InputStreams are used that the stock URL bar is not visible.
@@ -1100,7 +1159,6 @@ public class NavigationTest {
 
     @Test
     @SmallTest
-    @MinWebLayerVersion(87)
     public void testWebResponseMimeSniff() throws Exception {
         InstrumentationActivity activity = mActivityTestRule.launchShellWithUrl(URL1);
         TestThreadUtils.runOnUiThreadBlocking(() -> { activity.getBrowser().setTopView(null); });
@@ -1112,7 +1170,6 @@ public class NavigationTest {
 
     @Test
     @SmallTest
-    @MinWebLayerVersion(87)
     public void testWebResponseNoCacheControl() throws Exception {
         InstrumentationActivity activity = mActivityTestRule.launchShellWithUrl(URL1);
         TestThreadUtils.runOnUiThreadBlocking(() -> { activity.getBrowser().setTopView(null); });
@@ -1130,7 +1187,6 @@ public class NavigationTest {
 
     @Test
     @SmallTest
-    @MinWebLayerVersion(87)
     public void testWebResponseCached() throws Exception {
         InstrumentationActivity activity = mActivityTestRule.launchShellWithUrl(URL1);
         TestThreadUtils.runOnUiThreadBlocking(() -> { activity.getBrowser().setTopView(null); });
@@ -1150,7 +1206,6 @@ public class NavigationTest {
 
     @Test
     @SmallTest
-    @MinWebLayerVersion(87)
     public void testWebResponseCachedWithSniffedMimeType() throws Exception {
         InstrumentationActivity activity = mActivityTestRule.launchShellWithUrl(URL1);
         TestThreadUtils.runOnUiThreadBlocking(() -> { activity.getBrowser().setTopView(null); });
@@ -1170,7 +1225,6 @@ public class NavigationTest {
 
     @Test
     @SmallTest
-    @MinWebLayerVersion(87)
     public void testWebResponseNoStore() throws Exception {
         InstrumentationActivity activity = mActivityTestRule.launchShellWithUrl(URL1);
         TestThreadUtils.runOnUiThreadBlocking(() -> { activity.getBrowser().setTopView(null); });
@@ -1188,7 +1242,6 @@ public class NavigationTest {
 
     @Test
     @SmallTest
-    @MinWebLayerVersion(87)
     public void testWebResponseExpired() throws Exception {
         InstrumentationActivity activity = mActivityTestRule.launchShellWithUrl(URL1);
         TestThreadUtils.runOnUiThreadBlocking(() -> { activity.getBrowser().setTopView(null); });
@@ -1259,5 +1312,70 @@ public class NavigationTest {
         long largestContentfulPaint =
                 mCallback.onLargestContentfulPaintCallback.getLargestContentfulPaintMs();
         Assert.assertTrue(largestContentfulPaint <= (current - navigationStart));
+    }
+
+    @MinWebLayerVersion(89)
+    @Test
+    @SmallTest
+    @CommandLineFlags.Add("enable-features=BackForwardCache")
+    public void testServedFromBackForwardCache() throws Exception {
+        TestWebServer testServer = TestWebServer.start();
+        InstrumentationActivity activity = mActivityTestRule.launchShellWithUrl(null);
+        setNavigationCallback(activity);
+
+        String url = mActivityTestRule.getTestServer().getURL("/echo");
+        navigateAndWaitForCompletion(url,
+                () -> { activity.getTab().getNavigationController().navigate(Uri.parse(url)); });
+        Assert.assertFalse(mCallback.onStartedCallback.isServedFromBackForwardCache());
+
+        String url2 = testServer.setResponse("/ok.html", "<html>ok</html>", null);
+        mActivityTestRule.navigateAndWait(url2);
+        Assert.assertFalse(mCallback.onStartedCallback.isServedFromBackForwardCache());
+
+        navigateAndWaitForCompletion(
+                url, () -> { activity.getTab().getNavigationController().goBack(); });
+        Assert.assertTrue(mCallback.onStartedCallback.isServedFromBackForwardCache());
+    }
+
+    @MinWebLayerVersion(89)
+    @Test
+    @SmallTest
+    public void testIsFormSubmission() throws Exception {
+        InstrumentationActivity activity =
+                mActivityTestRule.launchShellWithUrl(mActivityTestRule.getTestDataURL("form.html"));
+        setNavigationCallback(activity);
+
+        // Touch the page; this should submit the form.
+        int currentCallCount = mCallback.onStartedCallback.getCallCount();
+        EventUtils.simulateTouchCenterOfView(activity.getWindow().getDecorView());
+
+        mCallback.onStartedCallback.waitForCallback(currentCallCount);
+        assertEquals(true, mCallback.onStartedCallback.isFormSubmission());
+    }
+
+    @MinWebLayerVersion(89)
+    @Test
+    @SmallTest
+    public void testGetReferrer() throws Exception {
+        TestWebServer testServer = TestWebServer.start();
+        InstrumentationActivity activity = mActivityTestRule.launchShellWithUrl(null);
+        setNavigationCallback(activity);
+        String referrer = "http://foo.com/";
+        NavigationCallback navigationCallback = new NavigationCallback() {
+            @Override
+            public void onNavigationStarted(Navigation navigation) {
+                try {
+                    navigation.setRequestHeader("Referer", referrer);
+                } catch (IllegalStateException e) {
+                }
+            }
+        };
+
+        registerNavigationCallback(navigationCallback);
+        int currentCallCount = mCallback.onCompletedCallback.getCallCount();
+        String url = testServer.setResponse("/ok.html", "<html>ok</html>", null);
+        mActivityTestRule.navigateAndWait(url);
+        mCallback.onCompletedCallback.waitForCallback(currentCallCount);
+        assertEquals(referrer, mCallback.onCompletedCallback.getReferrer().toString());
     }
 }

@@ -66,13 +66,13 @@
 #include "third_party/blink/renderer/core/layout/layout_html_canvas.h"
 #include "third_party/blink/renderer/core/layout/layout_image.h"
 #include "third_party/blink/renderer/core/layout/layout_inline.h"
+#include "third_party/blink/renderer/core/layout/layout_list_item.h"
 #include "third_party/blink/renderer/core/layout/layout_list_marker.h"
 #include "third_party/blink/renderer/core/layout/layout_replaced.h"
 #include "third_party/blink/renderer/core/layout/layout_table.h"
 #include "third_party/blink/renderer/core/layout/layout_table_cell.h"
 #include "third_party/blink/renderer/core/layout/layout_table_row.h"
 #include "third_party/blink/renderer/core/layout/layout_table_section.h"
-#include "third_party/blink/renderer/core/layout/layout_text_fragment.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/layout/list_marker.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_cursor.h"
@@ -91,7 +91,6 @@
 #include "third_party/blink/renderer/modules/accessibility/ax_inline_text_box.h"
 #include "third_party/blink/renderer/modules/accessibility/ax_mock_object.h"
 #include "third_party/blink/renderer/modules/accessibility/ax_object_cache_impl.h"
-#include "third_party/blink/renderer/modules/accessibility/ax_svg_root.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/text/platform_locale.h"
 #include "third_party/blink/renderer/platform/text/text_direction.h"
@@ -199,8 +198,6 @@ ax::mojom::blink::Role AXLayoutObject::RoleFromLayoutObject(
       return ax::mojom::blink::Role::kImageMap;
     if (IsA<HTMLInputElement>(node))
       return ButtonRoleType();
-    if (IsSVGImage())
-      return ax::mojom::blink::Role::kSvgRoot;
 
     return ax::mojom::blink::Role::kImage;
   }
@@ -291,8 +288,6 @@ void AXLayoutObject::Init() {
 
 void AXLayoutObject::Detach() {
   AXNodeObject::Detach();
-
-  DetachRemoteSVGRoot();
 
 #if DCHECK_IS_ON()
   if (layout_object_)
@@ -400,7 +395,7 @@ bool AXLayoutObject::IsLineBreakingObject() const {
 
   const LayoutObject* layout_object = GetLayoutObject();
   if (layout_object->IsBR() || layout_object->IsLayoutBlock() ||
-      layout_object->IsAnonymousBlock() ||
+      layout_object->IsTableSection() || layout_object->IsAnonymousBlock() ||
       (layout_object->IsLayoutBlockFlow() &&
        layout_object->StyleRef().IsDisplayBlockContainer())) {
     return true;
@@ -602,8 +597,8 @@ bool AXLayoutObject::ComputeAccessibilityIsIgnored(
 #endif
 
   // All nodes must have an unignored parent within their tree under
-  // kRootWebArea, so force kRootWebArea to always be unignored.
-  if (role_ == ax::mojom::blink::Role::kRootWebArea)
+  // the root node of the web area, so force that node to always be unignored.
+  if (IsWebArea())
     return false;
 
   if (IsA<HTMLHtmlElement>(GetNode()))
@@ -688,6 +683,15 @@ bool AXLayoutObject::ComputeAccessibilityIsIgnored(
         ignored_reasons->push_back(IgnoredReason(kAXEmptyText));
       return true;
     }
+    // Ignore TextAlternative of the list marker for SUMMARY because:
+    //  - TextAlternatives for disclosure-* are triangle symbol characters used
+    //    to visually indicate the expansion state.
+    //  - It's redundant. The host DETAILS exposes the expansion state.
+    if (layout_object_->Parent()->IsListMarkerForSummary()) {
+      if (ignored_reasons)
+        ignored_reasons->push_back(IgnoredReason(kAXPresentational));
+      return true;
+    }
     return false;
   }
 
@@ -696,8 +700,20 @@ bool AXLayoutObject::ComputeAccessibilityIsIgnored(
   if (alt_text)
     return alt_text->IsEmpty();
 
-  if (IsWebArea() || layout_object_->IsListMarkerIncludingAll())
+  if (IsWebArea())
     return false;
+  if (layout_object_->IsListMarkerIncludingAll()) {
+    // Ignore TextAlternative of the list marker for SUMMARY because:
+    //  - TextAlternatives for disclosure-* are triangle symbol characters used
+    //    to visually indicate the expansion state.
+    //  - It's redundant. The host DETAILS exposes the expansion state.
+    if (layout_object_->IsListMarkerForSummary()) {
+      if (ignored_reasons)
+        ignored_reasons->push_back(IgnoredReason(kAXPresentational));
+      return true;
+    }
+    return false;
+  }
 
   // Positioned elements and scrollable containers are important for
   // determining bounding boxes.
@@ -833,12 +849,11 @@ bool AXLayoutObject::CanIgnoreTextAsEmpty() const {
   if (!layout_text->IsAllCollapsibleWhitespace())
     return false;
 
-  // Will now look at sibling nodes.
-  // Using "skipping children" methods as we need the closest element to the
+  // Will now look at sibling nodes. We need the closest element to the
   // whitespace markup-wise, e.g. tag1 in these examples:
   // [whitespace] <tag1><tag2>x</tag2></tag1>
   // <span>[whitespace]</span> <tag1><tag2>x</tag2></tag1>
-  Node* prev_node = FlatTreeTraversal::PreviousSkippingChildren(*node);
+  Node* prev_node = FlatTreeTraversal::PreviousAbsoluteSibling(*node);
   if (!prev_node)
     return true;
 
@@ -1087,7 +1102,7 @@ static AXObject* NextOnLineInternalNG(const AXObject& ax_object) {
             ax_object.AXObjectCache().GetOrCreate(runner_layout_object))
       return result;
   }
-  if (!ax_object.ParentObject())
+  if (!ax_object.ParentObjectIncludedInTree())
     return nullptr;
   // Returns next object of parent, since next of |ax_object| isn't appeared on
   // line.
@@ -1112,7 +1127,7 @@ AXObject* AXLayoutObject::NextOnLine() const {
     //
     // This AXLayoutObject might not be included in the accessibility tree at
     // all, so "RawNextSibling" needs to be used to walk the layout tree.
-    result = RawNextSibling();
+    result = NextSiblingIncludingIgnored();
   } else if (ShouldUseLayoutNG(*GetLayoutObject())) {
     result = NextOnLineInternalNG(*this);
   } else {
@@ -1143,7 +1158,7 @@ AXObject* AXLayoutObject::NextOnLine() const {
     }
 
     if (!result) {
-      AXObject* parent = ParentObject();
+      AXObject* parent = ParentObjectIncludedInTree();
       // Our parent object could have been created based on an ignored inline or
       // inline block spanning multiple lines. We need to ensure that we are
       // really at the end of our parent before attempting to connect to the
@@ -1168,7 +1183,7 @@ AXObject* AXLayoutObject::NextOnLine() const {
       // Note that we can't use AXObject::IndexInParent() to do this, because
       // for performance reasons we don't define it on objects that are not
       // included in the accessibility tree at all.
-      if (parent && !RawNextSibling())
+      if (parent && !NextSiblingIncludingIgnored())
         result = parent->NextOnLine();
     }
   }
@@ -1211,7 +1226,7 @@ static AXObject* PreviousOnLineInlineNG(const AXObject& ax_object) {
     return nullptr;
   // Returns previous object of parent, since next of |ax_object| isn't appeared
   // on line.
-  return ax_object.ParentObject()->PreviousOnLine();
+  return ax_object.ParentObjectIncludedInTree()->PreviousOnLine();
 }
 
 AXObject* AXLayoutObject::PreviousOnLine() const {
@@ -1260,7 +1275,7 @@ AXObject* AXLayoutObject::PreviousOnLine() const {
     }
 
     if (!result) {
-      AXObject* parent = ParentObject();
+      AXObject* parent = ParentObjectIncludedInTree();
       // Our parent object could have been created based on an ignored inline or
       // inline block spanning multiple lines. We need to ensure that we are
       // really at the start of our parent before attempting to connect to the
@@ -1283,7 +1298,7 @@ AXObject* AXLayoutObject::PreviousOnLine() const {
       // Note that we can't use AXObject::IndexInParent() to do this, because
       // for performance reasons we don't define it on objects that are not
       // included in the accessibility tree at all.
-      if (parent && parent->RawFirstChild() == this)
+      if (parent && parent->FirstChildIncludingIgnored() == this)
         result = parent->PreviousOnLine();
     }
   }
@@ -1334,8 +1349,11 @@ String AXLayoutObject::StringValue() const {
     NOTREACHED();
   }
 
-  if (IsTextControl())
+  if (IsTextControl()) {
+    // TODO(https://crbug.com/1165853) For contenteditable, compute on browser
+    // side instead.
     return GetText();
+  }
 
   if (layout_object_->IsFileUploadControl())
     return To<LayoutFileUploadControl>(layout_object_)->FileTextValue();
@@ -1364,11 +1382,6 @@ String AXLayoutObject::StringValue() const {
     return TextFromDescendants(visited, false);
   }
 
-  // FIXME: We might need to implement a value here for more types
-  // FIXME: It would be better not to advertise a value at all for the types for
-  // which we don't implement one; this would require subclassing or making
-  // accessibilityAttributeNames do something other than return a single static
-  // array.
   return String();
 }
 
@@ -1514,14 +1527,6 @@ AXObject* AXLayoutObject::AccessibilityHitTest(const IntPoint& point) const {
   return result;
 }
 
-AXObject* AXLayoutObject::ElementAccessibilityHitTest(
-    const IntPoint& point) const {
-  if (IsSVGImage())
-    return RemoteSVGElementHitTest(point);
-
-  return AXObject::ElementAccessibilityHitTest(point);
-}
-
 //
 // Low-level accessibility tree exploration, only for use within the
 // accessibility module.
@@ -1642,115 +1647,6 @@ static inline LayoutObject* ParentLayoutObject(LayoutObject* layout_object) {
 
   // Otherwise just return the parent in the layout tree.
   return layout_object->Parent();
-}
-
-// See LAYOUT TREE WALKING ALGORITHM, above, for details.
-// Return true if this layout object is the continuation of some other
-// layout object.
-static bool IsContinuation(LayoutObject* layout_object) {
-  if (layout_object->IsElementContinuation())
-    return true;
-
-  auto* block_flow = DynamicTo<LayoutBlockFlow>(layout_object);
-  return block_flow && block_flow->IsAnonymousBlock() &&
-         block_flow->Continuation();
-}
-
-// See LAYOUT TREE WALKING ALGORITHM, above, for details.
-// Return the continuation of this layout object, or nullptr if it doesn't
-// have one.
-LayoutObject* GetContinuation(LayoutObject* layout_object) {
-  if (layout_object->IsLayoutInline())
-    return To<LayoutInline>(layout_object)->Continuation();
-
-  if (auto* block_flow = DynamicTo<LayoutBlockFlow>(layout_object))
-    return block_flow->Continuation();
-
-  return nullptr;
-}
-
-// See LAYOUT TREE WALKING ALGORITHM, above, for details.
-AXObject* AXLayoutObject::RawFirstChild() const {
-  if (!layout_object_)
-    return nullptr;
-
-  // Walk sections of a table (thead, tbody, tfoot) in visual order.
-  // Note: always call RecalcSectionsIfNeeded() before accessing
-  // the sections of a LayoutTable.
-  if (layout_object_->IsTable()) {
-    LayoutNGTableInterface* table =
-        ToInterface<LayoutNGTableInterface>(layout_object_);
-    table->RecalcSectionsIfNeeded();
-    LayoutNGTableSectionInterface* top_section = table->TopSectionInterface();
-    return AXObjectCache().GetOrCreate(
-        top_section ? top_section->ToMutableLayoutObject() : nullptr);
-  }
-
-  LayoutObject* first_child = layout_object_->SlowFirstChild();
-
-  // CSS first-letter pseudo element is handled as continuation. Returning it
-  // will result in duplicated elements.
-  auto* fragment = DynamicTo<LayoutTextFragment>(first_child);
-  if (fragment && fragment->GetFirstLetterPseudoElement())
-    return nullptr;
-
-  // Skip over continuations.
-  while (first_child && IsContinuation(first_child))
-    first_child = first_child->NextSibling();
-
-  // If there's a first child that's not a continuation, return that.
-  if (first_child)
-    return AXObjectCache().GetOrCreate(first_child);
-
-  // Finally check if this object has no children but it has a continuation
-  // itself - and if so, it's the first child.
-  LayoutObject* continuation = GetContinuation(layout_object_);
-  if (continuation)
-    return AXObjectCache().GetOrCreate(continuation);
-
-  return nullptr;
-}
-
-// See LAYOUT TREE WALKING ALGORITHM, above, for details.
-AXObject* AXLayoutObject::RawNextSibling() const {
-  if (!layout_object_)
-    return nullptr;
-
-  // Walk sections of a table (thead, tbody, tfoot) in visual order.
-  if (layout_object_->IsTableSection()) {
-    const LayoutNGTableSectionInterface* section =
-        ToInterface<LayoutNGTableSectionInterface>(layout_object_);
-    const LayoutNGTableSectionInterface* section_below =
-        section->TableInterface()->SectionBelowInterface(section,
-                                                         kSkipEmptySections);
-    // const_cast is necessary to avoid creating non-const versions of
-    // table interfaces.
-    LayoutObject* section_below_layout_object = const_cast<LayoutObject*>(
-        section_below ? section_below->ToLayoutObject() : nullptr);
-    return AXObjectCache().GetOrCreate(section_below_layout_object);
-  }
-
-  // If it's not a continuation, just get the next sibling from the
-  // layout tree, skipping over continuations.
-  if (!IsContinuation(layout_object_)) {
-    LayoutObject* next_sibling = layout_object_->NextSibling();
-    while (next_sibling && IsContinuation(next_sibling))
-      next_sibling = next_sibling->NextSibling();
-
-    if (next_sibling)
-      return AXObjectCache().GetOrCreate(next_sibling);
-  }
-
-  // If we've run out of siblings, check to see if the parent of this
-  // object has a continuation, and if so, follow it.
-  LayoutObject* parent = layout_object_->Parent();
-  if (parent) {
-    LayoutObject* continuation = GetContinuation(parent);
-    if (continuation)
-      return AXObjectCache().GetOrCreate(continuation);
-  }
-
-  return nullptr;
 }
 
 //
@@ -2536,36 +2432,6 @@ AXObject* AXLayoutObject::AccessibilityImageMapHitTest(
   }
 
   return nullptr;
-}
-
-void AXLayoutObject::DetachRemoteSVGRoot() {
-  if (AXSVGRoot* root = RemoteSVGRootElement())
-    root->SetParent(nullptr);
-}
-
-AXObject* AXLayoutObject::RemoteSVGElementHitTest(const IntPoint& point) const {
-  AXObject* remote = RemoteSVGRootElement();
-  if (!remote)
-    return nullptr;
-
-  IntSize offset =
-      point - RoundedIntPoint(GetBoundsInFrameCoordinates().Location());
-  return remote->AccessibilityHitTest(IntPoint(offset));
-}
-
-// The boundingBox for elements within the remote SVG element needs to be offset
-// by its position within the parent page, otherwise they are in relative
-// coordinates only.
-void AXLayoutObject::OffsetBoundingBoxForRemoteSVGElement(
-    LayoutRect& rect) const {
-  for (AXObject* parent = ParentObject(); parent;
-       parent = parent->ParentObject()) {
-    if (parent->IsAXSVGRoot()) {
-      rect.MoveBy(
-          parent->ParentObject()->GetBoundsInFrameCoordinates().Location());
-      break;
-    }
-  }
 }
 
 }  // namespace blink

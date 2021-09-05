@@ -20,9 +20,9 @@ struct App {
   string? name;
   string? short_name;
 
-  // The publisher-specific ID for this app, e.g. for Android apps, this field
-  // contains the Android package name. May be empty if AppId() should be
-  // considered as the canonical publisher ID.
+  // An optional, publisher-specific ID for this app, e.g. for Android apps,
+  // this field contains the Android package name, and for web apps, it
+  // contains the start URL.
   string? publisher_id;
 
   string? description;
@@ -108,6 +108,11 @@ enum Readiness {
   kDisabledByUser,       // Disabled by explicit user action.
   kTerminated,           // Renderer process crashed.
   kUninstalledByUser,
+  // Removed apps are purged from the registry cache and have their
+  // associated memory freed. Subscribers are not notified of removed
+  // apps, so publishers must set the app as uninstalled before
+  // removing it.
+  kRemoved,
 };
 
 // How the app was installed.
@@ -318,7 +323,9 @@ struct IntentFilter {
 };
 
 // Action and resource handling request. This includes the scheme and URL at
-// the moment, and will be extended to handle files in the future.
+// the moment, and will be extended to handle files in the future. This should
+// be kept in sync with ConvertIntentToValue and ConvertValueToIntent in
+// components/services/app_service/public/cpp/intent_util.*
 struct Intent {
   string? action; // Intent action. e.g. view, send.
   url.mojom.Url? url; // The URL of the intent. e.g. https://www.google.com/.
@@ -330,6 +337,7 @@ struct Intent {
   // from Google Drive.
   url.mojom.Url? drive_share_url;
   string? share_text; // Text to share. e.g. Share link to other app.
+  string? share_title; // Title for the share.
 };
 
 // Represents a group of |app_ids| that is no longer preferred app of their

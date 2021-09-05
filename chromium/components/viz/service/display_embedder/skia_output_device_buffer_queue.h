@@ -82,10 +82,11 @@ class VIZ_SERVICE_EXPORT SkiaOutputDeviceBufferQueue : public SkiaOutputDevice {
                            gfx::SwapCompletionResult result);
 
   gfx::Size GetSwapBuffersSize();
+  bool RecreateImages();
 
   std::unique_ptr<OutputPresenter> presenter_;
 
-  SkiaOutputSurfaceDependency* const dependency_;
+  scoped_refptr<gpu::SharedContextState> context_state_;
   gpu::SharedImageRepresentationFactory* const representation_factory_;
   // Format of images
   gfx::ColorSpace color_space_;

@@ -298,10 +298,6 @@ dependencies of this target. Excludes resources owned by non-chromium code.
 List of all resource zip files belonging to all transitive resource dependencies
 of this target. Excludes resources owned by non-chromium code.
 
-* `deps_info['owned_resource_srcjars']`:
-List of all .srcjar files belonging to all *direct* resource dependencies (i.e.
-without another java_library in the dependency path) for this target.
-
 * `deps_info['javac']`:
 A dictionary containing information about the way the sources in this library
 are compiled. Appears also on other Java-related targets. See the [dedicated
@@ -1428,33 +1424,16 @@ def main(argv):
     if options.res_sources_path:
       deps_info['res_sources_path'] = options.res_sources_path
 
-  if options.requires_android and is_java_target:
-    owned_resource_srcjars = set()
-    for c in all_resources_deps:
-      srcjar = c.get('srcjar')
-      if srcjar:
-        owned_resource_srcjars.add(srcjar)
-    for c in all_library_deps:
-      if c['requires_android'] and not c['is_prebuilt']:
-        # Many .aar files include R.class files in them, as it makes it easier
-        # for IDEs to resolve symbols. However, including them is not required
-        # and not all prebuilts do. Rather than try to detect their presense,
-        # just assume they are not there. The only consequence is redundant
-        # compilation of the R.class.
-        owned_resource_srcjars.difference_update(c['owned_resource_srcjars'])
-    deps_info['owned_resource_srcjars'] = sorted(owned_resource_srcjars)
-
-    if options.type == 'java_library':
-      # Used to strip out R.class for android_prebuilt()s.
-      config['javac']['resource_packages'] = [
-          c['package_name'] for c in all_resources_deps if 'package_name' in c
-      ]
-      if options.package_name:
-        deps_info['package_name'] = options.package_name
+  if options.requires_android and options.type == 'java_library':
+    # Used to strip out R.class for android_prebuilt()s.
+    config['javac']['resource_packages'] = [
+        c['package_name'] for c in all_resources_deps if 'package_name' in c
+    ]
+    if options.package_name:
+      deps_info['package_name'] = options.package_name
 
   if options.type in ('android_resources', 'android_apk', 'junit_binary',
                       'dist_aar', 'android_app_bundle_module', 'java_library'):
-
     dependency_zips = []
     dependency_zip_overlays = []
     for c in all_resources_deps:
@@ -1565,9 +1544,6 @@ def main(argv):
     # The classpath used for error prone.
     javac_full_interface_classpath = set(c['interface_jar_path']
                                          for c in all_library_deps)
-    # The path of the jetified jars.
-    jetified_full_jar_classpath = set(c['jetified_jar_path']
-                                      for c in all_library_deps)
 
     # Adding base module to classpath to compile against its R.java file
     if base_module_build_config:
@@ -1575,8 +1551,6 @@ def main(argv):
           base_module_build_config['deps_info']['unprocessed_jar_path'])
       javac_full_interface_classpath.add(
           base_module_build_config['deps_info']['interface_jar_path'])
-      jetified_full_jar_classpath.add(
-          base_module_build_config['deps_info']['jetified_jar_path'])
       # Turbine now compiles headers against only the direct classpath, so the
       # base module's interface jar must be on the direct interface classpath.
       javac_interface_classpath.add(
@@ -1590,7 +1564,6 @@ def main(argv):
       if 'extra_classpath_jars' in dep:
         javac_full_classpath.update(dep['extra_classpath_jars'])
         javac_full_interface_classpath.update(dep['extra_classpath_jars'])
-        jetified_full_jar_classpath.update(dep['extra_classpath_jars'])
 
     # TODO(agrieve): Might be less confusing to fold these into bootclasspath.
     # Deps to add to the compile-time classpath (but not the runtime classpath).
@@ -1601,7 +1574,6 @@ def main(argv):
       javac_interface_classpath.update(extra_classpath_jars)
       javac_full_classpath.update(extra_classpath_jars)
       javac_full_interface_classpath.update(extra_classpath_jars)
-      jetified_full_jar_classpath.update(extra_classpath_jars)
 
   if is_java_target or options.type == 'android_app_bundle':
     # The classpath to use to run this target (or as an input to ProGuard).
@@ -1803,8 +1775,7 @@ def main(argv):
         raise Exception('Deps %s have proguard enabled while deps %s have '
                         'proguard disabled' % (deps_proguard_enabled,
                                                deps_proguard_disabled))
-    else:
-      deps_info['proguard_enabled'] = bool(options.proguard_enabled)
+    deps_info['proguard_enabled'] = bool(options.proguard_enabled)
 
     if options.proguard_mapping_path:
       deps_info['proguard_mapping_path'] = options.proguard_mapping_path
@@ -1853,12 +1824,9 @@ def main(argv):
     javac_interface_classpath.add(tested_apk_config['interface_jar_path'])
     javac_full_classpath.add(tested_apk_config['unprocessed_jar_path'])
     javac_full_interface_classpath.add(tested_apk_config['interface_jar_path'])
-    jetified_full_jar_classpath.add(tested_apk_config['interface_jar_path'])
     javac_full_classpath.update(tested_apk_config['javac_full_classpath'])
     javac_full_interface_classpath.update(
         tested_apk_config['javac_full_interface_classpath'])
-    jetified_full_jar_classpath.update(
-        tested_apk_config['jetified_full_jar_classpath'])
 
     # Exclude .jar files from the test apk that exist within the apk under test.
     tested_apk_library_deps = tested_apk_deps.All('java_library')
@@ -1902,8 +1870,6 @@ def main(argv):
     deps_info['javac_full_classpath'] = sorted(javac_full_classpath)
     deps_info['javac_full_interface_classpath'] = sorted(
         javac_full_interface_classpath)
-    deps_info['jetified_full_jar_classpath'] = sorted(
-        jetified_full_jar_classpath)
   elif options.type == 'android_app_bundle':
     # bundles require javac_full_classpath to create .aab.jar.info and require
     # javac_full_interface_classpath for lint.
@@ -2023,7 +1989,6 @@ def main(argv):
     RemoveObjDups(config, base, 'deps_info', 'device_classpath')
     RemoveObjDups(config, base, 'deps_info', 'javac_full_classpath')
     RemoveObjDups(config, base, 'deps_info', 'javac_full_interface_classpath')
-    RemoveObjDups(config, base, 'deps_info', 'jetified_full_jar_classpath')
     RemoveObjDups(config, base, 'deps_info', 'jni', 'all_source')
     RemoveObjDups(config, base, 'final_dex', 'all_dex_files')
     RemoveObjDups(config, base, 'extra_android_manifests')

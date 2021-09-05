@@ -4,6 +4,7 @@
 <translation id="1033008476608128425">Landskab 3</translation>
 <translation id="1118377629180821201">Landskab 12</translation>
 <translation id="1158503667684816647">Vis ikke bekræftelse igen</translation>
+<translation id="1222195720020481779">Starter installationen...</translation>
 <translation id="1276145862619442150">Hurtigkald</translation>
 <translation id="1281950884873973195">Dyr 6</translation>
 <translation id="1411638389238344450">Send link via mail</translation>
@@ -21,11 +22,17 @@
 <translation id="1921101374471252440">&amp;Genindlæs billede</translation>
 <translation id="1924750141060565109">Landskab 15</translation>
 <translation id="19598411548897379">Generisk</translation>
+<translation id="1985669426322966465">Softwareopdatering</translation>
 <translation id="2079036669923635404">Klik her for at opdatere Vivaldi til version <ph name="VERSION" />.</translation>
 <translation id="2141974047387702305">Der opstod en fejl under download af opdateringsfiler. Kontrollér venligst din internetforbindelse og prøv igen senere.</translation>
+<translation id="2339641773402824483">Søger efter opdateringer...</translation>
 <translation id="2441056087170876076">Monster 2</translation>
 <translation id="2444387452209867610">Indsæt note</translation>
 <translation id="2486841023299517366">Dyr 4</translation>
+<translation id="2612127540243995147">Klar til at installere. Vivaldi vil blive lukket og genstartet.</translation>
+<translation id="2613387515621326337">Vis opdaterings-webside</translation>
+<translation id="2647368062414805334">Desværre, er dine Edge-indstillinger ikke tilgængelige mens den browser kører. For at importere disse indstillinger til Vivaldi, skal du gemme dit arbejde og lukke alle Edge-vinduer. Klik derefter fortsæt.</translation>
+<translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">Dyr 3</translation>
 <translation id="2873951654529031587">Papirkurv</translation>
 <translation id="292258461174562431">Monster 4</translation>
@@ -36,9 +43,12 @@
 <translation id="3084011186245865060">Landskab 6</translation>
 <translation id="3127383884976966729">Dyr 7</translation>
 <translation id="3156398087075132709">Nyt bogmærke</translation>
+<translation id="3255747772218936245">Installer opdatering</translation>
 <translation id="3259769196742189631">Validér</translation>
 <translation id="3302905971452834934">Monster 1</translation>
 <translation id="3334610655141903168">(ingen titel)</translation>
+<translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> er i øjeblikket den nyeste version, der er tilgængelig.</translation>
+<translation id="3383198080133834965">Du er opdateret!</translation>
 <translation id="3402602684546832928">Vælg Opera bogmærke-fil</translation>
 <translation id="3451317331714872347">Landskab 8</translation>
 <translation id="3457498675806041407">Bekræft lukning</translation>
@@ -48,14 +58,17 @@
 <translation id="3542768452570884558">Åbn link i nyt vindue</translation>
 <translation id="3588820906588687999">Åbn &amp;billede på ny fane</translation>
 <translation id="3601066750251199488">Monster 3</translation>
+<translation id="3680031241659195730">En ny version af Vivaldi er tilgængelig!</translation>
 <translation id="3708982624815781692">Download blev annuleret.</translation>
 <translation id="3732157130969736834">Gem link som bogmærke</translation>
 <translation id="3732388226447288666">Dyr 2</translation>
 <translation id="3732439195215136813">Dyr 5</translation>
+<translation id="3795800845758778870">Desværre, er dine Brave-indstillinger ikke tilgængelige mens den browser kører. For at importere disse indstillinger til Vivaldi, skal du gemme dit arbejde og lukke alle Brave-vinduer. Klik derefter fortsæt.</translation>
 <translation id="3832132597516774400">Landskab 5</translation>
 <translation id="3914946330804881301">Importeret fra Opera</translation>
 <translation id="3921292902397893431">Monster 8</translation>
 <translation id="3943857333388298514">Sæt ind</translation>
+<translation id="4005270918754737597">Spring denne version over</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4073157431025461511">&amp;Vis ikke igen</translation>
 <translation id="4074744496918018786">Åbn billede i nyt vindue</translation>
@@ -72,6 +85,7 @@
 <translation id="4677434526832593569">Dyr 8</translation>
 <translation id="474217410105706308">Mute fane</translation>
 <translation id="4881695831933465202">Åbn</translation>
+<translation id="498766871928286903"><ph name="DOWNLOADED" /> af <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
 <translation id="5014281392052865061">Importerede Kvikknapper</translation>
 <translation id="5092656712000637858">Tilføj side som Net-panel</translation>
 <translation id="5177818338935286353">Monster 7</translation>
@@ -87,6 +101,7 @@
 <translation id="5648110075441906505">Åbn billede i nyt vindue</translation>
 <translation id="5656371807944747581">Opdateringsfejl!</translation>
 <translation id="5716238312826274098">Deaktiverer notifikationer</translation>
+<translation id="5732584064771442623">Vivaldi <ph name="NEW_VERSION" /> er nu tilgængelig (du har <ph name="OLD_VERSION" />). Vil du downloade den nu?</translation>
 <translation id="5770433027661640693">Landskab 10</translation>
 <translation id="5857090052475505287">Ny mappe</translation>
 <translation id="588258955323874662">Fuldskærm</translation>
@@ -102,15 +117,21 @@
 <translation id="6538338088414940408">Åbn link i baggrundsfane</translation>
 <translation id="6551219277044048123">Tilføj som søgemas&amp;kine...</translation>
 <translation id="6630781781151951863">Landskab 18</translation>
+<translation id="6635049669875534328">Udgivelsesnoter:</translation>
+<translation id="6693585104974197539">Vælg Edge-profilmappe, der skal importeres</translation>
+<translation id="6726279523566323394">Vælg Brave-profilmappe, der skal importeres</translation>
 <translation id="6804831687363620480">Trist, dine Opera 15+ indstillinger er ikke tilgængelige mens den browser kører. For at importere disse indstillinger til Vivaldi skal du gamme dit arbejde og lukke alle Opera 15+ vinduer. Klik derefter på Fortsæt.</translation>
+<translation id="6892812721183419409">Åbn link som <ph name="USER" /></translation>
 <translation id="6896758677409633944">Kopier</translation>
 <translation id="7086554968911045110">Landskab 7</translation>
 <translation id="7111492742514999492">Landskab 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7496505986576158197">Vivaldi er gjort mulig af <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> open source-projektet og anden <ph name="BEGIN_LINK_OSS" />open source software<ph name="END_LINK_OSS" />.</translation>
 <translation id="7581266044164103589">Start af opdaterings-installationsprogramet fejlede. Kontrollér venligst at computeren har nok RAM eller diskplads og prøv igen senere.</translation>
+<translation id="7658239707568436148">Annuller</translation>
 <translation id="7715497554424665066">&amp;Ignorer opdatering</translation>
 <translation id="7724603315864178912">Klip</translation>
+<translation id="7727481996062361502">Bekræfter opdatering...</translation>
 <translation id="7793738202466490491">Tilføj som kalender-begivenhed</translation>
 <translation id="7848222781052558334">Verificering af den digitale signatur i de downloadede filer fejlede.</translation>
 <translation id="7865983598101744945">Bekræft lukning</translation>
@@ -121,9 +142,13 @@
 <translation id="8261506727792406068">Slet</translation>
 <translation id="8331671104904436324">Åbn i baggrunds-fane</translation>
 <translation id="8373293945112511707">Landskab 1</translation>
+<translation id="8388552048012645975">Downloader opdatering...</translation>
 <translation id="8427094907586191051">Landskab 17</translation>
+<translation id="8439034818057146672">En ny version af Vivaldi er klar til installation.</translation>
 <translation id="8446668873108041390">Eksekvering af JavaScript gennem AppleScript er slået fra. Under Indstillinger &gt; Privatliv &gt; Apple Events, er der en indstilling til tilladelse af JavaScript fra Apple Events.</translation>
 <translation id="8539196077526389150">Landskab 13</translation>
+<translation id="8562339533180097902">Luk Vivaldi og installer nu</translation>
+<translation id="8567452685425968223">Udpakker opdatering...</translation>
 <translation id="8624587806981488221">&amp;Genindlæs billede</translation>
 <translation id="864444594187862076">Opera version 15+ (Udvikler)</translation>
 <translation id="8651348004684669199">Tilføj aktiv fane</translation>
@@ -131,12 +156,15 @@
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8768970203213061953">Landskab 14</translation>
 <translation id="8773635261052182196">Du vil ikke se disse notifikationer længere. Du kan aktivere dem igen fra Vivaldi's indstillinger.</translation>
+<translation id="8813277370772331957">Mind mig om det senere</translation>
 <translation id="8894900864683381599">Tilføj link som Net-panel</translation>
 <translation id="8912720443398351457">Vil du virkelig lukke Vivaldi?</translation>
 <translation id="8947109330183116400">Vælg HTML bogmærke-fil</translation>
 <translation id="9017566390391482291">Vælg Vivaldi-profilmappe der skal importeres</translation>
 <translation id="9065203028668620118">Rediger</translation>
+<translation id="912022491595344261">Åbn billede som <ph name="USER" /></translation>
 <translation id="9157539936604258187">Åbn link</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
+<translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">Landskab 16</translation>
 </translationbundle>

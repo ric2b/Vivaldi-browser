@@ -17,7 +17,7 @@
 #include "base/metrics/user_metrics.h"
 #include "base/numerics/ranges.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/scoped_observer.h"
+#include "base/scoped_observation.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -146,13 +146,14 @@ class Tab::TabCloseButtonObserver : public views::ViewObserver {
                                   TabController* controller)
       : tab_(tab), close_button_(close_button), controller_(controller) {
     DCHECK(close_button_);
-    tab_close_button_observer_.Add(close_button_);
+    tab_close_button_observation_.Observe(close_button_);
   }
   TabCloseButtonObserver(const TabCloseButtonObserver&) = delete;
   TabCloseButtonObserver& operator=(const TabCloseButtonObserver&) = delete;
 
   ~TabCloseButtonObserver() override {
-    tab_close_button_observer_.Remove(close_button_);
+    DCHECK(tab_close_button_observation_.IsObserving());
+    tab_close_button_observation_.Reset();
   }
 
  private:
@@ -166,8 +167,8 @@ class Tab::TabCloseButtonObserver : public views::ViewObserver {
       controller_->UpdateHoverCard(nullptr);
   }
 
-  ScopedObserver<views::View, views::ViewObserver> tab_close_button_observer_{
-      this};
+  base::ScopedObservation<views::View, views::ViewObserver>
+      tab_close_button_observation_{this};
 
   Tab* tab_;
   views::View* close_button_;
@@ -854,6 +855,15 @@ void Tab::SetTabNeedsAttention(bool attention) {
   SchedulePaint();
 }
 
+void Tab::SetFreezingVoteToken(
+    std::unique_ptr<performance_manager::freezing::FreezingVoteToken> token) {
+  freezing_token_ = std::move(token);
+}
+
+void Tab::ReleaseFreezingVoteToken() {
+  freezing_token_.reset();
+}
+
 // static
 base::string16 Tab::GetTooltipText(const base::string16& title,
                                    base::Optional<TabAlertState> alert_state) {
@@ -1020,8 +1030,7 @@ void Tab::UpdateForegroundColors() {
 
   title_->SetEnabledColor(colors.foreground_color);
 
-  close_button_->SetIconColors(colors.foreground_color,
-                               colors.background_color);
+  close_button_->SetColors(colors);
 
   if (foreground_color_ != colors.foreground_color) {
     foreground_color_ = colors.foreground_color;

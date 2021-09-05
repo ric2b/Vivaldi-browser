@@ -69,7 +69,6 @@ cc_library(
     deps = [
         ":internal",
         "//absl/base",
-        "//absl/base:bits",
         "//absl/base:config",
         "//absl/base:core_headers",
         "//absl/base:endian",
@@ -77,6 +76,7 @@ cc_library(
         "//absl/base:throw_delegate",
         "//absl/memory",
         "//absl/meta:type_traits",
+        "//absl/numeric:bits",
         "//absl/numeric:int128",
     ],
 )
@@ -267,13 +267,23 @@ cc_test(
 
 cc_library(
     name = "cord_internal",
-    hdrs = ["internal/cord_internal.h"],
+    srcs = [
+        "internal/cord_internal.cc",
+    ],
+    hdrs = [
+        "internal/cord_internal.h",
+        "internal/cord_rep_flat.h",
+    ],
     copts = ABSL_DEFAULT_COPTS,
-    visibility = ["//visibility:private"],
+    visibility = [
+        "//visibility:private",
+    ],
     deps = [
         ":strings",
         "//absl/base:base_internal",
+        "//absl/base:core_headers",
         "//absl/container:compressed_tuple",
+        "//absl/container:inlined_vector",
         "//absl/meta:type_traits",
     ],
 )
@@ -653,11 +663,11 @@ cc_library(
     visibility = ["//visibility:private"],
     deps = [
         ":strings",
-        "//absl/base:bits",
         "//absl/base:config",
         "//absl/base:core_headers",
         "//absl/functional:function_ref",
         "//absl/meta:type_traits",
+        "//absl/numeric:bits",
         "//absl/numeric:int128",
         "//absl/types:optional",
         "//absl/types:span",

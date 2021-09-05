@@ -53,6 +53,7 @@ import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.omnibox.LocationBar;
 import org.chromium.chrome.browser.omnibox.LocationBarCoordinator;
 import org.chromium.chrome.browser.omnibox.SearchEngineLogoUtils;
+import org.chromium.chrome.browser.omnibox.status.StatusCoordinator;
 import org.chromium.chrome.browser.partnercustomizations.PartnerBrowserCustomizations;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
@@ -87,7 +88,7 @@ import android.content.res.Configuration;
 
 import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.NavigationPopup;
-import org.chromium.chrome.browser.toolbar.ThemeColorProvider;
+import org.chromium.chrome.browser.theme.ThemeColorProvider;
 
 import org.vivaldi.browser.common.VivaldiUtils;
 import org.vivaldi.browser.panels.PanelUtils;
@@ -463,7 +464,7 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
         mToggleTabStackButton.setOnKeyListener(new KeyboardNavigationListener() {
             @Override
             public View getNextFocusForward() {
-                if (getMenuButtonCoordinator().isShown()) {
+                if (isMenuButtonPresent()) {
                     return getMenuButtonCoordinator().getMenuButton();
                 } else {
                     return getCurrentTabView();
@@ -949,7 +950,8 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
      *         some adjustment to account for possible padding differences when the button
      *         visibility changes.
      */
-    private float getLocationBarWidthOffsetForOptionalButton() {
+    @VisibleForTesting
+    float getLocationBarWidthOffsetForOptionalButton() {
         float widthChange = mOptionalButton.getWidth();
 
         // When the optional button is the only visible button after the location bar and the
@@ -1057,9 +1059,7 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
         // implementation details.
         boolean isIncognito = getToolbarDataProvider().isIncognito();
         if (SearchEngineLogoUtils.shouldShowSearchEngineLogo(isIncognito)) {
-            locationBarBaseTranslationX +=
-                    mLocationBar.getPhoneCoordinator().getLocationBarOffsetForFocusAnimation(
-                            hasFocus());
+            locationBarBaseTranslationX += getLocationBarOffsetForFocusAnimation(hasFocus());
         }
 
         boolean isLocationBarRtl =
@@ -1104,8 +1104,7 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
         // LocationBar#getUrlBarTranslationXForToolbarAnimation() for implementation details.
         if (SearchEngineLogoUtils.shouldShowSearchEngineLogo(isIncognito)) {
             mUrlBar.setTranslationX(
-                    mLocationBar.getPhoneCoordinator().getUrlBarTranslationXForToolbarAnimation(
-                            mUrlExpansionFraction, hasFocus()));
+                    getUrlBarTranslationXForToolbarAnimation(mUrlExpansionFraction, hasFocus()));
         } else if (SearchEngineLogoUtils.isSearchEngineLogoEnabled()) {
             mUrlBar.setTranslationX(0);
         }
@@ -1575,6 +1574,7 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
         super.onAttachedToWindow();
 
         mToolbarShadow = (ImageView) getRootView().findViewById(R.id.toolbar_shadow);
+        updateShadowVisibility();
 
         // This is a workaround for http://crbug.com/574928. Since Jelly Bean is the lowest version
         // we support now and the next deprecation target, we decided to simply workaround.
@@ -1683,22 +1683,30 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
 
     @Override
     public void updateButtonVisibility() {
-        if (mHomeButton == null) return;
-
-        boolean hideHomeButton = !mIsHomeButtonEnabled
-                || ReturnToChromeExperimentsUtil.shouldHideHomeButtonForStartSurface(
-                        isIncognito(), false /* isTablet */);
-
-        // Note(david@vivaldi.com): Home button visibility will be handled in
-        // onBottomToolbarVisibilityChanged().
-        if (!ChromeApplication.isVivaldi())
-        if (hideHomeButton) {
-            removeHomeButton();
-        } else {
-            addHomeButton();
+        if (mHomeButton != null) {
+            boolean hideHomeButton = !mIsHomeButtonEnabled
+                    || ReturnToChromeExperimentsUtil.shouldHideHomeButtonForStartSurface(
+                            isIncognito(), false /* isTablet */);
+            // Note(david@vivaldi.com): Home button visibility will be handled in
+            // onBottomToolbarVisibilityChanged().
+            if (!ChromeApplication.isVivaldi())
+            if (hideHomeButton) {
+                removeHomeButton();
+            } else {
+                addHomeButton();
+            }
+            // Vivaldi: Update shield button.
+            mShieldButton.updateVisibility();
         }
-        // Vivaldi: Update shield button.
-        mShieldButton.updateVisibility();
+        if (mOptionalButton != null) {
+            if (isMenuButtonPresent()) {
+                int padding = getResources().getDimensionPixelSize(
+                        R.dimen.toolbar_phone_optional_button_padding);
+                mOptionalButton.setPaddingRelative(padding, 0, 0, 0);
+            } else {
+                mOptionalButton.setPadding(0, 0, 0, 0);
+            }
+        }
     }
 
     @Override
@@ -1887,7 +1895,7 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
         // crbug.com/974745.
         requestLayout();
 
-        mLocationBar.getPhoneCoordinator().setUrlBarFocusable(false);
+        mLocationBar.setUrlBarFocusable(false);
 
         finishAnimations();
 
@@ -1982,7 +1990,7 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
 
         // Detect what was being transitioned from and set the new state appropriately.
         if (mTabSwitcherState == EXITING_TAB_SWITCHER) {
-            mLocationBar.getPhoneCoordinator().setUrlBarFocusable(true);
+            mLocationBar.setUrlBarFocusable(true);
             mTabSwitcherState = STATIC_TAB;
             updateVisualsForLocationBarState();
         }
@@ -2244,13 +2252,10 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
                     mLayoutLocationBarInFocusedMode = false;
                     requestLayout();
                 }
-                mLocationBar.getPhoneCoordinator().finishUrlFocusChange(
-                        hasFocus, shouldShowKeyboard);
+                mLocationBar.getPhoneCoordinator().finishUrlFocusChange(hasFocus,
+                        shouldShowKeyboard,
+                        getToolbarDataProvider().shouldShowLocationBarInOverviewMode());
                 mUrlFocusChangeInProgress = false;
-
-                if (getToolbarDataProvider().shouldShowLocationBarInOverviewMode()) {
-                    mLocationBar.updateStatusIcon();
-                }
             }
         });
         mUrlFocusLayoutAnimator.start();
@@ -2603,7 +2608,6 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
             ViewStub viewStub = findViewById(R.id.optional_button_stub);
             mOptionalButton = (ImageButton) viewStub.inflate();
 
-            if (!isMenuButtonPresent()) mOptionalButton.setPadding(0, 0, 0, 0);
             mOptionalButtonTranslation = getResources().getDimensionPixelSize(
                     R.dimen.toolbar_optional_button_animation_translation);
             if (getLayoutDirection() == LAYOUT_DIRECTION_RTL) mOptionalButtonTranslation *= -1;
@@ -2672,7 +2676,7 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
      * buttons besides the optional button.
      */
     private boolean isMenuButtonPresent() {
-        return getMenuButtonCoordinator().isShown();
+        return getMenuButtonCoordinator().isVisible();
     }
 
     private void requestLayoutHostUpdateForOptionalButton() {
@@ -2879,6 +2883,100 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
         }
     }
 
+    /**
+     * Calculates the offset required for the focused LocationBar to appear as if it's still
+     * unfocused so it can animate to a focused state.
+     *
+     * @param hasFocus True if the LocationBar has focus, this will be true between the focus
+     *                 animation starting and the unfocus animation starting.
+     * @return The offset for the location bar when showing the dse icon.
+     */
+    private int getLocationBarOffsetForFocusAnimation(boolean hasFocus) {
+        StatusCoordinator statusCoordinator = mLocationBar.getStatusCoordinator();
+        if (statusCoordinator == null) return 0;
+
+        // No offset is required if the experiment is disabled.
+        if (!SearchEngineLogoUtils.shouldShowSearchEngineLogo(
+                    getToolbarDataProvider().isIncognito())) {
+            return 0;
+        }
+
+        // On non-NTP pages, there will always be an icon when unfocused.
+        if (!getToolbarDataProvider().getNewTabPageDelegate().isCurrentlyVisible()) return 0;
+
+        // This offset is only required when the focus animation is running.
+        if (!hasFocus) return 0;
+
+        // We're on the NTP with the fakebox showing.
+        // The value returned changes based on if the layout is LTR OR RTL.
+        // For LTR, the value is negative because we are making space on the left-hand side.
+        // For RTL, the value is positive because we are pushing the icon further to the
+        // right-hand side.
+        int offset = statusCoordinator.getStatusIconWidth() - getAdditionalOffsetForNTP();
+        return getLayoutDirection() == LAYOUT_DIRECTION_RTL ? offset : -offset;
+    }
+
+    /**
+     * Function used to position the url bar inside the location bar during omnibox animation.
+     *
+     * @param urlExpansionPercent The current expansion percent, 1 is fully focused and 0 is
+     *                            completely unfocused.
+     * @param hasFocus True if the LocationBar has focus, this will be true between the focus
+     *                 animation starting and the unfocus animation starting.
+     * @return The X translation for the URL bar, used in the toolbar animation.
+     */
+    private float getUrlBarTranslationXForToolbarAnimation(
+            float urlExpansionPercent, boolean hasFocus) {
+        StatusCoordinator statusCoordinator = mLocationBar.getStatusCoordinator();
+        if (statusCoordinator == null) return 0;
+
+        // No offset is required if the experiment is disabled.
+        if (!SearchEngineLogoUtils.shouldShowSearchEngineLogo(
+                    getToolbarDataProvider().isIncognito())) {
+            return 0;
+        }
+
+        boolean isRtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
+        // The calculation here is: the difference in padding between the focused vs unfocused
+        // states and also accounts for the translation that the status icon will do. In the end,
+        // this translation will be the distance that the url bar needs to travel to arrive at the
+        // desired padding when focused.
+        float translation =
+                urlExpansionPercent * statusCoordinator.getEndPaddingPixelSizeOnFocusDelta();
+
+        // Vivaldi - the search engine icon is always visible on NTP; the translation X
+        // should not be modified regardless of focus state.
+        if (!ChromeApplication.isVivaldi()) {
+        boolean scrollingOnNtp = !hasFocus && statusCoordinator.isSearchEngineStatusIconVisible()
+                && UrlUtilities.isNTPUrl(getToolbarDataProvider().getCurrentUrl());
+        if (scrollingOnNtp) {
+            // When:
+            // 1. unfocusing the LocationBar on the NTP.
+            // 2. scrolling the fakebox to the LocationBar on the NTP.
+            // The status icon and the URL bar text overlap in the animation.
+            //
+            // This branch calculates the negative distance the URL bar needs to travel to
+            // completely overlap the status icon and end up in a state that matches the fakebox.
+            float overStatusIconTranslation = translation
+                    - (1f - urlExpansionPercent)
+                            * (statusCoordinator.getStatusIconWidth()
+                                    - getAdditionalOffsetForNTP());
+            // The value returned changes based on if the layout is LTR or RTL.
+            // For LTR, the value is negative because the status icon is left of the url bar on the
+            // x/y plane.
+            // For RTL, the value is positive because the status icon is right of the url bar on the
+            // x/y plane.
+            return isRtl ? -overStatusIconTranslation : overStatusIconTranslation;
+        }
+        } // Vivaldi
+
+        return isRtl ? -translation : translation;
+    }
+
+    private int getAdditionalOffsetForNTP() {
+        return getResources().getDimensionPixelSize(R.dimen.sei_search_box_lateral_padding)
+                - getResources().getDimensionPixelSize(R.dimen.sei_location_bar_lateral_padding);
+    }
 
     // Vivaldi
     @Override
@@ -2961,5 +3059,11 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
         mBackButton.setVisibility(visibility);
         mForwardButton.setVisibility(visibility);
         mToolbarButtonsContainer.requestLayout();
+    }
+
+    @Override
+    public boolean areNavigationButtonsVisible() {
+        return (mBackButton.getVisibility() == VISIBLE ||
+                mForwardButton.getVisibility() == VISIBLE);
     }
 }

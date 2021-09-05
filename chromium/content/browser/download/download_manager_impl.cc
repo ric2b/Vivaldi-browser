@@ -75,6 +75,7 @@
 #include "net/base/upload_bytes_element_reader.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/cpp/features.h"
+#include "services/network/public/cpp/is_potentially_trustworthy.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/wrapper_shared_url_loader_factory.h"
 #include "third_party/blink/public/common/loader/network_utils.h"
@@ -328,14 +329,14 @@ DownloadManagerImpl::DownloadManagerImpl(BrowserContext* browser_context)
     in_progress_manager_ =
         std::make_unique<download::InProgressDownloadManager>(
             this, base::FilePath(), proto_db_provider,
-            base::BindRepeating(&blink::network_utils::IsOriginSecure),
+            base::BindRepeating(&network::IsUrlPotentiallyTrustworthy),
             base::BindRepeating(&DownloadRequestUtils::IsURLSafe),
             /*wake_lock_provider_binder=*/base::NullCallback());
   } else {
     in_progress_manager_->SetDelegate(this);
     in_progress_manager_->set_download_start_observer(nullptr);
     in_progress_manager_->set_is_origin_secure_cb(
-        base::BindRepeating(&blink::network_utils::IsOriginSecure));
+        base::BindRepeating(&network::IsUrlPotentiallyTrustworthy));
   }
 }
 
@@ -686,6 +687,15 @@ DownloadManagerImpl::GetQuarantineConnectionCallback() {
   return delegate_->GetQuarantineConnectionCallback();
 }
 
+std::unique_ptr<download::DownloadItemRenameHandler>
+DownloadManagerImpl::GetRenameHandlerForDownload(
+    download::DownloadItemImpl* download_item) {
+  if (!delegate_)
+    return nullptr;
+
+  return delegate_->GetRenameHandlerForDownload(download_item);
+}
+
 void DownloadManagerImpl::StartDownload(
     std::unique_ptr<download::DownloadCreateInfo> info,
     std::unique_ptr<download::InputStream> stream,
@@ -880,7 +890,8 @@ void DownloadManagerImpl::InterceptNavigation(
     content::DownloadInformation* downloadinfo =
       web_contents->GetDelegate()->GetDownloadInformation();
     downloadinfo->mime_type = response_head->mime_type;
-    downloadinfo->size = response_head->content_length;
+    downloadinfo->size =
+        response_head->content_length ? response_head->content_length : -1;
     std::string default_file_name = "file";
 
     std::string content_disposition;

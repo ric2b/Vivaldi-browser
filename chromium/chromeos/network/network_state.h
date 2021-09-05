@@ -129,12 +129,14 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkState : public ManagedState {
   void set_blocked_by_policy(bool blocked_by_policy) {
     blocked_by_policy_ = blocked_by_policy;
   }
+  bool hidden_ssid() const { return hidden_ssid_; }
 
   // Wifi property accessors
   const std::string& eap_method() const { return eap_method_; }
   const std::vector<uint8_t>& raw_ssid() const { return raw_ssid_; }
 
   // Cellular property accessors
+  const std::string& eid() const { return eid_; }
   const std::string& network_technology() const { return network_technology_; }
   const std::string& activation_type() const { return activation_type_; }
   const std::string& activation_state() const { return activation_state_; }
@@ -166,6 +168,10 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkState : public ManagedState {
   void set_tether_guid(const std::string& guid) { tether_guid_ = guid; }
 
   bool connect_requested() const { return connect_requested_; }
+
+  const std::string& shill_connect_error() const {
+    return shill_connect_error_;
+  }
 
   PortalState portal_state() const { return portal_state_; }
 
@@ -306,6 +312,10 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkState : public ManagedState {
   // configuration is updated/removed.
   std::string last_error_;
 
+  // The error message provided by the shill Service.Connect dbus method if the
+  // most recent connect attempt failed. Otherwise empty.
+  std::string shill_connect_error_;
+
   // Cached copy of the Shill Service IPConfig object. For ipv6 properties use
   // the ip_configs_ property in the corresponding DeviceState.
   base::Value ipv4_config_;
@@ -316,8 +326,10 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkState : public ManagedState {
   std::string bssid_;
   int frequency_ = 0;
   bool blocked_by_policy_ = false;
+  bool hidden_ssid_ = false;
 
   // Cellular properties, used for icons, Connect, and Activation.
+  std::string eid_;
   std::string network_technology_;
   std::string activation_type_;
   std::string activation_state_;

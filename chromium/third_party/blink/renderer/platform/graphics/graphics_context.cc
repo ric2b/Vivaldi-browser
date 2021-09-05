@@ -117,25 +117,8 @@ class GraphicsContext::DarkModeFlags final {
   base::Optional<PaintFlags> dark_mode_flags_;
 };
 
-GraphicsContext::GraphicsContext(PaintController& paint_controller,
-                                 printing::MetafileSkia* metafile,
-                                 paint_preview::PaintPreviewTracker* tracker)
-    : canvas_(nullptr),
-      paint_controller_(paint_controller),
-      paint_state_stack_(),
-      paint_state_index_(0),
-      metafile_(metafile),
-      tracker_(tracker),
-#if DCHECK_IS_ON()
-      layer_count_(0),
-      disable_destruction_checks_(false),
-#endif
-      device_scale_factor_(1.0f),
-      dark_mode_filter_(nullptr),
-      printing_(false),
-      is_painting_preview_(false),
-      in_drawing_recorder_(false),
-      is_dark_mode_enabled_(false) {
+GraphicsContext::GraphicsContext(PaintController& paint_controller)
+    : paint_controller_(paint_controller) {
   // FIXME: Do some tests to determine how many states are typically used, and
   // allocate several here.
   paint_state_stack_.push_back(std::make_unique<GraphicsContextState>());
@@ -151,6 +134,14 @@ GraphicsContext::~GraphicsContext() {
     DCHECK(!SaveCount());
   }
 #endif
+}
+
+void GraphicsContext::CopyConfigFrom(GraphicsContext& other) {
+  SetPrintingMetafile(other.printing_metafile_);
+  SetPaintPreviewTracker(other.paint_preview_tracker_);
+  SetDarkModeEnabled(other.is_dark_mode_enabled_);
+  SetDeviceScaleFactor(other.device_scale_factor_);
+  SetPrinting(other.printing_);
 }
 
 DarkModeFilter* GraphicsContext::GetDarkModeFilter() {
@@ -221,6 +212,7 @@ void GraphicsContext::SetInDrawingRecorder(bool val) {
 }
 
 void GraphicsContext::SetDOMNodeId(DOMNodeId new_node_id) {
+  DCHECK(NeedsDOMNodeId());
   if (canvas_)
     canvas_->setNodeId(new_node_id);
 
@@ -228,33 +220,8 @@ void GraphicsContext::SetDOMNodeId(DOMNodeId new_node_id) {
 }
 
 DOMNodeId GraphicsContext::GetDOMNodeId() const {
+  DCHECK(NeedsDOMNodeId());
   return dom_node_id_;
-}
-
-void GraphicsContext::SetShadow(
-    const FloatSize& offset,
-    float blur,
-    const Color& color,
-    DrawLooperBuilder::ShadowTransformMode shadow_transform_mode,
-    DrawLooperBuilder::ShadowAlphaMode shadow_alpha_mode,
-    ShadowMode shadow_mode) {
-  DrawLooperBuilder draw_looper_builder;
-  if (!color.Alpha()) {
-    // When shadow-only but there is no shadow, we use an empty draw looper
-    // to disable rendering of the source primitive.  When not shadow-only, we
-    // clear the looper.
-    SetDrawLooper(shadow_mode != kDrawShadowOnly
-                      ? nullptr
-                      : draw_looper_builder.DetachDrawLooper());
-    return;
-  }
-
-  draw_looper_builder.AddShadow(offset, blur, color, shadow_transform_mode,
-                                shadow_alpha_mode);
-  if (shadow_mode == kDrawShadowAndForeground) {
-    draw_looper_builder.AddUnmodifiedContent();
-  }
-  SetDrawLooper(draw_looper_builder.DetachDrawLooper());
 }
 
 void GraphicsContext::SetDrawLooper(sk_sp<SkDrawLooper> draw_looper) {
@@ -315,10 +282,10 @@ void GraphicsContext::EndLayer() {
 void GraphicsContext::BeginRecording(const FloatRect& bounds) {
   DCHECK(!canvas_);
   canvas_ = paint_recorder_.beginRecording(bounds);
-  if (metafile_)
-    canvas_->SetPrintingMetafile(metafile_);
-  if (tracker_)
-    canvas_->SetPaintPreviewTracker(tracker_);
+  if (printing_metafile_)
+    canvas_->SetPrintingMetafile(printing_metafile_);
+  if (paint_preview_tracker_)
+    canvas_->SetPaintPreviewTracker(paint_preview_tracker_);
 }
 
 sk_sp<PaintRecord> GraphicsContext::EndRecording() {
@@ -492,84 +459,6 @@ void GraphicsContext::DrawFocusRing(const Vector<IntRect>& rects,
   } else {
     DrawFocusRingInternal(rects, width, offset, border_radius, inner_color);
   }
-}
-
-static inline FloatRect AreaCastingShadowInHole(
-    const FloatRect& hole_rect,
-    float shadow_blur,
-    float shadow_spread,
-    const FloatSize& shadow_offset) {
-  FloatRect bounds(hole_rect);
-
-  bounds.Inflate(shadow_blur);
-
-  if (shadow_spread < 0)
-    bounds.Inflate(-shadow_spread);
-
-  FloatRect offset_bounds = bounds;
-  offset_bounds.Move(-shadow_offset);
-  return UnionRect(bounds, offset_bounds);
-}
-
-void GraphicsContext::DrawInnerShadow(const FloatRoundedRect& rect,
-                                      const Color& orig_shadow_color,
-                                      const FloatSize& shadow_offset,
-                                      float shadow_blur,
-                                      float shadow_spread,
-                                      Edges clipped_edges) {
-  SkColor shadow_color = DarkModeFilterHelper::ApplyToColorIfNeeded(
-      this, orig_shadow_color.Rgb(), DarkModeFilter::ElementRole::kBackground);
-
-  FloatRect hole_rect(rect.Rect());
-  hole_rect.Inflate(-shadow_spread);
-
-  if (hole_rect.IsEmpty()) {
-    FillRoundedRect(rect, Color(shadow_color));
-    return;
-  }
-
-  if (clipped_edges & kLeftEdge) {
-    hole_rect.Move(-std::max(shadow_offset.Width(), 0.0f) - shadow_blur, 0);
-    hole_rect.SetWidth(hole_rect.Width() +
-                       std::max(shadow_offset.Width(), 0.0f) + shadow_blur);
-  }
-  if (clipped_edges & kTopEdge) {
-    hole_rect.Move(0, -std::max(shadow_offset.Height(), 0.0f) - shadow_blur);
-    hole_rect.SetHeight(hole_rect.Height() +
-                        std::max(shadow_offset.Height(), 0.0f) + shadow_blur);
-  }
-  if (clipped_edges & kRightEdge)
-    hole_rect.SetWidth(hole_rect.Width() -
-                       std::min(shadow_offset.Width(), 0.0f) + shadow_blur);
-  if (clipped_edges & kBottomEdge)
-    hole_rect.SetHeight(hole_rect.Height() -
-                        std::min(shadow_offset.Height(), 0.0f) + shadow_blur);
-
-  Color fill_color(SkColorGetR(shadow_color), SkColorGetG(shadow_color),
-                   SkColorGetB(shadow_color), 255);
-
-  FloatRect outer_rect = AreaCastingShadowInHole(rect.Rect(), shadow_blur,
-                                                 shadow_spread, shadow_offset);
-  FloatRoundedRect rounded_hole(hole_rect, rect.GetRadii());
-
-  GraphicsContextStateSaver state_saver(*this);
-  if (rect.IsRounded()) {
-    ClipRoundedRect(rect);
-    if (shadow_spread < 0)
-      rounded_hole.ExpandRadii(-shadow_spread);
-    else
-      rounded_hole.ShrinkRadii(shadow_spread);
-  } else {
-    Clip(rect.Rect());
-  }
-
-  DrawLooperBuilder draw_looper_builder;
-  draw_looper_builder.AddShadow(FloatSize(shadow_offset), shadow_blur,
-                                shadow_color,
-                                DrawLooperBuilder::kShadowRespectsTransforms,
-                                DrawLooperBuilder::kShadowIgnoresAlpha);
-  SetDrawLooper(draw_looper_builder.DetachDrawLooper());
-  FillRectWithRoundedHole(outer_rect, rounded_hole, fill_color);
 }
 
 static void EnforceDotsAtEndpoints(GraphicsContext& context,
@@ -966,7 +855,7 @@ SkFilterQuality GraphicsContext::ComputeFilterQuality(
     const FloatRect& dest,
     const FloatRect& src) const {
   InterpolationQuality resampling;
-  if (Printing()) {
+  if (printing_) {
     resampling = kInterpolationNone;
   } else if (image->CurrentFrameIsLazyDecoded()) {
     resampling = kInterpolationDefault;
@@ -1162,6 +1051,16 @@ void GraphicsContext::FillDRRect(const FloatRoundedRect& outer,
   canvas_->drawRRect(stroke_r_rect, stroke_flags);
 }
 
+void GraphicsContext::FillRectWithRoundedHole(
+    const FloatRect& rect,
+    const FloatRoundedRect& rounded_hole_rect,
+    const Color& color) {
+  PaintFlags flags(ImmutableState()->FillFlags());
+  flags.setColor(DarkModeFilterHelper::ApplyToColorIfNeeded(
+      this, color.Rgb(), DarkModeFilter::ElementRole::kBackground));
+  canvas_->drawDRRect(SkRRect::MakeRect(rect), rounded_hole_rect, flags);
+}
+
 void GraphicsContext::FillEllipse(const FloatRect& ellipse) {
   DrawOval(ellipse, ImmutableState()->FillFlags());
 }
@@ -1292,7 +1191,7 @@ void GraphicsContext::SetURLDestinationLocation(const String& name,
   DCHECK(canvas_);
 
   // Paint previews don't make use of linked destinations.
-  if (tracker_)
+  if (paint_preview_tracker_)
     return;
 
   SkRect rect = SkRect::MakeXYWH(location.X(), location.Y(), 0, 0);
@@ -1303,16 +1202,6 @@ void GraphicsContext::SetURLDestinationLocation(const String& name,
 
 void GraphicsContext::ConcatCTM(const AffineTransform& affine) {
   Concat(AffineTransformToSkMatrix(affine));
-}
-
-void GraphicsContext::FillRectWithRoundedHole(
-    const FloatRect& rect,
-    const FloatRoundedRect& rounded_hole_rect,
-    const Color& color) {
-  PaintFlags flags(ImmutableState()->FillFlags());
-  flags.setColor(DarkModeFilterHelper::ApplyToColorIfNeeded(
-      this, color.Rgb(), DarkModeFilter::ElementRole::kBackground));
-  canvas_->drawDRRect(SkRRect::MakeRect(rect), rounded_hole_rect, flags);
 }
 
 void GraphicsContext::AdjustLineToPixelBoundaries(FloatPoint& p1,

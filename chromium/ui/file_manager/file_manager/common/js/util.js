@@ -484,7 +484,9 @@ util.toggleFullScreen = (appWindow, enabled) => {
  */
 util.FileOperationType = {
   COPY: 'COPY',
+  DELETE: 'DELETE',
   MOVE: 'MOVE',
+  RESTORE: 'RESTORE',
   ZIP: 'ZIP',
 };
 Object.freeze(util.FileOperationType);
@@ -1154,6 +1156,8 @@ util.getRootTypeLabel = locationInfo => {
       return str('LINUX_FILES_ROOT_LABEL');
     case VolumeManagerCommon.RootType.MY_FILES:
       return str('MY_FILES_ROOT_LABEL');
+    case VolumeManagerCommon.RootType.TRASH:
+      return str('TRASH_ROOT_LABEL');
     case VolumeManagerCommon.RootType.MEDIA_VIEW:
       const mediaViewRootType =
           VolumeManagerCommon.getMediaViewRootTypeFromVolumeId(
@@ -1425,7 +1429,7 @@ util.isFilesCameraFolderEnabled = () => {
  * @return {boolean}
  */
 util.isFilesNg = () => {
-  return loadTimeData.getBoolean('FILES_NG_ENABLED');
+  return true;
 };
 
 /**
@@ -1480,19 +1484,27 @@ util.isZipUnpackEnabled = () => {
 };
 
 /**
- * Returns true if transfer details flag is enabled.
- * @return {boolean}
- */
-util.isTransferDetailsEnabled = () => {
-  return loadTimeData.getBoolean('FILES_TRANSFER_DETAILS_ENABLED');
-};
-
-/**
  * Returns true if FilesSinglePartitionFormat flag is enabled.
  * @return {boolean}
  */
 util.isSinglePartitionFormatEnabled = () => {
   return loadTimeData.getBoolean('FILES_SINGLE_PARTITION_FORMAT_ENABLED');
+};
+
+/**
+ * Returns true if  flag is enabled.
+ * @return {boolean}
+ */
+util.isAudioPlayerJsModulesEnabled = () => {
+  return loadTimeData.getBoolean('AUDIO_PLAYER_JS_MODULES_ENABLED');
+};
+
+/**
+ * Returns true if  flag is enabled.
+ * @return {boolean}
+ */
+util.isVideoPlayerJsModulesEnabled = () => {
+  return loadTimeData.getBoolean('VIDEO_PLAYER_JS_MODULES_ENABLED');
 };
 
 /**
@@ -1762,12 +1774,6 @@ util.hasOverflow = (element) => {
 util.isSharesheetEnabled = () => {
   return loadTimeData.valueExists('SHARESHEET_ENABLED') &&
       loadTimeData.getBoolean('SHARESHEET_ENABLED');
-};
-
-/** @return {boolean} */
-util.isHoldingSpaceEnabled = () => {
-  return loadTimeData.valueExists('HOLDING_SPACE_ENABLED') &&
-      loadTimeData.getBoolean('HOLDING_SPACE_ENABLED');
 };
 
 util.isDriveDssPinEnabled = () => {

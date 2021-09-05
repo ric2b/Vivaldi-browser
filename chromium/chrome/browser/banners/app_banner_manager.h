@@ -13,19 +13,18 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/strings/string16.h"
-#include "chrome/browser/engagement/site_engagement_observer.h"
-#include "chrome/browser/installable/installable_logging.h"
-#include "chrome/browser/installable/installable_manager.h"
+#include "components/site_engagement/content/site_engagement_observer.h"
+#include "components/webapps/browser/installable/installable_logging.h"
+#include "components/webapps/browser/installable/installable_params.h"
 #include "content/public/browser/media_player_id.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "third_party/blink/public/common/manifest/manifest.h"
 #include "third_party/blink/public/mojom/app_banner/app_banner.mojom.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom-forward.h"
 #include "url/gurl.h"
 
-enum class WebappInstallSource;
-class InstallableManager;
 class SkBitmap;
 
 namespace content {
@@ -33,7 +32,10 @@ class RenderFrameHost;
 class WebContents;
 }  // namespace content
 
-namespace banners {
+namespace webapps {
+class InstallableManager;
+enum class WebappInstallSource;
+struct InstallableData;
 
 // Coordinates the creation of an app banner, from detecting eligibility to
 // fetching data and creating the infobar. Sites declare that they want an app
@@ -49,7 +51,7 @@ namespace banners {
 // TODO(https://crbug.com/930612): Refactor this into several simpler classes.
 class AppBannerManager : public content::WebContentsObserver,
                          public blink::mojom::AppBannerService,
-                         public SiteEngagementObserver {
+                         public site_engagement::SiteEngagementObserver {
  public:
   class Observer : public base::CheckedObserver {
    public:
@@ -185,6 +187,15 @@ class AppBannerManager : public content::WebContentsObserver,
 
   InstallableWebAppCheckResult GetInstallableWebAppCheckResultForTesting();
 
+  // Return the name of the app for this page.
+  virtual base::string16 GetAppName() const;
+
+  // Simple accessors:
+  const blink::Manifest& manifest() { return manifest_; }
+  const SkBitmap& primary_icon() { return primary_icon_; }
+  bool has_maskable_primary_icon() { return has_maskable_primary_icon_; }
+  const GURL& validated_url() { return validated_url_; }
+
  protected:
   explicit AppBannerManager(content::WebContents* web_contents);
   ~AppBannerManager() override;
@@ -200,9 +211,6 @@ class AppBannerManager : public content::WebContentsObserver,
 
   // Return a string identifying this app for metrics.
   virtual std::string GetAppIdentifier();
-
-  // Return the name of the app for this page.
-  virtual base::string16 GetAppName() const;
 
   // Return a string describing what type of banner is being created. Used when
   // alerting websites that a banner is about to be created.
@@ -229,8 +237,12 @@ class AppBannerManager : public content::WebContentsObserver,
       const blink::Manifest::RelatedApplication& related_app) const = 0;
 
   // Returns whether the current page is already installed as a web app, or
-  // should be considered as installed.
-  virtual bool IsWebAppConsideredInstalled();
+  // should be considered as installed. Returns true if there is an installed
+  // web app within the BrowserContext of |web_contents()| that contains |url|
+  // within its scope, and false otherwise. For example, the URL
+  // https://example.com/a/b/c/d.html is contained within a web app with scope
+  // https://example.com/a/b/.
+  virtual bool IsWebAppConsideredInstalled() const = 0;
 
   // Returns whether the installed web app at the current page can be
   // overwritten with a new app install for the current page.
@@ -245,8 +257,8 @@ class AppBannerManager : public content::WebContentsObserver,
   // manifest.
   virtual void OnDidGetManifest(const InstallableData& result);
 
-  // Returns an InstallableParams object that requests all checks necessary for
-  // a web app banner.
+  // Returns an InstallableParams object that requests all checks
+  // necessary for a web app banner.
   virtual InstallableParams ParamsToPerformInstallableWebAppCheck();
 
   // Run at the conclusion of OnDidGetManifest. For web app banners, this calls
@@ -317,7 +329,7 @@ class AppBannerManager : public content::WebContentsObserver,
   void OnEngagementEvent(content::WebContents* web_contents,
                          const GURL& url,
                          double score,
-                         SiteEngagementService::EngagementType type) override;
+                         site_engagement::EngagementType type) override;
 
   // Subclass accessors for private fields which should not be changed outside
   // this class.
@@ -374,8 +386,7 @@ class AppBannerManager : public content::WebContentsObserver,
   // requesting that it be shown later.
   void DisplayAppBanner() override;
 
-  // Returns an InstallableStatusCode indicating whether a banner should be
-  // shown.
+  // Returns a status code indicating whether a banner should be shown.
   InstallableStatusCode ShouldShowBannerCode();
 
   // Returns a status code based on the current state, to log when terminating.
@@ -413,6 +424,6 @@ class AppBannerManager : public content::WebContentsObserver,
   DISALLOW_COPY_AND_ASSIGN(AppBannerManager);
 };
 
-}  // namespace banners
+}  // namespace webapps
 
 #endif  // CHROME_BROWSER_BANNERS_APP_BANNER_MANAGER_H_

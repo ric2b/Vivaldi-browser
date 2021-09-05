@@ -17,9 +17,9 @@
 #include "base/observer_list_types.h"
 #include "base/scoped_observation.h"
 #include "base/timer/elapsed_timer.h"
-#include "base/util/type_safety/strong_alias.h"
+#include "base/types/strong_alias.h"
 #include "components/password_manager/core/browser/compromised_credentials_consumer.h"
-#include "components/password_manager/core/browser/compromised_credentials_table.h"
+#include "components/password_manager/core/browser/insecure_credentials_table.h"
 #include "components/password_manager/core/browser/leak_detection/bulk_leak_check.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/core/browser/ui/compromised_credentials_reader.h"
@@ -39,6 +39,8 @@ enum class InsecureCredentialTypeFlags {
   kCredentialPhished = 1 << 1,
   // If the credential has a weak password.
   kWeakCredential = 1 << 2,
+  // If the credentials has the same password as another credentials.
+  kReusedCredential = 1 << 3,
 };
 
 constexpr InsecureCredentialTypeFlags operator&(

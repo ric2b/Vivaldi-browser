@@ -11,9 +11,9 @@
 #include <memory>
 
 #include "base/auto_reset.h"
+#include "base/containers/contains.h"
 #include "base/json/json_reader.h"
 #include "base/run_loop.h"
-#include "base/stl_util.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/task_environment.h"
 #include "base/win/atl.h"
@@ -1394,7 +1394,7 @@ TEST_F(AXPlatformNodeWinTest, IAccessibleTableQueryInterfaceOnNonTable) {
 
   AXNodeData root;
   root.id = 1;
-  root.role = ax::mojom::Role::kWebArea;
+  root.role = ax::mojom::Role::kRootWebArea;
   Init(root);
 
   ComPtr<IAccessible> root_obj = GetRootIAccessible();
@@ -3048,7 +3048,7 @@ TEST_F(AXPlatformNodeWinTest, IAccessibleTextGetNCharacters) {
 TEST_F(AXPlatformNodeWinTest, IAccessibleTextGetOffsetAtPoint) {
   AXNodeData root;
   root.id = 1;
-  root.role = ax::mojom::Role::kWebArea;
+  root.role = ax::mojom::Role::kRootWebArea;
   root.relative_bounds.bounds = gfx::RectF(0, 0, 300, 200);
   root.child_ids = {2, 3};
 
@@ -5644,6 +5644,9 @@ TEST_F(AXPlatformNodeWinTest, GetPatternProviderSupportedPatterns) {
                                grid_with_header_id};
   update.nodes[1].id = text_field_with_combo_box_id;
   update.nodes[1].role = ax::mojom::Role::kTextFieldWithComboBox;
+  update.nodes[1].AddState(ax::mojom::State::kEditable);
+  update.nodes[1].AddBoolAttribute(ax::mojom::BoolAttribute::kEditableRoot,
+                                   true);
   update.nodes[2].id = meter_id;
   update.nodes[2].role = ax::mojom::Role::kMeter;
   update.nodes[3].id = group_with_scroll_id;
@@ -5704,7 +5707,8 @@ TEST_F(AXPlatformNodeWinTest, GetPatternProviderSupportedPatterns) {
             GetSupportedPatternsFromNodeId(root_id));
 
   EXPECT_EQ(PatternSet({UIA_ScrollItemPatternId, UIA_ValuePatternId,
-                        UIA_ExpandCollapsePatternId, UIA_TextChildPatternId}),
+                        UIA_ExpandCollapsePatternId, UIA_TextChildPatternId,
+                        UIA_TextEditPatternId, UIA_TextPatternId}),
             GetSupportedPatternsFromNodeId(text_field_with_combo_box_id));
 
   EXPECT_EQ(PatternSet({UIA_ScrollItemPatternId, UIA_ValuePatternId,

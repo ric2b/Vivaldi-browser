@@ -64,6 +64,7 @@
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
 #include "third_party/blink/public/mojom/page/record_content_to_visible_time_request.mojom-forward.h"
 #include "third_party/blink/public/mojom/page/widget.mojom.h"
+#include "ui/base/dragdrop/mojom/drag_drop_types.mojom-forward.h"
 #include "ui/base/ime/text_input_mode.h"
 #include "ui/base/ime/text_input_type.h"
 #include "ui/base/ui_base_types.h"
@@ -148,10 +149,23 @@ class CONTENT_EXPORT RenderWidgetHostImpl
       public blink::mojom::WidgetHost,
       public blink::mojom::PointerLockContext {
  public:
-  // |routing_id| must not be MSG_ROUTING_NONE.
-  // If this object outlives |delegate|, DetachDelegate() must be called when
-  // |delegate| goes away.
-  RenderWidgetHostImpl(
+  // See the constructor for documentations.
+  static std::unique_ptr<RenderWidgetHostImpl> Create(
+      RenderWidgetHostDelegate* delegate,
+      AgentSchedulingGroupHost& agent_scheduling_host,
+      int32_t routing_id,
+      bool hidden,
+      bool renderer_initiated_creation,
+      std::unique_ptr<FrameTokenMessageQueue> frame_token_message_queue);
+
+  // See the constructor for documentations.
+  //
+  // Contrary to Create(), this function doesn't give ownership of the
+  // RenderWidgetHost. Instead, this instance is self-owned. It deletes itself
+  // when:
+  // - ShutdownAndDestroyWidget(also_delete = true) is called.
+  // - its RenderProcess exit.
+  static RenderWidgetHostImpl* CreateSelfOwned(
       RenderWidgetHostDelegate* delegate,
       AgentSchedulingGroupHost& agent_scheduling_host,
       int32_t routing_id,
@@ -252,7 +266,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
                       int key_modifiers) override;
   void DragSourceEndedAt(const gfx::PointF& client_pt,
                          const gfx::PointF& screen_pt,
-                         blink::DragOperation operation) override;
+                         ui::mojom::DragOperation operation) override;
   void DragSourceSystemDragEnded() override;
   void FilterDropData(DropData* drop_data) override;
   void SetCursor(const ui::Cursor& cursor) override;
@@ -315,11 +329,6 @@ class CONTENT_EXPORT RenderWidgetHostImpl
 
   RenderWidgetHostDelegate* delegate() const { return delegate_; }
 
-  // Called when a renderer object already been created for this host, and we
-  // just need to be attached to it. Used for window.open, <select> dropdown
-  // menus, and other times when the renderer initiates creating an object.
-  void Init();
-
   // Allocate and bind new widget interfaces.
   std::pair<mojo::PendingAssociatedRemote<blink::mojom::WidgetHost>,
             mojo::PendingAssociatedReceiver<blink::mojom::Widget>>
@@ -346,20 +355,31 @@ class CONTENT_EXPORT RenderWidgetHostImpl
           frame_widget_host,
       mojo::PendingAssociatedRemote<blink::mojom::FrameWidget> frame_widget);
 
-  // Initializes a RenderWidgetHost that is attached to a RenderFrameHost.
-  void InitForFrame();
+  // The Bind*Interfaces() methods are called before creating the renderer-side
+  // Widget object, and RendererWidgetCreated() is called afterward. At that
+  // point the bound mojo interfaces are connected to the renderer Widget. The
+  // `for_frame_widget` informs if this widget should enable frame-specific
+  // behaviour and mojo connections.
+  void RendererWidgetCreated(bool for_frame_widget);
+
+  // Renderer-created top-level widgets (either for a main frame or for a popup)
+  // wait to be shown until the renderer requests it. When that condition is
+  // satisfied we are notified through Init(). This will always happen after
+  // RendererWidgetCreated().
+  void Init();
+
+  // OH NO DO NOT CALL THIS.
+  // This is called from RenderViewHost in order to mark itself as "live" even
+  // though there is actually no Widget created in the renderer, as there is no
+  // main frame attached to the RenderViewHost.
+  // TODO(crbug.com/419087): Remove this, and have RenderViewHost track its own
+  // live-ness. Then checks for a null `view_` in this class can just check
+  // `renderer_widget_created_` instead. And have RenderViewHost tell this class
+  // when the main frame goes away and thus the renderer widget along with it.
+  void SetRendererWidgetCreatedForInactiveRenderView();
 
   // Returns true if the frame content needs be stored before being evicted.
   bool ShouldShowStaleContentOnEviction();
-
-  // Signal whether this RenderWidgetHost is owned by a RenderFrameHost, in
-  // which case it does not do self-deletion.
-  void set_owned_by_render_frame_host(bool owned_by_rfh) {
-    owned_by_render_frame_host_ = owned_by_rfh;
-  }
-  bool owned_by_render_frame_host() const {
-    return owned_by_render_frame_host_;
-  }
 
   void SetFrameDepth(unsigned int depth);
   void SetIntersectsViewport(bool intersects);
@@ -613,15 +633,12 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   void RejectMouseLockOrUnlockIfNecessary(
       blink::mojom::PointerLockResult reason);
 
-  void set_renderer_initialized(bool renderer_initialized) {
-    renderer_initialized_ = renderer_initialized;
-  }
-
   // Store values received in a child frame RenderWidgetHost from a parent
   // RenderWidget, in order to pass them to the renderer and continue their
   // propagation down the RenderWidget tree.
   void SetVisualPropertiesFromParentFrame(
       float page_scale_factor,
+      float compositing_scale_factor,
       bool is_pinch_gesture_active,
       const gfx::Size& visible_viewport_size,
       const gfx::Rect& compositor_viewport,
@@ -667,7 +684,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
 
   size_t in_flight_event_count() const { return in_flight_event_count_; }
 
-  bool renderer_initialized() const { return renderer_initialized_; }
+  bool renderer_initialized() const { return renderer_widget_created_; }
 
   base::WeakPtr<RenderWidgetHostImpl> GetWeakPtr() {
     return weak_factory_.GetWeakPtr();
@@ -817,6 +834,17 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   }
 
  protected:
+  // |routing_id| must not be MSG_ROUTING_NONE.
+  // If this object outlives |delegate|, DetachDelegate() must be called when
+  // |delegate| goes away.
+  RenderWidgetHostImpl(
+      bool self_owned,
+      RenderWidgetHostDelegate* delegate,
+      AgentSchedulingGroupHost& agent_scheduling_host,
+      int32_t routing_id,
+      bool hidden,
+      bool renderer_initiated_creation,
+      std::unique_ptr<FrameTokenMessageQueue> frame_token_message_queue);
   // ---------------------------------------------------------------------------
   // The following method is overridden by RenderViewHost to send upwards to
   // its delegate.
@@ -891,7 +919,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   friend class OverscrollNavigationOverlayTest;
   friend class RenderViewHostTester;
   friend class TestRenderViewHost;
-  friend bool TestGuestAutoresize(RenderProcessHost*, RenderWidgetHost*);
+  friend bool TestGuestAutoresize(WebContents*, WebContents*);
 
   // Tell this object to destroy itself. If |also_delete| is specified, the
   // destructor is called as well.
@@ -913,7 +941,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // IPC message handlers
   void OnClose();
   void OnUpdateScreenRectsAck();
-  void OnUpdateDragCursor(blink::DragOperation current_op);
+  void OnUpdateDragCursor(ui::mojom::DragOperation current_op);
 
   // blink::mojom::FrameWidgetHost overrides.
   void AnimateDoubleTapZoomInMainFrame(const gfx::Point& tap_point,
@@ -1068,10 +1096,27 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // An expiry time for resetting the pending_user_activation_timer_.
   static const base::TimeDelta kActivationNotificationExpireTime;
 
-  // true if a renderer has once been valid. We use this flag to display a sad
-  // tab only when we lose our renderer and not if a paint occurs during
-  // initialization.
-  bool renderer_initialized_ = false;
+  // RenderWidgetHost are either:
+  // - Owned by RenderViewHostImpl.
+  // - Owned by RenderFrameHost, for local root iframes.
+  // - Self owned. Lifetime is managed from the renderer process, via Mojo IPC;
+  //   This is used to implement:
+  //   - Color Chooser popup.
+  //   - Date/Time chooser popup.
+  //   - Internal popup. Essentially, the <select> element popup.
+  //
+  // self_owned RenderWidgetHost are expected to be deleted using:
+  // ShutdownAndDestroyWidget(true /* also_delete */);
+  bool self_owned_;
+
+  // True while there is an established connection to a renderer-side Widget
+  // object.
+  bool renderer_widget_created_ = false;
+  // When the renderer widget is created, if created by the renderer, it may
+  // request to avoid showing the widget until requested. In that case, this
+  // value is set to true, and we defer WasShown() events until the request
+  // arrives which is signaled by Init().
+  bool waiting_for_init_;
 
   // True if |Destroy()| has been called.
   bool destroyed_ = false;
@@ -1150,6 +1195,10 @@ class CONTENT_EXPORT RenderWidgetHostImpl
     // The page-scale factor of the main-frame.
     float page_scale_factor = 1.f;
 
+    // This represents the child frame's raster scale factor which takes into
+    // account the transform from child frame space to main frame space.
+    float compositing_scale_factor = 1.f;
+
     // True when the renderer is currently undergoing a pinch-zoom gesture.
     bool is_pinch_gesture_active = false;
 
@@ -1186,6 +1235,9 @@ class CONTENT_EXPORT RenderWidgetHostImpl
 
   // The observers watching us.
   base::ObserverList<RenderWidgetHostObserver> observers_;
+
+  // TODO(https://crbug.com/1153966): Remove this after closing this bug.
+  int observers_size_for_debug_ = 0;
 
   // This is true if the renderer is currently unresponsive.
   bool is_unresponsive_ = false;
@@ -1245,8 +1297,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
 
   base::OneShotTimer input_event_ack_timeout_;
 
-  std::unique_ptr<
-      RenderProcessHost::BlockStateChangedCallbackList::Subscription>
+  base::CallbackListSubscription
       render_process_blocked_state_changed_subscription_;
 
   std::unique_ptr<TimeoutMonitor> new_content_rendering_timeout_;
@@ -1257,10 +1308,6 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   using PendingSnapshotMap = std::map<int, GetSnapshotFromBrowserCallback>;
   PendingSnapshotMap pending_browser_snapshots_;
   PendingSnapshotMap pending_surface_browser_snapshots_;
-
-  // Indicates whether a RenderFramehost has ownership, in which case this
-  // object does not self destroy.
-  bool owned_by_render_frame_host_ = false;
 
   // Indicates whether this RenderWidgetHost thinks is focused. This is trying
   // to match what the renderer process knows. It is different from

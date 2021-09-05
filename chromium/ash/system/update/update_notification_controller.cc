@@ -17,7 +17,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
-#include "build/branding_buildflags.h"
 #include "components/vector_icons/vector_icons.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/message_center/message_center.h"
@@ -32,6 +31,8 @@ namespace {
 
 const char kNotifierId[] = "ash.update";
 
+const char kNotificationId[] = "chrome://update";
+
 bool CheckForSlowBoot(const base::FilePath& slow_boot_file_path) {
   if (base::PathExists(slow_boot_file_path)) {
     return true;
@@ -40,9 +41,6 @@ bool CheckForSlowBoot(const base::FilePath& slow_boot_file_path) {
 }
 
 }  // namespace
-
-// static
-const char UpdateNotificationController::kNotificationId[] = "chrome://update";
 
 UpdateNotificationController::UpdateNotificationController()
     : model_(Shell::Get()->system_tray_model()->update_model()),
@@ -124,6 +122,9 @@ bool UpdateNotificationController::ShouldShowUpdate() const {
 }
 
 base::string16 UpdateNotificationController::GetNotificationMessage() const {
+  if (model_->update_type() == UpdateType::kLacros)
+    return l10n_util::GetStringUTF16(IDS_UPDATE_NOTIFICATION_MESSAGE_LACROS);
+
   base::string16 system_app_name =
       l10n_util::GetStringUTF16(IDS_ASH_MESSAGE_CENTER_SYSTEM_APP_NAME);
   if (model_->rollback()) {
@@ -152,12 +153,9 @@ base::string16 UpdateNotificationController::GetNotificationMessage() const {
 }
 
 base::string16 UpdateNotificationController::GetNotificationTitle() const {
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-  if (model_->update_type() == UpdateType::kFlash) {
-    return l10n_util::GetStringUTF16(
-        IDS_UPDATE_NOTIFICATION_TITLE_FLASH_PLAYER);
-  }
-#endif
+  if (model_->update_type() == UpdateType::kLacros)
+    return l10n_util::GetStringUTF16(IDS_UPDATE_NOTIFICATION_TITLE_LACROS);
+
   const base::string16 notification_title = model_->notification_title();
   if (!notification_title.empty())
     return notification_title;

@@ -13,7 +13,9 @@
 #include <string>
 
 #include "base/memory/weak_ptr.h"
+#include "pdf/paint_manager.h"
 #include "pdf/pdfium/pdfium_form_filler.h"
+#include "ui/gfx/geometry/rect.h"
 
 namespace chrome_pdf {
 
@@ -22,12 +24,29 @@ class UrlLoader;
 
 // Common base to share code between the two plugin implementations,
 // `OutOfProcessInstance` (Pepper) and `PdfViewWebPlugin` (Blink).
-class PdfViewPluginBase : public PDFEngine::Client {
+class PdfViewPluginBase : public PDFEngine::Client,
+                          public PaintManager::Client {
  public:
   PdfViewPluginBase(const PdfViewPluginBase& other) = delete;
   PdfViewPluginBase& operator=(const PdfViewPluginBase& other) = delete;
 
+  // PDFEngine::Client:
+  uint32_t GetBackgroundColor() override;
+
+  // PaintManager::Client
+  void OnPaint(const std::vector<gfx::Rect>& paint_rects,
+               std::vector<PaintReadyRect>* ready,
+               std::vector<gfx::Rect>* pending) override;
+
  protected:
+  struct BackgroundPart {
+    gfx::Rect location;
+    uint32_t color;
+  };
+
+  // The minimum zoom level allowed.
+  static constexpr double kMinZoom = 0.01;
+
   PdfViewPluginBase();
   ~PdfViewPluginBase() override;
 
@@ -39,6 +58,8 @@ class PdfViewPluginBase : public PDFEngine::Client {
   void DestroyEngine();
 
   PDFiumEngine* engine() { return engine_.get(); }
+
+  PaintManager& paint_manager() { return paint_manager_; }
 
   // Starts loading `url`. If `is_print_preview` is `true`, load for print
   // preview instead of normal PDF viewing.
@@ -58,8 +79,116 @@ class PdfViewPluginBase : public PDFEngine::Client {
   virtual void DidOpenPreview(std::unique_ptr<UrlLoader> loader,
                               int32_t result) = 0;
 
+  // Paints the given invalid area of the plugin to the given graphics device.
+  // PaintManager::Client::OnPaint() should be its only caller.
+  virtual void DoPaint(const std::vector<gfx::Rect>& paint_rects,
+                       std::vector<PaintReadyRect>* ready,
+                       std::vector<gfx::Rect>* pending) = 0;
+
+  // Called whenever the plugin geometry changes to update the location of the
+  // background parts, and notifies the pdf engine.
+  virtual void OnGeometryChanged(double old_zoom, float old_device_scale) = 0;
+
+  // Figures out the location of any background rectangles (i.e. those that
+  // aren't painted by the PDF engine).
+  void CalculateBackgroundParts();
+
+  // Computes document width/height in device pixels, based on current zoom and
+  // device scale
+  int GetDocumentPixelWidth() const;
+  int GetDocumentPixelHeight() const;
+
+  const std::vector<BackgroundPart>& background_parts() const {
+    return background_parts_;
+  }
+
+  const gfx::Rect& available_area() const { return available_area_; }
+
+  // TODO(https://crbug.com/1140629): Remove mutable_available_area()
+  // once all uses of it in OnGeometryChanged() are migrated to
+  // PdfViewPluginBase.
+  gfx::Rect& mutable_available_area() { return available_area_; }
+
+  const gfx::Size& document_size() const { return document_size_; }
+  void set_document_size(const gfx::Size& size) { document_size_ = size; }
+
+  const gfx::Size& plugin_size() const { return plugin_size_; }
+  void set_plugin_size(const gfx::Size& size) { plugin_size_ = size; }
+
+  const gfx::Size& plugin_dip_size() const { return plugin_dip_size_; }
+  void set_plugin_dip_size(const gfx::Size& size) { plugin_dip_size_ = size; }
+
+  const gfx::Point& plugin_offset() const { return plugin_offset_; }
+  void set_plugin_offset(const gfx::Point& offset) { plugin_offset_ = offset; }
+
+  void SetBackgroundColor(uint32_t background_color) {
+    background_color_ = background_color;
+  }
+
+  int top_toolbar_height_in_viewport_coords() const {
+    return top_toolbar_height_in_viewport_coords_;
+  }
+
+  void set_top_toolbar_height_in_viewport_coords(int height) {
+    top_toolbar_height_in_viewport_coords_ = height;
+  }
+
+  // Sets the new zoom scale.
+  void SetZoom(double scale);
+
+  double zoom() const { return zoom_; }
+
+  float device_scale() const { return device_scale_; }
+  void set_device_scale(float device_scale) { device_scale_ = device_scale; }
+
+  bool first_paint() const { return first_paint_; }
+  void set_first_paint(bool first_paint) { first_paint_ = first_paint; }
+
+  bool in_paint() const { return in_paint_; }
+
  private:
   std::unique_ptr<PDFiumEngine> engine_;
+  PaintManager paint_manager_{this};
+
+  std::vector<BackgroundPart> background_parts_;
+
+  // Remaining area, in pixels, to render the pdf in after accounting for
+  // horizontal centering.
+  gfx::Rect available_area_;
+
+  // The size of the entire document in pixels (i.e. if each page is 800 pixels
+  // high and there are 10 pages, the height will be 8000).
+  gfx::Size document_size_;
+
+  // Size, in pixels, of plugin rectangle.
+  gfx::Size plugin_size_;
+
+  // Size, in DIPs, of plugin rectangle.
+  gfx::Size plugin_dip_size_;
+
+  // Positional offset, in CSS pixels, of the plugin rectangle.
+  gfx::Point plugin_offset_;
+
+  // The background color of the PDF viewer.
+  uint32_t background_color_ = 0;
+
+  // The blank space above the first page of the document reserved for the
+  // toolbar.
+  int top_toolbar_height_in_viewport_coords_ = 0;
+
+  // Current zoom factor.
+  double zoom_ = 1.0;
+
+  // Current device scale factor. Multiply by `device_scale_` to convert from
+  // viewport to screen coordinates. Divide by `device_scale_` to convert from
+  // screen to viewport coordinates.
+  float device_scale_ = 1.0f;
+
+  // True if we haven't painted the plugin viewport yet.
+  bool first_paint_ = true;
+
+  // Whether OnPaint() is in progress or not.
+  bool in_paint_ = false;
 };
 
 }  // namespace chrome_pdf

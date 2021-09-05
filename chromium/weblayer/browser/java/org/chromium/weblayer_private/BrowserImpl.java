@@ -15,6 +15,7 @@ import android.webkit.ValueCallback;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.fragment.app.FragmentManager;
 
 import org.chromium.base.ObserverList;
 import org.chromium.base.annotations.CalledByNative;
@@ -88,6 +89,9 @@ public class BrowserImpl extends IBrowser.Stub implements View.OnAttachStateChan
 
     // Created in the constructor from saved state and used in setClient().
     private PersistenceInfo mPersistenceInfo;
+
+    private int mMinimumSurfaceWidth;
+    private int mMinimumSurfaceHeight;
 
     private static final class PersistenceInfo {
         String mPersistenceId;
@@ -165,6 +169,7 @@ public class BrowserImpl extends IBrowser.Stub implements View.OnAttachStateChan
         mEmbedderActivityContext = embedderAppContext;
         mViewController = new BrowserViewController(
                 windowAndroid, this, mViewControllerState, mInConfigurationChangeAndWasAttached);
+        mViewController.setMinimumSurfaceSize(mMinimumSurfaceWidth, mMinimumSurfaceHeight);
         mLocaleReceiver = new LocaleChangedBroadcastReceiver(windowAndroid.getContext().get());
         mPasswordEchoEnabled = null;
     }
@@ -251,6 +256,16 @@ public class BrowserImpl extends IBrowser.Stub implements View.OnAttachStateChan
         StrictModeWorkaround.apply();
         getViewController().setSupportsEmbedding(enable,
                 (ValueCallback<Boolean>) ObjectWrapper.unwrap(valueCallback, ValueCallback.class));
+    }
+
+    @Override
+    public void setMinimumSurfaceSize(int width, int height) {
+        StrictModeWorkaround.apply();
+        mMinimumSurfaceWidth = width;
+        mMinimumSurfaceHeight = height;
+        BrowserViewController viewController = getPossiblyNullViewController();
+        if (viewController == null) return;
+        viewController.setMinimumSurfaceSize(width, height);
     }
 
     // Only call this if it's guaranteed that Browser is attached to an activity.
@@ -492,7 +507,7 @@ public class BrowserImpl extends IBrowser.Stub implements View.OnAttachStateChan
 
     @CalledByNative
     private void onRestoreCompleted() throws RemoteException {
-        if (WebLayerFactoryImpl.getClientMajorVersion() >= 87) mClient.onRestoreCompleted();
+        mClient.onRestoreCompleted();
     }
 
     public View getFragmentView() {
@@ -555,6 +570,10 @@ public class BrowserImpl extends IBrowser.Stub implements View.OnAttachStateChan
 
     public boolean isInConfigurationChangeAndWasAttached() {
         return mInConfigurationChangeAndWasAttached;
+    }
+
+    public FragmentManager getFragmentManager() {
+        return mWindowAndroid.getFragmentManager();
     }
 
     public boolean isViewAttachedToWindow() {

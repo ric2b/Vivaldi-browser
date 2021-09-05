@@ -234,7 +234,8 @@ void FrameHandler::InjectCSS(const std::string& key,
           : blink::WebDocument::kUserOrigin;
 
   render_frame()->GetWebFrame()->GetDocument().InsertStyleSheet(
-      blink::WebString::FromUTF8(content), &style_sheet_key, blink_css_origin);
+      blink::WebString::FromUTF8(content),
+      style_sheet_key.IsEmpty() ? nullptr : &style_sheet_key, blink_css_origin);
 }
 void FrameHandler::RemoveInjectedCSS(const std::string& key,
                                      const mojom::StylesheetOrigin origin) {

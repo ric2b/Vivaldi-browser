@@ -6,7 +6,12 @@ import 'chrome://resources/cr_elements/cr_lazy_render/cr_lazy_render.m.js';
 import 'chrome://resources/cr_elements/hidden_style_css.m.js';
 import 'chrome://resources/cr_elements/shared_vars_css.m.js';
 import '../data/user_manager.js';
+// <if expr="not chromeos">
 import './destination_dialog.js';
+// </if>
+// <if expr="chromeos">
+import './destination_dialog_cros.js';
+// </if>
 // <if expr="not chromeos">
 import './destination_select.js';
 // </if>
@@ -352,17 +357,13 @@ Polymer({
       return;
     }
 
-    // Remove unsupported cloud and privet printers from the sticky settings,
+    // Remove unsupported privet printers from the sticky settings,
     // to free up these spots for supported printers.
     // TODO (rbpotter): Remove this logic a milestone after the policy and flag
-    // below have been removed, as it is unlikely for users to still have stale
-    // cloud and privet printers after that point.
-    if (!loadTimeData.getBoolean('cloudPrintDeprecationWarningsSuppressed')) {
-      const privetEnabled =
-          loadTimeData.getBoolean('forceEnablePrivetPrinting');
+    // have been removed.
+    if (!loadTimeData.getBoolean('forceEnablePrivetPrinting')) {
       const filteredRecentDestinations = recentDestinations.filter(d => {
-        return !CloudOrigins.includes(d.origin) &&
-            (privetEnabled || d.origin !== DestinationOrigin.PRIVET);
+        return d.origin !== DestinationOrigin.PRIVET;
       });
       if (filteredRecentDestinations.length !== recentDestinations.length) {
         this.setSetting('recentDestinations', filteredRecentDestinations);

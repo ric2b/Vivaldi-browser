@@ -27,7 +27,7 @@ ExtensionLocalizationPeer::DataPipeState::DataPipeState()
 ExtensionLocalizationPeer::DataPipeState::~DataPipeState() = default;
 
 ExtensionLocalizationPeer::ExtensionLocalizationPeer(
-    std::unique_ptr<content::RequestPeer> peer,
+    std::unique_ptr<blink::WebRequestPeer> peer,
     IPC::Sender* message_sender,
     const GURL& request_url)
     : original_peer_(std::move(peer)),
@@ -38,9 +38,9 @@ ExtensionLocalizationPeer::~ExtensionLocalizationPeer() {
 }
 
 // static
-std::unique_ptr<content::RequestPeer>
+std::unique_ptr<blink::WebRequestPeer>
 ExtensionLocalizationPeer::CreateExtensionLocalizationPeer(
-    std::unique_ptr<content::RequestPeer> peer,
+    std::unique_ptr<blink::WebRequestPeer> peer,
     IPC::Sender* message_sender,
     const std::string& mime_type,
     const GURL& request_url) {
@@ -74,6 +74,13 @@ void ExtensionLocalizationPeer::OnReceivedResponse(
 
 void ExtensionLocalizationPeer::EvictFromBackForwardCache(
     blink::mojom::RendererEvictionReason) {}
+
+void ExtensionLocalizationPeer::DidBufferLoadWhileInBackForwardCache(
+    size_t num_bytes) {}
+
+bool ExtensionLocalizationPeer::CanContinueBufferingWhileInBackForwardCache() {
+  return true;
+}
 
 void ExtensionLocalizationPeer::OnStartLoadingResponseBody(
     mojo::ScopedDataPipeConsumerHandle body) {

@@ -37,9 +37,11 @@ import androidx.annotation.VisibleForTesting;
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ApplicationStatus;
+import org.chromium.base.BundleUtils;
 import org.chromium.base.Callback;
 import org.chromium.base.CommandLine;
 import org.chromium.base.ContextUtils;
+import org.chromium.base.FeatureList;
 import org.chromium.base.MathUtils;
 import org.chromium.base.StrictModeContext;
 import org.chromium.base.SysUtils;
@@ -67,6 +69,7 @@ import org.chromium.chrome.browser.accessibility.FontSizePrefs;
 import org.chromium.chrome.browser.app.appmenu.AppMenuPropertiesDelegateImpl;
 import org.chromium.chrome.browser.app.flags.ChromeCachedFlags;
 import org.chromium.chrome.browser.app.tab_activity_glue.ReparentingDelegateFactory;
+import org.chromium.chrome.browser.app.tab_activity_glue.TabReparentingController;
 import org.chromium.chrome.browser.app.tabmodel.AsyncTabParamsManagerSingleton;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkItem;
@@ -112,10 +115,10 @@ import org.chromium.chrome.browser.keyboard_accessory.ManualFillingComponentFact
 import org.chromium.chrome.browser.locale.LocaleManager;
 import org.chromium.chrome.browser.media.PictureInPictureController;
 import org.chromium.chrome.browser.metrics.ActivityTabStartupMetricsTracker;
+import org.chromium.chrome.browser.metrics.LaunchCauseMetrics;
 import org.chromium.chrome.browser.metrics.LaunchMetrics;
 import org.chromium.chrome.browser.metrics.UmaSessionStats;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
-import org.chromium.chrome.browser.night_mode.NightModeReparentingController;
 import org.chromium.chrome.browser.ntp.NewTabPageUma;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.offlinepages.indicator.OfflineIndicatorController;
@@ -129,12 +132,10 @@ import org.chromium.chrome.browser.partnercustomizations.PartnerBrowserCustomiza
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.printing.TabPrinter;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.settings.SettingsLauncher;
 import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
 import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.share.ShareDelegateImpl;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
-import org.chromium.chrome.browser.sync.SyncController;
 import org.chromium.chrome.browser.tab.AccessibilityVisibilityHandler;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabHidingType;
@@ -172,6 +173,7 @@ import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.modaldialog.AppModalPresenter;
 import org.chromium.components.browser_ui.notifications.NotificationManagerProxy;
 import org.chromium.components.browser_ui.notifications.NotificationManagerProxyImpl;
+import org.chromium.components.browser_ui.settings.SettingsLauncher;
 import org.chromium.components.browser_ui.widget.InsetObserverView;
 import org.chromium.components.browser_ui.widget.MenuOrKeyboardActionController;
 import org.chromium.components.browser_ui.widget.textbubble.TextBubble;
@@ -202,6 +204,7 @@ import org.chromium.ui.display.DisplayAndroid;
 import org.chromium.ui.display.DisplayUtil;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.widget.Toast;
+import org.chromium.url.GURL;
 import org.chromium.url.Origin;
 import org.chromium.webapk.lib.client.WebApkNavigationClient;
 
@@ -293,9 +296,6 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
     // Timestamp in ms when initial layout inflation ends
     private long mInflateInitialLayoutEndMs;
 
-    private int mUiMode;
-    private int mDensityDpi;
-
     private final ManualFillingComponent mManualFillingComponent =
             ManualFillingComponentFactory.createComponent();
 
@@ -318,6 +318,16 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
     private Bundle mMenuItemData;
 
     /**
+     * The current configuration, used to for diffing when the configuration is changed.
+     */
+    private Configuration mConfig;
+
+    /**
+     * Control the tab-reparenting tasks.
+     */
+    private TabReparentingController mTabReparentingController;
+
+    /**
      * The RootUiCoordinator associated with the activity. This variable is held to facilitate
      * testing.
      * TODO(pnoland, https://crbug.com/865801): make this private again.
@@ -327,6 +337,8 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
     @Nullable
     private StartupTabPreloader mStartupTabPreloader;
 
+    private LaunchCauseMetrics mLaunchCauseMetrics;
+
     /** Vivaldi **/
     protected CaptureThumbnailHandler mCaptureThumbnailHandler;
 
@@ -334,16 +346,14 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
     private List<MenuOrKeyboardActionController.MenuOrKeyboardActionHandler> mMenuActionHandlers =
             new ArrayList<>();
 
-    /** Controls tab reparenting for night mode. */
-    NightModeReparentingController mNightModeReparentingController;
-
     protected ChromeActivity() {
         mIntentHandler = new IntentHandler(this, createIntentHandlerDelegate());
     }
 
     @Override
     protected ActivityWindowAndroid createWindowAndroid() {
-        return new ChromeWindow(this);
+        return new ChromeWindow(/* activity= */ this, mActivityTabProvider,
+                this::getCompositorViewHolder, getModalDialogManagerSupplier());
     }
 
     @Override
@@ -673,10 +683,10 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
             }
 
             @Override
-            public void onPageLoadFinished(Tab tab, String url) {
+            public void onPageLoadFinished(Tab tab, GURL url) {
                 postDeferredStartupIfNeeded();
                 OfflinePageUtils.showOfflineSnackbarIfNecessary(tab);
-                if (ChromeApplication.isVivaldi() &&
+                if (ChromeApplication.isVivaldi() && !tab.isNativePage() &&
                         SpeedDialUtils.thumbnailsEnabled()) {
                     BookmarkModel model = new BookmarkModel();
                     model.finishLoadingBookmarkModel(new Runnable() {
@@ -748,6 +758,18 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
      */
     public ManualFillingComponent getManualFillingComponent() {
         return mManualFillingComponent;
+    }
+
+    /**
+     * @return The {@link LaunchCauseMetrics} to be owned by this {@link ChromeActivity}.
+     */
+    protected abstract LaunchCauseMetrics createLaunchCauseMetrics();
+
+    private LaunchCauseMetrics getLaunchCauseMetrics() {
+        if (mLaunchCauseMetrics == null) {
+            mLaunchCauseMetrics = createLaunchCauseMetrics();
+        }
+        return mLaunchCauseMetrics;
     }
 
     @Override
@@ -891,7 +913,8 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
                     DeviceFormFactor.isNonMultiDisplayContextOnTablet(/* Context */ this),
                     getResources(),
                     /* StatusBarColorProvider */ this, getOverviewModeBehaviorSupplier(),
-                    getLifecycleDispatcher(), getActivityTabProvider());
+                    getLifecycleDispatcher(), getActivityTabProvider(),
+                    mRootUiCoordinator.getTopUiThemeColorProvider());
         }
 
         return mStatusBarColorController;
@@ -918,11 +941,9 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
         if (!mStarted) return; // Sync state reporting should work only in started state.
         if (mContextReporter != null || getActivityTab() == null) return;
 
-        final SyncController syncController = SyncController.get();
         final ProfileSyncService syncService = ProfileSyncService.get();
 
-        if (syncController != null && syncController.isSyncingUrlsWithKeystorePassphrase()) {
-            assert syncService != null;
+        if (syncService != null && syncService.isSyncingUrlsWithKeystorePassphrase()) {
             mContextReporter = AppHooks.get().createGsaHelper().getContextReporter(this);
 
             if (mSyncStateChangedListener != null) {
@@ -946,6 +967,7 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
         super.onResumeWithNative();
         markSessionResume();
         RecordUserAction.record("MobileComeToForeground");
+        getLaunchCauseMetrics().recordLaunchCause();
 
         Tab tab = getActivityTab();
         if (tab != null) {
@@ -962,7 +984,7 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
                 MultiWindowUtils.getInstance().isInMultiWindowMode(this));
 
         if (mPictureInPictureController != null) {
-            mPictureInPictureController.cleanup(this);
+            mPictureInPictureController.cleanup();
         }
         VrModuleProvider.getDelegate().maybeRegisterVrEntryHook(this);
 
@@ -977,9 +999,11 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
         if (isActivityFinishingOrDestroyed()) return;
 
         if (mPictureInPictureController == null) {
-            mPictureInPictureController = new PictureInPictureController();
+            mPictureInPictureController = new PictureInPictureController(
+                    this, getActivityTabProvider(), getFullscreenManager());
         }
-        mPictureInPictureController.attemptPictureInPicture(this);
+
+        mPictureInPictureController.attemptPictureInPicture();
     }
 
     @Override
@@ -1027,7 +1051,7 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
     @Override
     public void onNewIntentWithNative(Intent intent) {
         if (mPictureInPictureController != null) {
-            mPictureInPictureController.cleanup(this);
+            mPictureInPictureController.cleanup();
         }
 
         super.onNewIntentWithNative(intent);
@@ -1056,13 +1080,6 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
     public boolean isCustomTab() {
         return getActivityType() == ActivityType.CUSTOM_TAB
                 || getActivityType() == ActivityType.TRUSTED_WEB_ACTIVITY;
-    }
-
-    /**
-     * @return Whether the given activity can show the publisher URL from a trusted CDN.
-     */
-    public boolean canShowTrustedCdnPublisherUrl() {
-        return false;
     }
 
     /**
@@ -1185,9 +1202,7 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
         }
         if (mCompositorViewHolder != null) mCompositorViewHolder.onStart();
 
-        Configuration config = getResources().getConfiguration();
-        mUiMode = config.uiMode;
-        mDensityDpi = config.densityDpi;
+        mConfig = getResources().getConfiguration();
         mStarted = true;
     }
 
@@ -1412,15 +1427,17 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
 
         VrModuleProvider.maybeInit();
         VrModuleProvider.getDelegate().onNativeLibraryAvailable();
-        ArDelegate arDelegate = ArDelegateProvider.getDelegate();
-        if (arDelegate != null) {
-            arDelegate.init();
-        }
+
         if (getSavedInstanceState() == null && getIntent() != null) {
             VrModuleProvider.getDelegate().onNewIntentWithNative(this, getIntent());
         }
 
+        // The first launch of the screenshot feature benefits from this DFM being installed
+        // proactively. However without the isolated split feature there are performance regressions
+        // as a result of adding this extra code.
         if (ChromeFeatureList.isEnabled(ChromeFeatureList.CHROME_SHARE_SCREENSHOT)
+                && BundleUtils.isolatedSplitsEnabled()
+                && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
                 && AppHooks.get().getImageEditorModuleProvider() != null) {
             AppHooks.get().getImageEditorModuleProvider().maybeInstallModuleDeferred();
         }
@@ -1432,12 +1449,22 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
                 findViewById(R.id.keyboard_accessory_stub),
                 findViewById(R.id.keyboard_accessory_sheet_stub));
 
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.ANDROID_NIGHT_MODE_TAB_REPARENTING)) {
-            mNightModeReparentingController = new NightModeReparentingController(
-                    ReparentingDelegateFactory.createNightModeReparentingControllerDelegate(
-                            getActivityTabProvider(), getTabModelSelector()),
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.ANDROID_NIGHT_MODE_TAB_REPARENTING)
+                || ChromeFeatureList.isEnabled(
+                        ChromeFeatureList.ANDROID_LAYOUT_CHANGE_TAB_REPARENT)) {
+            mTabReparentingController = new TabReparentingController(
+                    ReparentingDelegateFactory.createReparentingControllerDelegate(
+                            getTabModelSelector()),
                     AsyncTabParamsManagerSingleton.getInstance());
         }
+
+        // Make sure the user is reporting into one of the feed spinner groups, so that we can
+        // analyze daily power impact for a typical Chrome user. The flag only has an effect if the
+        // spinner is shown, but our earlier UMA analysis shows that it may have a side-effect on
+        // a future browsing session's power, even if the spinner is not shown (by causing more
+        // cold-starts).
+        // TODO(crbug.com/1151391): Remove after analysis is complete.
+        ChromeFeatureList.isEnabled(ChromeFeatureList.INTEREST_FEED_SPINNER_ALWAYS_ANIMATE);
     }
 
     /**
@@ -1609,7 +1636,7 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
         if (!SpeedDialUtils.thumbnailsEnabled()) return;
         if (mCaptureThumbnailHandler == null)
             mCaptureThumbnailHandler = new CaptureThumbnailHandler(this);
-        mCaptureThumbnailHandler.requestCapturePage(item.getGUID());
+        mCaptureThumbnailHandler.requestCapturePage(item.getGUID(), item.getId());
         model.setBookmarkThumbnail(item.getId(),
                 SpeedDialUtils.getThumbnailFolderPath() +
                         item.getGUID() + ".jpg");
@@ -1818,6 +1845,8 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
         mCompositorViewHolder.setBrowserControlsManager(getBrowserControlsManager());
         mCompositorViewHolder.setUrlBar(urlBar);
         mCompositorViewHolder.setInsetObserverView(getInsetObserverView());
+        mCompositorViewHolder.setTopUiThemeColorProvider(
+                mRootUiCoordinator.getTopUiThemeColorProvider());
         mCompositorViewHolder.onFinishNativeInitialization(getTabModelSelector(), this);
 
         if (controlContainer != null && DeviceClassManager.enableToolbarSwipe()
@@ -1867,27 +1896,32 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
     @Override
     public void performOnConfigurationChanged(Configuration newConfig) {
         super.performOnConfigurationChanged(newConfig);
+        if (FeatureList.isInitialized()
+                && ChromeFeatureList.isEnabled(ChromeFeatureList.ANDROID_LAYOUT_CHANGE_TAB_REPARENT)
+                && didChangeTabletMode()) {
+            onScreenLayoutSizeChange();
+            return;
+        }
 
         // We only handle VR UI mode and UI mode night changes. Any other changes should follow the
         // default behavior of recreating the activity. Note that if UI mode night changes, with or
         // without other changes, we will still recreate() until we get a callback from the
         // ChromeBaseAppCompatActivity#onNightModeStateChanged or the overridden method in
         // sub-classes if necessary.
-        if (didChangeNonVrUiMode(mUiMode, newConfig.uiMode)
-                && !didChangeUiModeNight(mUiMode, newConfig.uiMode)) {
+        if (didChangeNonVrUiMode(mConfig.uiMode, newConfig.uiMode)
+                && !didChangeUiModeNight(mConfig.uiMode, newConfig.uiMode)) {
             recreate();
             return;
         }
-        mUiMode = newConfig.uiMode;
 
-        if (newConfig.densityDpi != mDensityDpi) {
+        if (newConfig.densityDpi != mConfig.densityDpi) {
             if (!VrModuleProvider.getDelegate().onDensityChanged(
-                        mDensityDpi, newConfig.densityDpi)) {
+                        mConfig.densityDpi, newConfig.densityDpi)) {
                 recreate();
                 return;
             }
-            mDensityDpi = newConfig.densityDpi;
         }
+        mConfig = newConfig;
     }
 
     private static boolean didChangeNonVrUiMode(int oldMode, int newMode) {
@@ -2414,7 +2448,7 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
      *         the resumed state).
      */
     public float getLastActiveDensity() {
-        return mDensityDpi;
+        return mConfig.densityDpi;
     }
 
     /**
@@ -2446,15 +2480,41 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
         // Note: order matters here because the call to super will recreate the activity.
         // Note: it's possible for this method to be called before mNightModeReparentingController
         // is constructed.
-        if (mNightModeReparentingController != null) {
-            mNightModeReparentingController.onNightModeStateChanged();
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.ANDROID_NIGHT_MODE_TAB_REPARENTING)
+                && mTabReparentingController != null) {
+            mTabReparentingController.prepareTabsForReparenting();
         }
         super.onNightModeStateChanged();
+    }
+
+    @VisibleForTesting
+    public boolean didChangeTabletMode() {
+        DisplayAndroid display = DisplayAndroid.getNonMultiDisplay(this);
+        boolean isTablet = DisplayUtil.pxToDp(display, DisplayUtil.getSmallestWidth(display))
+                >= DeviceFormFactor.MINIMUM_TABLET_WIDTH_DP;
+        boolean wasTablet =
+                mConfig.smallestScreenWidthDp >= DeviceFormFactor.MINIMUM_TABLET_WIDTH_DP;
+        return wasTablet != isTablet;
+    }
+
+    /**
+     * Switch between phone and tablet mode and do the tab re-parenting in the meantime.
+     */
+    private void onScreenLayoutSizeChange() {
+        if (mTabReparentingController != null) {
+            mTabReparentingController.prepareTabsForReparenting();
+            if (!isFinishing()) recreate();
+        }
     }
 
     @VisibleForTesting
     @Nullable
     public BookmarkBridge getBookmarkBridgeForTesting() {
         return mBookmarkBridgeSupplier.get();
+    }
+
+    @VisibleForTesting
+    public Configuration getSavedConfigurationForTesting() {
+        return mConfig;
     }
 }

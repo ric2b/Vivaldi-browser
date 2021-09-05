@@ -29,7 +29,6 @@ using base::Time;
 
 namespace vivaldi {
 namespace {
-const char kNullGuid[] = "00000000-0000-0000-0000-000000000000";
 // Comparator used when sorting notes. Folders are sorted first, then
 // notes.
 class SortComparator {
@@ -61,9 +60,10 @@ NoteNode* AsMutable(const NoteNode* node) {
 }
 
 NotesModel::NotesModel(sync_notes::NoteSyncService* sync_service)
-    : root_(std::make_unique<NoteNode>(0,
-                                       NoteNode::kRootNodeGuid,
-                                       NoteNode::FOLDER)),
+    : root_(std::make_unique<NoteNode>(
+          0,
+          base::GUID::ParseLowercase(NoteNode::kRootNodeGuid),
+          NoteNode::FOLDER)),
       sync_service_(sync_service) {}
 
 NotesModel::~NotesModel() {
@@ -203,22 +203,16 @@ NoteNode* NotesModel::AddNote(const NoteNode* parent,
                               const GURL& url,
                               const base::string16& content,
                               base::Optional<base::Time> creation_time,
-                              base::Optional<std::string> guid) {
-  if (!loaded_)
-    return NULL;
-
-  if (guid)
-    DCHECK(base::IsValidGUIDOutputString(*guid));
-  else
-    guid = base::GenerateGUID();
+                              base::Optional<base::GUID> guid) {
+  DCHECK(loaded_);
+  DCHECK(!guid || guid->is_valid());
 
   if (!creation_time)
     creation_time = Time::Now();
 
-  int64_t id = generate_next_node_id();
-
-  std::unique_ptr<NoteNode> new_node =
-      std::make_unique<NoteNode>(id, *guid, NoteNode::NOTE);
+  std::unique_ptr<NoteNode> new_node = std::make_unique<NoteNode>(
+      generate_next_node_id(), guid ? *guid : base::GUID::GenerateRandomV4(),
+      NoteNode::NOTE);
   new_node->SetTitle(title);
   new_node->SetCreationTime(*creation_time);
   new_node->SetContent(content);
@@ -242,7 +236,7 @@ NoteNode* NotesModel::ImportNote(const NoteNode* parent,
   int64_t id = generate_next_node_id();
 
   std::unique_ptr<NoteNode> new_node = std::make_unique<NoteNode>(
-      id, base::GenerateGUID(),
+      id, base::GUID::GenerateRandomV4(),
       note.is_folder ? NoteNode::FOLDER : NoteNode::NOTE);
   new_node->SetTitle(note.title);
   new_node->SetCreationTime(note.creation_time);
@@ -257,19 +251,13 @@ NoteNode* NotesModel::ImportNote(const NoteNode* parent,
 NoteNode* NotesModel::AddFolder(const NoteNode* parent,
                                 size_t index,
                                 const base::string16& name,
-                                base::Optional<std::string> guid) {
+                                base::Optional<base::GUID> guid) {
   DCHECK(loaded_);
-  if (!loaded_)
-    return NULL;
+  DCHECK(!guid || guid->is_valid());
 
-  if (guid)
-    DCHECK(base::IsValidGUIDOutputString(*guid));
-  else
-    guid = base::GenerateGUID();
-
-  int64_t id = generate_next_node_id();
-  std::unique_ptr<NoteNode> new_node =
-      std::make_unique<NoteNode>(id, *guid, NoteNode::FOLDER);
+  std::unique_ptr<NoteNode> new_node = std::make_unique<NoteNode>(
+      generate_next_node_id(), guid ? *guid : base::GUID::GenerateRandomV4(),
+      NoteNode::FOLDER);
   new_node->SetTitle(name);
   DCHECK(new_node->GetTitle() == name);
   DCHECK(new_node->is_folder());
@@ -281,22 +269,16 @@ NoteNode* NotesModel::AddSeparator(const NoteNode* parent,
                                    size_t index,
                                    base::Optional<base::string16> name,
                                    base::Optional<base::Time> creation_time,
-                                   base::Optional<std::string> guid) {
+                                   base::Optional<base::GUID> guid) {
   DCHECK(loaded_);
-  if (!loaded_)
-    return NULL;
-
-  if (guid)
-    DCHECK(base::IsValidGUIDOutputString(*guid));
-  else
-    guid = base::GenerateGUID();
+  DCHECK(!guid || guid->is_valid());
 
   if (!creation_time)
     creation_time = Time::Now();
 
-  int64_t id = generate_next_node_id();
-  std::unique_ptr<NoteNode> new_node =
-      std::make_unique<NoteNode>(id, *guid, NoteNode::SEPARATOR);
+  std::unique_ptr<NoteNode> new_node = std::make_unique<NoteNode>(
+      generate_next_node_id(), guid ? *guid : base::GUID::GenerateRandomV4(),
+      NoteNode::SEPARATOR);
   if (name)
     new_node->SetTitle(*name);
   new_node->SetCreationTime(*creation_time);
@@ -495,7 +477,7 @@ bool NotesModel::IsValidIndex(const NoteNode* parent,
 void NotesModel::GetNodesByURL(const GURL& url,
                                std::vector<const NoteNode*>* nodes) {
   base::AutoLock url_lock(url_lock_);
-  NoteNode tmp_node(0, kNullGuid, NoteNode::NOTE);
+  NoteNode tmp_node(0, base::GUID::GenerateRandomV4(), NoteNode::NOTE);
   tmp_node.SetURL(url);
   NodesOrderedByURLSet::iterator i = nodes_ordered_by_url_set_.find(&tmp_node);
   while (i != nodes_ordered_by_url_set_.end() && (*i)->GetURL() == url) {
@@ -539,7 +521,7 @@ void NotesModel::RemoveAllUserNotes() {
 }
 
 bool NotesModel::IsNotesNoLock(const GURL& url) {
-  NoteNode tmp_node(0, kNullGuid, NoteNode::NOTE);
+  NoteNode tmp_node(0, base::GUID::GenerateRandomV4(), NoteNode::NOTE);
   tmp_node.SetURL(url);
   return (nodes_ordered_by_url_set_.find(&tmp_node) !=
           nodes_ordered_by_url_set_.end());

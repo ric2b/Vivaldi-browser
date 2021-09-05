@@ -97,7 +97,7 @@ bool IOSChromePasswordManagerClient::PromptUserToChooseCredentials(
 bool IOSChromePasswordManagerClient::PromptUserToSaveOrUpdatePassword(
     std::unique_ptr<PasswordFormManagerForUI> form_to_save,
     bool update_password) {
-  if (form_to_save->IsBlacklisted())
+  if (form_to_save->IsBlocklisted())
     return false;
 
   [bridge_ removePasswordInfoBarManualFallback:YES];
@@ -236,10 +236,10 @@ url::Origin IOSChromePasswordManagerClient::GetLastCommittedOrigin() const {
   return url::Origin::Create(bridge_.lastCommittedURL);
 }
 
-std::string IOSChromePasswordManagerClient::GetPageLanguage() const {
+autofill::LanguageCode IOSChromePasswordManagerClient::GetPageLanguage() const {
   // TODO(crbug.com/912597): Add WebState to the IOSChromePasswordManagerClient
   // to be able to get the pages LanguageState from the TranslateManager.
-  return std::string();
+  return autofill::LanguageCode();
 }
 
 const password_manager::CredentialsFilter*
@@ -313,6 +313,11 @@ void IOSChromePasswordManagerClient::CheckProtectedPasswordEntry(
     const std::vector<password_manager::MatchingReusedCredential>&
         matching_reused_credentials,
     bool password_field_exists) {
+  // TODO(crbug.com/1147967): This is no-op until the password protection
+  // service is enabled.
+}
+
+void IOSChromePasswordManagerClient::LogPasswordReuseDetectedEvent() {
   // TODO(crbug.com/1147967): This is no-op until the password protection
   // service is enabled.
 }

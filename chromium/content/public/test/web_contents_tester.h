@@ -96,14 +96,10 @@ class WebContentsTester {
   // Simulates a navigation with the given information.
   //
   // Guidance for calling these:
-  // - nav_entry_id should be 0 if simulating a renderer-initiated navigation;
-  //   if simulating a browser-initiated one, pass the GetUniqueID() value of
-  //   the NavigationController's PendingEntry.
   // - did_create_new_entry should be true if simulating a navigation that
   //   created a new navigation entry; false for history navigations, reloads,
   //   and other navigations that don't affect the history list.
   virtual void TestDidNavigate(RenderFrameHost* render_frame_host,
-                               int nav_entry_id,
                                bool did_create_new_entry,
                                const GURL& url,
                                ui::PageTransition transition) = 0;
@@ -172,6 +168,10 @@ class WebContentsTester {
       std::unique_ptr<WebContents> portal_web_contents) = 0;
   virtual WebContents* GetPortalContents(
       const blink::PortalToken& portal_token) = 0;
+
+  // Indicates if this WebContents has been frozen via a call to
+  // SetPageFrozen().
+  virtual bool IsPageFrozen() = 0;
 };
 
 }  // namespace content

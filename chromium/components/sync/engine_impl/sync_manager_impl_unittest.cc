@@ -30,7 +30,6 @@
 #include "components/sync/engine/net/http_post_provider_factory.h"
 #include "components/sync/engine/net/http_post_provider_interface.h"
 #include "components/sync/engine/polling_constants.h"
-#include "components/sync/engine/test_engine_components_factory.h"
 #include "components/sync/engine_impl/cancelation_signal.h"
 #include "components/sync/engine_impl/cycle/sync_cycle.h"
 #include "components/sync/engine_impl/sync_scheduler.h"
@@ -45,6 +44,7 @@
 #include "components/sync/protocol/sync.pb.h"
 #include "components/sync/test/callback_counter.h"
 #include "components/sync/test/engine/fake_sync_scheduler.h"
+#include "components/sync/test/engine/test_engine_components_factory.h"
 #include "components/sync/test/fake_sync_encryption_handler.h"
 #include "services/network/test/test_network_connection_tracker.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -170,7 +170,7 @@ class SyncManagerTest : public testing::Test {
     extensions_activity_ = new ExtensionsActivity();
 
     sync_manager_.AddObserver(&manager_observer_);
-    EXPECT_CALL(manager_observer_, OnInitializationComplete(_, _, _))
+    EXPECT_CALL(manager_observer_, OnInitializationComplete)
         .WillOnce(DoAll(SaveArg<0>(&js_backend_),
                         SaveArg<2>(&initialization_succeeded_)));
 
@@ -315,7 +315,7 @@ TEST_F(SyncManagerTestWithMockScheduler, BasicConfiguration) {
 
   ConfigurationParams params;
   EXPECT_CALL(*scheduler(), Start(SyncScheduler::CONFIGURATION_MODE, _));
-  EXPECT_CALL(*scheduler(), ScheduleConfiguration_(_))
+  EXPECT_CALL(*scheduler(), ScheduleConfiguration_)
       .WillOnce(MoveArg<0>(&params));
 
   CallbackCounter ready_task_counter;

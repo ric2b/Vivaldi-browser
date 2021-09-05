@@ -32,7 +32,7 @@
 #include "content/browser/renderer_host/render_widget_host_view_aura.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/browser/web_contents/web_contents_view_aura.h"
-#include "content/public/browser/accessibility_tree_formatter.h"
+#include "content/public/browser/ax_inspect_factory.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/render_frame_host.h"
@@ -141,16 +141,13 @@ AccessibilityWinBrowserTest::~AccessibilityWinBrowserTest() = default;
 
 std::string AccessibilityWinBrowserTest::PrintAXTree() const {
   std::unique_ptr<ui::AXTreeFormatter> formatter(
-      AccessibilityTreeFormatter::Create());
+      AXInspectFactory::CreatePlatformFormatter());
   DCHECK(formatter);
   formatter->set_show_ids(true);
   formatter->SetPropertyFilters(
       {ui::AXPropertyFilter("*", ui::AXPropertyFilter::ALLOW)});
 
-  std::string str;
-  formatter->FormatAccessibilityTreeForTesting(
-      GetRootAccessibilityNode(shell()->web_contents()), &str);
-  return str;
+  return formatter->Format(GetRootAccessibilityNode(shell()->web_contents()));
 }
 
 // Loads a page with  an input text field and places sample text in it. Also,
@@ -916,7 +913,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
   // the "kLoadComplete" event, and the "kFocus" and "kLoadComplete" events are
   // not guaranteed to be sent in the same order every time, neither do we need
   // to enforce such an ordering. However, we do need to ensure that at the
-  // point when the "kFocus" event is sent, the document is fully loaded.
+  // point when the "kFocus" event is sent, the root object is present.
   AccessibilityNotificationWaiter waiter(
       shell()->web_contents(), ui::kAXModeComplete,
       ui::AXEventGenerator::Event::FOCUS_CHANGED);
@@ -924,14 +921,15 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
   ASSERT_TRUE(NavigateToURL(shell(), html_data_url));
   waiter.WaitForNotification();
 
-  // Check that the page has indeed loaded.
-  AccessibleChecker document_checker(L"", ROLE_SYSTEM_DOCUMENT, L"");
-  AccessibleChecker paragraph_checker(L"", ROLE_SYSTEM_GROUPING,
-                                      IA2_ROLE_PARAGRAPH, L"");
-  document_checker.AppendExpectedChild(&paragraph_checker);
-  AccessibleChecker text_checker(L"Hello world.", ROLE_SYSTEM_STATICTEXT, L"");
-  paragraph_checker.AppendExpectedChild(&text_checker);
-  document_checker.CheckAccessible(GetRendererAccessible());
+  // Check that at least the root of the page has indeed loaded and that it is
+  // focused.
+  Microsoft::WRL::ComPtr<IAccessible> document(GetRendererAccessible());
+  ASSERT_TRUE(document);
+  base::win::ScopedVariant focus;
+  base::win::ScopedVariant childid_self(CHILDID_SELF);
+  ASSERT_HRESULT_SUCCEEDED(document->get_accFocus(focus.Receive()));
+  EXPECT_EQ(VT_I4, focus.type());
+  EXPECT_EQ(CHILDID_SELF, V_I4(focus.ptr()));
 }
 
 IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, TestBusyAccessibilityTree) {
@@ -1856,9 +1854,9 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
   EXPECT_LT(1, prev_height);
 
   // Delete the character in the input field.
-  AccessibilityNotificationWaiter waiter(
-      shell()->web_contents(), ui::kAXModeComplete,
-      ax::mojom::Event::kTextSelectionChanged);
+  AccessibilityNotificationWaiter waiter(shell()->web_contents(),
+                                         ui::kAXModeComplete,
+                                         ax::mojom::Event::kValueChanged);
   ExecuteScript(std::wstring(L"document.querySelector('input').value='';"));
   waiter.WaitForNotification();
 
@@ -1915,9 +1913,9 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
   }
 
   // Delete the character in the input field.
-  AccessibilityNotificationWaiter waiter(
-      shell()->web_contents(), ui::kAXModeComplete,
-      ax::mojom::Event::kTextSelectionChanged);
+  AccessibilityNotificationWaiter waiter(shell()->web_contents(),
+                                         ui::kAXModeComplete,
+                                         ax::mojom::Event::kValueChanged);
   ExecuteScript(std::wstring(L"document.querySelector('input').value='';"));
   waiter.WaitForNotification();
 
@@ -2122,9 +2120,9 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
   }
 
   // Delete the character in the input field.
-  AccessibilityNotificationWaiter waiter(
-      shell()->web_contents(), ui::kAXModeComplete,
-      ax::mojom::Event::kTextSelectionChanged);
+  AccessibilityNotificationWaiter waiter(shell()->web_contents(),
+                                         ui::kAXModeComplete,
+                                         ax::mojom::Event::kValueChanged);
   ExecuteScript(
       std::wstring(L"document.querySelector('textarea').innerText='';"));
   waiter.WaitForNotification();
@@ -2182,9 +2180,9 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
   }
 
   // Delete the character in the input field.
-  AccessibilityNotificationWaiter waiter(
-      shell()->web_contents(), ui::kAXModeComplete,
-      ax::mojom::Event::kTextSelectionChanged);
+  AccessibilityNotificationWaiter waiter(shell()->web_contents(),
+                                         ui::kAXModeComplete,
+                                         ax::mojom::Event::kValueChanged);
   ExecuteScript(
       std::wstring(L"const input = document.querySelector('input');"
                    "input.value='';"));
@@ -2769,20 +2767,63 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
       text_after_iframe.As(&text_after_iframe_iaccessible2_4));
 
   LONG n_ranges = 1;
-  IA2Range* ranges =
+  IA2Range* cross_tree_ranges =
       reinterpret_cast<IA2Range*>(CoTaskMemAlloc(sizeof(IA2Range)));
-  ranges[0].anchor = text_in_iframe.Get();
-  ranges[0].anchorOffset = 0;
-  ranges[0].active = text_after_iframe.Get();
-  ranges[0].activeOffset = 2;
+  cross_tree_ranges[0].anchor = text_in_iframe.Get();
+  cross_tree_ranges[0].anchorOffset = 0;
+  cross_tree_ranges[0].active = text_after_iframe.Get();
+  cross_tree_ranges[0].activeOffset = 2;
 
   // This is expected to fail because the anchor and focus nodes are in
   // different trees, which Blink doesn't support.
-  EXPECT_HRESULT_FAILED(
-      text_after_iframe_iaccessible2_4->setSelectionRanges(n_ranges, ranges));
+  EXPECT_HRESULT_FAILED(text_after_iframe_iaccessible2_4->setSelectionRanges(
+      n_ranges, cross_tree_ranges));
 
-  CoTaskMemFree(ranges);
-  ranges = nullptr;
+  CoTaskMemFree(cross_tree_ranges);
+  cross_tree_ranges = nullptr;
+
+  // Now test a variation where the selection start and end are in the same
+  // tree as each other, but a different tree than the caller.
+  IA2Range* same_tree_ranges =
+      reinterpret_cast<IA2Range*>(CoTaskMemAlloc(sizeof(IA2Range)));
+  same_tree_ranges[0].anchor = text_in_iframe.Get();
+  same_tree_ranges[0].anchorOffset = 0;
+  same_tree_ranges[0].active = text_in_iframe.Get();
+  same_tree_ranges[0].activeOffset = 1;
+
+  // This should succeed, however the selection will need to be queried from
+  // a node in the iframe tree.
+  AccessibilityNotificationWaiter selection_waiter(
+      shell()->web_contents(), ui::kAXModeComplete,
+      ax::mojom::Event::kTextSelectionChanged);
+  ASSERT_HRESULT_SUCCEEDED(text_after_iframe_iaccessible2_4->setSelectionRanges(
+      n_ranges, same_tree_ranges));
+  selection_waiter.WaitForNotification();
+
+  Microsoft::WRL::ComPtr<IAccessible2_4> text_in_iframe_iaccessible2_4;
+  ASSERT_HRESULT_SUCCEEDED(text_in_iframe.As(&text_in_iframe_iaccessible2_4));
+
+  IA2Range* result_ranges =
+      reinterpret_cast<IA2Range*>(CoTaskMemAlloc(sizeof(IA2Range)));
+  HRESULT hr = text_in_iframe_iaccessible2_4->get_selectionRanges(
+      &result_ranges, &n_ranges);
+  EXPECT_EQ(S_OK, hr);
+  EXPECT_EQ(1, n_ranges);
+  ASSERT_NE(nullptr, result_ranges);
+  ASSERT_NE(nullptr, result_ranges[0].anchor);
+  EXPECT_EQ(text_in_iframe.Get(), result_ranges[0].anchor);
+  EXPECT_EQ(0, result_ranges[0].anchorOffset);
+  ASSERT_NE(nullptr, result_ranges[0].active);
+  EXPECT_EQ(text_in_iframe.Get(), result_ranges[0].active);
+  EXPECT_EQ(1, result_ranges[0].activeOffset);
+
+  same_tree_ranges[0].anchor->Release();
+  same_tree_ranges[0].active->Release();
+  CoTaskMemFree(same_tree_ranges);
+  same_tree_ranges = nullptr;
+
+  CoTaskMemFree(result_ranges);
+  result_ranges = nullptr;
 }
 
 IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, TestMultiLineSetSelection) {

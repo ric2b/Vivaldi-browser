@@ -7,6 +7,7 @@
 #include "components/exo/vsync_timing_manager.h"
 #include "components/exo/wm_helper.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
+#include "ui/aura/client/drag_drop_delegate.h"
 #include "ui/base/ime/init/input_method_factory.h"
 #include "ui/display/manager/managed_display_info.h"
 #include "ui/wm/core/wm_core_switches.h"
@@ -69,6 +70,10 @@ class WMHelperTester : public WMHelper, public VSyncTimingManager::Delegate {
   void RemovePostTargetHandler(ui::EventHandler* handler) override {}
   bool InTabletMode() const override { return false; }
   double GetDefaultDeviceScaleFactor() const override { return 1.0; }
+  double GetDeviceScaleFactorForWindow(aura::Window* window) const override {
+    return 1.0;
+  }
+  void SetDefaultScaleCancellation(bool default_scale_cancellation) override {}
   void SetImeBlocked(aura::Window* window, bool ime_blocked) override {}
   bool IsImeBlocked(aura::Window* window) const override { return false; }
 
@@ -77,7 +82,10 @@ class WMHelperTester : public WMHelper, public VSyncTimingManager::Delegate {
 
   // Overridden from aura::client::DragDropDelegate:
   void OnDragEntered(const ui::DropTargetEvent& event) override {}
-  int OnDragUpdated(const ui::DropTargetEvent& event) override { return 0; }
+  aura::client::DragUpdateInfo OnDragUpdated(
+      const ui::DropTargetEvent& event) override {
+    return aura::client::DragUpdateInfo();
+  }
   void OnDragExited() override {}
   int OnPerformDrop(const ui::DropTargetEvent& event,
                     std::unique_ptr<ui::OSExchangeData> data) override {

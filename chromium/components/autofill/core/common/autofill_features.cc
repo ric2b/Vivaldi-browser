@@ -12,6 +12,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "components/autofill/core/common/autofill_prefs.h"
 #include "components/autofill/core/common/autofill_switches.h"
 #include "components/prefs/pref_service.h"
@@ -45,16 +46,6 @@ const base::Feature kAutofillAllowDuplicateFormSubmissions{
 const base::Feature kAutofillAllowNonHttpActivation{
     "AutofillAllowNonHttpActivation", base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kAutofillAlwaysFillAddresses{
-    "AlwaysFillAddresses", base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Controls whether negative patterns are used to parse the field type.
-// TODO(crbug.com/1132831): Remove once launched.
-const base::Feature
-    kAutofillApplyNegativePatternsForFieldTypeDetectionHeuristics{
-        "AutofillApplyNegativePatternsForFieldTypeDetectionHeuristics",
-        base::FEATURE_DISABLED_BY_DEFAULT};
-
 // Controls the use of GET (instead of POST) to fetch cacheable autofill query
 // responses.
 const base::Feature kAutofillCacheQueryResponses{
@@ -63,11 +54,25 @@ const base::Feature kAutofillCacheQueryResponses{
 const base::Feature kAutofillCreateDataForTest{
     "AutofillCreateDataForTest", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Kill switch for Autofill filling.
+const base::Feature kAutofillDisableFilling{"AutofillDisableFilling",
+                                            base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Kill switch for Autofill import.
+const base::Feature kAutofillDisableImport{"AutofillDisableImport",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Controls if Chrome support filling and importing apartment numbers.
+// TODO(crbug.com/1153715): Remove once launched.
+const base::Feature kAutofillEnableSupportForApartmentNumbers{
+    "AutofillEnableSupportForApartmentNumbers",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Controls whether we download server credit cards to the ephemeral
 // account-based storage when sync the transport is enabled.
 const base::Feature kAutofillEnableAccountWalletStorage {
   "AutofillEnableAccountWalletStorage",
-#if defined(OS_CHROMEOS) || defined(OS_ANDROID) || defined(OS_IOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH) || defined(OS_ANDROID) || defined(OS_IOS)
       // Wallet transport is only currently available on Win/Mac/Linux.
       // (Somehow, swapping this check makes iOS unhappy?)
       base::FEATURE_DISABLED_BY_DEFAULT
@@ -78,8 +83,15 @@ const base::Feature kAutofillEnableAccountWalletStorage {
 
 // Controls whether to detect and fill the augmented phone country code field
 // when enabled.
+// TODO(crbug.com/1150890) Remove once launched
 const base::Feature kAutofillEnableAugmentedPhoneCountryCode{
     "AutofillEnableAugmentedPhoneCountryCode",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Controls if Autofill parses ADDRESS_HOME_DEPENDENT_LOCALITY.
+// TODO(crbug.com/1157405): Remove once launched.
+const base::Feature kAutofillEnableDependentLocalityParsing{
+    "AutofillEnableDependentLocalityParsing",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Controls whether we show "Hide suggestions" item in the suggestions menu.
@@ -99,6 +111,14 @@ const base::Feature
 // corresponding account indication footer flags on.
 const base::Feature kAutofillEnableInfoBarAccountIndicationFooterForSyncUsers{
     "AutofillEnableInfoBarAccountIndicationFooterForSyncUsers",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
+// When enabled, the precedence is given to the field label over the name when
+// they match different types. Applied only for parsing of address forms in
+// Turkish.
+// TODO(crbug.com/1156315): Remove once launched.
+const base::Feature kAutofillEnableLabelPrecedenceForTurkishAddresses{
+    "AutofillEnableLabelPrecedenceForTurkishAddresses",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
 // When enabled and user is signed in, a footer indicating user's e-mail address
@@ -148,6 +168,12 @@ const base::Feature kAutofillExtractAllDatalists{
 const base::Feature kAutofillFixFillableFieldTypes{
     "AutofillFixFillableFieldTypes", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Controls if a server prediction with a prediction source |OVERRIDE| is
+// granted precedence over html type attributes.
+// TODO(crbug.com/1170384) Remove once launched
+const base::Feature kAutofillServerTypeTakesPrecedence{
+    "AutofillServerTypeTakesPrecedence", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // When enabled, Autofill will use FormRendererIds instead of
 // GetIdentifierForRefill() to identify forms during refills.
 // TODO(crbug/896689): Remove once experiment is finished.
@@ -160,12 +186,12 @@ const base::Feature kAutofillRefillWithRendererIds{
 const base::Feature kAutofillNameSectionsWithRendererIds{
     "AutofillNameSectionsWithRendererIds", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// When enabled, autofill suggestions are displayed in the keyboard accessory
+// When enabled, Autofill suggestions are displayed in the keyboard accessory
 // instead of the regular popup.
 const base::Feature kAutofillKeyboardAccessory{
     "AutofillKeyboardAccessory", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// When enabled, autofill will use new logic to strip both prefixes
+// When enabled, Autofill will use new logic to strip both prefixes
 // and suffixes when setting FormStructure::parseable_name_
 extern const base::Feature kAutofillLabelAffixRemoval{
     "AutofillLabelAffixRemoval", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -176,13 +202,27 @@ const base::Feature kAutofillPruneSuggestions{
 const base::Feature kAutofillMetadataUploads{"AutofillMetadataUploads",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kAutofillOffNoServerData{"AutofillOffNoServerData",
-                                             base::FEATURE_DISABLED_BY_DEFAULT};
+// When enabled, Autofill will load remote patterns via the component updater.
+// TODO(crbug/1121990): Remove once launched.
+extern const base::Feature kAutofillParsingPatternsFromRemote{
+    "AutofillParsingPatternsFromRemote", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// If feature is enabled, autofill will be disabled for mixed forms (forms on
+// Controls whether negative patterns are used to parse the field type.
+// TODO(crbug.com/1132831): Remove once launched.
+const base::Feature kAutofillParsingPatternsNegativeMatching{
+    "AutofillParsingPatternsNegativeMatching",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Controls whether page language is used to match patterns.
+// TODO(crbug.com/1134496): Remove once launched.
+const base::Feature kAutofillParsingPatternsLanguageDependent{
+    "AutofillParsingPatternsLanguageDependent",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
+// If feature is enabled, Autofill will be disabled for mixed forms (forms on
 // HTTPS sites that submit over HTTP).
 const base::Feature kAutofillPreventMixedFormsFilling{
-    "AutofillPreventMixedFormsFilling", base::FEATURE_DISABLED_BY_DEFAULT};
+    "AutofillPreventMixedFormsFilling", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // If the feature is enabled, FormTracker's probable-form-submission detection
 // is disabled and replaced with browser-side detection.
@@ -194,6 +234,11 @@ const base::Feature kAutofillProbableFormSubmissionInBrowser{
 const base::Feature kAutofillProfileClientValidation{
     "AutofillProfileClientValidation", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// TODO(crbug.com/1101280): Remove once feature is tested.
+const base::Feature kAutofillProfileImportFromUnfocusableFields{
+    "AutofillProfileImportFromUnfocusableFields",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Controls whether Autofill uses server-side validation to ensure that fields
 // with invalid data are not suggested.
 const base::Feature kAutofillProfileServerValidation{
@@ -204,6 +249,11 @@ const base::Feature kAutofillProfileServerValidation{
 // a form if there are signals to suggest that this might a checkout page.
 const base::Feature kAutofillRestrictUnownedFieldsToFormlessCheckout{
     "AutofillRestrictUnownedFieldsToFormlessCheckout",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Controls whether or not overall prediction are retrieved from the cache.
+const base::Feature kAutofillRetrieveOverallPredictionsFromCache{
+    "AutofillRetrieveOverallPredictionsFromCache",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
 // On Canary and Dev channels only, this feature flag instructs chrome to send
@@ -241,12 +291,6 @@ const base::Feature kAutofillShowTypePredictions{
 const base::Feature kAutofillSkipComparingInferredLabels{
     "AutofillSkipComparingInferredLabels", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Controls whether to skip fields whose last seen value differs from the
-// initially value.
-const base::Feature kAutofillSkipFillingFieldsWithChangedValues{
-    "AutofillSkipFillingFieldsWithChangedValues",
-    base::FEATURE_DISABLED_BY_DEFAULT};
-
 // Controls whether Autofill should search prefixes of all words/tokens when
 // filtering profiles, or only on prefixes of the whole string.
 const base::Feature kAutofillTokenPrefixMatching{
@@ -273,12 +317,6 @@ const base::Feature kAutofillUseImprovedLabelDisambiguation{
 // implementation for section splitting or not. See https://crbug.com/1076175.
 const base::Feature kAutofillUseNewSectioningMethod{
     "AutofillUseNewSectioningMethod", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Controls whether page language is used to match patterns.
-// TODO(crbug.com/1134496): Remove once launched.
-const base::Feature kAutofillUsePageLanguageToSelectFieldParsingPatterns{
-    "AutofillUsePageLanguageToSelectFieldParsingPatterns",
-    base::FEATURE_DISABLED_BY_DEFAULT};
 
 #if defined(OS_ANDROID)
 // Controls whether the Autofill manual fallback for Addresses and Payments is
@@ -309,6 +347,12 @@ const base::Feature kAutofillUseUniqueRendererIDsOnIOS{
 #endif
 
 #if defined(OS_ANDROID)
+// Controls whether Android autofill (WebView and WebLayer) should query the
+// Autofill server for the server field type predictions and send them to
+// Android autofill service.
+const base::Feature kAndroidAutofillQueryServerFieldTypes{
+    "AndroidAutofillQueryServerFieldTypes", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Controls whether the Wallet (GPay) integration requires first-sync-setup to
 // be complete.
 // TODO(crbug.com/1134564): Clean up after launch.

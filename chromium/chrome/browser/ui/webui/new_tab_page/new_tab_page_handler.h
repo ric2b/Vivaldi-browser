@@ -11,7 +11,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
-#include "base/scoped_observer.h"
+#include "base/scoped_observation.h"
 #include "base/time/time.h"
 #include "chrome/browser/bitmap_fetcher/bitmap_fetcher_service.h"
 #include "chrome/browser/search/background/ntp_background_service_observer.h"
@@ -21,6 +21,7 @@
 #include "chrome/browser/search/promos/promo_service.h"
 #include "chrome/browser/search/promos/promo_service_observer.h"
 #include "chrome/browser/ui/omnibox/omnibox_tab_helper.h"
+#include "chrome/browser/ui/search/ntp_user_data_logger.h"
 #include "chrome/browser/ui/webui/new_tab_page/new_tab_page.mojom.h"
 #include "chrome/common/search/instant_types.h"
 #include "chrome/common/search/ntp_logging_events.h"
@@ -63,7 +64,6 @@ class NewTabPageHandler : public new_tab_page::mojom::PageHandler,
                     Profile* profile,
                     InstantService* instant_service,
                     content::WebContents* web_contents,
-                    NTPUserDataLogger* logger,
                     const base::Time& ntp_navigation_start_time);
   ~NewTabPageHandler() override;
 
@@ -139,7 +139,9 @@ class NewTabPageHandler : public new_tab_page::mojom::PageHandler,
       new_tab_page::mojom::VoiceSearchAction action) override;
   void OnVoiceSearchError(new_tab_page::mojom::VoiceSearchError error) override;
   void OnModuleImpression(const std::string& module_id, double time) override;
-  void OnModuleLoaded(const std::string& module_id, double time) override;
+  void OnModuleLoaded(const std::string& module_id,
+                      base::TimeDelta duration,
+                      double time) override;
   void OnModuleUsage(const std::string& module_id) override;
   void OnModulesRendered(double time) override;
   void QueryAutocomplete(const base::string16& input,
@@ -229,8 +231,8 @@ class NewTabPageHandler : public new_tab_page::mojom::PageHandler,
   base::TimeTicks background_images_request_start_time_;
   std::vector<GetOneGoogleBarPartsCallback> one_google_bar_parts_callbacks_;
   OneGoogleBarService* one_google_bar_service_;
-  ScopedObserver<OneGoogleBarService, OneGoogleBarServiceObserver>
-      one_google_bar_service_observer_{this};
+  base::ScopedObservation<OneGoogleBarService, OneGoogleBarServiceObserver>
+      one_google_bar_service_observation_{this};
   base::Optional<base::TimeTicks> one_google_bar_load_start_time_;
   Profile* profile_;
   scoped_refptr<ui::SelectFileDialog> select_file_dialog_;
@@ -238,17 +240,17 @@ class NewTabPageHandler : public new_tab_page::mojom::PageHandler,
   FaviconCache favicon_cache_;
   BitmapFetcherService* bitmap_fetcher_service_;
   std::vector<BitmapFetcherService::RequestId> bitmap_request_ids_;
-  base::TimeTicks time_of_first_autocomplete_query_;
+  base::TimeTicks time_user_first_modified_realbox_;
   content::WebContents* web_contents_;
   base::Time ntp_navigation_start_time_;
-  NTPUserDataLogger* logger_;
+  NTPUserDataLogger logger_;
   std::unordered_map<const network::SimpleURLLoader*,
                      std::unique_ptr<network::SimpleURLLoader>>
       loader_map_;
   std::vector<GetPromoCallback> promo_callbacks_;
   PromoService* promo_service_;
-  ScopedObserver<PromoService, PromoServiceObserver> promo_service_observer_{
-      this};
+  base::ScopedObservation<PromoService, PromoServiceObserver>
+      promo_service_observation_{this};
   base::Optional<base::TimeTicks> promo_load_start_time_;
 
   // These are located at the end of the list of member variables to ensure the

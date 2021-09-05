@@ -49,6 +49,7 @@
 // shown here to indicate where ideal conversions are currently missing.
 #if SK_B32_SHIFT == 0 && SK_G32_SHIFT == 8 && SK_R32_SHIFT == 16 && \
     SK_A32_SHIFT == 24
+#define OUTPUT_ARGB 1
 #define LIBYUV_I400_TO_ARGB libyuv::I400ToARGB
 #define LIBYUV_I420_TO_ARGB libyuv::I420ToARGB
 #define LIBYUV_I422_TO_ARGB libyuv::I422ToARGB
@@ -86,8 +87,11 @@
 // #define LIBYUV_U410_TO_ARGB libyuv::U410ToARGB
 
 #define LIBYUV_NV12_TO_ARGB libyuv::NV12ToARGB
+
+#define LIBYUV_ABGR_TO_ARGB libyuv::ABGRToARGB
 #elif SK_R32_SHIFT == 0 && SK_G32_SHIFT == 8 && SK_B32_SHIFT == 16 && \
     SK_A32_SHIFT == 24
+#define OUTPUT_ARGB 0
 #define LIBYUV_I400_TO_ARGB libyuv::I400ToARGB
 #define LIBYUV_I420_TO_ARGB libyuv::I420ToABGR
 #define LIBYUV_I422_TO_ARGB libyuv::I422ToABGR
@@ -125,6 +129,8 @@
 // #define LIBYUV_U410_TO_ARGB libyuv::U410ToABGR
 
 #define LIBYUV_NV12_TO_ARGB libyuv::NV12ToABGR
+
+#define LIBYUV_ABGR_TO_ARGB libyuv::ARGBToABGR
 #else
 #error Unexpected Skia ARGB_8888 layout!
 #endif
@@ -314,7 +320,7 @@ void SynchronizeVideoFrameRead(scoped_refptr<VideoFrame> video_frame,
   WaitAndReplaceSyncTokenClient client(ri);
   video_frame->UpdateReleaseSyncToken(&client);
 
-  if (video_frame->metadata()->read_lock_fences_enabled) {
+  if (video_frame->metadata().read_lock_fences_enabled) {
     // |video_frame| must be kept alive during read operations.
     DCHECK(context_support);
     unsigned query_id = 0;
@@ -385,6 +391,29 @@ void ConvertVideoFrameToRGBPixelsTask(const VideoFrame* video_frame,
 
   uint8_t* pixels = static_cast<uint8_t*>(rgb_pixels) +
                     row_bytes * chunk_start * rows_per_chunk;
+
+  if (format == PIXEL_FORMAT_ARGB || format == PIXEL_FORMAT_XRGB ||
+      format == PIXEL_FORMAT_ABGR || format == PIXEL_FORMAT_XBGR) {
+    DCHECK_LE(width, static_cast<int>(row_bytes));
+    const uint8_t* data = plane_meta[VideoFrame::kARGBPlane].data;
+
+    if ((OUTPUT_ARGB &&
+         (format == PIXEL_FORMAT_ARGB || format == PIXEL_FORMAT_XRGB)) ||
+        (!OUTPUT_ARGB &&
+         (format == PIXEL_FORMAT_ABGR || format == PIXEL_FORMAT_XBGR))) {
+      for (size_t i = 0; i < rows; i++) {
+        memcpy(pixels, data, width * 4);
+        pixels += row_bytes;
+        data += plane_meta[VideoFrame::kARGBPlane].stride;
+      }
+    } else {
+      LIBYUV_ABGR_TO_ARGB(plane_meta[VideoFrame::kARGBPlane].data,
+                          plane_meta[VideoFrame::kARGBPlane].stride, pixels,
+                          row_bytes, width, rows);
+    }
+    done->Run();
+    return;
+  }
 
   // TODO(crbug.com/828599): This should default to BT.709 color space.
   SkYUVColorSpace color_space = kRec601_SkYUVColorSpace;
@@ -638,31 +667,24 @@ bool ValidFormatForDirectUploading(GrGLenum format, unsigned int type) {
   }
 }
 
-bool VideoPixelFormatAsSkYUVAInfoPlanarConfig(
-    VideoPixelFormat format,
-    SkYUVAInfo::PlanarConfig* config) {
-  // TODO(skbug.com/10632): Add more formats, e.g. I420A, NV12, NV21 when Skia
-  // equivalents are added.
+std::tuple<SkYUVAInfo::PlaneConfig, SkYUVAInfo::Subsampling>
+VideoPixelFormatAsSkYUVAInfoValues(VideoPixelFormat format) {
   // The 9, 10, and 12 bit formats could be added here if GetYUVAPlanes() were
-  // updated to convert data to unorm16/float16.
+  // updated to convert data to unorm16/float16. Similarly, alpha planes and
+  // formats with interleaved planes (e.g. NV12) could  be supported if that
+  // function were updated to not assume 3 separate Y, U, and V planes. Also,
+  // GpuImageDecodeCache would need be able to handle plane configurations
+  // other than 3 separate y, u, and v planes (crbug.com/910276).
   switch (format) {
     case PIXEL_FORMAT_I420:
-      if (config) {
-        *config = SkYUVAInfo::PlanarConfig::kY_U_V_420;
-      }
-      return true;
+      return {SkYUVAInfo::PlaneConfig::kY_U_V, SkYUVAInfo::Subsampling::k420};
     case PIXEL_FORMAT_I422:
-      if (config) {
-        *config = SkYUVAInfo::PlanarConfig::kY_U_V_422;
-      }
-      return true;
+      return {SkYUVAInfo::PlaneConfig::kY_U_V, SkYUVAInfo::Subsampling::k422};
     case PIXEL_FORMAT_I444:
-      if (config) {
-        *config = SkYUVAInfo::PlanarConfig::kY_U_V_444;
-      }
-      return true;
+      return {SkYUVAInfo::PlaneConfig::kY_U_V, SkYUVAInfo::Subsampling::k444};
     default:
-      return false;
+      return {SkYUVAInfo::PlaneConfig::kUnknown,
+              SkYUVAInfo::Subsampling::kUnknown};
   }
 }
 
@@ -704,9 +726,11 @@ class VideoImageGenerator : public cc::PaintImageGenerator {
     // is added for VideoImageGenerator.
     return false;
 #if 0
-    SkYUVAInfo::PlanarConfig planar_config;
-    if (!VideoPixelFormatAsSkYUVAInfoPlanarConfig(frame_->format(),
-                                                  &planar_config)) {
+    SkYUVAInfo::PlaneConfig plane_config;
+    SkYUVAInfo::Subsampling subsampling;
+    std::tie(plane_config, subsampling) =
+        VideoPixelFormatAsSkYUVAInfoValues(frame_->format());
+    if (plane_config == SkYUVAInfo::PlaneConfig::kUnknown) {
       return false;
     }
     if (info) {
@@ -722,8 +746,9 @@ class VideoImageGenerator : public cc::PaintImageGenerator {
           VideoFrame::PlaneSize(frame_->format(), VideoFrame::kYPlane,
                                 gfx::Size(frame_->visible_rect().width(),
                                           frame_->visible_rect().height()));
-      SkYUVAInfo yuva_info = SkYUVAInfo({y_size.width(), y_size.height()},
-                                        planar_config, yuv_color_space);
+      SkYUVAInfo yuva_info =
+          SkYUVAInfo({y_size.width(), y_size.height()}, plane_config,
+                     subsampling, yuv_color_space);
       *info = SkYUVAPixmapInfo(yuva_info, SkYUVAPixmapInfo::DataType::kUnorm8,
                                /* row bytes */ nullptr);
     }
@@ -735,13 +760,15 @@ class VideoImageGenerator : public cc::PaintImageGenerator {
                      size_t frame_index,
                      uint32_t lazy_pixel_ref) override {
     DCHECK_EQ(frame_index, 0u);
+    DCHECK_EQ(pixmaps.numPlanes(), 3);
 
-    if (!VideoPixelFormatAsSkYUVAInfoPlanarConfig(frame_->format(), nullptr)) {
-      return false;
-    }
-
-    if (!pixmaps.plane(3).dimensions().isEmpty()) {
-      return false;
+    if (DCHECK_IS_ON()) {
+      SkYUVAInfo::PlaneConfig plane_config;
+      SkYUVAInfo::Subsampling subsampling;
+      std::tie(plane_config, subsampling) =
+          VideoPixelFormatAsSkYUVAInfoValues(frame_->format());
+      DCHECK_EQ(plane_config, pixmaps.yuvaInfo().planeConfig());
+      DCHECK_EQ(subsampling, pixmaps.yuvaInfo().subsampling());
     }
 
     for (int plane = VideoFrame::kYPlane; plane <= VideoFrame::kVPlane;
@@ -864,7 +891,11 @@ void PaintCanvasVideoRenderer::Paint(
   // frame has an unexpected format.
   if (!video_frame.get() || video_frame->natural_size().IsEmpty() ||
       !(media::IsYuvPlanar(video_frame->format()) ||
-        video_frame->format() == media::PIXEL_FORMAT_Y16 ||
+        video_frame->format() == PIXEL_FORMAT_Y16 ||
+        video_frame->format() == PIXEL_FORMAT_ARGB ||
+        video_frame->format() == PIXEL_FORMAT_XRGB ||
+        video_frame->format() == PIXEL_FORMAT_ABGR ||
+        video_frame->format() == PIXEL_FORMAT_XBGR ||
         video_frame->HasTextures())) {
     cc::PaintFlags black_with_alpha_flags;
     black_with_alpha_flags.setAlpha(flags.getAlpha());
@@ -1024,7 +1055,7 @@ scoped_refptr<VideoFrame> DownShiftHighbitVideoFrame(
   ret->set_color_space(video_frame->ColorSpace());
   // Copy all metadata.
   // (May be enough to copy color space)
-  ret->metadata()->MergeMetadataFrom(video_frame->metadata());
+  ret->metadata().MergeMetadataFrom(video_frame->metadata());
 
   for (int plane = VideoFrame::kYPlane; plane <= VideoFrame::kVPlane; ++plane) {
     int width = ret->row_bytes(plane);
@@ -1296,7 +1327,7 @@ bool PaintCanvasVideoRenderer::CopyVideoFrameTexturesToGLTexture(
   DCHECK(video_frame);
   DCHECK(video_frame->HasTextures());
   if (video_frame->NumTextures() > 1 ||
-      video_frame->metadata()->read_lock_fences_enabled) {
+      video_frame->metadata().read_lock_fences_enabled) {
     if (!raster_context_provider)
       return false;
     GrDirectContext* gr_context = raster_context_provider->GrContext();
@@ -1305,8 +1336,13 @@ bool PaintCanvasVideoRenderer::CopyVideoFrameTexturesToGLTexture(
 // TODO(crbug.com/1108154): Expand this uploading path to macOS, linux
 // chromeOS after collecting perf data and resolve failure cases.
 #if defined(OS_WIN)
-    // Try direct uploading path
-    if (premultiply_alpha && level == 0) {
+    // Since skia always produces premultiply alpha outputs,
+    // trying direct uploading path when video format is opaque or premultiply
+    // alpha been requested. And dst texture mipLevel must be 0.
+    // TODO(crbug.com/1155003): Figure out whether premultiply options here are
+    // accurate.
+    if ((media::IsOpaque(video_frame->format()) || premultiply_alpha) &&
+        level == 0) {
       if (UploadVideoFrameToGLTexture(raster_context_provider, destination_gl,
                                       video_frame, target, texture,
                                       internal_format, format, type, flip_y)) {
@@ -1386,8 +1422,7 @@ bool PaintCanvasVideoRenderer::UploadVideoFrameToGLTexture(
   DCHECK(video_frame);
   DCHECK(video_frame->HasTextures());
   // Support uploading for NV12 and I420 video frame only.
-  if (video_frame->format() != PIXEL_FORMAT_I420 &&
-      video_frame->format() != PIXEL_FORMAT_NV12) {
+  if (!VideoFrameYUVConverter::IsVideoFrameFormatSupported(*video_frame)) {
     return false;
   }
 
@@ -1420,7 +1455,7 @@ bool PaintCanvasVideoRenderer::UploadVideoFrameToGLTexture(
   destination_gl->GenUnverifiedSyncTokenCHROMIUM(
       mailbox_holder.sync_token.GetData());
 
-  if (!VideoFrameYUVConverter::ConvertYUVVideoFrameWithSkSurfaceNoCaching(
+  if (!VideoFrameYUVConverter::ConvertYUVVideoFrameToDstTextureNoCaching(
           video_frame.get(), raster_context_provider, mailbox_holder,
           internal_format, type, flip_y, true /* use visible_rect */)) {
     return false;
@@ -1519,7 +1554,7 @@ bool PaintCanvasVideoRenderer::CopyVideoFrameYUVDataToGLTexture(
     return false;
   }
 
-  if (video_frame.format() != media::PIXEL_FORMAT_I420) {
+  if (!VideoFrameYUVConverter::IsVideoFrameFormatSupported(video_frame)) {
     return false;
   }
   // Could handle NV12 here as well. See NewSkImageFromVideoFrameYUV.

@@ -50,6 +50,7 @@
 #include "components/autofill/core/common/autofill_payments_features.h"
 #include "components/autofill/core/common/autofill_prefs.h"
 #include "components/autofill/core/common/autofill_switches.h"
+#include "components/autofill_assistant/browser/public/runtime_manager.h"
 #include "components/password_manager/content/browser/content_password_manager_driver.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_requirements_service.h"
@@ -223,6 +224,15 @@ std::string ChromeAutofillClient::GetVariationConfigCountryCode() const {
   return variation_service
              ? base::ToUpperASCII(variation_service->GetLatestCountry())
              : std::string();
+}
+
+profile_metrics::BrowserProfileType ChromeAutofillClient::GetProfileType()
+    const {
+  Profile* profile = GetProfile();
+  // Profile can only be null in tests, therefore it is safe to always return
+  // |kRegular| when it does not exist.
+  return profile ? ProfileMetrics::GetBrowserProfileType(profile)
+                 : profile_metrics::BrowserProfileType::kRegular;
 }
 
 std::unique_ptr<InternalAuthenticator>
@@ -514,6 +524,14 @@ void ChromeAutofillClient::ScanCreditCard(CreditCardScanCallback callback) {
 void ChromeAutofillClient::ShowAutofillPopup(
     const autofill::AutofillClient::PopupOpenArgs& open_args,
     base::WeakPtr<AutofillPopupDelegate> delegate) {
+  // Don't show any popups while Autofill Assistant's UI is shown.
+  auto* assistant_runtime_manager =
+      autofill_assistant::RuntimeManager::GetForWebContents(web_contents());
+  if (assistant_runtime_manager && assistant_runtime_manager->GetState() ==
+                                       autofill_assistant::UIState::kShown) {
+    return;
+  }
+
   // Convert element_bounds to be in screen space.
   gfx::Rect client_area = web_contents()->GetContainerBounds();
   if (vivaldi::IsVivaldiRunning() && web_contents()->GetOuterWebContents()) {
@@ -742,7 +760,7 @@ ChromeAutofillClient::ChromeAutofillClient(content::WebContents* web_contents)
   log_manager_ =
       LogManager::Create(AutofillLogRouterFactory::GetForBrowserContext(
                              web_contents->GetBrowserContext()),
-                         base::Closure());
+                         base::NullCallback());
   // Initialize StrikeDatabase so its cache will be loaded and ready to use when
   // when requested by other Autofill classes.
   GetStrikeDatabase();

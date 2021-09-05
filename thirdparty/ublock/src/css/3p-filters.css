@@ -2,6 +2,9 @@
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
     }
+body {
+    margin-bottom: 6rem;
+    }
 #actions {
     background-color: var(--default-surface);
     padding: var(--default-gap-small) 0 var(--default-gap-xsmall) 0;
@@ -71,7 +74,6 @@ body.hideUnused #listsOfBlockedHostsPrompt::before,
 .listEntry.toRemove .listname {
     text-decoration: line-through;
     }
-.listEntry .fa,
 .listEntry .fa-icon,
 .listEntry .counts {
     color: var(--fg-0-50);
@@ -80,7 +82,6 @@ body.hideUnused #listsOfBlockedHostsPrompt::before,
     font-size: 120%;
     margin: 0 0.2em 0 0;
     }
-.listEntry .fa:hover,
 .listEntry .fa-icon:hover {
     color: inherit;
     fill: inherit;

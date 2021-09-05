@@ -12,14 +12,17 @@
 #include <vector>
 
 #include "base/check_op.h"
+#include "base/location.h"
 #include "base/notreached.h"
 #include "base/thread_annotations.h"
 #include "base/threading/thread_checker.h"
+#include "base/time/time.h"
 #include "cc/paint/paint_canvas.h"
 #include "net/cookies/site_for_cookies.h"
 #include "pdf/pdf_engine.h"
 #include "pdf/pdf_init.h"
 #include "pdf/pdfium/pdfium_engine.h"
+#include "pdf/ppapi_migration/graphics.h"
 #include "pdf/ppapi_migration/url_loader.h"
 #include "ppapi/c/pp_errors.h"
 #include "third_party/blink/public/common/input/web_coalesced_input_event.h"
@@ -103,8 +106,23 @@ bool PdfViewWebPlugin::Initialize(blink::WebPluginContainer* container) {
 
   std::string stream_url;
   for (size_t i = 0; i < initial_params_.attribute_names.size(); ++i) {
-    if (initial_params_.attribute_names[i] == "stream-url")
+    if (initial_params_.attribute_names[i] == "stream-url") {
       stream_url = initial_params_.attribute_values[i].Utf8();
+    } else if (initial_params_.attribute_names[i] == "background-color") {
+      uint32_t background_color;
+      if (!base::HexStringToUInt(initial_params_.attribute_values[i].Utf8(),
+                                 &background_color)) {
+        return false;
+      }
+      SetBackgroundColor(background_color);
+    } else if (initial_params_.attribute_names[i] == "top-toolbar-height") {
+      int toolbar_height;
+      if (!base::StringToInt(initial_params_.attribute_values[i].Utf8(),
+                             &toolbar_height)) {
+        return false;
+      }
+      set_top_toolbar_height_in_viewport_coords(toolbar_height);
+    }
   }
 
   // Contents of `initial_params_` no longer needed.
@@ -267,10 +285,6 @@ bool PdfViewWebPlugin::IsPrintPreview() {
   return false;
 }
 
-uint32_t PdfViewWebPlugin::GetBackgroundColor() {
-  return 0;
-}
-
 void PdfViewWebPlugin::IsSelectingChanged(bool is_selecting) {}
 
 void PdfViewWebPlugin::SelectionChanged(const gfx::Rect& left,
@@ -295,6 +309,27 @@ void PdfViewWebPlugin::SetLinkUnderCursor(
 
 bool PdfViewWebPlugin::IsValidLink(const std::string& url) {
   return base::Value(url).is_string();
+}
+
+std::unique_ptr<Graphics> PdfViewWebPlugin::CreatePaintGraphics(
+    const gfx::Size& size) {
+  auto graphics = SkiaGraphics::Create(size);
+  DCHECK(graphics);
+  return graphics;
+}
+
+bool PdfViewWebPlugin::BindPaintGraphics(Graphics& graphics) {
+  NOTIMPLEMENTED_LOG_ONCE();
+  return false;
+}
+
+void PdfViewWebPlugin::ScheduleTaskOnMainThread(
+    base::TimeDelta delay,
+    ResultCallback callback,
+    int32_t result,
+    const base::Location& from_here) {
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+      from_here, base::BindOnce(std::move(callback), result), delay);
 }
 
 bool PdfViewWebPlugin::IsValid() const {
@@ -353,5 +388,18 @@ void PdfViewWebPlugin::DidOpenPreview(std::unique_ptr<UrlLoader> loader,
                                       int32_t result) {
   NOTIMPLEMENTED();
 }
+
+// TODO(https://crbug.com/1099020): To be implemented as a Pepper-free version
+// of `OutOfProcessInstance::DoPaint()`
+void PdfViewWebPlugin::DoPaint(const std::vector<gfx::Rect>& paint_rects,
+                               std::vector<PaintReadyRect>* ready,
+                               std::vector<gfx::Rect>* pending) {
+  NOTIMPLEMENTED_LOG_ONCE();
+}
+
+// TODO(https://crbug.com/1099020): To be implemented as a Pepper-free version
+// of `OutOfProcessInstance::OnGeometryChanged()`
+void PdfViewWebPlugin::OnGeometryChanged(double old_zoom,
+                                         float old_device_scale) {}
 
 }  // namespace chrome_pdf

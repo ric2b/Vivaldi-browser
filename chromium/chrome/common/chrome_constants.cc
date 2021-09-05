@@ -6,6 +6,7 @@
 
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/common/chrome_version.h"
 
 #define FPL FILE_PATH_LITERAL
@@ -202,11 +203,12 @@ const wchar_t kUserDataDirname[] = L"User Data";
 
 const float kMaxShareOfExtensionProcesses = 0.30f;
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 const char kProfileDirPrefix[] = "u-";
 const char kLegacyProfileDir[] = "user";
 const char kTestUserProfileDir[] = "test-user";
 const char kLockScreenAppProfile[] = "LockScreenAppsProfile";
+const char kLockScreenProfile[] = "LockScreenProfile";
 #endif
 
 // This GUID is associated with any 'don't ask me again' settings that the

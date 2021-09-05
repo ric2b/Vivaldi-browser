@@ -16,6 +16,7 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "build/buildflag.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sync/test/integration/configuration_refresher.h"
 #include "chrome/browser/sync/test/integration/fake_server_invalidation_sender.h"
@@ -31,9 +32,9 @@
 #include "net/http/http_status_code.h"
 #include "services/network/test/test_url_loader_factory.h"
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/ui/app_list/app_list_syncable_service.h"
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if defined(OS_ANDROID)
 #include "chrome/test/base/android/android_browser_test.h"
@@ -116,7 +117,6 @@ class SyncTest : public PlatformBrowserTest {
     void GetToken(const std::string& authorized_entity,
                   const std::string& scope,
                   base::TimeDelta time_to_live,
-                  const std::map<std::string, std::string>& options,
                   std::set<Flags> flags,
                   GetTokenCallback callback) override;
 
@@ -360,7 +360,7 @@ class SyncTest : public PlatformBrowserTest {
                                     Profile::CreateStatus status);
 
   static std::unique_ptr<KeyedService> CreateProfileInvalidationProvider(
-      std::map<const Profile*, syncer::FCMNetworkHandler*>*
+      std::map<const Profile*, invalidation::FCMNetworkHandler*>*
           profile_to_fcm_network_handler_map,
       std::map<const Profile*, std::unique_ptr<instance_id::InstanceIDDriver>>*
           profile_to_instance_id_driver_map,
@@ -499,7 +499,7 @@ class SyncTest : public PlatformBrowserTest {
   // Maps a profile to the corresponding FCMNetworkHandler. Contains one entry
   // per profile. It is used to simulate an incoming FCM messages to different
   // profiles within the FakeServerInvalidationSender.
-  std::map<const Profile*, syncer::FCMNetworkHandler*>
+  std::map<const Profile*, invalidation::FCMNetworkHandler*>
       profile_to_fcm_network_handler_map_;
 
   std::map<const Profile*, std::unique_ptr<instance_id::InstanceIDDriver>>
@@ -508,9 +508,7 @@ class SyncTest : public PlatformBrowserTest {
   // Triggers a GetUpdates via refresh after a configuration.
   std::unique_ptr<ConfigurationRefresher> configuration_refresher_;
 
-  std::unique_ptr<
-      BrowserContextDependencyManager::CreateServicesCallbackList::Subscription>
-      create_services_subscription_;
+  base::CallbackListSubscription create_services_subscription_;
 
   // Sync profile against which changes to individual profiles are verified.
   // We don't need a corresponding verifier sync client because the contents
@@ -527,7 +525,7 @@ class SyncTest : public PlatformBrowserTest {
   extensions::ScopedInstallVerifierBypassForTest ignore_install_verification_;
 #endif
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // A factory-like callback to create a model updater for testing, which will
   // take the place of the real updater in AppListSyncableService for testing.
   std::unique_ptr<

@@ -22,7 +22,6 @@
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/set_time_dialog.h"
 #include "chrome/browser/chromeos/system/system_clock.h"
-#include "chrome/browser/chromeos/web_applications/default_web_app_ids.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/lifetime/termination_notification.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -36,7 +35,9 @@
 #include "chrome/browser/ui/webui/chromeos/internet_detail_dialog.h"
 #include "chrome/browser/ui/webui/chromeos/multidevice_setup/multidevice_setup_dialog.h"
 #include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom.h"
+#include "chrome/browser/ui/webui/settings/chromeos/constants/setting.mojom.h"
 #include "chrome/browser/upgrade_detector/upgrade_detector.h"
+#include "chrome/browser/web_applications/components/web_app_id_constants.h"
 #include "chrome/common/url_constants.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/constants/chromeos_switches.h"
@@ -75,8 +76,14 @@ void ShowSettingsSubPageForActiveUser(const std::string& sub_page) {
       ProfileManager::GetActiveUserProfile(), sub_page);
 }
 
-// Returns the severity of a pending Chrome / Chrome OS update.
-ash::UpdateSeverity GetUpdateSeverity(UpgradeDetector* detector) {
+// Returns the severity of a pending update.
+ash::UpdateSeverity GetUpdateSeverity(ash::UpdateType update_type,
+                                      UpgradeDetector* detector) {
+  // Lacros is always "low", which is the same severity OS updates start with.
+  if (update_type == ash::UpdateType::kLacros)
+    return ash::UpdateSeverity::kLow;
+
+  // OS updates use UpgradeDetector's severity mapping.
   switch (detector->upgrade_notification_stage()) {
     case UpgradeDetector::UPGRADE_ANNOYANCE_NONE:
       return ash::UpdateSeverity::kNone;
@@ -89,11 +96,8 @@ ash::UpdateSeverity GetUpdateSeverity(UpgradeDetector* detector) {
     case UpgradeDetector::UPGRADE_ANNOYANCE_HIGH:
       return ash::UpdateSeverity::kHigh;
     case UpgradeDetector::UPGRADE_ANNOYANCE_CRITICAL:
-      break;
+      return ash::UpdateSeverity::kCritical;
   }
-  DCHECK_EQ(detector->upgrade_notification_stage(),
-            UpgradeDetector::UPGRADE_ANNOYANCE_CRITICAL);
-  return ash::UpdateSeverity::kCritical;
 }
 
 const chromeos::NetworkState* GetNetworkState(const std::string& network_id) {
@@ -124,7 +128,7 @@ SystemTrayClient::SystemTrayClient()
 
   // If an upgrade is available at startup then tell ash about it.
   if (UpgradeDetector::GetInstance()->notify_upgrade())
-    HandleUpdateAvailable();
+    HandleUpdateAvailable(ash::UpdateType::kSystem);
 
   // If the device is enterprise managed then send ash the enterprise domain.
   policy::BrowserPolicyConnectorChromeOS* policy_connector =
@@ -164,11 +168,6 @@ SystemTrayClient* SystemTrayClient::Get() {
   return g_system_tray_client_instance;
 }
 
-void SystemTrayClient::SetFlashUpdateAvailable() {
-  flash_update_available_ = true;
-  HandleUpdateAvailable();
-}
-
 void SystemTrayClient::SetUpdateNotificationState(
     ash::NotificationStyle style,
     const base::string16& notification_title,
@@ -176,7 +175,11 @@ void SystemTrayClient::SetUpdateNotificationState(
   update_notification_style_ = style;
   update_notification_title_ = notification_title;
   update_notification_body_ = notification_body;
-  HandleUpdateAvailable();
+  HandleUpdateAvailable(ash::UpdateType::kSystem);
+}
+
+void SystemTrayClient::SetLacrosUpdateAvailable() {
+  HandleUpdateAvailable(ash::UpdateType::kLacros);
 }
 
 void SystemTrayClient::SetPrimaryTrayEnabled(bool enabled) {
@@ -307,10 +310,10 @@ void SystemTrayClient::ShowGestureEducationHelp() {
 
   apps::AppServiceProxy* proxy =
       apps::AppServiceProxyFactory::GetForProfileRedirectInIncognito(profile);
-  proxy->LaunchAppWithUrl(
-      chromeos::default_web_apps::kHelpAppId, ui::EventFlags::EF_NONE,
-      GURL(chrome::kChromeOSGestureEducationHelpURL),
-      apps::mojom::LaunchSource::kFromOtherApp, display::kDefaultDisplayId);
+  proxy->LaunchAppWithUrl(web_app::kHelpAppId, ui::EventFlags::EF_NONE,
+                          GURL(chrome::kChromeOSGestureEducationHelpURL),
+                          apps::mojom::LaunchSource::kFromOtherApp,
+                          display::kDefaultDisplayId);
 }
 
 void SystemTrayClient::ShowPaletteHelp() {
@@ -368,6 +371,11 @@ void SystemTrayClient::ShowNetworkConfigure(const std::string& network_id) {
 
 void SystemTrayClient::ShowNetworkCreate(const std::string& type) {
   if (type == ::onc::network_type::kCellular) {
+    if (base::FeatureList::IsEnabled(
+            chromeos::features::kUpdatedCellularActivationUi)) {
+      ShowSettingsCellularSetupFlow();
+      return;
+    }
     const chromeos::NetworkState* cellular =
         chromeos::NetworkHandler::Get()
             ->network_state_handler()
@@ -378,6 +386,13 @@ void SystemTrayClient::ShowNetworkCreate(const std::string& type) {
     return;
   }
   chromeos::InternetConfigDialog::ShowDialogForNetworkType(type);
+}
+
+void SystemTrayClient::ShowSettingsCellularSetupFlow() {
+  // TODO(crbug.com/1093185) Add metrics action recorder
+  std::string page = chromeos::settings::mojom::kCellularNetworksSubpagePath;
+  page += "&showCellularSetup=true";
+  ShowSettingsSubPageForActiveUser(page);
 }
 
 void SystemTrayClient::ShowThirdPartyVpnCreate(
@@ -444,6 +459,9 @@ void SystemTrayClient::ShowNetworkSettingsHelper(const std::string& network_id,
     page += net::EscapeUrlEncodedData(
         chromeos::network_util::TranslateShillTypeToONC(network_state->type()),
         true);
+    page += "&settingId=";
+    page += base::NumberToString(static_cast<int32_t>(
+        chromeos::settings::mojom::Setting::kDisconnectWifiNetwork));
     if (show_configure)
       page += "&showConfigure=true";
   }
@@ -456,12 +474,7 @@ void SystemTrayClient::ShowMultiDeviceSetup() {
 }
 
 void SystemTrayClient::RequestRestartForUpdate() {
-  // Flash updates on Chrome OS require device reboot.
-  const browser_shutdown::RebootPolicy reboot_policy =
-      flash_update_available_ ? browser_shutdown::RebootPolicy::kForceReboot
-                              : browser_shutdown::RebootPolicy::kOptionalReboot;
-
-  browser_shutdown::NotifyAndTerminate(true /* fast_path */, reboot_policy);
+  browser_shutdown::NotifyAndTerminate(/*fast_path=*/true);
 }
 
 void SystemTrayClient::SetLocaleAndExit(const std::string& locale_iso_code) {
@@ -470,31 +483,19 @@ void SystemTrayClient::SetLocaleAndExit(const std::string& locale_iso_code) {
   chrome::AttemptUserExit();
 }
 
-void SystemTrayClient::HandleUpdateAvailable() {
-  // Show an update icon for Chrome updates and Flash component updates.
+void SystemTrayClient::HandleUpdateAvailable(ash::UpdateType update_type) {
   UpgradeDetector* detector = UpgradeDetector::GetInstance();
-  bool update_available = detector->notify_upgrade() || flash_update_available_;
-  DCHECK(update_available);
-  if (!update_available)
+  if (update_type == ash::UpdateType::kSystem && !detector->notify_upgrade()) {
+    LOG(ERROR) << "Tried to show update notification when no update available";
     return;
+  }
 
-  // Get the Chrome update severity.
-  ash::UpdateSeverity severity = GetUpdateSeverity(detector);
-
-  // Flash updates are low severity unless the Chrome severity is higher.
-  if (flash_update_available_)
-    severity = std::max(severity, ash::UpdateSeverity::kLow);
-
-  // Show a string specific to updating flash player if there is no system
-  // update.
-  ash::UpdateType update_type = detector->notify_upgrade()
-                                    ? ash::UpdateType::kSystem
-                                    : ash::UpdateType::kFlash;
-
+  // Show the system tray icon.
+  ash::UpdateSeverity severity = GetUpdateSeverity(update_type, detector);
   system_tray_->ShowUpdateIcon(severity, detector->is_factory_reset_required(),
                                detector->is_rollback(), update_type);
 
-  // Only overwrite title and body for system updates, not for flash updates.
+  // Only overwrite title and body for system updates.
   if (update_type == ash::UpdateType::kSystem) {
     system_tray_->SetUpdateNotificationState(update_notification_style_,
                                              update_notification_title_,
@@ -523,7 +524,7 @@ void SystemTrayClient::OnUpdateOverCellularOneTimePermissionGranted() {
 }
 
 void SystemTrayClient::OnUpgradeRecommended() {
-  HandleUpdateAvailable();
+  HandleUpdateAvailable(ash::UpdateType::kSystem);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

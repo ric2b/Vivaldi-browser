@@ -248,11 +248,11 @@ void BookmarkBridge::LoadFakePartnerBookmarkShimForTesting(
       PartnerBookmarksReader::CreatePartnerBookmarksRootForTesting();
   BookmarkNode* partner_bookmark_a =
       root_partner_node->Add(std::make_unique<BookmarkNode>(
-          1, base::GenerateGUID(), GURL("http://www.a.com")));
+          1, base::GUID::GenerateRandomV4(), GURL("http://www.a.com")));
   partner_bookmark_a->SetTitle(base::ASCIIToUTF16("Partner Bookmark A"));
   BookmarkNode* partner_bookmark_b =
       root_partner_node->Add(std::make_unique<BookmarkNode>(
-          2, base::GenerateGUID(), GURL("http://www.b.com")));
+          2, base::GUID::GenerateRandomV4(), GURL("http://www.b.com")));
   partner_bookmark_b->SetTitle(base::ASCIIToUTF16("Partner Bookmark B"));
   partner_bookmarks_shim_->SetPartnerBookmarksRoot(
       std::move(root_partner_node));
@@ -316,8 +316,7 @@ void BookmarkBridge::GetTopLevelFolderIDs(
   std::size_t special_count = top_level_folders.size();
 
   if (get_normal) {
-    DCHECK_EQ(5u, bookmark_model_->root_node()->children().size());
-
+    DCHECK_EQ(4u, bookmark_model_->root_node()->children().size());
     for (const auto& node : bookmark_model_->mobile_node()->children()) {
       if (node->is_folder())
         top_level_folders.push_back(node.get());
@@ -767,7 +766,12 @@ void BookmarkBridge::DeleteBookmark(
   if (partner_bookmarks_shim_->IsPartnerBookmark(node)) {
     partner_bookmarks_shim_->RemoveBookmark(node);
   } else if (type == BookmarkType::BOOKMARK_TYPE_READING_LIST) {
-    reading_list_manager_->Delete(node->url());
+    // Inside the Delete method, node will be destroyed and node->url will be
+    // also destroyed. This causes heap-use-after-free at
+    // ReadingListModelImpl::RemoveEntryByURLImpl. To avoid the
+    // heap-use-after-free, make a copy of node->url() and use it.
+    GURL url(node->url());
+    reading_list_manager_->Delete(url);
   } else {
     bookmark_model_->Remove(node);
   }
@@ -842,8 +846,9 @@ ScopedJavaLocalRef<jobject> BookmarkBridge::AddToReadingList(
   const BookmarkNode* node = reading_list_manager_->Add(
       GURL(base::android::ConvertJavaStringToUTF16(env, j_url)),
       base::android::ConvertJavaStringToUTF8(env, j_title));
-  DCHECK(node);
-  return JavaBookmarkIdCreateBookmarkId(env, node->id(), GetBookmarkType(node));
+  return node ? JavaBookmarkIdCreateBookmarkId(env, node->id(),
+                                               GetBookmarkType(node))
+              : ScopedJavaLocalRef<jobject>();
 }
 
 ScopedJavaLocalRef<jobject> BookmarkBridge::GetReadingListItem(
@@ -896,6 +901,13 @@ void BookmarkBridge::EndGroupingUndos(JNIEnv* env,
   grouped_bookmark_actions_.reset();
 }
 
+bool BookmarkBridge::IsBookmarked(JNIEnv* env,
+                                  const JavaParamRef<jobject>& gurl) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  return bookmark_model_->IsBookmarked(
+      *url::GURLAndroid::ToNativeGURL(env, gurl));
+}
+
 base::string16 BookmarkBridge::GetTitle(const BookmarkNode* node) const {
   if (partner_bookmarks_shim_->IsPartnerBookmark(node))
     return partner_bookmarks_shim_->GetTitle(node);
@@ -936,7 +948,7 @@ ScopedJavaLocalRef<jobject> BookmarkBridge::CreateJavaBookmark(
                                 vivaldi_bookmark_kit::GetDescription(node)),
         java_timestamp,
         ConvertUTF8ToJavaString(env, vivaldi_bookmark_kit::GetThumbnail(node)),
-        ConvertUTF8ToJavaString(env, node->guid())
+        ConvertUTF8ToJavaString(env, node->guid().AsLowercaseString())
         );
   }
 

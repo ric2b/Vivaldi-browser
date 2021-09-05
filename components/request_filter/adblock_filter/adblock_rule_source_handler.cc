@@ -116,88 +116,91 @@ FlatStringListOffset SerializeDomainList(
   return it->second;
 }
 
-uint8_t OptionsFromFilterRule(const FilterRule& filter_rule) {
+uint8_t OptionsFromRequestFilterRule(const RequestFilterRule& rule) {
   uint8_t options = 0;
-  if (filter_rule.party.test(FilterRule::kFirstParty))
+  if (rule.party.test(RequestFilterRule::kFirstParty))
     options |= flat::OptionFlag_FIRST_PARTY;
-  if (filter_rule.party.test(FilterRule::kThirdParty))
+  if (rule.party.test(RequestFilterRule::kThirdParty))
     options |= flat::OptionFlag_THIRD_PARTY;
-  if (filter_rule.is_allow_rule)
+  if (rule.is_allow_rule)
     options |= flat::OptionFlag_IS_ALLOW_RULE;
-  if (filter_rule.is_case_sensitive)
+  if (rule.is_case_sensitive)
     options |= flat::OptionFlag_IS_CASE_SENSITIVE;
-  if (filter_rule.is_csp_rule)
+  if (rule.is_csp_rule)
     options |= flat::OptionFlag_IS_CSP_RULE;
   return options;
 }
 
-uint16_t ResourceTypesFromFilterRule(const FilterRule& filter_rule) {
+uint16_t ResourceTypesFromRequestFilterRule(const RequestFilterRule& rule) {
   uint16_t resource_types = 0;
-  if (filter_rule.resource_types.test(FilterRule::kStylesheet))
+  if (rule.resource_types.test(RequestFilterRule::kStylesheet))
     resource_types |= flat::ResourceType_STYLESHEET;
-  if (filter_rule.resource_types.test(FilterRule::kImage))
+  if (rule.resource_types.test(RequestFilterRule::kImage))
     resource_types |= flat::ResourceType_IMAGE;
-  if (filter_rule.resource_types.test(FilterRule::kObject))
+  if (rule.resource_types.test(RequestFilterRule::kObject))
     resource_types |= flat::ResourceType_OBJECT;
-  if (filter_rule.resource_types.test(FilterRule::kScript))
+  if (rule.resource_types.test(RequestFilterRule::kScript))
     resource_types |= flat::ResourceType_SCRIPT;
-  if (filter_rule.resource_types.test(FilterRule::kXmlHttpRequest))
+  if (rule.resource_types.test(RequestFilterRule::kXmlHttpRequest))
     resource_types |= flat::ResourceType_XMLHTTPREQUEST;
-  if (filter_rule.resource_types.test(FilterRule::kSubDocument))
+  if (rule.resource_types.test(RequestFilterRule::kSubDocument))
     resource_types |= flat::ResourceType_SUBDOCUMENT;
-  if (filter_rule.resource_types.test(FilterRule::kFont))
+  if (rule.resource_types.test(RequestFilterRule::kFont))
     resource_types |= flat::ResourceType_FONT;
-  if (filter_rule.resource_types.test(FilterRule::kMedia))
+  if (rule.resource_types.test(RequestFilterRule::kMedia))
     resource_types |= flat::ResourceType_MEDIA;
-  if (filter_rule.resource_types.test(FilterRule::kWebSocket))
+  if (rule.resource_types.test(RequestFilterRule::kWebSocket))
     resource_types |= flat::ResourceType_WEBSOCKET;
-  if (filter_rule.resource_types.test(FilterRule::kWebRTC))
+  if (rule.resource_types.test(RequestFilterRule::kWebRTC))
     resource_types |= flat::ResourceType_WEBRTC;
-  if (filter_rule.resource_types.test(FilterRule::kPing))
+  if (rule.resource_types.test(RequestFilterRule::kPing))
     resource_types |= flat::ResourceType_PING;
-  if (filter_rule.resource_types.test(FilterRule::kOther))
+  if (rule.resource_types.test(RequestFilterRule::kOther))
     resource_types |= flat::ResourceType_OTHER;
   return resource_types;
 }
 
-uint8_t ActivationTypesFromFilterRule(const FilterRule& filter_rule) {
+uint8_t ActivationTypesFromRequestFilterRule(const RequestFilterRule& rule) {
   uint8_t activation_types = 0;
-  if (filter_rule.activation_types.test(FilterRule::kPopup))
+  if (rule.activation_types.test(RequestFilterRule::kPopup))
     activation_types |= flat::ActivationType_POPUP;
-  if (filter_rule.activation_types.test(FilterRule::kDocument))
+  if (rule.activation_types.test(RequestFilterRule::kDocument))
     activation_types |= flat::ActivationType_DOCUMENT;
-  if (filter_rule.activation_types.test(FilterRule::kElementHide))
+  if (rule.activation_types.test(RequestFilterRule::kElementHide))
     activation_types |= flat::ActivationType_ELEMENT_HIDE;
-  if (filter_rule.activation_types.test(FilterRule::kGenericHide))
+  if (rule.activation_types.test(RequestFilterRule::kGenericHide))
     activation_types |= flat::ActivationType_GENERIC_HIDE;
-  if (filter_rule.activation_types.test(FilterRule::kGenericBlock))
+  if (rule.activation_types.test(RequestFilterRule::kGenericBlock))
     activation_types |= flat::ActivationType_GENERIC_BLOCK;
   return activation_types;
 }
 
-flat::PatternType PatternTypeFromFilterRule(const FilterRule& filter_rule) {
-  switch (filter_rule.pattern_type) {
-    case FilterRule::kPlain:
+flat::PatternType PatternTypeFromRequestFilterRule(
+    const RequestFilterRule& rule) {
+  switch (rule.pattern_type) {
+    case RequestFilterRule::kPlain:
       return flat::PatternType_PLAIN;
-    case FilterRule::kWildcarded:
+    case RequestFilterRule::kWildcarded:
       return flat::PatternType_WILDCARDED;
-    case FilterRule::kRegex:
+    case RequestFilterRule::kRegex:
       return flat::PatternType_REGEXP;
   }
 }
 
-uint8_t AnchorTypeFromFilterRule(const FilterRule& filter_rule) {
+uint8_t AnchorTypeFromRequestFilterRule(const RequestFilterRule& rule) {
   uint8_t anchor_type = 0;
-  if (filter_rule.anchor_type.test(FilterRule::kAnchorStart))
+  if (rule.anchor_type.test(RequestFilterRule::kAnchorStart))
     anchor_type |= flat::AnchorType_START;
-  if (filter_rule.anchor_type.test(FilterRule::kAnchorEnd))
+  if (rule.anchor_type.test(RequestFilterRule::kAnchorEnd))
     anchor_type |= flat::AnchorType_END;
-  if (filter_rule.anchor_type.test(FilterRule::kAnchorHost))
+  if (rule.anchor_type.test(RequestFilterRule::kAnchorHost))
     anchor_type |= flat::AnchorType_HOST;
   return anchor_type;
 }
 
-void ParseContent(const std::string& file_contents, ParseResult* parse_result) {
+void ParseContent(const std::string& file_contents,
+                  bool allow_abp_snippets,
+                  ParseResult* parse_result) {
   JSONStringValueDeserializer serializer(file_contents);
   std::unique_ptr<base::Value> root(serializer.Deserialize(nullptr, nullptr));
   if (root.get()) {
@@ -205,55 +208,79 @@ void ParseContent(const std::string& file_contents, ParseResult* parse_result) {
     return;
   }
 
-  RulesetFileParser(parse_result).Parse(file_contents);
+  RulesetFileParser(parse_result, allow_abp_snippets).Parse(file_contents);
   return;
 }
 
 void AddRuleToBuffer(
     flatbuffers::FlatBufferBuilder* builder,
-    const FilterRule& filter_rule,
-    std::vector<FlatOffset<flat::FilterRule>>* filter_rules_offsets,
+    const RequestFilterRule& rule,
+    std::vector<FlatOffset<flat::RequestFilterRule>>* rules_offsets,
     FlatDomainMap* domain_map) {
   FlatStringListOffset domains_included_offset =
-      SerializeDomainList(builder, filter_rule.included_domains, domain_map);
+      SerializeDomainList(builder, rule.included_domains, domain_map);
   FlatStringListOffset domains_excluded_offset =
-      SerializeDomainList(builder, filter_rule.excluded_domains, domain_map);
+      SerializeDomainList(builder, rule.excluded_domains, domain_map);
 
-  FlatStringOffset pattern_offset =
-      builder->CreateSharedString(filter_rule.pattern);
+  FlatStringOffset pattern_offset = builder->CreateSharedString(rule.pattern);
 
   FlatStringOffset ngram_search_string_offset =
-      builder->CreateSharedString(filter_rule.ngram_search_string);
+      builder->CreateSharedString(rule.ngram_search_string);
 
-  FlatStringOffset host_offset = builder->CreateSharedString(filter_rule.host);
-  FlatStringOffset redirect_offset =
-      builder->CreateSharedString(filter_rule.redirect);
-  FlatStringOffset csp_offset = builder->CreateSharedString(filter_rule.csp);
+  FlatStringOffset host_offset = builder->CreateSharedString(rule.host);
+  FlatStringOffset redirect_offset = builder->CreateSharedString(rule.redirect);
+  FlatStringOffset csp_offset = builder->CreateSharedString(rule.csp);
 
-  filter_rules_offsets->push_back(flat::CreateFilterRule(
-      *builder, OptionsFromFilterRule(filter_rule),
-      ResourceTypesFromFilterRule(filter_rule),
-      ActivationTypesFromFilterRule(filter_rule),
-      PatternTypeFromFilterRule(filter_rule),
-      AnchorTypeFromFilterRule(filter_rule), host_offset,
+  rules_offsets->push_back(flat::CreateRequestFilterRule(
+      *builder, OptionsFromRequestFilterRule(rule),
+      ResourceTypesFromRequestFilterRule(rule),
+      ActivationTypesFromRequestFilterRule(rule),
+      PatternTypeFromRequestFilterRule(rule),
+      AnchorTypeFromRequestFilterRule(rule), host_offset,
       domains_included_offset, domains_excluded_offset, redirect_offset,
       csp_offset, pattern_offset, ngram_search_string_offset));
 }
 
-void AddRuleToBuffer(
+FlatOffset<flat::ContentInjectionRuleCore> AddContentInjectionRuleCoreToBuffer(
     flatbuffers::FlatBufferBuilder* builder,
-    const CosmeticRule& cosmetic_rule,
-    std::vector<FlatOffset<flat::CosmeticRule>>* cosmetic_rules_offsets,
+    const ContentInjectionRuleCore& core,
     FlatDomainMap* domain_map) {
   FlatStringListOffset domains_included_offset =
-      SerializeDomainList(builder, cosmetic_rule.included_domains, domain_map);
+      SerializeDomainList(builder, core.included_domains, domain_map);
   FlatStringListOffset domains_excluded_offset =
-      SerializeDomainList(builder, cosmetic_rule.excluded_domains, domain_map);
-  FlatStringOffset selector_offset =
-      builder->CreateSharedString(cosmetic_rule.selector);
-  cosmetic_rules_offsets->push_back(flat::CreateCosmeticRule(
-      *builder, cosmetic_rule.is_allow_rule, domains_included_offset,
-      domains_excluded_offset, selector_offset));
+      SerializeDomainList(builder, core.excluded_domains, domain_map);
+  return flat::CreateContentInjectionRuleCore(*builder, core.is_allow_rule,
+                                              domains_included_offset,
+                                              domains_excluded_offset);
+}
+
+void AddRuleToBuffer(flatbuffers::FlatBufferBuilder* builder,
+                     const CosmeticRule& rule,
+                     std::vector<FlatOffset<flat::CosmeticRule>>* rules_offsets,
+                     FlatDomainMap* domain_map) {
+  FlatStringOffset selector_offset = builder->CreateSharedString(rule.selector);
+  FlatOffset<flat::ContentInjectionRuleCore> rule_core_offset =
+      AddContentInjectionRuleCoreToBuffer(builder, rule.core, domain_map);
+  rules_offsets->push_back(
+      flat::CreateCosmeticRule(*builder, rule_core_offset, selector_offset));
+}
+
+void AddRuleToBuffer(
+    flatbuffers::FlatBufferBuilder* builder,
+    const ScriptletInjectionRule& rule,
+    std::vector<FlatOffset<flat::ScriptletInjectionRule>>* rules_offsets,
+    FlatDomainMap* domain_map) {
+  FlatStringOffset scriptlet_name_offset =
+      builder->CreateSharedString(rule.scriptlet_name);
+  std::vector<FlatStringOffset> argument_offsets;
+  for (const auto& argument : rule.arguments) {
+    argument_offsets.push_back(builder->CreateSharedString(argument));
+  }
+  FlatOffset<flat::ContentInjectionRuleCore> rule_core_offset =
+      AddContentInjectionRuleCoreToBuffer(builder, rule.core, domain_map);
+  rules_offsets->push_back(flat::CreateScriptletInjectionRule(
+      *builder, rule_core_offset, scriptlet_name_offset,
+      builder->CreateVector(argument_offsets)));
 }
 
 bool SaveRulesList(const base::FilePath& output_path,
@@ -322,6 +349,7 @@ class RuleSourceHandler::RulesReader {
       const base::FilePath& source_path,
       const base::FilePath& output_path,
       const base::FilePath& tracker_info_output_path,
+      bool allow_abp_snippets,
       bool delete_after_read,
       base::OnceCallback<void(std::unique_ptr<RulesReadResult>)> callback);
 
@@ -331,12 +359,14 @@ class RuleSourceHandler::RulesReader {
   RulesReader(const base::FilePath& source_path,
               const base::FilePath& output_path,
               const base::FilePath& tracker_info_output_path,
+              bool allow_abp_snippets,
               bool delete_after_read);
   ~RulesReader();
 
   base::FilePath source_path_;
   base::FilePath output_path_;
   base::FilePath tracker_info_output_path_;
+  bool allow_abp_snippets_;
   bool delete_after_read_;
   DISALLOW_COPY_AND_ASSIGN(RulesReader);
 };
@@ -345,12 +375,13 @@ void RuleSourceHandler::RulesReader::Start(
     const base::FilePath& source_path,
     const base::FilePath& output_path,
     const base::FilePath& tracker_info_output_path,
+    bool allow_abp_snippets,
     bool delete_after_read,
     base::OnceCallback<void(std::unique_ptr<RulesReadResult>)> callback) {
   std::unique_ptr<RulesReadResult> read_result =
       std::make_unique<RulesReadResult>();
   RulesReader(source_path, output_path, tracker_info_output_path,
-              delete_after_read)
+              allow_abp_snippets, delete_after_read)
       .Read(read_result.get());
 
   base::PostTask(FROM_HERE, {content::BrowserThread::UI},
@@ -361,6 +392,7 @@ RuleSourceHandler::RulesReader::RulesReader(
     const base::FilePath& source_path,
     const base::FilePath& output_path,
     const base::FilePath& tracker_info_output_path,
+    bool allow_abp_snippets,
     bool delete_after_read)
     : source_path_(source_path),
       output_path_(output_path),
@@ -381,7 +413,7 @@ void RuleSourceHandler::RulesReader::Read(RulesReadResult* read_result) {
     return;
   }
   ParseResult parse_result;
-  ParseContent(file_contents, &parse_result);
+  ParseContent(file_contents, allow_abp_snippets_, &parse_result);
   read_result->fetch_result = parse_result.fetch_result;
   read_result->metadata = parse_result.metadata;
   read_result->rules_info = parse_result.rules_info;
@@ -401,10 +433,11 @@ void RuleSourceHandler::RulesReader::Read(RulesReadResult* read_result) {
     return;
 
   flatbuffers::FlatBufferBuilder builder;
-  std::vector<FlatOffset<flat::FilterRule>> filter_rules_offsets;
+  std::vector<FlatOffset<flat::RequestFilterRule>> request_filter_rules_offsets;
   FlatDomainMap domain_map;
-  for (const auto& filter_rule : parse_result.filter_rules) {
-    AddRuleToBuffer(&builder, filter_rule, &filter_rules_offsets, &domain_map);
+  for (const auto& request_filter_rule : parse_result.request_filter_rules) {
+    AddRuleToBuffer(&builder, request_filter_rule,
+                    &request_filter_rules_offsets, &domain_map);
   }
   std::vector<FlatOffset<flat::CosmeticRule>> cosmetic_rules_offsets;
   for (const auto& cosmetic_rule : parse_result.cosmetic_rules) {
@@ -412,9 +445,18 @@ void RuleSourceHandler::RulesReader::Read(RulesReadResult* read_result) {
                     &domain_map);
   }
 
-  FlatOffset<flat::RulesList> root_offset =
-      flat::CreateRulesList(builder, builder.CreateVector(filter_rules_offsets),
-                            builder.CreateVector(cosmetic_rules_offsets));
+  std::vector<FlatOffset<flat::ScriptletInjectionRule>>
+      scriptlet_injection_rules_offsets;
+  for (const auto& scriptlet_injection_rule :
+       parse_result.scriptlet_injection_rules) {
+    AddRuleToBuffer(&builder, scriptlet_injection_rule,
+                    &scriptlet_injection_rules_offsets, &domain_map);
+  }
+
+  FlatOffset<flat::RulesList> root_offset = flat::CreateRulesList(
+      builder, builder.CreateVector(request_filter_rules_offsets),
+      builder.CreateVector(cosmetic_rules_offsets),
+      builder.CreateVector(scriptlet_injection_rules_offsets));
 
   flat::FinishRulesListBuffer(builder, root_offset);
 
@@ -581,10 +623,12 @@ void RuleSourceHandler::OnRulesDownloaded(base::FilePath file) {
 void RuleSourceHandler::ReadRulesFromFile(const base::FilePath& file,
                                           bool delete_after_read) {
   file_task_runner_->PostTask(
-      FROM_HERE, base::BindOnce(&RulesReader::Start, file, rules_list_path_,
-                                tracker_infos_path_, delete_after_read,
-                                base::BindOnce(&RuleSourceHandler::OnRulesRead,
-                                               weak_factory_.GetWeakPtr())));
+      FROM_HERE,
+      base::BindOnce(&RulesReader::Start, file, rules_list_path_,
+                     tracker_infos_path_, rule_source_.allow_abp_snippets,
+                     delete_after_read,
+                     base::BindOnce(&RuleSourceHandler::OnRulesRead,
+                                    weak_factory_.GetWeakPtr())));
 }
 
 void RuleSourceHandler::OnRulesRead(std::unique_ptr<RulesReadResult> result) {

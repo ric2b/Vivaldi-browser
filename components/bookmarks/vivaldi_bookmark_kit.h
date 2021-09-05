@@ -5,6 +5,7 @@
 
 #include <string>
 
+#include "base/guid.h"
 #include "base/time/time.h"
 #include "components/bookmarks/browser/bookmark_node.h"
 
@@ -45,7 +46,7 @@ class CustomMetaInfo {
   void SetBookmarkbar(bool bookmarkbar);
   void SetNickname(const std::string& nickname);
   void SetDescription(const std::string& description);
-  void SetPartner(const std::string& partner);
+  void SetPartner(const base::GUID& partner);
   void SetThumbnail(const std::string& thumbnail);
 
  private:
@@ -57,8 +58,8 @@ bool GetSpeeddial(const BookmarkNode* node);
 bool GetBookmarkbar(const BookmarkNode* node);
 const std::string& GetNickname(const BookmarkNode* node);
 const std::string& GetDescription(const BookmarkNode* node);
-const std::string* GetPartner(const BookmarkNode::MetaInfoMap& meta_info_map);
-const std::string& GetPartner(const BookmarkNode* node);
+const base::GUID GetPartner(const BookmarkNode::MetaInfoMap& meta_info_map);
+const base::GUID GetPartner(const BookmarkNode* node);
 const std::string& GetThumbnail(const BookmarkNode* node);
 
 bool IsSeparator(const BookmarkNode* node);
@@ -75,6 +76,8 @@ bool DoesNickExists(const BookmarkModel* model,
 bool SetBookmarkThumbnail(BookmarkModel* model,
                           int64_t bookmark_id,
                           const std::string& url);
+
+void RemovePartnerId(BookmarkModel* model, const BookmarkNode* node);
 
 // Android-specific functions
 

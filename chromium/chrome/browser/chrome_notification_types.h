@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_CHROME_NOTIFICATION_TYPES_H_
 
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "extensions/buildflags/buildflags.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -124,13 +125,6 @@ enum NotificationType {
   // The details are none and the source is the new profile.
   NOTIFICATION_PROFILE_ADDED,
 
-  // Use KeyedServiceShutdownNotifier instead this notification type (you did
-  // read the comment at the top of the file, didn't you?).
-  // Sent before a Profile is destroyed. This notification is sent both for
-  // normal and OTR profiles.
-  // The details are none and the source is a Profile*.
-  NOTIFICATION_PROFILE_DESTROYED,
-
   // Printing ----------------------------------------------------------------
 
   // Notification from PrintJob that an event occurred. It can be that a page
@@ -144,7 +138,7 @@ enum NotificationType {
 
   // Misc --------------------------------------------------------------------
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // Sent immediately after the logged-in user's profile is ready.
   // The details are a Profile object.
   NOTIFICATION_LOGIN_USER_PROFILE_PREPARED,
@@ -170,18 +164,6 @@ enum NotificationType {
   // 4. Boot into retail mode
   //    NOTIFICATION_LOGIN_OR_LOCK_WEBUI_VISIBLE
   NOTIFICATION_LOGIN_OR_LOCK_WEBUI_VISIBLE,
-
-  // Send when kiosk auto-launch warning screen is visible.
-  NOTIFICATION_KIOSK_AUTOLAUNCH_WARNING_VISIBLE,
-
-  // Send when kiosk auto-launch warning screen had completed.
-  NOTIFICATION_KIOSK_AUTOLAUNCH_WARNING_COMPLETED,
-
-  // Send when consumer kiosk has been enabled.
-  NOTIFICATION_KIOSK_ENABLED,
-
-  // Sent when kiosk app list is loaded in UI.
-  NOTIFICATION_KIOSK_APPS_LOADED,
 
   // Sent when the screen lock state has changed. The source is
   // ScreenLocker and the details is a bool specifing that the

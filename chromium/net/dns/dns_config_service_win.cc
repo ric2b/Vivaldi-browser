@@ -4,6 +4,8 @@
 
 #include "net/dns/dns_config_service_win.h"
 
+#include <sysinfoapi.h>
+
 #include <algorithm>
 #include <memory>
 #include <string>
@@ -17,7 +19,6 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/free_deleter.h"
-#include "base/metrics/histogram_macros.h"
 #include "base/sequence_checker.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_piece.h"
@@ -30,6 +31,7 @@
 #include "base/time/time.h"
 #include "base/win/registry.h"
 #include "base/win/scoped_handle.h"
+#include "base/win/windows_types.h"
 #include "net/base/ip_address.h"
 #include "net/base/network_change_notifier.h"
 #include "net/dns/dns_hosts.h"
@@ -68,15 +70,6 @@ const wchar_t kDnsConnectionsPath[] =
 const wchar_t kDnsConnectionsProxies[] =
     L"SYSTEM\\CurrentControlSet\\Services\\Dnscache\\Parameters\\"
     L"DnsConnectionsProxies";
-
-enum HostsParseWinResult {
-  HOSTS_PARSE_WIN_OK = 0,
-  HOSTS_PARSE_WIN_UNREADABLE_HOSTS_FILE,
-  HOSTS_PARSE_WIN_COMPUTER_NAME_FAILED,
-  HOSTS_PARSE_WIN_IPHELPER_FAILED,
-  HOSTS_PARSE_WIN_BAD_ADDRESS,
-  HOSTS_PARSE_WIN_MAX  // Bounding values for enumeration.
-};
 
 // Convenience for reading values using RegKey.
 class RegistryReader {
@@ -155,7 +148,7 @@ bool ReadDevolutionSetting(const RegistryReader& reader,
 }
 
 // Reads DnsSystemSettings from IpHelper and registry.
-ConfigParseWinResult ReadSystemSettings(DnsSystemSettings* settings) {
+bool ReadSystemSettings(DnsSystemSettings* settings) {
   base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
                                                 base::BlockingType::MAY_BLOCK);
   settings->addresses = ReadIpHelper(GAA_FLAG_SKIP_ANYCAST |
@@ -163,7 +156,7 @@ ConfigParseWinResult ReadSystemSettings(DnsSystemSettings* settings) {
                                      GAA_FLAG_SKIP_MULTICAST |
                                      GAA_FLAG_SKIP_FRIENDLY_NAME);
   if (!settings->addresses.get())
-    return CONFIG_PARSE_WIN_READ_IPHELPER;
+    return false;
 
   RegistryReader tcpip_reader(kTcpipPath);
   RegistryReader tcpip6_reader(kTcpip6Path);
@@ -172,32 +165,32 @@ ConfigParseWinResult ReadSystemSettings(DnsSystemSettings* settings) {
   RegistryReader primary_dns_suffix_reader(kPrimaryDnsSuffixPath);
 
   if (!policy_reader.ReadString(L"SearchList", &settings->policy_search_list)) {
-    return CONFIG_PARSE_WIN_READ_POLICY_SEARCHLIST;
+    return false;
   }
 
   if (!tcpip_reader.ReadString(L"SearchList", &settings->tcpip_search_list))
-    return CONFIG_PARSE_WIN_READ_TCPIP_SEARCHLIST;
+    return false;
 
   if (!tcpip_reader.ReadString(L"Domain", &settings->tcpip_domain))
-    return CONFIG_PARSE_WIN_READ_DOMAIN;
+    return false;
 
   if (!ReadDevolutionSetting(policy_reader, &settings->policy_devolution))
-    return CONFIG_PARSE_WIN_READ_POLICY_DEVOLUTION;
+    return false;
 
   if (!ReadDevolutionSetting(dnscache_reader, &settings->dnscache_devolution))
-    return CONFIG_PARSE_WIN_READ_DNSCACHE_DEVOLUTION;
+    return false;
 
   if (!ReadDevolutionSetting(tcpip_reader, &settings->tcpip_devolution))
-    return CONFIG_PARSE_WIN_READ_TCPIP_DEVOLUTION;
+    return false;
 
   if (!policy_reader.ReadDword(L"AppendToMultiLabelName",
                                &settings->append_to_multi_label_name)) {
-    return CONFIG_PARSE_WIN_READ_APPEND_MULTILABEL;
+    return false;
   }
 
   if (!primary_dns_suffix_reader.ReadString(L"PrimaryDnsSuffix",
                                             &settings->primary_dns_suffix)) {
-    return CONFIG_PARSE_WIN_READ_PRIMARY_SUFFIX;
+    return false;
   }
 
   base::win::RegistryKeyIterator nrpt_rules(HKEY_LOCAL_MACHINE, kNrptPath);
@@ -213,12 +206,12 @@ ConfigParseWinResult ReadSystemSettings(DnsSystemSettings* settings) {
   settings->have_proxy = (dns_connections.SubkeyCount() > 0 ||
                           dns_connections_proxies.SubkeyCount() > 0);
 
-  return CONFIG_PARSE_WIN_OK;
+  return true;
 }
 
 // Default address of "localhost" and local computer name can be overridden
 // by the HOSTS file, but if it's not there, then we need to fill it in.
-HostsParseWinResult AddLocalhostEntries(DnsHosts* hosts) {
+bool AddLocalhostEntries(DnsHosts* hosts) {
   IPAddress loopback_ipv4 = IPAddress::IPv4Localhost();
   IPAddress loopback_ipv6 = IPAddress::IPv6Localhost();
 
@@ -233,7 +226,7 @@ HostsParseWinResult AddLocalhostEntries(DnsHosts* hosts) {
   std::string localname;
   if (!GetComputerNameExW(ComputerNameDnsHostname, buffer, &size) ||
       !ParseDomainASCII(buffer, &localname)) {
-    return HOSTS_PARSE_WIN_COMPUTER_NAME_FAILED;
+    return false;
   }
   localname = base::ToLowerASCII(localname);
 
@@ -243,13 +236,13 @@ HostsParseWinResult AddLocalhostEntries(DnsHosts* hosts) {
       hosts->count(DnsHostsKey(localname, ADDRESS_FAMILY_IPV6)) > 0;
 
   if (have_ipv4 && have_ipv6)
-    return HOSTS_PARSE_WIN_OK;
+    return true;
 
   std::unique_ptr<IP_ADAPTER_ADDRESSES, base::FreeDeleter> addresses =
       ReadIpHelper(GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_DNS_SERVER |
                    GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_FRIENDLY_NAME);
   if (!addresses.get())
-    return HOSTS_PARSE_WIN_IPHELPER_FAILED;
+    return false;
 
   // The order of adapters is the network binding order, so stick to the
   // first good adapter for each family.
@@ -267,7 +260,7 @@ HostsParseWinResult AddLocalhostEntries(DnsHosts* hosts) {
       IPEndPoint ipe;
       if (!ipe.FromSockAddr(address->Address.lpSockaddr,
                             address->Address.iSockaddrLength)) {
-        return HOSTS_PARSE_WIN_BAD_ADDRESS;
+        return false;
       }
       if (!have_ipv4 && (ipe.GetFamily() == ADDRESS_FAMILY_IPV4)) {
         have_ipv4 = true;
@@ -278,7 +271,7 @@ HostsParseWinResult AddLocalhostEntries(DnsHosts* hosts) {
       }
     }
   }
-  return HOSTS_PARSE_WIN_OK;
+  return true;
 }
 
 // Watches a single registry key for changes.
@@ -505,9 +498,8 @@ bool ParseSearchList(const std::wstring& value,
   return !output->empty();
 }
 
-ConfigParseWinResult ConvertSettingsToDnsConfig(
-    const DnsSystemSettings& settings,
-    DnsConfig* config) {
+bool ConvertSettingsToDnsConfig(const DnsSystemSettings& settings,
+                                DnsConfig* config) {
   bool uses_vpn = false;
   *config = DnsConfig();
 
@@ -543,7 +535,7 @@ ConfigParseWinResult ConvertSettingsToDnsConfig(
           ipe = IPEndPoint(ipe.address(), dns_protocol::kDefaultPort);
         config->nameservers.push_back(ipe);
       } else {
-        return CONFIG_PARSE_WIN_BAD_ADDRESS;
+        return false;
       }
     }
 
@@ -558,7 +550,7 @@ ConfigParseWinResult ConvertSettingsToDnsConfig(
   }
 
   if (config->nameservers.empty())
-    return CONFIG_PARSE_WIN_NO_NAMESERVERS;  // No point continuing.
+    return false;  // No point continuing.
 
   // Windows always tries a multi-label name "as is" before using suffixes.
   config->ndots = 1;
@@ -575,27 +567,28 @@ ConfigParseWinResult ConvertSettingsToDnsConfig(
     config->use_local_ipv6 = true;
   }
 
-  ConfigParseWinResult result = CONFIG_PARSE_WIN_OK;
-  if (settings.have_name_resolution_policy || settings.have_proxy || uses_vpn) {
+  if (settings.have_name_resolution_policy || settings.have_proxy || uses_vpn)
     config->unhandled_options = true;
-    result = CONFIG_PARSE_WIN_UNHANDLED_OPTIONS;
-  }
 
   ConfigureSuffixSearch(settings, config);
-  return result;
+  return true;
 }
 
 // Watches registry and HOSTS file for changes. Must live on a sequence which
 // allows IO.
 class DnsConfigServiceWin::Watcher
-    : public NetworkChangeNotifier::IPAddressObserver {
+    : public NetworkChangeNotifier::IPAddressObserver,
+      public DnsConfigService::Watcher {
  public:
-  explicit Watcher(DnsConfigServiceWin* service) : service_(service) {}
+  explicit Watcher(DnsConfigServiceWin* service)
+      : DnsConfigService::Watcher(service) {}
   ~Watcher() override { NetworkChangeNotifier::RemoveIPAddressObserver(this); }
 
-  bool Watch() {
-    RegistryWatcher::CallbackType callback = base::BindRepeating(
-        &DnsConfigServiceWin::OnConfigChanged, base::Unretained(service_));
+  bool Watch() override {
+    CheckOnCorrectSequence();
+
+    RegistryWatcher::CallbackType callback =
+        base::BindRepeating(&Watcher::OnConfigChanged, base::Unretained(this));
 
     bool success = true;
 
@@ -603,9 +596,6 @@ class DnsConfigServiceWin::Watcher
     if (!tcpip_watcher_.Watch(kTcpipPath, callback)) {
       LOG(ERROR) << "DNS registry watch failed to start.";
       success = false;
-      UMA_HISTOGRAM_ENUMERATION("AsyncDNS.WatchStatus",
-                                DNS_CONFIG_WATCH_FAILED_TO_START_CONFIG,
-                                DNS_CONFIG_WATCH_MAX);
     }
 
     // Watch for IPv6 nameservers.
@@ -620,12 +610,10 @@ class DnsConfigServiceWin::Watcher
     dnscache_watcher_.Watch(kDnscachePath, callback);
     policy_watcher_.Watch(kPolicyPath, callback);
 
-    if (!hosts_watcher_.Watch(GetHostsPath(), false,
-                              base::BindRepeating(&Watcher::OnHostsChanged,
-                                                  base::Unretained(this)))) {
-      UMA_HISTOGRAM_ENUMERATION("AsyncDNS.WatchStatus",
-                                DNS_CONFIG_WATCH_FAILED_TO_START_HOSTS,
-                                DNS_CONFIG_WATCH_MAX);
+    if (!hosts_watcher_.Watch(
+            GetHostsPath(), base::FilePathWatcher::Type::kNonRecursive,
+            base::BindRepeating(&Watcher::OnHostsFilePathWatcherChange,
+                                base::Unretained(this)))) {
       LOG(ERROR) << "DNS hosts watch failed to start.";
       success = false;
     } else {
@@ -636,19 +624,17 @@ class DnsConfigServiceWin::Watcher
   }
 
  private:
-  void OnHostsChanged(const base::FilePath& path, bool error) {
+  void OnHostsFilePathWatcherChange(const base::FilePath& path, bool error) {
     if (error)
       NetworkChangeNotifier::RemoveIPAddressObserver(this);
-    service_->OnHostsChanged(!error);
+    OnHostsChanged(!error);
   }
 
   // NetworkChangeNotifier::IPAddressObserver:
   void OnIPAddressChanged() override {
     // Need to update non-loopback IP of local host.
-    service_->OnHostsChanged(true);
+    OnHostsChanged(true);
   }
-
-  DnsConfigServiceWin* service_;
 
   RegistryWatcher tcpip_watcher_;
   RegistryWatcher tcpip6_watcher_;
@@ -670,17 +656,10 @@ class DnsConfigServiceWin::ConfigReader : public SerialWorker {
   ~ConfigReader() override {}
 
   void DoWork() override {
-    base::TimeTicks start_time = base::TimeTicks::Now();
     DnsSystemSettings settings = {};
-    ConfigParseWinResult result = ReadSystemSettings(&settings);
-    if (result == CONFIG_PARSE_WIN_OK)
-      result = ConvertSettingsToDnsConfig(settings, &dns_config_);
-    success_ = (result == CONFIG_PARSE_WIN_OK ||
-                result == CONFIG_PARSE_WIN_UNHANDLED_OPTIONS);
-    UMA_HISTOGRAM_ENUMERATION("AsyncDNS.ConfigParseWin",
-                              result, CONFIG_PARSE_WIN_MAX);
-    UMA_HISTOGRAM_TIMES("AsyncDNS.ConfigParseDuration",
-                        base::TimeTicks::Now() - start_time);
+    success_ = false;
+    if (ReadSystemSettings(&settings))
+      success_ = ConvertSettingsToDnsConfig(settings, &dns_config_);
   }
 
   void OnWorkFinished() override {
@@ -703,53 +682,30 @@ class DnsConfigServiceWin::ConfigReader : public SerialWorker {
   bool success_;
 };
 
-// Reads hosts from HOSTS file and fills in localhost and local computer name if
-// necessary. All work performed in ThreadPool.
-class DnsConfigServiceWin::HostsReader : public SerialWorker {
+// Extension of DnsConfigService::HostsReader that fills in localhost and local
+// computer name if necessary.
+class DnsConfigServiceWin::HostsReader : public DnsConfigService::HostsReader {
  public:
   explicit HostsReader(DnsConfigServiceWin* service)
-      : path_(GetHostsPath()),
-        service_(service),
-        success_(false) {
+      : DnsConfigService::HostsReader(service, GetHostsPath().value()) {}
+
+  HostsReader(const HostsReader&) = delete;
+  HostsReader& operator=(const HostsReader&) = delete;
+
+ protected:
+  bool AddAdditionalHostsTo(DnsHosts& dns_hosts) override {
+    base::ScopedBlockingCall scoped_blocking_call(
+        FROM_HERE, base::BlockingType::MAY_BLOCK);
+    return AddLocalhostEntries(&dns_hosts);
   }
 
  private:
-  ~HostsReader() override {}
-
-  void DoWork() override {
-    base::TimeTicks start_time = base::TimeTicks::Now();
-    base::ScopedBlockingCall scoped_blocking_call(
-        FROM_HERE, base::BlockingType::MAY_BLOCK);
-    HostsParseWinResult result = HOSTS_PARSE_WIN_UNREADABLE_HOSTS_FILE;
-    if (ParseHostsFile(path_, &hosts_))
-      result = AddLocalhostEntries(&hosts_);
-    success_ = (result == HOSTS_PARSE_WIN_OK);
-    UMA_HISTOGRAM_ENUMERATION("AsyncDNS.HostsParseWin",
-                              result, HOSTS_PARSE_WIN_MAX);
-    UMA_HISTOGRAM_BOOLEAN("AsyncDNS.HostParseResult", success_);
-    UMA_HISTOGRAM_TIMES("AsyncDNS.HostsParseDuration",
-                        base::TimeTicks::Now() - start_time);
-  }
-
-  void OnWorkFinished() override {
-    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-    if (success_) {
-      service_->OnHostsRead(hosts_);
-    } else {
-      LOG(WARNING) << "Failed to read DnsHosts.";
-    }
-  }
-
-  const base::FilePath path_;
-  DnsConfigServiceWin* service_;
-  // Written in DoWork, read in OnWorkFinished, no locking necessary.
-  DnsHosts hosts_;
-  bool success_;
-
-  DISALLOW_COPY_AND_ASSIGN(HostsReader);
+  ~HostsReader() override = default;
 };
 
-DnsConfigServiceWin::DnsConfigServiceWin() {
+DnsConfigServiceWin::DnsConfigServiceWin()
+    : DnsConfigService(GetHostsPath().value(),
+                       base::nullopt /* config_change_delay */) {
   // Allow constructing on one sequence and living on another.
   DETACH_FROM_SEQUENCE(sequence_checker_);
 }
@@ -761,8 +717,11 @@ DnsConfigServiceWin::~DnsConfigServiceWin() {
     hosts_reader_->Cancel();
 }
 
-void DnsConfigServiceWin::ReadNow() {
+void DnsConfigServiceWin::ReadConfigNow() {
   config_reader_->WorkNow();
+}
+
+void DnsConfigServiceWin::ReadHostsNow() {
   hosts_reader_->WorkNow();
 }
 
@@ -773,34 +732,7 @@ bool DnsConfigServiceWin::StartWatching() {
     hosts_reader_ = base::MakeRefCounted<HostsReader>(this);
   // TODO(szym): re-start watcher if that makes sense. http://crbug.com/116139
   watcher_.reset(new Watcher(this));
-  UMA_HISTOGRAM_ENUMERATION("AsyncDNS.WatchStatus", DNS_CONFIG_WATCH_STARTED,
-                            DNS_CONFIG_WATCH_MAX);
   return watcher_->Watch();
-}
-
-void DnsConfigServiceWin::OnConfigChanged(bool succeeded) {
-  InvalidateConfig();
-  config_reader_->WorkNow();
-  if (!succeeded) {
-    LOG(ERROR) << "DNS config watch failed.";
-    set_watch_failed(true);
-    UMA_HISTOGRAM_ENUMERATION("AsyncDNS.WatchStatus",
-                              DNS_CONFIG_WATCH_FAILED_CONFIG,
-                              DNS_CONFIG_WATCH_MAX);
-  }
-}
-
-void DnsConfigServiceWin::OnHostsChanged(bool succeeded) {
-  InvalidateHosts();
-  if (succeeded) {
-    hosts_reader_->WorkNow();
-  } else {
-    LOG(ERROR) << "DNS hosts watch failed.";
-    set_watch_failed(true);
-    UMA_HISTOGRAM_ENUMERATION("AsyncDNS.WatchStatus",
-                              DNS_CONFIG_WATCH_FAILED_HOSTS,
-                              DNS_CONFIG_WATCH_MAX);
-  }
 }
 
 }  // namespace internal

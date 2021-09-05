@@ -11,7 +11,7 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
-#include "base/stl_util.h"
+#include "base/containers/contains.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
 #include "build/build_config.h"
@@ -129,8 +129,7 @@ PrerenderContents::PrerenderContents(
     const content::Referrer& referrer,
     const base::Optional<url::Origin>& initiator_origin,
     Origin origin)
-    : prerender_mode_(prerender::mojom::PrerenderMode::kNoPrerender),
-      prerendering_has_started_(false),
+    : prerendering_has_started_(false),
       prerender_manager_(prerender_manager),
       delegate_(std::move(delegate)),
       prerender_url_(url),
@@ -168,11 +167,6 @@ PrerenderContents::PrerenderContents(
 
 bool PrerenderContents::Init() {
   return AddAliasURL(prerender_url_);
-}
-
-void PrerenderContents::SetPrerenderMode(prerender::mojom::PrerenderMode mode) {
-  DCHECK(!prerendering_has_started_);
-  prerender_mode_ = mode;
 }
 
 // static
@@ -388,7 +382,7 @@ void PrerenderContents::RenderFrameCreated(
   render_frame_host->GetRemoteAssociatedInterfaces()->GetInterface(
       &prerender_render_frame);
   prerender_render_frame->SetIsPrerendering(
-      prerender_mode_, PrerenderHistograms::GetHistogramPrefix(origin_));
+      PrerenderHistograms::GetHistogramPrefix(origin_));
 }
 
 void PrerenderContents::DidStopLoading() {
@@ -564,19 +558,6 @@ std::unique_ptr<base::DictionaryValue> PrerenderContents::GetAsValue() const {
 
 void PrerenderContents::MarkAsUsedForTesting() {
   SetFinalStatus(FINAL_STATUS_USED);
-
-  if (prerender_contents_.get()) {
-    auto frames = prerender_contents_->GetAllFrames();
-    for (auto* frame : frames) {
-      mojo::AssociatedRemote<prerender::mojom::PrerenderMessages>
-          prerender_render_frame;
-      frame->GetRemoteAssociatedInterfaces()->GetInterface(
-          &prerender_render_frame);
-      prerender_render_frame->SetIsPrerendering(
-          prerender::mojom::PrerenderMode::kNoPrerender, std::string());
-    }
-  }
-
   NotifyPrerenderStop();
 }
 

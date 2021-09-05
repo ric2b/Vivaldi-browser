@@ -15,13 +15,13 @@
 #include "base/callback.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/containers/contains.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/one_shot_event.h"
 #include "base/single_thread_task_runner.h"
-#include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
@@ -40,7 +40,9 @@
 #include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
+#include "chrome/browser/profiles/profile_keep_alive_types.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/profiles/scoped_profile_keep_alive.h"
 #include "chrome/browser/status_icons/status_icon.h"
 #include "chrome/browser/status_icons/status_tray.h"
 #include "chrome/browser/ui/browser.h"
@@ -122,11 +124,27 @@ void BackgroundModeManager::BackgroundModeData::SetTracker(
   force_installed_tracker_observer_.Add(tracker);
 }
 
+void BackgroundModeManager::BackgroundModeData::UpdateProfileKeepAlive() {
+  bool background_mode =
+      (HasPersistentBackgroundClient() && manager_->IsBackgroundModeActive() &&
+       !manager_->background_mode_suspended_);
+  if (!background_mode) {
+    profile_keep_alive_.reset();
+    return;
+  }
+  if (profile_keep_alive_)
+    return;
+  profile_keep_alive_ = std::make_unique<ScopedProfileKeepAlive>(
+      profile_, ProfileKeepAliveOrigin::kBackgroundMode);
+}
+
 void BackgroundModeManager::BackgroundModeData::OnProfileWillBeDestroyed(
     Profile* profile) {
   DCHECK_EQ(profile_, profile);
   profile_observer_.RemoveAll();
   force_installed_tracker_observer_.RemoveAll();
+  DCHECK(!profile_keep_alive_);
+  profile_ = nullptr;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -268,6 +286,8 @@ BackgroundModeManager::BackgroundModeManager(
 
   // Add self as an observer for the ProfileAttributesStorage so we know when
   // profiles are deleted and their names change.
+  // This observer is never unregistered because the BackgroundModeManager
+  // outlives the profile storage.
   profile_storage_->AddObserver(this);
 
   UMA_HISTOGRAM_BOOLEAN("BackgroundMode.OnStartup.AutoLaunchState",
@@ -718,6 +738,9 @@ void BackgroundModeManager::ResumeBackgroundMode() {
 }
 
 void BackgroundModeManager::UpdateKeepAliveAndTrayIcon() {
+  for (const auto& entry : background_mode_data_)
+    entry.second->UpdateProfileKeepAlive();
+
   if (in_background_mode_ && !background_mode_suspended_) {
     if (!keep_alive_) {
       keep_alive_ = std::make_unique<ScopedKeepAlive>(
@@ -766,7 +789,7 @@ void BackgroundModeManager::OnClientsChanged(
       StartBackgroundMode();
     }
 
-    // List of clients changed so update the UI.
+    // List of clients changed so update the UI and keep alive references.
     UpdateStatusTrayIconContextMenu();
 
     // Notify the user about any new clients.
@@ -868,7 +891,8 @@ void BackgroundModeManager::CreateStatusTrayIcon() {
 
   // Since there are multiple profiles which share the status tray, we now
   // use the browser process to keep track of it.
-#if !defined(OS_MAC) && !defined(OS_CHROMEOS) && !BUILDFLAG(IS_LACROS)
+#if !defined(OS_MAC) && !BUILDFLAG(IS_CHROMEOS_ASH) && \
+    !BUILDFLAG(IS_CHROMEOS_LACROS)
   if (!status_tray_)
     status_tray_ = g_browser_process->status_tray();
 #endif

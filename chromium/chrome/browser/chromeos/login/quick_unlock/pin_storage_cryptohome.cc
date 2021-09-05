@@ -15,6 +15,7 @@
 #include "chromeos/cryptohome/homedir_methods.h"
 #include "chromeos/cryptohome/system_salt_getter.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/login/auth/cryptohome_key_constants.h"
 #include "chromeos/login/auth/user_context.h"
 #include "components/account_id/account_id.h"
 #include "components/user_manager/known_user.h"
@@ -23,9 +24,6 @@ namespace chromeos {
 namespace quick_unlock {
 
 namespace {
-
-// Key label in cryptohome.
-constexpr char kCryptohomePinLabel[] = "pin";
 
 // Read the salt from local state.
 std::string GetSalt(const AccountId& account_id) {
@@ -99,6 +97,7 @@ void OnCryptohomedServiceAvailable(int attempt,
   if (attempt > kMaxRetryTimes) {
     LOG(ERROR) << "Could not talk to cryptohomed";
     std::move(result).Run(false);
+    return;
   }
   if (!is_available) {
     const int retry_delay_in_milliseconds = 500 * (1 << attempt);

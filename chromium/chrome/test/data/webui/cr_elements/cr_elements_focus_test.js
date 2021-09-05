@@ -12,7 +12,7 @@ GEN('#include "content/public/test/browser_test.h"');
 function CrElementsFocusTest() {}
 
 CrElementsFocusTest.prototype = {
-  __proto__: PolymerInteractiveUITest.prototype,
+  __proto__: Polymer2DeprecatedInteractiveUITest.prototype,
 };
 
 function CrElementsActionMenuTest() {}
@@ -222,6 +222,27 @@ TEST_F('CrElementsTabsTest', 'All', function() {
 });
 
 // eslint-disable-next-line no-var
+var CrElementsToolbarFocusTest = class extends CrElementsFocusTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://resources/cr_elements/cr_toolbar/cr_toolbar.html';
+  }
+
+  /** @override */
+  get extraLibraries() {
+    return [
+      ...Polymer2DeprecatedTest.prototype.extraLibraries,
+      '../test_util.js',
+      'cr_toolbar_focus_tests.js',
+    ];
+  }
+};
+
+TEST_F('CrElementsToolbarFocusTest', 'All', function() {
+  mocha.run();
+});
+
+// eslint-disable-next-line no-var
 var IronListFocusTest = class extends CrElementsFocusTest {
   /** @override */
   get browsePreload() {
@@ -231,7 +252,7 @@ var IronListFocusTest = class extends CrElementsFocusTest {
   /** @override */
   get extraLibraries() {
     return [
-      ...PolymerTest.prototype.extraLibraries,
+      ...Polymer2DeprecatedTest.prototype.extraLibraries,
       '../test_util.js',
       'iron_list_focus_test.js',
     ];

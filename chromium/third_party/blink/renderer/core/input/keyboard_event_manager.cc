@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "base/i18n/uchar.h"
 #include "build/build_config.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink.h"
@@ -180,7 +181,7 @@ bool KeyboardEventManager::HandleAccessKey(const WebKeyboardEvent& evt) {
 #if !defined(OS_MAC)
   }
 #endif
-  String key = String(evt.unmodified_text);
+  String key = String(base::i18n::ToUCharPtr(evt.unmodified_text));
   Element* elem =
       frame_->GetDocument()->GetElementByAccessKey(key.DeprecatedLower());
   if (!elem)

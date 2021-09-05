@@ -8,10 +8,10 @@
 #include <algorithm>
 #include <utility>
 
+#include "base/containers/contains.h"
 #include "base/no_destructor.h"
 #include "base/numerics/ranges.h"
 #include "base/optional.h"
-#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -317,6 +317,7 @@ base::DictionaryValue* ExtensionTabUtil::OpenTab(ExtensionFunction* function,
   navigate_params.tabstrip_index = index;
   navigate_params.user_gesture = false;
   navigate_params.tabstrip_add_types = add_types;
+  navigate_params.ext_data = params.ext_data.get();
   Navigate(&navigate_params);
 
   // This happens in locked fullscreen mode.
@@ -844,6 +845,17 @@ bool ExtensionTabUtil::PrepareURLForNavigation(const std::string& url_string,
     return false;
   }
 
+  // Don't let the extension navigate directly to devtools scheme pages, unless
+  // they have applicable permissions.
+  if (url.SchemeIs(content::kChromeDevToolsScheme) &&
+      !(extension->permissions_data()->HasAPIPermission(
+            APIPermission::kDevtools) ||
+        extension->permissions_data()->HasAPIPermission(
+            APIPermission::kDebugger))) {
+    *error = tabs_constants::kCannotNavigateToDevtools;
+    return false;
+  }
+
   return_url->Swap(&url);
   return true;
 }
@@ -888,7 +900,7 @@ void ExtensionTabUtil::CreateTab(std::unique_ptr<WebContents> web_contents,
 
 // static
 void ExtensionTabUtil::ForEachTab(
-    const base::Callback<void(WebContents*)>& callback) {
+    base::RepeatingCallback<void(WebContents*)> callback) {
   for (auto* web_contents : AllTabContentses())
     callback.Run(web_contents);
 }

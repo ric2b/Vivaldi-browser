@@ -19,6 +19,7 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_io_data_handle.h"
 #include "chrome/common/buildflags.h"
@@ -35,7 +36,7 @@
 class MediaDeviceIDSalt;
 class PrefService;
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 namespace chromeos {
 class KioskTest;
 class LocaleChangeGuard;
@@ -93,8 +94,6 @@ class ProfileImpl : public Profile {
       override;
   content::BackgroundFetchDelegate* GetBackgroundFetchDelegate() override;
   content::BackgroundSyncController* GetBackgroundSyncController() override;
-  // TODO(https://crbug.com/1060940): Only supports primary OTR profile. Update
-  // to support all OTR profiles.
   void SetCorsOriginAccessListForOrigin(
       const url::Origin& source_origin,
       std::vector<network::mojom::CorsOriginPatternPtr> allow_patterns,
@@ -104,8 +103,8 @@ class ProfileImpl : public Profile {
   std::string GetMediaDeviceIDSalt() override;
   download::InProgressDownloadManager* RetriveInProgressDownloadManager()
       override;
-  content::NativeFileSystemPermissionContext*
-  GetNativeFileSystemPermissionContext() override;
+  content::FileSystemAccessPermissionContext*
+  GetFileSystemAccessPermissionContext() override;
   content::ContentIndexProvider* GetContentIndexProvider() override;
 
   // Profile implementation:
@@ -117,6 +116,9 @@ class ProfileImpl : public Profile {
   base::Time GetCreationTime() const override;
   bool IsOffTheRecord() override;
   bool IsOffTheRecord() const override;
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  bool IsMainProfile() const override;
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
   const OTRProfileID& GetOTRProfileID() const override;
   base::FilePath GetPath() const override;
   Profile* GetOffTheRecordProfile(const OTRProfileID& otr_profile_id) override;
@@ -136,20 +138,19 @@ class ProfileImpl : public Profile {
 #if !defined(OS_ANDROID)
   ChromeZoomLevelPrefs* GetZoomLevelPrefs() override;
 #endif
-  // TODO(https://crbug.com/1060940, https://crbug.com/1065444): Only supports
-  // primary OTR profile. Either update to support all OTR profiles or remove
-  // this function.
+  // TODO(https://crbug.com/1065444): Only supports primary OTR profile. Either
+  // update to support all OTR profiles or remove this function.
   PrefService* GetOffTheRecordPrefs() override;
   PrefService* GetReadOnlyOffTheRecordPrefs() override;
   policy::SchemaRegistryService* GetPolicySchemaRegistryService() override;
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   policy::UserCloudPolicyManagerChromeOS* GetUserCloudPolicyManagerChromeOS()
       override;
   policy::ActiveDirectoryPolicyManager* GetActiveDirectoryPolicyManager()
       override;
 #else
   policy::UserCloudPolicyManager* GetUserCloudPolicyManager() override;
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
   policy::ProfilePolicyConnector* GetProfilePolicyConnector() override;
   const policy::ProfilePolicyConnector* GetProfilePolicyConnector()
       const override;
@@ -166,17 +167,21 @@ class ProfileImpl : public Profile {
   bool ShouldRestoreOldSessionCookies() const override;
   bool ShouldPersistSessionCookies() const override;
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   void ChangeAppLocale(const std::string& locale, AppLocaleChangedVia) override;
   void OnLogin() override;
   void InitChromeOSPreferences() override;
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   void SetCreationTimeForTesting(base::Time creation_time) override;
   void RecordMainFrameNavigation() override {}
 
+ protected:
+  // Profile implementation.
+  bool IsSignedIn() override;
+
  private:
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   friend class chromeos::KioskTest;
   friend class chromeos::SupervisedUserTestBase;
 #endif
@@ -260,7 +265,7 @@ class ProfileImpl : public Profile {
 
   // configuration_policy_provider() is either of these, or nullptr in some
   // tests.
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   std::unique_ptr<policy::UserCloudPolicyManagerChromeOS>
       user_cloud_policy_manager_chromeos_;
   std::unique_ptr<policy::ActiveDirectoryPolicyManager>
@@ -302,7 +307,7 @@ class ProfileImpl : public Profile {
   // SimpleKeyedServiceFactory.
   std::unique_ptr<ProfileKey> key_;
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   std::unique_ptr<chromeos::Preferences> chromeos_preferences_;
 
   std::unique_ptr<chromeos::LocaleChangeGuard> locale_change_guard_;

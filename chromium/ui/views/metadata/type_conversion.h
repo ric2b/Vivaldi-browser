@@ -25,9 +25,13 @@
 #include "ui/gfx/shadow_value.h"
 #include "ui/gfx/text_constants.h"
 #include "ui/views/views_export.h"
+#include "url/gurl.h"
+#include "url/third_party/mozilla/url_parse.h"
 
 namespace views {
 namespace metadata {
+
+using ValidStrings = std::vector<base::string16>;
 
 // Various metadata methods pass types either by value or const ref depending on
 // whether the types are "small" (defined as "fundamental, enum, or pointer").
@@ -45,12 +49,17 @@ using ArgType =
                               const T&>::type;
 
 // General Type Conversion Template Functions ---------------------------------
-template <typename T>
-struct TypeConverter {
-  static constexpr bool is_serializable = std::is_enum<T>::value;
+template <bool serializable>
+struct BaseTypeConverter {
+  static constexpr bool is_serializable = serializable;
   static bool IsSerializable() { return is_serializable; }
+};
+
+template <typename T>
+struct TypeConverter : BaseTypeConverter<std::is_enum<T>::value> {
   static base::string16 ToString(ArgType<T> source_value);
   static base::Optional<T> FromString(const base::string16& source_value);
+  static ValidStrings GetValidStrings();
 };
 
 // Types and macros for generating enum converters ----------------------------
@@ -63,6 +72,13 @@ struct EnumStrings {
 
   explicit EnumStrings(std::vector<EnumString> init_val)
       : pairs(std::move(init_val)) {}
+
+  ValidStrings GetStringValues() const {
+    ValidStrings string_values;
+    for (const auto& pair : pairs)
+      string_values.push_back(pair.str_value);
+    return string_values;
+  }
 
   const std::vector<EnumString> pairs;
 };
@@ -103,17 +119,29 @@ static const EnumStrings<T>& GetEnumStringsInstance();
       }                                                            \
     }                                                              \
     return base::nullopt;                                          \
+  }                                                                \
+                                                                   \
+  template <>                                                      \
+  views::metadata::ValidStrings                                    \
+  views::metadata::TypeConverter<T>::GetValidStrings() {           \
+    return GetEnumStringsInstance<T>().GetStringValues();          \
   }
 
 // String Conversions ---------------------------------------------------------
 
+// Converts the four elements of |pieces| beginning at |start_piece| to an
+// SkColor by assuming the pieces are split from a string like "rgba(r,g,b,a)".
+// Returns nullopt if conversion was unsuccessful.
+VIEWS_EXPORT base::Optional<SkColor> RgbaPiecesToSkColor(
+    const std::vector<base::StringPiece16>& pieces,
+    size_t start_piece);
+
 #define DECLARE_CONVERSIONS(T)                                               \
   template <>                                                                \
-  struct VIEWS_EXPORT TypeConverter<T> {                                     \
-    static constexpr bool is_serializable = true;                            \
-    static bool IsSerializable() { return is_serializable; }                 \
+  struct VIEWS_EXPORT TypeConverter<T> : BaseTypeConverter<true> {           \
     static base::string16 ToString(ArgType<T> source_value);                 \
     static base::Optional<T> FromString(const base::string16& source_value); \
+    static ValidStrings GetValidStrings() { return {}; }                     \
   };
 
 DECLARE_CONVERSIONS(int8_t)
@@ -126,7 +154,6 @@ DECLARE_CONVERSIONS(uint32_t)
 DECLARE_CONVERSIONS(uint64_t)
 DECLARE_CONVERSIONS(float)
 DECLARE_CONVERSIONS(double)
-DECLARE_CONVERSIONS(bool)
 DECLARE_CONVERSIONS(const char*)
 DECLARE_CONVERSIONS(base::string16)
 DECLARE_CONVERSIONS(base::TimeDelta)
@@ -134,17 +161,25 @@ DECLARE_CONVERSIONS(gfx::ShadowValues)
 DECLARE_CONVERSIONS(gfx::Size)
 DECLARE_CONVERSIONS(gfx::Range)
 DECLARE_CONVERSIONS(gfx::Insets)
+DECLARE_CONVERSIONS(GURL)
+DECLARE_CONVERSIONS(url::Component)
 
 #undef DECLARE_CONVERSIONS
+
+template <>
+struct VIEWS_EXPORT TypeConverter<bool> : BaseTypeConverter<true> {
+  static base::string16 ToString(bool source_value);
+  static base::Optional<bool> FromString(const base::string16& source_value);
+  static ValidStrings GetValidStrings();
+};
 
 // Special Conversions for base::Optional<T> type ------------------------------
 
 VIEWS_EXPORT const base::string16& GetNullOptStr();
 
 template <typename T>
-struct TypeConverter<base::Optional<T>> {
-  static constexpr bool is_serializable = TypeConverter<T>::is_serializable;
-  static bool IsSerializable() { return is_serializable; }
+struct TypeConverter<base::Optional<T>>
+    : BaseTypeConverter<TypeConverter<T>::is_serializable> {
   static base::string16 ToString(ArgType<base::Optional<T>> source_value) {
     if (!source_value)
       return GetNullOptStr();
@@ -158,15 +193,15 @@ struct TypeConverter<base::Optional<T>> {
     auto ret = TypeConverter<T>::FromString(source_value);
     return ret ? base::make_optional(ret) : base::nullopt;
   }
+  static ValidStrings GetValidStrings() { return {}; }
 };
 
 template <typename T>
-struct TypeConverter<std::unique_ptr<T>> {
-  static constexpr bool is_serializable = false;
-  static bool IsSerializable() { return is_serializable; }
+struct TypeConverter<std::unique_ptr<T>> : BaseTypeConverter<false> {
   static base::string16 ToString(const std::unique_ptr<T>& source_value);
   static base::Optional<std::unique_ptr<T>> FromString(
       const base::string16& source_value);
+  static ValidStrings GetValidStrings() { return {}; }
 };
 
 }  // namespace metadata

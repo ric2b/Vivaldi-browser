@@ -22,22 +22,23 @@ import org.chromium.chrome.browser.lifecycle.NativeInitObserver;
 import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.settings.MainSettings;
-import org.chromium.chrome.browser.settings.SettingsLauncher;
 import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
-import org.chromium.chrome.browser.signin.IdentityServicesProvider;
-import org.chromium.chrome.browser.signin.ProfileDataCache;
+import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
+import org.chromium.chrome.browser.signin.services.ProfileDataCache;
 import org.chromium.chrome.browser.sync.settings.SyncAndServicesSettings;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.toolbar.ButtonData;
 import org.chromium.chrome.browser.toolbar.ButtonDataProvider;
 import org.chromium.chrome.browser.user_education.IPHCommandBuilder;
 import org.chromium.chrome.features.start_surface.StartSurfaceState;
+import org.chromium.components.browser_ui.settings.SettingsLauncher;
 import org.chromium.components.feature_engagement.EventConstants;
 import org.chromium.components.feature_engagement.FeatureConstants;
 import org.chromium.components.feature_engagement.Tracker;
 import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.components.signin.identitymanager.IdentityManager;
+import org.chromium.components.signin.identitymanager.PrimaryAccountChangeEvent;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -250,18 +251,22 @@ public class IdentityDiscController implements NativeInitObserver, ProfileDataCa
     /**
      * Implements {@link IdentityManager.Observer}.
      *
-     * TODO(https://crbug.com/1132291): This method only observes sign-in with sync, we should also
-     * observe sign-in without sync.
+     * IdentityDisc should be shown as long as the user is signed in. Whether the user is syncing
+     * or not should not matter.
      */
     @Override
-    public void onPrimaryAccountSet(CoreAccountInfo account) {
-        resetIdentityDiscCache();
-        notifyObservers(true);
-    }
-
-    @Override
-    public void onPrimaryAccountCleared(CoreAccountInfo account) {
-        notifyObservers(false);
+    public void onPrimaryAccountChanged(PrimaryAccountChangeEvent eventDetails) {
+        switch (eventDetails.getEventTypeFor(ConsentLevel.NOT_REQUIRED)) {
+            case PrimaryAccountChangeEvent.Type.SET:
+                resetIdentityDiscCache();
+                notifyObservers(true);
+                break;
+            case PrimaryAccountChangeEvent.Type.CLEARED:
+                notifyObservers(false);
+                break;
+            case PrimaryAccountChangeEvent.Type.NONE:
+                break;
+        }
     }
 
     /**

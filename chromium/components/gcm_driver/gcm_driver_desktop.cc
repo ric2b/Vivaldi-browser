@@ -18,6 +18,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "components/gcm_driver/gcm_account_mapper.h"
 #include "components/gcm_driver/gcm_app_handler.h"
 #include "components/gcm_driver/gcm_client_factory.h"
@@ -28,7 +29,7 @@
 #include "net/base/ip_endpoint.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "components/timers/alarm_timer_chromeos.h"
 #endif
 
@@ -109,8 +110,7 @@ class GCMDriverDesktop::IOWorker : public GCMClient::Delegate {
   void GetToken(const std::string& app_id,
                 const std::string& authorized_entity,
                 const std::string& scope,
-                base::TimeDelta time_to_live,
-                const std::map<std::string, std::string>& options);
+                base::TimeDelta time_to_live);
   bool ValidateRegistration(scoped_refptr<RegistrationInfo> registration_info,
                             const std::string& registration_id);
   void DeleteToken(const std::string& app_id,
@@ -454,12 +454,10 @@ void GCMDriverDesktop::IOWorker::GetInstanceIDData(
                                 service_, app_id, instance_id, extra_data));
 }
 
-void GCMDriverDesktop::IOWorker::GetToken(
-    const std::string& app_id,
-    const std::string& authorized_entity,
-    const std::string& scope,
-    base::TimeDelta time_to_live,
-    const std::map<std::string, std::string>& options) {
+void GCMDriverDesktop::IOWorker::GetToken(const std::string& app_id,
+                                          const std::string& authorized_entity,
+                                          const std::string& scope,
+                                          base::TimeDelta time_to_live) {
   DCHECK(io_thread_->RunsTasksInCurrentSequence());
 
   auto instance_id_token_info = base::MakeRefCounted<InstanceIDTokenInfo>();
@@ -467,7 +465,6 @@ void GCMDriverDesktop::IOWorker::GetToken(
   instance_id_token_info->authorized_entity = authorized_entity;
   instance_id_token_info->scope = scope;
   instance_id_token_info->time_to_live = time_to_live;
-  instance_id_token_info->options = options;
   gcm_client_->Register(std::move(instance_id_token_info));
 }
 
@@ -483,7 +480,7 @@ void GCMDriverDesktop::IOWorker::DeleteToken(
 }
 
 void GCMDriverDesktop::IOWorker::WakeFromSuspendForHeartbeat(bool wake) {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   DCHECK(io_thread_->RunsTasksInCurrentSequence());
 
   std::unique_ptr<base::RetainingOneShotTimer> timer;
@@ -841,7 +838,6 @@ void GCMDriverDesktop::GetToken(
     const std::string& authorized_entity,
     const std::string& scope,
     base::TimeDelta time_to_live,
-    const std::map<std::string, std::string>& options,
     GetTokenCallback callback) {
   DCHECK(!app_id.empty());
   DCHECK(!authorized_entity.empty());
@@ -871,19 +867,17 @@ void GCMDriverDesktop::GetToken(
   if (!delayed_task_controller_->CanRunTaskWithoutDelay()) {
     delayed_task_controller_->AddTask(base::BindOnce(
         &GCMDriverDesktop::DoGetToken, weak_ptr_factory_.GetWeakPtr(), app_id,
-        authorized_entity, scope, time_to_live, options));
+        authorized_entity, scope, time_to_live));
     return;
   }
 
-  DoGetToken(app_id, authorized_entity, scope, time_to_live, options);
+  DoGetToken(app_id, authorized_entity, scope, time_to_live);
 }
 
-void GCMDriverDesktop::DoGetToken(
-    const std::string& app_id,
-    const std::string& authorized_entity,
-    const std::string& scope,
-    base::TimeDelta time_to_live,
-    const std::map<std::string, std::string>& options) {
+void GCMDriverDesktop::DoGetToken(const std::string& app_id,
+                                  const std::string& authorized_entity,
+                                  const std::string& scope,
+                                  base::TimeDelta time_to_live) {
   DCHECK(ui_thread_->RunsTasksInCurrentSequence());
 
   TokenTuple tuple_key(app_id, authorized_entity, scope);
@@ -894,10 +888,9 @@ void GCMDriverDesktop::DoGetToken(
   }
 
   io_thread_->PostTask(
-      FROM_HERE,
-      base::BindOnce(&GCMDriverDesktop::IOWorker::GetToken,
-                     base::Unretained(io_worker_.get()), app_id,
-                     authorized_entity, scope, time_to_live, options));
+      FROM_HERE, base::BindOnce(&GCMDriverDesktop::IOWorker::GetToken,
+                                base::Unretained(io_worker_.get()), app_id,
+                                authorized_entity, scope, time_to_live));
 }
 
 void GCMDriverDesktop::ValidateToken(const std::string& app_id,

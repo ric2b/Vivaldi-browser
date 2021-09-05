@@ -12,13 +12,13 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/containers/contains.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
-#include "base/stl_util.h"
 #include "base/task_runner_util.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "base/util/type_safety/pass_key.h"
+#include "base/types/pass_key.h"
 #include "net/url_request/url_request.h"
 #include "storage/browser/file_system/copy_or_move_file_validator.h"
 #include "storage/browser/file_system/external_mount_points.h"
@@ -150,28 +150,29 @@ FileSystemContext::FileSystemContext(
       io_task_runner_(io_task_runner),
       default_file_task_runner_(file_task_runner),
       quota_manager_proxy_(quota_manager_proxy),
-      sandbox_delegate_(
-          new SandboxFileSystemBackendDelegate(quota_manager_proxy,
-                                               file_task_runner,
-                                               partition_path,
-                                               special_storage_policy,
-                                               options,
-                                               env_override_.get())),
-      sandbox_backend_(new SandboxFileSystemBackend(sandbox_delegate_.get())),
-      plugin_private_backend_(
-          new PluginPrivateFileSystemBackend(file_task_runner,
-                                             partition_path,
-                                             special_storage_policy,
-                                             options,
-                                             env_override_.get())),
+      sandbox_delegate_(std::make_unique<SandboxFileSystemBackendDelegate>(
+          quota_manager_proxy,
+          file_task_runner,
+          partition_path,
+          special_storage_policy,
+          options,
+          env_override_.get())),
+      sandbox_backend_(
+          std::make_unique<SandboxFileSystemBackend>(sandbox_delegate_.get())),
+      plugin_private_backend_(std::make_unique<PluginPrivateFileSystemBackend>(
+          file_task_runner,
+          partition_path,
+          special_storage_policy,
+          options,
+          env_override_.get())),
       additional_backends_(std::move(additional_backends)),
       auto_mount_handlers_(auto_mount_handlers),
       external_mount_points_(external_mount_points),
       partition_path_(partition_path),
       is_incognito_(options.is_incognito()),
-      operation_runner_(
-          new FileSystemOperationRunner(util::PassKey<FileSystemContext>(),
-                                        this)) {
+      operation_runner_(std::make_unique<FileSystemOperationRunner>(
+          base::PassKey<FileSystemContext>(),
+          this)) {
   RegisterBackend(sandbox_backend_.get());
   RegisterBackend(plugin_private_backend_.get());
 
@@ -183,9 +184,9 @@ FileSystemContext::FileSystemContext(
   // IsolatedFileSystemBackend does not need to handle them. For example, on
   // Chrome OS the additional backend chromeos::FileSystemBackend handles these
   // types.
-  isolated_backend_.reset(new IsolatedFileSystemBackend(
+  isolated_backend_ = std::make_unique<IsolatedFileSystemBackend>(
       !base::Contains(backend_map_, kFileSystemTypeNativeLocal),
-      !base::Contains(backend_map_, kFileSystemTypeNativeForPlatformApp)));
+      !base::Contains(backend_map_, kFileSystemTypeNativeForPlatformApp));
   RegisterBackend(isolated_backend_.get());
 
   if (quota_manager_proxy) {
@@ -458,13 +459,13 @@ std::unique_ptr<FileStreamWriter> FileSystemContext::CreateFileStreamWriter(
 std::unique_ptr<FileSystemOperationRunner>
 FileSystemContext::CreateFileSystemOperationRunner() {
   return std::make_unique<FileSystemOperationRunner>(
-      util::PassKey<FileSystemContext>(), this);
+      base::PassKey<FileSystemContext>(), this);
 }
 
 base::SequenceBound<FileSystemOperationRunner>
 FileSystemContext::CreateSequenceBoundFileSystemOperationRunner() {
   return base::SequenceBound<FileSystemOperationRunner>(
-      io_task_runner_, util::PassKey<FileSystemContext>(),
+      io_task_runner_, base::PassKey<FileSystemContext>(),
       base::WrapRefCounted(this));
 }
 

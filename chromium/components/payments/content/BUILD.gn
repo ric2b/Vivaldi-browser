@@ -2,6 +2,8 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/chromeos/ui_mode.gni")
+
 static_library("content") {
   sources = [
     "android_app_communication.cc",
@@ -32,10 +34,14 @@ static_library("content") {
     "payment_event_response_util.h",
     "payment_handler_host.cc",
     "payment_handler_host.h",
+    "payment_handler_navigation_throttle.cc",
+    "payment_handler_navigation_throttle.h",
     "payment_request_converter.cc",
     "payment_request_converter.h",
     "payment_request_spec.cc",
     "payment_request_spec.h",
+    "payments_userdata_key.cc",
+    "payments_userdata_key.h",
     "secure_payment_confirmation_app.cc",
     "secure_payment_confirmation_app.h",
     "secure_payment_confirmation_app_factory.cc",
@@ -51,6 +57,7 @@ static_library("content") {
     ":content_common",
     ":utils",
     "//base",
+    "//build:chromeos_buildflags",
     "//components/autofill/core/browser",
     "//components/keyed_service/content",
     "//components/payments/content/utility",
@@ -71,17 +78,17 @@ static_library("content") {
     "//url",
   ]
 
-  if (is_chromeos) {
+  if (is_chromeos_ash) {
     sources += [ "android_app_communication_chrome_os.cc" ]
 
     deps += [
-      "//ash/public/cpp/external_arc:external_arc",
+      "//ash/public/cpp/external_arc",
       "//components/arc",
       "//components/arc/mojom",
     ]
   }
 
-  if (!is_chromeos) {
+  if (!is_chromeos_ash) {
     sources += [ "android_app_communication_stub.cc" ]
   }
 
@@ -139,18 +146,24 @@ static_library("utils") {
     "payment_method_manifest_table.h",
     "service_worker_payment_app_finder.cc",
     "service_worker_payment_app_finder.h",
+    "ssl_validity_checker.cc",
+    "ssl_validity_checker.h",
     "web_app_manifest_section_table.cc",
     "web_app_manifest_section_table.h",
   ]
 
   deps = [
     ":content_common",
+    "//base",
     "//components/autofill/core/browser",
+    "//components/network_session_configurator/common",
     "//components/payments/content/icon",
     "//components/payments/content/utility",
     "//components/payments/core",
     "//components/payments/core:error_strings",
     "//components/payments/core:method_strings",
+    "//components/security_state/content",
+    "//components/security_state/core",
     "//components/strings",
     "//components/webdata/common",
     "//content/public/browser",
@@ -217,18 +230,18 @@ source_set("unit_tests") {
     "//third_party/libaddressinput:test_support",
   ]
 
-  if (is_chromeos) {
+  if (is_chromeos_ash) {
     sources += [ "android_app_communication_test_support_chrome_os.cc" ]
 
     deps += [
-      "//ash/public/cpp/external_arc:external_arc",
+      "//ash/public/cpp/external_arc:test_support",
       "//components/arc",
       "//components/arc:arc_test_support",
       "//components/arc/mojom",
     ]
   }
 
-  if (!is_chromeos) {
+  if (!is_chromeos_ash) {
     sources += [ "android_app_communication_test_support_stub.cc" ]
   }
 }

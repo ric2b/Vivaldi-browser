@@ -619,7 +619,8 @@ void RequestFilterManager::RequestHandler::MergeResponseHeaderChanges(
     // Add headers.
     for (const auto& header : header_changes.headers_to_add) {
       RequestFilter::ResponseHeader lowercase_header(ToLowerCase(header));
-      (*response_headers)->AddHeader(header.first, header.second);
+      (*response_headers)
+          ->AddHeader(lowercase_header.first, lowercase_header.second);
     }
   }
 

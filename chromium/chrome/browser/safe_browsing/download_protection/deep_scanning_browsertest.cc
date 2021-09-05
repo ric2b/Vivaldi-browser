@@ -116,11 +116,12 @@ class DownloadDeepScanningBrowserTest
   }
 
   void SetUpReporting() {
-    SetOnSecurityEventReporting(true);
+    SetOnSecurityEventReporting(browser()->profile()->GetPrefs(), true);
     client_ = std::make_unique<policy::MockCloudPolicyClient>();
+    client_->SetDMToken("dm_token");
     extensions::SafeBrowsingPrivateEventRouterFactory::GetForProfile(
         browser()->profile())
-        ->SetCloudPolicyClientForTesting(client_.get());
+        ->SetBrowserCloudPolicyClientForTesting(client_.get());
     identity_test_environment_ =
         std::make_unique<signin::IdentityTestEnvironment>();
     identity_test_environment_->MakePrimaryAccountAvailable(kUserName);
@@ -158,7 +159,8 @@ class DownloadDeepScanningBrowserTest
 
     SetDMTokenForTesting(
         policy::DMToken::CreateValidTokenForTesting("dm_token"));
-    SetAnalysisConnector(enterprise_connectors::FILE_DOWNLOADED,
+    SetAnalysisConnector(browser()->profile()->GetPrefs(),
+                         enterprise_connectors::FILE_DOWNLOADED,
                          R"({
                               "service_provider": "google",
                               "enable": [
@@ -284,7 +286,7 @@ class DownloadDeepScanningBrowserTest
 
   void AuthorizeForDeepScanning() {
     BinaryUploadServiceFactory::GetForProfile(browser()->profile())
-        ->SetAuthForTesting(/*authorized=*/true);
+        ->SetAuthForTesting("dm_token", /*authorized=*/true);
   }
 
  private:
@@ -754,7 +756,8 @@ class DownloadRestrictionsDeepScanningBrowserTest
     browser()->profile()->GetPrefs()->SetInteger(
         prefs::kDownloadRestrictions,
         static_cast<int>(DownloadPrefs::DownloadRestriction::DANGEROUS_FILES));
-    SetAnalysisConnector(enterprise_connectors::FILE_DOWNLOADED,
+    SetAnalysisConnector(browser()->profile()->GetPrefs(),
+                         enterprise_connectors::FILE_DOWNLOADED,
                          R"({
                               "service_provider": "google",
                               "enable": [
@@ -991,7 +994,8 @@ INSTANTIATE_TEST_SUITE_P(
 
 IN_PROC_BROWSER_TEST_P(MetadataCheckAndDeepScanningBrowserTest, Test) {
   SetUpReporting();
-  SetAnalysisConnector(enterprise_connectors::FILE_DOWNLOADED,
+  SetAnalysisConnector(browser()->profile()->GetPrefs(),
+                       enterprise_connectors::FILE_DOWNLOADED,
                        R"({
                             "service_provider": "google",
                             "enable": [

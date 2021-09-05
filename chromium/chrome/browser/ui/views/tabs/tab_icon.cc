@@ -22,7 +22,9 @@
 #include "ui/gfx/animation/linear_animation.h"
 #include "ui/gfx/animation/tween.h"
 #include "ui/gfx/canvas.h"
+#include "ui/gfx/color_analysis.h"
 #include "ui/gfx/color_palette.h"
+#include "ui/gfx/color_utils.h"
 #include "ui/gfx/favicon_size.h"
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/scoped_canvas.h"
@@ -336,8 +338,13 @@ void TabIcon::MaybePaintFavicon(gfx::Canvas* canvas,
         2;
     const float scale = std::min(diameter, SkFloatToScalar(gfx::kFaviconSize)) /
                         gfx::kFaviconSize;
+    // Translating to/from bounds offset is done to scale around the center
+    // point. This fixes RTL issues where bounds.x() is non-zero. See
+    // https://crbug.com/1147408
+    canvas->Translate(gfx::Vector2d(bounds.x(), bounds.y()));
     canvas->Translate(gfx::Vector2d(offset, offset));
     canvas->Scale(scale, scale);
+    canvas->Translate(gfx::Vector2d(-bounds.x(), -bounds.y()));
   }
 
   canvas->DrawImageInt(icon, 0, 0, bounds.width(), bounds.height(), bounds.x(),
@@ -427,11 +434,32 @@ void TabIcon::RefreshLayer() {
 }
 
 gfx::ImageSkia TabIcon::ThemeImage(const gfx::ImageSkia& source) {
-  if (!GetThemeProvider()->HasCustomColor(
-          ThemeProperties::COLOR_TOOLBAR_BUTTON_ICON))
-    return source;
+  // Choose between leaving the image as-is or changing to the toolbar button
+  // icon color.
+  const SkColor original_color =
+      color_utils::CalculateKMeanColorOfBitmap(*source.bitmap());
+  const ui::ThemeProvider* tp = GetThemeProvider();
+  const SkColor alternate_color =
+      tp->GetColor(ThemeProperties::COLOR_TOOLBAR_BUTTON_ICON);
 
-  return gfx::ImageSkiaOperations::CreateColorMask(
-      source,
-      GetThemeProvider()->GetColor(ThemeProperties::COLOR_TOOLBAR_BUTTON_ICON));
+  // Compute the minimum contrast of each color against foreground and
+  // background tabs (for active windows).
+  const SkColor active_tab_background =
+      tp->GetColor(ThemeProperties::COLOR_TAB_BACKGROUND_ACTIVE_FRAME_ACTIVE);
+  const SkColor inactive_tab_background =
+      tp->GetColor(ThemeProperties::COLOR_TAB_BACKGROUND_INACTIVE_FRAME_ACTIVE);
+  const float original_contrast = std::min(
+      color_utils::GetContrastRatio(original_color, active_tab_background),
+      color_utils::GetContrastRatio(original_color, inactive_tab_background));
+  const float alternate_contrast = std::min(
+      color_utils::GetContrastRatio(alternate_color, active_tab_background),
+      color_utils::GetContrastRatio(alternate_color, inactive_tab_background));
+
+  // Recolor the image if the original has low minimum contrast and recoloring
+  // will improve it.
+  return ((original_contrast < color_utils::kMinimumVisibleContrastRatio) &&
+          (alternate_contrast > original_contrast))
+             ? gfx::ImageSkiaOperations::CreateColorMask(source,
+                                                         alternate_color)
+             : source;
 }

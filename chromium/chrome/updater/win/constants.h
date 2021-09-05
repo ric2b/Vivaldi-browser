@@ -8,7 +8,7 @@
 #include <windows.h>
 
 #include "base/strings/string16.h"
-#include "chrome/updater/updater_version.h"
+#include "chrome/updater/updater_branding.h"
 
 namespace updater {
 
@@ -37,12 +37,6 @@ extern const base::char16 kRegistryValueName[];
 extern const base::char16 kRegistryValueInstallerProgress[];
 
 extern const base::char16 kWindowsServiceName[];
-
-// The 'dynamic_guid' feature of midl.gni only allows for a single 'coclass'
-// definition in the IDL file. Any other coclasses need to be defined here.
-extern const CLSID CLSID_UpdaterServiceClass;
-extern const CLSID CLSID_UpdaterControlClass;
-extern const CLSID CLSID_GoogleUpdate3WebUserClass;
 
 }  // namespace updater
 

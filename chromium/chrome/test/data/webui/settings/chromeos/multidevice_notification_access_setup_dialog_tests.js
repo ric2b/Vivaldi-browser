@@ -76,12 +76,13 @@ suite('Multidevice', () => {
 
     simulateStatusChanged(NotificationAccessSetupOperationStatus.
         SENT_MESSAGE_TO_PHONE_AND_WAITING_FOR_RESPONSE);
-    assertFalse(isSetupInstructionsShownSeparately());
+    assertTrue(isSetupInstructionsShownSeparately());
     assertTrue(!!buttonContainer.querySelector('#cancelButton'));
     assertFalse(!!buttonContainer.querySelector('#getStartedButton'));
     assertFalse(!!buttonContainer.querySelector('#doneButton'));
     assertFalse(!!buttonContainer.querySelector('#tryAgainButton'));
 
+    assertEquals(browserProxy.getCallCount('setFeatureEnabledState'), 0);
     simulateStatusChanged(
         NotificationAccessSetupOperationStatus.COMPLETED_SUCCESSFULLY);
     assertFalse(isSetupInstructionsShownSeparately());
@@ -89,6 +90,10 @@ suite('Multidevice', () => {
     assertFalse(!!buttonContainer.querySelector('#getStartedButton'));
     assertTrue(!!buttonContainer.querySelector('#doneButton'));
     assertFalse(!!buttonContainer.querySelector('#tryAgainButton'));
+
+    // The feature becomes enabled when the status becomes
+    // NotificationAccessSetupOperationStatus.COMPLETED_SUCCESSFULLY.
+    assertEquals(browserProxy.getCallCount('setFeatureEnabledState'), 1);
 
     assertTrue(notificationAccessSetupDialog.$$('#dialog').open);
     buttonContainer.querySelector('#doneButton').click();

@@ -56,11 +56,9 @@ VivaldiContextMenu* CreateVivaldiContextMenu(
     content::WebContents* web_contents,
     ui::SimpleMenuModel* menu_model,
     const gfx::Rect& rect,
-    bool force_views,
-    vivaldi::ContextMenuPostitionDelegate* delegate) {
+    bool force_views) {
   if (force_views) {
-    return new VivaldiContextMenuViews(web_contents, menu_model, rect,
-        delegate);
+    return new VivaldiContextMenuViews(web_contents, menu_model, rect);
   } else {
     return new VivaldiContextMenuMac(web_contents, menu_model, rect);
   }
@@ -80,10 +78,15 @@ VivaldiContextMenuMac::VivaldiContextMenuMac(
 VivaldiContextMenuMac::~VivaldiContextMenuMac() {
 }
 
-void VivaldiContextMenuMac::Show() {
+void VivaldiContextMenuMac::Init(ui::SimpleMenuModel* menu_model,
+                              vivaldi::ContextMenuPostitionDelegate* delegate) {
+  menu_model_ = menu_model;
+}
+
+bool VivaldiContextMenuMac::Show() {
   NSView* parent_view = GetActiveNativeView();
   if (!parent_view)
-    return;
+    return false;
 
   menu_controller_.reset(
       [[MenuControllerCocoa alloc] initWithModel:menu_model_
@@ -126,6 +129,7 @@ void VivaldiContextMenuMac::Show() {
                    withEvent:clickEvent
                      forView:parent_view];
   }
+  return true;
 }
 
 void VivaldiContextMenuMac::SetIcon(const gfx::Image& icon, int id) {

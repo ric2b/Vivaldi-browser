@@ -5,7 +5,7 @@
 #include "chrome/browser/ui/views/page_info/page_info_bubble_view.h"
 
 #include "base/run_loop.h"
-#include "base/scoped_observer.h"
+#include "base/scoped_observation.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "build/build_config.h"
 #include "chrome/browser/safe_browsing/chrome_password_protection_service.h"
@@ -28,8 +28,8 @@
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/page_info/page_info.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
-#include "components/safe_browsing/content/password_protection/metrics_util.h"
 #include "components/safe_browsing/core/features.h"
+#include "components/safe_browsing/core/password_protection/metrics_util.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
@@ -324,9 +324,11 @@ class PageInfoBubbleViewBrowserTest : public DialogBrowserTest {
         ->GetMainFrame()
         ->ExecuteJavaScriptForTests(
             base::ASCIIToUTF16(js),
-            base::BindOnce([](const base::Closure& quit_callback,
-                              base::Value result) { quit_callback.Run(); },
-                           run_loop.QuitClosure()));
+            base::BindOnce(
+                [](base::OnceClosure quit_callback, base::Value result) {
+                  std::move(quit_callback).Run();
+                },
+                run_loop.QuitClosure()));
     run_loop.Run();
   }
 
@@ -945,7 +947,7 @@ class ViewFocusTracker : public FocusTracker, public views::ViewObserver {
  public:
   explicit ViewFocusTracker(views::View* view)
       : FocusTracker(view->HasFocus()) {
-    scoped_observer_.Add(view);
+    scoped_observation_.Observe(view);
   }
 
   void OnViewFocused(views::View* observed_view) override { OnFocused(); }
@@ -953,7 +955,8 @@ class ViewFocusTracker : public FocusTracker, public views::ViewObserver {
   void OnViewBlurred(views::View* observed_view) override { OnBlurred(); }
 
  private:
-  ScopedObserver<views::View, views::ViewObserver> scoped_observer_{this};
+  base::ScopedObservation<views::View, views::ViewObserver> scoped_observation_{
+      this};
 };
 
 }  // namespace

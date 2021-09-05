@@ -185,16 +185,25 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
   ImageData* createImageData(int width, int height, ExceptionState&) const;
   ImageData* createImageData(unsigned,
                              unsigned,
-                             ImageDataColorSettings*,
+                             ImageDataSettings*,
                              ExceptionState&) const;
 
   // For deferred canvases this will have the side effect of drawing recorded
   // commands in order to finalize the frame
-  virtual ImageData* getImageData(int sx,
-                                  int sy,
-                                  int sw,
-                                  int sh,
-                                  ExceptionState&);
+  ImageData* getImageData(int sx, int sy, int sw, int sh, ExceptionState&);
+  ImageData* getImageData(int sx,
+                          int sy,
+                          int sw,
+                          int sh,
+                          ImageDataSettings*,
+                          ExceptionState&);
+  virtual ImageData* getImageDataInternal(int sx,
+                                          int sy,
+                                          int sw,
+                                          int sh,
+                                          ImageDataSettings*,
+                                          ExceptionState&);
+
   void putImageData(ImageData*, int dx, int dy, ExceptionState&);
   void putImageData(ImageData*,
                     int dx,
@@ -244,16 +253,14 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
 
   virtual bool HasAlpha() const = 0;
 
+  virtual bool IsDesynchronized() const {
+    NOTREACHED();
+    return false;
+  }
+
   virtual bool isContextLost() const = 0;
 
   virtual void WillDrawImage(CanvasImageSource*) const {}
-
-  virtual String ColorSpaceAsString() const {
-    return kSRGBCanvasColorSpaceName;
-  }
-  virtual CanvasPixelFormat PixelFormat() const {
-    return CanvasColorParams::GetNativeCanvasPixelFormat();
-  }
 
   void RestoreMatrixClipStack(cc::PaintCanvas*) const;
 
@@ -268,6 +275,7 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
   String textRendering() const;
 
   String fontKerning() const;
+  String fontStretch() const;
   String fontVariantCaps() const;
 
   void Trace(Visitor*) const override;
@@ -350,7 +358,10 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
 
   void UnwindStateStack();
 
-  virtual CanvasColorParams ColorParams() const { return CanvasColorParams(); }
+  // The implementations of this will query the CanvasColorParams from the
+  // CanvasRenderingContext.
+  virtual CanvasColorParams GetCanvas2DColorParams() const = 0;
+
   virtual bool WritePixels(const SkImageInfo& orig_info,
                            const void* pixels,
                            size_t row_bytes,
@@ -389,6 +400,15 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
   static const char kNormalKerningString[];
   static const char kNoneKerningString[];
   static const char kNormalVariantString[];
+  static const char kUltraCondensedString[];
+  static const char kExtraCondensedString[];
+  static const char kCondensedString[];
+  static const char kSemiCondensedString[];
+  static const char kNormalStretchString[];
+  static const char kSemiExpandedString[];
+  static const char kExpandedString[];
+  static const char kExtraExpandedString[];
+  static const char kUltraExpandedString[];
   static const char kSmallCapsVariantString[];
   static const char kAllSmallCapsVariantString[];
   static const char kPetiteVariantString[];
@@ -464,10 +484,7 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
   // such as tainting from a filter applied to the canvas.
   void SetOriginTaintedByContent();
 
-  ImageDataColorSettings* GetColorSettingsAsImageDataColorSettings() const;
-
-  void PutByteArray(const unsigned char* source,
-                    const IntSize& source_size,
+  void PutByteArray(const SkPixmap& source,
                     const IntRect& source_rect,
                     const IntPoint& dest_point);
   virtual bool IsCanvas2DBufferValid() const {
@@ -481,6 +498,9 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
 
   void IdentifiabilityMaybeUpdateForStyleUnion(
       const StringOrCanvasGradientOrCanvasPattern& style);
+
+  RespectImageOrientationEnum RespectImageOrientationInternal(
+      CanvasImageSource*);
 
   bool origin_tainted_by_content_;
 

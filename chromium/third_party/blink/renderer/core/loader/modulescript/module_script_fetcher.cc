@@ -7,6 +7,7 @@
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/renderer/core/dom/dom_implementation.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
+#include "third_party/blink/renderer/core/loader/resource/script_resource.h"
 #include "third_party/blink/renderer/core/loader/subresource_integrity_helper.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/loader/cors/cors.h"
@@ -17,15 +18,15 @@
 namespace blink {
 
 ModuleScriptFetcher::ModuleScriptFetcher(
-    util::PassKey<ModuleScriptLoader> pass_key) {}
+    base::PassKey<ModuleScriptLoader> pass_key) {}
 
 void ModuleScriptFetcher::Client::OnFetched(
-    const base::Optional<ModuleScriptCreationParams>& params) {
-  NotifyFetchFinished(params, HeapVector<Member<ConsoleMessage>>());
+    const ModuleScriptCreationParams& params) {
+  NotifyFetchFinishedSuccess(params);
 }
 
 void ModuleScriptFetcher::Client::OnFailed() {
-  NotifyFetchFinished(base::nullopt, HeapVector<Member<ConsoleMessage>>());
+  NotifyFetchFinishedError(HeapVector<Member<ConsoleMessage>>());
 }
 
 void ModuleScriptFetcher::Trace(Visitor* visitor) const {
@@ -34,10 +35,11 @@ void ModuleScriptFetcher::Trace(Visitor* visitor) const {
 
 // <specdef href="https://html.spec.whatwg.org/C/#fetch-a-single-module-script">
 bool ModuleScriptFetcher::WasModuleLoadSuccessful(
-    Resource* resource,
+    ScriptResource* resource,
     HeapVector<Member<ConsoleMessage>>* error_messages,
-    ModuleScriptCreationParams::ModuleType* module_type) {
+    ModuleType* module_type) {
   DCHECK(error_messages);
+  DCHECK_EQ(resource->GetScriptType(), mojom::blink::ScriptType::kModule);
 
   if (resource) {
     SubresourceIntegrityHelper::GetConsoleMessages(
@@ -69,20 +71,20 @@ bool ModuleScriptFetcher::WasModuleLoadSuccessful(
   // <spec step="12">If type is a JavaScript MIME type, then:</spec>
   if (MIMETypeRegistry::IsSupportedJavaScriptMIMEType(
           response.HttpContentType())) {
-    *module_type = ModuleScriptCreationParams::ModuleType::kJavaScriptModule;
+    *module_type = ModuleType::kJavaScript;
     return true;
   }
   // <spec step="13">If type is a JSON MIME type, then:</spec>
   if (base::FeatureList::IsEnabled(blink::features::kJSONModules) &&
       MIMETypeRegistry::IsJSONMimeType(response.HttpContentType())) {
-    *module_type = ModuleScriptCreationParams::ModuleType::kJSONModule;
+    *module_type = ModuleType::kJSON;
     return true;
   }
 
   if (RuntimeEnabledFeatures::CSSModulesEnabled() &&
       MIMETypeRegistry::IsSupportedStyleSheetMIMEType(
           response.HttpContentType())) {
-    *module_type = ModuleScriptCreationParams::ModuleType::kCSSModule;
+    *module_type = ModuleType::kCSS;
     return true;
   }
   String required_response_type = "JavaScript";

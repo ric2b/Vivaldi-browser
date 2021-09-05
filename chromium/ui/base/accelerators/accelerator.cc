@@ -14,6 +14,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/events/event.h"
 #include "ui/events/keycodes/keyboard_code_conversion.h"
@@ -27,7 +28,7 @@
 #include "ui/events/keycodes/keyboard_code_conversion.h"
 #endif
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ui/base/ui_base_features.h"
 #endif
 
@@ -37,7 +38,7 @@ namespace ui {
 
 namespace {
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 template <DomKey::Base T>
 using DomKeyConst = typename ui::DomKey::Constant<T>;
 
@@ -115,7 +116,7 @@ Accelerator::Accelerator(const KeyEvent& key_event)
       time_stamp_(key_event.time_stamp()),
       interrupted_by_mouse_event_(false),
       source_device_id_(key_event.source_device_id()) {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   if (features::IsNewShortcutMappingEnabled()) {
     DomKey dom_key = key_event.GetDomKey();
     if (!dom_key.IsCharacter())
@@ -437,7 +438,7 @@ base::string16 Accelerator::ApplyLongFormModifiers(
   if (IsCmdDown()) {
 #if defined(OS_APPLE)
     shortcut = ApplyModifierToAcceleratorString(shortcut, IDS_APP_COMMAND_KEY);
-#elif defined(OS_CHROMEOS)
+#elif BUILDFLAG(IS_CHROMEOS_ASH)
     shortcut = ApplyModifierToAcceleratorString(shortcut, IDS_APP_SEARCH_KEY);
 #elif defined(OS_WIN)
     shortcut = ApplyModifierToAcceleratorString(shortcut, IDS_APP_WINDOWS_KEY);

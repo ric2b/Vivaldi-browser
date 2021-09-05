@@ -31,6 +31,8 @@ enum ImporterTypeMetrics {
   IMPORTER_METRICS_VIVALDI         = 11,
   IMPORTER_METRICS_YANDEX          = 12,
   IMPORTER_METRICS_OPERA_OPIUM     = 13,
+  IMPORTER_METRICS_BRAVE           = 14,
+  IMPORTER_METRICS_EDGE_CHROMIUM   = 15,
 
   // Insert new values here. Never remove any existing values, as this enum is
   // used to bucket a UMA histogram, and removing values breaks that.
@@ -77,6 +79,12 @@ void LogImporterUseToMetrics(const std::string& metric_postfix,
       break;
     case TYPE_VIVALDI:
       metrics_type = IMPORTER_METRICS_VIVALDI;
+      break;
+    case TYPE_BRAVE:
+      metrics_type = IMPORTER_METRICS_BRAVE;
+      break;
+    case TYPE_EDGE_CHROMIUM:
+      metrics_type = IMPORTER_METRICS_EDGE_CHROMIUM;
       break;
     case TYPE_YANDEX:
       metrics_type = IMPORTER_METRICS_YANDEX;

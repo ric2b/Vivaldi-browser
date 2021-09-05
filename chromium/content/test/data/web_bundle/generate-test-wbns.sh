@@ -9,6 +9,7 @@ set -e
 if ! command -v gen-bundle > /dev/null 2>&1; then
     echo "gen-bundle is not installed. Please run:"
     echo "  go get -u github.com/WICG/webpackage/go/bundle/cmd/..."
+    echo '  export PATH=$PATH:$(go env GOPATH)/bin'
     exit 1
 fi
 
@@ -51,3 +52,17 @@ gen-bundle \
   -primaryURL https://test.example.org/ \
   -har variants_test.har \
   -o variants_test.wbn
+
+# Generate a WBN which will be used as a cross origin bundle.
+gen-bundle \
+  -version b1 \
+  -har cross_origin.har \
+  -primaryURL http://cross-origin.com/web_bundle/resource.json \
+  -o cross_origin.wbn
+
+# Generate a WBN which will be used as a same origin bundle.
+gen-bundle \
+  -version b1 \
+  -har same_origin.har \
+  -primaryURL http://foo.com/web_bundle/resource.json \
+  -o same_origin.wbn

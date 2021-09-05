@@ -35,8 +35,20 @@ Polymer({
   systemDataProvider_: null,
 
   properties: {
-    /** @private */
+    /** @private {boolean} */
     showBatteryStatusCard_: {
+      type: Boolean,
+      value: false,
+    },
+
+    /** @type {boolean} */
+    isTestRunning: {
+      type: Boolean,
+      value: false,
+    },
+
+    /** @type {boolean} */
+    systemInfoReceived_: {
       type: Boolean,
       value: false,
     },
@@ -50,17 +62,18 @@ Polymer({
 
   /** @private */
   fetchSystemInfo_() {
-    this.systemDataProvider_.getSystemInfo().then(
-        this.onSystemInfoReceived_.bind(this));
+    this.systemDataProvider_.getSystemInfo().then((result) => {
+      this.onSystemInfoReceived_(result.systemInfo);
+    });
   },
 
   /**
-   * @param {{systemInfo: !SystemInfo}} result
+   * @param {!SystemInfo} systemInfo
    * @private
    */
-  onSystemInfoReceived_(result) {
-    this.showBatteryStatusCard_ =
-        result.systemInfo.deviceCapabilities.hasBattery;
+  onSystemInfoReceived_(systemInfo) {
+    this.systemInfoReceived_ = true;
+    this.showBatteryStatusCard_ = systemInfo.deviceCapabilities.hasBattery;
   },
 
 });

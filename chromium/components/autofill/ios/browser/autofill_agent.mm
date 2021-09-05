@@ -4,6 +4,8 @@
 
 #import "components/autofill/ios/browser/autofill_agent.h"
 
+#import <UIKit/UIKit.h>
+
 #include <memory>
 #include <string>
 #include <utility>
@@ -49,7 +51,6 @@
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
 #include "ios/web/common/url_scheme_util.h"
-#import "ios/web/public/deprecated/crw_js_injection_receiver.h"
 #include "ios/web/public/deprecated/url_verification_constants.h"
 #include "ios/web/public/js_messaging/web_frame.h"
 #include "ios/web/public/js_messaging/web_frame_util.h"
@@ -113,9 +114,9 @@ void UpdateFieldManagerWithFillingResults(
   std::map<uint32_t, base::string16> fillingResults;
   if (autofill::ExtractFillingResults(jsonString, &fillingResults)) {
     for (auto& fillData : fillingResults) {
-      fieldDataManager->UpdateFieldDataWithAutofilledValue(
-          FieldRendererId(fillData.first), fillData.second,
-          kAutofilledOnUserTrigger);
+      fieldDataManager->UpdateFieldDataMap(FieldRendererId(fillData.first),
+                                           fillData.second,
+                                           kAutofilledOnUserTrigger);
     }
   }
   // TODO(crbug/1131038): Remove once the experiment is over.
@@ -128,9 +129,9 @@ void UpdateFieldManagerForClearedIDs(
   std::vector<uint32_t> clearingResults;
   if (autofill::ExtractIDs(jsonString, &clearingResults)) {
     for (auto uniqueID : clearingResults) {
-      fieldDataManager->UpdateFieldDataWithAutofilledValue(
-          FieldRendererId(uniqueID), base::string16(),
-          kAutofilledOnUserTrigger);
+      fieldDataManager->UpdateFieldDataMap(FieldRendererId(uniqueID),
+                                           base::string16(),
+                                           kAutofilledOnUserTrigger);
     }
   }
 }
@@ -270,7 +271,7 @@ autofillManagerFromWebState:(web::WebState*)webState
                   ofFormsSeen:(const FormDataVector&)forms {
   DCHECK(autofillManager);
   DCHECK(!forms.empty());
-  autofillManager->OnFormsSeen(forms, base::TimeTicks::Now());
+  autofillManager->OnFormsSeen(forms);
 }
 
 // Notifies the autofill manager when forms are submitted.
@@ -933,7 +934,7 @@ autofillManagerFromWebState:(web::WebState*)webState
           if (!strongSelf)
             return;
           if (success) {
-            strongSelf->_fieldDataManager->UpdateFieldDataWithAutofilledValue(
+            strongSelf->_fieldDataManager->UpdateFieldDataMap(
                 uniqueFieldID, value, kAutofilledOnUserTrigger);
           }
           suggestionHandledCompletionCopy();

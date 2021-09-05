@@ -11,9 +11,12 @@
 #include "ash/public/cpp/multi_user_window_manager.h"
 #include "ash/public/cpp/shelf_model.h"
 #include "ash/public/cpp/window_properties.h"
-#include "base/stl_util.h"
+#include "base/containers/contains.h"
+#include "base/feature_list.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
+#include "chrome/browser/chromeos/borealis/borealis_service.h"
+#include "chrome/browser/chromeos/borealis/borealis_window_manager.h"
 #include "chrome/browser/chromeos/crosapi/browser_util.h"
 #include "chrome/browser/chromeos/crostini/crostini_features.h"
 #include "chrome/browser/chromeos/crostini/crostini_shelf_utils.h"
@@ -27,15 +30,18 @@
 #include "chrome/browser/ui/ash/launcher/app_window_launcher_item_controller.h"
 #include "chrome/browser/ui/ash/launcher/arc_app_window.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
+#include "chrome/browser/ui/ash/launcher/crostini_app_window.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager_helper.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/grit/chrome_unscaled_resources.h"
+#include "chromeos/constants/chromeos_features.h"
+#include "chromeos/ui/base/window_properties.h"
 #include "components/account_id/account_id.h"
-#include "components/arc/arc_util.h"
 #include "components/exo/shell_surface_base.h"
+#include "components/exo/shell_surface_util.h"
 #include "components/services/app_service/public/cpp/instance.h"
 #include "components/services/app_service/public/mojom/types.mojom-shared.h"
 #include "components/services/app_service/public/mojom/types.mojom.h"
@@ -72,7 +78,7 @@ AppServiceAppWindowLauncherController::AppServiceAppWindowLauncherController(
   if (arc::IsArcAllowedForProfile(owner->profile()))
     arc_tracker_ = std::make_unique<AppServiceAppWindowArcTracker>(this);
 
-  if (crostini::CrostiniFeatures::Get()->IsUIAllowed(owner->profile())) {
+  if (crostini::CrostiniFeatures::Get()->CouldBeAllowed(owner->profile())) {
     crostini_tracker_ =
         std::make_unique<AppServiceAppWindowCrostiniTracker>(this);
   }
@@ -315,8 +321,7 @@ void AppServiceAppWindowLauncherController::OnWindowActivated(
 
 void AppServiceAppWindowLauncherController::OnInstanceUpdate(
     const apps::InstanceUpdate& update) {
-  if (update.StateChanged() &&
-      update.State() == apps::InstanceState::kDestroyed) {
+  if (update.IsDestruction()) {
     // For Chrome apps edge case, it could be added for the inactive users, and
     // then removed. Since it is not registered we don't need to do anything
     // anyways. As such, all which is left to do here is to get rid of our own
@@ -335,9 +340,7 @@ void AppServiceAppWindowLauncherController::OnInstanceUpdate(
   ash::ShelfID shelf_id(update.AppId(), update.LaunchId());
 
   // This is the first update for the given window.
-  if (update.StateIsNull() &&
-      (update.State() & apps::InstanceState::kDestroyed) ==
-          apps::InstanceState::kUnknown) {
+  if (update.IsCreation()) {
     std::string app_id = update.AppId();
     if (GetAppType(app_id) == apps::mojom::AppType::kCrostini ||
         crostini::IsUnmatchedCrostiniShelfAppId(app_id)) {
@@ -421,6 +424,13 @@ void AppServiceAppWindowLauncherController::AddWindowToShelf(
             owner()->profile());
     app_window = app_window_ptr.get();
     aura_window_to_app_window_[window] = std::move(app_window_ptr);
+  } else if (crostini_tracker_ &&
+             !crostini_tracker_->GetShelfAppId(window).empty()) {
+    auto app_window_ptr = std::make_unique<CrostiniAppWindow>(
+        owner()->profile(), shelf_id,
+        views::Widget::GetWidgetForNativeWindow(window));
+    app_window = app_window_ptr.get();
+    aura_window_to_app_window_[window] = std::move(app_window_ptr);
   } else {
     auto app_window_ptr = std::make_unique<AppWindowBase>(
         shelf_id, views::Widget::GetWidgetForNativeWindow(window));
@@ -455,7 +465,7 @@ AppServiceAppWindowLauncherController::GetArcWindows() {
   std::vector<aura::Window*> arc_windows;
   std::copy_if(window_list_.begin(), window_list_.end(),
                std::inserter(arc_windows, arc_windows.end()),
-               [](aura::Window* w) { return arc::IsArcAppWindow(w); });
+               [](aura::Window* w) { return ash::IsArcWindow(w); });
   return arc_windows;
 }
 
@@ -495,30 +505,38 @@ void AppServiceAppWindowLauncherController::RegisterWindow(
   // so we don't need to call AddWindowToShelf again.
   if (arc_tracker_ && arc::GetWindowTaskId(window) != arc::kNoTaskId) {
     arc_tracker_->AttachControllerToWindow(window);
-  } else {
-    // The window for ARC Play Store is a special window, which is created by
-    // both Extensions and ARC. If Extensions's window is generated after
-    // ARC window, calls OnItemDelegateDiscarded to remove the ARC apps
-    // window.
-    if (shelf_id.app_id == arc::kPlayStoreAppId) {
-      AppWindowLauncherItemController* item_controller =
-          owner()->shelf_model()->GetAppWindowLauncherItemController(shelf_id);
-      if (item_controller && shelf_id.app_id == arc::kPlayStoreAppId &&
-          arc_tracker_) {
-        OnItemDelegateDiscarded(item_controller);
-      }
-    }
-
-    AddWindowToShelf(window, shelf_id);
-
-    if (plugin_vm::IsPluginVmAppWindow(window)) {
-      // Set an icon for the Plugin VM app window.
-      static_cast<exo::ShellSurfaceBase*>(
-          views::Widget::GetWidgetForNativeWindow(window)->widget_delegate())
-          ->SetIcon(*ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
-              IDR_LOGO_PLUGIN_VM_DEFAULT_192));
-    }
+    return;
   }
+
+  // The window for ARC Play Store is a special window, which is created by
+  // both Extensions and ARC. If Extensions's window is generated after
+  // ARC window, calls OnItemDelegateDiscarded to remove the ARC apps
+  // window.
+  if (shelf_id.app_id == arc::kPlayStoreAppId) {
+    AppWindowLauncherItemController* item_controller =
+        owner()->shelf_model()->GetAppWindowLauncherItemController(shelf_id);
+    if (item_controller && shelf_id.app_id == arc::kPlayStoreAppId &&
+        arc_tracker_) {
+      OnItemDelegateDiscarded(item_controller);
+    }
+  } else if (plugin_vm::IsPluginVmAppWindow(window)) {
+    // Set an icon for the Plugin VM app window.
+    static_cast<exo::ShellSurfaceBase*>(
+        views::Widget::GetWidgetForNativeWindow(window)->widget_delegate())
+        ->SetIcon(*ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
+            IDR_LOGO_PLUGIN_VM_DEFAULT_192));
+    // Set fullscreen properties.
+    if (base::FeatureList::IsEnabled(chromeos::features::kPluginVmFullscreen)) {
+      exo::SetShellUseImmersiveForFullscreen(window, false);
+      window->SetProperty(chromeos::kEscHoldToExitFullscreen, true);
+    }
+  } else if (borealis::BorealisWindowManager::IsBorealisWindow(window)) {
+    // Set fullscreen properties for Borealis.
+    window->SetProperty(chromeos::kEscHoldToExitFullscreen, true);
+    window->SetProperty(chromeos::kEscHoldExitFullscreenToMinimized, true);
+  }
+
+  AddWindowToShelf(window, shelf_id);
 }
 
 void AppServiceAppWindowLauncherController::UnregisterAppWindow(
@@ -539,23 +557,25 @@ void AppServiceAppWindowLauncherController::AddAppWindowToShelf(
 
   AppWindowLauncherItemController* item_controller =
       owner()->shelf_model()->GetAppWindowLauncherItemController(shelf_id);
-  if (item_controller == nullptr) {
-    auto controller =
-        std::make_unique<AppServiceAppWindowLauncherItemController>(shelf_id,
-                                                                    this);
-    item_controller = controller.get();
-    if (!owner()->GetItem(shelf_id)) {
-      owner()->CreateAppLauncherItem(std::move(controller),
-                                     ash::STATUS_RUNNING);
-    } else {
-      owner()->shelf_model()->SetShelfItemDelegate(shelf_id,
-                                                   std::move(controller));
-      owner()->SetItemStatus(shelf_id, ash::STATUS_RUNNING);
-    }
+  if (item_controller) {
+    item_controller->AddWindow(app_window);
+    app_window->SetController(item_controller);
+    return;
   }
 
+  auto controller = std::make_unique<AppServiceAppWindowLauncherItemController>(
+      shelf_id, this);
+  item_controller = controller.get();
   item_controller->AddWindow(app_window);
   app_window->SetController(item_controller);
+
+  if (!owner()->GetItem(shelf_id)) {
+    owner()->CreateAppLauncherItem(std::move(controller), ash::STATUS_RUNNING);
+  } else {
+    owner()->shelf_model()->SetShelfItemDelegate(shelf_id,
+                                                 std::move(controller));
+    owner()->SetItemStatus(shelf_id, ash::STATUS_RUNNING);
+  }
 }
 
 void AppServiceAppWindowLauncherController::RemoveAppWindowFromShelf(
@@ -599,8 +619,19 @@ ash::ShelfID AppServiceAppWindowLauncherController::GetShelfId(
   if (crosapi::browser_util::IsLacrosWindow(window))
     return ash::ShelfID(extension_misc::kLacrosAppId);
 
+  std::string shelf_app_id;
+  if (borealis::BorealisWindowManager::IsBorealisWindow(window)) {
+    for (auto* profile : profile_list_) {
+      shelf_app_id = borealis::BorealisService::GetForProfile(profile)
+                         ->WindowManager()
+                         .GetShelfAppId(window);
+      if (!shelf_app_id.empty()) {
+        return ash::ShelfID(shelf_app_id);
+      }
+    }
+  }
+
   if (crostini_tracker_) {
-    std::string shelf_app_id;
     shelf_app_id = crostini_tracker_->GetShelfAppId(window);
     if (!shelf_app_id.empty())
       return ash::ShelfID(shelf_app_id);

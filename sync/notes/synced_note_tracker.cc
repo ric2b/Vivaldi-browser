@@ -10,6 +10,7 @@
 
 #include "app/vivaldi_apptools.h"
 #include "base/base64.h"
+#include "base/guid.h"
 #include "base/hash/sha1.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
@@ -138,15 +139,18 @@ bool SyncedNoteTracker::Entity::has_final_guid() const {
 }
 
 bool SyncedNoteTracker::Entity::final_guid_matches(
-    const std::string& guid) const {
+    const base::GUID& guid) const {
   return metadata_->has_client_tag_hash() &&
          metadata_->client_tag_hash() ==
-             syncer::ClientTagHash::FromUnhashed(syncer::NOTES, guid).value();
+             syncer::ClientTagHash::FromUnhashed(syncer::NOTES,
+                                                 guid.AsLowercaseString())
+                 .value();
 }
 
-void SyncedNoteTracker::Entity::set_final_guid(const std::string& guid) {
-  metadata_->set_client_tag_hash(
-      syncer::ClientTagHash::FromUnhashed(syncer::NOTES, guid).value());
+void SyncedNoteTracker::Entity::set_final_guid(const base::GUID& guid) {
+  metadata_->set_client_tag_hash(syncer::ClientTagHash::FromUnhashed(
+                                     syncer::NOTES, guid.AsLowercaseString())
+                                     .value());
 }
 
 size_t SyncedNoteTracker::Entity::EstimateMemoryUsage() const {
@@ -219,9 +223,10 @@ const SyncedNoteTracker::Entity* SyncedNoteTracker::GetEntityForSyncId(
 }
 
 const SyncedNoteTracker::Entity* SyncedNoteTracker::GetTombstoneEntityForGuid(
-    const std::string& guid) const {
+    const base::GUID& guid) const {
   const syncer::ClientTagHash client_tag_hash =
-      syncer::ClientTagHash::FromUnhashed(syncer::NOTES, guid);
+      syncer::ClientTagHash::FromUnhashed(syncer::NOTES,
+                                          guid.AsLowercaseString());
 
   for (const Entity* tombstone_entity : ordered_local_tombstones_) {
     if (tombstone_entity->metadata()->client_tag_hash() ==
@@ -271,7 +276,8 @@ const SyncedNoteTracker::Entity* SyncedNoteTracker::Add(
   // For any newly added note, be it a local creation or a remote one, the
   // authoritative final GUID is known from start.
   metadata->set_client_tag_hash(
-      syncer::ClientTagHash::FromUnhashed(syncer::NOTES, note_node->guid())
+      syncer::ClientTagHash::FromUnhashed(syncer::NOTES,
+                                          note_node->guid().AsLowercaseString())
           .value());
   HashSpecifics(specifics, metadata->mutable_specifics_hash());
   auto entity = std::make_unique<Entity>(note_node, std::move(metadata));
@@ -311,7 +317,7 @@ void SyncedNoteTracker::UpdateServerVersion(const Entity* entity,
 }
 
 void SyncedNoteTracker::PopulateFinalGuid(const Entity* entity,
-                                          const std::string& guid) {
+                                          const base::GUID& guid) {
   DCHECK(entity);
   AsMutableEntity(entity)->set_final_guid(guid);
 }
@@ -556,7 +562,8 @@ bool SyncedNoteTracker::InitEntitiesFromModelAndMetadata(
     if (note_metadata.metadata().has_client_tag_hash() &&
         !node->is_permanent_node() &&
         note_metadata.metadata().client_tag_hash() !=
-            syncer::ClientTagHash::FromUnhashed(syncer::NOTES, node->guid())
+            syncer::ClientTagHash::FromUnhashed(
+                syncer::NOTES, node->guid().AsLowercaseString())
                 .value()) {
       DLOG(ERROR) << "Note GUID does not match the client tag.";
 
@@ -751,7 +758,8 @@ void SyncedNoteTracker::UndeleteTombstoneForNoteNode(
   DCHECK(node);
   DCHECK(entity->metadata()->is_deleted());
   const syncer::ClientTagHash client_tag_hash =
-      syncer::ClientTagHash::FromUnhashed(syncer::NOTES, node->guid());
+      syncer::ClientTagHash::FromUnhashed(syncer::NOTES,
+                                          node->guid().AsLowercaseString());
   // The same entity must be used only for the same note node.
   DCHECK_EQ(entity->metadata()->client_tag_hash(), client_tag_hash.value());
   DCHECK_EQ(GetTombstoneEntityForGuid(node->guid()), entity);

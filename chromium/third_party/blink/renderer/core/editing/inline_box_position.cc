@@ -324,20 +324,23 @@ InlineBoxPosition ComputeInlineBoxPositionForInlineAdjustedPositionAlgorithm(
   const PositionTemplate<Strategy>& position = adjusted.GetPosition();
   DCHECK(!position.AnchorNode()->IsShadowRoot()) << adjusted;
   DCHECK(position.AnchorNode()->GetLayoutObject()) << adjusted;
-  const LayoutObject& layout_object = *position.AnchorNode()->GetLayoutObject();
+  LayoutObject& layout_object = *position.AnchorNode()->GetLayoutObject();
   const int caret_offset = position.ComputeEditingOffset();
-  const int round_offset =
-      std::min(caret_offset, layout_object.CaretMaxOffset());
 
   if (layout_object.IsText()) {
     // TODO(yoichio): Consider |ToLayoutText(layout_object)->TextStartOffset()|
     // for first-letter tested with LocalCaretRectTest::FloatFirstLetter.
-    return ComputeInlineBoxPositionForTextNode(
-        &To<LayoutText>(layout_object), round_offset, adjusted.Affinity());
+    const LayoutText& layout_text = To<LayoutText>(layout_object);
+    const int round_offset =
+        std::min(caret_offset, layout_text.CaretMaxOffset());
+    return ComputeInlineBoxPositionForTextNode(&layout_text, round_offset,
+                                               adjusted.Affinity());
   }
 
   DCHECK(layout_object.IsAtomicInlineLevel());
   DCHECK(layout_object.IsInline());
+  const int round_offset =
+      std::min(caret_offset, LineLayoutItem(&layout_object).CaretMaxOffset());
   return ComputeInlineBoxPositionForAtomicInline(&layout_object, round_offset);
 }
 
@@ -366,11 +369,6 @@ InlineBoxPosition ComputeInlineBoxPosition(
   return ComputeInlineBoxPositionTemplate<EditingInFlatTreeStrategy>(position);
 }
 
-InlineBoxPosition ComputeInlineBoxPosition(const VisiblePosition& position) {
-  DCHECK(position.IsValid()) << position;
-  return ComputeInlineBoxPosition(position.ToPositionWithAffinity());
-}
-
 PositionWithAffinity ComputeInlineAdjustedPosition(
     const PositionWithAffinity& position) {
   return ComputeInlineAdjustedPositionAlgorithm(position, 0);
@@ -379,13 +377,6 @@ PositionWithAffinity ComputeInlineAdjustedPosition(
 PositionInFlatTreeWithAffinity ComputeInlineAdjustedPosition(
     const PositionInFlatTreeWithAffinity& position) {
   return ComputeInlineAdjustedPositionAlgorithm(position, 0);
-}
-
-PositionWithAffinity ComputeInlineAdjustedPosition(
-    const VisiblePosition& position) {
-  DCHECK(position.IsValid()) << position;
-  return ComputeInlineAdjustedPositionAlgorithm(
-      position.ToPositionWithAffinity(), 0);
 }
 
 InlineBoxPosition ComputeInlineBoxPositionForInlineAdjustedPosition(

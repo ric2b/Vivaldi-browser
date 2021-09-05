@@ -57,14 +57,6 @@ std::unique_ptr<KeyedService> BuildMockSyncService(web::BrowserState* context) {
   return std::make_unique<syncer::MockSyncService>();
 }
 
-std::unique_ptr<KeyedService> BuildMockSyncSetupService(
-    web::BrowserState* context) {
-  ChromeBrowserState* browser_state =
-      ChromeBrowserState::FromBrowserState(context);
-  return std::make_unique<SyncSetupServiceMock>(
-      ProfileSyncServiceFactory::GetForBrowserState(browser_state));
-}
-
 CoreAccountId GetAccountId(ChromeIdentity* identity) {
   return CoreAccountId(base::SysNSStringToUTF8([identity gaiaID]));
 }
@@ -80,8 +72,9 @@ class AuthenticationServiceTest : public PlatformTest {
     builder.SetPrefService(CreatePrefService());
     builder.AddTestingFactory(ProfileSyncServiceFactory::GetInstance(),
                               base::BindRepeating(&BuildMockSyncService));
-    builder.AddTestingFactory(SyncSetupServiceFactory::GetInstance(),
-                              base::BindRepeating(&BuildMockSyncSetupService));
+    builder.AddTestingFactory(
+        SyncSetupServiceFactory::GetInstance(),
+        base::BindRepeating(&SyncSetupServiceMock::CreateKeyedService));
     builder.AddTestingFactory(
         AuthenticationServiceFactory::GetInstance(),
         AuthenticationServiceFactory::GetDefaultFactory());
@@ -133,8 +126,8 @@ class AuthenticationServiceTest : public PlatformTest {
     authentication_service()->OnAccessTokenRefreshFailed(identity, user_info);
   }
 
-  void FireIdentityListChanged() {
-    authentication_service()->OnIdentityListChanged();
+  void FireIdentityListChanged(bool keychainReload) {
+    authentication_service()->OnIdentityListChanged(keychainReload);
   }
 
   void SetCachedMDMInfo(ChromeIdentity* identity, NSDictionary* user_info) {
@@ -320,7 +313,7 @@ TEST_F(AuthenticationServiceTest, HaveAccountsChanged_NoChange) {
   authentication_service()->SignIn(identity(0));
 
   identity_service()->AddIdentities(@[ @"foo3" ]);
-  FireIdentityListChanged();
+  FireIdentityListChanged(true);
   base::RunLoop().RunUntilIdle();
 
   // If an account is added while the application is in foreground, then the
@@ -344,7 +337,7 @@ TEST_F(AuthenticationServiceTest, HaveAccountsChanged_ChangedInBackground) {
   authentication_service()->SignIn(identity(0));
 
   identity_service()->AddIdentities(@[ @"foo3" ]);
-  FireIdentityListChanged();
+  FireIdentityListChanged(true);
   base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(
       authentication_service()->HaveAccountsChangedWhileInBackground());
@@ -362,7 +355,7 @@ TEST_F(AuthenticationServiceTest, HaveAccountsChanged_CalledInBackground) {
   authentication_service()->SignIn(identity(0));
 
   identity_service()->AddIdentities(@[ @"foo3" ]);
-  FireIdentityListChanged();
+  FireIdentityListChanged(true);
   base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(
       authentication_service()->HaveAccountsChangedWhileInBackground());
@@ -371,7 +364,7 @@ TEST_F(AuthenticationServiceTest, HaveAccountsChanged_CalledInBackground) {
   // background.
   FireApplicationDidEnterBackground();
   identity_service()->AddIdentities(@[ @"foo4" ]);
-  FireIdentityListChanged();
+  FireIdentityListChanged(true);
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(authentication_service()->HaveAccountsChangedWhileInBackground());
 
@@ -386,7 +379,7 @@ TEST_F(AuthenticationServiceTest, HaveAccountsChanged_ResetOntwoBackgrounds) {
   authentication_service()->SignIn(identity(0));
 
   identity_service()->AddIdentities(@[ @"foo3" ]);
-  FireIdentityListChanged();
+  FireIdentityListChanged(true);
   base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(
       authentication_service()->HaveAccountsChangedWhileInBackground());

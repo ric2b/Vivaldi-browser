@@ -69,10 +69,6 @@ class CORE_EXPORT TextFragmentSelectorGenerator final
   String GetNextTextBlockForTesting(const Position& position) {
     return GetNextTextBlock(position);
   }
-  bool IsInSameUninterruptedBlockForTesting(const Position& start,
-                                            const Position& end) {
-    return IsInSameUninterruptedBlock(start, end);
-  }
 
   // Releases members if necessary.
   void ClearSelection();
@@ -112,10 +108,6 @@ class CORE_EXPORT TextFragmentSelectorGenerator final
   // Returns max text following given position that doesn't cross block
   // boundaries.
   String GetNextTextBlock(const Position& position);
-
-  // Returns true if start and end positions are in the same block and there are
-  // no other blocks between them. Otherwise, returns false.
-  bool IsInSameUninterruptedBlock(const Position& start, const Position& end);
 
   void GenerateExactSelector();
   void ExtendRangeSelector();

@@ -10,7 +10,8 @@
 #include <map>
 #include <vector>
 
-#include "base/stl_util.h"
+#include "base/containers/contains.h"
+#include "base/containers/flat_map.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace performance_manager {
@@ -33,14 +34,14 @@ class DummyVoteConsumer : public VoteConsumer<VoteImpl> {
   DummyVoteConsumer& operator=(const DummyVoteConsumer& rhs) = delete;
 
   // VoteConsumer implementation:
-  VoteReceipt<VoteImpl> SubmitVote(util::PassKey<VotingChannel>,
+  VoteReceipt<VoteImpl> SubmitVote(base::PassKey<VotingChannel>,
                                    voting::VoterId<VoteImpl> voter_id,
                                    const ContextType* context,
                                    const VoteImpl& vote) override;
-  void ChangeVote(util::PassKey<AcceptedVote>,
+  void ChangeVote(base::PassKey<AcceptedVote>,
                   AcceptedVote* old_vote,
                   const VoteImpl& new_vote) override;
-  void VoteInvalidated(util::PassKey<AcceptedVote>,
+  void VoteInvalidated(base::PassKey<AcceptedVote>,
                        AcceptedVote* vote) override;
 
   void ExpectInvalidVote(size_t index);
@@ -52,7 +53,7 @@ class DummyVoteConsumer : public VoteConsumer<VoteImpl> {
                        voting::VoterId<VoteImpl> voter_id,
                        const typename VoteImpl::ContextType* context,
                        typename VoteImpl::VoteType vote_value,
-                       const char* reason = nullptr);
+                       const char* reason);
 
   VotingChannelFactory<VoteImpl> voting_channel_factory_;
   std::vector<AcceptedVote> votes_;
@@ -91,6 +92,26 @@ class DummyVoteObserver : public VoteObserver<VoteImpl> {
   DummyVoteObserver();
   ~DummyVoteObserver() override;
 
+  VotingChannel<VoteImpl> BuildVotingChannel();
+
+  size_t GetVoteCount() const;
+  size_t GetVoteCountForContext(
+      const typename VoteImpl::ContextType* context) const;
+  size_t GetVoteCountForVoterId(voting::VoterId<VoteImpl> voter_id) const;
+
+  bool HasVote(voting::VoterId<VoteImpl> voter_id,
+               const typename VoteImpl::ContextType* context) const;
+
+  bool HasVote(voting::VoterId<VoteImpl> voter_id,
+               const typename VoteImpl::ContextType* context,
+               const VoteImpl& vote) const;
+
+  bool HasVote(voting::VoterId<VoteImpl> voter_id,
+               const typename VoteImpl::ContextType* context,
+               typename VoteImpl::VoteType vote_value,
+               const char* reason = nullptr) const;
+
+ protected:
   // VoteObserver:
   void OnVoteSubmitted(voting::VoterId<VoteImpl> voter_id,
                        const ContextType* context,
@@ -101,13 +122,11 @@ class DummyVoteObserver : public VoteObserver<VoteImpl> {
   void OnVoteInvalidated(voting::VoterId<VoteImpl> voter_id,
                          const ContextType* context) override;
 
-  bool HasVote(voting::VoterId<VoteImpl> voter_id,
-               const typename VoteImpl::ContextType* context,
-               typename VoteImpl::VoteType vote_value,
-               const char* reason = nullptr);
-
+ private:
   VoteConsumerDefaultImpl vote_consumer_default_impl_{this};
-  std::map<voting::VoterId<VoteImpl>, std::map<const ContextType*, VoteImpl>>
+
+  base::flat_map<voting::VoterId<VoteImpl>,
+                 base::flat_map<const ContextType*, VoteImpl>>
       votes_by_voter_id_;
 };
 
@@ -122,7 +141,7 @@ DummyVoteConsumer<VoteImpl>::~DummyVoteConsumer() = default;
 
 template <class VoteImpl>
 VoteReceipt<VoteImpl> DummyVoteConsumer<VoteImpl>::SubmitVote(
-    util::PassKey<VotingChannel>,
+    base::PassKey<VotingChannel>,
     voting::VoterId<VoteImpl> voter_id,
     const ContextType* context,
     const VoteImpl& vote) {
@@ -141,7 +160,7 @@ VoteReceipt<VoteImpl> DummyVoteConsumer<VoteImpl>::SubmitVote(
 }
 
 template <class VoteImpl>
-void DummyVoteConsumer<VoteImpl>::ChangeVote(util::PassKey<AcceptedVote>,
+void DummyVoteConsumer<VoteImpl>::ChangeVote(base::PassKey<AcceptedVote>,
                                              AcceptedVote* old_vote,
                                              const VoteImpl& new_vote) {
   // We should own this vote and it should be valid.
@@ -155,7 +174,7 @@ void DummyVoteConsumer<VoteImpl>::ChangeVote(util::PassKey<AcceptedVote>,
 }
 
 template <class VoteImpl>
-void DummyVoteConsumer<VoteImpl>::VoteInvalidated(util::PassKey<AcceptedVote>,
+void DummyVoteConsumer<VoteImpl>::VoteInvalidated(base::PassKey<AcceptedVote>,
                                                   AcceptedVote* vote) {
   // We should own this vote.
   EXPECT_LE(votes_.data(), vote);
@@ -224,6 +243,80 @@ template <class VoteImpl>
 DummyVoteObserver<VoteImpl>::~DummyVoteObserver() = default;
 
 template <class VoteImpl>
+VotingChannel<VoteImpl> DummyVoteObserver<VoteImpl>::BuildVotingChannel() {
+  return vote_consumer_default_impl_.BuildVotingChannel();
+}
+
+template <class VoteImpl>
+size_t DummyVoteObserver<VoteImpl>::GetVoteCount() const {
+  size_t vote_count = 0;
+  for (const auto& votes : votes_by_voter_id_) {
+    vote_count += votes.second.size();
+  }
+  return vote_count;
+}
+
+template <class VoteImpl>
+size_t DummyVoteObserver<VoteImpl>::GetVoteCountForVoterId(
+    voting::VoterId<VoteImpl> voter_id) const {
+  auto it = votes_by_voter_id_.find(voter_id);
+  if (it == votes_by_voter_id_.end())
+    return 0;
+
+  return it->second.size();
+}
+
+template <class VoteImpl>
+size_t DummyVoteObserver<VoteImpl>::GetVoteCountForContext(
+    const typename VoteImpl::ContextType* context) const {
+  size_t vote_count = 0;
+  for (const auto& votes : votes_by_voter_id_) {
+    vote_count += votes.second.count(context);
+  }
+  return vote_count;
+}
+
+template <class VoteImpl>
+bool DummyVoteObserver<VoteImpl>::HasVote(
+    voting::VoterId<VoteImpl> voter_id,
+    const typename VoteImpl::ContextType* context) const {
+  auto votes_it = votes_by_voter_id_.find(voter_id);
+  if (votes_it == votes_by_voter_id_.end())
+    return false;
+
+  const auto& votes = votes_it->second;
+
+  return base::Contains(votes, context);
+}
+
+template <class VoteImpl>
+bool DummyVoteObserver<VoteImpl>::HasVote(
+    voting::VoterId<VoteImpl> voter_id,
+    const typename VoteImpl::ContextType* context,
+    const VoteImpl& vote) const {
+  auto votes_it = votes_by_voter_id_.find(voter_id);
+  if (votes_it == votes_by_voter_id_.end())
+    return false;
+
+  const auto& votes = votes_it->second;
+
+  auto vote_it = votes.find(context);
+  if (vote_it == votes.end())
+    return false;
+
+  return vote_it->second == vote;
+}
+
+template <class VoteImpl>
+bool DummyVoteObserver<VoteImpl>::HasVote(
+    voting::VoterId<VoteImpl> voter_id,
+    const typename VoteImpl::ContextType* context,
+    typename VoteImpl::VoteType vote_value,
+    const char* reason) const {
+  return HasVote(voter_id, context, VoteImpl(vote_value, reason));
+}
+
+template <class VoteImpl>
 void DummyVoteObserver<VoteImpl>::OnVoteSubmitted(VoterId<VoteImpl> voter_id,
                                                   const ContextType* context,
                                                   const VoteImpl& vote) {
@@ -247,29 +340,12 @@ void DummyVoteObserver<VoteImpl>::OnVoteInvalidated(
   auto it = votes_by_voter_id_.find(voter_id);
   DCHECK(it != votes_by_voter_id_.end());
 
-  std::map<const ContextType*, VoteImpl>& votes = it->second;
+  base::flat_map<const ContextType*, VoteImpl>& votes = it->second;
   size_t removed = votes.erase(context);
   DCHECK_EQ(removed, 1u);
 
   if (votes.empty())
     votes_by_voter_id_.erase(it);
-}
-
-template <class VoteImpl>
-bool DummyVoteObserver<VoteImpl>::HasVote(
-    voting::VoterId<VoteImpl> voter_id,
-    const typename VoteImpl::ContextType* context,
-    typename VoteImpl::VoteType vote_value,
-    const char* reason) {
-  if (!base::Contains(votes_by_voter_id_, voter_id))
-    return false;
-
-  std::map<const ContextType*, VoteImpl>& votes = votes_by_voter_id_[voter_id];
-
-  if (!base::Contains(votes, context))
-    return false;
-
-  return votes[context] == VoteImpl(vote_value, reason);
 }
 
 }  // namespace test

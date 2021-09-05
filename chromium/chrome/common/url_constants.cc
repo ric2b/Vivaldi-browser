@@ -7,6 +7,8 @@
 #include "build/branding_buildflags.h"
 #include "chrome/common/webui_url_constants.h"
 
+#include "build/chromeos_buildflags.h"
+
 namespace chrome {
 
 const char kAccessibilityLabelsLearnMoreURL[] =
@@ -39,12 +41,8 @@ const char kChromeBetaForumURL[] =
 const char kChromeFixUpdateProblems[] =
     "https://support.google.com/chrome?p=fix_chrome_updates";
 
-// TODO: replace w/link after marketing provides it.
-const char kChromeReleaseNotesURL[] =
-    "https://www.google.com/chromebook/whatsnew/embedded/";
-
 const char kChromeHelpViaKeyboardURL[] =
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
     "chrome-extension://honijodknafkokifofgiaalefdiedpko/main.html";
 #else
@@ -52,10 +50,10 @@ const char kChromeHelpViaKeyboardURL[] =
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 #else
     "https://support.google.com/chrome/?p=help&ctx=keyboard";
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 const char kChromeHelpViaMenuURL[] =
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
     "chrome-extension://honijodknafkokifofgiaalefdiedpko/main.html";
 #else
@@ -63,18 +61,18 @@ const char kChromeHelpViaMenuURL[] =
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 #else
     "https://support.google.com/chrome/?p=help&ctx=menu";
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 const char kChromeHelpViaWebUIURL[] =
     "https://support.google.com/chrome/?p=help&ctx=settings";
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 const char kChromeOsHelpViaWebUIURL[] =
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
     "chrome-extension://honijodknafkokifofgiaalefdiedpko/main.html";
 #else
     "https://support.google.com/chromebook/?p=help&ctx=settings";
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 const char kChromeNativeScheme[] = "chrome-native";
 
@@ -99,7 +97,7 @@ const char kChromeUIUntrustedNewTabPageUrl[] =
 const char kChromiumProjectURL[] = "https://www.chromium.org/";
 
 const char kCloudPrintCertificateErrorLearnMoreURL[] =
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     "https://support.google.com/chromebook?p=cloudprint_error_troubleshoot";
 #elif defined(OS_MAC)
     "https://support.google.com/cloudprint?p=cloudprint_error_offline_mac";
@@ -121,21 +119,21 @@ const char kCpuX86Sse2ObsoleteURL[] =
     "https://support.google.com/chrome/?p=chrome_update_sse3";
 
 const char kCrashReasonURL[] =
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     "https://support.google.com/chromebook/?p=e_awsnap";
 #else
     "https://support.google.com/chrome/?p=e_awsnap";
 #endif
 
 const char kCrashReasonFeedbackDisplayedURL[] =
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     "https://support.google.com/chromebook/?p=e_awsnap_rl";
 #else
     "https://support.google.com/chrome/?p=e_awsnap_rl";
 #endif
 
 const char kDoNotTrackLearnMoreURL[] =
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     "https://support.google.com/chromebook/?p=settings_do_not_track";
 #else
     "https://support.google.com/chrome/?p=settings_do_not_track";
@@ -174,7 +172,7 @@ const char kLegacySupervisedUserManagementDisplayURL[] =
     "www.chrome.com/manage";
 
 const char kManagedUiLearnMoreUrl[] =
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     "https://support.google.com/chromebook/?p=is_chrome_managed";
 #else
     "https://support.google.com/chrome/?p=is_chrome_managed";
@@ -187,21 +185,21 @@ const char kMyActivityUrlInClearBrowsingData[] =
     "https://myactivity.google.com/myactivity/?utm_source=chrome_cbd";
 
 const char kOmniboxLearnMoreURL[] =
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     "https://support.google.com/chromebook/?p=settings_omnibox";
 #else
     "https://support.google.com/chrome/?p=settings_omnibox";
 #endif
 
 const char kPageInfoHelpCenterURL[] =
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     "https://support.google.com/chromebook/?p=ui_security_indicator";
 #else
     "https://support.google.com/chrome/?p=ui_security_indicator";
 #endif
 
 const char kPasswordCheckLearnMoreURL[] =
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     "https://support.google.com/chromebook/"
     "?p=settings_password#leak_detection_privacy";
 #else
@@ -213,7 +211,7 @@ const char kPasswordGenerationLearnMoreURL[] =
     "https://support.google.com/chrome/answer/7570435";
 
 const char kPasswordManagerLearnMoreURL[] =
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     "https://support.google.com/chromebook/?p=settings_password";
 #else
     "https://support.google.com/chrome/?p=settings_password";
@@ -225,7 +223,7 @@ const char kPaymentMethodsURL[] =
     "paymentMethods";
 
 const char kPaymentMethodsLearnMoreURL[] =
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     "https://support.google.com/chromebook/answer/"
     "142893?visit_id=636857416902558798-696405304&p=settings_autofill&rd=1";
 #else
@@ -234,11 +232,14 @@ const char kPaymentMethodsLearnMoreURL[] =
 #endif
 
 const char kPrivacyLearnMoreURL[] =
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     "https://support.google.com/chromebook/?p=settings_privacy";
 #else
     "https://support.google.com/chrome/?p=settings_privacy";
 #endif
+
+const char kPrivacySandboxURL[] =
+    "https://www.chromium.org/Home/chromium-privacy/privacy-sandbox";
 
 const char kRemoveNonCWSExtensionURL[] =
     "https://support.google.com/chrome/?p=ui_remove_non_cws_extensions";
@@ -262,7 +263,7 @@ const char kSyncAndGoogleServicesLearnMoreURL[] =
     "https://support.google.com/chrome?p=syncgoogleservices";
 
 const char kSyncEncryptionHelpURL[] =
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     "https://support.google.com/chromebook/?p=settings_encryption";
 #else
     "https://support.google.com/chrome/?p=settings_encryption";
@@ -284,23 +285,21 @@ const char kUpgradeHelpCenterBaseURL[] =
 const char kWhoIsMyAdministratorHelpURL[] =
     "https://support.google.com/chrome?p=your_administrator";
 
-const char kChromeFlashRoadmapURL[] = "https://www.chromium.org/flash-roadmap/";
-
 #if defined(OS_ANDROID)
 const char kAndroidAppScheme[] = "android-app";
 #endif
 
-#if defined(OS_CHROMEOS) || defined(OS_ANDROID)
+#if BUILDFLAG(IS_CHROMEOS_ASH) || defined(OS_ANDROID)
 const char kEnhancedPlaybackNotificationLearnMoreURL[] =
 #endif
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     "https://support.google.com/chromebook/?p=enhanced_playback";
 #elif defined(OS_ANDROID)
 // Keep in sync with chrome/android/java/strings/android_chrome_strings.grd
     "https://support.google.com/chrome/?p=mobile_protected_content";
 #endif
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 const char kAccountManagerLearnMoreURL[] =
     "https://support.google.com/chromebook/?p=google_accounts";
 
@@ -422,7 +421,14 @@ const char kTabletModeGesturesLearnMoreURL[] =
 
 const char kWifiSyncLearnMoreURL[] =
     "https://support.google.com/chromebook/?p=wifisync";
-#endif  // defined(OS_CHROMEOS)
+
+const char kNearbyShareLearnMoreURL[] =
+    "https://support.google.com/chromebook?p=nearby_share";
+
+extern const char kNearbyShareManageContactsURL[] =
+    "https://contacts.google.com";
+
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if defined(OS_MAC)
 const char kChromeEnterpriseSignInLearnMoreURL[] =
@@ -446,9 +452,6 @@ const char kChromeSyncLearnMoreURL[] =
 #endif  // BUILDFLAG(ENABLE_ONE_CLICK_SIGNIN)
 
 #if BUILDFLAG(ENABLE_PLUGINS)
-const char kBlockedPluginLearnMoreURL[] =
-    "https://support.google.com/chrome/?p=ib_blocked_plugin";
-
 const char kOutdatedPluginLearnMoreURL[] =
     "https://support.google.com/chrome/?p=ib_outdated_plugin";
 #endif

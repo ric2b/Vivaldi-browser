@@ -7,7 +7,6 @@
 #include "base/mac/foundation_util.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
 #include "ios/chrome/browser/ui/commands/browser_commands.h"
-#import "ios/chrome/browser/ui/page_info/features.h"
 #import "ios/chrome/browser/ui/page_info/page_info_constants.h"
 #import "ios/chrome/browser/ui/settings/cells/settings_switch_cell.h"
 #import "ios/chrome/browser/ui/settings/cells/settings_switch_item.h"
@@ -16,6 +15,8 @@
 #import "ios/chrome/browser/ui/table_view/cells/table_view_text_header_footer_item.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_text_item.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_text_link_item.h"
+#import "ios/chrome/browser/ui/table_view/table_view_utils.h"
+#include "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -54,7 +55,10 @@ float kPaddingSecurityHeader = 28.0f;
 
 - (instancetype)initWithSiteSecurityDescription:
     (PageInfoSiteSecurityDescription*)siteSecurityDescription {
-  self = [super initWithStyle:UITableViewStylePlain];
+  UITableViewStyle style = base::FeatureList::IsEnabled(kSettingsRefresh)
+                               ? ChromeTableViewStyle()
+                               : UITableViewStylePlain;
+  self = [super initWithStyle:style];
   if (self) {
     _pageInfoSecurityDescription = siteSecurityDescription;
   }
@@ -64,9 +68,9 @@ float kPaddingSecurityHeader = 28.0f;
 - (void)viewDidLoad {
   [super viewDidLoad];
 
+  self.navigationItem.titleView =
+      [self titleViewLabelForURL:self.pageInfoSecurityDescription.siteURL];
   self.title = l10n_util::GetNSString(IDS_IOS_PAGE_INFO_SITE_INFORMATION);
-  self.navigationItem.prompt = self.pageInfoSecurityDescription.siteURL;
-  self.navigationController.navigationBar.prefersLargeTitles = NO;
   self.tableView.accessibilityIdentifier = kPageInfoViewAccessibilityIdentifier;
 
   UIBarButtonItem* dismissButton = [[UIBarButtonItem alloc]
@@ -141,6 +145,19 @@ float kPaddingSecurityHeader = 28.0f;
             didRequestOpenURL:(const GURL&)URL {
   DCHECK(URL == GURL(kPageInfoHelpCenterURL));
   [self.handler showSecurityHelpPage];
+}
+
+#pragma mark - Private
+
+// Returns the navigationItem titleView for |siteURL|.
+- (UILabel*)titleViewLabelForURL:(NSString*)siteURL {
+  UILabel* labelURL = [[UILabel alloc] init];
+  labelURL.lineBreakMode = NSLineBreakByTruncatingHead;
+  labelURL.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
+  labelURL.text = siteURL;
+  labelURL.adjustsFontSizeToFitWidth = YES;
+  labelURL.minimumScaleFactor = 0.7;
+  return labelURL;
 }
 
 @end

@@ -76,6 +76,7 @@
       <command id="rename" label="$i18n{RENAME_BUTTON_LABEL}"
                shortcut="Enter|Ctrl">
       <command id="delete" shortcut="Backspace|Alt Delete">
+      <command id="restore-from-trash" label="$i18n{RESTORE_FROM_TRASH_BUTTON_LABEL}">
       <command id="refresh" label="$i18n{REFRESH_BUTTON_LABEL}"
                shortcut="b|Ctrl" hidden>
       <command id="pin-folder"
@@ -205,6 +206,7 @@
         <cr-menu-item command="#rename"></cr-menu-item>
         <cr-menu-item command="#pin-folder"></cr-menu-item>
         <cr-menu-item command="#delete" class="hide-on-toolbar">$i18n{DELETE_BUTTON_LABEL}</cr-menu-item>
+        <cr-menu-item command="#restore-from-trash"></cr-menu-item>
         <cr-menu-item command="#zip-selection"></cr-menu-item>
         <cr-menu-item command="#toggle-holding-space" visibleif="full-page">
             </cr-menu-item>
@@ -399,6 +401,13 @@
           <files-ripple></files-ripple>
           <div class="icon"></div>
         </cr-button>
+        <cr-button id="restore-from-trash-button" class="icon-button menu-button" tabindex="0" hidden
+                aria-label="$i18n{RESTORE_FROM_TRASH_BUTTON_LABEL}"
+                visibleif="full-page"
+                has-tooltip>
+          <files-ripple></files-ripple>
+          <div class="icon"></div>
+        </cr-button>
         <div id="search-wrapper">
           <cr-button id="search-button" class="icon-button menu-button" tabindex="0"
                   aria-label="$i18n{SEARCH_TEXT_LABEL}"
@@ -506,26 +515,6 @@
         <div class="dialog-navigation-list-contents" role="navigation">
           <tree id="directory-tree" role="tree" tabindex="0" files-ng></tree>
         </div>
-        <div class="dialog-navigation-list-footer" hidden>
-          <div id="progress-center" hidden>
-            <li id="progress-center-close-view">
-              <div class="progress-frame">
-                <label></label>
-                <div class="progress-bar">
-                  <div class="progress-track" hidden></div>
-                </div>
-              </div>
-              <div class="button-frame">
-                <button class="cancel" tabindex="-1"></button>
-                <button class="dismiss" tabindex="-1"></button>
-                <button class="open" tabindex="-1"></button>
-              </div>
-            </li>
-            <div id="progress-center-open-view">
-              <button class="close" tabindex="-1"></button>
-            </div>
-          </div>
-        </div>
       </div>
       <div class="splitter" id="navigation-list-splitter">
         <cr-button aria-hidden="true" class="splitter-button" tabindex="-1">
@@ -538,6 +527,7 @@
           <div class="main-panel">
             <div class="filelist-panel">
               <div class="drive-welcome header"></div>
+              <div class="holding-space-welcome" hidden style="height: 0; opacity: 0;"></div>
               <div class="volume-warning banner-cloud-bg" id="volume-space-warning" hidden></div>
               <div class="volume-warning banner-cloud-bg" id="drive-auth-failed-warning" hidden>
                 <div class="drive-icon"></div>

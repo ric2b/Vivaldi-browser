@@ -24,6 +24,7 @@
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_content_browser_client.h"
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
@@ -240,8 +241,10 @@ class NetworkContextConfigurationBrowserTest
   ~NetworkContextConfigurationBrowserTest() override {}
 
   void SetUpInProcessBrowserTestFixture() override {
-    EXPECT_CALL(provider_, IsInitializationComplete(testing::_))
-        .WillRepeatedly(testing::Return(true));
+    ON_CALL(provider_, IsInitializationComplete(testing::_))
+        .WillByDefault(testing::Return(true));
+    ON_CALL(provider_, IsFirstPolicyLoadComplete(testing::_))
+        .WillByDefault(testing::Return(true));
     policy::BrowserPolicyConnector::SetPolicyProviderForTesting(&provider_);
   }
 
@@ -264,7 +267,7 @@ class NetworkContextConfigurationBrowserTest
       incognito_ = CreateIncognitoBrowser();
     SimulateNetworkServiceCrashIfNecessary();
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     // On ChromeOS the connection type comes from a fake Shill service, which
     // is configured with a fake ethernet connection asynchronously. Wait for
     // the connection type to be available to avoid getting notified of the
@@ -774,7 +777,7 @@ class NetworkContextConfigurationBrowserTest
   std::unique_ptr<net::test_server::ControllableHttpResponse>
       controllable_http_response_;
 
-  policy::MockConfigurationPolicyProvider provider_;
+  testing::NiceMock<policy::MockConfigurationPolicyProvider> provider_;
   // Used in tests that need a live request during browser shutdown.
   std::unique_ptr<network::SimpleURLLoader> live_during_shutdown_simple_loader_;
   std::unique_ptr<content::SimpleURLLoaderTestHelper>

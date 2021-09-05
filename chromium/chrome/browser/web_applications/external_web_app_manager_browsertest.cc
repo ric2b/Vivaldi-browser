@@ -9,21 +9,23 @@
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/test/bind.h"
-#include "build/branding_buildflags.h"
-#include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
 #include "chrome/browser/web_applications/components/external_app_install_features.h"
-#include "chrome/browser/web_applications/components/os_integration_manager.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/browser/web_applications/preinstalled_web_apps/preinstalled_web_apps.h"
 #include "chrome/browser/web_applications/test/test_file_utils.h"
+#include "chrome/browser/web_applications/test/test_os_integration_manager.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/test_launcher.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/test_extension_registry_observer.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace web_app {
@@ -37,8 +39,6 @@ class ExternalWebAppManagerBrowserTest
 
   void SetUpOnMainThread() override {
     ExtensionBrowserTest::SetUpOnMainThread();
-    os_hooks_suppress_ =
-        OsIntegrationManager::ScopedSuppressOsHooksForTesting();
   }
 
   GURL GetAppUrl() const {
@@ -55,9 +55,10 @@ class ExternalWebAppManagerBrowserTest
 
     base::RunLoop run_loop;
     WebAppProvider::Get(browser()->profile())
-        ->external_web_app_manager_for_testing()
+        ->external_web_app_manager()
         .LoadAndSynchronizeForTesting(base::BindLambdaForTesting(
-            [&](std::map<GURL, InstallResultCode> install_results,
+            [&](std::map<GURL, PendingAppManager::InstallResult>
+                    install_results,
                 std::map<GURL, bool> uninstall_results) {
               EXPECT_EQ(install_results.size(), 0u);
               EXPECT_EQ(uninstall_results.size(), 0u);
@@ -92,13 +93,14 @@ class ExternalWebAppManagerBrowserTest
     base::Optional<InstallResultCode> code;
     base::RunLoop sync_run_loop;
     WebAppProvider::Get(browser()->profile())
-        ->external_web_app_manager_for_testing()
+        ->external_web_app_manager()
         .LoadAndSynchronizeForTesting(base::BindLambdaForTesting(
-            [&](std::map<GURL, InstallResultCode> install_results,
+            [&](std::map<GURL, PendingAppManager::InstallResult>
+                    install_results,
                 std::map<GURL, bool> uninstall_results) {
               auto it = install_results.find(install_url);
               if (it != install_results.end())
-                code = it->second;
+                code = it->second.code;
               sync_run_loop.Quit();
             }));
     sync_run_loop.Run();
@@ -118,6 +120,7 @@ class ExternalWebAppManagerBrowserTest
 
 IN_PROC_BROWSER_TEST_F(ExternalWebAppManagerBrowserTest,
                        LaunchQueryParamsBasic) {
+  ExternalWebAppManager::BypassOfflineManifestRequirementForTesting();
   ASSERT_TRUE(embedded_test_server()->Start());
 
   GURL start_url = embedded_test_server()->GetURL("/web_apps/basic.html");
@@ -149,6 +152,7 @@ IN_PROC_BROWSER_TEST_F(ExternalWebAppManagerBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(ExternalWebAppManagerBrowserTest,
                        LaunchQueryParamsDuplicate) {
+  ExternalWebAppManager::BypassOfflineManifestRequirementForTesting();
   ASSERT_TRUE(embedded_test_server()->Start());
 
   GURL install_url = embedded_test_server()->GetURL(
@@ -183,6 +187,7 @@ IN_PROC_BROWSER_TEST_F(ExternalWebAppManagerBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(ExternalWebAppManagerBrowserTest,
                        LaunchQueryParamsComplex) {
+  ExternalWebAppManager::BypassOfflineManifestRequirementForTesting();
   ASSERT_TRUE(embedded_test_server()->Start());
 
   GURL install_url = embedded_test_server()->GetURL(
@@ -218,6 +223,7 @@ IN_PROC_BROWSER_TEST_F(ExternalWebAppManagerBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(ExternalWebAppManagerBrowserTest, UninstallAndReplace) {
+  ExternalWebAppManager::BypassOfflineManifestRequirementForTesting();
   ASSERT_TRUE(embedded_test_server()->Start());
   Profile* profile = browser()->profile();
 
@@ -250,9 +256,43 @@ IN_PROC_BROWSER_TEST_F(ExternalWebAppManagerBrowserTest, UninstallAndReplace) {
   EXPECT_EQ(app, uninstalled_app.get());
 }
 
+IN_PROC_BROWSER_TEST_F(ExternalWebAppManagerBrowserTest,
+                       DefaultAppsPrefInstall) {
+  ExternalWebAppManager::BypassOfflineManifestRequirementForTesting();
+  ASSERT_TRUE(embedded_test_server()->Start());
+  profile()->GetPrefs()->SetString(prefs::kDefaultApps, "install");
+
+  EXPECT_EQ(
+      SyncDefaultAppConfig(GetAppUrl(), base::ReplaceStringPlaceholders(
+                                            R"({
+                "app_url": "$1",
+                "launch_container": "window",
+                "user_type": ["unmanaged"]
+              })",
+                                            {GetAppUrl().spec()}, nullptr)),
+      InstallResultCode::kSuccessNewInstall);
+}
+
+IN_PROC_BROWSER_TEST_F(ExternalWebAppManagerBrowserTest,
+                       DefaultAppsPrefNoinstall) {
+  ExternalWebAppManager::BypassOfflineManifestRequirementForTesting();
+  ASSERT_TRUE(embedded_test_server()->Start());
+  profile()->GetPrefs()->SetString(prefs::kDefaultApps, "noinstall");
+
+  EXPECT_EQ(
+      SyncDefaultAppConfig(GetAppUrl(), base::ReplaceStringPlaceholders(
+                                            R"({
+                "app_url": "$1",
+                "launch_container": "window",
+                "user_type": ["unmanaged"]
+              })",
+                                            {GetAppUrl().spec()}, nullptr)),
+      base::nullopt);
+}
+
 // The offline manifest JSON config functionality is only available on Chrome
 // OS.
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 
 // Check that offline fallback installs work offline.
 IN_PROC_BROWSER_TEST_F(ExternalWebAppManagerBrowserTest,
@@ -289,6 +329,9 @@ IN_PROC_BROWSER_TEST_F(ExternalWebAppManagerBrowserTest,
   EXPECT_EQ(registrar().GetAppShortName(app_id), kAppName);
   EXPECT_EQ(registrar().GetAppStartUrl(app_id).spec(), kAppStartUrl);
   EXPECT_EQ(registrar().GetAppScope(app_id).spec(), kAppScope);
+  EXPECT_EQ(registrar().GetAppUserDisplayMode(app_id),
+            DisplayMode::kStandalone);
+  EXPECT_EQ(registrar().GetAppDisplayMode(app_id), DisplayMode::kMinimalUi);
   // theme_color must be installed opaque.
   EXPECT_EQ(registrar().GetAppThemeColor(app_id),
             SkColorSetARGB(0xFF, 0xBB, 0xCC, 0xDD));
@@ -341,6 +384,9 @@ IN_PROC_BROWSER_TEST_F(ExternalWebAppManagerBrowserTest,
   EXPECT_EQ(registrar().GetAppShortName(app_id), "Basic web app");
   EXPECT_EQ(registrar().GetAppStartUrl(app_id).spec(), install_url);
   EXPECT_EQ(registrar().GetAppScope(app_id).spec(), scope);
+  EXPECT_EQ(registrar().GetAppUserDisplayMode(app_id),
+            DisplayMode::kStandalone);
+  EXPECT_EQ(registrar().GetAppDisplayMode(app_id), DisplayMode::kStandalone);
 }
 
 // Check that offline only installs work offline.
@@ -379,6 +425,9 @@ IN_PROC_BROWSER_TEST_F(ExternalWebAppManagerBrowserTest,
   EXPECT_EQ(registrar().GetAppShortName(app_id), kAppName);
   EXPECT_EQ(registrar().GetAppStartUrl(app_id).spec(), kAppStartUrl);
   EXPECT_EQ(registrar().GetAppScope(app_id).spec(), kAppScope);
+  EXPECT_EQ(registrar().GetAppUserDisplayMode(app_id),
+            DisplayMode::kStandalone);
+  EXPECT_EQ(registrar().GetAppDisplayMode(app_id), DisplayMode::kMinimalUi);
   // theme_color must be installed opaque.
   EXPECT_EQ(registrar().GetAppThemeColor(app_id),
             SkColorSetARGB(0xFF, 0xBB, 0xCC, 0xDD));
@@ -428,6 +477,9 @@ IN_PROC_BROWSER_TEST_F(ExternalWebAppManagerBrowserTest,
   EXPECT_EQ(registrar().GetAppShortName(app_id), kAppName);
   EXPECT_EQ(registrar().GetAppStartUrl(app_id).spec(), start_url);
   EXPECT_EQ(registrar().GetAppScope(app_id).spec(), scope);
+  EXPECT_EQ(registrar().GetAppUserDisplayMode(app_id),
+            DisplayMode::kStandalone);
+  EXPECT_EQ(registrar().GetAppDisplayMode(app_id), DisplayMode::kMinimalUi);
   // theme_color must be installed opaque.
   EXPECT_EQ(registrar().GetAppThemeColor(app_id),
             SkColorSetARGB(0xFF, 0xBB, 0xCC, 0xDD));
@@ -482,35 +534,6 @@ IN_PROC_BROWSER_TEST_F(ExternalWebAppManagerBrowserTest,
             base::nullopt);
 }
 
-#endif  // defined(OS_CHROMEOS)
-
-// Icon resourcs are only available on Chrome branded builds.
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-IN_PROC_BROWSER_TEST_F(ExternalWebAppManagerBrowserTest, PreinstalledWebApps) {
-  base::AutoReset<bool> scope =
-      SetExternalAppInstallFeatureAlwaysEnabledForTesting();
-
-  constexpr std::array<const char*, 1> kExpectedInstallUrls = {
-      "https://docs.google.com/document/installwebapp?usp=chrome_default",
-  };
-
-  base::RunLoop run_loop;
-  WebAppProvider::Get(browser()->profile())
-      ->external_web_app_manager_for_testing()
-      .LoadAndSynchronizeForTesting(base::BindLambdaForTesting(
-          [&](std::map<GURL, InstallResultCode> install_results,
-              std::map<GURL, bool> uninstall_results) {
-            EXPECT_EQ(install_results.size(), kExpectedInstallUrls.size());
-            for (const char* install_url : kExpectedInstallUrls) {
-              EXPECT_TRUE(base::Contains(install_results, GURL(install_url)))
-                  << install_url;
-            }
-
-            EXPECT_EQ(uninstall_results.size(), 0u);
-            run_loop.Quit();
-          }));
-  run_loop.Run();
-}
-#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 }  // namespace web_app

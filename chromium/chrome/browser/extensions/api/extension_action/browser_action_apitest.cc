@@ -58,7 +58,6 @@
 #include "extensions/browser/process_manager.h"
 #include "extensions/browser/test_extension_registry_observer.h"
 #include "extensions/common/feature_switch.h"
-#include "extensions/common/scoped_worker_based_extensions_channel.h"
 #include "extensions/test/extension_test_message_listener.h"
 #include "extensions/test/result_catcher.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
@@ -153,14 +152,7 @@ using ContextType = ExtensionBrowserTest::ContextType;
 class BrowserActionApiLazyTest
     : public BrowserActionApiTest,
       public testing::WithParamInterface<ContextType> {
- public:
-  BrowserActionApiLazyTest() {
-    // Service Workers are currently only available on certain channels, so set
-    // the channel for those tests.
-    if (GetParam() == ContextType::kServiceWorker)
-      current_channel_ = std::make_unique<ScopedWorkerBasedExtensionsChannel>();
-  }
-
+ protected:
   const extensions::Extension* LoadExtensionWithParamFlags(
       const base::FilePath& path) {
     int flags = kFlagEnableFileAccess;
@@ -237,8 +229,6 @@ class BrowserActionApiLazyTest
 
  private:
   base::test::ScopedFeatureList feature_list_;
-  std::unique_ptr<extensions::ScopedWorkerBasedExtensionsChannel>
-      current_channel_;
 };
 
 IN_PROC_BROWSER_TEST_P(BrowserActionApiLazyTest, Basic) {
@@ -690,14 +680,7 @@ IN_PROC_BROWSER_TEST_P(BrowserActionApiLazyTest, BrowserActionRemovePopup) {
       << "a specific tab id.";
 }
 
-#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_CHROMEOS)
-// Flaky: https://crbug.com/1113904
-#define MAYBE_IncognitoBasic DISABLED_IncognitoBasic
-#else
-#define MAYBE_IncognitoBasic IncognitoBasic
-#endif
-
-IN_PROC_BROWSER_TEST_P(BrowserActionApiLazyTest, MAYBE_IncognitoBasic) {
+IN_PROC_BROWSER_TEST_P(BrowserActionApiLazyTest, IncognitoBasic) {
   ExtensionTestMessageListener ready_listener("ready", false);
   ASSERT_TRUE(embedded_test_server()->Start());
   scoped_refptr<const Extension> extension = LoadExtensionWithParamFlags(

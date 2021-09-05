@@ -19,11 +19,11 @@
 #import "ios/chrome/browser/ui/commands/load_query_commands.h"
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/ui/commands/text_zoom_commands.h"
-#import "ios/chrome/browser/ui/page_info/features.h"
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_action_handler_commands.h"
 #import "ios/chrome/browser/ui/popup_menu/public/cells/popup_menu_item.h"
 #import "ios/chrome/browser/ui/popup_menu/public/popup_menu_table_view_controller.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
+#import "ios/chrome/browser/web/web_navigation_browser_agent.h"
 #import "ios/chrome/browser/window_activities/window_activity_helpers.h"
 #include "url/gurl.h"
 
@@ -54,11 +54,11 @@ const char kManagementPageURL[] = "chrome://management";
   switch (identifier) {
     case PopupMenuActionReload:
       RecordAction(UserMetricsAction("MobileMenuReload"));
-      [self.dispatcher reload];
+      self.navigationAgent->Reload();
       break;
     case PopupMenuActionStop:
       RecordAction(UserMetricsAction("MobileMenuStop"));
-      [self.dispatcher stopLoading];
+      self.navigationAgent->StopLoading();
       break;
     case PopupMenuActionOpenNewTab:
       RecordAction(UserMetricsAction("MobileMenuNewTab"));
@@ -98,13 +98,7 @@ const char kManagementPageURL[] = "chrome://management";
       break;
     case PopupMenuActionSiteInformation:
       RecordAction(UserMetricsAction("MobileMenuSiteInformation"));
-      if (base::FeatureList::IsEnabled(kPageInfoRefactoring)) {
-        [self.dispatcher showPageInfo];
-      } else {
-        [self.dispatcher
-            legacyShowPageInfoForOriginPoint:self.baseViewController.view
-                                                 .center];
-      }
+      [self.dispatcher showPageInfo];
       break;
     case PopupMenuActionReportIssue:
       RecordAction(UserMetricsAction("MobileMenuReportAnIssue"));

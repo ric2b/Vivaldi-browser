@@ -50,7 +50,6 @@
 #include "content/browser/renderer_host/render_widget_host_input_event_router.h"
 #include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
 #include "content/browser/screen_orientation/screen_orientation_provider.h"
-#include "content/browser/service_manager/service_manager_context.h"
 #include "content/browser/storage_partition_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/browser/web_contents/web_contents_view.h"
@@ -75,7 +74,6 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/service_names.mojom.h"
 #include "content/public/common/use_zoom_for_dsf_policy.h"
 #include "content/public/test/accessibility_notification_waiter.h"
 #include "content/public/test/no_renderer_crashes_assertion.h"
@@ -109,7 +107,6 @@
 #include "services/network/public/mojom/cookie_manager.mojom.h"
 #include "services/network/public/mojom/network_service.mojom.h"
 #include "services/network/public/mojom/network_service_test.mojom.h"
-#include "services/service_manager/public/cpp/connector.h"
 #include "storage/browser/file_system/file_system_context.h"
 #include "testing/gmock/include/gmock/gmock-matchers.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -549,12 +546,12 @@ class CommitOriginInterceptor : public DidCommitNavigationInterceptor {
   bool WillProcessDidCommitNavigation(
       RenderFrameHost* render_frame_host,
       NavigationRequest* navigation_request,
-      ::FrameHostMsg_DidCommitProvisionalLoad_Params* params,
+      mojom::DidCommitProvisionalLoadParamsPtr* params,
       mojom::DidCommitProvisionalLoadInterfaceParamsPtr* interface_params)
       override {
-    if (params->url == target_url_) {
-      params->url = new_url_;
-      params->origin = new_origin_;
+    if ((**params).url == target_url_) {
+      (**params).url = new_url_;
+      (**params).origin = new_origin_;
     }
     return true;
   }
@@ -598,7 +595,7 @@ bool NavigateToURLFromRenderer(const ToRenderFrameHost& adapter,
                                const GURL& expected_commit_url) {
   RenderFrameHost* rfh = adapter.render_frame_host();
   TestFrameNavigationObserver nav_observer(rfh);
-  if (!ExecJs(rfh, JsReplace("location = $1", url)))
+  if (!BeginNavigateToURLFromRenderer(adapter, url))
     return false;
   nav_observer.Wait();
   return nav_observer.last_committed_url() == expected_commit_url &&
@@ -616,6 +613,11 @@ bool NavigateToURLFromRendererWithoutUserGesture(
   }
   nav_observer.Wait();
   return nav_observer.last_committed_url() == url;
+}
+
+bool BeginNavigateToURLFromRenderer(const ToRenderFrameHost& adapter,
+                                    const GURL& url) {
+  return ExecJs(adapter, JsReplace("location = $1", url));
 }
 
 bool NavigateIframeToURL(WebContents* web_contents,
@@ -2982,6 +2984,12 @@ void TestNavigationManager::DidFinishNavigation(NavigationHandle* handle) {
   current_state_ = NavigationState::FINISHED;
   navigation_paused_ = false;
   request_ = nullptr;
+
+  // Invalidate the WeakPtrs so that the throttle callbacks will not be
+  // called after this point. We need to do this because
+  // TestNavigationManagerThrottle posts tasks for these callbacks and we
+  // may get a call to this function before those tasks run.
+  weak_factory_.InvalidateWeakPtrs();
   OnNavigationStateChanged();
 }
 
@@ -3097,7 +3105,8 @@ void WebContentsConsoleObserver::OnDidAddMessageToConsole(
     blink::mojom::ConsoleMessageLevel log_level,
     const base::string16& message_contents,
     int32_t line_no,
-    const base::string16& source_id) {
+    const base::string16& source_id,
+    const base::Optional<base::string16>& untrusted_stack_trace) {
   Message message(
       {source_frame, log_level, message_contents, line_no, source_id});
   if (filter_ && !filter_.Run(message))
@@ -3405,29 +3414,27 @@ void EnsureCookiesFlushed(BrowserContext* browser_context) {
       }));
 }
 
-bool HasValidProcessForProcessGroup(const std::string& process_group_name) {
-  return ServiceManagerContext::HasValidProcessForProcessGroup(
-      process_group_name);
-}
+bool TestGuestAutoresize(WebContents* embedder_web_contents,
+                         WebContents* guest_web_contents) {
+  FrameTreeNode* guest_main_frame_node =
+      static_cast<WebContentsImpl*>(guest_web_contents)->GetFrameTree()->root();
+  RenderFrameProxyHost* subframe_proxy_host =
+      guest_main_frame_node->render_manager()->GetProxyToOuterDelegate();
 
-bool TestGuestAutoresize(RenderProcessHost* embedder_rph,
-                         RenderWidgetHost* guest_rwh) {
-  RenderProcessHostImpl* embedder_rph_impl =
-      static_cast<RenderProcessHostImpl*>(embedder_rph);
+  RenderWidgetHost* guest_rwh =
+      guest_web_contents->GetRenderWidgetHostView()->GetRenderWidgetHost();
   RenderWidgetHostImpl* guest_rwh_impl =
       static_cast<RenderWidgetHostImpl*>(guest_rwh);
 
-  auto filter =
-      base::MakeRefCounted<SynchronizeVisualPropertiesMessageFilter>();
-
-  embedder_rph_impl->AddFilter(filter.get());
+  auto interceptor = std::make_unique<SynchronizeVisualPropertiesInterceptor>(
+      subframe_proxy_host);
 
   viz::LocalSurfaceId current_id =
       guest_rwh_impl->GetView()->GetLocalSurfaceId();
   // The guest may not yet be fully attached / initted. If not, |current_id|
   // will be invalid, and we should wait for an ID before proceeding.
   if (!current_id.is_valid())
-    current_id = filter->WaitForSurfaceId();
+    current_id = interceptor->WaitForSurfaceId();
 
   // Enable auto-resize.
   gfx::Size min_size(10, 10);
@@ -3436,7 +3443,7 @@ bool TestGuestAutoresize(RenderProcessHost* embedder_rph,
   guest_rwh_impl->GetView()->EnableAutoResize(min_size, max_size);
 
   // Enabling auto resize generates a surface ID, wait for it.
-  current_id = filter->WaitForSurfaceId();
+  current_id = interceptor->WaitForSurfaceId();
 
   // Fake an auto-resize update.
   viz::LocalSurfaceId local_surface_id(current_id.parent_sequence_number(),
@@ -3453,48 +3460,48 @@ bool TestGuestAutoresize(RenderProcessHost* embedder_rph,
 
   // Get the first delivered surface id and ensure it has the surface id which
   // we expect.
-  return filter->WaitForSurfaceId() ==
+  return interceptor->WaitForSurfaceId() ==
          viz::LocalSurfaceId(current_id.parent_sequence_number() + 1,
                              current_id.child_sequence_number() + 1,
                              current_id.embed_token());
 }
 
-SynchronizeVisualPropertiesMessageFilter::
-    SynchronizeVisualPropertiesMessageFilter()
-    : BrowserMessageFilter(FrameMsgStart),
-      screen_space_rect_run_loop_(std::make_unique<base::RunLoop>()),
-      screen_space_rect_received_(false),
-      pinch_gesture_active_set_(false),
-      pinch_gesture_active_cleared_(false),
-      last_pinch_gesture_active_(false) {}
+SynchronizeVisualPropertiesInterceptor::SynchronizeVisualPropertiesInterceptor(
+    RenderFrameProxyHost* render_frame_proxy_host)
+    : render_frame_proxy_host_(render_frame_proxy_host),
+      screen_space_rect_run_loop_(std::make_unique<base::RunLoop>()) {
+  impl_ = render_frame_proxy_host_->frame_host_receiver_for_testing()
+              .SwapImplForTesting(this);
+}
 
-void SynchronizeVisualPropertiesMessageFilter::WaitForRect() {
+SynchronizeVisualPropertiesInterceptor::
+    ~SynchronizeVisualPropertiesInterceptor() {
+  render_frame_proxy_host_->frame_host_receiver_for_testing()
+      .SwapImplForTesting(impl_);
+}
+
+blink::mojom::RemoteFrameHost*
+SynchronizeVisualPropertiesInterceptor::GetForwardingInterface() {
+  return render_frame_proxy_host_;
+}
+
+void SynchronizeVisualPropertiesInterceptor::WaitForRect() {
   screen_space_rect_run_loop_->Run();
 }
 
-void SynchronizeVisualPropertiesMessageFilter::ResetRectRunLoop() {
+void SynchronizeVisualPropertiesInterceptor::ResetRectRunLoop() {
   last_rect_ = gfx::Rect();
   screen_space_rect_run_loop_ = std::make_unique<base::RunLoop>();
   screen_space_rect_received_ = false;
 }
 
-viz::LocalSurfaceId
-SynchronizeVisualPropertiesMessageFilter::WaitForSurfaceId() {
+viz::LocalSurfaceId SynchronizeVisualPropertiesInterceptor::WaitForSurfaceId() {
   surface_id_run_loop_ = std::make_unique<base::RunLoop>();
   surface_id_run_loop_->Run();
   return last_surface_id_;
 }
 
-SynchronizeVisualPropertiesMessageFilter::
-    ~SynchronizeVisualPropertiesMessageFilter() {}
-
-void SynchronizeVisualPropertiesMessageFilter::
-    OnSynchronizeFrameHostVisualProperties(
-        const blink::FrameVisualProperties& visual_properties) {
-  OnSynchronizeVisualProperties(visual_properties);
-}
-
-void SynchronizeVisualPropertiesMessageFilter::OnSynchronizeVisualProperties(
+void SynchronizeVisualPropertiesInterceptor::SynchronizeVisualProperties(
     const blink::FrameVisualProperties& visual_properties) {
   // Monitor |is_pinch_gesture_active| to determine when pinch gestures begin
   // and end.
@@ -3524,26 +3531,28 @@ void SynchronizeVisualPropertiesMessageFilter::OnSynchronizeVisualProperties(
   GetUIThreadTaskRunner({})->PostTask(
       FROM_HERE,
       base::BindOnce(
-          &SynchronizeVisualPropertiesMessageFilter::OnUpdatedFrameRectOnUI,
-          this, screen_space_rect_in_dip));
+          &SynchronizeVisualPropertiesInterceptor::OnUpdatedFrameRectOnUI,
+          weak_factory_.GetWeakPtr(), screen_space_rect_in_dip));
 
   // Track each surface id update.
   GetUIThreadTaskRunner({})->PostTask(
       FROM_HERE,
       base::BindOnce(
-          &SynchronizeVisualPropertiesMessageFilter::OnUpdatedSurfaceIdOnUI,
-          this, visual_properties.local_surface_id));
+          &SynchronizeVisualPropertiesInterceptor::OnUpdatedSurfaceIdOnUI,
+          weak_factory_.GetWeakPtr(), visual_properties.local_surface_id));
 
   // We can't nest on the IO thread. So tests will wait on the UI thread, so
   // post there to exit the nesting.
   GetUIThreadTaskRunner({})->PostTask(
       FROM_HERE,
       base::BindOnce(
-          &SynchronizeVisualPropertiesMessageFilter::OnUpdatedFrameSinkIdOnUI,
-          this));
+          &SynchronizeVisualPropertiesInterceptor::OnUpdatedFrameSinkIdOnUI,
+          weak_factory_.GetWeakPtr()));
+
+  GetForwardingInterface()->SynchronizeVisualProperties(visual_properties);
 }
 
-void SynchronizeVisualPropertiesMessageFilter::OnUpdatedFrameRectOnUI(
+void SynchronizeVisualPropertiesInterceptor::OnUpdatedFrameRectOnUI(
     const gfx::Rect& rect) {
   last_rect_ = rect;
   if (!screen_space_rect_received_) {
@@ -3554,11 +3563,11 @@ void SynchronizeVisualPropertiesMessageFilter::OnUpdatedFrameRectOnUI(
   }
 }
 
-void SynchronizeVisualPropertiesMessageFilter::OnUpdatedFrameSinkIdOnUI() {
+void SynchronizeVisualPropertiesInterceptor::OnUpdatedFrameSinkIdOnUI() {
   run_loop_.Quit();
 }
 
-void SynchronizeVisualPropertiesMessageFilter::OnUpdatedSurfaceIdOnUI(
+void SynchronizeVisualPropertiesInterceptor::OnUpdatedSurfaceIdOnUI(
     viz::LocalSurfaceId surface_id) {
   last_surface_id_ = surface_id;
   if (surface_id_run_loop_) {
@@ -3566,19 +3575,7 @@ void SynchronizeVisualPropertiesMessageFilter::OnUpdatedSurfaceIdOnUI(
   }
 }
 
-bool SynchronizeVisualPropertiesMessageFilter::OnMessageReceived(
-    const IPC::Message& message) {
-  IPC_BEGIN_MESSAGE_MAP(SynchronizeVisualPropertiesMessageFilter, message)
-    IPC_MESSAGE_HANDLER(FrameHostMsg_SynchronizeVisualProperties,
-                        OnSynchronizeFrameHostVisualProperties)
-  IPC_END_MESSAGE_MAP()
-
-  // We do not consume the message, so that we can verify the effects of it
-  // being processed.
-  return false;
-}
-
-void SynchronizeVisualPropertiesMessageFilter::WaitForPinchGestureEnd() {
+void SynchronizeVisualPropertiesInterceptor::WaitForPinchGestureEnd() {
   if (pinch_gesture_active_cleared_)
     return;
   DCHECK(!pinch_end_run_loop_);

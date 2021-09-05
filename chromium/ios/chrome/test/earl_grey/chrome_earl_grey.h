@@ -28,7 +28,7 @@ namespace chrome_test_util {
 // error resulting from the execution, if one occurs. The return value is the
 // result of the JavaScript execution. If the request is timed out, then nil is
 // returned.
-id ExecuteJavaScript(NSString* javascript, NSError* __autoreleasing* out_error);
+id ExecuteJavaScript(NSString* javascript, NSError** out_error);
 
 }  // namespace chrome_test_util
 
@@ -150,7 +150,7 @@ id ExecuteJavaScript(NSString* javascript, NSError* __autoreleasing* out_error);
 
 #pragma mark - Sync Utilities (EG2)
 
-// Clears fake sync server data.
+// Clears fake sync server data if the server is running.
 - (void)clearSyncServerData;
 
 // Starts the sync server. The server should not be running when calling this.
@@ -240,6 +240,10 @@ id ExecuteJavaScript(NSString* javascript, NSError* __autoreleasing* out_error);
 - (void)waitForTypedURL:(const GURL&)URL
           expectPresent:(BOOL)expectPresent
                 timeout:(NSTimeInterval)timeout;
+
+// Waits for sync invalidation field presence in the DeviceInfo data type on the
+// server.
+- (void)waitForSyncInvalidationFields;
 
 #pragma mark - Tab Utilities (EG2)
 
@@ -511,9 +515,6 @@ id ExecuteJavaScript(NSString* javascript, NSError* __autoreleasing* out_error);
 // Returns YES if kTestFeature is enabled.
 - (BOOL)isTestFeatureEnabled;
 
-// Returns YES if CreditCardScanner feature is enabled.
-- (BOOL)isCreditCardScannerEnabled WARN_UNUSED_RESULT;
-
 // Returns YES if DemographicMetricsReporting feature is enabled.
 - (BOOL)isDemographicMetricsReportingEnabled WARN_UNUSED_RESULT;
 
@@ -587,6 +588,10 @@ id ExecuteJavaScript(NSString* javascript, NSError* __autoreleasing* out_error);
 
 // Verifies that |text| was copied to the pasteboard.
 - (void)verifyStringCopied:(NSString*)text;
+
+// Retrieves the GURL stored in the Pasteboard. Returns an empty GURL if no
+// URL is currently in the pasteboard.
+- (GURL)pasteboardURL;
 
 #pragma mark - Context Menus Utilities (EG2)
 

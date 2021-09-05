@@ -13,6 +13,7 @@
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_button_delegate.h"
 #include "ash/shelf/shelf_view.h"
+#include "ash/strings/grit/ash_strings.h"
 #include "ash/style/default_color_constants.h"
 #include "ash/style/default_colors.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
@@ -24,6 +25,7 @@
 #include "skia/ext/image_operations.h"
 #include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_node_data.h"
+#include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
@@ -182,7 +184,7 @@ class ShelfAppButton::AppNotificationIndicatorView : public views::View {
     canvas->SaveLayerAlpha(SK_AlphaOPAQUE);
 
     DCHECK_EQ(width(), height());
-    DCHECK_EQ(kNotificationIndicatorRadiusDip, width() / 2);
+    float radius = width() / 2.0f;
     const float dsf = canvas->UndoDeviceScaleFactor();
     const int kStrokeWidthPx = 1;
     gfx::PointF center = gfx::RectF(GetLocalBounds()).CenterPoint();
@@ -192,15 +194,12 @@ class ShelfAppButton::AppNotificationIndicatorView : public views::View {
     cc::PaintFlags flags;
     flags.setColor(indicator_color_);
     flags.setAntiAlias(true);
-    canvas->DrawCircle(
-        center, dsf * kNotificationIndicatorRadiusDip - kStrokeWidthPx, flags);
+    canvas->DrawCircle(center, dsf * radius - kStrokeWidthPx, flags);
 
     // Stroke the border.
     flags.setColor(SkColorSetA(SK_ColorBLACK, 0x4D));
     flags.setStyle(cc::PaintFlags::kStroke_Style);
-    canvas->DrawCircle(
-        center, dsf * kNotificationIndicatorRadiusDip - kStrokeWidthPx / 2.0f,
-        flags);
+    canvas->DrawCircle(center, dsf * radius - kStrokeWidthPx / 2.0f, flags);
   }
 
   void SetColor(SkColor new_color) {
@@ -247,8 +246,11 @@ class ShelfAppButton::AppStatusIndicatorView
     gfx::PointF center = gfx::RectF(GetLocalBounds()).CenterPoint();
     cc::PaintFlags flags;
     // Active and running indicators look a little different in the new UI.
-    flags.setColor(DeprecatedGetAppStateIndicatorColor(
-        active_, kIndicatorColorActive, kInicatorColorRunning));
+    flags.setColor(DeprecatedGetContentLayerColor(
+        active_ ? AshColorProvider::ContentLayerType::kAppStateIndicatorColor
+                : AshColorProvider::ContentLayerType::
+                      kAppStateIndicatorColorInactive,
+        active_ ? kIndicatorColorActive : kIndicatorColorRunning));
     flags.setAntiAlias(true);
     flags.setStrokeCap(cc::PaintFlags::Cap::kRound_Cap);
     flags.setStrokeJoin(cc::PaintFlags::Join::kRound_Join);
@@ -547,6 +549,21 @@ void ShelfAppButton::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   ShelfButton::GetAccessibleNodeData(node_data);
   const base::string16 title = shelf_view_->GetTitleForView(this);
   node_data->SetName(title.empty() ? GetAccessibleName() : title);
+
+  switch (app_status_) {
+    case AppStatus::kBlocked:
+      node_data->SetDescription(
+          ui::ResourceBundle::GetSharedInstance().GetLocalizedString(
+              IDS_SHELF_ITEM_BLOCKED_APP));
+      break;
+    case AppStatus::kPaused:
+      node_data->SetDescription(
+          ui::ResourceBundle::GetSharedInstance().GetLocalizedString(
+              IDS_SHELF_ITEM_PAUSED_APP));
+      break;
+    default:
+      break;
+  }
 }
 
 bool ShelfAppButton::ShouldEnterPushedState(const ui::Event& event) {
@@ -563,6 +580,8 @@ void ShelfAppButton::ReflectItemStatus(const ShelfItem& item) {
     else
       ClearState(ShelfAppButton::STATE_NOTIFICATION);
   }
+
+  app_status_ = item.app_status;
 
   const ShelfID active_id = shelf_view_->model()->active_shelf_id();
   if (!active_id.IsNull() && item.id == active_id) {
@@ -733,6 +752,16 @@ gfx::Rect ShelfAppButton::GetIconViewBounds(float icon_scale) {
   return gfx::ToRoundedRect(icon_view_bounds);
 }
 
+gfx::Rect ShelfAppButton::GetNotificationIndicatorBounds(float icon_scale) {
+  gfx::Rect scaled_icon_view_bounds = GetIconViewBounds(icon_scale);
+  float diameter =
+      std::floor(kNotificationIndicatorRadiusDip * icon_scale * 2.0f);
+  return gfx::Rect(scaled_icon_view_bounds.right() - diameter -
+                       kNotificationIndicatorPadding,
+                   scaled_icon_view_bounds.y() + kNotificationIndicatorPadding,
+                   diameter, diameter);
+}
+
 void ShelfAppButton::Layout() {
   Shelf* shelf = shelf_view_->shelf();
   gfx::Rect icon_view_bounds = GetIconViewBounds(icon_scale_);
@@ -742,17 +771,13 @@ void ShelfAppButton::Layout() {
 
   icon_view_->SetBoundsRect(icon_view_bounds);
 
-  // The indicators should be aligned with the icon, not the icon + shadow.
-  gfx::Point indicator_midpoint = icon_view_bounds.CenterPoint();
   if (is_notification_indicator_enabled_) {
-    notification_indicator_->SetBoundsRect(gfx::Rect(
-        icon_view_bounds.right() - 2 * kNotificationIndicatorRadiusDip -
-            kNotificationIndicatorPadding,
-        icon_view_bounds.y() + kNotificationIndicatorPadding,
-        kNotificationIndicatorRadiusDip * 2,
-        kNotificationIndicatorRadiusDip * 2));
+    notification_indicator_->SetBoundsRect(
+        GetNotificationIndicatorBounds(icon_scale_));
   }
 
+  // The indicators should be aligned with the icon, not the icon + shadow.
+  gfx::Point indicator_midpoint = icon_view_bounds.CenterPoint();
   switch (shelf->alignment()) {
     case ShelfAlignment::kBottom:
     case ShelfAlignment::kBottomLocked:
@@ -944,12 +969,31 @@ void ShelfAppButton::ScaleAppIcon(bool scale_up) {
     settings.AddObserver(this);
     icon_view_->layer()->SetTransform(GetScaleTransform(kAppIconScale));
   }
+
+  // Animate the notification indicator alongside the |icon_view_|.
+  if (notification_indicator_) {
+    gfx::RectF pre_scale(GetNotificationIndicatorBounds(1.0));
+    gfx::RectF post_scale(GetNotificationIndicatorBounds(kAppIconScale));
+    gfx::Transform scale_transform =
+        gfx::TransformBetweenRects(post_scale, pre_scale);
+
+    if (scale_up)
+      notification_indicator_->layer()->SetTransform(scale_transform);
+    ui::ScopedLayerAnimationSettings notification_settings(
+        notification_indicator_->layer()->GetAnimator());
+    notification_settings.SetTransitionDuration(
+        base::TimeDelta::FromMilliseconds(kDragDropAppIconScaleTransitionMs));
+    notification_indicator_->layer()->SetTransform(scale_up ? gfx::Transform()
+                                                            : scale_transform);
+  }
 }
 
 void ShelfAppButton::OnImplicitAnimationsCompleted() {
   icon_scale_ = 1.0f;
   SetImage(icon_image_);
   icon_view_->layer()->SetTransform(gfx::Transform());
+  if (notification_indicator_)
+    notification_indicator_->layer()->SetTransform(gfx::Transform());
 }
 
 void ShelfAppButton::SetInkDropAnimationStarted(bool started) {

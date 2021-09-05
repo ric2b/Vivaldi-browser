@@ -46,6 +46,11 @@ wtf_size_t LayoutNGTable::ColumnCount() const {
   return cached_layout_result->TableColumnCount();
 }
 
+bool LayoutNGTable::HasCollapsedBorders() const {
+  NOT_DESTROYED();
+  return cached_table_borders_ && cached_table_borders_->IsCollapsed();
+}
+
 void LayoutNGTable::SetCachedTableBorders(
     scoped_refptr<const NGTableBorders> table_borders) {
   NOT_DESTROYED();
@@ -77,14 +82,33 @@ void LayoutNGTable::SetCachedTableColumnConstraints(
 void LayoutNGTable::GridBordersChanged() {
   NOT_DESTROYED();
   InvalidateCachedTableBorders();
-  // If borders change, table fragment must be regenerated.
-  if (StyleRef().BorderCollapse() == EBorderCollapse::kCollapse)
+  if (StyleRef().BorderCollapse() == EBorderCollapse::kCollapse) {
+    SetShouldDoFullPaintInvalidationWithoutGeometryChange(
+        PaintInvalidationReason::kStyle);
+    // If borders change, table fragment must be regenerated.
     SetNeedsLayout(layout_invalidation_reason::kTableChanged);
+  }
 }
 
 void LayoutNGTable::TableGridStructureChanged() {
   NOT_DESTROYED();
   InvalidateCachedTableBorders();
+}
+
+bool LayoutNGTable::HasBackgroundForPaint() const {
+  NOT_DESTROYED();
+  if (StyleRef().HasBackground())
+    return true;
+  DCHECK_GT(PhysicalFragmentCount(), 0u);
+  const NGTableFragmentData::ColumnGeometries* column_geometries =
+      GetPhysicalFragment(0)->TableColumnGeometries();
+  if (column_geometries) {
+    for (const auto& column_geometry : *column_geometries) {
+      if (column_geometry.node.Style().HasBackground())
+        return true;
+    }
+  }
+  return false;
 }
 
 void LayoutNGTable::UpdateBlockLayout(bool relayout_children) {
@@ -225,17 +249,23 @@ void LayoutNGTable::AddVisualEffectOverflow() {
   if (const NGPhysicalBoxFragment* fragment = GetPhysicalFragment(0)) {
     DCHECK_EQ(PhysicalFragmentCount(), 1u);
     // Table's collapsed borders contribute to visual overflow.
-    // Table border side can be composed of multiple border segments.
-    // Inline visual overflow uses size of the largest border segment.
-    // Block visual overflow uses size of first border segment.
+    // In the inline direction, table's border box does not include
+    // visual border width (largest border), but does include
+    // layout border width (border of first cell).
+    // Expands border box to include visual border width.
     if (const NGTableBorders* collapsed_borders =
             fragment->TableCollapsedBorders()) {
       PhysicalRect borders_overflow = PhysicalBorderBoxRect();
       NGBoxStrut table_borders = collapsed_borders->TableBorder();
       auto visual_inline_strut =
           collapsed_borders->GetCollapsedBorderVisualInlineStrut();
-      table_borders.inline_start = visual_inline_strut.first;
-      table_borders.inline_end = visual_inline_strut.second;
+      // Expand by difference between visual and layout border width.
+      table_borders.inline_start =
+          visual_inline_strut.first - table_borders.inline_start;
+      table_borders.inline_end =
+          visual_inline_strut.second - table_borders.inline_end;
+      table_borders.block_start = LayoutUnit();
+      table_borders.block_end = LayoutUnit();
       borders_overflow.Expand(
           table_borders.ConvertToPhysical(StyleRef().GetWritingDirection()));
       AddSelfVisualOverflow(borders_overflow);
@@ -297,6 +327,34 @@ LayoutUnit LayoutNGTable::BorderBottom() const {
         .bottom;
   }
   return LayoutNGMixin<LayoutBlock>::BorderBottom();
+}
+
+LayoutUnit LayoutNGTable::PaddingTop() const {
+  NOT_DESTROYED();
+  if (ShouldCollapseBorders())
+    return LayoutUnit();
+  return LayoutNGMixin<LayoutBlock>::PaddingTop();
+}
+
+LayoutUnit LayoutNGTable::PaddingBottom() const {
+  NOT_DESTROYED();
+  if (ShouldCollapseBorders())
+    return LayoutUnit();
+  return LayoutNGMixin<LayoutBlock>::PaddingBottom();
+}
+
+LayoutUnit LayoutNGTable::PaddingLeft() const {
+  NOT_DESTROYED();
+  if (ShouldCollapseBorders())
+    return LayoutUnit();
+  return LayoutNGMixin<LayoutBlock>::PaddingLeft();
+}
+
+LayoutUnit LayoutNGTable::PaddingRight() const {
+  NOT_DESTROYED();
+  if (ShouldCollapseBorders())
+    return LayoutUnit();
+  return LayoutNGMixin<LayoutBlock>::PaddingRight();
 }
 
 LayoutRectOutsets LayoutNGTable::BorderBoxOutsets() const {

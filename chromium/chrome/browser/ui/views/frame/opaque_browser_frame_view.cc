@@ -9,6 +9,7 @@
 
 #include "build/build_config.h"
 #include "build/buildflag.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/frame/browser_frame.h"
@@ -20,7 +21,7 @@
 #include "chrome/browser/ui/views/tabs/new_tab_button.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
-#include "chrome/browser/ui/views/web_apps/web_app_frame_toolbar_view.h"
+#include "chrome/browser/ui/views/web_apps/frame_toolbar/web_app_frame_toolbar_view.h"
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
@@ -178,13 +179,14 @@ void OpaqueBrowserFrameView::InitViews() {
 
   // Initializing the TabIconView is expensive, so only do it if we need to.
   if (browser_view()->ShouldShowWindowIcon()) {
-    window_icon_ = new TabIconView(
-        this, base::BindRepeating(&OpaqueBrowserFrameView::WindowIconPressed,
-                                  base::Unretained(this)));
-    window_icon_->set_is_light(true);
-    window_icon_->SetID(VIEW_ID_WINDOW_ICON);
-    AddChildView(window_icon_);
-    window_icon_->Update();
+    AddChildView(views::Builder<TabIconView>()
+                     .CopyAddressTo(&window_icon_)
+                     .SetModel(this)
+                     .SetCallback(base::BindRepeating(
+                         &OpaqueBrowserFrameView::WindowIconPressed,
+                         base::Unretained(this)))
+                     .SetID(VIEW_ID_WINDOW_ICON)
+                     .Build());
   }
 
   web_app::AppBrowserController* controller =
@@ -464,7 +466,9 @@ bool OpaqueBrowserFrameView::EverHasVisibleBackgroundTabShapes() const {
 
 OpaqueBrowserFrameView::FrameButtonStyle
 OpaqueBrowserFrameView::GetFrameButtonStyle() const {
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// of lacros-chrome is complete.
+#if defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
   return FrameButtonStyle::kMdButton;
 #else
   return FrameButtonStyle::kImageButton;
@@ -488,7 +492,6 @@ void OpaqueBrowserFrameView::OnPaint(gfx::Canvas* canvas) {
   frame_background_->set_frame_color(frame_color);
   frame_background_->set_use_custom_frame(frame()->UseCustomFrame());
   frame_background_->set_is_active(active);
-  frame_background_->set_incognito(browser_view()->IsIncognito());
   frame_background_->set_theme_image(GetFrameImage());
   const int y_inset =
       browser_view()->IsTabStripVisible()

@@ -5,18 +5,18 @@
 #include "ui/accessibility/ax_tree.h"
 
 #include <stddef.h>
-
 #include <algorithm>
 #include <numeric>
 #include <utility>
 
 #include "base/auto_reset.h"
+#include "base/callback_helpers.h"
 #include "base/check_op.h"
 #include "base/command_line.h"
+#include "base/containers/contains.h"
 #include "base/memory/ptr_util.h"
 #include "base/no_destructor.h"
 #include "base/notreached.h"
-#include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "ui/accessibility/accessibility_switches.h"
 #include "ui/accessibility/ax_enums.mojom.h"
@@ -683,6 +683,10 @@ AXTreeID AXTree::GetAXTreeID() const {
   return data().tree_id;
 }
 
+const AXTreeData& AXTree::data() const {
+  return data_;
+}
+
 AXNode* AXTree::GetFromId(int32_t id) const {
   auto iter = id_map_.find(id);
   return iter != id_map_.end() ? iter->second : nullptr;
@@ -984,7 +988,16 @@ bool AXTree::Unserialize(const AXTreeUpdate& update) {
   // of the new root.
   bool root_updated = false;
   if (update.node_id_to_clear != AXNode::kInvalidAXID) {
-    if (AXNode* cleared_node = GetFromId(update.node_id_to_clear)) {
+    // If the incoming tree was initialized with a root with an id != 1, the
+    // update won't match the tree created by CreateEmptyDocument In this
+    // case, the update won't be able to set the right node_id_to_clear.
+    // If node_id_to_clear was set and the update's root_id doesn't match the
+    // old_root_id, we assume that the update meant to replace the root.
+    int node_id_to_clear = update.node_id_to_clear;
+    if (!GetFromId(node_id_to_clear) && update.root_id == node_id_to_clear &&
+        update.root_id != old_root_id && root_)
+      node_id_to_clear = old_root_id;
+    if (AXNode* cleared_node = GetFromId(node_id_to_clear)) {
       DCHECK(root_);
       if (cleared_node == root_) {
         // Only destroy the root if the root was replaced and not if it's simply
@@ -2429,6 +2442,14 @@ void AXTree::SetTreeUpdateInProgressState(bool set_tree_update_value) {
 
 bool AXTree::HasPaginationSupport() const {
   return has_pagination_support_;
+}
+
+void AXTree::NotifyTreeManagerWillBeRemoved(AXTreeID previous_tree_id) {
+  if (previous_tree_id == AXTreeIDUnknown())
+    return;
+
+  for (AXTreeObserver& observer : observers_)
+    observer.OnTreeManagerWillBeRemoved(previous_tree_id);
 }
 
 void AXTree::RecordError(std::string new_error) {

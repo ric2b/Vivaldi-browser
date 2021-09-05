@@ -1,0 +1,69 @@
+# This file is part of Adblock Plus <https://adblockplus.org/>,
+# Copyright (C) 2006-present eyeo GmbH
+#
+# Adblock Plus is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License version 3 as
+# published by the Free Software Foundation.
+#
+# Adblock Plus is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with Adblock Plus.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Synopsis:
+#
+# When included in a root GitLab CI configuration, the following jobs will
+# take care of creating and publishing branched (master / next) contents of the
+# project's GitLab Pages (https://docs.gitlab.com/ee/user/project/pages/).
+#
+# In your root CI configuration, define a hidden job `.pages` with all content
+# generating jobs from prior stages listed in `dependencies`.
+# Additionaly, define the `stage:` parameter with a valid stage.
+#
+# Note: Each prior job's content must be put in a unique directory, which
+# should be listed as that job's artifact
+#
+# The resulting url of the GitLab pages will be generated as follows:
+# <user>.gitlab.io/<project>/<branch>/<artifact directory>/
+# E.g. for an artifact directory `docs` from `master` in
+# `eyeo/adblockplus/adblockpluschrome`:
+#
+# eyeo.gitlab.io/adblockpluschrome/master/docs/
+
+---
+
+pages:
+  extends: .pages
+  variables:
+    MASTER_ARTIFACT_URL: "$CI_API_V4_URL/projects/$CI_PROJECT_ID/jobs/artifacts/master/download?job=pages"
+    NEXT_ARTIFACT_URL: "$CI_API_V4_URL/projects/$CI_PROJECT_ID/jobs/artifacts/next/download?job=pages"
+  script:
+    - "UPDATES=`git ls-files --others --directory`"
+    - echo $UPDATES
+    - "mkdir public"
+    # preserve the most recent public pages
+    - "wget -q $MASTER_ARTIFACT_URL -O master.zip &&
+       unzip -q master.zip -d master &&
+       mv -t public master/public/master || true"
+    - "wget -q $NEXT_ARTIFACT_URL -O next.zip &&
+       unzip -q next.zip -d next &&
+       mv -t public next/public/next || true"
+    # Update this branch's publich page
+    - mkdir -p public/$CI_COMMIT_REF_NAME
+    - |
+      for PART in $UPDATES
+      do
+        echo "Updating $PART"
+        rm -rf public/$CI_COMMIT_REF_NAME/$PART
+        mv $PART public/$CI_COMMIT_REF_NAME/
+      done
+  resource_group: pages
+  artifacts:
+    paths:
+      - "public"
+  only:
+    - "master"
+    - "next"

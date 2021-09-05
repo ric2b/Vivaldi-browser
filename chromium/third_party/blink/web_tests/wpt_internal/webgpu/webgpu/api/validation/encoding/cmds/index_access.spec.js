@@ -25,31 +25,37 @@ class F extends ValidationTest {
   }
 
   createRenderPipeline() {
-    const vertexModule = this.makeShaderModule('vertex', {
-      glsl: `
-        #version 450
-        void main() {
-          gl_Position = vec4(0.0, 0.0, 0.0, 1.0);
-        }
-      `,
-    });
-
-    const fragmentModule = this.makeShaderModule('fragment', {
-      glsl: `
-        #version 450
-        layout(location = 0) out vec4 fragColor;
-        void main() {
-            fragColor = vec4(0.0, 1.0, 0.0, 1.0);
-        }
-      `,
-    });
-
     return this.device.createRenderPipeline({
-      layout: this.device.createPipelineLayout({ bindGroupLayouts: [] }),
-      vertexStage: { module: vertexModule, entryPoint: 'main' },
-      fragmentStage: { module: fragmentModule, entryPoint: 'main' },
+      vertexStage: {
+        module: this.device.createShaderModule({
+          code: `
+            [[builtin(position)]] var<out> Position : vec4<f32>;
+
+            [[stage(vertex)]] fn main() -> void {
+              Position = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+              return;
+            }`,
+        }),
+
+        entryPoint: 'main',
+      },
+
+      fragmentStage: {
+        module: this.device.createShaderModule({
+          code: `
+            [[location(0)]] var<out> fragColor : vec4<f32>;
+            [[stage(fragment)]] fn main() -> void {
+              fragColor = vec4<f32>(0.0, 1.0, 0.0, 1.0);
+              return;
+            }`,
+        }),
+
+        entryPoint: 'main',
+      },
+
       primitiveTopology: 'triangle-strip',
       colorStates: [{ format: 'rgba8unorm' }],
+      vertexState: { indexFormat: 'uint32' },
     });
   }
 
@@ -79,7 +85,7 @@ class F extends ValidationTest {
     const encoder = this.device.createCommandEncoder();
     const pass = this.beginRenderPass(encoder);
     pass.setPipeline(pipeline);
-    pass.setIndexBuffer(indexBuffer);
+    pass.setIndexBuffer(indexBuffer, 'uint32');
     pass.drawIndexed(indexCount, instanceCount, firstIndex, baseVertex, firstInstance);
     pass.endPass();
 
@@ -103,7 +109,7 @@ class F extends ValidationTest {
     const encoder = this.device.createCommandEncoder();
     const pass = this.beginRenderPass(encoder);
     pass.setPipeline(pipeline);
-    pass.setIndexBuffer(indexBuffer, 0);
+    pass.setIndexBuffer(indexBuffer, 'uint32');
     pass.drawIndexedIndirect(indirectBuffer, indirectOffset);
     pass.endPass();
 

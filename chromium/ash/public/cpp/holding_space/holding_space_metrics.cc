@@ -71,6 +71,10 @@ void RecordDownloadsAction(DownloadsAction action) {
   base::UmaHistogramEnumeration("HoldingSpace.Downloads.Action.All", action);
 }
 
+void RecordFilesAppChipAction(FilesAppChipAction action) {
+  base::UmaHistogramEnumeration("HoldingSpace.FilesAppChip.Action.All", action);
+}
+
 void RecordItemAction(const std::vector<const HoldingSpaceItem*>& items,
                       ItemAction action) {
   for (const HoldingSpaceItem* item : items) {
@@ -120,6 +124,20 @@ void RecordTimeFromFirstEntryToFirstPin(base::TimeDelta time_delta) {
                                 /*min=*/base::TimeDelta(),
                                 /*max=*/base::TimeDelta::FromDays(24),
                                 /*buckets=*/50);
+}
+
+void RecordBubbleResizeAnimationSmoothness(int smoothness) {
+  DCHECK_GE(smoothness, 0);
+  DCHECK_LE(smoothness, 100);
+  base::UmaHistogramPercentage("HoldingSpace.Animation.BubbleResize.Smoothness",
+                               smoothness);
+}
+
+void RecordPodResizeAnimationSmoothness(int smoothness) {
+  DCHECK_GE(smoothness, 0);
+  DCHECK_LE(smoothness, 100);
+  base::UmaHistogramPercentage("HoldingSpace.Animation.PodResize.Smoothness",
+                               smoothness);
 }
 
 }  // namespace holding_space_metrics

@@ -29,6 +29,7 @@ extern const char kDeviceManagementServiceOAuth[];
 extern const char kAnyApiOAuth2Scope[];
 extern const char kChromeSyncOAuth2Scope[];
 extern const char kChromeSyncSupervisedOAuth2Scope[];
+extern const char kKidManagementOAuth2Scope[];
 extern const char kKidManagementPrivilegedOAuth2Scope[];
 extern const char kKidsSupervisionSetupChildOAuth2Scope[];
 extern const char kGoogleTalkOAuth2Scope[];
@@ -57,6 +58,9 @@ extern const char kClientOAuthEmailKey[];
 
 // Refresh token that is guaranteed to be invalid.
 extern const char kInvalidRefreshToken[];
+
+// Name of the Google authentication cookie.
+extern const char kGaiaSigninCookieName[];
 }  // namespace GaiaConstants
 
 #endif  // GOOGLE_APIS_GAIA_GAIA_CONSTANTS_H_

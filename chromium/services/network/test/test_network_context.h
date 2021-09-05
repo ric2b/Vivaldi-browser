@@ -6,6 +6,7 @@
 #define SERVICES_NETWORK_TEST_TEST_NETWORK_CONTEXT_H_
 
 #include <cstdint>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -17,6 +18,7 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/base/address_list.h"
 #include "net/base/ip_endpoint.h"
+#include "net/base/isolation_info.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "services/network/public/cpp/network_service_buildflags.h"
 #include "services/network/public/mojom/cookie_access_observer.mojom.h"
@@ -58,12 +60,13 @@ class TestNetworkContext : public mojom::NetworkContext {
           restricted_cookie_manager,
       mojom::RestrictedCookieManagerRole role,
       const url::Origin& origin,
-      const net::SiteForCookies& site_for_cookies,
-      const url::Origin& top_frame_origin,
+      const net::IsolationInfo& isolation_info,
       mojo::PendingRemote<mojom::CookieAccessObserver> observer) override {}
   void GetHasTrustTokensAnswerer(
       mojo::PendingReceiver<mojom::HasTrustTokensAnswerer> receiver,
       const url::Origin& top_frame_origin) override {}
+  void GetStoredTrustTokenCounts(
+      GetStoredTrustTokenCountsCallback callback) override {}
   void ClearNetworkingHistoryBetween(
       base::Time start_time,
       base::Time end_time,
@@ -112,7 +115,7 @@ class TestNetworkContext : public mojom::NetworkContext {
                             mojom::NetworkConditionsPtr conditions) override {}
   void SetAcceptLanguage(const std::string& new_accept_language) override {}
   void SetEnableReferrers(bool enable_referrers) override {}
-#if BUILDFLAG(IS_ASH)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   void UpdateAdditionalCertificates(
       mojom::AdditionalCertificatesPtr additional_certificates) override {}
 #endif
@@ -270,7 +273,7 @@ class TestNetworkContext : public mojom::NetworkContext {
       const GURL& url,
       const net::NetworkIsolationKey& network_isolation_key,
       LookupServerBasicAuthCredentialsCallback callback) override {}
-#if BUILDFLAG(IS_ASH)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   void LookupProxyAuthCredentials(
       const net::ProxyServer& proxy_server,
       const std::string& auth_scheme,

@@ -39,6 +39,7 @@
 #include "chrome/browser/ui/app_list/app_list_syncable_service_factory.h"
 #include "chrome/browser/ui/app_list/app_service/app_service_app_icon_loader.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
+#include "chrome/browser/ui/app_list/icon_standardizer.h"
 #include "chrome/browser/ui/app_list/md_icon_normalizer.h"
 #include "chrome/browser/ui/apps/app_info_dialog.h"
 #include "chrome/browser/ui/ash/chrome_launcher_prefs.h"
@@ -214,10 +215,6 @@ ChromeLauncherController::ChromeLauncherController(Profile* profile,
 
   DCHECK(model_);
 
-  if (chrome::SettingsWindowManager::UseDeprecatedSettingsWindow(profile)) {
-    settings_window_observer_ = std::make_unique<SettingsWindowObserver>();
-  }
-
   if (!profile) {
     // If no profile was passed, we take the currently active profile and use it
     // as the owner of the current desktop.
@@ -227,6 +224,10 @@ ChromeLauncherController::ChromeLauncherController(Profile* profile,
     profile = ProfileManager::GetActiveUserProfile();
     if (!profile->IsGuestSession() && !profile->IsSystemProfile())
       profile = profile->GetOriginalProfile();
+  }
+
+  if (chrome::SettingsWindowManager::UseDeprecatedSettingsWindow(profile)) {
+    settings_window_observer_ = std::make_unique<SettingsWindowObserver>();
   }
 
   // All profile relevant settings get bound to the current profile.
@@ -854,11 +855,23 @@ void ChromeLauncherController::OnAppInstalled(
         app_icon_loader->ClearImage(app_id);
         app_icon_loader->FetchImage(app_id);
       }
+
+      bool needs_update = false;
       if (item.title.empty()) {
+        needs_update = true;
         item.title = LauncherControllerHelper::GetAppTitle(
             latest_active_profile_, app_id);
-        model_->Set(index, item);
       }
+
+      ash::AppStatus app_status = LauncherControllerHelper::GetAppStatus(
+          latest_active_profile_, app_id);
+      if (app_status != item.app_status) {
+        needs_update = true;
+        item.app_status = app_status;
+      }
+
+      if (needs_update)
+        model_->Set(index, item);
     }
   }
 
@@ -879,6 +892,17 @@ void ChromeLauncherController::OnAppUpdated(
       AppIconLoader* app_icon_loader = GetAppIconLoaderForApp(app_id);
       if (app_icon_loader)
         app_icon_loader->FetchImage(app_id);
+
+      bool needs_update = false;
+      ash::AppStatus app_status = LauncherControllerHelper::GetAppStatus(
+          latest_active_profile_, app_id);
+      if (app_status != item.app_status) {
+        needs_update = true;
+        item.app_status = app_status;
+      }
+
+      if (needs_update)
+        model_->Set(index, item);
     }
   }
 }
@@ -905,6 +929,10 @@ void ChromeLauncherController::OnAppUninstalledPrepared(
 
 void ChromeLauncherController::OnAppImageUpdated(const std::string& app_id,
                                                  const gfx::ImageSkia& image) {
+  bool is_standard_icon = true;
+  if (!AppServiceAppIconLoader::CanLoadImage(latest_active_profile_, app_id))
+    is_standard_icon = false;
+
   // TODO: need to get this working for shortcuts.
   for (int index = 0; index < model_->item_count(); ++index) {
     ash::ShelfItem item = model_->items()[index];
@@ -913,7 +941,8 @@ void ChromeLauncherController::OnAppImageUpdated(const std::string& app_id,
         item.id.app_id != app_id) {
       continue;
     }
-    item.image = image;
+    item.image =
+        is_standard_icon ? image : app_list::CreateStandardIconImage(image);
     shelf_spinner_controller_->MaybeApplySpinningEffect(app_id, &item.image);
     model_->Set(index, item);
     // It's possible we're waiting on more than one item, so don't break.
@@ -1165,6 +1194,8 @@ ash::ShelfID ChromeLauncherController::InsertAppLauncherItem(
   item.type = shelf_item_type;
   item.id = item_delegate->shelf_id();
   item.title = title;
+  item.app_status = LauncherControllerHelper::GetAppStatus(
+      latest_active_profile_, item_delegate->shelf_id().app_id);
   // Set the delegate first to avoid constructing one in ShelfItemAdded.
   model_->SetShelfItemDelegate(item.id, std::move(item_delegate));
   model_->AddAt(index, item);
@@ -1282,15 +1313,16 @@ void ChromeLauncherController::AttachProfile(Profile* profile_to_attach) {
   pref_change_registrar_.Init(profile()->GetPrefs());
   pref_change_registrar_.Add(
       prefs::kPolicyPinnedLauncherApps,
-      base::Bind(&ChromeLauncherController::UpdateAppLaunchersFromSync,
-                 base::Unretained(this)));
+      base::BindRepeating(&ChromeLauncherController::UpdateAppLaunchersFromSync,
+                          base::Unretained(this)));
   // Handling of prefs::kArcEnabled change should be called deferred to avoid
   // race condition when OnAppUninstalledPrepared for ARC apps is called after
   // UpdateAppLaunchersFromSync.
   pref_change_registrar_.Add(
       arc::prefs::kArcEnabled,
-      base::Bind(&ChromeLauncherController::ScheduleUpdateAppLaunchersFromSync,
-                 base::Unretained(this)));
+      base::BindRepeating(
+          &ChromeLauncherController::ScheduleUpdateAppLaunchersFromSync,
+          base::Unretained(this)));
 
   app_list::AppListSyncableService* app_list_syncable_service =
       app_list::AppListSyncableServiceFactory::GetForProfile(profile());
@@ -1344,6 +1376,14 @@ void ChromeLauncherController::ShelfItemAdded(int index) {
       needs_update = true;
       item.status = status;
     }
+
+    ash::AppStatus app_status = LauncherControllerHelper::GetAppStatus(
+        latest_active_profile_, id.app_id);
+    if (app_status != item.app_status) {
+      needs_update = true;
+      item.app_status = app_status;
+    }
+
     if (needs_update)
       model_->Set(index, item);
   }

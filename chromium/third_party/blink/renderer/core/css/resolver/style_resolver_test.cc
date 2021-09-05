@@ -33,7 +33,8 @@ class StyleResolverTest : public PageTestBase {
  public:
   scoped_refptr<ComputedStyle> StyleForId(AtomicString id) {
     Element* element = GetDocument().getElementById(id);
-    auto style = GetStyleEngine().GetStyleResolver().StyleForElement(element);
+    auto style = GetStyleEngine().GetStyleResolver().StyleForElement(
+        element, StyleRecalcContext());
     DCHECK(style);
     return style;
   }
@@ -82,8 +83,9 @@ TEST_F(StyleResolverTest, AnimationBaseComputedStyle) {
   animations.SetAnimationStyleChange(true);
 
   StyleResolver& resolver = GetStyleEngine().GetStyleResolver();
-  ASSERT_TRUE(resolver.StyleForElement(div));
-  EXPECT_EQ(20, resolver.StyleForElement(div)->FontSize());
+  ASSERT_TRUE(resolver.StyleForElement(div, StyleRecalcContext()));
+  EXPECT_EQ(20,
+            resolver.StyleForElement(div, StyleRecalcContext())->FontSize());
   ASSERT_TRUE(animations.BaseComputedStyle());
   EXPECT_EQ(20, animations.BaseComputedStyle()->FontSize());
 
@@ -91,31 +93,14 @@ TEST_F(StyleResolverTest, AnimationBaseComputedStyle) {
   // animation base computed style.
   const ComputedStyle* parent_style =
       GetDocument().documentElement()->GetComputedStyle();
-  EXPECT_EQ(
-      10,
-      resolver.StyleForElement(div, parent_style, parent_style)->FontSize());
+  EXPECT_EQ(10, resolver
+                    .StyleForElement(div, StyleRecalcContext(), parent_style,
+                                     parent_style)
+                    ->FontSize());
   ASSERT_TRUE(animations.BaseComputedStyle());
   EXPECT_EQ(20, animations.BaseComputedStyle()->FontSize());
-  EXPECT_EQ(20, resolver.StyleForElement(div)->FontSize());
-}
-
-TEST_F(StyleResolverTest, ShadowDOMV0Crash) {
-  GetDocument().documentElement()->setInnerHTML(R"HTML(
-    <style>
-      span { display: contents; }
-    </style>
-    <summary><span id="outer"><span id="inner"></b></b></summary>
-  )HTML");
-
-  Element* outer = GetDocument().getElementById("outer");
-  Element* inner = GetDocument().getElementById("inner");
-  ShadowRoot& outer_root = outer->CreateV0ShadowRootForTesting();
-  ShadowRoot& inner_root = inner->CreateV0ShadowRootForTesting();
-  outer_root.setInnerHTML("<content>");
-  inner_root.setInnerHTML("<span>");
-
-  // Test passes if it doesn't crash.
-  UpdateAllLifecyclePhasesForTest();
+  EXPECT_EQ(20,
+            resolver.StyleForElement(div, StyleRecalcContext())->FontSize());
 }
 
 TEST_F(StyleResolverTest, HasEmUnits) {
@@ -368,7 +353,8 @@ TEST_F(StyleResolverTest, NonCachableStyleCheckDoesNotAffectBaseComputedStyle) {
   // Perform a non-cacheable style resolution, and ensure that the base computed
   // style is not updated.
   GetStyleEngine().GetStyleResolver().StyleForElement(
-      target, nullptr, nullptr, kMatchAllRulesExcludingSMIL);
+      target, StyleRecalcContext(), nullptr, nullptr,
+      kMatchAllRulesExcludingSMIL);
   EXPECT_FALSE(element_animations->BaseComputedStyle());
 
   // Computing the style with default args updates the base computed style.
@@ -975,8 +961,9 @@ TEST_F(StyleResolverTest, TreeScopedReferences) {
     StyleResolverState state(GetDocument(), *host);
     SelectorFilter filter;
     MatchResult match_result;
-    ElementRuleCollector collector(state.ElementContext(), filter, match_result,
-                                   state.Style(), EInsideLink::kNotInsideLink);
+    ElementRuleCollector collector(state.ElementContext(), StyleRecalcContext(),
+                                   filter, match_result, state.Style(),
+                                   EInsideLink::kNotInsideLink);
     GetDocument().GetStyleEngine().GetStyleResolver().MatchAllRules(
         state, collector, false /* include_smil_properties */);
     const auto& properties = match_result.GetMatchedProperties();
@@ -1001,8 +988,9 @@ TEST_F(StyleResolverTest, TreeScopedReferences) {
     StyleResolverState state(GetDocument(), *span);
     SelectorFilter filter;
     MatchResult match_result;
-    ElementRuleCollector collector(state.ElementContext(), filter, match_result,
-                                   state.Style(), EInsideLink::kNotInsideLink);
+    ElementRuleCollector collector(state.ElementContext(), StyleRecalcContext(),
+                                   filter, match_result, state.Style(),
+                                   EInsideLink::kNotInsideLink);
     GetDocument().GetStyleEngine().GetStyleResolver().MatchAllRules(
         state, collector, false /* include_smil_properties */);
     const auto& properties = match_result.GetMatchedProperties();
@@ -1092,20 +1080,6 @@ TEST_F(StyleResolverTest, InheritStyleImagesFromDisplayContents) {
   ASSERT_TRUE(style->MaskImage());
   EXPECT_FALSE(style->MaskImage()->IsPendingImage())
       << "-webkit-mask-image is fetched";
-}
-
-// https://crbug.com/1145406
-TEST_F(StyleResolverTest, StyleSheetWithNullRuleSet) {
-  ScopedCSSKeyframesMemoryReductionForTest enabled_scope(true);
-
-  GetDocument().documentElement()->setInnerHTML(R"HTML(
-    <style>.c6 { animation-name: anim; }</style>
-    <style media=print></style>
-    <div class=c6></div>
-  )HTML");
-
-  // Should not crash inside
-  UpdateAllLifecyclePhasesForTest();
 }
 
 }  // namespace blink

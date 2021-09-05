@@ -23,12 +23,12 @@ class TaskRunner;
 
 namespace content {
 
-class NativeIOContext;
+class NativeIOManager;
 class NativeIOFileHost;
 
 // Implements the NativeIO Web Platform feature for an origin.
 //
-// NativeIOContext owns an instance of this class for each origin that is
+// NativeIOManager owns an instance of this class for each origin that is
 // actively using NativeIO.
 //
 // This class is not thread-safe, so all access to an instance must happen on
@@ -37,7 +37,7 @@ class NativeIOFileHost;
 // sequences, if desired.
 class NativeIOHost : public blink::mojom::NativeIOHost {
  public:
-  explicit NativeIOHost(NativeIOContext* context,
+  explicit NativeIOHost(NativeIOManager* manager,
                         const url::Origin& origin,
                         base::FilePath root_path);
 
@@ -91,26 +91,26 @@ class NativeIOHost : public blink::mojom::NativeIOHost {
   // Called after the file I/O part of DeleteFile() completed.
   void DidDeleteFile(const std::string& name,
                      DeleteFileCallback callback,
-                     bool success);
+                     blink::mojom::NativeIOErrorPtr delete_error);
 
   // Called after the file I/O part of RenameFile() completed.
   void DidRenameFile(const std::string& old_name,
                      const std::string& new_name,
                      RenameFileCallback callback,
-                     bool success);
+                     blink::mojom::NativeIOErrorPtr rename_error);
 
   // The directory holding all the files for this origin.
   const base::FilePath root_path_;
 
-  // Raw pointer use is safe because NativeIOContext owns this NativeIOHost, and
+  // Raw pointer use is safe because NativeIOManager owns this NativeIOHost, and
   // therefore is guaranteed to outlive it.
-  NativeIOContext* const context_;
+  NativeIOManager* const manager_;
 
   // The origin served by this host.
   const url::Origin origin_;
 
-  // All receivers for frames and workers whose origin is |origin_| associated
-  // with the StoragePartition that owns |context_|.
+  // All receivers for frames and workers whose origin is `origin_` associated
+  // with the StoragePartition that owns `manager_`.
   mojo::ReceiverSet<blink::mojom::NativeIOHost> receivers_;
 
   // The names of files that have pending I/O tasks.

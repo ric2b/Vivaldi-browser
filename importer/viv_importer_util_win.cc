@@ -15,6 +15,7 @@ using base::PathService;
 static const wchar_t* kOperaRegPath = L"Software\\Opera Software";
 static const wchar_t* kOpera = L"Opera";
 static const wchar_t* kOpera64bitFolder = L"Opera x64";
+static const wchar_t* kMailFolder = L"mail";
 
 base::FilePath GetOperaInstallPathFromRegistry() {
   // Detects the path that Opera is installed in.
@@ -38,12 +39,26 @@ base::FilePath GetProfileDir() {
 
   // Tree is Opera/Opera (for 32 bit) and Opera/Opera x64 (64 bit).
   // Use 64 bit if found otherwise 32 bit.
-  profile_dir = profile_dir.AppendASCII("Opera");
+  profile_dir = profile_dir.Append(kOpera);
 
   if (base::PathExists(profile_dir.Append(kOpera64bitFolder)))
     return profile_dir.Append(kOpera64bitFolder);
   else if (base::PathExists(profile_dir.Append(kOpera)))
     return profile_dir.Append(kOpera);
+  else
+    return base::FilePath();
+}
+
+base::FilePath GetMailDirectory() {
+  base::FilePath profile_dir;
+  if (!PathService::Get(base::DIR_LOCAL_APP_DATA, &profile_dir))
+    return base::FilePath();
+
+  profile_dir = profile_dir.Append(kOpera);
+  if (base::PathExists(profile_dir.Append(kOpera64bitFolder).Append(kMailFolder)))
+    return profile_dir.Append(kOpera64bitFolder).Append(kMailFolder);
+  else if (base::PathExists(profile_dir.Append(kOpera).Append(kMailFolder)))
+    return profile_dir.Append(kOpera).Append(kMailFolder);
   else
     return base::FilePath();
 }

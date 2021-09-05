@@ -38,6 +38,7 @@ var HelpAppUIBrowserTest = class extends testing.Test {
     return {
       enabled: [
         'chromeos::features::kHelpAppSearchServiceIntegration',
+        'chromeos::features::kEnableLocalSearchService',
       ]
     };
   }
@@ -80,6 +81,11 @@ TEST_F('HelpAppUIBrowserTest', 'GuestHasLang', async () => {
 
 TEST_F('HelpAppUIBrowserTest', 'GuestCanSearchWithHeadings', async () => {
   await runTestInGuest('GuestCanSearchWithHeadings');
+  testDone();
+});
+
+TEST_F('HelpAppUIBrowserTest', 'GuestCanSearchWithCategories', async () => {
+  await runTestInGuest('GuestCanSearchWithCategories');
   testDone();
 });
 

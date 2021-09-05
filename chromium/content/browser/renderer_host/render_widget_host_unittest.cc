@@ -52,6 +52,7 @@
 #include "content/test/mock_widget_input_handler.h"
 #include "content/test/stub_render_widget_host_owner_delegate.h"
 #include "content/test/test_render_view_host.h"
+#include "content/test/test_render_widget_host.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -89,7 +90,6 @@
 #include "ui/events/event.h"
 #endif
 
-using base::TimeDelta;
 using blink::WebGestureDevice;
 using blink::WebGestureEvent;
 using blink::WebInputEvent;
@@ -97,7 +97,6 @@ using blink::WebKeyboardEvent;
 using blink::WebMouseEvent;
 using blink::WebMouseWheelEvent;
 using blink::WebTouchEvent;
-using blink::WebTouchPoint;
 
 using testing::_;
 using testing::Return;
@@ -544,9 +543,9 @@ class RenderWidgetHostTest : public testing::Test {
     screen_.reset(aura::TestScreen::Create(gfx::Size()));
     display::Screen::SetScreenInstance(screen_.get());
 #endif
-    host_.reset(MockRenderWidgetHost::Create(
+    host_ = MockRenderWidgetHost::Create(
         delegate_.get(), *agent_scheduling_group_host_,
-        process_->GetNextRoutingID(), widget_.GetNewRemote()));
+        process_->GetNextRoutingID(), widget_.GetNewRemote());
     // Set up the RenderWidgetHost as being for a main frame.
     host_->set_owner_delegate(&mock_owner_delegate_);
     // Act like there is no RenderWidget present in the renderer yet.
@@ -561,8 +560,6 @@ class RenderWidgetHostTest : public testing::Test {
     host_->GetInitialVisualProperties();
     EXPECT_CALL(mock_owner_delegate_, IsMainFrameActive())
         .WillRepeatedly(Return(true));
-    // Init() happens once the navigation completes.
-    host_->Init();
 
     mojo::PendingRemote<cc::mojom::RenderFrameMetadataObserver>
         renderer_render_frame_metadata_observer_remote;
@@ -581,6 +578,15 @@ class RenderWidgetHostTest : public testing::Test {
     host_->RegisterRenderFrameMetadataObserver(
         std::move(render_frame_metadata_observer_client_receiver),
         std::move(renderer_render_frame_metadata_observer_remote));
+
+    // The blink::mojom::Widget is already set during MockRenderWidgetHost
+    // construction.
+    host_->BindFrameWidgetInterfaces(
+        mojo::PendingAssociatedRemote<blink::mojom::FrameWidgetHost>()
+            .InitWithNewEndpointAndPassReceiver(),
+        TestRenderWidgetHost::CreateStubFrameWidgetRemote());
+
+    host_->RendererWidgetCreated(/*for_frame_widget=*/true);
   }
 
   void TearDown() override {
@@ -611,20 +617,16 @@ class RenderWidgetHostTest : public testing::Test {
   }
 
   void ReinitalizeHost() {
-    mojo::AssociatedRemote<blink::mojom::WidgetHost> widget_host;
     host_->BindWidgetInterfaces(
-        widget_host.BindNewEndpointAndPassDedicatedReceiver(),
+        mojo::AssociatedRemote<blink::mojom::WidgetHost>()
+            .BindNewEndpointAndPassDedicatedReceiver(),
         widget_.GetNewRemote());
-
-    mojo::AssociatedRemote<blink::mojom::FrameWidgetHost> frame_widget_host;
-    mojo::AssociatedRemote<blink::mojom::FrameWidget> frame_widget;
-    auto frame_widget_receiver =
-        frame_widget.BindNewEndpointAndPassDedicatedReceiver();
     host_->BindFrameWidgetInterfaces(
-        frame_widget_host.BindNewEndpointAndPassDedicatedReceiver(),
-        frame_widget.Unbind());
+        mojo::AssociatedRemote<blink::mojom::FrameWidgetHost>()
+            .BindNewEndpointAndPassDedicatedReceiver(),
+        TestRenderWidgetHost::CreateStubFrameWidgetRemote());
 
-    host_->Init();
+    host_->RendererWidgetCreated(/*for_frame_widget=*/true);
   }
 
   base::TimeTicks GetNextSimulatedEventTime() {
@@ -2292,25 +2294,6 @@ TEST_F(RenderWidgetHostTest, SetCursorWithBitmap) {
   cursor.set_custom_bitmap(bitmap);
 
   host_->SetCursor(cursor);
-  EXPECT_EQ(WebCursor(cursor), view_->last_cursor());
-}
-
-TEST_F(RenderWidgetHostTest, SetCursorWithInvalidBitmap) {
-  ui::Cursor cursor;
-
-  SkBitmap badbitmap;
-  badbitmap.allocPixels(
-      SkImageInfo::Make(1, 1, kARGB_4444_SkColorType, kPremul_SkAlphaType));
-  badbitmap.eraseColor(SK_ColorGREEN);
-
-  SkBitmap n32bitmap;
-  EXPECT_TRUE(skia::SkBitmapToN32OpaqueOrPremul(badbitmap, &n32bitmap));
-
-  // A non-N32 32bpp bitmap will be converted on receipt from IPC.
-  cursor.set_custom_bitmap(badbitmap);
-  host_->SetCursor(cursor);
-  // Compare to the `n32bitmap`.
-  cursor.set_custom_bitmap(n32bitmap);
   EXPECT_EQ(WebCursor(cursor), view_->last_cursor());
 }
 

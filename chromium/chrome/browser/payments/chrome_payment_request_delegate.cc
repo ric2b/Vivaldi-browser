@@ -9,19 +9,20 @@
 #include "base/check_op.h"
 #include "base/memory/ref_counted.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/autofill/address_normalizer_factory.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/autofill/validation_rules_storage_factory.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/payments/payment_request_display_manager_factory.h"
-#include "chrome/browser/payments/ssl_validity_checker.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/views/payments/payment_request_dialog_view.h"
+#include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/browser/web_data_service_factory.h"
 #include "components/autofill/content/browser/webauthn/internal_authenticator_impl.h"
 #include "components/autofill/core/browser/address_normalizer_impl.h"
@@ -32,6 +33,7 @@
 #include "components/payments/content/payment_manifest_web_data_service.h"
 #include "components/payments/content/payment_request.h"
 #include "components/payments/content/payment_request_dialog.h"
+#include "components/payments/content/ssl_validity_checker.h"
 #include "components/payments/core/payment_prefs.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "content/public/browser/render_frame_host.h"
@@ -42,9 +44,9 @@
 #include "third_party/libaddressinput/chromium/chrome_metadata_source.h"
 #include "third_party/libaddressinput/chromium/chrome_storage_impl.h"
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/chromeos/apps/apk_web_app_service.h"
-#endif  // OS_CHROMEOS
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 namespace payments {
 
@@ -261,9 +263,17 @@ bool ChromePaymentRequestDelegate::SkipUiForBasicCard() const {
 }
 
 std::string ChromePaymentRequestDelegate::GetTwaPackageName() const {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   auto* rfh = content::RenderFrameHost::FromID(frame_routing_id_);
   if (!rfh || !rfh->IsCurrent())
+    return "";
+
+  auto* web_contents = content::WebContents::FromRenderFrameHost(rfh);
+  if (!web_contents)
+    return "";
+
+  Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
+  if (!web_app::AppBrowserController::IsWebApp(browser))
     return "";
 
   auto* apk_web_app_service = chromeos::ApkWebAppService::Get(
@@ -273,13 +283,12 @@ std::string ChromePaymentRequestDelegate::GetTwaPackageName() const {
 
   base::Optional<std::string> twa_package_name =
       apk_web_app_service->GetPackageNameForWebApp(
-          content::WebContents::FromRenderFrameHost(rfh)
-              ->GetLastCommittedURL());
+          web_contents->GetLastCommittedURL());
 
   return twa_package_name.has_value() ? twa_package_name.value() : "";
 #else
   return "";
-#endif  // OS_CHROMEOS
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 }
 
 PaymentRequestDialog* ChromePaymentRequestDelegate::GetDialogForTesting() {

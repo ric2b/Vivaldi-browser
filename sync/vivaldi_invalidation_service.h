@@ -22,17 +22,17 @@ class VivaldiInvalidationService : public invalidation::InvalidationService {
   explicit VivaldiInvalidationService(Profile*);
   ~VivaldiInvalidationService() override;
 
-  void PerformInvalidation(const syncer::TopicInvalidationMap&);
-  void UpdateInvalidatorState(syncer::InvalidatorState state);
+  void PerformInvalidation(const invalidation::TopicInvalidationMap&);
+  void UpdateInvalidatorState(invalidation::InvalidatorState state);
 
   // InvalidationService
   void RegisterInvalidationHandler(
-      syncer::InvalidationHandler* handler) override;
-  bool UpdateInterestedTopics(syncer::InvalidationHandler* handler,
-                              const syncer::TopicSet& ids) override;
+      invalidation::InvalidationHandler* handler) override;
+  bool UpdateInterestedTopics(invalidation::InvalidationHandler* handler,
+                              const invalidation::TopicSet& ids) override;
   void UnregisterInvalidationHandler(
-      syncer::InvalidationHandler* handler) override;
-  syncer::InvalidatorState GetInvalidatorState() const override;
+      invalidation::InvalidationHandler* handler) override;
+  invalidation::InvalidatorState GetInvalidatorState() const override;
   std::string GetInvalidatorClientId() const override;
   invalidation::InvalidationLogger* GetInvalidationLogger() override;
   void RequestDetailedStatus(base::Callback<void(const base::DictionaryValue&)>
@@ -40,7 +40,7 @@ class VivaldiInvalidationService : public invalidation::InvalidationService {
 
  private:
   std::string client_id_;
-  syncer::InvalidatorRegistrarWithMemory invalidator_registrar_;
+  invalidation::InvalidatorRegistrarWithMemory invalidator_registrar_;
 
   DISALLOW_COPY_AND_ASSIGN(VivaldiInvalidationService);
 };

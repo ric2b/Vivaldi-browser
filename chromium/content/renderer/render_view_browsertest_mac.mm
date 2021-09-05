@@ -9,7 +9,6 @@
 #include "content/common/frame_messages.h"
 #include "content/common/frame_replication_state.h"
 #include "content/common/input_messages.h"
-#include "content/common/unfreezable_frame_messages.h"
 #include "content/public/browser/native_web_keyboard_event.h"
 #include "content/public/test/render_view_test.h"
 #include "content/renderer/render_view_impl.h"
@@ -83,11 +82,10 @@ TEST_F(RenderViewTest, MacTestCmdUp) {
   prefs.enable_scroll_animator = false;
 
   RenderViewImpl* view = static_cast<RenderViewImpl*>(view_);
-  RenderWidget* widget = view->GetMainRenderFrame()->GetLocalRootRenderWidget();
   blink::WebFrameWidget* blink_widget =
-      static_cast<blink::WebFrameWidget*>(widget->GetWebWidget());
+      view->GetMainRenderFrame()->GetLocalRootWebFrameWidget();
 
-  view->SetBlinkPreferences(prefs);
+  view->GetWebView()->SetWebPreferences(prefs);
 
   const int kMaxOutputCharacters = 1024;
   std::string output;

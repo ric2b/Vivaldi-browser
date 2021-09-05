@@ -5,16 +5,25 @@
 module crosapi.mojom;
 
 import "chromeos/crosapi/mojom/account_manager.mojom";
+import "chromeos/crosapi/mojom/cert_database.mojom";
+import "chromeos/crosapi/mojom/clipboard.mojom";
+import "chromeos/crosapi/mojom/device_attributes.mojom";
 import "chromeos/crosapi/mojom/feedback.mojom";
 import "chromeos/crosapi/mojom/file_manager.mojom";
 import "chromeos/crosapi/mojom/keystore_service.mojom";
 import "chromeos/crosapi/mojom/message_center.mojom";
+import "chromeos/crosapi/mojom/metrics_reporting.mojom";
+import "chromeos/crosapi/mojom/prefs.mojom";
 import "chromeos/crosapi/mojom/screen_manager.mojom";
 import "chromeos/crosapi/mojom/select_file.mojom";
+import "chromeos/crosapi/mojom/test_controller.mojom";
 import "mojo/public/mojom/base/big_string.mojom";
+import "mojo/public/mojom/base/file_path.mojom";
 import "mojo/public/mojom/base/token.mojom";
 import "mojo/public/mojom/base/values.mojom";
 import "services/device/public/mojom/hid.mojom";
+import "services/media_session/public/mojom/audio_focus.mojom";
+import "services/media_session/public/mojom/media_controller.mojom";
 import "url/mojom/url.mojom";
 
 // LacrosInfo is a set of parameters passed to ash from lacros-chrome
@@ -36,14 +45,29 @@ struct LacrosInfo {
 // milestone when you added it, to help us reason about compatibility between
 // lacros-chrome and older ash-chrome binaries.
 //
-// Next version: 6
-// Next method id: 9
+// Next version: 13
+// Next method id: 18
 [Stable, Uuid="8b79c34f-2bf8-4499-979a-b17cac522c1e"]
 interface AshChromeService {
   // Binds Chrome OS Account Manager for Identity management.
   // Added in M87.
   [MinVersion=4]
   BindAccountManager@7(pending_receiver<AccountManager> receiver);
+
+  // Binds the CertDatabase interface for initializing certificate database in
+  // Lacros-Chrome.
+  // Added in M89.
+  [MinVersion=7] BindCertDatabase@12(pending_receiver<CertDatabase> receiver);
+
+  // Bind the clipboard interface to allow lacros-chrome to interact with the
+  // system clipboard.
+  [MinVersion=10] BindClipboard@15(pending_receiver<Clipboard> receiver);
+
+  // Binds the device attributes service which is used by enterprise extension
+  // APIs to query information about the device.
+  // Added in M89.
+  [MinVersion=12] BindDeviceAttributes@17(
+      pending_receiver<DeviceAttributes> receiver);
 
   // Binds the FileManager interface for showing files, folders, etc.
   // Added in M88.
@@ -57,6 +81,15 @@ interface AshChromeService {
   // Binds the MessageCenter interface for showing notification messages.
   // Added in M86.
   BindMessageCenter@3(pending_receiver<MessageCenter> receiver);
+
+  // Binds the MetricsReporting interface for metrics reporting consent.
+  // Added in M89.
+  [MinVersion=8]
+  BindMetricsReporting@13(pending_receiver<MetricsReporting> receiver);
+
+  // Binds the prefs service which allows get, set, and notify update of prefs.
+  // Added in M89.
+  [MinVersion=11] BindPrefs@16(pending_receiver<Prefs> receiver);
 
   // Binds the ScreenManager interface for interacting with windows, screens and
   // displays.
@@ -74,6 +107,29 @@ interface AshChromeService {
   // Binds the Feedback interface for showing feedback UI.
   // Added in M87.
   [MinVersion=3] BindFeedback@5(pending_receiver<Feedback> receiver);
+
+  // Binds the Media Session service (controller) for enabling media playback
+  // control.
+  // Added in M88.
+  [MinVersion=6] BindMediaSessionController@9(
+      pending_receiver<media_session.mojom.MediaControllerManager> receiver);
+
+  // Binds the Media Session service (audio focus) for enabling media sessions
+  // to register with the service so they can be controlled.
+  // Added in M88.
+  [MinVersion=6] BindMediaSessionAudioFocus@10(
+      pending_receiver<media_session.mojom.AudioFocusManager> receiver);
+
+  // Binds the Media Session service (audio focus debug) for enabling debugging
+  // of media playback sessions.
+  // Added in M88.
+  [MinVersion=6] BindMediaSessionAudioFocusDebug@11(
+      pending_receiver<media_session.mojom.AudioFocusManagerDebug> receiver);
+
+  // Binds the test controller service, which tests can use to mutate ash. This
+  // is not available on production devices.
+  [MinVersion=9] BindTestController@14(
+      pending_receiver<TestController> receiver);
 
   // Passes generic lacros information such as lacros version, etc into ash
   // in |lacros_info| during startup.
@@ -109,6 +165,46 @@ enum DeviceMode {
   kDemo,
 };
 
+// Whether or not metrics reporting in ash is managed by policy.
+[Stable, Extensible]
+enum MetricsReportingManaged {
+  // Default value for backwards compatibility with old versions of ash.
+  kUnknown = 0,
+  kNotManaged = 1,
+  kManaged = 2,
+};
+
+// Default directories on the system.
+[Stable]
+struct DefaultPaths {
+  // The default (non-configurable) directory for documents. For example,
+  // /home/chronos/u-<hash>/MyFiles. We send the full path for future
+  // compatibility, to avoid assumptions about where on disk the directory is
+  // located.
+  mojo_base.mojom.FilePath documents@0;
+
+  // The default (non-configurable) directory for downloads. For example,
+  // /home/chronos/u-<hash>/MyFiles/Downloads.  We send the full path for future
+  // compatibility, to avoid assumptions about where on disk the directory is
+  // located.
+  mojo_base.mojom.FilePath downloads@1;
+};
+
+
+[Stable, Extensible]
+enum ExoImeSupport {
+  kUnsupported = 0,
+
+  // To work with the client IME implementation, exo has short term workaround
+  // to filter some wayland key/keysym events by using ConsumedByIme().
+  // Note that this is an approach consistent with ARC's behavior.
+  kConsumedByImeWorkaround = 1,
+
+  // TODO(crbug.com/1093194): For long term, we're looking at a way to remove
+  // the above workaround. It will be exclusive state, so on implementing
+  // ash-chrome's fix, it is necessary to add a new value here, too, atomically.
+};
+
 // LacrosInitParams is a set of parameters for initialization of lacros-chrome,
 // which is passed from ash-chrome to lacros-chrome. Since ash-chrome and
 // lacros-chrome may have different versions, lacros-chrome must handle this
@@ -125,6 +221,8 @@ enum DeviceMode {
 //
 // If ash-chrome is newer than lacros-chrome, then some fields may not be
 // processed by lacros-chrome.
+//
+// Next version: 12
 [Stable]
 struct LacrosInitParams {
   // This is ash-chrome's version of the AshChromeService interface. This is
@@ -161,15 +259,56 @@ struct LacrosInitParams {
   // Added in M88.
   [MinVersion=5]
   map<mojo_base.mojom.Token, uint32>? interface_versions@5;
+
+  // Default directories on the system.
+  // Added in M89.
+  [MinVersion=6]
+  DefaultPaths? default_paths@6;
+
+  // Device Account's obfuscated Gaia id, if present.
+  // This is null for older versions of ash, for Active Directory sessions,
+  // Guest sessions, Managed Guest sessions, Demo mode, and Kiosks.
+  // Added in M89.
+  [MinVersion=7]
+  string? device_account_gaia_id@7;
+
+  // Whether or not metrics reporting in ash is managed by policy. This is
+  // passed independently because the metrics reporting state is controlled by
+  // ash-level device policy, but we want to show the "managed" icon in the
+  // browser preferences UI as if it was controlled by user policy.
+  // Added in M89.
+  [MinVersion=8]
+  MetricsReportingManaged ash_metrics_managed@8;
+
+  // How exo supports IME on Lacros. Lacros can control IME handling
+  // depending on the ash-chrome's support status via this flag.
+  [MinVersion=9]
+  ExoImeSupport exo_ime_support@9;
+
+  // Primary user ID hash. Used to set CROS_USER_ID_HASH env var in crosh.
+  // Do not use this to construct paths, use DefaultPaths for that purpose.
+  [MinVersion=10]
+  string? cros_user_id_hash@10;
+
+  // Policy blob of the device account. If present, it's a managed account with
+  // policy data. If empty, it's unmanaged account. If absent, an error occurred
+  // while loading policy data. The format is serialized PolicyFetchResponse
+  // object. See components/policy/proto/device_management_backend.proto for
+  // details.
+  [MinVersion=11]
+  array<uint8>? device_account_policy@11;
 };
 
 // LacrosChromeService defines the APIs that live in lacros-chrome and
 // are accessed from ash-chrome.
 [Stable, Uuid="4e04dc16-b34c-40fd-9e3f-3c55c2c6cf91"]
 interface LacrosChromeService {
+  // DEPRECATED: in M89. In new versions, memory backed file based
+  // initialization data passing is used.
+  //
   // Ash-chrome can pass initialize parameters via this method.
   // The parameters are available on lacros-chrome startup.
-  Init@2(LacrosInitParams params);
+  InitDeprecated@2(LacrosInitParams params);
 
   // Returns the pending_receiver of AshChromeService.
   // Ash-chrome is expected to call this method on initialization.

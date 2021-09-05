@@ -30,11 +30,19 @@ class ASH_EXPORT HoldingSpaceItemScreenCaptureView
   ~HoldingSpaceItemScreenCaptureView() override;
 
  private:
+  // HoldingSpaceItemView:
+  views::View* GetTooltipHandlerForPoint(const gfx::Point& point) override;
+  base::string16 GetTooltipText(const gfx::Point& point) const override;
+  void OnHoldingSpaceItemUpdated(const HoldingSpaceItem* item) override;
+
   void UpdateImage();
+
+  // Overlays a play icon over `image_`.
+  void AddPlayIcon();
 
   RoundedImageView* image_ = nullptr;
 
-  std::unique_ptr<HoldingSpaceImage::Subscription> image_subscription_;
+  base::CallbackListSubscription image_subscription_;
 };
 
 }  // namespace ash

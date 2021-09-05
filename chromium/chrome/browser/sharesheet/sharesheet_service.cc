@@ -18,9 +18,16 @@
 #include "chrome/browser/sharesheet/sharesheet_service_delegate.h"
 #include "chrome/browser/sharesheet/sharesheet_types.h"
 #include "chrome/common/chrome_features.h"
+#include "chrome/grit/generated_resources.h"
 #include "components/services/app_service/public/cpp/intent_util.h"
+#include "content/public/browser/web_contents.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/display/types/display_constants.h"
 #include "ui/views/view.h"
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "ui/chromeos/strings/grit/ui_chromeos_strings.h"
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 namespace sharesheet {
 
@@ -34,7 +41,7 @@ SharesheetService::~SharesheetService() = default;
 
 void SharesheetService::ShowBubble(content::WebContents* web_contents,
                                    apps::mojom::IntentPtr intent,
-                                   sharesheet::CloseCallback close_callback) {
+                                   CloseCallback close_callback) {
   ShowBubble(web_contents, std::move(intent),
              /*contains_hosted_document=*/false, std::move(close_callback));
 }
@@ -42,23 +49,21 @@ void SharesheetService::ShowBubble(content::WebContents* web_contents,
 void SharesheetService::ShowBubble(content::WebContents* web_contents,
                                    apps::mojom::IntentPtr intent,
                                    bool contains_hosted_document,
-                                   sharesheet::CloseCallback close_callback) {
+                                   CloseCallback close_callback) {
   DCHECK(intent->action == apps_util::kIntentActionSend ||
          intent->action == apps_util::kIntentActionSendMultiple);
-  auto sharesheet_service_delegate =
-      std::make_unique<SharesheetServiceDelegate>(delegate_counter_++,
-                                                  web_contents, this);
-  ShowBubbleWithDelegate(std::move(sharesheet_service_delegate),
-                         std::move(intent), contains_hosted_document,
-                         std::move(close_callback));
+  auto* sharesheet_service_delegate =
+      GetOrCreateDelegate(web_contents->GetTopLevelNativeWindow());
+  ShowBubbleWithDelegate(sharesheet_service_delegate, std::move(intent),
+                         contains_hosted_document, std::move(close_callback));
 }
 
 // Cleanup delegate when bubble closes.
-void SharesheetService::OnBubbleClosed(uint32_t id,
+void SharesheetService::OnBubbleClosed(gfx::NativeWindow native_window,
                                        const base::string16& active_action) {
   auto iter = active_delegates_.begin();
   while (iter != active_delegates_.end()) {
-    if ((*iter)->GetId() == id) {
+    if ((*iter)->GetNativeWindow() == native_window) {
       if (!active_action.empty()) {
         ShareAction* share_action =
             sharesheet_action_cache_->GetActionFromName(active_action);
@@ -72,28 +77,24 @@ void SharesheetService::OnBubbleClosed(uint32_t id,
   }
 }
 
-void SharesheetService::OnTargetSelected(uint32_t delegate_id,
+void SharesheetService::OnTargetSelected(gfx::NativeWindow native_window,
                                          const base::string16& target_name,
                                          const TargetType type,
                                          apps::mojom::IntentPtr intent,
                                          views::View* share_action_view) {
-  SharesheetServiceDelegate* delegate = GetDelegate(delegate_id);
+  SharesheetServiceDelegate* delegate = GetDelegate(native_window);
   if (delegate == nullptr)
     return;
 
+  RecordActionMetrics(target_name);
   if (type == TargetType::kAction) {
     ShareAction* share_action =
         sharesheet_action_cache_->GetActionFromName(target_name);
     if (share_action == nullptr)
       return;
-    sharesheet::SharesheetMetrics::RecordSharesheetActionMetrics(
-        sharesheet::SharesheetMetrics::UserAction::kAction);
     delegate->OnActionLaunched();
     share_action->LaunchAction(delegate, share_action_view, std::move(intent));
   } else if (type == TargetType::kApp) {
-    // TODO(crbug.com/1097623) Update this when we support more app types.
-    sharesheet::SharesheetMetrics::RecordSharesheetActionMetrics(
-        sharesheet::SharesheetMetrics::UserAction::kArc);
     auto launch_source = apps::mojom::LaunchSource::kFromSharesheet;
     app_service_proxy_->LaunchAppWithIntent(
         base::UTF16ToUTF8(target_name),
@@ -106,11 +107,23 @@ void SharesheetService::OnTargetSelected(uint32_t delegate_id,
   }
 }
 
+SharesheetServiceDelegate* SharesheetService::GetOrCreateDelegate(
+    gfx::NativeWindow native_window) {
+  auto* delegate = GetDelegate(native_window);
+  if (delegate == nullptr) {
+    auto new_delegate =
+        std::make_unique<SharesheetServiceDelegate>(native_window, this);
+    delegate = new_delegate.get();
+    active_delegates_.push_back(std::move(new_delegate));
+  }
+  return delegate;
+}
+
 SharesheetServiceDelegate* SharesheetService::GetDelegate(
-    uint32_t delegate_id) {
+    gfx::NativeWindow native_window) {
   auto iter = active_delegates_.begin();
   while (iter != active_delegates_.end()) {
-    if ((*iter)->GetId() == delegate_id) {
+    if ((*iter)->GetNativeWindow() == native_window) {
       return iter->get();
     }
     ++iter;
@@ -130,6 +143,11 @@ bool SharesheetService::HasShareTargets(const apps::mojom::IntentPtr& intent,
 
 Profile* SharesheetService::GetProfile() {
   return profile_;
+}
+
+const gfx::VectorIcon* SharesheetService::GetVectorIcon(
+    const base::string16& display_name) {
+  return sharesheet_action_cache_->GetVectorIconFromName(display_name);
 }
 
 void SharesheetService::LoadAppIcons(
@@ -178,21 +196,19 @@ void SharesheetService::OnIconLoaded(
                std::move(callback));
 }
 
-void SharesheetService::OnAppIconsLoaded(
-    std::unique_ptr<SharesheetServiceDelegate> delegate,
-    apps::mojom::IntentPtr intent,
-    sharesheet::CloseCallback close_callback,
-    std::vector<TargetInfo> targets) {
+void SharesheetService::OnAppIconsLoaded(SharesheetServiceDelegate* delegate,
+                                         apps::mojom::IntentPtr intent,
+                                         CloseCallback close_callback,
+                                         std::vector<TargetInfo> targets) {
   delegate->ShowBubble(std::move(targets), std::move(intent),
                        std::move(close_callback));
-  active_delegates_.push_back(std::move(delegate));
 }
 
 void SharesheetService::ShowBubbleWithDelegate(
-    std::unique_ptr<SharesheetServiceDelegate> delegate,
+    SharesheetServiceDelegate* delegate,
     apps::mojom::IntentPtr intent,
     bool contains_hosted_document,
-    sharesheet::CloseCallback close_callback) {
+    CloseCallback close_callback) {
   std::vector<TargetInfo> targets;
   auto& actions = sharesheet_action_cache_->GetShareActions();
   auto iter = actions.begin();
@@ -208,17 +224,48 @@ void SharesheetService::ShowBubbleWithDelegate(
   std::vector<apps::IntentLaunchInfo> intent_launch_info =
       contains_hosted_document ? std::vector<apps::IntentLaunchInfo>()
                                : app_service_proxy_->GetAppsForIntent(intent);
-  sharesheet::SharesheetMetrics::RecordSharesheetAppCount(
-      intent_launch_info.size());
+  SharesheetMetrics::RecordSharesheetAppCount(intent_launch_info.size());
   LoadAppIcons(std::move(intent_launch_info), std::move(targets), 0,
                base::BindOnce(&SharesheetService::OnAppIconsLoaded,
-                              weak_factory_.GetWeakPtr(), std::move(delegate),
+                              weak_factory_.GetWeakPtr(), delegate,
                               std::move(intent), std::move(close_callback)));
 }
 
-const gfx::VectorIcon* SharesheetService::GetVectorIcon(
-    const base::string16& display_name) {
-  return sharesheet_action_cache_->GetVectorIconFromName(display_name);
+void SharesheetService::RecordActionMetrics(const base::string16& target_name) {
+  if (target_name == l10n_util::GetStringUTF16(IDS_NEARBY_SHARE_FEATURE_NAME)) {
+    SharesheetMetrics::RecordSharesheetActionMetrics(
+        SharesheetMetrics::UserAction::kNearbyAction);
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  } else if (target_name ==
+             l10n_util::GetStringUTF16(IDS_FILE_BROWSER_SHARE_BUTTON_LABEL)) {
+    SharesheetMetrics::RecordSharesheetActionMetrics(
+        SharesheetMetrics::UserAction::kDriveAction);
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+  } else {
+    // Should be an app if we reached here.
+    auto app_type = app_service_proxy_->AppRegistryCache().GetAppType(
+        base::UTF16ToUTF8(target_name));
+    switch (app_type) {
+      case apps::mojom::AppType::kArc:
+        SharesheetMetrics::RecordSharesheetActionMetrics(
+            SharesheetMetrics::UserAction::kArc);
+        break;
+      case apps::mojom::AppType::kWeb:
+        SharesheetMetrics::RecordSharesheetActionMetrics(
+            SharesheetMetrics::UserAction::kWeb);
+        break;
+      case apps::mojom::AppType::kBuiltIn:
+      case apps::mojom::AppType::kCrostini:
+      case apps::mojom::AppType::kExtension:
+      case apps::mojom::AppType::kMacOs:
+      case apps::mojom::AppType::kPluginVm:
+      case apps::mojom::AppType::kLacros:
+      case apps::mojom::AppType::kRemote:
+      case apps::mojom::AppType::kBorealis:
+      case apps::mojom::AppType::kUnknown:
+        NOTREACHED();
+    }
+  }
 }
 
 }  // namespace sharesheet

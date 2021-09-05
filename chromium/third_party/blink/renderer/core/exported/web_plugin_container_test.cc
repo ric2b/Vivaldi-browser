@@ -200,14 +200,16 @@ class TestPluginWithEditableText : public FakeWebPlugin {
 
 class TestPluginWebFrameClient : public frame_test_helpers::TestWebFrameClient {
   WebLocalFrame* CreateChildFrame(
-      WebLocalFrame* parent,
       mojom::blink::TreeScopeType scope,
       const WebString& name,
       const WebString& fallback_name,
       const FramePolicy&,
       const WebFrameOwnerProperties&,
-      mojom::blink::FrameOwnerElementType owner_type) override {
-    return CreateLocalChild(*parent, scope,
+      mojom::blink::FrameOwnerElementType owner_type,
+      blink::CrossVariantMojoAssociatedReceiver<
+          blink::mojom::PolicyContainerHostInterfaceBase>
+          policy_container_host_receiver) override {
+    return CreateLocalChild(*Frame(), scope,
                             std::make_unique<TestPluginWebFrameClient>());
   }
 
@@ -1432,12 +1434,12 @@ class CompositedPlugin : public FakeWebPlugin {
   bool Initialize(WebPluginContainer* container) override {
     if (!FakeWebPlugin::Initialize(container))
       return false;
-    container->SetCcLayer(layer_.get(), false);
+    container->SetCcLayer(layer_.get());
     return true;
   }
 
   void Destroy() override {
-    Container()->SetCcLayer(nullptr, false);
+    Container()->SetCcLayer(nullptr);
     FakeWebPlugin::Destroy();
   }
 

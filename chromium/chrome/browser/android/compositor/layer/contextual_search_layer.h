@@ -43,7 +43,6 @@ class ContextualSearchLayer : public OverlayPanelLayer {
                      int search_bar_shadow_resource_id,
                      int search_provider_icon_resource_id,
                      int quick_action_icon_resource_id,
-                     int arrow_up_resource_id,
                      int drag_handlebar_resource_id,
                      int open_tab_icon_resource_id,
                      int close_icon_resource_id,
@@ -85,18 +84,11 @@ class ContextualSearchLayer : public OverlayPanelLayer {
                      int bar_image_size,
                      int icon_color,
                      int drag_handlebar_color,
-                     float arrow_icon_opacity,
-                     float arrow_icon_rotation,
                      float close_icon_opacity,
                      bool progress_bar_visible,
                      float progress_bar_height,
                      float progress_bar_opacity,
                      float progress_bar_completion,
-                     float divider_line_visibility_percentage,
-                     float divider_line_width,
-                     float divider_line_height,
-                     int divider_line_color,
-                     float divider_line_x_offset,
                      bool touch_highlight_visible,
                      float touch_highlight_x_offset,
                      float touch_highlight_width,
@@ -147,7 +139,6 @@ class ContextualSearchLayer : public OverlayPanelLayer {
   scoped_refptr<cc::UIResourceLayer> search_provider_icon_layer_;
   scoped_refptr<cc::UIResourceLayer> thumbnail_layer_;
   scoped_refptr<cc::UIResourceLayer> quick_action_icon_layer_;
-  scoped_refptr<cc::UIResourceLayer> arrow_icon_;
   scoped_refptr<cc::UIResourceLayer> search_promo_;
   scoped_refptr<cc::SolidColorLayer> search_promo_container_;
   scoped_refptr<cc::SolidColorLayer> bar_banner_container_;
@@ -155,7 +146,6 @@ class ContextualSearchLayer : public OverlayPanelLayer {
   scoped_refptr<cc::UIResourceLayer> bar_banner_text_;
   scoped_refptr<cc::UIResourceLayer> search_caption_;
   scoped_refptr<cc::UIResourceLayer> text_layer_;
-  scoped_refptr<cc::SolidColorLayer> divider_line_;
   scoped_refptr<cc::SolidColorLayer> touch_highlight_layer_;
 };
 

@@ -65,6 +65,13 @@ base::FilePath GetProfileDir(importer::ImporterType importerType) {
     case importer::TYPE_VIVALDI:
       profile_path = app_data_path.AppendASCII("Vivaldi\\User Data");
       break;
+    case importer::TYPE_BRAVE:
+      profile_path = app_data_path.AppendASCII("BraveSoftware\\Brave-Browser\\User Data");
+      break;
+    case importer::TYPE_EDGE_CHROMIUM:
+      profile_path = app_data_path.AppendASCII("Microsoft\\Edge\\User Data");
+      break;
+
     default:
       profile_path = app_data_path.AppendASCII("not-supported");
       break;

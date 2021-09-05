@@ -31,7 +31,6 @@
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/mock_autocomplete_history_manager.h"
-#include "components/autofill/core/browser/pattern_provider/test_pattern_provider.h"
 #include "components/autofill/core/browser/payments/payments_customer_data.h"
 #include "components/autofill/core/browser/payments/test_credit_card_save_manager.h"
 #include "components/autofill/core/browser/payments/test_credit_card_save_strike_database.h"
@@ -132,6 +131,7 @@ class CreditCardSaveManagerTest : public testing::Test {
     personal_data_.Init(/*profile_database=*/database_,
                         /*account_database=*/nullptr,
                         /*pref_service=*/autofill_client_.GetPrefs(),
+                        /*local_state=*/autofill_client_.GetPrefs(),
                         /*identity_manager=*/nullptr,
                         /*client_profile_validator=*/nullptr,
                         /*history_service=*/nullptr,
@@ -175,7 +175,7 @@ class CreditCardSaveManagerTest : public testing::Test {
   }
 
   void FormsSeen(const std::vector<FormData>& forms) {
-    autofill_manager_->OnFormsSeen(forms, base::TimeTicks());
+    autofill_manager_->OnFormsSeen(forms);
   }
 
   void FormSubmitted(const FormData& form) {
@@ -350,7 +350,6 @@ class CreditCardSaveManagerTest : public testing::Test {
   MockAutocompleteHistoryManager autocomplete_history_manager_;
   syncer::TestSyncService sync_service_;
   base::test::ScopedFeatureList scoped_feature_list_;
-  TestPatternProvider test_pattern_provider_;
   // Ends up getting owned (and destroyed) by TestFormDataImporter:
   TestCreditCardSaveManager* credit_card_save_manager_;
   // Ends up getting owned (and destroyed) by TestAutofillClient:

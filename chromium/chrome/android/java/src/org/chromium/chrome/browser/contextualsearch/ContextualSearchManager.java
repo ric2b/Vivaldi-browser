@@ -23,6 +23,7 @@ import org.chromium.base.TimeUtils;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.base.supplier.Supplier;
+import org.chromium.cc.input.BrowserControlsState;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayContentDelegate;
@@ -52,7 +53,7 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabObserver;
 import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
 import org.chromium.components.browser_ui.widget.scrim.ScrimCoordinator;
 import org.chromium.components.external_intents.ExternalNavigationHandler;
-import org.chromium.components.external_intents.ExternalNavigationHandler.OverrideUrlLoadingResult;
+import org.chromium.components.external_intents.ExternalNavigationHandler.OverrideUrlLoadingResultType;
 import org.chromium.components.external_intents.ExternalNavigationParams;
 import org.chromium.components.external_intents.RedirectHandler;
 import org.chromium.components.navigation_interception.NavigationParams;
@@ -63,11 +64,11 @@ import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.NavigationEntry;
 import org.chromium.content_public.browser.SelectionClient;
 import org.chromium.content_public.browser.WebContents;
-import org.chromium.content_public.common.BrowserControlsState;
 import org.chromium.content_public.common.ContentUrlConstants;
 import org.chromium.contextual_search.mojom.OverlayPosition;
 import org.chromium.net.NetworkChangeNotifier;
 import org.chromium.ui.touch_selection.SelectionEventType;
+import org.chromium.url.GURL;
 
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -105,8 +106,8 @@ public class ContextualSearchManager
 
     private static final String INTENT_URL_PREFIX = "intent:";
 
-    // We blacklist this URL because malformed URLs may bring up this page.
-    private static final String BLACKLISTED_URL = ContentUrlConstants.ABOUT_BLANK_DISPLAY_URL;
+    // We denylist this URL because malformed URLs may bring up this page.
+    private static final String DENYLISTED_URL = ContentUrlConstants.ABOUT_BLANK_DISPLAY_URL;
 
     // How long to wait for a tap near a previous tap before hiding the UI or showing a re-Tap.
     // This setting is not critical: in practice it determines how long to wait after an invalid
@@ -579,7 +580,7 @@ public class ContextualSearchManager
         };
         mTabModelSelectorTabObserver = new TabModelSelectorTabObserver(selector) {
             @Override
-            public void onPageLoadStarted(Tab tab, String url) {
+            public void onPageLoadStarted(Tab tab, GURL url) {
                 // Detects navigation of the base page for crbug.com/428368 (navigation-detection).
                 hideContextualSearch(StateChangeReason.UNKNOWN);
             }
@@ -829,7 +830,7 @@ public class ContextualSearchManager
         mLoadedSearchUrlTimeMs = System.currentTimeMillis();
         mLastSearchRequestLoaded = mSearchRequest;
         String searchUrl = mSearchRequest.getSearchUrl();
-        ContextualSearchManagerJni.get().whitelistContextualSearchJsApiUrl(
+        ContextualSearchManagerJni.get().allowlistContextualSearchJsApiUrl(
                 mNativeContextualSearchManagerPtr, this, searchUrl);
         mSearchPanel.loadUrlInPanel(searchUrl);
         mDidStartLoadingResolvedSearchRequest = true;
@@ -1038,7 +1039,7 @@ public class ContextualSearchManager
         }
 
         @Override
-        public void onContentLoadStarted(String url) {
+        public void onContentLoadStarted() {
             mDidPromoteSearchNavigation = false;
         }
 
@@ -1098,8 +1099,8 @@ public class ContextualSearchManager
                             .setRedirectHandler(mRedirectHandler)
                             .setIsMainFrame(navigationParams.isMainFrame)
                             .build();
-            if (externalNavHandler.shouldOverrideUrlLoading(params)
-                    != OverrideUrlLoadingResult.NO_OVERRIDE) {
+            if (externalNavHandler.shouldOverrideUrlLoading(params).getResultType()
+                    != OverrideUrlLoadingResultType.NO_OVERRIDE) {
                 return false;
             }
             return !navigationParams.isExternalProtocol;
@@ -1190,7 +1191,7 @@ public class ContextualSearchManager
      * @param url The URL we are navigating to.
      */
     public void onExternalNavigation(String url) {
-        if (!mDidPromoteSearchNavigation && mSearchPanel != null && !BLACKLISTED_URL.equals(url)
+        if (!mDidPromoteSearchNavigation && mSearchPanel != null && !DENYLISTED_URL.equals(url)
                 && !url.startsWith(INTENT_URL_PREFIX) && shouldPromoteSearchNavigation()) {
             // Do not promote to a regular tab if we're loading our Resolved Search
             // URL, otherwise we'll promote it when prefetching the Serp.
@@ -1256,7 +1257,7 @@ public class ContextualSearchManager
         // First, check the pending navigation entry, because there might be an navigation
         // not yet committed being processed. Otherwise, get the URL from the WebContents.
         NavigationEntry entry = searchWebContents.getNavigationController().getPendingEntry();
-        return entry != null ? entry.getUrl() : searchWebContents.getLastCommittedUrl();
+        return entry != null ? entry.getUrl().getSpec() : searchWebContents.getLastCommittedUrl();
     }
 
     @Override
@@ -1934,7 +1935,7 @@ public class ContextualSearchManager
         void gatherSurroundingText(long nativeContextualSearchManager,
                 ContextualSearchManager caller, ContextualSearchContext contextualSearchContext,
                 WebContents baseWebContents);
-        void whitelistContextualSearchJsApiUrl(
+        void allowlistContextualSearchJsApiUrl(
                 long nativeContextualSearchManager, ContextualSearchManager caller, String url);
         void enableContextualSearchJsApiForWebContents(long nativeContextualSearchManager,
                 ContextualSearchManager caller, WebContents overlayWebContents);

@@ -35,7 +35,7 @@
 #include "third_party/blink/public/mojom/appcache/appcache.mojom.h"
 #include "third_party/blink/public/mojom/background_sync/background_sync.mojom.h"
 #include "third_party/blink/public/mojom/cache_storage/cache_storage.mojom-forward.h"
-#include "third_party/blink/public/mojom/file_system_access/native_file_system_manager.mojom-forward.h"
+#include "third_party/blink/public/mojom/file_system_access/file_system_access_manager.mojom-forward.h"
 #include "third_party/blink/public/mojom/filesystem/file_system.mojom-forward.h"
 #include "third_party/blink/public/mojom/indexeddb/indexeddb.mojom-forward.h"
 #include "third_party/blink/public/mojom/locks/lock_manager.mojom-forward.h"
@@ -287,8 +287,8 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
 
   using BlockStateChangedCallbackList = base::RepeatingCallbackList<void(bool)>;
   using BlockStateChangedCallback = BlockStateChangedCallbackList::CallbackType;
-  virtual std::unique_ptr<BlockStateChangedCallbackList::Subscription>
-  RegisterBlockStateChangedCallback(const BlockStateChangedCallback& cb) = 0;
+  virtual base::CallbackListSubscription RegisterBlockStateChangedCallback(
+      const BlockStateChangedCallback& cb) = 0;
 
   // Schedules the host for deletion and removes it from the all_hosts list.
   virtual void Cleanup() = 0;
@@ -487,7 +487,7 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
       mojo::PendingReceiver<blink::mojom::FileSystemManager> receiver) = 0;
   virtual void BindNativeFileSystemManager(
       const url::Origin& origin,
-      mojo::PendingReceiver<blink::mojom::NativeFileSystemManager>
+      mojo::PendingReceiver<blink::mojom::FileSystemAccessManager>
           receiver) = 0;
 
   // |render_frame_id| is the frame associated with |receiver|, or
@@ -544,13 +544,12 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
 
   // Controls whether the destructor of RenderProcessHost*Impl* will end up
   // cleaning the memory used by the exception added via
-  // RenderProcessHostImpl::AddCorbExceptionForPlugin and
-  // AddAllowedRequestInitiatorForPlugin.
+  // RenderProcessHostImpl::AddAllowedRequestInitiatorForPlugin.
   //
   // TODO(lukasza): https://crbug.com/652474: This method shouldn't be part of
   // the //content public API, because it shouldn't be called by anyone other
   // than RenderProcessHostImpl (from underneath
-  // RenderProcessHostImpl::AddCorbExceptionForPlugin).
+  // RenderProcessHostImpl::AddAllowedRequestInitiatorForPlugin).
   virtual void CleanupNetworkServicePluginExceptionsUponDestruction() = 0;
 
   // Returns a string that contains information useful for debugging
@@ -594,8 +593,7 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   // when the host is ready (RenderProcessHostObserver::RenderProcessReady). If
   // the spare RenderProcessHost is promoted to be a "real" RenderProcessHost or
   // discarded for any reason, the callback is made with a null pointer.
-  static std::unique_ptr<
-      base::CallbackList<void(RenderProcessHost*)>::Subscription>
+  static base::CallbackListSubscription
   RegisterSpareRenderProcessHostChangedCallback(
       const base::RepeatingCallback<void(RenderProcessHost*)>& cb);
 

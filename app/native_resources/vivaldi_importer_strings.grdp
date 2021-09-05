@@ -22,6 +22,12 @@
   <message name="IDS_IMPORT_FROM_VIVALDI" desc="Name of import profile from Vivaldi">
     Vivaldi
   </message>
+  <message name="IDS_IMPORT_FROM_BRAVE" desc="Name of import profile from Vivaldi">
+    Brave
+  </message>
+  <message name="IDS_IMPORT_FROM_EDGE_CHROMIUM" desc="Name of import profile from Vivaldi">
+    Microsoft Edge
+  </message>
   <message name="IDS_IMPORT_FROM_CHROMIUM" desc="Name of import profile from Chromium">
     Chromium
   </message>
@@ -33,6 +39,12 @@
   </message>
   <message name="IDS_YANDEX_IMPORTER_LOCK_TEXT" desc="The message to be displayed on dialog">
     Sadly, your Yandex settings are not available while that browser is running. To import those settings to Vivaldi, save your work and close all Yandex windows. Then click Continue.
+  </message>
+  <message name="IDS_BRAVE_IMPORTER_LOCK_TEXT" desc="The message to be displayed on dialog">
+    Sadly, your Brave settings are not available while that browser is running. To import those settings to Vivaldi, save your work and close all Brave windows. Then click Continue.
+  </message>
+  <message name="IDS_EDGE_CHROMIUM_IMPORTER_LOCK_TEXT" desc="The message to be displayed on dialog">
+    Sadly, your Edge settings are not available while that browser is running. To import those settings to Vivaldi, save your work and close all Edge windows. Then click Continue.
   </message>
   <message name="IDS_OPIUM_IMPORTER_LOCK_TEXT" desc="The message to be displayed on dialog">
     Sadly, your Opera 15+ settings are not available while that browser is running. To import those settings to Vivaldi, save your work and close all Opera 15+ windows. Then click Continue.

@@ -1335,6 +1335,18 @@
           {
             "name": "changes",
             "$ref": "updateCalendar"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "parameters": [
+              {
+                "description": "Was the calendar updated successfully?",
+                "name": "result",
+                "type": "boolean"
+              }
+            ]
           }
         ]
       },

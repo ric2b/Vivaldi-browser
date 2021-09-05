@@ -9,12 +9,12 @@
 #include "third_party/blink/renderer/modules/xr/xr_input_source.h"
 #include "third_party/blink/renderer/modules/xr/xr_light_estimate.h"
 #include "third_party/blink/renderer/modules/xr/xr_light_probe.h"
+#include "third_party/blink/renderer/modules/xr/xr_plane_set.h"
 #include "third_party/blink/renderer/modules/xr/xr_reference_space.h"
 #include "third_party/blink/renderer/modules/xr/xr_session.h"
 #include "third_party/blink/renderer/modules/xr/xr_transient_input_hit_test_source.h"
 #include "third_party/blink/renderer/modules/xr/xr_view.h"
 #include "third_party/blink/renderer/modules/xr/xr_viewer_pose.h"
-#include "third_party/blink/renderer/modules/xr/xr_world_information.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 
 namespace blink {
@@ -46,12 +46,14 @@ const char kCannotObtainNativeOrigin[] =
 
 }  // namespace
 
-XRFrame::XRFrame(XRSession* session, XRWorldInformation* world_information)
-    : world_information_(world_information), session_(session) {}
+XRFrame::XRFrame(XRSession* session, bool is_animation_frame)
+    : session_(session), is_animation_frame_(is_animation_frame) {}
 
 XRViewerPose* XRFrame::getViewerPose(XRReferenceSpace* reference_space,
                                      ExceptionState& exception_state) {
-  DVLOG(3) << __func__;
+  DVLOG(3) << __func__ << ": is_active_=" << is_active_
+           << ", is_animation_frame_=" << is_animation_frame_;
+
   if (!is_active_) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                       kInactiveFrame);
@@ -102,6 +104,27 @@ XRAnchorSet* XRFrame::trackedAnchors() const {
   return session_->TrackedAnchors();
 }
 
+XRPlaneSet* XRFrame::detectedPlanes(ExceptionState& exception_state) const {
+  DVLOG(3) << __func__;
+
+  if (!session_->IsFeatureEnabled(
+          device::mojom::XRSessionFeature::PLANE_DETECTION)) {
+    DVLOG(2) << __func__
+             << ": plane detection feature not enabled on a session";
+    exception_state.ThrowDOMException(DOMExceptionCode::kNotSupportedError,
+                                      XRSession::kPlanesFeatureNotSupported);
+    return {};
+  }
+
+  if (!is_active_) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      kInactiveFrame);
+    return nullptr;
+  }
+
+  return session_->GetDetectedPlanes();
+}
+
 XRLightEstimate* XRFrame::getLightEstimate(
     XRLightProbe* light_probe,
     ExceptionState& exception_state) const {
@@ -142,13 +165,19 @@ XRDepthInformation* XRFrame::getDepthInformation(
     return nullptr;
   }
 
+  if (!is_animation_frame_) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      kNonAnimationFrame);
+    return nullptr;
+  }
+
   if (this != view->frame()) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                       kInvalidView);
     return nullptr;
   }
 
-  return session_->GetDepthInformation();
+  return session_->GetDepthInformation(this);
 }
 
 // Return an XRPose that has a transform of basespace_from_space, while
@@ -354,7 +383,6 @@ HeapVector<Member<XRImageTrackingResult>> XRFrame::getImageTrackingResults(
 
 void XRFrame::Trace(Visitor* visitor) const {
   visitor->Trace(session_);
-  visitor->Trace(world_information_);
   ScriptWrappable::Trace(visitor);
 }
 

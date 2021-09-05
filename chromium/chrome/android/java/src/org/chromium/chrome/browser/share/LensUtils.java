@@ -14,17 +14,18 @@ import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.chrome.browser.IntentHandler;
-import org.chromium.chrome.browser.externalauth.ExternalAuthUtils;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.gsa.GSAState;
 import org.chromium.chrome.browser.lens.LensController;
 import org.chromium.chrome.browser.lens.LensIntentParams;
 import org.chromium.chrome.browser.lens.LensQueryResult;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.signin.IdentityServicesProvider;
+import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
+import org.chromium.components.externalauth.ExternalAuthUtils;
 import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.components.variations.VariationsAssociatedData;
+import org.chromium.url.GURL;
 
 /**
  * This class provides utilities for intenting into Google Lens.
@@ -300,8 +301,8 @@ public class LensUtils {
      * @return The intent to Google Lens.
      */
     public static Intent getShareWithGoogleLensIntent(final Context context, final Uri imageUri,
-            final boolean isIncognito, final long currentTimeNanos, final String srcUrl,
-            final String titleOrAltText, final String pageUrl, LensQueryResult lensQueryResult,
+            final boolean isIncognito, final long currentTimeNanos, final GURL srcUrl,
+            final String titleOrAltText, final GURL pageUrl, LensQueryResult lensQueryResult,
             final boolean requiresConfirmation) {
         final CoreAccountInfo coreAccountInfo =
                 IdentityServicesProvider.get()
@@ -335,11 +336,10 @@ public class LensUtils {
             }
 
             if (!isIncognito) {
-                if ((srcUrl != null)
-                        && ChromeFeatureList.getFieldTrialParamByFeatureAsBoolean(
-                                ChromeFeatureList.CONTEXT_MENU_SEARCH_WITH_GOOGLE_LENS,
-                                SEND_SRC_PARAM_NAME, false)) {
-                    lensUriBuilder.appendQueryParameter(IMAGE_SRC_URI_KEY, srcUrl);
+                if (ChromeFeatureList.getFieldTrialParamByFeatureAsBoolean(
+                            ChromeFeatureList.CONTEXT_MENU_SEARCH_WITH_GOOGLE_LENS,
+                            SEND_SRC_PARAM_NAME, false)) {
+                    lensUriBuilder.appendQueryParameter(IMAGE_SRC_URI_KEY, srcUrl.getSpec());
                 }
                 if ((titleOrAltText != null)
                         && ChromeFeatureList.getFieldTrialParamByFeatureAsBoolean(
@@ -347,11 +347,10 @@ public class LensUtils {
                                 SEND_ALT_PARAM_NAME, false)) {
                     lensUriBuilder.appendQueryParameter(ALT_URI_KEY, titleOrAltText);
                 }
-                if ((pageUrl != null)
-                        && ChromeFeatureList.getFieldTrialParamByFeatureAsBoolean(
-                                ChromeFeatureList.CONTEXT_MENU_SEARCH_WITH_GOOGLE_LENS,
-                                SEND_PAGE_PARAM_NAME, false)) {
-                    lensUriBuilder.appendQueryParameter(PAGE_URI_KEY, pageUrl);
+                if (ChromeFeatureList.getFieldTrialParamByFeatureAsBoolean(
+                            ChromeFeatureList.CONTEXT_MENU_SEARCH_WITH_GOOGLE_LENS,
+                            SEND_PAGE_PARAM_NAME, false)) {
+                    lensUriBuilder.appendQueryParameter(PAGE_URI_KEY, pageUrl.getSpec());
                 }
                 String variations = sFakeVariationsForTesting == null
                         ? VariationsAssociatedData.getGoogleAppVariations()
@@ -414,16 +413,18 @@ public class LensUtils {
      *                         image.
      * @param pageUrl          The url of the top level frame of the page.
      * @param requiresConfirmation Whether the request requires an confirmation dialog.
+     * @param lensIntentType The Lens intent type
      * @return The intent parameters to intent to Google Lens.
      */
     public static LensIntentParams buildLensIntentParams(final Uri imageUri,
             final boolean isIncognito, final String srcUrl, final String titleOrAltText,
-            final String pageUrl, final boolean requiresConfirmation) {
+            final String pageUrl, final boolean requiresConfirmation, final int lensIntentType) {
         LensIntentParams.Builder intentParamsBuilder = new LensIntentParams.Builder();
+        // TODO(crbug/1170825): Pass LensQueryResult directly to LensIntentParams.
         return intentParamsBuilder.withImageUri(imageUri)
                 .withIsIncognito(isIncognito)
                 .withRequiresConfirmation(requiresConfirmation)
-                .withIntentType(getLensShoppingIntentType())
+                .withIntentType(lensIntentType)
                 .withImageTitleOrAltText(titleOrAltText)
                 .withSrcUrl(srcUrl)
                 .withPageUrl(pageUrl)
@@ -589,7 +590,7 @@ public class LensUtils {
      * Check if the page uri to determine whether the image is shoppable.
      * @return true if the image is shoppable.
      */
-    public static boolean isInShoppingAllowlist(final String url) {
+    public static boolean isInShoppingAllowlist(final GURL url) {
         if (sFakeImageUrlInShoppingAllowlistForTesting) {
             return true;
         }
@@ -598,7 +599,7 @@ public class LensUtils {
             return false;
         }
 
-        if (url == null || url.isEmpty()) {
+        if (GURL.isEmptyOrInvalid(url)) {
             return false;
         }
 
@@ -650,25 +651,25 @@ public class LensUtils {
     /**
      * Check if the uri matches any shopping url patterns.
      */
-    private static boolean hasShoppingUrlPattern(final String url) {
+    private static boolean hasShoppingUrlPattern(final GURL url) {
         String shoppingUrlPatterns = getShoppingUrlPatterns();
         if (shoppingUrlPatterns == null || shoppingUrlPatterns.isEmpty()) {
             // Fallback to default shopping url patterns.
             shoppingUrlPatterns = LENS_DEFAULT_SHOPPING_URL_PATTERNS;
         }
 
-        return url.matches(shoppingUrlPatterns);
+        return url.getSpec().matches(shoppingUrlPatterns);
     }
 
     /**
      * Check if the uri domain is in the Lens shopping domain Allowlist.
      */
-    private static boolean isInDomainAllowList(final String url) {
+    private static boolean isInDomainAllowList(final GURL url) {
         final String allowlistEntries = getAllowlistEntries();
         final String[] allowlist = allowlistEntries.split(",");
 
         for (final String allowlistEntry : allowlist) {
-            if (allowlistEntry.length() > 0 && url.contains(allowlistEntry)) {
+            if (allowlistEntry.length() > 0 && url.getSpec().contains(allowlistEntry)) {
                 return true;
             }
         }

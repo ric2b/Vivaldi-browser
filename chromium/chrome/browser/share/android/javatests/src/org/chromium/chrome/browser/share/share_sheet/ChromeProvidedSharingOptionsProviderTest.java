@@ -8,13 +8,14 @@ import static org.junit.Assert.assertEquals;
 import static org.mockito.ArgumentMatchers.anyString;
 
 import android.app.Activity;
-import android.support.test.rule.ActivityTestRule;
+import android.support.test.runner.lifecycle.Stage;
 
 import androidx.test.filters.MediumTest;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -25,8 +26,11 @@ import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
 import org.chromium.base.supplier.Supplier;
+import org.chromium.base.test.BaseActivityTestRule;
+import org.chromium.base.test.util.ApplicationTestUtils;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.share.ChromeShareExtras;
@@ -36,6 +40,7 @@ import org.chromium.chrome.test.ChromeBrowserTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.components.browser_ui.share.ShareParams;
+import org.chromium.components.feature_engagement.Tracker;
 import org.chromium.components.prefs.PrefService;
 import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.components.user_prefs.UserPrefsJni;
@@ -55,8 +60,8 @@ public class ChromeProvidedSharingOptionsProviderTest {
     public final ChromeBrowserTestRule mBrowserTestRule = new ChromeBrowserTestRule();
 
     @Rule
-    public ActivityTestRule<DummyUiActivity> mActivityTestRule =
-            new ActivityTestRule<>(DummyUiActivity.class);
+    public BaseActivityTestRule<DummyUiActivity> mActivityTestRule =
+            new BaseActivityTestRule<>(DummyUiActivity.class);
 
     @Rule
     public TestRule mFeatureProcessor = new Features.JUnitProcessor();
@@ -89,6 +94,9 @@ public class ChromeProvidedSharingOptionsProviderTest {
     @Mock
     private WebContents mWebContents;
 
+    @Mock
+    private Tracker mTracker;
+
     @Before
     public void setUp() {
         MockitoAnnotations.initMocks(this);
@@ -99,7 +107,16 @@ public class ChromeProvidedSharingOptionsProviderTest {
         Mockito.when(mTab.getWebContents()).thenReturn(mWebContents);
         Mockito.when(mTab.getUrl()).thenReturn(new GURL(URL));
         Mockito.when(mWebContents.isIncognito()).thenReturn(false);
+
+        TrackerFactory.setTrackerForTests(mTracker);
+        mActivityTestRule.launchActivity(null);
+        ApplicationTestUtils.waitForActivityState(mActivityTestRule.getActivity(), Stage.RESUMED);
         mActivity = mActivityTestRule.getActivity();
+    }
+
+    @After
+    public void tearDown() throws Exception {
+        TrackerFactory.setTrackerForTests(null);
     }
 
     @Test
@@ -332,9 +349,10 @@ public class ChromeProvidedSharingOptionsProviderTest {
     @Test
     @MediumTest
     public void getUrlToShare_noShareParamsUrl_returnsImageUrl() {
+        GURL gurl = new GURL(URL);
         ShareParams shareParams = new ShareParams.Builder(null, /*title=*/"", /*url=*/"").build();
         ChromeShareExtras chromeShareExtras =
-                new ChromeShareExtras.Builder().setImageSrcUrl(URL).build();
+                new ChromeShareExtras.Builder().setImageSrcUrl(gurl).build();
 
         assertEquals("URL should be imageSrcUrl.",
                 ChromeProvidedSharingOptionsProvider.getUrlToShare(
@@ -347,7 +365,7 @@ public class ChromeProvidedSharingOptionsProviderTest {
     public void getUrlToShare_shareParamsUrlExists_returnsShareParamsUrl() {
         ShareParams shareParams = new ShareParams.Builder(null, /*title=*/"", URL).build();
         ChromeShareExtras chromeShareExtras =
-                new ChromeShareExtras.Builder().setImageSrcUrl("").build();
+                new ChromeShareExtras.Builder().setImageSrcUrl(GURL.emptyGURL()).build();
 
         assertEquals("URL should be ShareParams URL.",
                 ChromeProvidedSharingOptionsProvider.getUrlToShare(
@@ -360,7 +378,7 @@ public class ChromeProvidedSharingOptionsProviderTest {
     public void getUrlToShare_noShareParamsUrl_noImageUrl() {
         ShareParams shareParams = new ShareParams.Builder(null, /*title=*/"", /*url=*/"").build();
         ChromeShareExtras chromeShareExtras =
-                new ChromeShareExtras.Builder().setImageSrcUrl("").build();
+                new ChromeShareExtras.Builder().setImageSrcUrl(GURL.emptyGURL()).build();
 
         assertEquals("URL should be ShareParams URL.",
                 ChromeProvidedSharingOptionsProvider.getUrlToShare(
@@ -383,7 +401,7 @@ public class ChromeProvidedSharingOptionsProviderTest {
                         /*settingsLauncher=*/null,
                         /*syncState=*/false,
                         /*shareStartTime=*/0, mShareSheetCoordinator,
-                        /*imageEditorModuleProvider*/ null);
+                        /*imageEditorModuleProvider*/ null, mTracker);
     }
 
     private void assertCorrectModelsAreInTheRightOrder(

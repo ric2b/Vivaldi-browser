@@ -10,6 +10,7 @@
 #include "chrome/browser/apps/app_service/app_icon_factory.h"
 #include "chrome/browser/apps/app_service/menu_util.h"
 #include "chrome/browser/chromeos/borealis/borealis_app_launcher.h"
+#include "chrome/browser/chromeos/borealis/borealis_context_manager.h"
 #include "chrome/browser/chromeos/borealis/borealis_features.h"
 #include "chrome/browser/chromeos/borealis/borealis_service.h"
 #include "chrome/browser/chromeos/borealis/borealis_util.h"
@@ -65,6 +66,9 @@ BorealisApps::BorealisApps(
     Profile* profile)
     : profile_(profile) {
   Registry()->AddObserver(this);
+
+  anonymous_app_observation_.Observe(
+      &borealis::BorealisService::GetForProfile(profile_)->WindowManager());
 
   PublisherBase::Initialize(app_service, apps::mojom::AppType::kBorealis);
 
@@ -175,6 +179,16 @@ void BorealisApps::GetMenuModel(const std::string& app_id,
                                 GetMenuModelCallback callback) {
   apps::mojom::MenuItemsPtr menu_items = apps::mojom::MenuItems::New();
 
+  // TODO(b/170677773): Show shutdown in another app.
+  if (app_id == borealis::kBorealisAppId &&
+      borealis::BorealisService::GetForProfile(profile_)
+          ->ContextManager()
+          .IsRunning()) {
+    // TODO(b/174705762): Use borealis-specific strings.
+    AddCommandItem(ash::SHUTDOWN_GUEST_OS, IDS_PLUGIN_VM_SHUT_DOWN_MENU_ITEM,
+                   &menu_items);
+  }
+
   if (ShouldAddCloseItem(app_id, menu_type, profile_)) {
     AddCommandItem(ash::MENU_CLOSE, IDS_SHELF_CONTEXT_MENU_CLOSE, &menu_items);
   }
@@ -214,6 +228,42 @@ void BorealisApps::OnRegistryUpdated(
       Publish(Convert(*registration, /*new_icon_key=*/true), subscribers_);
     }
   }
+}
+
+void BorealisApps::OnAnonymousAppAdded(const std::string& shelf_app_id,
+                                       const std::string& shelf_app_name) {
+  apps::mojom::AppPtr app = apps::PublisherBase::MakeApp(
+      apps::mojom::AppType::kBorealis, shelf_app_id,
+      apps::mojom::Readiness::kReady, shelf_app_name,
+      apps::mojom::InstallSource::kUser);
+
+  app->icon_key = apps::mojom::IconKey::New(
+      apps::mojom::IconKey::kDoesNotChangeOverTime,
+      IDR_LOGO_BOREALIS_DEFAULT_192, apps::IconEffects::kNone);
+  app->recommendable = apps::mojom::OptionalBool::kFalse;
+  app->searchable = apps::mojom::OptionalBool::kFalse;
+  app->show_in_launcher = apps::mojom::OptionalBool::kFalse;
+  app->show_in_shelf = apps::mojom::OptionalBool::kTrue;
+  app->show_in_search = apps::mojom::OptionalBool::kFalse;
+
+  Publish(std::move(app), subscribers_);
+}
+
+void BorealisApps::OnAnonymousAppRemoved(const std::string& shelf_app_id) {
+  // First uninstall the anonymous app, then remove it.
+  for (auto readiness : {apps::mojom::Readiness::kUninstalledByUser,
+                         apps::mojom::Readiness::kRemoved}) {
+    apps::mojom::AppPtr app = apps::mojom::App::New();
+    app->app_type = apps::mojom::AppType::kBorealis;
+    app->app_id = shelf_app_id;
+    app->readiness = readiness;
+    Publish(std::move(app), subscribers_);
+  }
+}
+
+void BorealisApps::OnWindowManagerDeleted(
+    borealis::BorealisWindowManager* window_manager) {
+  anonymous_app_observation_.Reset();
 }
 
 }  // namespace apps

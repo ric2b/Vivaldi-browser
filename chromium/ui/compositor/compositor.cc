@@ -11,14 +11,15 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/containers/contains.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/system/sys_info.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "cc/animation/animation_host.h"
 #include "cc/animation/animation_id_provider.h"
 #include "cc/animation/animation_timeline.h"
@@ -28,6 +29,7 @@
 #include "cc/layers/layer.h"
 #include "cc/metrics/begin_main_frame_metrics.h"
 #include "cc/metrics/frame_sequence_tracker.h"
+#include "cc/metrics/web_vital_metrics.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/layer_tree_settings.h"
 #include "components/viz/common/features.h"
@@ -574,13 +576,23 @@ bool Compositor::HasObserver(const CompositorObserver* observer) const {
 }
 
 void Compositor::AddAnimationObserver(CompositorAnimationObserver* observer) {
+  if (animation_observer_list_.empty()) {
+    for (auto& obs : observer_list_)
+      obs.OnFirstAnimationStarted(this);
+  }
   animation_observer_list_.AddObserver(observer);
   host_->SetNeedsAnimate();
 }
 
 void Compositor::RemoveAnimationObserver(
     CompositorAnimationObserver* observer) {
+  if (!animation_observer_list_.HasObserver(observer))
+    return;
   animation_observer_list_.RemoveObserver(observer);
+  if (animation_observer_list_.empty()) {
+    for (auto& obs : observer_list_)
+      obs.OnLastAnimationEnded(this);
+  }
 }
 
 bool Compositor::HasAnimationObserver(
@@ -623,7 +635,7 @@ void Compositor::BeginMainFrame(const viz::BeginFrameArgs& args) {
   DCHECK(!IsLocked());
   for (auto& observer : animation_observer_list_)
     observer.OnAnimationStep(args.frame_time);
-  if (animation_observer_list_.might_have_observers())
+  if (!animation_observer_list_.empty())
     host_->SetNeedsAnimate();
 }
 
@@ -668,6 +680,10 @@ void Compositor::DidCommit(base::TimeTicks) {
 
 std::unique_ptr<cc::BeginMainFrameMetrics>
 Compositor::GetBeginMainFrameMetrics() {
+  return nullptr;
+}
+
+std::unique_ptr<cc::WebVitalMetrics> Compositor::GetWebVitalMetrics() {
   return nullptr;
 }
 
@@ -732,7 +748,9 @@ void Compositor::CancelThroughtputTracker(TrackerId tracker_id) {
   throughput_tracker_map_.erase(tracker_id);
 }
 
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// of lacros-chrome is complete.
+#if defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
 void Compositor::OnCompleteSwapWithNewSize(const gfx::Size& size) {
   for (auto& observer : observer_list_)
     observer.OnCompositingCompleteSwapWithNewSize(this, size);

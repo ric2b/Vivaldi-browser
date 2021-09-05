@@ -2,9 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import './strings.m.js';
-import './realbox_button.js';
 import './realbox_icon.js';
+import './strings.m.js';
+import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
+import 'chrome://resources/cr_elements/cr_icons_css.m.js';
+import 'chrome://resources/cr_elements/hidden_style_css.m.js';
 
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
@@ -48,7 +50,7 @@ class RealboxMatchElement extends PolymerElement {
        */
       ariaLabel: {
         type: String,
-        computed: `computeAriaLabel_(match)`,
+        computed: `computeAriaLabel_(matchText_, removeButtonIsVisible_)`,
         reflectToAttribute: true,
       },
 
@@ -101,6 +103,27 @@ class RealboxMatchElement extends PolymerElement {
       descriptionHtml_: {
         type: String,
         computed: `computeDescriptionHtml_(match)`,
+      },
+
+      /**
+       * The text content of match used to calculate the 'aria-label' attributes
+       * of the element as well as the remove button.
+       * @type {string}
+       * @private
+       */
+      matchText_: {
+        type: String,
+        computed: `computeMatchText_(match)`,
+      },
+
+      /**
+       * Remove button's 'aria-label' attribute.
+       * @type {string}
+       * @private
+       */
+      removeButtonAriaLabel_: {
+        type: String,
+        computed: `computeRemoveButtonAriaLabel_(matchText_)`,
       },
 
       /**
@@ -199,14 +222,8 @@ class RealboxMatchElement extends PolymerElement {
    * @param {!Event} e
    * @private
    */
-  onRemoveButtonKeydown_(e) {
-    if (e.key !== 'Enter' && e.key !== ' ') {
-      return;
-    }
-
-    // Simulate a click so that it gets handled by |onRemoveButtonClick_|.
-    e.target.click();
-    e.preventDefault();  // Prevents default browser action.
+  onRemoveButtonMouseDown_(e) {
+    e.preventDefault();  // Prevents default browser action (focus).
   }
 
   //============================================================================
@@ -217,7 +234,7 @@ class RealboxMatchElement extends PolymerElement {
    * @return {string}
    * @private
    */
-  computeAriaLabel_() {
+  computeMatchText_() {
     if (!this.match) {
       return '';
     }
@@ -226,6 +243,16 @@ class RealboxMatchElement extends PolymerElement {
     return this.match.swapContentsAndDescription ?
         description + this.separatorText_ + contents :
         contents + this.separatorText_ + description;
+  }
+
+  /**
+   * @return {string}
+   * @private
+   */
+  computeAriaLabel_() {
+    return this.removeButtonIsVisible_ ?
+        loadTimeData.getStringF('removeSuggestionA11ySuffix', this.matchText_) :
+        this.matchText_;
   }
 
   /**
@@ -278,6 +305,15 @@ class RealboxMatchElement extends PolymerElement {
    */
   computeRemoveButtonIsVisible_() {
     return this.match && this.match.supportsDeletion;
+  }
+
+  /**
+   * @return {string}
+   * @private
+   */
+  computeRemoveButtonAriaLabel_() {
+    return loadTimeData.getStringF(
+        'removeSuggestionA11yPrefix', this.matchText_);
   }
 
   /**

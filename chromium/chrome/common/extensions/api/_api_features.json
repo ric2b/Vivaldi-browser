@@ -236,10 +236,6 @@
       "chrome://add-supervision/*"
     ]
   }],
-  "cloudPrintPrivate": {
-    "dependencies": ["permission:cloudPrintPrivate"],
-    "contexts": ["blessed_extension"]
-  },
   "commandLinePrivate": {
     "dependencies": ["permission:commandLinePrivate"],
     "contexts": ["blessed_extension"]
@@ -302,10 +298,6 @@
       "B44D08FD98F1523ED5837D78D0A606EA9D6206E5"  // Web Store
     ]
   }],
-  "dataReductionProxy": {
-    "dependencies": ["permission:dataReductionProxy"],
-    "contexts": ["blessed_extension"]
-  },
   "debugger": {
     "dependencies": ["permission:debugger"],
     "contexts": ["blessed_extension"]
@@ -814,10 +806,16 @@
       "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
     ]
   }],
+  "tabs.executeScript": {
+    "max_manifest_version": 2
+  },
   "tabs.getAllInWindow": {
     "max_manifest_version": 2
   },
   "tabs.getSelected": {
+    "max_manifest_version": 2
+  },
+  "tabs.insertCSS": {
     "max_manifest_version": 2
   },
   "tabs.onActiveChanged": {
@@ -864,10 +862,16 @@
     "dependencies": ["permission:topSites"],
     "contexts": ["blessed_extension"]
   },
-  "tts": {
+  "tts": [{
     "dependencies": ["permission:tts"],
     "contexts": ["blessed_extension"]
-  },
+  }, {
+    "channel": "stable",
+    "contexts": ["webui"],
+    "matches": [
+      "chrome://oobe/*"
+    ]
+  }],
   "ttsEngine": {
     "dependencies": ["permission:ttsEngine"],
     "contexts": ["blessed_extension"]

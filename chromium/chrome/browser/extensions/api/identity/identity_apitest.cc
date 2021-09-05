@@ -21,6 +21,7 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "build/buildflag.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/api/identity/gaia_remote_consent_flow.h"
 #include "chrome/browser/extensions/api/identity/gaia_web_auth_flow.h"
@@ -77,7 +78,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/chromeos/login/users/mock_user_manager.h"
 #include "chrome/browser/chromeos/net/network_portal_detector_test_impl.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
@@ -107,7 +108,7 @@ const char kGetAuthTokenResultHistogramName[] =
 const char kGetAuthTokenResultAfterConsentApprovedHistogramName[] =
     "Signin.Extensions.GetAuthTokenResult.RemoteConsentApproved";
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 void InitNetwork() {
   const chromeos::NetworkState* default_network =
       chromeos::NetworkHandler::Get()
@@ -426,7 +427,7 @@ class FakeGetAuthTokenFunction : public IdentityGetAuthTokenFunction {
     }
   }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   void StartDeviceAccessTokenRequest() override {
     // In these tests requests for the device account just funnel through to
     // requests for the token key account.
@@ -590,7 +591,7 @@ class IdentityTestWithSignin : public AsyncExtensionBrowserTest {
   void SetUpOnMainThread() override {
     AsyncExtensionBrowserTest::SetUpOnMainThread();
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     // Fake the network online state so that Gaia requests can come through.
     InitNetwork();
 #endif
@@ -611,9 +612,11 @@ class IdentityTestWithSignin : public AsyncExtensionBrowserTest {
   }
 
  protected:
-  // Returns the account ID of the created account.
+  // Signs in (at sync consent level) and returns the account ID of the primary
+  // account.
   CoreAccountId SignIn(const std::string& email) {
     auto account_info = identity_test_env()->MakePrimaryAccountAvailable(email);
+    EXPECT_TRUE(identity_test_env()->identity_manager()->HasPrimaryAccount());
     return account_info.account_id;
   }
 
@@ -630,9 +633,7 @@ class IdentityTestWithSignin : public AsyncExtensionBrowserTest {
   std::unique_ptr<IdentityTestEnvironmentProfileAdaptor>
       identity_test_env_profile_adaptor_;
 
-  std::unique_ptr<
-      BrowserContextDependencyManager::CreateServicesCallbackList::Subscription>
-      create_services_subscription_;
+  base::CallbackListSubscription create_services_subscription_;
 };
 
 class IdentityGetAccountsFunctionTest : public IdentityTestWithSignin {
@@ -1132,7 +1133,7 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, NonInteractiveNotSignedIn) {
 }
 
 // The signin flow is simply not used on ChromeOS.
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
 IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
                        InteractiveNotSignedInShowSigninOnlyOnce) {
   scoped_refptr<FakeGetAuthTokenFunction> func(new FakeGetAuthTokenFunction());
@@ -1283,7 +1284,7 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
 }
 
 // The signin flow is simply not used on ChromeOS.
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
 IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
                        InteractiveMintServiceErrorShowSigninOnlyOnce) {
   scoped_refptr<FakeGetAuthTokenFunction> func(new FakeGetAuthTokenFunction());
@@ -1359,7 +1360,7 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, InteractiveLoginCanceled) {
   EXPECT_EQ(std::string(errors::kUserNotSignedIn), error);
 // ChromeOS does not support the interactive login flow, so the login UI will
 // never be shown on that platform.
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
   EXPECT_TRUE(func->login_ui_shown());
 #endif
   EXPECT_FALSE(func->scope_ui_shown());
@@ -1390,7 +1391,7 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
 // The interactive login flow is always short-circuited out with failure on
 // ChromeOS, so the tests of the interactive login flow being successful are not
 // relevant on that platform.
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
 IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
                        InteractiveLoginSuccessMintFailure) {
   scoped_refptr<FakeGetAuthTokenFunction> func(new FakeGetAuthTokenFunction());
@@ -1595,7 +1596,7 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
 }
 
 // The signin flow is simply not used on ChromeOS.
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
 IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
                        InteractiveApprovalServiceErrorShowSigninUIOnlyOnce) {
   scoped_refptr<FakeGetAuthTokenFunction> func(new FakeGetAuthTokenFunction());
@@ -2024,7 +2025,7 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, InteractiveCacheHit) {
 
 // The interactive login UI is never shown on ChromeOS, so tests of the
 // interactive login flow being successful are not relevant on that platform.
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
 IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, LoginInvalidatesTokenCache) {
   scoped_refptr<FakeGetAuthTokenFunction> func(new FakeGetAuthTokenFunction());
   scoped_refptr<const Extension> extension(CreateExtension(CLIENT_ID | SCOPES));
@@ -2707,7 +2708,7 @@ IN_PROC_BROWSER_TEST_F(
 }
 
 // The signin flow is simply not used on ChromeOS.
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
 IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
                        MultiSecondaryInteractiveInvalidToken) {
   // Setup a secondary account with no valid refresh token, and try to get a
@@ -2922,7 +2923,7 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, GranularPermissionsResponse) {
       1);
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 class GetAuthTokenFunctionPublicSessionTest : public GetAuthTokenFunctionTest {
  public:
   GetAuthTokenFunctionPublicSessionTest()
@@ -3319,7 +3320,7 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionSelectedUserIdTest,
 }
 
 // The signin flow is not used on ChromeOS.
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
 // Tests that Chrome does not have any selected user id value if the account
 // specified by the extension is not available.
 IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionSelectedUserIdTest,
@@ -3662,14 +3663,14 @@ class ClearAllCachedAuthTokensFunctionTestWithPartitionParam
 
 IN_PROC_BROWSER_TEST_P(ClearAllCachedAuthTokensFunctionTestWithPartitionParam,
                        CleanWebAuthFlowCookies) {
-  net::CanonicalCookie test_cookie(
+  auto test_cookie = net::CanonicalCookie::CreateUnsafeCookieForTesting(
       "test_name", "test_value", "test.com", "/", base::Time(), base::Time(),
       base::Time(), true, false, net::CookieSameSite::NO_RESTRICTION,
       net::COOKIE_PRIORITY_DEFAULT, false);
   base::RunLoop set_cookie_loop;
   GetCookieManager()->SetCanonicalCookie(
-      test_cookie,
-      net::cookie_util::SimulatedCookieSource(test_cookie, url::kHttpsScheme),
+      *test_cookie,
+      net::cookie_util::SimulatedCookieSource(*test_cookie, url::kHttpsScheme),
       net::CookieOptions(),
       net::cookie_util::AdaptCookieAccessResultToBool(
           base::BindLambdaForTesting([&](bool include) {
@@ -3769,7 +3770,7 @@ IN_PROC_BROWSER_TEST_F(OnSignInChangedEventTest, FireOnPrimaryAccountSignIn) {
   EXPECT_FALSE(HasExpectedEvent());
 }
 
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
 // Test that an event is fired when the primary account signs out. Only
 // applicable in non-DICE mode, as when DICE is enabled clearing the primary
 // account does not result in its refresh token being removed and hence does
@@ -3791,7 +3792,7 @@ IN_PROC_BROWSER_TEST_F(OnSignInChangedEventTest, FireOnPrimaryAccountSignOut) {
 
   EXPECT_FALSE(HasExpectedEvent());
 }
-#endif  // !defined(OS_CHROMEOS)
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
 // Test that an event is fired when the primary account has a refresh token
 // invalidated.

@@ -154,66 +154,54 @@ public class BookmarkActionBar extends SelectableListToolbar<BookmarkId>
         } else if (menuItem.getItemId() == R.id.select_all_menu_id) {
             toggleSelectAll();
             return true;
-        } else if (ChromeApplication.isVivaldi() && menuItem.getItemId() == R.id.sort_bookmarks_id) {
-            View view = findViewById(R.id.sort_bookmarks_id);
-            PopupMenu popupMenu = new PopupMenu(getContext(), view);
-            popupMenu.inflate(R.menu.vivaldi_sort_bookmarks_menu);
-
-            BookmarkItemsAdapter.SortOrder order = mDelegate.getSortOrder();
-            if (order == BookmarkItemsAdapter.SortOrder.MANUAL) {
-                popupMenu.getMenu().findItem(R.id.sort_manual_id).setCheckable(true);
-                popupMenu.getMenu().findItem(R.id.sort_manual_id).setChecked(true);
-            } else if (order == BookmarkItemsAdapter.SortOrder.TITLE) {
-                popupMenu.getMenu().findItem(R.id.sort_by_title_id).setCheckable(true);
-                popupMenu.getMenu().findItem(R.id.sort_by_title_id).setChecked(true);
-            } else if (order == BookmarkItemsAdapter.SortOrder.ADDRESS) {
-                popupMenu.getMenu().findItem(R.id.sort_by_address_id).setCheckable(true);
-                popupMenu.getMenu().findItem(R.id.sort_by_address_id).setChecked(true);
-            } else if (order == BookmarkItemsAdapter.SortOrder.NICK) {
-                popupMenu.getMenu().findItem(R.id.sort_by_nickname_id).setCheckable(true);
-                popupMenu.getMenu().findItem(R.id.sort_by_nickname_id).setChecked(true);
-            } else if (order == BookmarkItemsAdapter.SortOrder.DESCRIPTION) {
-                popupMenu.getMenu().findItem(R.id.sort_by_description_id).setCheckable(true);
-                popupMenu.getMenu().findItem(R.id.sort_by_description_id).setChecked(true);
-            } else if (order == BookmarkItemsAdapter.SortOrder.DATE) {
-                popupMenu.getMenu().findItem(R.id.sort_by_date_id).setCheckable(true);
-                popupMenu.getMenu().findItem(R.id.sort_by_date_id).setChecked(true);
-            }
-
-            popupMenu.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
-                @Override
-                public boolean onMenuItemClick(MenuItem menuItem) {
-                    if (menuItem.getItemId() == R.id.sort_manual_id) {
-                        mDelegate.setSortOrder(
-                                BookmarkItemsAdapter.SortOrder.forNumber(BookmarkItemsAdapter.SortOrder.MANUAL.getNumber()));
-                        return true;
-                    } else if (menuItem.getItemId() == R.id.sort_by_title_id) {
-                        mDelegate.setSortOrder(
-                                BookmarkItemsAdapter.SortOrder.forNumber(BookmarkItemsAdapter.SortOrder.TITLE.getNumber()));
-                        return true;
-                    } else if (menuItem.getItemId() == R.id.sort_by_address_id) {
-                        mDelegate.setSortOrder(
-                                BookmarkItemsAdapter.SortOrder.forNumber(BookmarkItemsAdapter.SortOrder.ADDRESS.getNumber()));
-                        return true;
-                    } else if (menuItem.getItemId() == R.id.sort_by_nickname_id) {
-                        mDelegate.setSortOrder(
-                                BookmarkItemsAdapter.SortOrder.forNumber(BookmarkItemsAdapter.SortOrder.NICK.getNumber()));
-                        return true;
-                    } else if (menuItem.getItemId() == R.id.sort_by_description_id) {
-                        mDelegate.setSortOrder(
-                                BookmarkItemsAdapter.SortOrder.forNumber(BookmarkItemsAdapter.SortOrder.DESCRIPTION.getNumber()));
-                        return true;
-                    } else if (menuItem.getItemId() == R.id.sort_by_date_id) {
-                        mDelegate.setSortOrder(
-                                BookmarkItemsAdapter.SortOrder.forNumber(BookmarkItemsAdapter.SortOrder.DATE.getNumber()));
-                        return true;
-                    }
-                    return false;
+        } else if (ChromeApplication.isVivaldi()) {
+            if (menuItem.getItemId() == R.id.sort_bookmarks_id) {
+                BookmarkItemsAdapter.SortOrder order = mDelegate.getSortOrder();
+                if (order == BookmarkItemsAdapter.SortOrder.MANUAL) {
+                    menuItem.getSubMenu().findItem(R.id.sort_manual_id).setChecked(true);
+                } else if (order == BookmarkItemsAdapter.SortOrder.TITLE) {
+                    menuItem.getSubMenu().findItem(R.id.sort_by_title_id).setChecked(true);
+                } else if (order == BookmarkItemsAdapter.SortOrder.ADDRESS) {
+                    menuItem.getSubMenu().findItem(R.id.sort_by_address_id).setChecked(true);
+                } else if (order == BookmarkItemsAdapter.SortOrder.NICK) {
+                    menuItem.getSubMenu().findItem(R.id.sort_by_nickname_id).setChecked(true);
+                } else if (order == BookmarkItemsAdapter.SortOrder.DESCRIPTION) {
+                    menuItem.getSubMenu().findItem(R.id.sort_by_description_id).setChecked(true);
+                } else if (order == BookmarkItemsAdapter.SortOrder.DATE) {
+                    menuItem.getSubMenu().findItem(R.id.sort_by_date_id).setChecked(true);
                 }
-            });
-            popupMenu.show();
-
-            return true;
+                return true;
+            } else if (menuItem.getItemId() == R.id.sort_manual_id) {
+                mDelegate.setSortOrder(
+                        BookmarkItemsAdapter.SortOrder.forNumber(BookmarkItemsAdapter.
+                                SortOrder.MANUAL.getNumber()));
+                return true;
+            } else if (menuItem.getItemId() == R.id.sort_by_title_id) {
+                mDelegate.setSortOrder(
+                        BookmarkItemsAdapter.SortOrder.forNumber(BookmarkItemsAdapter.
+                                SortOrder.TITLE.getNumber()));
+                return true;
+            } else if (menuItem.getItemId() == R.id.sort_by_address_id) {
+                mDelegate.setSortOrder(
+                        BookmarkItemsAdapter.SortOrder.forNumber(BookmarkItemsAdapter.
+                                SortOrder.ADDRESS.getNumber()));
+                return true;
+            } else if (menuItem.getItemId() == R.id.sort_by_nickname_id) {
+                mDelegate.setSortOrder(
+                        BookmarkItemsAdapter.SortOrder.forNumber(BookmarkItemsAdapter.
+                                SortOrder.NICK.getNumber()));
+                return true;
+            } else if (menuItem.getItemId() == R.id.sort_by_description_id) {
+                mDelegate.setSortOrder(
+                        BookmarkItemsAdapter.SortOrder.forNumber(BookmarkItemsAdapter.
+                                SortOrder.DESCRIPTION.getNumber()));
+                return true;
+            } else if (menuItem.getItemId() == R.id.sort_by_date_id) {
+                mDelegate.setSortOrder(
+                        BookmarkItemsAdapter.SortOrder.forNumber(BookmarkItemsAdapter.
+                                SortOrder.DATE.getNumber()));
+                return true;
+            }
         }
 
         assert false : "Unhandled menu click.";

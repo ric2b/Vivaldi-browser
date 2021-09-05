@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/buildflag_header.gni")
+import("//build/config/chromeos/ui_mode.gni")
 import("//build/config/features.gni")
 import("//build/config/ozone.gni")
 import("//build/config/ui.gni")
@@ -61,6 +62,8 @@ component("views") {
     "accessibility/ax_virtual_view.h",
     "accessibility/view_accessibility.h",
     "accessibility/view_accessibility_utils.h",
+    "accessibility/views_ax_tree_manager.h",
+    "accessibility/widget_ax_tree_id_map.h",
     "accessible_pane_view.h",
     "animation/animation_delegate_views.h",
     "animation/bounds_animator.h",
@@ -177,6 +180,7 @@ component("views") {
     "controls/tree/tree_view_controller.h",
     "controls/tree/tree_view_drawing_provider.h",
     "controls/views_text_services_context_menu.h",
+    "controls/views_text_services_context_menu_base.h",
     "debug_utils.h",
     "drag_controller.h",
     "drag_utils.h",
@@ -273,7 +277,6 @@ component("views") {
     "window/native_frame_view.h",
     "window/non_client_view.h",
     "window/window_button_order_provider.h",
-    "window/window_resize_utils.h",
     "window/window_resources.h",
     "window/window_shape.h",
     "word_lookup_client.h",
@@ -384,7 +387,6 @@ component("views") {
     "controls/tree/tree_view_controller.cc",
     "controls/tree/tree_view_drawing_provider.cc",
     "controls/views_text_services_context_menu_base.cc",
-    "controls/views_text_services_context_menu_base.h",
     "debug_utils.cc",
     "drag_utils.cc",
     "focus/external_focus_tracker.cc",
@@ -459,7 +461,6 @@ component("views") {
     "window/native_frame_view.cc",
     "window/non_client_view.cc",
     "window/window_button_order_provider.cc",
-    "window/window_resize_utils.cc",
     "window/window_shape.cc",
   ]
 
@@ -486,6 +487,7 @@ component("views") {
     "//base/third_party/dynamic_annotations",
     "//build:chromeos_buildflags",
     "//cc/paint",
+    "//components/url_formatter",
     "//mojo/public/cpp/bindings",
     "//skia",
     "//third_party/icu",
@@ -529,12 +531,16 @@ component("views") {
     deps += [ "//ui/display/util" ]
   }
 
+  if (is_chromeos) {
+    deps += [ "//ui/base/ime/chromeos" ]
+  }
+
   if (is_linux || is_chromeos) {
     public += [ "color_chooser/color_chooser_view.h" ]
     sources += [ "color_chooser/color_chooser_view.cc" ]
   }
 
-  if (is_linux && !is_chromeos) {
+  if (is_linux || is_chromeos_lacros) {
     sources -= [ "window/window_button_order_provider.cc" ]
     public_deps += [ "//ui/base/cursor:theme_manager" ]
     deps += [
@@ -549,15 +555,22 @@ component("views") {
       "linux_ui/window_button_order_observer.h",
     ]
     sources += [
-      "controls/menu/menu_config_linux.cc",
       "linux_ui/linux_ui.cc",
       "linux_ui/status_icon_linux.cc",
       "linux_ui/window_button_order_provider.cc",
     ]
+
+    if (!is_chromeos_lacros) {
+      sources += [ "controls/menu/menu_config_linux.cc" ]
+    }
   }
 
-  if (is_chromeos) {
+  if (is_chromeos_ash || is_chromeos_lacros) {
     sources += [ "controls/menu/menu_config_chromeos.cc" ]
+    if (!is_chromeos_lacros) {
+      public += [ "controls/views_text_services_context_menu_chromeos.h" ]
+      sources += [ "controls/views_text_services_context_menu_chromeos.cc" ]
+    }
   }
 
   if (is_mac) {
@@ -729,6 +742,12 @@ component("views") {
         "corewm/tooltip_win.cc",
       ]
     }
+    if (!is_chromeos_ash) {
+      sources += [
+        "accessibility/views_ax_tree_manager.cc",
+        "accessibility/widget_ax_tree_id_map.cc",
+      ]
+    }
     deps += [
       "//ui/aura",
       "//ui/events",
@@ -808,6 +827,8 @@ component("views") {
           "widget/desktop_aura/desktop_drag_drop_client_ozone.h",
           "widget/desktop_aura/desktop_window_tree_host_platform.cc",
           "widget/desktop_aura/window_move_client_platform.cc",
+          "widget/desktop_aura/window_shape_updater.cc",
+          "widget/desktop_aura/window_shape_updater.h",
         ]
       }
       if (use_atk) {
@@ -828,8 +849,6 @@ component("views") {
 
     if (use_aura) {
       sources += [
-        "accessibility/views_ax_tree_manager.cc",
-        "accessibility/views_ax_tree_manager.h",
         "accessibility/views_utilities_aura.cc",
         "accessibility/views_utilities_aura.h",
       ]
@@ -959,6 +978,7 @@ source_set("test_support") {
     ":views",
     "//base",
     "//base/test:test_support",
+    "//build:chromeos_buildflags",
     "//gpu/ipc/service",
     "//ipc:test_support",
     "//mojo/core/embedder",
@@ -1029,7 +1049,7 @@ source_set("test_support") {
     deps += [ "//ui/ozone" ]
   }
 
-  if (use_ozone && is_linux && enable_desktop_aura) {
+  if (use_ozone && (is_linux || is_chromeos_lacros) && enable_desktop_aura) {
     sources += [
       "test/test_desktop_screen_ozone.cc",
       "test/test_desktop_screen_ozone.h",
@@ -1151,7 +1171,6 @@ test("views_unittests") {
     "window/frame_caption_button_unittest.cc",
     "window/hit_test_utils_unittest.cc",
     "window/non_client_view_unittest.cc",
-    "window/window_resize_utils_unittest.cc",
   ]
 
   configs += [ "//build/config:precompiled_headers" ]
@@ -1162,6 +1181,7 @@ test("views_unittests") {
     "//base",
     "//base:i18n",
     "//base/test:test_support",
+    "//build:chromeos_buildflags",
     "//cc",
     "//cc/paint",
     "//components/vector_icons",
@@ -1222,7 +1242,7 @@ test("views_unittests") {
     ]
   }
 
-  if (is_linux && !is_chromeos) {
+  if (is_linux || is_chromeos_lacros) {
     deps += [ "//ui/base/ime/linux" ]
   }
 
@@ -1332,7 +1352,7 @@ test("views_unittests") {
     }
   }
 
-  if (is_linux && use_ozone) {
+  if ((is_linux || is_chromeos_lacros) && use_ozone) {
     data_deps +=
         [ "//testing/buildbot/filters:linux_ozone_views_unittests_filters" ]
   }
@@ -1364,6 +1384,7 @@ source_set("views_interactive_ui_tests") {
     ":views",
     "//base",
     "//base/test:test_support",
+    "//build:chromeos_buildflags",
     "//mojo/core/embedder",
     "//skia",
     "//testing/gtest",
@@ -1402,7 +1423,7 @@ source_set("views_interactive_ui_tests") {
       "//ui/wm/public",
     ]
 
-    if (is_linux) {
+    if (is_linux || is_chromeos_lacros) {
       sources += [ "widget/desktop_aura/desktop_window_tree_host_linux_interactive_uitest.cc" ]
     }
 
@@ -1430,7 +1451,7 @@ source_set("views_interactive_ui_tests") {
     ]
   }
 
-  if (is_chromeos) {
+  if (is_chromeos_ash) {
     sources -= [ "corewm/desktop_capture_controller_unittest.cc" ]
   }
 }

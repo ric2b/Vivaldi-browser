@@ -12,8 +12,7 @@
 #include "chrome/install_static/install_util.h"
 #include "chrome/install_static/policy_path_parser.h"
 
-// Vivaldi
-#include <Shlwapi.h>
+#include "install_static/vivaldi_user_data_dir.inc"
 
 namespace install_static {
 
@@ -92,9 +91,8 @@ bool GetDefaultUserDataDirectory(const InstallConstants& mode,
       return false;
     user_data_dir.resize(size);
   }
-// Vivaldi ////////////////////////////////////////
-#include "install_static/vivaldi_user_data_dir.inc"
-///////////////////////////////////////////////////
+  if (VivaldiCheckStandaloneUserDir(result))
+    return true;
   result->swap(user_data_dir);
   if ((*result)[result->length() - 1] != L'\\')
     result->push_back(L'\\');

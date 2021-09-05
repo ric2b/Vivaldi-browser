@@ -34,6 +34,7 @@
 #include "third_party/blink/public/mojom/frame/viewport_intersection_state.mojom-blink.h"
 #include "third_party/blink/public/mojom/scroll/scroll_into_view_params.mojom-blink-forward.h"
 #include "third_party/blink/renderer/core/core_export.h"
+#include "third_party/blink/renderer/core/document_transition/document_transition.h"
 #include "third_party/blink/renderer/core/dom/document_lifecycle.h"
 #include "third_party/blink/renderer/core/frame/frame_view.h"
 #include "third_party/blink/renderer/core/frame/layout_subtree_root_list.h"
@@ -349,8 +350,7 @@ class CORE_EXPORT LocalFrameView final
   void WillBeRemovedFromFrame();
 
   bool IsUpdatingLifecycle() {
-    return current_update_lifecycle_phases_target_state_ !=
-           DocumentLifecycle::kUninitialized;
+    return target_state_ != DocumentLifecycle::kUninitialized;
   }
 
   // Run all needed lifecycle stages. After calling this method, all frames will
@@ -402,7 +402,9 @@ class CORE_EXPORT LocalFrameView final
   // desired state.
   bool UpdateLifecycleToLayoutClean(DocumentUpdateReason reason);
 
-  void SetInLifecycleUpdateForTest(bool val) { in_lifecycle_update_ = val; }
+  void SetTargetStateForTest(DocumentLifecycle::LifecycleState state) {
+    target_state_ = state;
+  }
 
   // This for doing work that needs to run synchronously at the end of lifecyle
   // updates, but needs to happen outside of the lifecycle code. It's OK to
@@ -616,6 +618,7 @@ class CORE_EXPORT LocalFrameView final
   bool CanThrottleRendering() const override;
   void UpdateRenderThrottlingStatus(bool hidden_for_throttling,
                                     bool subtree_throttled,
+                                    bool display_locked,
                                     bool recurse = false) override;
 
   void BeginLifecycleUpdates();
@@ -852,6 +855,8 @@ class CORE_EXPORT LocalFrameView final
 
   LayoutSVGRoot* EmbeddedReplacedContent() const;
 
+  void PrepareForLifecycleUpdateRecursive();
+
   // Returns whether the lifecycle was successfully updated to the
   // target state.
   bool UpdateLifecyclePhases(DocumentLifecycle::LifecycleState target_state,
@@ -907,8 +912,6 @@ class CORE_EXPORT LocalFrameView final
   DoublePoint ConvertFromContainingEmbeddedContentView(
       const DoublePoint&) const;
 
-  void InvalidateForThrottlingChange();
-
   void UpdateGeometriesIfNeeded();
   bool WasViewportResized();
   void SendResizeEventIfNeeded();
@@ -955,6 +958,8 @@ class CORE_EXPORT LocalFrameView final
   bool UpdateViewportIntersectionsForSubtree(unsigned parent_flags) override;
   void DeliverSynchronousIntersectionObservations();
 
+  bool RunScrollTimelineSteps();
+
   bool NotifyResizeObservers(DocumentLifecycle::LifecycleState target_state);
   bool RunResizeObserverSteps(DocumentLifecycle::LifecycleState target_state);
   void ClearResizeObserverLimit();
@@ -988,6 +993,12 @@ class CORE_EXPORT LocalFrameView final
   // Returns true if we should paint the color adjust background from the
   // StyleEngine instead of the base background color.
   bool ShouldUseColorAdjustBackground() const;
+
+  // Appends the document transition from this view into the given vector.
+  void AppendDocumentTransitionRequests(
+      WTF::Vector<std::unique_ptr<DocumentTransition::Request>>&);
+
+  bool AnyFrameIsPrintingOrPaintingPreview();
 
   LayoutSize size_;
 
@@ -1072,9 +1083,7 @@ class CORE_EXPORT LocalFrameView final
   bool allow_throttling_ = false;
 
   // This is set on the local root frame view only.
-  DocumentLifecycle::LifecycleState
-      current_update_lifecycle_phases_target_state_;
-  bool past_layout_lifecycle_update_;
+  DocumentLifecycle::LifecycleState target_state_;
 
   using AnchoringAdjustmentQueue =
       HeapLinkedHashSet<WeakMember<ScrollableArea>>;
@@ -1092,7 +1101,6 @@ class CORE_EXPORT LocalFrameView final
   bool needs_forced_compositing_update_;
 
   bool needs_focus_on_fragment_;
-  bool in_lifecycle_update_;
 
   // True if the frame has deferred commits at least once per document load.
   // We won't defer again for the same document.

@@ -5,7 +5,10 @@ include_rules = [
     "+components/viz/common/resources/single_release_callback.h",
 
     "+gpu/command_buffer/client/shared_image_interface.h",
+    "+gpu/command_buffer/client/raster_interface.h",
+    "+gpu/GLES2/gl2extchromium.h",
 
+    "+media/audio",
     "+media/base",
     "+media/filters",
     "+media/formats/mp4/box_definitions.h",
@@ -15,6 +18,7 @@ include_rules = [
     "+media/video",
 
     "+third_party/libyuv",
+    "+third_party/openh264",
 
     "+ui/gfx/color_space.h",
     "+ui/gfx/geometry/rect.h",

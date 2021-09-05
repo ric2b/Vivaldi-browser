@@ -21,7 +21,7 @@ class CapturePage : private content::WebContentsObserver {
   struct CaptureParams {
     gfx::Rect rect;
     gfx::Size target_size;
-
+    int client_id = 0;
     bool full_page = false;
 
     // Only single capture request will be made per given WebContents.
@@ -40,12 +40,14 @@ class CapturePage : private content::WebContentsObserver {
     // Return false if unsuccessful. This should only be called once per Result
     // instance.
     bool MovePixelsToBitmap(SkBitmap* bitmap);
+    int client_id();
 
    private:
     friend class CapturePage;
 
     SkImageInfo image_info_;
     base::ReadOnlySharedMemoryRegion region_;
+    int client_id_;
 
     DISALLOW_COPY_AND_ASSIGN(Result);
   };
@@ -81,7 +83,8 @@ class CapturePage : private content::WebContentsObserver {
   void OnRequestThumbnailForFrameResponse(
       int callback_id,
       gfx::Size image_size,
-      base::ReadOnlySharedMemoryRegion region);
+      base::ReadOnlySharedMemoryRegion region,
+      int client_id);
 
   DoneCallback capture_callback_;
   int callback_id_ = 0;

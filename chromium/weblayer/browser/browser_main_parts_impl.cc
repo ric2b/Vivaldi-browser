@@ -36,6 +36,7 @@
 #include "weblayer/browser/no_state_prefetch/prerender_manager_factory.h"
 #include "weblayer/browser/permissions/weblayer_permissions_client.h"
 #include "weblayer/browser/stateful_ssl_host_state_delegate_factory.h"
+#include "weblayer/browser/subresource_filter_profile_context_factory.h"
 #include "weblayer/browser/translate_accept_languages_factory.h"
 #include "weblayer/browser/translate_ranker_factory.h"
 #include "weblayer/browser/webui/web_ui_controller_factory.h"
@@ -68,7 +69,7 @@
 #include "ui/base/ui_base_features.h"
 #include "ui/events/devices/x11/touch_factory_x11.h"  // nogncheck
 #endif
-#if !defined(OS_CHROMEOS) && defined(USE_AURA) && defined(OS_LINUX)
+#if defined(USE_AURA) && defined(OS_LINUX)
 #include "ui/base/ime/init/input_method_initializer.h"
 #endif
 
@@ -115,6 +116,7 @@ void EnsureBrowserContextKeyedServiceFactoriesBuilt() {
   TranslateRankerFactory::GetInstance();
   PrerenderLinkManagerFactory::GetInstance();
   PrerenderManagerFactory::GetInstance();
+  SubresourceFilterProfileContextFactory::GetInstance();
 #if defined(OS_ANDROID)
   if (MediaRouterFactory::IsFeatureEnabled()) {
     LocalPresentationManagerFactory::GetInstance();
@@ -156,15 +158,6 @@ int BrowserMainPartsImpl::PreCreateThreads() {
 
   crash_reporter::InitializeCrashKeys();
 
-  // MediaSession was implemented in M85, and requires both implementation and
-  // client libraries to be at least that new. The version check has to be in
-  // the browser process, but the command line flag is automatically propagated
-  // to renderers.
-  if (WebLayerFactoryImplAndroid::GetClientMajorVersion() < 85) {
-    base::CommandLine::ForCurrentProcess()->AppendSwitch(
-        ::switches::kDisableMediaSessionAPI);
-  }
-
   // WebLayer initializes the MetricsService once consent is determined.
   // Determining consent is async and potentially slow. VariationsIdsProvider
   // is responsible for updating the X-Client-Data header. To ensure the header
@@ -191,7 +184,7 @@ void BrowserMainPartsImpl::PreMainMessageLoopStart() {
 int BrowserMainPartsImpl::PreEarlyInitialization() {
   browser_process_ = std::make_unique<BrowserProcess>(std::move(local_state_));
 
-#if defined(USE_AURA) && (defined(OS_LINUX) || defined(OS_CHROMEOS))
+#if defined(USE_AURA) && defined(OS_LINUX)
   ui::InitializeInputMethodForTesting();
 #endif
 #if defined(OS_ANDROID)

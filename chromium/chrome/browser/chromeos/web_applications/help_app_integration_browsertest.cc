@@ -10,6 +10,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
@@ -47,9 +48,7 @@ class HelpAppIntegrationTest : public SystemWebAppIntegrationTest {
  public:
   HelpAppIntegrationTest() {
     scoped_feature_list_.InitWithFeatures(
-        {chromeos::features::kHelpAppSearchServiceIntegration,
-         chromeos::features::kReleaseNotesNotificationAllChannels},
-        {});
+        {chromeos::features::kReleaseNotesNotificationAllChannels}, {});
   }
 
  private:
@@ -161,7 +160,7 @@ IN_PROC_BROWSER_TEST_P(HelpAppAllProfilesIntegrationTest, HelpAppV2ShowHelp) {
 
   chrome::ShowHelp(browser(), chrome::HELP_SOURCE_KEYBOARD);
 
-#if defined(OS_CHROMEOS) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#if BUILDFLAG(IS_CHROMEOS_ASH) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
   EXPECT_NO_FATAL_FAILURE(WaitForAppToOpen(GURL("chrome://help-app/")));
 #else
   EXPECT_EQ(1u, chrome::GetTotalBrowserCount());
@@ -185,7 +184,7 @@ IN_PROC_BROWSER_TEST_P(HelpAppAllProfilesIntegrationTest,
 
   chrome::LaunchReleaseNotes(profile(),
                              apps::mojom::LaunchSource::kFromOtherApp);
-#if defined(OS_CHROMEOS) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#if BUILDFLAG(IS_CHROMEOS_ASH) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
   // If no navigation happens, then this test will time out due to the wait.
   navigation_observer.Wait();
 
@@ -211,7 +210,7 @@ IN_PROC_BROWSER_TEST_P(HelpAppIntegrationTest, HelpAppV2ReleaseNotesMetrics) {
   base::UserActionTester user_action_tester;
   chrome::LaunchReleaseNotes(profile(),
                              apps::mojom::LaunchSource::kFromOtherApp);
-#if defined(OS_CHROMEOS) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#if BUILDFLAG(IS_CHROMEOS_ASH) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
   EXPECT_EQ(1,
             user_action_tester.GetActionCount("ReleaseNotes.ShowReleaseNotes"));
 #else
@@ -249,7 +248,7 @@ IN_PROC_BROWSER_TEST_P(HelpAppIntegrationTest,
       1, user_action_tester.GetActionCount("ReleaseNotes.NotificationShown"));
   EXPECT_EQ(1, user_action_tester.GetActionCount(
                    "ReleaseNotes.LaunchedNotification"));
-#if defined(OS_CHROMEOS) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#if BUILDFLAG(IS_CHROMEOS_ASH) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
   EXPECT_NO_FATAL_FAILURE(WaitForAppToOpen(GURL("chrome://help-app/updates")));
   EXPECT_EQ(1,
             user_action_tester.GetActionCount("ReleaseNotes.ShowReleaseNotes"));
@@ -355,45 +354,6 @@ IN_PROC_BROWSER_TEST_P(HelpAppIntegrationTest, HelpAppV2ShowParentalControls) {
   EXPECT_EQ(expected_url, GetActiveWebContents()->GetVisibleURL());
 }
 
-// Test that the Help App delegate uses the local search service methods.
-IN_PROC_BROWSER_TEST_P(HelpAppIntegrationTest,
-                       HelpAppV2UsesLocalSearchServiceMethods) {
-  WaitForTestSystemAppInstall();
-  content::WebContents* web_contents = LaunchApp(web_app::SystemAppType::HELP);
-
-  // Script that adds a data item to the search index, then tries to find that
-  // data item.
-  constexpr char kScript[] = R"(
-    (async () => {
-      const delegate = document.querySelector('showoff-app').getDelegate();
-
-      await delegate.addOrUpdateSearchIndex([{
-        id: 'test-id',
-        title: 'foobar',
-        body: 'foo bar baz',
-        mainCategoryName: 'Help',
-        locale: 'en-US',
-      }]);
-
-      // Polling is required as addOrUpdateSearchIndex resolves before the
-      // search index is actually updated.
-      setInterval(async () => {
-        // Note that the LSS will fuzzy match into foobar.
-        const {results} = await delegate.findInSearchIndex('foober');
-        if (results && results.length === 1) {
-          window.domAutomationController.send(results[0].id);
-        }
-      }, 10);
-    })();
-  )";
-  std::string result;
-  // Use ExecuteScript instead of EvalJsInAppFrame because the script needs to
-  // run in the same world as the page's code.
-  EXPECT_TRUE(content::ExecuteScriptAndExtractString(
-      SandboxedWebUiAppTestBase::GetAppFrame(web_contents), kScript, &result));
-  EXPECT_EQ(result, "test-id");
-}
-
 // Test that the Help App opens when Gesture help requested.
 IN_PROC_BROWSER_TEST_P(HelpAppAllProfilesIntegrationTest, HelpAppOpenGestures) {
   WaitForTestSystemAppInstall();
@@ -419,7 +379,7 @@ IN_PROC_BROWSER_TEST_P(HelpAppIntegrationTest, HelpAppOpenKeyboardShortcut) {
       browser(), ui::VKEY_OEM_2, /*control=*/true,
       /*shift=*/false, /*alt=*/false, /*command=*/false));
 
-#if defined(OS_CHROMEOS) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#if BUILDFLAG(IS_CHROMEOS_ASH) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
   // Default browser tab and Help app are open.
   EXPECT_EQ(2u, chrome::GetTotalBrowserCount());
   EXPECT_EQ("chrome://help-app/", GetActiveWebContents()->GetVisibleURL());

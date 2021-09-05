@@ -24,8 +24,13 @@ js_type_check("closure_compile") {
 }
 
 js_library("nearby_share_confirm_page") {
-  deps =
-      [ "//chrome/browser/resources/nearby_share/shared:nearby_page_template" ]
+  deps = [
+    "//chrome/browser/resources/nearby_share/shared:nearby_device",
+    "//chrome/browser/resources/nearby_share/shared:nearby_page_template",
+    "//chrome/browser/resources/nearby_share/shared:nearby_preview",
+    "//chrome/browser/resources/nearby_share/shared:nearby_progress",
+    "//ui/webui/resources/js:i18n_behavior",
+  ]
 }
 
 js_library("nearby_account_manager_browser_proxy") {
@@ -69,6 +74,7 @@ js_library("nearby_share_high_visibility_page") {
   deps = [
     "../localized_link:localized_link",
     "//chrome/browser/resources/nearby_share/shared:nearby_page_template",
+    "//third_party/polymer/v1_0/components-chromium/iron-a11y-announcer:iron-a11y-announcer-extracted",
     "//ui/webui/resources/cr_elements/cr_lottie:cr_lottie",
     "//ui/webui/resources/js:i18n_behavior",
   ]
@@ -104,6 +110,7 @@ js_library("nearby_share_subpage") {
     ":nearby_share_data_usage_dialog",
     ":nearby_share_device_name_dialog",
     ":nearby_share_receive_dialog",
+    ":nearby_share_receive_manager",
     ":types",
     "..:deep_linking_behavior",
     "..:os_route",
@@ -160,7 +167,11 @@ js_type_check("closure_compile_module") {
 js_library("nearby_share_confirm_page.m") {
   sources = [ "$root_gen_dir/chrome/browser/resources/settings/chromeos/nearby_share_page/nearby_share_confirm_page.m.js" ]
   deps = [
+    "//chrome/browser/resources/nearby_share/shared:nearby_device.m",
     "//chrome/browser/resources/nearby_share/shared:nearby_page_template.m",
+    "//chrome/browser/resources/nearby_share/shared:nearby_preview.m",
+    "//chrome/browser/resources/nearby_share/shared:nearby_progress.m",
+    "//ui/webui/resources/js:i18n_behavior.m",
   ]
   extra_deps = [ ":nearby_share_confirm_page_module" ]
 }
@@ -209,6 +220,7 @@ js_library("nearby_share_high_visibility_page.m") {
   deps = [
     "../localized_link:localized_link.m",
     "//chrome/browser/resources/nearby_share/shared:nearby_page_template.m",
+    "//third_party/polymer/v3_0/components-chromium/iron-a11y-announcer:iron-a11y-announcer",
     "//ui/webui/resources/cr_elements/cr_lottie:cr_lottie.m",
     "//ui/webui/resources/js:i18n_behavior.m",
   ]
@@ -256,6 +268,7 @@ js_library("nearby_share_subpage.m") {
     ":nearby_share_data_usage_dialog.m",
     ":nearby_share_device_name_dialog.m",
     ":nearby_share_receive_dialog.m",
+    ":nearby_share_receive_manager.m",
     ":types.m",
     "..:deep_linking_behavior.m",
     "..:os_route.m",
@@ -266,8 +279,10 @@ js_library("nearby_share_subpage.m") {
     "//chrome/browser/resources/nearby_share/shared:nearby_onboarding_page.m",
     "//chrome/browser/resources/nearby_share/shared:nearby_share_settings_behavior.m",
     "//chrome/browser/resources/nearby_share/shared:nearby_visibility_page.m",
+    "//ui/webui/resources/cr_elements/cr_link_row:cr_link_row.m",
     "//ui/webui/resources/js:cr.m",
     "//ui/webui/resources/js:i18n_behavior.m",
+    "//ui/webui/resources/js:load_time_data",
   ]
   extra_deps = [ ":nearby_share_subpage_module" ]
 }

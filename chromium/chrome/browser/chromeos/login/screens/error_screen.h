@@ -29,9 +29,6 @@ class ErrorScreen : public BaseScreen,
                     public LoginPerformer::Delegate,
                     public NetworkConnectionObserver {
  public:
-  using ConnectRequestCallbackSubscription =
-      std::unique_ptr<base::CallbackList<void()>::Subscription>;
-
   // TODO(jdufault): Some of these are no longer used and can be removed. See
   // crbug.com/672142.
   static const char kUserActionConfigureCertsButtonClicked[];
@@ -99,7 +96,7 @@ class ErrorScreen : public BaseScreen,
 
   // Register a callback to be invoked when the user indicates that an attempt
   // to connect to the network should be made.
-  ConnectRequestCallbackSubscription RegisterConnectRequestCallback(
+  base::CallbackListSubscription RegisterConnectRequestCallback(
       const base::Closure& callback);
 
   // Creates an instance of CaptivePortalWindowProxy, if one has not already
@@ -152,6 +149,9 @@ class ErrorScreen : public BaseScreen,
   // Handle uses action to reboot device.
   void OnRebootButtonClicked();
 
+  // If show is true offline login flow is enabled from the error screen.
+  void ShowOfflineLoginOption(bool show);
+
   // Handles the response of an ownership check and starts the guest session if
   // applicable.
   void StartGuestSessionAfterOwnershipCheck(
@@ -160,6 +160,8 @@ class ErrorScreen : public BaseScreen,
   ErrorScreenView* view_ = nullptr;
 
   std::unique_ptr<LoginPerformer> guest_login_performer_;
+
+  bool offline_login_allowed_ = false;
 
   // Proxy which manages showing of the window for captive portal entering.
   std::unique_ptr<CaptivePortalWindowProxy> captive_portal_window_proxy_;

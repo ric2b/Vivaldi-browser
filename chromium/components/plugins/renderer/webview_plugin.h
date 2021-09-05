@@ -21,9 +21,9 @@
 #include "third_party/blink/public/web/blink.h"
 #include "third_party/blink/public/web/web_local_frame_client.h"
 #include "third_party/blink/public/web/web_navigation_control.h"
+#include "third_party/blink/public/web/web_non_composited_widget_client.h"
 #include "third_party/blink/public/web/web_plugin.h"
 #include "third_party/blink/public/web/web_view_client.h"
-#include "third_party/blink/public/web/web_widget_client.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/ime/mojom/text_input_state.mojom.h"
 
@@ -161,7 +161,7 @@ class WebViewPlugin : public blink::WebPlugin,
 
   // A helper that handles interaction from WebViewPlugin's internal WebView.
   class WebViewHelper : public blink::WebViewClient,
-                        public blink::WebWidgetClient,
+                        public blink::WebNonCompositedWidgetClient,
                         public blink::WebLocalFrameClient,
                         public blink::mojom::WidgetHost {
    public:
@@ -174,17 +174,11 @@ class WebViewPlugin : public blink::WebPlugin,
 
     // WebViewClient methods:
     bool AcceptsLoadDrops() override;
-    bool CanHandleGestureEvent() override;
     bool CanUpdateLayout() override;
     void DidInvalidateRect(const blink::WebRect&) override;
 
-    // WebWidgetClient methods:
-    bool InterceptStartDragging(const blink::WebDragData&,
-                                blink::DragOperationsMask,
-                                const SkBitmap&,
-                                const gfx::Point&) override;
-    void DidChangeCursor(const ui::Cursor& cursor) override;
-    void ScheduleAnimation() override;
+    // WebNonCompositedWidgetClient overrides.
+    void ScheduleNonCompositedAnimation() override;
 
     // WebLocalFrameClient methods:
     void BindToFrame(blink::WebNavigationControl* frame) override;
@@ -194,7 +188,7 @@ class WebViewPlugin : public blink::WebPlugin,
         override;
 
     // blink::mojom::WidgetHost implementation.
-    void SetCursor(const ui::Cursor& cursor) override {}
+    void SetCursor(const ui::Cursor& cursor) override;
     void SetToolTipText(const base::string16& tooltip_text,
                         base::i18n::TextDirection hint) override;
     void TextInputStateChanged(ui::mojom::TextInputStatePtr state) override {}

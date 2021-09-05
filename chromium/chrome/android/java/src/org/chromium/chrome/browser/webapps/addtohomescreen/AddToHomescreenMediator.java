@@ -10,9 +10,13 @@ import android.util.Pair;
 import androidx.annotation.StringRes;
 
 import org.chromium.base.annotations.CalledByNative;
+import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
-import org.chromium.chrome.browser.ShortcutHelper;
 import org.chromium.chrome.browser.banners.AppData;
+import org.chromium.chrome.browser.webapps.AddToHomescreenProperties;
+import org.chromium.chrome.browser.webapps.AddToHomescreenViewDelegate;
+import org.chromium.components.webapps.WebappsIconUtils;
+import org.chromium.components.webapps.addtohomescreen.AppType;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.modelutil.PropertyModel;
@@ -26,6 +30,7 @@ import javax.annotation.Nonnull;
  * information about the app is available. These methods modify the model that lives on the Java
  * side.
  */
+@JNINamespace("webapps")
 class AddToHomescreenMediator implements AddToHomescreenViewDelegate {
     private long mNativeAddToHomescreenMediator;
     private PropertyModel mModel;
@@ -50,7 +55,7 @@ class AddToHomescreenMediator implements AddToHomescreenViewDelegate {
         Bitmap iconToShow = icon;
         if (needToAddPadding) {
             assert isAdaptive;
-            iconToShow = ShortcutHelper.createHomeScreenIconFromWebIcon(icon, true /*maskable*/);
+            iconToShow = WebappsIconUtils.createHomeScreenIconFromWebIcon(icon, true /*maskable*/);
         }
 
         mModel.set(AddToHomescreenProperties.ICON, new Pair<>(iconToShow, isAdaptive));

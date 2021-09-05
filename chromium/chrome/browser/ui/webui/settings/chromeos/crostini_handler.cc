@@ -227,7 +227,7 @@ void CrostiniHandler::OnJavascriptDisallowed() {
   crostini::CrostiniPortForwarder::GetForProfile(profile_)->RemoveObserver(
       this);
 
-  adb_sideloading_device_policy_subscription_.reset();
+  adb_sideloading_device_policy_subscription_ = {};
   pref_change_registrar_.RemoveAll();
 }
 
@@ -286,17 +286,17 @@ void CrostiniHandler::OnCrostiniSharedPathRemoved(
 }
 
 namespace {
-base::ListValue UsbDevicesToListValue(
-    const std::vector<CrosUsbDeviceInfo> shared_usbs) {
+base::ListValue GetSharableUsbDevices(CrosUsbDetector* detector) {
   base::ListValue usb_devices_list;
-  for (auto& device : shared_usbs) {
+  for (const auto& device : detector->GetDevicesSharableWithCrostini()) {
     base::Value device_info(base::Value::Type::DICTIONARY);
     device_info.SetStringKey("guid", device.guid);
     device_info.SetStringKey("label", device.label);
     bool shared = device.shared_vm_name == crostini::kCrostiniDefaultVmName;
     device_info.SetBoolKey("shared", shared);
-    device_info.SetBoolKey("shareWillReassign",
-                           device.shared_vm_name && !shared);
+    device_info.SetBoolKey(
+        "shareWillReassign",
+        !shared && detector->SharingRequiresReassignPrompt(device));
     usb_devices_list.Append(std::move(device_info));
   }
   return usb_devices_list;
@@ -357,9 +357,8 @@ void CrostiniHandler::HandleSetCrostiniUsbDeviceShared(
 void CrostiniHandler::OnUsbDevicesChanged() {
   chromeos::CrosUsbDetector* detector = chromeos::CrosUsbDetector::Get();
   DCHECK(detector);  // This callback is called by the detector.
-  FireWebUIListener(
-      "crostini-shared-usb-devices-changed",
-      UsbDevicesToListValue(detector->GetDevicesSharableWithCrostini()));
+  FireWebUIListener("crostini-shared-usb-devices-changed",
+                    GetSharableUsbDevices(detector));
 }
 
 void CrostiniHandler::HandleExportCrostiniContainer(
@@ -618,8 +617,8 @@ void CrostiniHandler::HandleRemoveCrostiniPortForward(
       crostini::ContainerId(std::move(vm_name), std::move(container_name)),
       port_number,
       static_cast<crostini::CrostiniPortForwarder::Protocol>(protocol_type),
-      base::Bind(&CrostiniHandler::OnPortForwardComplete,
-                 weak_ptr_factory_.GetWeakPtr(), std::move(callback_id)));
+      base::BindOnce(&CrostiniHandler::OnPortForwardComplete,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback_id)));
 }
 
 void CrostiniHandler::HandleRemoveAllCrostiniPortForwards(
@@ -661,8 +660,8 @@ void CrostiniHandler::HandleActivateCrostiniPortForward(
       crostini::ContainerId(std::move(vm_name), std::move(container_name)),
       port_number,
       static_cast<crostini::CrostiniPortForwarder::Protocol>(protocol_type),
-      base::Bind(&CrostiniHandler::OnPortForwardComplete,
-                 weak_ptr_factory_.GetWeakPtr(), std::move(callback_id)));
+      base::BindOnce(&CrostiniHandler::OnPortForwardComplete,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback_id)));
 }
 
 void CrostiniHandler::HandleDeactivateCrostiniPortForward(
@@ -689,8 +688,8 @@ void CrostiniHandler::HandleDeactivateCrostiniPortForward(
       crostini::ContainerId(std::move(vm_name), std::move(container_name)),
       port_number,
       static_cast<crostini::CrostiniPortForwarder::Protocol>(protocol_type),
-      base::Bind(&CrostiniHandler::OnPortForwardComplete,
-                 weak_ptr_factory_.GetWeakPtr(), std::move(callback_id)));
+      base::BindOnce(&CrostiniHandler::OnPortForwardComplete,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback_id)));
 }
 
 void CrostiniHandler::OnPortForwardComplete(std::string callback_id,

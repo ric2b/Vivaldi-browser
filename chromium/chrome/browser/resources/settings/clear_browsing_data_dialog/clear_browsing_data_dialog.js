@@ -22,6 +22,7 @@ import '../settings_shared_css.m.js';
 
 import {assert} from 'chrome://resources/js/assert.m.js';
 import {WebUIListenerBehavior} from 'chrome://resources/js/web_ui_listener_behavior.m.js';
+import {IronA11yAnnouncer} from 'chrome://resources/polymer/v3_0/iron-a11y-announcer/iron-a11y-announcer.js';
 import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {DropdownMenuOptionList} from '../controls/settings_dropdown_menu.m.js';
@@ -123,6 +124,12 @@ Polymer({
     },
 
     /** @private */
+    clearingDataAlertString_: {
+      type: String,
+      value: '',
+    },
+
+    /** @private */
     clearButtonDisabled_: {
       type: Boolean,
       value: false,
@@ -194,15 +201,6 @@ Polymer({
           'computeHasOtherError_(syncStatus, isSyncPaused_, hasPassphraseError_)',
     },
 
-    /**
-     * Time in ms, when the dialog was opened.
-     * @private
-     */
-    dialogOpenedTime_: {
-      type: Number,
-      value: 0,
-    },
-
     /** @private {Array<string>} */
     tabsNames_: {
       type: Array,
@@ -254,7 +252,6 @@ Polymer({
   /** @override */
   attached() {
     this.browserProxy_ = ClearBrowsingDataBrowserProxyImpl.getInstance();
-    this.dialogOpenedTime_ = Date.now();
     this.browserProxy_.initialize().then(() => {
       this.$.clearBrowsingDataDialog.showModal();
     });
@@ -304,7 +301,6 @@ Polymer({
   currentRouteChanged(currentRoute) {
     if (currentRoute === routes.CLEAR_BROWSER_DATA) {
       chrome.metricsPrivate.recordUserAction('ClearBrowsingData_DialogCreated');
-      this.dialogOpenedTime_ = Date.now();
     }
   },
 
@@ -446,6 +442,7 @@ Polymer({
    */
   clearBrowsingData_: async function() {
     this.clearingInProgress_ = true;
+    this.clearingDataAlertString_ = loadTimeData.getString('clearingData');
     const tab = this.$.tabs.selectedItem;
     const dataTypes = this.getSelectedDataTypes_(tab);
     const timePeriod = tab.querySelector('.time-range-select').pref.value;
@@ -464,6 +461,8 @@ Polymer({
         await this.browserProxy_.clearBrowsingData(
             dataTypes, timePeriod, this.installedApps_);
     this.clearingInProgress_ = false;
+    IronA11yAnnouncer.requestAvailability();
+    this.fire('iron-announce', {text: loadTimeData.getString('clearedData')});
     this.showHistoryDeletionDialog_ = showHistoryNotice;
     // If both the history notice and the passwords notice should be shown, show
     // the history notice first, and then show the passwords notice once the
@@ -472,9 +471,6 @@ Polymer({
         showPasswordsNotice && !showHistoryNotice;
     this.showPasswordsDeletionDialogLater_ =
         showPasswordsNotice && showHistoryNotice;
-    chrome.metricsPrivate.recordMediumTime(
-        'History.ClearBrowsingData.TimeSpentInDialog',
-        Date.now() - this.dialogOpenedTime_);
 
     // Close the clear browsing data or installed apps dialog if they are open.
     const isLastDialog = !showHistoryNotice && !showPasswordsNotice;

@@ -59,6 +59,7 @@ namespace content {
 
 class BrowserContext;
 class ContentBrowserConsistencyChecker;
+class MockAgentSchedulingGroupHostFactory;
 class MockRenderProcessHost;
 class MockRenderProcessHostFactory;
 class NavigationController;
@@ -118,17 +119,10 @@ class RenderFrameHostTester {
   // parameter.
   virtual void SimulateBeforeUnloadCompleted(bool proceed) = 0;
 
-  // Simulates the FrameHostMsg_Unload_ACK that fires if you commit a cross-site
-  // navigation without making any network requests.
+  // Simulates the mojo::AgentSchedulingGroupHost::DidUnloadRenderFrame that
+  // fires if you commit a cross-site navigation without making any network
+  // requests.
   virtual void SimulateUnloadACK() = 0;
-
-  // Set the feature policy header for the RenderFrameHost for test. Currently
-  // this is limited to setting an allowlist for a single feature. This function
-  // can be generalized as needed. Setting a header policy should only be done
-  // once per navigation of the RFH.
-  virtual void SimulateFeaturePolicyHeader(
-      blink::mojom::FeaturePolicyFeature feature,
-      const std::vector<url::Origin>& allowlist) = 0;
 
   // Simulates the frame receiving a user activation.
   virtual void SimulateUserActivation() = 0;
@@ -193,6 +187,7 @@ class RenderViewHostTestEnabler {
 #endif
   std::unique_ptr<base::test::SingleThreadTaskEnvironment> task_environment_;
   std::unique_ptr<MockRenderProcessHostFactory> rph_factory_;
+  std::unique_ptr<MockAgentSchedulingGroupHostFactory> asgh_factory_;
   std::unique_ptr<TestRenderViewHostFactory> rvh_factory_;
   std::unique_ptr<TestRenderFrameHostFactory> rfh_factory_;
   std::unique_ptr<TestRenderWidgetHostFactory> rwhi_factory_;

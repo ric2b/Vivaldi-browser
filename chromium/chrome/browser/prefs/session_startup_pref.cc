@@ -62,7 +62,7 @@ void SessionStartupPref::RegisterProfilePrefs(
 
 // static
 SessionStartupPref::Type SessionStartupPref::GetDefaultStartupType() {
-#if defined(OS_CHROMEOS) || BUILDFLAG(IS_LACROS)
+#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
   return SessionStartupPref::LAST;
 #else
   if (vivaldi::IsVivaldiRunning()) {

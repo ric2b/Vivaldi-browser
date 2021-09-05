@@ -25,6 +25,7 @@
 #include "ui/accessibility/ax_tree_data.h"
 #include "ui/accessibility/ax_tree_manager_map.h"
 #include "ui/accessibility/ax_tree_serializer.h"
+#include "ui/base/buildflags.h"
 
 namespace content {
 
@@ -132,12 +133,19 @@ BrowserAccessibilityFindInPageInfo::BrowserAccessibilityFindInPageInfo()
       end_offset(-1),
       active_request_id(-1) {}
 
-#if !defined(PLATFORM_HAS_NATIVE_ACCESSIBILITY_IMPL)
+#if !BUILDFLAG(HAS_PLATFORM_ACCESSIBILITY_SUPPORT)
 // static
 BrowserAccessibilityManager* BrowserAccessibilityManager::Create(
     const ui::AXTreeUpdate& initial_tree,
     BrowserAccessibilityDelegate* delegate) {
   return new BrowserAccessibilityManager(initial_tree, delegate);
+}
+
+// static
+BrowserAccessibilityManager* BrowserAccessibilityManager::Create(
+    BrowserAccessibilityDelegate* delegate) {
+  return new BrowserAccessibilityManager(
+      BrowserAccessibilityManager::GetEmptyDocument(), delegate);
 }
 #endif
 
@@ -180,6 +188,12 @@ BrowserAccessibilityManager::BrowserAccessibilityManager(
 }
 
 BrowserAccessibilityManager::~BrowserAccessibilityManager() {
+  // If the root's parent is in another accessibility tree but it wasn't
+  // previously connected, post the proper notifications on the parent.
+  BrowserAccessibility* parent = nullptr;
+  if (connected_to_parent_tree_node_)
+    parent = GetParentNodeFromParentTree();
+
   // Fire any events that need to be fired when tree nodes get deleted. For
   // example, events that fire every time "OnSubtreeWillBeDeleted" is called.
   ax_tree()->Destroy();
@@ -190,6 +204,8 @@ BrowserAccessibilityManager::~BrowserAccessibilityManager() {
   }
 
   ui::AXTreeManagerMap::GetInstance().RemoveTreeManager(ax_tree_id_);
+
+  ParentConnectionChanged(parent);
 }
 
 bool BrowserAccessibilityManager::Unserialize(
@@ -224,6 +240,9 @@ void BrowserAccessibilityManager::Initialize(
 // static
 bool BrowserAccessibilityManager::never_suppress_or_delay_events_for_testing_ =
     false;
+
+// A flag for use in tests to indicate that extra mac nodes are allowed.
+bool BrowserAccessibilityManager::allow_extra_mac_nodes_for_testing_ = false;
 
 // static
 base::Optional<int32_t> BrowserAccessibilityManager::last_focused_node_id_ = {};
@@ -265,19 +284,6 @@ void BrowserAccessibilityManager::FireFocusEventsIfNeeded() {
       return;
     if (!CanFireEvents())
       return;
-  }
-
-  // Don't allow the top document to be focused if it has no children and hasn't
-  // finished loading yet. Wait for at least a tiny bit of content, or for the
-  // document to actually finish loading.
-  // Even after the document has loaded, we shouldn't fire a focus event if the
-  // document is completely empty, otherwise the user will be placed inside an
-  // empty container. This would result in user confusion, since none of the
-  // screen reader commands will read anything.
-  if (focus == focus->manager()->GetRoot() &&
-      (focus->PlatformChildCount() == 0 ||
-       !focus->manager()->GetTreeData().loaded)) {
-    return;
   }
 
   // Wait until navigation is complete or stopped, before attempting to move the
@@ -343,6 +349,19 @@ BrowserAccessibility* BrowserAccessibilityManager::GetParentNodeFromParentTree()
       BrowserAccessibilityManager::FromID(parent_tree_id);
   return parent && parent_manager ? parent_manager->GetFromAXNode(parent)
                                   : nullptr;
+}
+
+void BrowserAccessibilityManager::ParentConnectionChanged(
+    BrowserAccessibility* parent) {
+  if (!parent)
+    return;
+  parent->OnDataChanged();
+  parent->UpdatePlatformAttributes();
+  BrowserAccessibilityManager* parent_manager = parent->manager();
+  parent = parent_manager->RetargetForEvents(
+      parent, RetargetEventType::RetargetEventTypeGenerated);
+  parent_manager->FireGeneratedEvent(
+      ui::AXEventGenerator::Event::CHILDREN_CHANGED, parent);
 }
 
 BrowserAccessibility* BrowserAccessibilityManager::GetPopupRoot() const {
@@ -456,11 +475,7 @@ bool BrowserAccessibilityManager::OnAccessibilityEvents(
   BrowserAccessibility* parent = GetParentNodeFromParentTree();
   if (parent) {
     if (!connected_to_parent_tree_node_) {
-      parent->OnDataChanged();
-      parent->UpdatePlatformAttributes();
-      parent = RetargetForEvents(parent,
-                                 RetargetEventType::RetargetEventTypeGenerated);
-      FireGeneratedEvent(ui::AXEventGenerator::Event::CHILDREN_CHANGED, parent);
+      ParentConnectionChanged(parent);
       connected_to_parent_tree_node_ = true;
     }
   } else {
@@ -631,21 +646,27 @@ void BrowserAccessibilityManager::ActivateFindInPageResult(int request_id) {
 }
 
 BrowserAccessibility* BrowserAccessibilityManager::GetActiveDescendant(
-    BrowserAccessibility* focus) const {
-  if (!focus)
+    BrowserAccessibility* node) const {
+  if (!node)
     return nullptr;
 
-  int32_t active_descendant_id;
+  ui::AXNode::AXID active_descendant_id;
   BrowserAccessibility* active_descendant = nullptr;
-  if (focus->GetIntAttribute(ax::mojom::IntAttribute::kActivedescendantId,
-                             &active_descendant_id)) {
-    active_descendant = focus->manager()->GetFromID(active_descendant_id);
+  if (node->GetIntAttribute(ax::mojom::IntAttribute::kActivedescendantId,
+                            &active_descendant_id)) {
+    active_descendant = node->manager()->GetFromID(active_descendant_id);
   }
 
-  if (focus->GetRole() == ax::mojom::Role::kPopUpButton) {
-    BrowserAccessibility* child = focus->InternalGetFirstChild();
+  // When getting the active descendant, we avoid calling
+  // BrowserAccessibility::IsInvisibleOrIgnored on the node because
+  // IsInvisibleOrIgnored takes the focused object into account by retrieving
+  // it. We already have the focused object, thus there is no need to
+  // re-retrieve it. Furthermore, doing so can lead to an infinite loop.
+  // Therefore just check the AXNodeData.
+  if (node->GetRole() == ax::mojom::Role::kPopUpButton) {
+    BrowserAccessibility* child = node->InternalGetFirstChild();
     if (child && child->GetRole() == ax::mojom::Role::kMenuListPopup &&
-        !child->GetData().HasState(ax::mojom::State::kInvisible)) {
+        !child->GetData().IsInvisibleOrIgnored()) {
       // The active descendant is found on the menu list popup, i.e. on the
       // actual list and not on the button that opens it.
       // If there is no active descendant, focus should stay on the button so
@@ -661,11 +682,25 @@ BrowserAccessibility* BrowserAccessibilityManager::GetActiveDescendant(
     }
   }
 
-  if (active_descendant &&
-      !active_descendant->GetData().HasState(ax::mojom::State::kInvisible))
+  if (active_descendant && !active_descendant->GetData().IsInvisibleOrIgnored())
     return active_descendant;
 
-  return focus;
+  return node;
+}
+
+std::vector<BrowserAccessibility*> BrowserAccessibilityManager::GetAriaControls(
+    const BrowserAccessibility* focus) const {
+  if (!focus)
+    return {};
+
+  std::vector<BrowserAccessibility*> aria_control_nodes;
+  for (const auto& id :
+       focus->GetIntListAttribute(ax::mojom::IntListAttribute::kControlsIds)) {
+    if (focus->manager()->GetFromID(id))
+      aria_control_nodes.push_back(focus->manager()->GetFromID(id));
+  }
+
+  return aria_control_nodes;
 }
 
 bool BrowserAccessibilityManager::NativeViewHasFocus() {
@@ -702,7 +737,7 @@ BrowserAccessibility* BrowserAccessibilityManager::GetFocus() const {
 
 BrowserAccessibility*
 BrowserAccessibilityManager::GetFocusFromThisOrDescendantFrame() const {
-  int32_t focus_id = GetTreeData().focus_id;
+  ui::AXNode::AXID focus_id = GetTreeData().focus_id;
   BrowserAccessibility* obj = GetFromID(focus_id);
   // If nothing is focused, then the top document has the focus.
   if (!obj)
@@ -768,6 +803,16 @@ void BrowserAccessibilityManager::SetGeneratedEventCallbackForTesting(
 // static
 void BrowserAccessibilityManager::NeverSuppressOrDelayEventsForTesting() {
   never_suppress_or_delay_events_for_testing_ = true;
+}
+
+// static
+void BrowserAccessibilityManager::AllowExtraMacNodesForTesting() {
+  allow_extra_mac_nodes_for_testing_ = true;
+}
+
+// static
+bool BrowserAccessibilityManager::GetExtraMacNodesAllowed() {
+  return allow_extra_mac_nodes_for_testing_;
 }
 
 void BrowserAccessibilityManager::Decrement(const BrowserAccessibility& node) {
@@ -1485,6 +1530,13 @@ ui::AXNode* BrowserAccessibilityManager::GetParentNodeFromParentTreeAsAXNode()
   return nullptr;
 }
 
+void BrowserAccessibilityManager::WillBeRemovedFromMap() {
+  if (!ax_tree())
+    return;
+
+  ax_tree()->NotifyTreeManagerWillBeRemoved(ax_tree_id_);
+}
+
 BrowserAccessibilityManager* BrowserAccessibilityManager::GetRootManager()
     const {
   BrowserAccessibility* parent = GetParentNodeFromParentTree();
@@ -1652,14 +1704,16 @@ void BrowserAccessibilityManager::CollectChangedNodesAndParentsForAtomicUpdate(
     if (obj)
       nodes_needing_update->insert(obj->GetAXPlatformNode());
 
-    // When a node is a text node or line break, update its parent, because
-    // its text is part of its hypertext.
     const ui::AXNode* parent = changed_node->GetUnignoredParent();
     if (!parent)
       continue;
 
-    if (changed_node->IsText() &&
-        changed_node->data().role != ax::mojom::Role::kInlineTextBox) {
+    // Update changed nodes' parents, including their hypertext:
+    // Any child that changes, whether text or not, can affect the parent's
+    // hypertext. Hypertext uses embedded object characters to represent
+    // child objects, and the AXHyperText caches relevant object at
+    // each embedded object character offset.
+    if (!changed_node->IsChildOfLeaf()) {
       BrowserAccessibility* parent_obj = GetFromAXNode(parent);
       if (parent_obj)
         nodes_needing_update->insert(parent_obj->GetAXPlatformNode());

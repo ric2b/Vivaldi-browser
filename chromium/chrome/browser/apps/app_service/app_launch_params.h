@@ -25,6 +25,13 @@ struct AppLaunchParams {
                   apps::mojom::AppLaunchSource source,
                   int64_t display_id = display::kInvalidDisplayId);
 
+  AppLaunchParams(const std::string& app_id,
+                  apps::mojom::LaunchContainer container,
+                  WindowOpenDisposition disposition,
+                  int64_t display_id,
+                  const std::vector<base::FilePath>& files,
+                  const apps::mojom::IntentPtr& intentPtr);
+
   AppLaunchParams(const AppLaunchParams&) = delete;
   AppLaunchParams& operator=(const AppLaunchParams&) = delete;
   AppLaunchParams(AppLaunchParams&&);
@@ -54,6 +61,9 @@ struct AppLaunchParams {
 
   // If non-empty, use override_app_name in place of generating one normally.
   std::string override_app_name;
+
+  // The id from the restore data to restore the browser window.
+  int32_t restore_id = 0;
 
   // If non-empty, information from the command line may be passed on to the
   // application.

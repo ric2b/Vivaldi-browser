@@ -34,14 +34,14 @@ import org.chromium.chrome.browser.omnibox.UrlBarData;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
+import org.chromium.chrome.browser.theme.ThemeColorProvider;
+import org.chromium.chrome.browser.theme.ThemeColorProvider.ThemeColorObserver;
+import org.chromium.chrome.browser.theme.ThemeColorProvider.TintObserver;
+import org.chromium.chrome.browser.theme.ThemeUtils;
 import org.chromium.chrome.browser.toolbar.ButtonData;
 import org.chromium.chrome.browser.toolbar.HomeButton;
 import org.chromium.chrome.browser.toolbar.NewTabPageDelegate;
 import org.chromium.chrome.browser.toolbar.TabCountProvider;
-import org.chromium.chrome.browser.toolbar.ThemeColorProvider;
-import org.chromium.chrome.browser.toolbar.ThemeColorProvider.ThemeColorObserver;
-import org.chromium.chrome.browser.toolbar.ThemeColorProvider.TintObserver;
-import org.chromium.chrome.browser.toolbar.ToolbarColors;
 import org.chromium.chrome.browser.toolbar.ToolbarDataProvider;
 import org.chromium.chrome.browser.toolbar.ToolbarProgressBar;
 import org.chromium.chrome.browser.toolbar.ToolbarTabController;
@@ -86,15 +86,14 @@ public abstract class ToolbarLayout
     private MenuButtonCoordinator mMenuButtonCoordinator;
     private AppMenuButtonHelper mAppMenuButtonHelper;
 
-    private Callback<Boolean> mOverlayVisibilityCallback;
-    private Runnable mTabOrModelChangeRunnable;
+    private TopToolbarOverlayCoordinator mOverlayCoordinator;
 
     /**
      * Basic constructor for {@link ToolbarLayout}.
      */
     public ToolbarLayout(Context context, AttributeSet attrs) {
         super(context, attrs);
-        mDefaultTint = ToolbarColors.getThemedToolbarIconTint(getContext(), false);
+        mDefaultTint = ThemeUtils.getThemedToolbarIconTint(getContext(), false);
         mProgressBar = createProgressBar();
 
         addOnLayoutChangeListener(new OnLayoutChangeListener() {
@@ -119,28 +118,23 @@ public abstract class ToolbarLayout
      */
     @CallSuper
     protected void initialize(ToolbarDataProvider toolbarDataProvider,
-            ToolbarTabController tabController, MenuButtonCoordinator menuButtonCoordinator,
-            Runnable tabOrModelChangeRunnable) {
+            ToolbarTabController tabController, MenuButtonCoordinator menuButtonCoordinator) {
         mToolbarDataProvider = toolbarDataProvider;
         mToolbarTabController = tabController;
         mMenuButtonCoordinator = menuButtonCoordinator;
-        mTabOrModelChangeRunnable = tabOrModelChangeRunnable;
     }
 
-    /**
-     * @param callback Callback to invoke on visibility change of the texture version
-     *        of the top toolbar.
-     */
-    public void setOverlayVisibilityCallback(Callback<Boolean> callback) {
-        mOverlayVisibilityCallback = callback;
-        mOverlayVisibilityCallback.onResult(getVisibility() == View.VISIBLE);
+    /** @param overlay The coordinator for the texture version of the top toolbar. */
+    void setOverlayCoordinator(TopToolbarOverlayCoordinator overlay) {
+        mOverlayCoordinator = overlay;
+        mOverlayCoordinator.setIsAndroidViewVisible(getVisibility() == View.VISIBLE);
     }
 
     @Override
     public void setVisibility(int visibility) {
         super.setVisibility(visibility);
-        if (mOverlayVisibilityCallback != null) {
-            mOverlayVisibilityCallback.onResult(visibility == View.VISIBLE);
+        if (mOverlayCoordinator != null) {
+            mOverlayCoordinator.setIsAndroidViewVisible(visibility == View.VISIBLE);
         }
     }
 
@@ -526,10 +520,7 @@ public abstract class ToolbarLayout
      * tabs but no normal tabs will still allow you to select the normal model), this should
      * not guarantee that the model's current tab is non-null.
      */
-    void onTabOrModelChanged() {
-        mTabOrModelChangeRunnable.run();
-        getLocationBar().updateMicButtonState();
-    }
+    void onTabOrModelChanged() {}
 
     /**
      * For extending classes to override and carry out the changes related with the primary color
@@ -577,9 +568,7 @@ public abstract class ToolbarLayout
     /**
      * Triggered when the content view for the specified tab has changed.
      */
-    void onTabContentViewChanged() {
-        mTabOrModelChangeRunnable.run();
-    }
+    void onTabContentViewChanged() {}
 
     boolean isReadyForTextureCapture() {
         return true;
@@ -834,4 +823,10 @@ public abstract class ToolbarLayout
 
     /** Vivaldi */
     public void onBottomToolbarVisibilityChanged(boolean isVisible, int orientation) {}
+
+    /** Vivaldi
+     * Checks if the toolbar navigation (forward/back) buttons are visible.
+     * @return true if visible
+     */
+    public boolean areNavigationButtonsVisible() { return false; }
 }

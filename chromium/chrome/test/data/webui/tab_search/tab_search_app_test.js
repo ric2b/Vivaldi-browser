@@ -3,11 +3,7 @@
 // found in the LICENSE file.
 
 import {keyDownOn} from 'chrome://resources/polymer/v3_0/iron-test-helpers/mock-interactions.js';
-import {TabSearchAppElement} from 'chrome://tab-search/app.js';
-import {ProfileTabs, Tab} from 'chrome://tab-search/tab_search.mojom-webui.js';
-import {TabSearchApiProxy, TabSearchApiProxyImpl} from 'chrome://tab-search/tab_search_api_proxy.js';
-import {TabSearchItem} from 'chrome://tab-search/tab_search_item.js';
-import {TabSearchSearchField} from 'chrome://tab-search/tab_search_search_field.js';
+import {ProfileTabs, Tab, TabSearchApiProxyImpl, TabSearchAppElement, TabSearchSearchField} from 'chrome://tab-search/tab_search.js';
 
 import {assertEquals, assertFalse, assertNotEquals, assertTrue} from '../../chai_assert.js';
 import {flushTasks, waitAfterNextRender} from '../../test_util.m.js';
@@ -38,7 +34,7 @@ suite('TabSearchAppTest', () => {
    */
   function queryRows() {
     return tabSearchApp.shadowRoot.querySelector('#tabsList')
-        .shadowRoot.querySelectorAll('tab-search-item');
+        .querySelectorAll('tab-search-item');
   }
 
   /**
@@ -102,7 +98,7 @@ suite('TabSearchAppTest', () => {
 
     const tabSearchItem = /** @type {!HTMLElement} */
         (tabSearchApp.shadowRoot.querySelector('#tabsList')
-             .shadowRoot.querySelector('tab-search-item'));
+             .querySelector('tab-search-item'));
     tabSearchItem.click();
     const [tabInfo] = await testProxy.whenCalled('switchToTab');
     assertEquals(tabData.tabId, tabInfo.tabId);
@@ -233,7 +229,7 @@ suite('TabSearchAppTest', () => {
     verifyTabIds(queryRows(), [1, 5, 6, 2, 3, 4]);
     let tabSearchItem = /** @type {!HTMLElement} */
         (tabSearchApp.shadowRoot.querySelector('#tabsList')
-             .shadowRoot.querySelector('tab-search-item[id="1"]'));
+             .querySelector('tab-search-item[id="1"]'));
     assertEquals('Google', tabSearchItem.data.tab.title);
     assertEquals('https://www.google.com', tabSearchItem.data.tab.url);
     const updatedTab = /** @type {!Tab} */ ({
@@ -249,7 +245,7 @@ suite('TabSearchAppTest', () => {
     verifyTabIds(queryRows(), [1, 5, 6, 2, 3, 4]);
     tabSearchItem = /** @type {!HTMLElement} */
         (tabSearchApp.shadowRoot.querySelector('#tabsList')
-             .shadowRoot.querySelector('tab-search-item[id="1"]'));
+             .querySelector('tab-search-item[id="1"]'));
     assertEquals(updatedTab.title, tabSearchItem.data.tab.title);
     assertEquals(updatedTab.url, tabSearchItem.data.tab.url);
     assertEquals('example.com', tabSearchItem.data.hostname);
@@ -276,9 +272,10 @@ suite('TabSearchAppTest', () => {
     };
 
     await setupTest(sampleData());
+    await testProxy.whenCalled('showUI');
     await waitAfterNextRender(tabSearchApp);
 
-    // Make sure that tab data has been recieved.
+    // Make sure that tab data has been received.
     verifyTabIds(queryRows(), [ 1, 5, 6, 2, 3, 4 ]);
 
     // Ensure that |chrome.metricsPrivate.recordTime()| has been called
@@ -308,7 +305,7 @@ suite('TabSearchAppTest', () => {
     // Click the first element with tabId 1.
     let tabSearchItem = /** @type {!HTMLElement} */
         (tabSearchApp.shadowRoot.querySelector('#tabsList')
-             .shadowRoot.querySelector('tab-search-item[id="1"]'));
+             .querySelector('tab-search-item[id="1"]'));
     tabSearchItem.click();
 
     // Assert switchToTab() was called appropriately for an unfiltered tab list.
@@ -323,7 +320,7 @@ suite('TabSearchAppTest', () => {
     // Click the first element with tabId 6.
     tabSearchItem = /** @type {!HTMLElement} */
         (tabSearchApp.shadowRoot.querySelector('#tabsList')
-             .shadowRoot.querySelector('tab-search-item[id="6"]'));
+             .querySelector('tab-search-item[id="6"]'));
     tabSearchItem.click();
 
     // Assert switchToTab() was called appropriately for an unfiltered tab list.
@@ -346,7 +343,7 @@ suite('TabSearchAppTest', () => {
     // Click the only remaining element with tabId 2.
     tabSearchItem = /** @type {!HTMLElement} */
         (tabSearchApp.shadowRoot.querySelector('#tabsList')
-             .shadowRoot.querySelector('tab-search-item[id="2"]'));
+             .querySelector('tab-search-item[id="2"]'));
     tabSearchItem.click();
 
     // Assert switchToTab() was called appropriately for a tab list fitlered by
@@ -359,21 +356,16 @@ suite('TabSearchAppTest', () => {
         });
   });
 
-  /** TODO(crbug.com/1148061) Investigate/Fix flaky test. */
-  // Casting to avoid inexistent skip() function closure validation error.
-  /** @type {!Object} */
-  (test).skip('Verify showUI() is called correctly', async () => {
-    assertEquals(0, testProxy.getCallCount('showUI'));
-
+  test('Verify showUI() is called correctly', async () => {
     await setupTest(sampleData());
     await waitAfterNextRender(tabSearchApp);
 
     // Make sure that tab data has been received.
     verifyTabIds(queryRows(), [ 1, 5, 6, 2, 3, 4 ]);
 
-    // Ensure that showUI() has been called once after initial data has been
+    // Ensure that showUI() has been called after the initial data has been
     // rendered.
-    assertEquals(1, testProxy.getCallCount('showUI'));
+    await testProxy.whenCalled('showUI');
 
     // Force a change to filtered tab data that would result in a
     // re-render.
@@ -445,7 +437,7 @@ suite('TabSearchAppTest', () => {
       tabSearchApp.shadowRoot.querySelector('#searchField'),
       tabSearchApp.shadowRoot.querySelector('#tabsList'),
       tabSearchApp.shadowRoot.querySelector('#tabsList')
-          .shadowRoot.querySelector('tab-search-item'),
+          .querySelector('tab-search-item'),
       tabSearchApp.shadowRoot.querySelector('#feedback-footer'),
     ];
 

@@ -914,6 +914,7 @@
 <translation id="7810781339813764006">Grupo siguiente</translation>
 <translation id="7813616274030162878">Menú de accesibilidad con interruptores</translation>
 <translation id="7839679365527550018">Palabra anterior</translation>
+<translation id="7842115774595115751">Habilitar controles de navegación</translation>
 <translation id="7846634333498149051">Teclado</translation>
 <translation id="7851816175263618915">Algunos signos de puntuación</translation>
 <translation id="7871691770940645922">Pantalla braille virtual</translation>
@@ -997,7 +998,7 @@
 <translation id="8463645336674919227">Saliendo del error gramatical</translation>
 <translation id="847040613207937740">No hay ninguna casilla posterior</translation>
 <translation id="8473540203671727883">Enunciar el texto que está debajo del ratón</translation>
-<translation id="8476408756881832830">Detener la reproducción cuando ChromeVox habla</translation>
+<translation id="8476408756881832830">Pausar la reproducción cuando ChromeVox habla</translation>
 <translation id="8476508772960940536">vista general de la ventana</translation>
 <translation id="8480873377842220259">Ahora vas a aprender algunas combinaciones de teclas básicas para desplazarte. Para desplazarte por la pantalla, mantén pulsada la tecla de búsqueda y pulsa las teclas de flecha. Para continuar, pulsa la tecla de búsqueda + flecha hacia la derecha.</translation>
 <translation id="8503360654911991865">Disminuye granularidad de navegación</translation>
@@ -1057,6 +1058,7 @@
 <translation id="8978496506222343566">tltip</translation>
 <translation id="8986362086234534611">Dejar de recordar</translation>
 <translation id="8989104346085848538">Para detener un mensaje de voz de ChromeVox, pulsa la tecla Ctrl.</translation>
+<translation id="8993737615451556423">Te permite acelerar, ralentizar y pausar la voz de lectura</translation>
 <translation id="9014206344398081366">Tutorial de ChromeVox</translation>
 <translation id="9040132695316389094">Título 1</translation>
 <translation id="9061884144798498064">Selecciona una tabla braille de 8 puntos:</translation>

@@ -20,14 +20,6 @@ var CrComponentsV3BrowserTest = class extends PolymerTest {
   }
 
   /** @override */
-  get extraLibraries() {
-    return [
-      '//third_party/mocha/mocha.js',
-      '//chrome/test/data/webui/mocha_adapter.js',
-    ];
-  }
-
-  /** @override */
   get webuiHost() {
     return 'dummyurl';
   }
@@ -38,7 +30,7 @@ var CrComponentsManagedFootnoteV3Test =
     class extends CrComponentsV3BrowserTest {
   /** @override */
   get browsePreload() {
-    return 'chrome://test?module=cr_components/managed_footnote_test.m.js';
+    return 'chrome://test/test_loader.html?module=cr_components/managed_footnote_test.m.js';
   }
 };
 

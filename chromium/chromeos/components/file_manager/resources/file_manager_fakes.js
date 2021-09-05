@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// TODO(crbug.com/1113981) rename to file_manager_api_proxy.js or similar.
-
 /** @suppress {checkTypes} */
 window.chrome.extension = {
   inIncognitoContext: false,
@@ -21,7 +19,7 @@ window.chrome.storage = {
      * @param {!Array<string>|string} keys
      * @param {function((!Object)} callback
      */
-    get : (keys, callback) => {
+    get: (keys, callback) => {
       const inKeys = Array.isArray(keys) ? keys : [keys];
       const result = {};
       inKeys.forEach(key => {
@@ -51,7 +49,7 @@ window.chrome.storage = {
      * @param {!Array<string>|string} keys
      * @param {function((!Object)} callback
      */
-    get : (keys, callback) => {
+    get: (keys, callback) => {
       const inKeys = Array.isArray(keys) ? keys : [keys];
       const result = {};
       inKeys.forEach(key => {
@@ -76,131 +74,116 @@ window.chrome.storage = {
   },
 };
 
-/** @suppress {checkTypes} */
-window.chrome.metricsPrivate = {
-  /** @enum {string} */
-  MetricTypeType: {
-    HISTOGRAM_LINEAR: 'histogram-linear',
-  },
-
-  /**
-   * Describes the type of metric to be collected.
-   * @typedef {{
-   *   metricName: string,
-   *   type: !chrome.metricsPrivate.MetricTypeType,
-   *   min: number,
-   *   max: number,
-   *   buckets: number
-   * }}
-   */
-  MetricType: {},
-
-  /**
-   * Records a value than can range from 1 to 100.
-   * @param {string} metricName
-   * @param {number} value
-   */
-  recordSmallCount: (metricName, value) => {},
-
-  /**
-   * Records a value than can range from 1 to 10,000.
-   * @param {string} metricName
-   * @param {number} value
-   */
-  recordMediumCount: (metricName, value) => {},
-
-  /**
-   * Records a percentage value from 1 to 100.
-   * @param {string} metricName
-   * @param {number} value
-   */
-  recordPercentage: (metricName, value) => {},
-
-  /**
-   * Records an elapsed time of no more than 10 seconds.
-   * @param {string} metricName
-   * @param {number} value Value in milliseconds.
-   */
-  recordTime: (metricName, value) => {},
-
-  /**
-   * Records an action performed by the user.
-   * @param {string} name
-   */
-  recordUserAction: (name) => {},
-
-  /**
-   * Adds a value to the given metric.
-   * @param {!chrome.metricsPrivate.MetricType} metric
-   * @param {number} value
-   */
-  recordValue: (metricName, value) => {},
-};
-
-window.DriveSyncHandler = class extends EventTarget {
-  /**
-   * Returns the completed event name.
-   * @return {string}
-   */
-  getCompletedEventName() {}
-
-  /**
-   * Returns whether the Drive sync is currently suppressed or not.
-   * @return {boolean}
-   */
-  isSyncSuppressed() {}
-
-  /**
-   * Shows a notification that Drive sync is disabled on cellular networks.
-   */
-  showDisabledMobileSyncNotification() {}
-
-  /**
-   * @return {boolean} Whether the handler is syncing items or not.
-   */
-  get syncing() {}
-}
-
-window.BackgroundPageFake = class {
+window.BackgroundWindowSWA = class {
   constructor() {
     /**
-     * @type {FileBrowserBackground}
+     * @type {!FileBrowserBackgroundFull}
      */
-    this.background;
+    this.background = new FileBrowserBackgroundFull();
+  }
+}
+
+window.FileBrowserBackgroundFull = class {
+  constructor() {
+    /**
+     * Dialogs
+     * @type {!Object<!Window>}
+     */
+    this.dialogs = {};
 
     /**
-     * @type {!Object}
+     * String assets (translation strings and flag states).
+     * @type {Object<string>}
      */
-    this.launcher = {};
-
-    /**
-     * @private @type {VolumeManager}
-     */
-    this.volumeManagerInstance_;
-
-    /**
-     * @type {!VolumeManagerFactory}
-     */
-    this.volumeManagerFactory = /** @type {!Object} */ ({
-      /** @return {!VolumeManager} */
-      getInstance() {
-        if (!this.volumeManagerInstance_) {
-          this.volumeManagerInstance_ = new VolumeManager();
-        }
-        return this.volumeManagerInstance_;
-      },
-    });
+    this.stringData = {};
 
     /**
      * @type {!DriveSyncHandler}
      */
     this.driveSyncHandler = new DriveSyncHandler();
+
+    /**
+     * @type {!ProgressCenter}
+     */
+    this.progressCenter = new ProgressCenter();
+
+    /**
+     * @type {FileOperationManager}
+     */
+    this.fileOperationManager = new FileOperationManager();
+
+    /**
+     * @type {!importer.ImportRunner}
+     */
+    this.mediaImportHandler = new MediaImportHandler();
+
+    /**
+     * @type {!importer.MediaScanner}
+     */
+    this.mediaScanner = new MediaScanner();
+
+    /**
+     * @type {!importer.HistoryLoader}
+     */
+    this.historyLoader = new HistoryLoader();
+
+    /**
+     * @type {!Crostini}
+     */
+    this.crostini = new Crostini();
+
+    /**
+     * @private @type {VolumeManager}
+     */
+    this.volumeManagerInstance_;
   }
 
   /**
-   * @param {Window} window
+   * @param {!Window} window
    */
-  registerDialog(window) {}
+  registerDialog(window) {
+    console.error('registerDialog() not implemented for SWA yet');
+  }
+
+  /**
+   * @param {function()} callback Ready callback.
+   */
+  ready(callback) {
+    const script = document.createElement('script');
+
+    script.onload = () => {
+      this.stringData = window.loadTimeData.data_;
+      window.loadTimeData.data_ = null;
+      callback();
+    };
+
+    document.head.append(script);
+    script.src = 'strings.js';
+  }
+
+  /**
+   * Returns VolumeManager instance.
+   * @public
+   * @return {!VolumeManager}
+   */
+  getVolumeManager() {
+    if (!this.volumeManagerInstance_) {
+      this.volumeManagerInstance_ = new VolumeManager();
+    }
+
+    return this.volumeManagerInstance_;
+  }
+
+  /**
+   * Launches a new File Manager window.
+   *
+   * @param {Object=} opt_appState App state.
+   * @return {!Promise<chrome.app.window.AppWindow|string>} Resolved with the
+   *     App ID.
+   */
+  async launchFileManager(opt_appState) {
+    console.error('launchFileManager() not implemented for SWA yet');
+  }
 }
 
 window.VolumeManager = class {
@@ -211,8 +194,6 @@ window.VolumeManager = class {
      */
     this.volumeInfoList = new VolumeInfoListFake();
   }
-
-  addEventListener() {}
 
   /**
    * Disposes the instance. After the invocation of this method, any other
@@ -391,62 +372,28 @@ window.VolumeInfoListFake = class {
   }
 }
 
-window.FileBrowserBackground = class {
-  constructor() {
-    /** @type {!Object<!Window>} */
-    this.dialogs;
-  }
+window.DriveSyncHandler = class extends EventTarget {
   /**
-   * @param {function()} callback
+   * Returns the completed event name.
+   * @return {string}
    */
-  ready(callback) {}
-}
+  getCompletedEventName() {}
 
-window.FileBrowserBackgroundFull = class extends FileBrowserBackground {
-  constructor() {
-    super();
+  /**
+   * Returns whether the Drive sync is currently suppressed or not.
+   * @return {boolean}
+   */
+  isSyncSuppressed() {}
 
-    /**
-     * @type {!DriveSyncHandler}
-     */
-    this.driveSyncHandler;
+  /**
+   * Shows a notification that Drive sync is disabled on cellular networks.
+   */
+  showDisabledMobileSyncNotification() {}
 
-    /**
-     * @type {!ProgressCenter}
-     */
-    this.progressCenter;
-
-    /**
-     * String assets.
-     * @type {Object<string>}
-     */
-    this.stringData;
-
-    /**
-     * @type {FileOperationManager}
-     */
-    this.fileOperationManager;
-
-    /**
-     * @type {!importer.ImportRunner}
-     */
-    this.mediaImportHandler;
-
-    /**
-     * @type {!importer.MediaScanner}
-     */
-    this.mediaScanner;
-
-    /**
-     * @type {!importer.HistoryLoader}
-     */
-    this.historyLoader;
-
-    /**
-     * @type {!Crostini}
-     */
-    this.crostini;
-  }
+  /**
+   * @return {boolean} Whether the handler is syncing items or not.
+   */
+  get syncing() {}
 }
 
 window.Crostini = class {
@@ -613,9 +560,9 @@ window.FileOperationManager = class extends EventTarget {
    * Restores files from trash.
    *
    * @param {Array<!{name: string, filesEntry: !Entry, infoEntry: !FileEntry}>}
-   *     trashItems The trash items.
+   *     trashEntries The trash entries.
    */
-  restoreDeleted(trashItems) {}
+  restoreDeleted(trashEntries) {}
 
   /**
    * Creates a zip file for the selection of files.

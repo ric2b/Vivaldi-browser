@@ -46,6 +46,7 @@ ConversionReport GetReport(int64_t conversion_id) {
           .SetData(base::NumberToString(conversion_id))
           .Build(),
       /*conversion_data=*/base::NumberToString(conversion_id),
+      /*conversion_time=*/base::Time(),
       /*report_time=*/base::Time(),
       /*conversion_id=*/conversion_id);
 }
@@ -135,6 +136,7 @@ TEST_F(ConversionNetworkSenderTest, ReportSent_QueryParamsSetCorrectly) {
           .Build();
   ConversionReport report(impression,
                           /*conversion_data=*/"conversion",
+                          /*conversion_time=*/base::Time(),
                           /*report_time=*/base::Time(),
                           /*conversion_id=*/1);
   report.attribution_credit = 50;
@@ -153,10 +155,11 @@ TEST_F(ConversionNetworkSenderTest, ReportSent_RequestAttributesSet) {
       ImpressionBuilder(base::Time())
           .SetData("1")
           .SetReportingOrigin(url::Origin::Create(GURL("https://a.com")))
-          .SetConversionOrigin(url::Origin::Create(GURL("https://b.com")))
+          .SetConversionOrigin(url::Origin::Create(GURL("https://sub.b.com")))
           .Build();
   ConversionReport report(impression,
                           /*conversion_data=*/"1",
+                          /*conversion_time=*/base::Time(),
                           /*report_time=*/base::Time(),
                           /*conversion_id=*/1);
   network_sender_->SendReport(&report, base::DoNothing());
@@ -172,6 +175,8 @@ TEST_F(ConversionNetworkSenderTest, ReportSent_RequestAttributesSet) {
   EXPECT_EQ(network::mojom::CredentialsMode::kOmit,
             pending_request->credentials_mode);
   EXPECT_EQ("POST", pending_request->method);
+
+  // Make sure the domain is used as the referrer.
   EXPECT_EQ(GURL("https://b.com"), pending_request->referrer);
 }
 
@@ -246,6 +251,17 @@ TEST_F(ConversionNetworkSenderTest, ErrorHistogram) {
     // kExternalError = 2.
     histograms.ExpectUniqueSample("Conversions.ReportStatus", 2, 1);
   }
+}
+
+TEST_F(ConversionNetworkSenderTest, TimeFromConversionToReportSendHistogram) {
+  base::HistogramTester histograms;
+  auto report = GetReport(/*conversion_id=*/1);
+  report.report_time = base::Time() + base::TimeDelta::FromHours(5);
+  network_sender_->SendReport(&report, GetSentCallback());
+  EXPECT_TRUE(test_url_loader_factory_.SimulateResponseForPendingRequest(
+      GetReportUrl("1"), ""));
+  histograms.ExpectUniqueSample("Conversions.TimeFromConversionToReportSend", 5,
+                                1);
 }
 
 }  // namespace content

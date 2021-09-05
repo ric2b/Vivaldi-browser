@@ -10,6 +10,7 @@
 #include <unordered_set>
 
 #include "base/bind.h"
+#include "base/containers/contains.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
 #include "base/location.h"
@@ -17,7 +18,6 @@
 #include "base/observer_list.h"
 #include "base/observer_list_types.h"
 #include "base/optional.h"
-#include "base/stl_util.h"
 #include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
@@ -713,6 +713,7 @@ void CertProvisioningSchedulerImpl::UpdateFailedCertProfiles(
 
   FailedWorkerInfo info;
   info.state_before_failure = worker.GetPreviousState();
+  info.cert_profile_name = worker.GetCertProfile().name;
   info.public_key = worker.GetPublicKey();
   info.last_update_time = worker.GetLastUpdateTime();
 

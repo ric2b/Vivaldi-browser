@@ -18,6 +18,7 @@
 #include "third_party/blink/public/common/scheduler/web_scheduler_tracked_feature.h"
 #include "third_party/blink/public/platform/blame_context.h"
 #include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/renderer/platform/back_forward_cache_utils.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/scheduler/common/features.h"
 #include "third_party/blink/renderer/platform/scheduler/common/throttling/budget_pool.h"
@@ -384,18 +385,16 @@ QueueTraits FrameSchedulerImpl::CreateQueueTraitsForTaskType(TaskType type) {
               QueueTraits::PrioritisationType::kJavaScriptTimer)
           .SetCanBeIntensivelyThrottled(IsIntensiveWakeUpThrottlingEnabled());
     case TaskType::kJavascriptTimerImmediate: {
-      return DeferrableTaskQueueTraits()
-          .SetPrioritisationType(
-              QueueTraits::PrioritisationType::kJavaScriptTimer)
-          .SetCanBeThrottled(!base::FeatureList::IsEnabled(
-              features::kOptOutZeroTimeoutTimersFromThrottling));
+      // Immediate timers are not throttled.
+      return DeferrableTaskQueueTraits().SetPrioritisationType(
+          QueueTraits::PrioritisationType::kJavaScriptTimer);
     }
     case TaskType::kInternalLoading:
     case TaskType::kNetworking:
     case TaskType::kNetworkingWithURLLoaderAnnotation:
       return LoadingTaskQueueTraits();
     case TaskType::kNetworkingUnfreezable:
-      return base::FeatureList::IsEnabled(features::kLoadingTasksUnfreezable)
+      return IsInflightNetworkRequestBackForwardCacheSupportEnabled()
                  ? UnfreezableLoadingTaskQueueTraits()
                  : LoadingTaskQueueTraits();
     case TaskType::kNetworkingControl:
@@ -670,7 +669,7 @@ void FrameSchedulerImpl::OnStartedUsingFeature(
         "renderer.scheduler", "ActiveSchedulerTrackedFeature",
         TRACE_ID_LOCAL(reinterpret_cast<intptr_t>(this) ^
                        static_cast<int>(feature)),
-        "feature", FeatureToString(feature));
+        "feature", FeatureToHumanReadableString(feature));
   }
 }
 
@@ -962,6 +961,10 @@ bool FrameSchedulerImpl::ShouldThrottleTaskQueues() const {
     return false;
   if (!parent_page_scheduler_->IsPageVisible())
     return true;
+  if (base::FeatureList::IsEnabled(kThrottleVisibleNotFocusedTimers) &&
+      !parent_page_scheduler_->IsPageFocused()) {
+    return true;
+  }
   return RuntimeEnabledFeatures::TimerThrottlingForHiddenFramesEnabled() &&
          !frame_visible_ && IsCrossOriginToMainFrame();
 }
@@ -1349,8 +1352,7 @@ MainThreadTaskQueue::QueueTraits
 FrameSchedulerImpl::DeferrableTaskQueueTraits() {
   return QueueTraits()
       .SetCanBeDeferred(true)
-      .SetCanBeFrozen(base::FeatureList::IsEnabled(
-          blink::features::kStopNonTimersInBackground))
+      .SetCanBeFrozen(true)
       .SetCanBePaused(true)
       .SetCanRunWhenVirtualTimePaused(false)
       .SetCanBePausedForAndroidWebview(true);
@@ -1359,8 +1361,7 @@ FrameSchedulerImpl::DeferrableTaskQueueTraits() {
 // static
 MainThreadTaskQueue::QueueTraits FrameSchedulerImpl::PausableTaskQueueTraits() {
   return QueueTraits()
-      .SetCanBeFrozen(base::FeatureList::IsEnabled(
-          blink::features::kStopNonTimersInBackground))
+      .SetCanBeFrozen(true)
       .SetCanBePaused(true)
       .SetCanRunWhenVirtualTimePaused(false)
       .SetCanBePausedForAndroidWebview(true);

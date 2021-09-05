@@ -351,7 +351,6 @@ VISIT_PROTO_FIELDS(const sync_pb::DatatypeAssociationStats& proto) {
   VISIT(data_type_id);
   VISIT(download_wait_time_us);
   VISIT(download_time_us);
-  VISIT(association_wait_time_for_high_priority_us);
   VISIT_REP(high_priority_type_configured_before);
   VISIT_REP(same_priority_type_configured_before);
 }
@@ -726,6 +725,21 @@ VISIT_PROTO_FIELDS(const sync_pb::PasswordSpecificsData& proto) {
   VISIT(display_name);
   VISIT(avatar_url);
   VISIT(federation_url);
+  VISIT(date_last_used);
+  VISIT(password_issues);
+}
+
+VISIT_PROTO_FIELDS(const sync_pb::PasswordSpecificsData_PasswordIssues& proto) {
+  VISIT(leaked_password_issue);
+  VISIT(reused_password_issue);
+  VISIT(weak_password_issue);
+  VISIT(phished_password_issue);
+}
+
+VISIT_PROTO_FIELDS(
+    const sync_pb::PasswordSpecificsData_PasswordIssues_PasswordIssue& proto) {
+  VISIT(date_first_detection_microseconds);
+  VISIT(is_muted);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::PasswordSpecificsMetadata& proto) {
@@ -809,6 +823,8 @@ VISIT_PROTO_FIELDS(const sync_pb::SendTabToSelfSpecifics& proto) {
   VISIT(navigation_time_usec);
   VISIT(device_name);
   VISIT(target_device_sync_cache_guid);
+  VISIT(opened);
+  VISIT(notification_dismissed);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::SessionHeader& proto) {
@@ -953,7 +969,6 @@ VISIT_PROTO_FIELDS(
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::UserEventSpecifics::FlocIdComputed& proto) {
-  VISIT_ENUM(event_trigger);
   VISIT(floc_id);
 }
 

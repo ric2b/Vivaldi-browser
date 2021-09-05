@@ -17,6 +17,7 @@
 #include "chrome/browser/chromeos/login/auth/auth_prewarmer.h"
 #include "chrome/browser/chromeos/login/oobe_screen.h"
 #include "chrome/browser/chromeos/login/ui/login_display.h"
+#include "chrome/browser/chromeos/login/ui/signin_ui.h"
 #include "components/user_manager/user_type.h"
 
 #include "ui/gfx/native_widget_types.h"
@@ -145,12 +146,18 @@ class LoginDisplayHost {
   virtual void StartKiosk(const KioskAppId& kiosk_app_id,
                           bool is_auto_launch) = 0;
 
+  // Performs necessary check and shows consumer kiosk UI if eligible.
+  virtual void AttemptShowEnableConsumerKioskScreen() = 0;
+
   // Show the gaia dialog. If available, `account` is preloaded in the gaia
   // dialog.
   virtual void ShowGaiaDialog(const AccountId& prefilled_account) = 0;
 
   // Hide any visible oobe dialog.
   virtual void HideOobeDialog() = 0;
+
+  // Sets whether shelf buttons are enabled.
+  virtual void SetShelfButtonsEnabled(bool enabled) = 0;
 
   // Update the state of the oobe dialog.
   virtual void UpdateOobeDialogState(ash::OobeDialogState state) = 0;
@@ -213,9 +220,15 @@ class LoginDisplayHost {
   // Returns if the device has any user after filtering based on policy.
   virtual bool HasUserPods() = 0;
 
+  virtual void VerifyOwnerForKiosk(base::OnceClosure on_success) = 0;
+
   // Used to add an observer for the changes in the web dilaog login view.
   virtual void AddObserver(Observer* observer) = 0;
   virtual void RemoveObserver(Observer* observer) = 0;
+
+  // Return sign-in UI instance, guaranteed to be non-null
+  // during sign-in process. Result should not be stored.
+  virtual SigninUI* GetSigninUI() = 0;
 
  protected:
   LoginDisplayHost();

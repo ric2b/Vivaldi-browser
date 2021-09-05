@@ -9,6 +9,7 @@ include_rules = [
     "+base/logging.h",
     "+base/macros.h",
     "+base/mac/scoped_cftyperef.h",
+    "+base/memory/memory_pressure_listener.h",
     "+base/memory/ref_counted.h",
     "+base/memory/scoped_refptr.h",
     "+base/memory/weak_ptr.h",
@@ -30,6 +31,7 @@ include_rules = [
     "+media/base/audio_renderer_sink.h",
     "+media/base/eme_constants.h",
     "+media/base/media_log.h",
+    "+media/base/stream_parser.h",
     "+media/base/video_frame_metadata.h",
     "+media/base/video_transformation.h",
     "+mojo/public",
@@ -84,3 +86,9 @@ include_rules = [
     "+third_party/blink/renderer/core",
     "+third_party/blink/renderer/platform",
 ]
+
+specific_include_rules = {
+  "web_mojo_url_loader_client.h": [
+    "+services/network/public/mojom/url_loader.mojom.h",
+  ]
+}

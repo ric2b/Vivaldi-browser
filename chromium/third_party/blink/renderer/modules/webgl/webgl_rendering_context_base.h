@@ -108,6 +108,7 @@ class WebGLShader;
 class WebGLShaderPrecisionFormat;
 class WebGLUniformLocation;
 class WebGLVertexArrayObjectBase;
+class XRSystem;
 
 using GLenumHashSet = HashSet<GLenum,
                               WTF::AlreadyHashed,
@@ -629,6 +630,8 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
     Member<WebGLTexture> texture3d_binding_;
     Member<WebGLTexture> texture2d_array_binding_;
     Member<WebGLTexture> texture_video_image_binding_;
+    Member<WebGLTexture> texture_external_oes_binding_;
+    Member<WebGLTexture> texture_rectangle_arb_binding_;
 
     void Trace(Visitor*) const;
   };
@@ -826,6 +829,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   static bool IsXrCompatibleFromResult(
       device::mojom::blink::XrCompatibleResult result);
   static bool DidGpuRestart(device::mojom::blink::XrCompatibleResult result);
+  static XRSystem* GetXrSystemFromHost(CanvasRenderingContextHost* host);
   void MakeXrCompatibleAsync();
   void OnMakeXrCompatibleFinished(
       device::mojom::blink::XrCompatibleResult xr_compatible_result);
@@ -894,6 +898,9 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
       stencil_func_ref_back_;  // Note that these are the user specified values,
                                // not the internal clamped value.
   GLuint stencil_func_mask_, stencil_func_mask_back_;
+
+  // WebGL 2.0 only, but putting it here saves multiple virtual functions.
+  bool rasterizer_discard_enabled_;
 
   bool is_depth_stencil_supported_;
 
@@ -1082,7 +1089,15 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
     // doesn't have to call glClear() again.
     kCombinedClear
   };
-  HowToClear ClearIfComposited(GLbitfield clear_mask = 0);
+  enum ClearCaller {
+    // Caller of ClearIfComposited is a user-level draw or clear call.
+    kClearCallerDrawOrClear,
+    // Caller of ClearIfComposited is anything else, including
+    // readbacks or copies.
+    kClearCallerOther,
+  };
+
+  HowToClear ClearIfComposited(ClearCaller caller, GLbitfield clear_mask = 0);
 
   // Convert texture internal format.
   GLenum ConvertTexInternalFormat(GLenum internalformat, GLenum type);
@@ -1776,6 +1791,10 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
                         DOMArrayBufferView* pixels,
                         int64_t offset);
 
+  // Record Canvas/OffscreenCanvas.RenderingContextDrawnTo at the first draw
+  // call.
+  void RecordUKMCanvasDrawnToAtFirstDrawCall();
+
  private:
   WebGLRenderingContextBase(CanvasRenderingContextHost*,
                             scoped_refptr<base::SingleThreadTaskRunner>,
@@ -1825,6 +1844,13 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
                                            GLenum precision_type,
                                            WebGLShaderPrecisionFormat* format);
 
+  // PushFrameWithCopy will make a potential copy if the resource is accelerated
+  // or a drawImage if the resource is non accelerated.
+  bool PushFrameWithCopy();
+  // PushFrameNoCopy will try and export the content of the DrawingBuffer as a
+  // ExtenralCanvasResource.
+  bool PushFrameNoCopy();
+
   static bool webgl_context_limits_initialized_;
   static unsigned max_active_webgl_contexts_;
   static unsigned max_active_webgl_contexts_on_worker_;
@@ -1840,6 +1866,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
 
   friend class WebGLFastCallHelper;
   WebGLFastCallHelper fast_call_;
+  bool has_been_drawn_to_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(WebGLRenderingContextBase);
 };

@@ -40,23 +40,21 @@ class PrerenderLinkManager : public KeyedService,
   // Called when a <link rel=prerender ...> element has been inserted into the
   // document. Returns the prerender id that is used for canceling or abandoning
   // prerendering. Returns base::nullopt if the prerender was not started.
-  base::Optional<int> OnStartPrerender(
+  virtual base::Optional<int> OnStartPrerender(
       int launcher_render_process_id,
       int launcher_render_view_id,
       blink::mojom::PrerenderAttributesPtr attributes,
-      const url::Origin& initiator_origin,
-      mojo::PendingRemote<blink::mojom::PrerenderProcessorClient>
-          processor_client);
+      const url::Origin& initiator_origin);
 
   // Called when a <link rel=prerender ...> element has been explicitly removed
   // from a document.
-  void OnCancelPrerender(int prerender_id);
+  virtual void OnCancelPrerender(int prerender_id);
 
   // Called when a renderer launching <link rel=prerender ...> has navigated
   // away from the launching page, the launching renderer process has crashed,
   // or perhaps the renderer process was fast-closed when the last render view
   // in it was closed.
-  void OnAbandonPrerender(int prerender_id);
+  virtual void OnAbandonPrerender(int prerender_id);
 
  private:
   friend class PrerenderBrowserTest;
@@ -72,8 +70,6 @@ class PrerenderLinkManager : public KeyedService,
                   int launcher_render_view_id,
                   blink::mojom::PrerenderAttributesPtr attributes,
                   const url::Origin& initiator_origin,
-                  mojo::PendingRemote<blink::mojom::PrerenderProcessorClient>
-                      processor_client,
                   base::TimeTicks creation_time,
                   PrerenderContents* deferred_launcher);
     ~LinkPrerender();
@@ -89,10 +85,6 @@ class PrerenderLinkManager : public KeyedService,
     const content::Referrer referrer;
     const url::Origin initiator_origin;
     const gfx::Size size;
-
-    // Notification interface back to the requestor of this prerender.
-    mojo::Remote<blink::mojom::PrerenderProcessorClient>
-        remote_processor_client;
 
     // The time at which this Prerender was added to PrerenderLinkManager.
     const base::TimeTicks creation_time;
@@ -140,9 +132,6 @@ class PrerenderLinkManager : public KeyedService,
   void Shutdown() override;
 
   // From PrerenderHandle::Observer:
-  void OnPrerenderStart(PrerenderHandle* prerender_handle) override;
-  void OnPrerenderStopLoading(PrerenderHandle* prerender_handle) override;
-  void OnPrerenderDomContentLoaded(PrerenderHandle* prerender_handle) override;
   void OnPrerenderStop(PrerenderHandle* prerender_handle) override;
   void OnPrerenderNetworkBytesChanged(
       PrerenderHandle* prerender_handle) override;

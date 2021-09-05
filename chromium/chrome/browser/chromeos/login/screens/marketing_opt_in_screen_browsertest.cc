@@ -19,6 +19,7 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
+#include "chrome/browser/chromeos/login/login_pref_names.h"
 #include "chrome/browser/chromeos/login/marketing_backend_connector.h"
 #include "chrome/browser/chromeos/login/test/fake_gaia_mixin.h"
 #include "chrome/browser/chromeos/login/test/js_checker.h"
@@ -51,6 +52,10 @@ const test::UIPath kChromebookEmailToggle = {"marketing-opt-in",
                                              "chromebookUpdatesOption"};
 const test::UIPath kChromebookEmailToggleDiv = {"marketing-opt-in",
                                                 "marketing-opt-in-toggle"};
+const test::UIPath kChromebookEmailLegalFooterDiv = {"marketing-opt-in",
+                                                     "legalFooter"};
+const test::UIPath kChromebookEmailAnimation = {"marketing-opt-in",
+                                                "animation"};
 const test::UIPath kMarketingA11yButton = {
     "marketing-opt-in", "marketing-opt-in-accessibility-button"};
 const test::UIPath kMarketingFinalA11yPage = {"marketing-opt-in",
@@ -65,30 +70,31 @@ struct RegionToCodeMap {
   const char* country_code;
   bool is_default_opt_in;
   bool is_unknown_country;
+  bool requires_legal_footer;
 };
 
 // Default countries
 const RegionToCodeMap kDefaultCountries[]{
-    {"US", "America/Los_Angeles", "us", true, false},
-    {"Canada", "Canada/Atlantic", "ca", false, false},
-    {"UnitedKingdom", "Europe/London", "gb", false, false}};
+    {"US", "America/Los_Angeles", "us", true, false, false},
+    {"Canada", "Canada/Atlantic", "ca", false, false, true},
+    {"UnitedKingdom", "Europe/London", "gb", false, false, false}};
 
 // Extended region list. Behind feature flag.
 const RegionToCodeMap kExtendedCountries[]{
-    {"France", "Europe/Paris", "fr", false, false},
-    {"Netherlands", "Europe/Amsterdam", "nl", false, false},
-    {"Finland", "Europe/Helsinki", "fi", false, false},
-    {"Sweden", "Europe/Stockholm", "se", false, false},
-    {"Norway", "Europe/Oslo", "no", false, false},
-    {"Denmark", "Europe/Copenhagen", "dk", false, false},
-    {"Spain", "Europe/Madrid", "es", false, false},
-    {"Italy", "Europe/Rome", "it", false, false},
-    {"Japan", "Asia/Tokyo", "jp", false, false},
-    {"Australia", "Australia/Sydney", "au", false, false}};
+    {"France", "Europe/Paris", "fr", false, false, false},
+    {"Netherlands", "Europe/Amsterdam", "nl", false, false, false},
+    {"Finland", "Europe/Helsinki", "fi", false, false, false},
+    {"Sweden", "Europe/Stockholm", "se", false, false, false},
+    {"Norway", "Europe/Oslo", "no", false, false, false},
+    {"Denmark", "Europe/Copenhagen", "dk", false, false, false},
+    {"Spain", "Europe/Madrid", "es", false, false, false},
+    {"Italy", "Europe/Rome", "it", false, false, false},
+    {"Japan", "Asia/Tokyo", "jp", false, false, false},
+    {"Australia", "Australia/Sydney", "au", false, false, false}};
 
 // Double opt-in countries. Behind double opt-in feature flag.
 const RegionToCodeMap kDoubleOptInCountries[]{
-    {"Germany", "Europe/Berlin", "de", false, false}};
+    {"Germany", "Europe/Berlin", "de", false, false, false}};
 
 // Unknown country.
 const RegionToCodeMap kUnknownCountry[]{
@@ -113,16 +119,25 @@ class MarketingOptInScreenTest : public OobeBaseTest,
   void ExpectNoOptInOption();
   // Expects that the option to opt-in is visible.
   void ExpectOptInOptionAvailable();
+  // Expects a verbose footer containing legal information.
+  void ExpectLegalFooterVisibility(bool visibility);
   // Expects that the opt-in toggle is visible and unchecked.
   void ExpectOptedOut();
   // Expects that the opt-in toggle is visible and checked.
   void ExpectOptedIn();
+  void ExpectRecordedUserPrefRegardingChoice(bool opted_in);
   // Flips the toggle to opt-in. Only to be called when the toggle is unchecked.
   void OptIn();
+  void OptOut();
 
   void ExpectGeolocationMetric(bool resolved, int length);
   void WaitForScreenExit();
-  void SetUpLocalState() override {}
+
+  // US as default location for non-parameterized tests.
+  void SetUpLocalState() override {
+    g_browser_process->local_state()->SetString(::prefs::kSigninScreenTimezone,
+                                                "America/Los_Angeles");
+  }
 
   // Logs in as a normal user. Overridden by subclasses.
   virtual void PerformLogin();
@@ -182,12 +197,9 @@ void MarketingOptInScreenTest::SetUpOnMainThread() {
   original_callback_ = GetScreen()->get_exit_callback_for_testing();
   GetScreen()->set_exit_callback_for_testing(base::BindRepeating(
       &MarketingOptInScreenTest::HandleScreenExit, base::Unretained(this)));
+  GetScreen()->set_ingore_pref_sync_for_testing(true);
 
   OobeBaseTest::SetUpOnMainThread();
-  PerformLogin();
-  OobeScreenExitWaiter(GetFirstSigninScreen()).Wait();
-  ProfileManager::GetActiveUserProfile()->GetPrefs()->SetBoolean(
-      ash::prefs::kGestureEducationNotificationShown, true);
 }
 
 MarketingOptInScreen* MarketingOptInScreenTest::GetScreen() {
@@ -196,6 +208,10 @@ MarketingOptInScreen* MarketingOptInScreenTest::GetScreen() {
 }
 
 void MarketingOptInScreenTest::ShowMarketingOptInScreen() {
+  PerformLogin();
+  OobeScreenExitWaiter(GetFirstSigninScreen()).Wait();
+  ProfileManager::GetActiveUserProfile()->GetPrefs()->SetBoolean(
+      ash::prefs::kGestureEducationNotificationShown, true);
   LoginDisplayHost::default_host()->StartWizard(
       MarketingOptInScreenView::kScreenId);
 }
@@ -222,6 +238,17 @@ void MarketingOptInScreenTest::ExpectOptInOptionAvailable() {
   test::OobeJS().ExpectVisiblePath(kChromebookEmailToggleDiv);
 }
 
+void MarketingOptInScreenTest::ExpectLegalFooterVisibility(bool visibility) {
+  ExpectOptInOptionAvailable();
+  if (visibility) {
+    test::OobeJS().ExpectVisiblePath(kChromebookEmailLegalFooterDiv);
+    test::OobeJS().ExpectHiddenPath(kChromebookEmailAnimation);
+  } else {
+    test::OobeJS().ExpectHiddenPath(kChromebookEmailLegalFooterDiv);
+    test::OobeJS().ExpectVisiblePath(kChromebookEmailAnimation);
+  }
+}
+
 void MarketingOptInScreenTest::ExpectOptedOut() {
   ExpectOptInOptionAvailable();
   test::OobeJS().ExpectHasNoAttribute("checked", kChromebookEmailToggle);
@@ -232,9 +259,26 @@ void MarketingOptInScreenTest::ExpectOptedIn() {
   test::OobeJS().ExpectHasAttribute("checked", kChromebookEmailToggle);
 }
 
+void MarketingOptInScreenTest::ExpectRecordedUserPrefRegardingChoice(
+    bool opted_in) {
+  EXPECT_TRUE(
+      ProfileManager::GetPrimaryUserProfile()->GetPrefs()->GetUserPrefValue(
+          prefs::kOobeMarketingOptInChoice) != nullptr);
+  EXPECT_EQ(ProfileManager::GetPrimaryUserProfile()->GetPrefs()->GetBoolean(
+                prefs::kOobeMarketingOptInChoice),
+            opted_in);
+}
+
 void MarketingOptInScreenTest::OptIn() {
+  ExpectOptedOut();
   test::OobeJS().ClickOnPath(kChromebookEmailToggle);
   test::OobeJS().ExpectHasAttribute("checked", kChromebookEmailToggle);
+}
+
+void MarketingOptInScreenTest::OptOut() {
+  ExpectOptedIn();
+  test::OobeJS().ClickOnPath(kChromebookEmailToggle);
+  test::OobeJS().ExpectHasNoAttribute("checked", kChromebookEmailToggle);
 }
 
 void MarketingOptInScreenTest::ExpectGeolocationMetric(bool resolved,
@@ -294,10 +338,85 @@ void MarketingOptInScreenTestWithRequest::HandleBackendRequest(
 
 // Tests that the screen is visible
 IN_PROC_BROWSER_TEST_F(MarketingOptInScreenTest, ScreenVisible) {
-  ShowMarketingOptInScreen();
+  PerformLogin();
+  OobeScreenExitWaiter(GetFirstSigninScreen()).Wait();
+  // Expect the screen to not have been shown before.
+  EXPECT_FALSE(ProfileManager::GetActiveUserProfile()->GetPrefs()->GetBoolean(
+      prefs::kOobeMarketingOptInScreenFinished));
+  LoginDisplayHost::default_host()->StartWizard(
+      MarketingOptInScreenView::kScreenId);
+
   OobeScreenWaiter(MarketingOptInScreenView::kScreenId).Wait();
   test::OobeJS().ExpectVisiblePath(
       {"marketing-opt-in", "marketingOptInOverviewDialog"});
+  TapOnGetStartedAndWaitForScreenExit();
+
+  // Expect the screen to be marked as shown.
+  EXPECT_TRUE(ProfileManager::GetActiveUserProfile()->GetPrefs()->GetBoolean(
+      prefs::kOobeMarketingOptInScreenFinished));
+}
+
+IN_PROC_BROWSER_TEST_F(MarketingOptInScreenTest, OptInFlow) {
+  ShowMarketingOptInScreen();
+  OobeScreenWaiter(MarketingOptInScreenView::kScreenId).Wait();
+  // U.S. is the default region for the base tests.
+  ExpectOptedIn();
+  TapOnGetStartedAndWaitForScreenExit();
+
+  // Expect the user preference to have been stored as opted-in (true).
+  ExpectRecordedUserPrefRegardingChoice(true);
+}
+
+IN_PROC_BROWSER_TEST_F(MarketingOptInScreenTest, OptOutFlow) {
+  ShowMarketingOptInScreen();
+  OobeScreenWaiter(MarketingOptInScreenView::kScreenId).Wait();
+  // U.S. is the default region for the base tests.
+  ExpectOptedIn();
+  OptOut();
+  TapOnGetStartedAndWaitForScreenExit();
+
+  // Expect the user preference to have been stored as opted-out (false).
+  ExpectRecordedUserPrefRegardingChoice(false);
+}
+
+// Tests that the option to sign up for emails isn't shown when the user
+// already made its choice.
+IN_PROC_BROWSER_TEST_F(MarketingOptInScreenTest, HideOptionWhenChoiceKnown) {
+  PerformLogin();
+  OobeScreenExitWaiter(GetFirstSigninScreen()).Wait();
+
+  // Mark the screen as shown before and the user's choice as 'not opted in'.
+  ProfileManager::GetPrimaryUserProfile()->GetPrefs()->SetBoolean(
+      prefs::kOobeMarketingOptInScreenFinished, true);
+  ProfileManager::GetPrimaryUserProfile()->GetPrefs()->SetBoolean(
+      prefs::kOobeMarketingOptInChoice, false);
+
+  LoginDisplayHost::default_host()->StartWizard(
+      MarketingOptInScreenView::kScreenId);
+
+  ExpectNoOptInOption();
+  TapOnGetStartedAndWaitForScreenExit();
+}
+
+// Tests that the option to sign up is shown if the screen was shown before
+// but the user did not have an option to sign up for emails. (No user
+// preference stored)
+IN_PROC_BROWSER_TEST_F(MarketingOptInScreenTest,
+                       ShowOptionWhenNoChoiceOnRecord) {
+  PerformLogin();
+  OobeScreenExitWaiter(GetFirstSigninScreen()).Wait();
+
+  ProfileManager::GetPrimaryUserProfile()->GetPrefs()->SetBoolean(
+      prefs::kOobeMarketingOptInScreenFinished, true);
+
+  LoginDisplayHost::default_host()->StartWizard(
+      MarketingOptInScreenView::kScreenId);
+
+  ExpectOptInOptionAvailable();
+  TapOnGetStartedAndWaitForScreenExit();
+
+  // Expect the user preference to have been stored as opted-in (true).
+  ExpectRecordedUserPrefRegardingChoice(true);
 }
 
 // Tests that the user can enable shelf navigation buttons in tablet mode from
@@ -375,7 +494,7 @@ class RegionAsParameterInterface
 
   void SetUpLocalStateRegion() {
     RegionToCodeMap param = GetParam();
-    g_browser_process->local_state()->SetString(prefs::kSigninScreenTimezone,
+    g_browser_process->local_state()->SetString(::prefs::kSigninScreenTimezone,
                                                 param.region);
   }
 };
@@ -397,6 +516,7 @@ IN_PROC_BROWSER_TEST_P(MarketingTestCountryCodes, CountryCodes) {
   ShowMarketingOptInScreen();
   OobeScreenWaiter(MarketingOptInScreenView::kScreenId).Wait();
 
+  ExpectLegalFooterVisibility(param.requires_legal_footer);
   if (param.is_default_opt_in) {
     ExpectOptedIn();
   } else {
@@ -514,7 +634,7 @@ class MarketingOptInScreenTestChildUser : public MarketingOptInScreenTest {
     // Child users require a user policy, set up an empty one so the user can
     // get through login.
     ASSERT_TRUE(user_policy_mixin_.RequestPolicyUpdate());
-    OobeBaseTest::SetUpInProcessBrowserTestFixture();
+    MarketingOptInScreenTest::SetUpInProcessBrowserTestFixture();
   }
   void PerformLogin() override { login_manager_mixin_.LoginAsNewChildUser(); }
 

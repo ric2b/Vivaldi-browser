@@ -23,11 +23,10 @@
 #include "ui/events/keycodes/keyboard_code_conversion_x.h"
 #include "ui/events/platform/platform_event_source.h"
 #include "ui/events/platform/scoped_event_dispatcher.h"
-#include "ui/events/platform/x11/x11_event_source.h"
 #include "ui/events/x/events_x_utils.h"
-#include "ui/events/x/x11_window_event_manager.h"
 #include "ui/gfx/x/connection.h"
 #include "ui/gfx/x/keysyms/keysyms.h"
+#include "ui/gfx/x/x11_window_event_manager.h"
 #include "ui/gfx/x/xproto.h"
 
 namespace ui {
@@ -277,7 +276,7 @@ void X11WholeScreenMoveLoop::CreateDragInputWindow(
       x11::EventMask::ButtonPress | x11::EventMask::ButtonRelease |
       x11::EventMask::PointerMotion | x11::EventMask::KeyPress |
       x11::EventMask::KeyRelease | x11::EventMask::StructureNotify;
-  grab_input_window_events_ = std::make_unique<ui::XScopedEventSelector>(
+  grab_input_window_events_ = std::make_unique<x11::XScopedEventSelector>(
       grab_input_window_, event_mask);
   connection->MapWindow({grab_input_window_});
   RaiseWindow(grab_input_window_);

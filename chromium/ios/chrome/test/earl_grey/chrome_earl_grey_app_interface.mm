@@ -8,6 +8,7 @@
 #include "base/command_line.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/strings/sys_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/values.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/common/autofill_features.h"
@@ -26,7 +27,6 @@
 #include "ios/chrome/browser/content_settings/host_content_settings_map_factory.h"
 #import "ios/chrome/browser/ntp/features.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
-#import "ios/chrome/browser/ui/settings/autofill/features.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/features.h"
 #import "ios/chrome/browser/ui/table_view/feature_flags.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
@@ -35,6 +35,7 @@
 #import "ios/chrome/browser/ui/util/named_guide.h"
 #import "ios/chrome/browser/unified_consent/unified_consent_service_factory.h"
 #import "ios/chrome/browser/web/tab_id_tab_helper.h"
+#import "ios/chrome/browser/web/web_navigation_browser_agent.h"
 #import "ios/chrome/test/app/bookmarks_test_util.h"
 #import "ios/chrome/test/app/browsing_data_test_util.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
@@ -69,7 +70,6 @@ using base::test::ios::kWaitForActionTimeout;
 using base::test::ios::kWaitForJSCompletionTimeout;
 using base::test::ios::kWaitForPageLoadTimeout;
 using base::test::ios::WaitUntilConditionOrTimeout;
-using chrome_test_util::BrowserCommandDispatcherForMainBVC;
 
 namespace {
 
@@ -87,6 +87,10 @@ NSString* SerializedPref(const PrefService::Preference* pref) {
   return base::SysUTF8ToNSString(serialized_value);
 }
 
+// ScopedFeatureList used to disable the kEnableCloseAllTabsConfirmation
+// feature. It's kept alive to preserve the state of
+// kEnableCloseAllTabsConfirmation feature during testing.
+base::test::ScopedFeatureList closeAllTabsScopedFeatureList;
 }
 
 @implementation ChromeEarlGreyAppInterface
@@ -149,7 +153,8 @@ NSString* SerializedPref(const PrefService::Preference* pref) {
 }
 
 + (void)startReloading {
-  [BrowserCommandDispatcherForMainBVC() reload];
+  WebNavigationBrowserAgent::FromBrowser(chrome_test_util::GetMainBrowser())
+      ->Reload();
 }
 
 + (NamedGuide*)guideWithName:(GuideName*)name view:(UIView*)view {
@@ -282,11 +287,13 @@ NSString* SerializedPref(const PrefService::Preference* pref) {
 }
 
 + (void)startGoingBack {
-  [BrowserCommandDispatcherForMainBVC() goBack];
+  WebNavigationBrowserAgent::FromBrowser(chrome_test_util::GetMainBrowser())
+      ->GoBack();
 }
 
 + (void)startGoingForward {
-  [BrowserCommandDispatcherForMainBVC() goForward];
+  WebNavigationBrowserAgent::FromBrowser(chrome_test_util::GetMainBrowser())
+      ->GoForward();
 }
 
 + (NSString*)currentTabID {
@@ -301,6 +308,15 @@ NSString* SerializedPref(const PrefService::Preference* pref) {
 
 + (NSUInteger)indexOfActiveNormalTab {
   return chrome_test_util::GetIndexOfActiveNormalTab();
+}
+
++ (void)resetCloseAllTabsConfirmation {
+  closeAllTabsScopedFeatureList.Reset();
+}
+
++ (void)disableCloseAllTabsConfirmation {
+  closeAllTabsScopedFeatureList.InitAndDisableFeature(
+      kEnableCloseAllTabsConfirmation);
 }
 
 #pragma mark - Window utilities (EG2)
@@ -656,6 +672,17 @@ NSString* SerializedPref(const PrefService::Preference* pref) {
   return base::SysUTF8ToNSString(chrome_test_util::GetSyncCacheGuid());
 }
 
++ (NSError*)waitForSyncInvalidationFields {
+  const bool success = WaitUntilConditionOrTimeout(kWaitForActionTimeout, ^{
+    return chrome_test_util::VerifySyncInvalidationFieldsPopulated();
+  });
+  if (!success) {
+    return testing::NSErrorWithLocalizedDescription(
+        @"The local DeviceInfo doesn't have invalidation fields");
+  }
+  return nil;
+}
+
 + (BOOL)isFakeSyncServerSetUp {
   return chrome_test_util::IsFakeSyncServerSetUp();
 }
@@ -795,10 +822,6 @@ NSString* SerializedPref(const PrefService::Preference* pref) {
   return base::FeatureList::IsEnabled(kTestFeature);
 }
 
-+ (BOOL)isCreditCardScannerEnabled {
-  return base::FeatureList::IsEnabled(kCreditCardScanner);
-}
-
 + (BOOL)isDemographicMetricsReportingEnabled {
   return base::FeatureList::IsEnabled(
       metrics::DemographicMetricsProvider::kDemographicMetricsReporting);
@@ -921,6 +944,10 @@ NSString* SerializedPref(const PrefService::Preference* pref) {
 
 + (NSString*)pasteboardString {
   return [UIPasteboard generalPasteboard].string;
+}
+
++ (NSString*)pasteboardURLSpec {
+  return [UIPasteboard generalPasteboard].URL.absoluteString;
 }
 
 @end

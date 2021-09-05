@@ -64,8 +64,6 @@ ContentSetting ConvertToContentSetting(
 ContentSettingsType ConvertToContentSettingsType(
     vivaldi::settings::ContentSettingsTypeEnum type) {
   switch (type) {
-    case vivaldi::settings::CONTENT_SETTINGS_TYPE_ENUM_PLUGINS:
-      return ContentSettingsType::PLUGINS;
     case vivaldi::settings::CONTENT_SETTINGS_TYPE_ENUM_POPUPS:
       return ContentSettingsType::POPUPS;
     case vivaldi::settings::CONTENT_SETTINGS_TYPE_ENUM_GEOLOCATION:

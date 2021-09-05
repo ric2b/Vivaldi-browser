@@ -314,7 +314,7 @@ static bool IsVP9(VideoCodecProfile profile) {
   return profile >= VP9PROFILE_MIN && profile <= VP9PROFILE_MAX;
 }
 
-#if BUILDFLAG(IS_ASH)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 // Determine the test is known-to-fail and should be skipped.
 bool ShouldSkipTest(VideoPixelFormat format) {
   struct Pattern {
@@ -362,7 +362,7 @@ bool ShouldSkipTest(VideoPixelFormat format) {
 
   return false;
 }
-#endif  // BUILDFLAG(IS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 // Helper functions to do string conversions.
 static base::FilePath::StringType StringToFilePathStringType(
@@ -1078,8 +1078,8 @@ class VideoFrameQualityValidator
   VideoFrameQualityValidator(const VideoCodecProfile profile,
                              const VideoPixelFormat pixel_format,
                              bool verify_quality,
-                             const base::Closure& flush_complete_cb,
-                             const base::Closure& decode_error_cb);
+                             const base::RepeatingClosure& flush_complete_cb,
+                             const base::RepeatingClosure& decode_error_cb);
   void Initialize(const gfx::Size& coded_size, const gfx::Rect& visible_size);
   // Save original YUV frame to compare it with the decoded frame later.
   void AddOriginalFrame(scoped_refptr<VideoFrame> frame);
@@ -1111,8 +1111,8 @@ class VideoFrameQualityValidator
   const bool verify_quality_;
   std::unique_ptr<FFmpegVideoDecoder> decoder_;
   // Callback of Flush(). Called after all frames are decoded.
-  const base::Closure flush_complete_cb_;
-  const base::Closure decode_error_cb_;
+  base::RepeatingClosure flush_complete_cb_;
+  base::RepeatingClosure decode_error_cb_;
   State decoder_state_;
   base::queue<scoped_refptr<VideoFrame>> original_frames_;
   base::queue<scoped_refptr<DecoderBuffer>> decode_buffers_;
@@ -1124,8 +1124,8 @@ VideoFrameQualityValidator::VideoFrameQualityValidator(
     const VideoCodecProfile profile,
     const VideoPixelFormat pixel_format,
     const bool verify_quality,
-    const base::Closure& flush_complete_cb,
-    const base::Closure& decode_error_cb)
+    const base::RepeatingClosure& flush_complete_cb,
+    const base::RepeatingClosure& decode_error_cb)
     : profile_(profile),
       pixel_format_(pixel_format),
       verify_quality_(verify_quality),
@@ -1723,7 +1723,7 @@ class VEAClient : public VEAClientBase {
   // The BitstreamBufferReadyTimeout closure. It is set at each
   // BitstreamBufferReady() call, and cancelled at the next
   // BitstreamBufferReady() or flush callback is called.
-  base::CancelableClosure buffer_ready_timeout_;
+  base::CancelableOnceClosure buffer_ready_timeout_;
 
   // The timestamps for each frame in the order of CreateFrame() invocation.
   base::queue<base::TimeDelta> frame_timestamps_;
@@ -2169,7 +2169,7 @@ scoped_refptr<VideoFrame> VEAClient::CreateFrame(off_t position) {
       video_frame = test::CloneVideoFrame(
           gpu_memory_buffer_factory_.get(), video_frame.get(),
           video_frame->layout(), VideoFrame::STORAGE_GPU_MEMORY_BUFFER,
-          gfx::BufferUsage::SCANOUT_VEA_READ_CAMERA_AND_CPU_READ_WRITE);
+          gfx::BufferUsage::VEA_READ_CAMERA_AND_CPU_READ_WRITE);
     } else {
       // We want MOJO_SHARED_BUFFER memory for the Chrome OS VEA if it needs to
       // use the image processor.
@@ -2793,10 +2793,10 @@ TEST_P(VideoEncodeAcceleratorTest, TestSimpleEncode) {
   const bool force_level = std::get<8>(GetParam());
   const bool scale = std::get<9>(GetParam());
 
-#if BUILDFLAG(IS_ASH)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   if (ShouldSkipTest(g_env->test_streams_[0]->pixel_format))
     GTEST_SKIP();
-#endif  // BUILDFLAG(IS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   if (force_level) {
     // Skip ForceLevel test if "--force_level=false".
@@ -2928,10 +2928,10 @@ TEST_P(VideoEncodeAcceleratorSimpleTest, TestSimpleEncode) {
   const int test_type = GetParam();
   ASSERT_LT(test_type, 2) << "Invalid test type=" << test_type;
 
-#if BUILDFLAG(IS_ASH)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   if (ShouldSkipTest(g_env->test_streams_[0]->pixel_format))
     GTEST_SKIP();
-#endif  // BUILDFLAG(IS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   if (test_type == 0)
     SimpleTestFunc<VEANoInputClient>();
@@ -3185,7 +3185,7 @@ class VEATestSuite : public base::TestSuite {
   void Initialize() override {
     base::TestSuite::Initialize();
 
-#if BUILDFLAG(IS_ASH)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     task_environment_ = std::make_unique<base::test::TaskEnvironment>(
         base::test::TaskEnvironment::MainThreadType::UI);
 #else
@@ -3277,7 +3277,7 @@ int main(int argc, char** argv) {
     }
 
     if (it->first == "native_input") {
-#if BUILDFLAG(IS_ASH)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
       media::g_native_input = true;
 #else
       LOG(FATAL) << "Unsupported option";

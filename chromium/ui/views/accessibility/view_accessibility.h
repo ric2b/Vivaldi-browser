@@ -12,6 +12,7 @@
 #include "base/callback_forward.h"
 #include "base/strings/string16.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "ui/accessibility/ax_enums.mojom-forward.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/accessibility/platform/ax_unique_id.h"
@@ -28,6 +29,7 @@ class AXPlatformNodeDelegate;
 namespace views {
 
 class View;
+class ViewsAXTreeManager;
 class Widget;
 
 // An object that manages the accessibility interface for a View.
@@ -78,26 +80,34 @@ class VIEWS_EXPORT ViewAccessibility {
   void OverrideDescription(const base::string16& description);
   void OverrideIsLeaf(bool value);
   void OverrideIsIgnored(bool value);
+  void OverrideViewEnablingState(bool enabled);
   void OverrideBounds(const gfx::RectF& bounds);
   void OverrideDescribedBy(View* described_by_view);
   void OverrideHasPopup(const ax::mojom::HasPopup has_popup);
 
-  // Override indexes used by some screen readers when describing elements in a
-  // menu, list, etc. If not specified, a view's index in its parent and its
-  // parent's number of children provide the values for these.
+  // Override information provided to users by screen readers when describing
+  // elements in a menu, listbox, or another set-like item. For example, "New
+  // tab, menu item 1 of 5". If not specified, a view's index in its parent and
+  // its parent's number of children provide the values for |pos_in_set| and
+  // |set_size| respectively.
   //
-  // Note: |pos_in_set| is 1-indexed.
+  // Note that |pos_in_set| is one-based, i.e. it starts from 1 not 0.
   void OverridePosInSet(int pos_in_set, int set_size);
 
-  // Override the next or previous focused widget. Some screen readers may
-  // utilize this information to transition focus from the beginning or end of
-  // one window to another when navigating by its default navigation method.
+  // Override the next or previous focused widget. Some assistive technologies,
+  // such as screen readers, may utilize this information to transition focus
+  // from the beginning or end of one widget to another when navigating by its
+  // default navigation method.
   void OverrideNextFocus(Widget* widget);
   void OverridePreviousFocus(Widget* widget);
-  Widget* GetNextFocus();
-  Widget* GetPreviousFocus();
+  Widget* GetNextFocus() const;
+  Widget* GetPreviousFocus() const;
 
+  // Returns the accessibility object that represents the View whose
+  // accessibility is managed by this instance. This may be an AXPlatformNode or
+  // it may be a native accessible object implemented by another class.
   virtual gfx::NativeViewAccessible GetNativeObject() const;
+
   virtual void NotifyAccessibilityEvent(ax::mojom::Event event_type);
 
   // Causes the screen reader to announce |text|. If the current user is not
@@ -109,7 +119,8 @@ class VIEWS_EXPORT ViewAccessibility {
   View* view() const { return view_; }
   AXVirtualView* FocusedVirtualChild() const { return focused_virtual_child_; }
   virtual bool IsLeaf() const;
-  bool IsIgnored() const { return is_ignored_; }
+  ViewsAXTreeManager* AXTreeManager() const;
+  virtual bool IsIgnored() const;
 
   //
   // Methods for managing virtual views.
@@ -159,7 +170,7 @@ class VIEWS_EXPORT ViewAccessibility {
   virtual void EndPopupFocusOverride();
 
   // Return true if this view is considered focused.
-  virtual bool IsFocusedForTesting();
+  virtual bool IsFocusedForTesting() const;
 
   // Call when a menu closes, to restore focus to where it was previously.
   virtual void FireFocusAfterMenuClose();
@@ -207,8 +218,16 @@ class VIEWS_EXPORT ViewAccessibility {
   // "presentational".
   bool is_ignored_;
 
+  // Used by the Views system to help some assistive technologies, such as
+  // screen readers, transition focus from one widget to another.
   Widget* next_focus_ = nullptr;
   Widget* previous_focus_ = nullptr;
+
+#if defined(USE_AURA) && !BUILDFLAG(IS_CHROMEOS_ASH)
+  // Each instance of ViewAccessibility that's associated with a root View
+  // owns an ViewsAXTreeManager. For other Views, this should be nullptr.
+  std::unique_ptr<views::ViewsAXTreeManager> ax_tree_manager_;
+#endif
 };
 
 }  // namespace views

@@ -14,7 +14,7 @@
 #include "base/process/process.h"
 #include "base/process/process_handle.h"
 #include "base/time/time.h"
-#include "base/util/type_safety/pass_key.h"
+#include "base/types/pass_key.h"
 #include "components/performance_manager/graph/node_attached_data.h"
 #include "components/performance_manager/graph/node_base.h"
 #include "components/performance_manager/graph/properties.h"
@@ -24,6 +24,7 @@
 #include "components/performance_manager/public/render_process_host_proxy.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver.h"
+#include "third_party/blink/public/common/tokens/tokens.h"
 
 namespace performance_manager {
 
@@ -46,7 +47,7 @@ class ProcessNodeImpl
       public TypedNodeBase<ProcessNodeImpl, ProcessNode, ProcessNodeObserver>,
       public mojom::ProcessCoordinationUnit {
  public:
-  using PassKey = util::PassKey<ProcessNodeImpl>;
+  using PassKey = base::PassKey<ProcessNodeImpl>;
 
   static constexpr NodeTypeEnum Type() { return NodeTypeEnum::kProcess; }
 
@@ -66,6 +67,13 @@ class ProcessNodeImpl
       const blink::V8ContextToken& v8_context_token) override;
   void OnV8ContextDestroyed(
       const blink::V8ContextToken& v8_context_token) override;
+  void OnRemoteIframeAttached(
+      const blink::LocalFrameToken& parent_frame_token,
+      const blink::RemoteFrameToken& remote_frame_token,
+      mojom::IframeAttributionDataPtr iframe_attribution_data) override;
+  void OnRemoteIframeDetached(
+      const blink::LocalFrameToken& parent_frame_token,
+      const blink::RemoteFrameToken& remote_frame_token) override;
 
   void SetProcessExitStatus(int32_t exit_status);
   void SetProcess(base::Process process, base::Time launch_time);
@@ -150,6 +158,7 @@ class ProcessNodeImpl
   base::Optional<int32_t> GetExitStatus() const override;
   bool VisitFrameNodes(const FrameNodeVisitor& visitor) const override;
   base::flat_set<const FrameNode*> GetFrameNodes() const override;
+  base::flat_set<const WorkerNode*> GetWorkerNodes() const override;
   bool GetMainThreadTaskLoadIsLow() const override;
   uint64_t GetPrivateFootprintKb() const override;
   uint64_t GetResidentSetKb() const override;

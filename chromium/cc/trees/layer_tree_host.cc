@@ -37,6 +37,7 @@
 #include "cc/base/histograms.h"
 #include "cc/base/math_util.h"
 #include "cc/debug/rendering_stats_instrumentation.h"
+#include "cc/document_transition/document_transition_request.h"
 #include "cc/input/layer_selection_bound.h"
 #include "cc/input/overscroll_behavior.h"
 #include "cc/input/page_scale_animation.h"
@@ -780,11 +781,12 @@ std::string LayerTreeHost::LayersAsString() const {
 }
 
 bool LayerTreeHost::CaptureContent(std::vector<NodeInfo>* content) {
-  if (viewport_visible_rect_.IsEmpty())
+  if (visual_device_viewport_intersection_rect_.IsEmpty())
     return false;
 
-  gfx::Rect rect = gfx::Rect(viewport_visible_rect_.width(),
-                             viewport_visible_rect_.height());
+  gfx::Rect rect =
+      gfx::Rect(visual_device_viewport_intersection_rect_.width(),
+                visual_device_viewport_intersection_rect_.height());
   for (auto* layer : *this) {
     // Normally, the node won't be drawn in multiple layers, even it is, such as
     // text strokes, the visual rect don't have too much different.
@@ -800,11 +802,17 @@ void LayerTreeHost::DidObserveFirstScrollDelay(
                                       first_scroll_timestamp);
 }
 
+void LayerTreeHost::AddDocumentTransitionRequest(
+    std::unique_ptr<DocumentTransitionRequest> request) {
+  // TODO(vmpstr): Propagate this to viz after activation.
+  request->TakeCommitCallback().Run();
+}
+
 bool LayerTreeHost::DoUpdateLayers() {
   TRACE_EVENT1("cc,benchmark", "LayerTreeHost::DoUpdateLayers",
                "source_frame_number", SourceFrameNumber());
 
-  UpdateHudLayer(debug_state_.ShowHudInfo());
+  UpdateHudLayer(debug_state_.ShouldCreateHudLayer());
 
   // In layer lists mode, the cc property trees are built directly and do not
   // need to be built here.
@@ -917,29 +925,6 @@ void LayerTreeHost::ApplyViewportChanges(
   SetNeedsUpdateLayers();
 }
 
-void LayerTreeHost::RecordManipulationTypeCounts(
-    const CompositorCommitData& commit_data) {
-  client_->RecordManipulationTypeCounts(commit_data.manipulation_info);
-}
-
-void LayerTreeHost::SendOverscrollAndScrollEndEventsFromImplSide(
-    const CompositorCommitData& commit_data) {
-  if (commit_data.scroll_latched_element_id == ElementId())
-    return;
-
-  if (!commit_data.overscroll_delta.IsZero()) {
-    client_->SendOverscrollEventFromImplSide(
-        commit_data.overscroll_delta, commit_data.scroll_latched_element_id);
-  }
-  // TODO(bokan): If a scroll ended and a new one began in the same Blink frame
-  // (e.g. during a long running main thread task), this will erroneously
-  // dispatch the scroll end to the latter (still-scrolling) element.
-  // https://crbug.com/1116780.
-  if (commit_data.scroll_gesture_did_end)
-    client_->SendScrollEndEventFromImplSide(
-        commit_data.scroll_latched_element_id);
-}
-
 void LayerTreeHost::UpdateScrollOffsetFromImpl(
     const ElementId& id,
     const gfx::ScrollOffset& delta,
@@ -1015,14 +1000,12 @@ void LayerTreeHost::ApplyCompositorChanges(CompositorCommitData* commit_data) {
     }
   }
 
-  SendOverscrollAndScrollEndEventsFromImplSide(*commit_data);
+  client_->UpdateCompositorScrollState(*commit_data);
 
   // This needs to happen after scroll deltas have been sent to prevent top
   // controls from clamping the layout viewport both on the compositor and
   // on the main thread.
   ApplyViewportChanges(*commit_data);
-
-  RecordManipulationTypeCounts(*commit_data);
 }
 
 void LayerTreeHost::ApplyMutatorEvents(std::unique_ptr<MutatorEvents> events) {
@@ -1273,11 +1256,21 @@ void LayerTreeHost::SetViewportRectAndScale(
   }
 }
 
-void LayerTreeHost::SetViewportVisibleRect(const gfx::Rect& visible_rect) {
-  if (visible_rect == viewport_visible_rect_)
+void LayerTreeHost::SetVisualDeviceViewportIntersectionRect(
+    const gfx::Rect& intersection_rect) {
+  if (intersection_rect == visual_device_viewport_intersection_rect_)
     return;
 
-  viewport_visible_rect_ = visible_rect;
+  visual_device_viewport_intersection_rect_ = intersection_rect;
+}
+
+void LayerTreeHost::SetVisualDeviceViewportSize(
+    const gfx::Size& visual_device_viewport_size) {
+  if (visual_device_viewport_size == visual_device_viewport_size_)
+    return;
+
+  visual_device_viewport_size_ = visual_device_viewport_size;
+  SetNeedsCommit();
 }
 
 void LayerTreeHost::SetBrowserControlsParams(
@@ -1522,6 +1515,16 @@ void LayerTreeHost::UpdateHudLayer(bool show_hud_info) {
       root_layer_->AddChild(hud_layer_);
     hud_layer_->UpdateLocationAndSize(device_viewport_rect_.size(),
                                       device_scale_factor_);
+    if (debug_state_.show_web_vital_metrics) {
+      // This WebVitalMetrics is filled by the main frame, which is equivalent
+      // to WebPerf's numbers. The main frame's number doesn't include any
+      // iframes. UMA/UKM records metrics for the entire page aggregating all
+      // the frames. The page metrics are in the browser process.
+      // TODO(weiliangc): Get the page metrics for display.
+      auto metrics = client_->GetWebVitalMetrics();
+      if (metrics && metrics->HasValue())
+        hud_layer_->UpdateWebVitalMetrics(std::move(metrics));
+    }
   } else if (hud_layer_.get()) {
     hud_layer_->RemoveFromParent();
     hud_layer_ = nullptr;
@@ -1636,6 +1639,7 @@ void LayerTreeHost::PushLayerTreeHostPropertiesTo(
   RecordGpuRasterizationHistogram(host_impl);
 
   host_impl->SetDebugState(debug_state_);
+  host_impl->SetVisualDeviceViewportSize(visual_device_viewport_size_);
 }
 
 Layer* LayerTreeHost::LayerByElementId(ElementId element_id) const {
@@ -1794,13 +1798,11 @@ void LayerTreeHost::ElementIsAnimatingChanged(
                                               true);
 }
 
-void LayerTreeHost::AnimationScalesChanged(ElementId element_id,
-                                           ElementListType list_type,
-                                           float maximum_scale,
-                                           float starting_scale) {
+void LayerTreeHost::MaximumScaleChanged(ElementId element_id,
+                                        ElementListType list_type,
+                                        float maximum_scale) {
   DCHECK_EQ(ElementListType::ACTIVE, list_type);
-  property_trees()->AnimationScalesChanged(element_id, maximum_scale,
-                                           starting_scale);
+  property_trees()->MaximumAnimationScaleChanged(element_id, maximum_scale);
 }
 
 gfx::ScrollOffset LayerTreeHost::GetScrollOffsetForAnimation(
@@ -1881,6 +1883,12 @@ bool LayerTreeHost::TakeForceSendMetadataRequest() {
 void LayerTreeHost::SetEnableFrameRateThrottling(
     bool enable_frame_rate_throttling) {
   proxy_->SetEnableFrameRateThrottling(enable_frame_rate_throttling);
+}
+
+void LayerTreeHost::SetDelegatedInkMetadata(
+    std::unique_ptr<viz::DelegatedInkMetadata> metadata) {
+  delegated_ink_metadata_ = std::move(metadata);
+  SetNeedsCommit();
 }
 
 }  // namespace cc

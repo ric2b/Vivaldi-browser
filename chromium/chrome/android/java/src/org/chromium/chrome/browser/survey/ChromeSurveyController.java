@@ -26,7 +26,7 @@ import org.chromium.chrome.browser.infobar.SurveyInfoBar;
 import org.chromium.chrome.browser.infobar.SurveyInfoBarDelegate;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
-import org.chromium.chrome.browser.privacy.settings.PrivacyPreferencesManager;
+import org.chromium.chrome.browser.privacy.settings.PrivacyPreferencesManagerImpl;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabHidingType;
@@ -38,6 +38,7 @@ import org.chromium.chrome.browser.version.ChromeVersionInfo;
 import org.chromium.components.infobars.InfoBarAnimationListener;
 import org.chromium.components.infobars.InfoBarUiItem;
 import org.chromium.components.variations.VariationsAssociatedData;
+import org.chromium.url.GURL;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -229,7 +230,7 @@ public class ChromeSurveyController implements InfoBarAnimationListener {
             }
 
             @Override
-            public void onPageLoadFinished(Tab tab, String url) {
+            public void onPageLoadFinished(Tab tab, GURL url) {
                 showInfoBarIfApplicable(tab, siteId, this);
             }
 
@@ -257,7 +258,8 @@ public class ChromeSurveyController implements InfoBarAnimationListener {
 
     /** @return Whether the user has consented to reporting usage metrics and crash dumps. */
     private boolean isUMAEnabled() {
-        return PrivacyPreferencesManager.getInstance().isUsageAndCrashReportingPermittedByUser();
+        return PrivacyPreferencesManagerImpl.getInstance()
+                .isUsageAndCrashReportingPermittedByUser();
     }
 
     /** @return If the survey info bar for this survey was logged as seen before. */

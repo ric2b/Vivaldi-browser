@@ -60,8 +60,6 @@ struct DidOverscrollParams;
 
 namespace content {
 
-class BrowserAccessibilityDelegate;
-class BrowserAccessibilityManager;
 class CursorManager;
 class MouseWheelPhaseHandler;
 class RenderWidgetHostImpl;
@@ -70,11 +68,15 @@ class SyntheticGestureTarget;
 class TextInputManager;
 class TouchSelectionControllerClientManager;
 class WebCursor;
+class WebContentsAccessibility;
 class DelegatedFrameHost;
 
 // Basic implementation shared by concrete RenderWidgetHostView subclasses.
 class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView {
  public:
+  RenderWidgetHostViewBase(const RenderWidgetHostViewBase&) = delete;
+  RenderWidgetHostViewBase& operator=(const RenderWidgetHostViewBase&) = delete;
+
   float current_device_scale_factor() const {
     return current_device_scale_factor_;
   }
@@ -222,14 +224,6 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView {
   // be used to inject synthetic input events.
   virtual std::unique_ptr<SyntheticGestureTarget>
   CreateSyntheticGestureTarget() = 0;
-
-  // Create a BrowserAccessibilityManager for a frame in this view.
-  // If |for_root_frame| is true, creates a BrowserAccessibilityManager
-  // suitable for the root frame, which may be linked to its native
-  // window container.
-  virtual BrowserAccessibilityManager* CreateBrowserAccessibilityManager(
-      BrowserAccessibilityDelegate* delegate,
-      bool for_root_frame);
 
   virtual gfx::AcceleratedWidget AccessibilityGetAcceleratedWidget();
   virtual gfx::NativeViewAccessible AccessibilityGetNativeViewAccessible();
@@ -413,12 +407,6 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView {
   virtual void InitAsPopup(RenderWidgetHostView* parent_host_view,
                            const gfx::Rect& bounds) = 0;
 
-  // Perform all the initialization steps necessary for this object to represent
-  // a full screen window.
-  // |reference_host_view| is the view associated with the creating page that
-  // helps to position the full screen widget on the correct monitor.
-  virtual void InitAsFullscreen(RenderWidgetHostView* reference_host_view) = 0;
-
   // Sets the cursor for this view to the one associated with the specified
   // cursor_type.
   virtual void UpdateCursor(const WebCursor& cursor) = 0;
@@ -498,8 +486,6 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView {
 
   void StopFling();
 
-  bool is_fullscreen() { return is_fullscreen_; }
-
   void set_is_currently_scrolling_viewport(
       bool is_currently_scrolling_viewport) {
     is_currently_scrolling_viewport_ = is_currently_scrolling_viewport;
@@ -511,8 +497,11 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView {
 
   virtual void DidNavigate();
 
-  // Called when the RenderWidgetHostImpl has be initialized.
-  virtual void OnRenderWidgetInit() {}
+  // Called when the RenderWidgetHostImpl establishes a connection to the
+  // renderer process Widget.
+  virtual void OnRendererWidgetCreated() {}
+
+  virtual WebContentsAccessibility* GetWebContentsAccessibility();
 
   void set_is_evicted() { is_evicted_ = true; }
   void reset_is_evicted() { is_evicted_ = false; }
@@ -530,6 +519,7 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView {
 
  protected:
   explicit RenderWidgetHostViewBase(RenderWidgetHost* host);
+  ~RenderWidgetHostViewBase() override;
 
   void NotifyObserversAboutShutdown();
 
@@ -559,9 +549,6 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView {
   // The model object. Access is protected to allow access to
   // RenderWidgetHostViewChildFrame.
   RenderWidgetHostImpl* host_;
-
-  // Is this a fullscreen view?
-  bool is_fullscreen_ = false;
 
   // Whether this view is a frame or a popup.
   WidgetType widget_type_ = WidgetType::kFrame;
@@ -601,9 +588,6 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView {
   // Vivaldi addition:
   bool is_render_widget_host_view_mac_ = false;
 
- protected:
-  ~RenderWidgetHostViewBase() override;
-
  private:
   FRIEND_TEST_ALL_PREFIXES(
       BrowserSideFlingBrowserTest,
@@ -618,6 +602,8 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView {
   FRIEND_TEST_ALL_PREFIXES(DelegatedInkPointTest, EventForwardedToCompositor);
   FRIEND_TEST_ALL_PREFIXES(DelegatedInkPointTest,
                            MojoInterfaceReboundOnDisconnect);
+  FRIEND_TEST_ALL_PREFIXES(NoCompositingRenderWidgetHostViewBrowserTest,
+                           NoFallbackAfterHiddenNavigationFails);
 
   void SynchronizeVisualProperties();
 
@@ -657,8 +643,6 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView {
   bool is_evicted_ = false;
 
   base::WeakPtrFactory<RenderWidgetHostViewBase> weak_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostViewBase);
 };
 
 }  // namespace content

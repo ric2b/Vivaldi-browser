@@ -18,6 +18,17 @@ grit("autofill_address_rewriter_resources") {
   output_dir = "$root_gen_dir/components/autofill/core/browser"
 }
 
+action("default_regex_patterns_cc") {
+  visibility = [ ":*" ]
+  sources = [ "pattern_provider/resources/regex_patterns.json" ]
+  script = "pattern_provider/transpile_default_regex_patterns.py"
+  args = [
+    rebase_path("pattern_provider/resources/regex_patterns.json"),
+    rebase_path("$target_gen_dir/pattern_provider/default_regex_patterns.cc"),
+  ]
+  outputs = [ "$target_gen_dir/pattern_provider/default_regex_patterns.cc" ]
+}
+
 static_library("browser") {
   sources = [
     "address_normalization_manager.cc",
@@ -193,6 +204,7 @@ static_library("browser") {
     "metrics/form_event_logger_base.cc",
     "metrics/form_event_logger_base.h",
     "metrics/form_events.h",
+    "pattern_provider/default_regex_patterns.h",
     "pattern_provider/pattern_configuration_parser.cc",
     "pattern_provider/pattern_configuration_parser.h",
     "pattern_provider/pattern_provider.cc",
@@ -234,6 +246,8 @@ static_library("browser") {
     "payments/webauthn_callback_types.h",
     "personal_data_manager.cc",
     "personal_data_manager.h",
+    "personal_data_manager_cleaner.cc",
+    "personal_data_manager_cleaner.h",
     "personal_data_manager_observer.h",
     "randomized_encoder.cc",
     "randomized_encoder.h",
@@ -314,6 +328,8 @@ static_library("browser") {
     "webdata/system_encryptor.h",
   ]
 
+  sources += get_target_outputs(":default_regex_patterns_cc")
+
   if (is_win) {
     sources += [
       "autofill_ie_toolbar_import_win.cc",
@@ -332,6 +348,8 @@ static_library("browser") {
     sources += [
       "payments/autofill_credit_card_filling_infobar_delegate_mobile.cc",
       "payments/autofill_credit_card_filling_infobar_delegate_mobile.h",
+      "payments/autofill_offer_notification_infobar_delegate_mobile.cc",
+      "payments/autofill_offer_notification_infobar_delegate_mobile.h",
       "payments/autofill_save_card_infobar_delegate_mobile.cc",
       "payments/autofill_save_card_infobar_delegate_mobile.h",
       "payments/autofill_save_card_infobar_mobile.h",
@@ -376,20 +394,23 @@ static_library("browser") {
   ]
   deps = [
     ":autofill_address_rewriter_resources",
+    ":default_regex_patterns_cc",
     "//base",
     "//base:i18n",
     "//build:branding_buildflags",
+    "//build:chromeos_buildflags",
     "//components/google/core/common",
     "//components/history/core/browser",
     "//components/infobars/core",
     "//components/keyed_service/core",
-    "//components/language_usage_metrics",
+    "//components/language/core/browser",
     "//components/leveldb_proto",
     "//components/os_crypt",
     "//components/policy/core/browser",
     "//components/policy/core/common",
     "//components/pref_registry",
     "//components/prefs",
+    "//components/profile_metrics",
     "//components/signin/public/base",
     "//components/signin/public/identity_manager",
     "//components/strings",
@@ -461,8 +482,6 @@ static_library("test_support") {
     "logging/stub_log_manager.h",
     "mock_autocomplete_history_manager.cc",
     "mock_autocomplete_history_manager.h",
-    "pattern_provider/test_pattern_provider.cc",
-    "pattern_provider/test_pattern_provider.h",
     "payments/test_authentication_requester.cc",
     "payments/test_authentication_requester.h",
     "payments/test_credit_card_save_manager.cc",
@@ -494,7 +513,6 @@ static_library("test_support") {
     "test_autofill_profile_validator.h",
     "test_autofill_profile_validator_delayed.cc",
     "test_autofill_profile_validator_delayed.h",
-    "test_autofill_provider.cc",
     "test_autofill_provider.h",
     "test_autofill_tick_clock.cc",
     "test_autofill_tick_clock.h",
@@ -533,6 +551,7 @@ static_library("test_support") {
     "//components/translate/core/browser:test_support",
     "//components/ukm",
     "//components/ukm:test_support",
+    "//components/version_info:version_info",
     "//google_apis:test_support",
     "//services/network:test_support",
     "//services/network/public/cpp",
@@ -609,6 +628,7 @@ source_set("unit_tests") {
     "autofill_profile_sync_util_unittest.cc",
     "autofill_profile_validation_util_unittest.cc",
     "autofill_profile_validator_unittest.cc",
+    "autofill_provider_unittest.cc",
     "autofill_regexes_unittest.cc",
     "autofill_subject_unittest.cc",
     "autofill_type_unittest.cc",
@@ -723,6 +743,7 @@ source_set("unit_tests") {
     ":unit_tests_bundle_data",
     "//base",
     "//base/test:test_support",
+    "//build:chromeos_buildflags",
     "//components/autofill/core/common",
     "//components/infobars/core:feature_flags",
     "//components/leveldb_proto",

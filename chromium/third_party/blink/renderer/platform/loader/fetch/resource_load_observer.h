@@ -8,7 +8,7 @@
 #include <inttypes.h>
 
 #include "base/containers/span.h"
-#include "base/util/type_safety/strong_alias.h"
+#include "base/types/strong_alias.h"
 #include "third_party/blink/public/mojom/frame/back_forward_cache_controller.mojom-blink-forward.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource.h"
@@ -89,7 +89,7 @@ class PLATFORM_EXPORT ResourceLoadObserver
                                 int64_t decoded_body_length,
                                 bool should_report_corb_blocking) = 0;
 
-  using IsInternalRequest = util::StrongAlias<class IsInternalRequestTag, bool>;
+  using IsInternalRequest = base::StrongAlias<class IsInternalRequestTag, bool>;
   // Called when a request fails.
   virtual void DidFailLoading(const KURL&,
                               uint64_t identifier,
@@ -101,6 +101,10 @@ class PLATFORM_EXPORT ResourceLoadObserver
   // event which can't proceed if the page is in BackForwardCache and can't be
   // easily deferred to handle later, for example network redirect handling.
   virtual void EvictFromBackForwardCache(mojom::RendererEvictionReason) {}
+
+  virtual void DidBufferLoadWhileInBackForwardCache(size_t num_bytes) {}
+
+  virtual bool CanContinueBufferingWhileInBackForwardCache() { return true; }
 
   virtual void Trace(Visitor*) const {}
 };

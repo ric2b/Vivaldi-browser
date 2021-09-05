@@ -271,7 +271,8 @@ void OnSignedExchangeCertificateRequestSent(
   DispatchToAgents(frame_tree_node, &protocol::NetworkHandler::RequestSent,
                    request_id.ToString(), loader_id.ToString(), request,
                    protocol::Network::Initiator::TypeEnum::SignedExchange,
-                   signed_exchange_url, timestamp);
+                   signed_exchange_url, /*initiator_devtools_request_id=*/"",
+                   timestamp);
 
   auto value = std::make_unique<base::trace_event::TracedValue>();
   value->SetString("requestId", request_id.ToString());
@@ -669,12 +670,14 @@ void OnRequestWillBeSentExtraInfo(
     int routing_id,
     const std::string& devtools_request_id,
     const net::CookieAccessResultList& request_cookie_list,
-    const std::vector<network::mojom::HttpRawHeaderPairPtr>& request_headers) {
+    const std::vector<network::mojom::HttpRawHeaderPairPtr>& request_headers,
+    const network::mojom::ClientSecurityStatePtr security_state) {
   FrameTreeNode* ftn = GetFtnForNetworkRequest(process_id, routing_id);
   if (ftn) {
     DispatchToAgents(ftn,
                      &protocol::NetworkHandler::OnRequestWillBeSentExtraInfo,
-                     devtools_request_id, request_cookie_list, request_headers);
+                     devtools_request_id, request_cookie_list, request_headers,
+                     security_state);
     return;
   }
 
@@ -686,7 +689,8 @@ void OnRequestWillBeSentExtraInfo(
   DispatchToWorkerAgents(
       process_id, routing_id,
       &protocol::NetworkHandler::OnRequestWillBeSentExtraInfo,
-      devtools_request_id, request_cookie_list, request_headers);
+      devtools_request_id, request_cookie_list, request_headers,
+      security_state);
 }
 
 void OnResponseReceivedExtraInfo(
@@ -716,21 +720,17 @@ void OnCorsPreflightRequest(int32_t process_id,
                             int32_t render_frame_id,
                             const base::UnguessableToken& devtools_request_id,
                             const network::ResourceRequest& request,
-                            const GURL& initiator_url) {
+                            const GURL& initiator_url,
+                            const std::string& initiator_devtools_request_id) {
   FrameTreeNode* ftn = GetFtnForNetworkRequest(process_id, render_frame_id);
   if (!ftn)
     return;
   auto timestamp = base::TimeTicks::Now();
   auto id = devtools_request_id.ToString();
-  // TODO(crbug.com/941297): Currently we are using an empty string for
-  // |loader_id|. But when we will introduce a better UI for preflight requests,
-  // consider using the navigation token which is same as the |loader_id| of the
-  // original request or the |devtools_request_id| of the original request, so
-  // that we can associate the requests in the DevTools front end.
   DispatchToAgents(ftn, &protocol::NetworkHandler::RequestSent, id,
                    /* loader_id=*/"", request,
-                   protocol::Network::Initiator::TypeEnum::Other, initiator_url,
-                   timestamp);
+                   protocol::Network::Initiator::TypeEnum::Preflight,
+                   initiator_url, initiator_devtools_request_id, timestamp);
 }
 
 void OnCorsPreflightResponse(int32_t process_id,
@@ -744,7 +744,7 @@ void OnCorsPreflightResponse(int32_t process_id,
   auto id = devtools_request_id.ToString();
   DispatchToAgents(ftn, &protocol::NetworkHandler::ResponseReceived, id,
                    /* loader_id=*/"", url,
-                   protocol::Network::ResourceTypeEnum::Other, *head,
+                   protocol::Network::ResourceTypeEnum::Preflight, *head,
                    protocol::Maybe<std::string>());
 }
 
@@ -758,7 +758,25 @@ void OnCorsPreflightRequestCompleted(
     return;
   auto id = devtools_request_id.ToString();
   DispatchToAgents(ftn, &protocol::NetworkHandler::LoadingComplete, id,
-                   protocol::Network::ResourceTypeEnum::Other, status);
+                   protocol::Network::ResourceTypeEnum::Preflight, status);
+}
+
+void OnTrustTokenOperationDone(
+    int32_t process_id,
+    int32_t routing_id,
+    const std::string& devtools_request_id,
+    const network::mojom::TrustTokenOperationResultPtr result) {
+  FrameTreeNode* ftn = GetFtnForNetworkRequest(process_id, routing_id);
+  if (ftn) {
+    DispatchToAgents(ftn, &protocol::NetworkHandler::OnTrustTokenOperationDone,
+                     devtools_request_id, *result);
+    return;
+  }
+
+  // See comment on DispatchToWorkerAgents in OnRequestWillBeSentExtraInfo.
+  DispatchToWorkerAgents(process_id, routing_id,
+                         &protocol::NetworkHandler::OnTrustTokenOperationDone,
+                         devtools_request_id, *result);
 }
 
 namespace {

@@ -83,7 +83,10 @@ bool VideoCaptureDeviceFactoryChromeOS::Init() {
 
   camera_hal_delegate_ =
       new CameraHalDelegate(camera_hal_ipc_thread_.task_runner());
-  camera_hal_delegate_->RegisterCameraClient();
+  if (!camera_hal_delegate_->RegisterCameraClient()) {
+    LOG(ERROR) << "Failed to register camera client";
+    return false;
+  }
 
   // Since the |camera_hal_delegate_| is initialized on the constructor of this
   // object and is destroyed after |camera_app_device_bridge_| unsetting its
@@ -91,6 +94,9 @@ bool VideoCaptureDeviceFactoryChromeOS::Init() {
   if (camera_app_device_bridge_) {
     camera_app_device_bridge_->SetCameraInfoGetter(
         base::BindRepeating(&CameraHalDelegate::GetCameraInfoFromDeviceId,
+                            base::Unretained(camera_hal_delegate_.get())));
+    camera_app_device_bridge_->SetVirtualDeviceController(
+        base::BindRepeating(&CameraHalDelegate::EnableVirtualDevice,
                             base::Unretained(camera_hal_delegate_.get())));
   }
   return true;

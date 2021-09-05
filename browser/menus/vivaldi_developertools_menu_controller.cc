@@ -109,10 +109,15 @@ bool DeveloperToolsMenuController::GetAcceleratorForCommandId(
     int command_id,
     ui::Accelerator* accelerator) const {
   if (command_id == IDC_CONTENT_CONTEXT_INSPECTELEMENT) {
-    *accelerator = ui::Accelerator(ui::VKEY_I,
-                                   ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN);
+    // We used to have ui::VKEY_I ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN here
+    // but it makes no sense as that shortcut is reserved for inspecting a
+    // regular web page in chromium.
+    *accelerator = ui::Accelerator();
     return true;
   }
+
+
+
   return false;
 }
 

@@ -68,7 +68,6 @@ public class RevampedContextMenuCoordinator implements ContextMenuUi {
     private ContextMenuDialog mDialog;
     private Runnable mOnMenuClosed;
     private ContextMenuNativeDelegate mNativeDelegate;
-    private boolean mIsDismissed;
 
     /**
      * Constructor that also sets the content offset.
@@ -95,11 +94,6 @@ public class RevampedContextMenuCoordinator implements ContextMenuUi {
     @Override
     public void dismiss() {
         dismissDialog();
-    }
-
-    @Override
-    public boolean isDismissed() {
-        return mIsDismissed;
     }
 
     // Shows the menu with chip.
@@ -225,6 +219,7 @@ public class RevampedContextMenuCoordinator implements ContextMenuUi {
         // Do not start any action when the activity is on the way to destruction.
         // See https://crbug.com/990987
         if (activity.isFinishing() || activity.isDestroyed()) return;
+
         onItemClicked.onResult((int) id);
         dismissDialog();
     }
@@ -283,7 +278,6 @@ public class RevampedContextMenuCoordinator implements ContextMenuUi {
     }
 
     private void dismissDialog() {
-        mIsDismissed = true;
         if (mWebContentsObserver != null) {
             mWebContentsObserver.destroy();
         }
@@ -342,7 +336,9 @@ public class RevampedContextMenuCoordinator implements ContextMenuUi {
     public ListItem findItem(int id) {
         for (int i = 0; i < getCount(); i++) {
             final ListItem item = getItem(i);
-            if (item.model.get(MENU_ID) == id) {
+            // If the item is a title/divider, its model does not have MENU_ID as key.
+            if (item.model.getAllSetProperties().contains(MENU_ID)
+                    && item.model.get(MENU_ID) == id) {
                 return item;
             }
         }

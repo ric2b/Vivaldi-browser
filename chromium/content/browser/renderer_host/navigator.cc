@@ -29,7 +29,6 @@
 #include "content/browser/webui/web_ui_controller_factory_registry.h"
 #include "content/browser/webui/web_ui_impl.h"
 #include "content/common/frame_messages.h"
-#include "content/common/inter_process_time_ticks_converter.h"
 #include "content/common/navigation_params.h"
 #include "content/common/navigation_params_utils.h"
 #include "content/public/browser/browser_context.h"
@@ -51,33 +50,106 @@
 #include "services/metrics/public/cpp/ukm_recorder.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
+#include "third_party/blink/public/common/loader/inter_process_time_ticks_converter.h"
 #include "url/gurl.h"
 #include "url/url_util.h"
 
 namespace content {
 
+namespace {
+
+void RecordWebPlatformSecurityMetrics(RenderFrameHostImpl* rfh,
+                                      bool has_embedding_control,
+                                      bool is_error_page) {
+  ContentBrowserClient* client = GetContentClient()->browser();
+  if (rfh->cross_origin_opener_policy().value ==
+      network::mojom::CrossOriginOpenerPolicyValue::kSameOrigin) {
+    client->LogWebFeatureForCurrentPage(
+        rfh, blink::mojom::WebFeature::kCrossOriginOpenerPolicySameOrigin);
+  }
+  if (rfh->cross_origin_opener_policy().value ==
+      network::mojom::CrossOriginOpenerPolicyValue::kSameOriginAllowPopups) {
+    client->LogWebFeatureForCurrentPage(
+        rfh, blink::mojom::WebFeature::
+                 kCrossOriginOpenerPolicySameOriginAllowPopups);
+  }
+
+  if (rfh->cross_origin_embedder_policy().value ==
+      network::mojom::CrossOriginEmbedderPolicyValue::kRequireCorp) {
+    client->LogWebFeatureForCurrentPage(
+        rfh, blink::mojom::WebFeature::kCrossOriginEmbedderPolicyRequireCorp);
+  }
+
+  if (rfh->cross_origin_opener_policy().value ==
+      network::mojom::CrossOriginOpenerPolicyValue::kSameOriginPlusCoep) {
+    client->LogWebFeatureForCurrentPage(
+        rfh, blink::mojom::WebFeature::kCoopAndCoepIsolated);
+  }
+
+  if (rfh->cross_origin_opener_policy().reporting_endpoint ||
+      rfh->cross_origin_opener_policy().report_only_reporting_endpoint) {
+    client->LogWebFeatureForCurrentPage(
+        rfh, blink::mojom::WebFeature::kCrossOriginOpenerPolicyReporting);
+  }
+
+  // Record iframes embedded in cross-origin contexts without a CSP
+  // frame-ancestor directive.
+  bool is_embedded_in_cross_origin_context = false;
+  RenderFrameHostImpl* parent = rfh->frame_tree_node()->parent();
+  while (parent) {
+    if (!parent->GetLastCommittedOrigin().IsSameOriginWith(
+            rfh->GetLastCommittedOrigin())) {
+      is_embedded_in_cross_origin_context = true;
+      break;
+    }
+    parent = parent->frame_tree_node()->parent();
+  }
+
+  if (is_embedded_in_cross_origin_context && !has_embedding_control &&
+      !is_error_page) {
+    client->LogWebFeatureForCurrentPage(
+        rfh,
+        blink::mojom::WebFeature::kCrossOriginSubframeWithoutEmbeddingControl);
+  }
+}
+
+bool HasEmbeddingControl(NavigationRequest* navigation_request) {
+  if (!navigation_request->response())
+    // This navigation did not result in a network request. The embedding of
+    // the frame is not controlled by network headers.
+    return true;
+
+  // Check if the request has a CSP frame-ancestor directive.
+  for (const auto& csp : navigation_request->response()
+                             ->parsed_headers->content_security_policy) {
+    if (csp->header->type ==
+            network::mojom::ContentSecurityPolicyType::kEnforce &&
+        csp->directives.contains(
+            network::mojom::CSPDirectiveName::FrameAncestors)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+}  // namespace
+
 struct Navigator::NavigationMetricsData {
   NavigationMetricsData(base::TimeTicks start_time,
                         GURL url,
                         ukm::SourceId ukm_source_id,
-                        bool is_browser_initiated_before_unload,
-                        RestoreType restore_type)
+                        bool is_browser_initiated_before_unload)
       : start_time_(start_time),
         url_(url),
         ukm_source_id_(ukm_source_id),
         is_browser_initiated_before_unload_(
-            is_browser_initiated_before_unload) {
-    is_restoring_from_last_session_ =
-        (restore_type == RestoreType::LAST_SESSION_EXITED_CLEANLY ||
-         restore_type == RestoreType::LAST_SESSION_CRASHED);
-  }
+            is_browser_initiated_before_unload) {}
 
   base::TimeTicks start_time_;
   GURL url_;
   ukm::SourceId ukm_source_id_;
   bool is_browser_initiated_before_unload_;
-  bool is_restoring_from_last_session_;
-  base::TimeTicks url_job_start_time_;
   base::TimeDelta before_unload_delay_;
 
   // Timestamps before_unload_(start|end)_ give the time it took to run
@@ -123,7 +195,7 @@ bool Navigator::CheckWebUIRendererDoesNotDisplayNormalURL(
       security_policy->GetProcessLock(render_frame_host->GetProcess()->GetID());
 
   // In the case of error page process, any URL is allowed to commit.
-  if (process_lock == ProcessLock::CreateForErrorPage())
+  if (process_lock.is_error_page())
     return true;
 
   bool frame_has_bindings = ((render_frame_host->GetEnabledBindings() &
@@ -225,7 +297,7 @@ bool Navigator::StartHistoryNavigationInNewSubframe(
 
 void Navigator::DidNavigate(
     RenderFrameHostImpl* render_frame_host,
-    const FrameHostMsg_DidCommitProvisionalLoad_Params& params,
+    const mojom::DidCommitProvisionalLoadParams& params,
     std::unique_ptr<NavigationRequest> navigation_request,
     bool was_within_same_document) {
   DCHECK(navigation_request);
@@ -336,18 +408,8 @@ void Navigator::DidNavigate(
     if (!navigation_request->IsServedFromBackForwardCache())
       render_frame_host->ResetContentSecurityPolicies();
 
-    auto reset_result = frame_tree_node->ResetForNavigation(
+    frame_tree_node->ResetForNavigation(
         navigation_request->IsServedFromBackForwardCache());
-
-    // |old_frame_host| might get immediately deleted after the DidNavigateFrame
-    // call above, so use weak pointer here.
-    if (old_frame_host && old_frame_host->IsInBackForwardCache()) {
-      if (reset_result.changed_frame_policy) {
-        old_frame_host->EvictFromBackForwardCacheWithReason(
-            BackForwardCacheMetrics::NotRestoredReason::
-                kFrameTreeNodeStateReset);
-      }
-    }
   }
 
   // Update the site of the SiteInstance if it doesn't have one yet, unless
@@ -419,6 +481,14 @@ void Navigator::DidNavigate(
       !navigation_request->IsServedFromBackForwardCache() &&
       !is_same_document_navigation && !was_within_same_document;
 
+  // Store some information for recording WebPlatform security metrics. These
+  // metrics depends on information present in the NavigationRequest. However
+  // they must be recorded after the NavigationRequest has been destroyed and
+  // DidFinishNavigation was called, otherwise they will not be properly
+  // attributed to the right page.
+  bool has_embedding_control = HasEmbeddingControl(navigation_request.get());
+  bool is_error_page = navigation_request->IsErrorPage();
+
   render_frame_host->DidNavigate(params, navigation_request.get(),
                                  did_create_new_document);
 
@@ -428,10 +498,15 @@ void Navigator::DidNavigate(
   if (details.type != NAVIGATION_TYPE_NAV_IGNORE && delegate_) {
     DCHECK_EQ(!render_frame_host->GetParent(),
               did_navigate ? details.is_main_frame : false);
-    navigation_request->DidCommitNavigation(params, did_navigate,
-                                            details.did_replace_entry,
-                                            details.previous_url, details.type);
+    navigation_request->DidCommitNavigation(
+        params, did_navigate, details.did_replace_entry,
+        details.previous_main_frame_url, details.type);
     navigation_request.reset();
+  }
+
+  if (did_create_new_document) {
+    RecordWebPlatformSecurityMetrics(render_frame_host, has_embedding_control,
+                                     is_error_page);
   }
 
   if (!did_navigate)
@@ -458,23 +533,18 @@ void Navigator::DidNavigate(
 }
 
 void Navigator::Navigate(std::unique_ptr<NavigationRequest> request,
-                         ReloadType reload_type,
-                         RestoreType restore_type) {
+                         ReloadType reload_type) {
   TRACE_EVENT0("browser,navigation", "Navigator::Navigate");
   TRACE_EVENT_INSTANT_WITH_TIMESTAMP0(
       "navigation,rail", "NavigationTiming navigationStart",
       TRACE_EVENT_SCOPE_GLOBAL, request->common_params().navigation_start);
 
-  // Save destination url, as it is needed for
-  // DidStartNavigationToPendingEntry and request could be destroyed after
-  // BeginNavigation below.
-  GURL dest_url = request->common_params().url;
   FrameTreeNode* frame_tree_node = request->frame_tree_node();
 
   navigation_data_ = std::make_unique<NavigationMetricsData>(
       request->common_params().navigation_start, request->common_params().url,
       frame_tree_node->current_frame_host()->GetPageUkmSourceId(),
-      true /* is_browser_initiated_before_unload */, restore_type);
+      true /* is_browser_initiated_before_unload */);
 
   // Check if the BeforeUnload event needs to execute before assigning the
   // NavigationRequest to the FrameTreeNode. Assigning it to the FrameTreeNode
@@ -522,7 +592,8 @@ void Navigator::Navigate(std::unique_ptr<NavigationRequest> request,
 void Navigator::RequestOpenURL(
     RenderFrameHostImpl* render_frame_host,
     const GURL& url,
-    const GlobalFrameRoutingId& initiator_routing_id,
+    const base::UnguessableToken* initiator_frame_token,
+    int initiator_process_id,
     const base::Optional<url::Origin>& initiator_origin,
     const scoped_refptr<network::ResourceRequestBody>& post_body,
     const std::string& extra_headers,
@@ -530,10 +601,10 @@ void Navigator::RequestOpenURL(
     WindowOpenDisposition disposition,
     bool should_replace_current_entry,
     bool user_gesture,
-    blink::TriggeringEventInfo triggering_event_info,
+    blink::mojom::TriggeringEventInfo triggering_event_info,
     const std::string& href_translate,
     scoped_refptr<network::SharedURLLoaderFactory> blob_url_loader_factory,
-    const base::Optional<Impression>& impression) {
+    const base::Optional<blink::Impression>& impression) {
   // Note: This can be called for subframes (even when OOPIFs are not possible)
   // if the disposition calls for a different window.
 
@@ -573,7 +644,10 @@ void Navigator::RequestOpenURL(
   params.user_gesture = user_gesture;
   params.triggering_event_info = triggering_event_info;
   params.initiator_origin = initiator_origin;
-  params.initiator_routing_id = initiator_routing_id;
+  params.initiator_frame_token =
+      initiator_frame_token ? base::make_optional(*initiator_frame_token)
+                            : base::nullopt;
+  params.initiator_process_id = initiator_process_id;
 
   // RequestOpenURL is used only for local frames, so we can get here only if
   // the navigation is initiated by a frame in the same SiteInstance as this
@@ -606,7 +680,8 @@ void Navigator::RequestOpenURL(
 void Navigator::NavigateFromFrameProxy(
     RenderFrameHostImpl* render_frame_host,
     const GURL& url,
-    const GlobalFrameRoutingId& initiator_routing_id,
+    const base::UnguessableToken* initiator_frame_token,
+    int initiator_process_id,
     const url::Origin& initiator_origin,
     SiteInstance* source_site_instance,
     const Referrer& referrer,
@@ -618,7 +693,7 @@ void Navigator::NavigateFromFrameProxy(
     const std::string& extra_headers,
     scoped_refptr<network::SharedURLLoaderFactory> blob_url_loader_factory,
     bool has_user_gesture,
-    const base::Optional<Impression>& impression) {
+    const base::Optional<blink::Impression>& impression) {
   // |method != "POST"| should imply absence of |post_body|.
   if (method != "POST" && post_body) {
     NOTREACHED();
@@ -653,10 +728,11 @@ void Navigator::NavigateFromFrameProxy(
   }
 
   controller_->NavigateFromFrameProxy(
-      render_frame_host, url, initiator_routing_id, initiator_origin,
-      is_renderer_initiated, source_site_instance, referrer_to_use,
-      page_transition, should_replace_current_entry, download_policy, method,
-      post_body, extra_headers, std::move(blob_url_loader_factory), impression);
+      render_frame_host, url, initiator_frame_token, initiator_process_id,
+      initiator_origin, is_renderer_initiated, source_site_instance,
+      referrer_to_use, page_transition, should_replace_current_entry,
+      download_policy, method, post_body, extra_headers,
+      std::move(blob_url_loader_factory), impression);
 }
 
 void Navigator::BeforeUnloadCompleted(FrameTreeNode* frame_tree_node,
@@ -772,7 +848,7 @@ void Navigator::OnBeginNavigation(
       navigation_request->common_params().navigation_start,
       navigation_request->common_params().url,
       frame_tree_node->current_frame_host()->GetPageUkmSourceId(),
-      false /* is_browser_initiated_before_unload */, RestoreType::NONE);
+      false /* is_browser_initiated_before_unload */);
 
   LogRendererInitiatedBeforeUnloadTime(
       navigation_request->begin_params()->before_unload_start,
@@ -829,16 +905,6 @@ void Navigator::CancelNavigation(FrameTreeNode* frame_tree_node) {
     navigation_data_.reset();
 }
 
-void Navigator::LogResourceRequestTime(base::TimeTicks timestamp,
-                                       const GURL& url) {
-  if (navigation_data_ && navigation_data_->url_ == url) {
-    navigation_data_->url_job_start_time_ = timestamp;
-    UMA_HISTOGRAM_TIMES(
-        "Navigation.TimeToURLJobStart",
-        navigation_data_->url_job_start_time_ - navigation_data_->start_time_);
-  }
-}
-
 void Navigator::LogBeforeUnloadTime(
     base::TimeTicks renderer_before_unload_start_time,
     base::TimeTicks renderer_before_unload_end_time,
@@ -859,17 +925,18 @@ void Navigator::LogBeforeUnloadTime(
   if (!base::TimeTicks::IsConsistentAcrossProcesses()) {
     // These timestamps come directly from the renderer so they might need to be
     // converted to local time stamps.
-    InterProcessTimeTicksConverter converter(
-        LocalTimeTicks::FromTimeTicks(before_unload_sent_time),
-        LocalTimeTicks::FromTimeTicks(base::TimeTicks::Now()),
-        RemoteTimeTicks::FromTimeTicks(renderer_before_unload_start_time),
-        RemoteTimeTicks::FromTimeTicks(renderer_before_unload_end_time));
-    LocalTimeTicks converted_renderer_before_unload_start =
-        converter.ToLocalTimeTicks(
-            RemoteTimeTicks::FromTimeTicks(renderer_before_unload_start_time));
-    LocalTimeTicks converted_renderer_before_unload_end =
-        converter.ToLocalTimeTicks(
-            RemoteTimeTicks::FromTimeTicks(renderer_before_unload_end_time));
+    blink::InterProcessTimeTicksConverter converter(
+        blink::LocalTimeTicks::FromTimeTicks(before_unload_sent_time),
+        blink::LocalTimeTicks::FromTimeTicks(base::TimeTicks::Now()),
+        blink::RemoteTimeTicks::FromTimeTicks(
+            renderer_before_unload_start_time),
+        blink::RemoteTimeTicks::FromTimeTicks(renderer_before_unload_end_time));
+    blink::LocalTimeTicks converted_renderer_before_unload_start =
+        converter.ToLocalTimeTicks(blink::RemoteTimeTicks::FromTimeTicks(
+            renderer_before_unload_start_time));
+    blink::LocalTimeTicks converted_renderer_before_unload_end =
+        converter.ToLocalTimeTicks(blink::RemoteTimeTicks::FromTimeTicks(
+            renderer_before_unload_end_time));
     navigation_data_->before_unload_start_ =
         converted_renderer_before_unload_start.ToTimeTicks();
     navigation_data_->before_unload_end_ =
@@ -893,17 +960,18 @@ void Navigator::LogRendererInitiatedBeforeUnloadTime(
   if (!base::TimeTicks::IsConsistentAcrossProcesses()) {
     // These timestamps come directly from the renderer so they might need to be
     // converted to local time stamps.
-    InterProcessTimeTicksConverter converter(
-        LocalTimeTicks::FromTimeTicks(base::TimeTicks()),
-        LocalTimeTicks::FromTimeTicks(base::TimeTicks::Now()),
-        RemoteTimeTicks::FromTimeTicks(renderer_before_unload_start_time),
-        RemoteTimeTicks::FromTimeTicks(renderer_before_unload_end_time));
-    LocalTimeTicks converted_renderer_before_unload_start =
-        converter.ToLocalTimeTicks(
-            RemoteTimeTicks::FromTimeTicks(renderer_before_unload_start_time));
-    LocalTimeTicks converted_renderer_before_unload_end =
-        converter.ToLocalTimeTicks(
-            RemoteTimeTicks::FromTimeTicks(renderer_before_unload_end_time));
+    blink::InterProcessTimeTicksConverter converter(
+        blink::LocalTimeTicks::FromTimeTicks(base::TimeTicks()),
+        blink::LocalTimeTicks::FromTimeTicks(base::TimeTicks::Now()),
+        blink::RemoteTimeTicks::FromTimeTicks(
+            renderer_before_unload_start_time),
+        blink::RemoteTimeTicks::FromTimeTicks(renderer_before_unload_end_time));
+    blink::LocalTimeTicks converted_renderer_before_unload_start =
+        converter.ToLocalTimeTicks(blink::RemoteTimeTicks::FromTimeTicks(
+            renderer_before_unload_start_time));
+    blink::LocalTimeTicks converted_renderer_before_unload_end =
+        converter.ToLocalTimeTicks(blink::RemoteTimeTicks::FromTimeTicks(
+            renderer_before_unload_end_time));
     navigation_data_->renderer_before_unload_start_ =
         converted_renderer_before_unload_start.ToTimeTicks();
     navigation_data_->renderer_before_unload_end_ =
@@ -918,12 +986,11 @@ void Navigator::LogRendererInitiatedBeforeUnloadTime(
 
 void Navigator::RecordNavigationMetrics(
     const LoadCommittedDetails& details,
-    const FrameHostMsg_DidCommitProvisionalLoad_Params& params,
+    const mojom::DidCommitProvisionalLoadParams& params,
     SiteInstance* site_instance) {
   DCHECK(site_instance->HasProcess());
 
   if (!details.is_main_frame || !navigation_data_ ||
-      navigation_data_->url_job_start_time_.is_null() ||
       navigation_data_->url_ != params.original_request_url) {
     return;
   }
@@ -931,43 +998,6 @@ void Navigator::RecordNavigationMetrics(
   ukm::builders::Unload builder(navigation_data_->ukm_source_id_);
 
   if (navigation_data_->is_browser_initiated_before_unload_) {
-    base::TimeDelta time_to_commit =
-        base::TimeTicks::Now() - navigation_data_->start_time_;
-    UMA_HISTOGRAM_TIMES("Navigation.TimeToCommit", time_to_commit);
-
-    time_to_commit -= navigation_data_->before_unload_delay_;
-    base::TimeDelta time_to_network = navigation_data_->url_job_start_time_ -
-                                      navigation_data_->start_time_ -
-                                      navigation_data_->before_unload_delay_;
-    if (navigation_data_->is_restoring_from_last_session_) {
-      UMA_HISTOGRAM_TIMES(
-          "Navigation.TimeToCommit_SessionRestored_BeforeUnloadDiscounted",
-          time_to_commit);
-      UMA_HISTOGRAM_TIMES(
-          "Navigation.TimeToURLJobStart_SessionRestored_BeforeUnloadDiscounted",
-          time_to_network);
-      navigation_data_.reset();
-      return;
-    }
-    bool navigation_created_new_renderer_process =
-        site_instance->GetProcess()->GetInitTimeForNavigationMetrics() >
-        navigation_data_->start_time_;
-    if (navigation_created_new_renderer_process) {
-      UMA_HISTOGRAM_TIMES(
-          "Navigation.TimeToCommit_NewRenderer_BeforeUnloadDiscounted",
-          time_to_commit);
-      UMA_HISTOGRAM_TIMES(
-          "Navigation.TimeToURLJobStart_NewRenderer_BeforeUnloadDiscounted",
-          time_to_network);
-    } else {
-      UMA_HISTOGRAM_TIMES(
-          "Navigation.TimeToCommit_ExistingRenderer_BeforeUnloadDiscounted",
-          time_to_commit);
-      UMA_HISTOGRAM_TIMES(
-          "Navigation.TimeToURLJobStart_ExistingRenderer_"
-          "BeforeUnloadDiscounted",
-          time_to_network);
-    }
     if (navigation_data_->before_unload_start_ &&
         navigation_data_->before_unload_end_) {
       builder.SetBeforeUnloadDuration(

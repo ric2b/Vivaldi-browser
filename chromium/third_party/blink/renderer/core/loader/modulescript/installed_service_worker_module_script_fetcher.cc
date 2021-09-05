@@ -6,6 +6,7 @@
 
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/appcache/appcache.mojom-blink.h"
+#include "third_party/blink/renderer/bindings/core/v8/script_source_location_type.h"
 #include "third_party/blink/renderer/core/dom/dom_implementation.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/workers/installed_scripts_manager.h"
@@ -20,7 +21,7 @@ namespace blink {
 InstalledServiceWorkerModuleScriptFetcher::
     InstalledServiceWorkerModuleScriptFetcher(
         WorkerGlobalScope* global_scope,
-        util::PassKey<ModuleScriptLoader> pass_key)
+        base::PassKey<ModuleScriptLoader> pass_key)
     : ModuleScriptFetcher(pass_key), global_scope_(global_scope) {
   DCHECK(global_scope_->IsServiceWorkerGlobalScope());
 }
@@ -30,6 +31,7 @@ void InstalledServiceWorkerModuleScriptFetcher::Fetch(
     ResourceFetcher*,
     ModuleGraphLevel level,
     ModuleScriptFetcher::Client* client) {
+  DCHECK_EQ(fetch_params.GetScriptType(), mojom::blink::ScriptType::kModule);
   DCHECK(global_scope_->IsContextThread());
   auto* installed_scripts_manager = global_scope_->GetInstalledScriptsManager();
   DCHECK(installed_scripts_manager);
@@ -45,7 +47,7 @@ void InstalledServiceWorkerModuleScriptFetcher::Fetch(
         mojom::ConsoleMessageLevel::kError,
         "Failed to load the script unexpectedly",
         fetch_params.Url().GetString(), nullptr, 0));
-    client->NotifyFetchFinished(base::nullopt, error_messages);
+    client->NotifyFetchFinishedError(error_messages);
     return;
   }
 
@@ -77,17 +79,17 @@ void InstalledServiceWorkerModuleScriptFetcher::Fetch(
                               mojom::blink::kAppCacheNoCacheId);
   }
 
-  ModuleScriptCreationParams::ModuleType module_type;
+  ModuleType module_type;
 
   // TODO(sasebree) De-duplicate similar logic that lives in
   // ModuleScriptFetcher::WasModuleLoadSuccessful
   if (MIMETypeRegistry::IsSupportedJavaScriptMIMEType(
           script_data->GetHttpContentType())) {
-    module_type = ModuleScriptCreationParams::ModuleType::kJavaScriptModule;
+    module_type = ModuleType::kJavaScript;
   } else if (base::FeatureList::IsEnabled(blink::features::kJSONModules) &&
              MIMETypeRegistry::IsJSONMimeType(
                  script_data->GetHttpContentType())) {
-    module_type = ModuleScriptCreationParams::ModuleType::kJSONModule;
+    module_type = ModuleType::kJSON;
   } else {
     // This should never happen.
     // If we reach here, we know we received an incompatible mime type from the
@@ -98,16 +100,17 @@ void InstalledServiceWorkerModuleScriptFetcher::Fetch(
         mojom::ConsoleMessageLevel::kError,
         "Failed to load the script unexpectedly",
         fetch_params.Url().GetString(), nullptr, 0));
-    client->NotifyFetchFinished(base::nullopt, error_messages);
+    client->NotifyFetchFinishedError(error_messages);
     return;
   }
 
-  ModuleScriptCreationParams params(
-      fetch_params.Url(), module_type,
+  // Create an external module script where base_url == source_url.
+  // https://html.spec.whatwg.org/multipage/webappapis.html#concept-script-base-url
+  client->NotifyFetchFinishedSuccess(ModuleScriptCreationParams(
+      /*source_url=*/fetch_params.Url(), /*base_url=*/fetch_params.Url(),
+      ScriptSourceLocationType::kExternalFile, module_type,
       ParkableString(script_data->TakeSourceText().Impl()),
-      nullptr /* cache_handler */,
-      fetch_params.GetResourceRequest().GetCredentialsMode());
-  client->NotifyFetchFinished(params, HeapVector<Member<ConsoleMessage>>());
+      /*cache_handler=*/nullptr));
 }
 
 void InstalledServiceWorkerModuleScriptFetcher::Trace(Visitor* visitor) const {

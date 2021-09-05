@@ -150,11 +150,10 @@ Polymer({
     },
 
     /** @private */
-    shouldShowExperimentalCursorColor_: {
+    isMagnifierPanningImprovementsEnabled_: {
       type: Boolean,
       value() {
-        return loadTimeData.getBoolean(
-            'showExperimentalAccessibilityCursorColor');
+        return loadTimeData.getBoolean('isMagnifierPanningImprovementsEnabled');
       },
     },
 
@@ -244,6 +243,7 @@ Polymer({
         chromeos.settings.mojom.Setting.kSelectToSpeak,
         chromeos.settings.mojom.Setting.kHighContrastMode,
         chromeos.settings.mojom.Setting.kFullscreenMagnifier,
+        chromeos.settings.mojom.Setting.kFullscreenMagnifierFocusFollowing,
         chromeos.settings.mojom.Setting.kDockedMagnifier,
         chromeos.settings.mojom.Setting.kStickyKeys,
         chromeos.settings.mojom.Setting.kOnScreenKeyboard,

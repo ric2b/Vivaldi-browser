@@ -44,11 +44,13 @@ class VivaldiContextMenuViews : public VivaldiContextMenu {
   ~VivaldiContextMenuViews() override;
   VivaldiContextMenuViews(content::WebContents* web_contents,
                           ui::SimpleMenuModel* menu_model,
-                          const gfx::Rect& rect,
-                          ContextMenuPostitionDelegate* delegate);
-  void Show() override;
+                          const gfx::Rect& rect);
+  void Init(ui::SimpleMenuModel* menu_model,
+            ContextMenuPostitionDelegate* delegate) override;
+  bool Show() override;
   void SetIcon(const gfx::Image& icon, int id) override;
   void UpdateMenu(ui::SimpleMenuModel* menu_model, int id) override;
+  RenderViewContextMenuBase::ToolkitDelegate* GetToolkitDelegate() override;
 
  private:
   void RunMenuAt(views::Widget* parent,

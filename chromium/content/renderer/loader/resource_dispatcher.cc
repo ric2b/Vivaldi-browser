@@ -21,12 +21,9 @@
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "content/common/inter_process_time_ticks_converter.h"
 #include "content/common/navigation_params.h"
-#include "content/public/renderer/request_peer.h"
 #include "content/public/renderer/resource_dispatcher_delegate.h"
 #include "content/renderer/loader/sync_load_context.h"
-#include "content/renderer/loader/url_loader_client_impl.h"
 #include "content/renderer/render_frame_impl.h"
 #include "content/renderer/render_thread_impl.h"
 #include "net/base/load_flags.h"
@@ -35,11 +32,13 @@
 #include "net/http/http_response_headers.h"
 #include "net/url_request/referrer_policy.h"
 #include "services/network/public/cpp/features.h"
+#include "services/network/public/cpp/is_potentially_trustworthy.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/url_loader_completion_status.h"
 #include "services/network/public/mojom/fetch_api.mojom.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
 #include "third_party/blink/public/common/client_hints/client_hints.h"
+#include "third_party/blink/public/common/loader/inter_process_time_ticks_converter.h"
 #include "third_party/blink/public/common/loader/network_utils.h"
 #include "third_party/blink/public/common/loader/referrer_utils.h"
 #include "third_party/blink/public/common/loader/resource_type_util.h"
@@ -47,6 +46,8 @@
 #include "third_party/blink/public/mojom/loader/resource_load_info.mojom-shared.h"
 #include "third_party/blink/public/platform/resource_load_info_notifier_wrapper.h"
 #include "third_party/blink/public/platform/sync_load_response.h"
+#include "third_party/blink/public/platform/web_mojo_url_loader_client.h"
+#include "third_party/blink/public/platform/web_request_peer.h"
 
 namespace content {
 
@@ -55,9 +56,10 @@ namespace {
 // Converts |time| from a remote to local TimeTicks, overwriting the original
 // value.
 void RemoteToLocalTimeTicks(
-    const InterProcessTimeTicksConverter& converter,
+    const blink::InterProcessTimeTicksConverter& converter,
     base::TimeTicks* time) {
-  RemoteTimeTicks remote_time = RemoteTimeTicks::FromTimeTicks(*time);
+  blink::RemoteTimeTicks remote_time =
+      blink::RemoteTimeTicks::FromTimeTicks(*time);
   *time = converter.ToLocalTimeTicks(remote_time).ToTimeTicks();
 }
 
@@ -68,7 +70,7 @@ void CheckSchemeForReferrerPolicy(const network::ResourceRequest& request) {
            net::ReferrerPolicy::CLEAR_ON_TRANSITION_FROM_SECURE_TO_INSECURE) &&
       request.referrer.SchemeIsCryptographic() &&
       !url::Origin::Create(request.url).opaque() &&
-      !blink::network_utils::IsOriginSecure(request.url)) {
+      !network::IsUrlPotentiallyTrustworthy(request.url)) {
     LOG(FATAL) << "Trying to send secure referrer for insecure request "
                << "without an appropriate referrer policy.\n"
                << "URL = " << request.url << "\n"
@@ -131,6 +133,41 @@ ResourceDispatcher::GetPendingRequestInfo(int request_id) {
   return it->second.get();
 }
 
+void ResourceDispatcher::FollowPendingRedirect(
+    PendingRequestInfo* request_info) {
+  if (request_info->has_pending_redirect &&
+      request_info->should_follow_redirect) {
+    request_info->has_pending_redirect = false;
+    // net::URLRequest clears its request_start on redirect, so should we.
+    request_info->local_request_start = base::TimeTicks::Now();
+    // Redirect URL may not be handled by the network service, so force a
+    // restart in case another URLLoaderFactory should handle the URL.
+    if (request_info->redirect_requires_loader_restart) {
+      request_info->url_loader->FollowRedirectForcingRestart();
+    } else {
+      request_info->url_loader->FollowRedirect(
+          request_info->removed_headers, {} /* modified_headers */,
+          {} /* modified_cors_exempt_headers */);
+    }
+  }
+}
+
+void ResourceDispatcher::OnTransferSizeUpdated(int request_id,
+                                               int32_t transfer_size_diff) {
+  DCHECK_GT(transfer_size_diff, 0);
+  PendingRequestInfo* request_info = GetPendingRequestInfo(request_id);
+  if (!request_info)
+    return;
+
+  // TODO(yhirano): Consider using int64_t in
+  // blink::WebRequestPeer::OnTransferSizeUpdated.
+  request_info->peer->OnTransferSizeUpdated(transfer_size_diff);
+  if (!GetPendingRequestInfo(request_id))
+    return;
+  request_info->resource_load_info_notifier_wrapper
+      ->NotifyResourceTransferSizeUpdated(transfer_size_diff);
+}
+
 void ResourceDispatcher::OnUploadProgress(int request_id,
                                           int64_t position,
                                           int64_t size) {
@@ -155,9 +192,10 @@ void ResourceDispatcher::OnReceivedResponse(
   ToLocalURLResponseHead(*request_info, *response_head);
   request_info->load_timing_info = response_head->load_timing;
   if (delegate_) {
-    std::unique_ptr<RequestPeer> new_peer = delegate_->OnReceivedResponse(
-        std::move(request_info->peer), response_head->mime_type,
-        request_info->url);
+    std::unique_ptr<blink::WebRequestPeer> new_peer =
+        delegate_->OnReceivedResponse(std::move(request_info->peer),
+                                      response_head->mime_type,
+                                      request_info->url);
     DCHECK(new_peer);
     request_info->peer = std::move(new_peer);
   }
@@ -180,16 +218,6 @@ void ResourceDispatcher::OnReceivedCachedMetadata(int request_id,
   if (data.size()) {
     request_info->peer->OnReceivedCachedMetadata(std::move(data));
   }
-}
-
-void ResourceDispatcher::OnStartLoadingResponseBody(
-    int request_id,
-    mojo::ScopedDataPipeConsumerHandle body) {
-  PendingRequestInfo* request_info = GetPendingRequestInfo(request_id);
-  if (!request_info)
-    return;
-
-  request_info->peer->OnStartLoadingResponseBody(std::move(body));
 }
 
 void ResourceDispatcher::OnReceivedRedirect(
@@ -247,23 +275,14 @@ void ResourceDispatcher::OnReceivedRedirect(
   }
 }
 
-void ResourceDispatcher::FollowPendingRedirect(
-    PendingRequestInfo* request_info) {
-  if (request_info->has_pending_redirect &&
-      request_info->should_follow_redirect) {
-    request_info->has_pending_redirect = false;
-    // net::URLRequest clears its request_start on redirect, so should we.
-    request_info->local_request_start = base::TimeTicks::Now();
-    // Redirect URL may not be handled by the network service, so force a
-    // restart in case another URLLoaderFactory should handle the URL.
-    if (request_info->redirect_requires_loader_restart) {
-      request_info->url_loader->FollowRedirectForcingRestart();
-    } else {
-      request_info->url_loader->FollowRedirect(
-          request_info->removed_headers, {} /* modified_headers */,
-          {} /* modified_cors_exempt_headers */);
-    }
-  }
+void ResourceDispatcher::OnStartLoadingResponseBody(
+    int request_id,
+    mojo::ScopedDataPipeConsumerHandle body) {
+  PendingRequestInfo* request_info = GetPendingRequestInfo(request_id);
+  if (!request_info)
+    return;
+
+  request_info->peer->OnStartLoadingResponseBody(std::move(body));
 }
 
 void ResourceDispatcher::OnRequestComplete(
@@ -279,7 +298,7 @@ void ResourceDispatcher::OnRequestComplete(
   request_info->resource_load_info_notifier_wrapper
       ->NotifyResourceLoadCompleted(status);
 
-  RequestPeer* peer = request_info->peer.get();
+  blink::WebRequestPeer* peer = request_info->peer.get();
 
   if (delegate_) {
     delegate_->OnRequestComplete();
@@ -299,7 +318,7 @@ void ResourceDispatcher::OnRequestComplete(
   } else {
     // We have already converted the request start timestamp, let's use that
     // conversion information.
-    // Note: We cannot create a InterProcessTimeTicksConverter with
+    // Note: We cannot create a blink::InterProcessTimeTicksConverter with
     // (local_request_start, now, remote_request_start, remote_completion_time)
     // as that may result in inconsistent timestamps.
     renderer_status.completion_time =
@@ -392,22 +411,6 @@ void ResourceDispatcher::DidChangePriority(int request_id,
   request_info->url_loader->SetPriority(new_priority, intra_priority_value);
 }
 
-void ResourceDispatcher::OnTransferSizeUpdated(int request_id,
-                                               int32_t transfer_size_diff) {
-  DCHECK_GT(transfer_size_diff, 0);
-  PendingRequestInfo* request_info = GetPendingRequestInfo(request_id);
-  if (!request_info)
-    return;
-
-  // TODO(yhirano): Consider using int64_t in
-  // RequestPeer::OnTransferSizeUpdated.
-  request_info->peer->OnTransferSizeUpdated(transfer_size_diff);
-  if (!GetPendingRequestInfo(request_id))
-    return;
-  request_info->resource_load_info_notifier_wrapper
-      ->NotifyResourceTransferSizeUpdated(transfer_size_diff);
-}
-
 void ResourceDispatcher::EvictFromBackForwardCache(
     blink::mojom::RendererEvictionReason reason,
     int request_id) {
@@ -418,13 +421,31 @@ void ResourceDispatcher::EvictFromBackForwardCache(
   return request_info->peer->EvictFromBackForwardCache(reason);
 }
 
+void ResourceDispatcher::DidBufferLoadWhileInBackForwardCache(size_t num_bytes,
+                                                              int request_id) {
+  PendingRequestInfo* request_info = GetPendingRequestInfo(request_id);
+  if (!request_info)
+    return;
+
+  request_info->peer->DidBufferLoadWhileInBackForwardCache(num_bytes);
+}
+
+bool ResourceDispatcher::CanContinueBufferingWhileInBackForwardCache(
+    int request_id) {
+  PendingRequestInfo* request_info = GetPendingRequestInfo(request_id);
+  if (!request_info)
+    return true;
+
+  return request_info->peer->CanContinueBufferingWhileInBackForwardCache();
+}
+
 void ResourceDispatcher::SetCorsExemptHeaderList(
     const std::vector<std::string>& list) {
   cors_exempt_header_list_ = list;
 }
 
 ResourceDispatcher::PendingRequestInfo::PendingRequestInfo(
-    std::unique_ptr<RequestPeer> peer,
+    std::unique_ptr<blink::WebRequestPeer> peer,
     network::mojom::RequestDestination request_destination,
     int render_frame_id,
     const GURL& request_url,
@@ -452,7 +473,7 @@ void ResourceDispatcher::StartSync(
     std::vector<std::unique_ptr<blink::URLLoaderThrottle>> throttles,
     base::TimeDelta timeout,
     mojo::PendingRemote<blink::mojom::BlobRegistry> download_to_blob_registry,
-    std::unique_ptr<RequestPeer> peer,
+    std::unique_ptr<blink::WebRequestPeer> peer,
     std::unique_ptr<blink::ResourceLoadInfoNotifierWrapper>
         resource_load_info_notifier_wrapper) {
   CheckSchemeForReferrerPolicy(*request);
@@ -518,7 +539,7 @@ int ResourceDispatcher::StartAsync(
     scoped_refptr<base::SingleThreadTaskRunner> loading_task_runner,
     const net::NetworkTrafficAnnotationTag& traffic_annotation,
     uint32_t loader_options,
-    std::unique_ptr<RequestPeer> peer,
+    std::unique_ptr<blink::WebRequestPeer> peer,
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     std::vector<std::unique_ptr<blink::URLLoaderThrottle>> throttles,
     std::unique_ptr<blink::ResourceLoadInfoNotifierWrapper>
@@ -548,9 +569,10 @@ int ResourceDispatcher::StartAsync(
 
   pending_request->previews_state = request->previews_state;
 
-  std::unique_ptr<URLLoaderClientImpl> client(new URLLoaderClientImpl(
-      request_id, this, loading_task_runner,
-      url_loader_factory->BypassRedirectChecks(), request->url));
+  std::unique_ptr<blink::WebMojoURLLoaderClient> client(
+      new blink::WebMojoURLLoaderClient(
+          request_id, this, loading_task_runner,
+          url_loader_factory->BypassRedirectChecks(), request->url));
 
   std::unique_ptr<blink::ThrottlingURLLoader> url_loader =
       blink::ThrottlingURLLoader::CreateLoaderAndStart(
@@ -575,11 +597,11 @@ void ResourceDispatcher::ToLocalURLResponseHead(
       response_head.load_timing.request_start.is_null()) {
     return;
   }
-  InterProcessTimeTicksConverter converter(
-      LocalTimeTicks::FromTimeTicks(request_info.local_request_start),
-      LocalTimeTicks::FromTimeTicks(request_info.local_response_start),
-      RemoteTimeTicks::FromTimeTicks(response_head.request_start),
-      RemoteTimeTicks::FromTimeTicks(response_head.response_start));
+  blink::InterProcessTimeTicksConverter converter(
+      blink::LocalTimeTicks::FromTimeTicks(request_info.local_request_start),
+      blink::LocalTimeTicks::FromTimeTicks(request_info.local_response_start),
+      blink::RemoteTimeTicks::FromTimeTicks(response_head.request_start),
+      blink::RemoteTimeTicks::FromTimeTicks(response_head.response_start));
 
   net::LoadTimingInfo* load_timing = &response_head.load_timing;
   RemoteToLocalTimeTicks(converter, &load_timing->request_start);

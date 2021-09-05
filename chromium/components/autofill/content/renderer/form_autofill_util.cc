@@ -15,12 +15,12 @@
 
 #include "base/check_op.h"
 #include "base/command_line.h"
+#include "base/containers/contains.h"
 #include "base/i18n/case_conversion.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
 #include "base/notreached.h"
-#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -98,15 +98,6 @@ enum FieldFilterMask {
                                      FILTER_READONLY_ELEMENTS |
                                      FILTER_NON_FOCUSABLE_ELEMENTS,
 };
-
-// Returns whether sending autofill field metadata to the server is enabled.
-// TODO(crbug.com/938804): Remove this when button titles are crowdsourced in
-// all channels.
-bool IsAutofillFieldMetadataEnabled() {
-  static base::NoDestructor<std::string> kGroupName(
-      base::FieldTrialList::FindFullName("AutofillFieldMetadata"));
-  return base::StartsWith(*kGroupName, "Enabled", base::CompareCase::SENSITIVE);
-}
 
 void TruncateString(base::string16* str, size_t max_length) {
   if (str->length() > max_length)
@@ -1663,10 +1654,8 @@ bool IsWebElementVisible(const blink::WebElement& element) {
 
 base::string16 GetFormIdentifier(const WebFormElement& form) {
   base::string16 identifier = form.GetName().Utf16();
-  static base::NoDestructor<WebString> kId("id");
   if (identifier.empty())
-    identifier = form.GetAttribute(*kId).Utf16();
-
+    identifier = form.GetIdAttribute().Utf16();
   return identifier;
 }
 
@@ -1716,7 +1705,6 @@ void WebFormControlElementToFormField(
   DCHECK(field);
   DCHECK(!element.IsNull());
   static base::NoDestructor<WebString> kAutocomplete("autocomplete");
-  static base::NoDestructor<WebString> kId("id");
   static base::NoDestructor<WebString> kName("name");
   static base::NoDestructor<WebString> kRole("role");
   static base::NoDestructor<WebString> kPlaceholder("placeholder");
@@ -1725,7 +1713,7 @@ void WebFormControlElementToFormField(
   // Save both id and name attributes, if present. If there is only one of them,
   // it will be saved to |name|. See HTMLFormControlElement::nameForAutofill.
   field->name = element.NameForAutofill().Utf16();
-  field->id_attribute = element.GetAttribute(*kId).Utf16();
+  field->id_attribute = element.GetIdAttribute().Utf16();
   field->name_attribute = element.GetAttribute(*kName).Utf16();
   field->unique_renderer_id =
       FieldRendererId(element.UniqueRendererFormControlId());
@@ -2211,9 +2199,10 @@ base::string16 FindChildText(const WebNode& node) {
 ButtonTitleList GetButtonTitles(const WebFormElement& web_form,
                                 const WebDocument& document,
                                 ButtonTitlesCache* button_titles_cache) {
-  DCHECK(button_titles_cache);
-  if (!IsAutofillFieldMetadataEnabled() && web_form.IsNull())
+  if (!button_titles_cache) {
+    // Button titles scraping is disabled for this form.
     return ButtonTitleList();
+  }
 
   // True if the cache has no entry for |web_form|.
   bool cache_miss = true;

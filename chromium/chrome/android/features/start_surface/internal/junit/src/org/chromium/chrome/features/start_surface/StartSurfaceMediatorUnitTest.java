@@ -1785,8 +1785,9 @@ public class StartSurfaceMediatorUnitTest {
         StartSurfaceMediator mediator = new StartSurfaceMediator(mMainTabGridController,
                 mTabModelSelector, mode == SurfaceMode.NO_START_SURFACE ? null : mPropertyModel,
                 mode == SurfaceMode.SINGLE_PANE ? mSecondaryTasksSurfaceInitializer : null, mode,
-                mNightModeStateProvider, mBrowserControlsStateProvider, mActivityStateChecker,
-                excludeMVTiles, showStackTabSwitcher, mStartSurfaceSupplier, hadWarmStart);
+                ContextUtils.getApplicationContext(), mBrowserControlsStateProvider,
+                mActivityStateChecker, excludeMVTiles, showStackTabSwitcher, mStartSurfaceSupplier,
+                hadWarmStart);
         return mediator;
     }
 }

@@ -15,9 +15,10 @@
 #include "base/callback.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/containers/contains.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
-#include "base/stl_util.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/thread_checker.h"
@@ -27,6 +28,7 @@
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/chromeos/settings/device_settings_provider.h"
+#include "chrome/browser/chromeos/settings/owner_flags_storage.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chromeos/constants/chromeos_switches.h"
@@ -620,17 +622,13 @@ void OwnerSettingsServiceChromeOS::UpdateDeviceSettings(
     } else {
       NOTREACHED();
     }
-  } else if (path == kStartUpFlags) {
-    em::StartUpFlagsProto* flags_proto = settings.mutable_start_up_flags();
-    flags_proto->Clear();
-    const base::ListValue* flags;
-    if (value.GetAsList(&flags)) {
-      for (base::ListValue::const_iterator i = flags->begin();
-           i != flags->end();
-           ++i) {
-        std::string flag;
-        if (i->GetAsString(&flag))
-          flags_proto->add_flags(flag);
+  } else if (path == kFeatureFlags) {
+    em::FeatureFlagsProto* feature_flags = settings.mutable_feature_flags();
+    feature_flags->Clear();
+    if (value.is_list()) {
+      for (const auto& flag : value.GetList()) {
+        if (flag.is_string())
+          feature_flags->add_feature_flags(flag.GetString());
       }
     }
   } else if (path == kSystemUse24HourClock) {
@@ -734,7 +732,7 @@ void OwnerSettingsServiceChromeOS::ReloadKeypairImpl(
 
 void OwnerSettingsServiceChromeOS::StorePendingChanges() {
   if (!HasPendingChanges() || store_settings_factory_.HasWeakPtrs() ||
-      !device_settings_service_ || user_id_.empty()) {
+      !device_settings_service_ || user_id_.empty() || !IsOwner()) {
     return;
   }
 
@@ -746,6 +744,7 @@ void OwnerSettingsServiceChromeOS::StorePendingChanges() {
                  DeviceSettingsService::STORE_SUCCESS &&
              device_settings_service_->device_settings()) {
     settings = *device_settings_service_->device_settings();
+    MigrateFeatureFlags(&settings);
   } else {
     return;
   }
@@ -794,6 +793,41 @@ void OwnerSettingsServiceChromeOS::ReportStatusAndContinueStoring(
   for (auto& observer : observers_)
     observer.OnSignedPolicyStored(success);
   StorePendingChanges();
+}
+
+void OwnerSettingsServiceChromeOS::MigrateFeatureFlags(
+    enterprise_management::ChromeDeviceSettingsProto* settings) {
+  DCHECK(IsOwner() || IsOwnerInTests(user_id_));
+
+  if (settings->feature_flags().switches_size() == 0) {
+    base::UmaHistogramEnumeration(
+        "ChromeOS.DeviceSettings.FeatureFlagsMigration",
+        FeatureFlagsMigrationStatus::kNoFeatureFlags);
+    return;
+  }
+
+  em::FeatureFlagsProto* feature_flags = settings->mutable_feature_flags();
+  if (feature_flags->feature_flags_size() != 0) {
+    // Both old and new settings. This shouldn't happen in practice, but if it
+    // does the most probable explanation is that we already migrated, so get
+    // rid of the raw switches.
+    feature_flags->clear_switches();
+    base::UmaHistogramEnumeration(
+        "ChromeOS.DeviceSettings.FeatureFlagsMigration",
+        FeatureFlagsMigrationStatus::kAlreadyMigrated);
+    return;
+  }
+
+  chromeos::about_flags::OwnerFlagsStorage flags_storage(profile_->GetPrefs(),
+                                                         this);
+  std::set<std::string> flags = flags_storage.GetFlags();
+  for (const auto& flag : flags) {
+    feature_flags->add_feature_flags(flag);
+  }
+  feature_flags->clear_switches();
+  base::UmaHistogramEnumeration(
+      "ChromeOS.DeviceSettings.FeatureFlagsMigration",
+      FeatureFlagsMigrationStatus::kMigrationPerformed);
 }
 
 }  // namespace chromeos

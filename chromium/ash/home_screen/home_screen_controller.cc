@@ -8,7 +8,6 @@
 #include <vector>
 
 #include "ash/app_list/app_list_controller_impl.h"
-#include "ash/home_screen/home_launcher_gesture_handler.h"
 #include "ash/home_screen/home_screen_delegate.h"
 #include "ash/home_screen/window_scale_animation.h"
 #include "ash/public/cpp/ash_features.h"
@@ -30,6 +29,7 @@
 #include "base/barrier_closure.h"
 #include "base/bind.h"
 #include "base/check.h"
+#include "base/containers/contains.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "ui/aura/window.h"
@@ -105,9 +105,7 @@ class WindowAnimationsCallback : public ui::LayerAnimationObserver {
 
 }  // namespace
 
-HomeScreenController::HomeScreenController()
-    : home_launcher_gesture_handler_(
-          std::make_unique<HomeLauncherGestureHandler>()) {
+HomeScreenController::HomeScreenController() {
   Shell::Get()->overview_controller()->AddObserver(this);
   Shell::Get()->wallpaper_controller()->AddObserver(this);
 }

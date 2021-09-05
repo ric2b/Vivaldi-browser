@@ -12,11 +12,11 @@
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/test/bind.h"
+#include "build/chromeos_buildflags.h"
 #include "cc/test/pixel_comparator.h"
 #include "cc/test/pixel_test_utils.h"
 #include "chrome/browser/apps/app_service/app_icon_factory.h"
 #include "chrome/browser/extensions/chrome_app_icon.h"
-#include "chrome/browser/installable/installable_manager.h"
 #include "chrome/browser/web_applications/components/app_icon_manager.h"
 #include "chrome/browser/web_applications/components/app_registry_controller.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
@@ -41,7 +41,7 @@
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/image/image_unittest_util.h"
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/chromeos/arc/icon_decode_request.h"
 #include "chrome/browser/ui/app_list/icon_standardizer.h"
 #include "chrome/browser/ui/app_list/md_icon_normalizer.h"
@@ -195,9 +195,9 @@ class AppIconFactoryTest : public testing::Test {
     ASSERT_TRUE(gfx::PNGCodec::Decode(compressed_data.data(),
                                       compressed_data.size(), &decoded));
 
-    output_image_skia = gfx::ImageSkia(gfx::ImageSkiaRep(decoded, scale));
+    output_image_skia = gfx::ImageSkia::CreateFromBitmap(decoded, scale);
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     if (base::FeatureList::IsEnabled(features::kAppServiceAdaptiveIcon)) {
       output_image_skia = app_list::CreateStandardIconImage(output_image_skia);
     }
@@ -205,13 +205,12 @@ class AppIconFactoryTest : public testing::Test {
     EnsureRepresentationsLoaded(output_image_skia);
   }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   void RunLoadIconFromResource(apps::mojom::IconType icon_type,
                                apps::IconEffects icon_effects,
                                apps::mojom::IconValuePtr& output_icon) {
     bool is_placeholder_icon = false;
-    apps::LoadIconFromResource(icon_type, kSizeInDip,
-                               IDR_LOGO_CROSTINI_DEFAULT_192,
+    apps::LoadIconFromResource(icon_type, kSizeInDip, IDR_LOGO_CROSTINI_DEFAULT,
                                is_placeholder_icon, icon_effects,
                                base::BindOnce(
                                    [](apps::mojom::IconValuePtr* result,
@@ -227,7 +226,7 @@ class AppIconFactoryTest : public testing::Test {
   void GenerateCrostiniPenguinIcon(gfx::ImageSkia& output_image_skia) {
     output_image_skia =
         *(ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
-            IDR_LOGO_CROSTINI_DEFAULT_192));
+            IDR_LOGO_CROSTINI_DEFAULT));
     output_image_skia = gfx::ImageSkiaOperations::CreateResizedImage(
         output_image_skia, skia::ImageOperations::RESIZE_BEST,
         gfx::Size(kSizeInDip, kSizeInDip));
@@ -238,7 +237,7 @@ class AppIconFactoryTest : public testing::Test {
   void GenerateCrostiniPenguinCompressedIcon(std::vector<uint8_t>& output) {
     base::StringPiece data =
         ui::ResourceBundle::GetSharedInstance().GetRawDataResource(
-            IDR_LOGO_CROSTINI_DEFAULT_192);
+            IDR_LOGO_CROSTINI_DEFAULT);
     output = std::vector<uint8_t>(data.begin(), data.end());
   }
 #endif
@@ -352,7 +351,7 @@ TEST_F(AppIconFactoryTest, LoadIconFromCompressedData) {
       result->uncompressed.GetRepresentation(scale).GetBitmap()));
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 TEST_F(AppIconFactoryTest, LoadCrostiniPenguinIcon) {
   auto icon_type = apps::mojom::IconType::kUncompressed;
   auto icon_effects = apps::IconEffects::kNone;
@@ -614,7 +613,7 @@ class WebAppIconFactoryTest : public ChromeRenderViewHostTestHarness {
     run_loop.Run();
 
     extensions::ChromeAppIcon::ResizeFunction resize_function;
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     if (base::FeatureList::IsEnabled(features::kAppServiceAdaptiveIcon)) {
       if (purpose == IconPurpose::ANY) {
         output_image_skia =
@@ -663,7 +662,7 @@ class WebAppIconFactoryTest : public ChromeRenderViewHostTestHarness {
     base::RunLoop run_loop;
 
     auto icon_type = apps::mojom::IconType::kUncompressed;
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     if (base::FeatureList::IsEnabled(features::kAppServiceAdaptiveIcon)) {
       icon_type = apps::mojom::IconType::kStandard;
     }
@@ -736,7 +735,7 @@ TEST_F(WebAppIconFactoryTest, LoadNonMaskableIcon) {
   gfx::ImageSkia dst_image_skia;
   apps::IconEffects icon_effect = apps::IconEffects::kRoundCorners;
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   if (base::FeatureList::IsEnabled(features::kAppServiceAdaptiveIcon)) {
     icon_effect |= apps::IconEffects::kCrOsStandardIcon;
   } else {
@@ -772,7 +771,7 @@ TEST_F(WebAppIconFactoryTest, LoadNonMaskableCompressedIcon) {
   apps::mojom::IconValuePtr icon;
   apps::IconEffects icon_effect = apps::IconEffects::kRoundCorners;
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   if (base::FeatureList::IsEnabled(features::kAppServiceAdaptiveIcon)) {
     icon_effect |= apps::IconEffects::kCrOsStandardIcon;
   } else {
@@ -801,7 +800,7 @@ TEST_F(WebAppIconFactoryTest, LoadMaskableIcon) {
 
   RegisterApp(std::move(web_app));
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   if (base::FeatureList::IsEnabled(features::kAppServiceAdaptiveIcon)) {
     ASSERT_TRUE(
         icon_manager().HasIcons(app_id, IconPurpose::MASKABLE, {kIconSize2}));
@@ -852,7 +851,7 @@ TEST_F(WebAppIconFactoryTest, LoadMaskableCompressedIcon) {
   std::vector<uint8_t> src_data;
   apps::mojom::IconValuePtr icon;
   apps::IconEffects icon_effect = apps::IconEffects::kRoundCorners;
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   if (base::FeatureList::IsEnabled(features::kAppServiceAdaptiveIcon)) {
     icon_effect |= apps::IconEffects::kCrOsStandardBackground |
                    apps::IconEffects::kCrOsStandardMask;
@@ -907,7 +906,7 @@ TEST_F(WebAppIconFactoryTest, LoadNonMaskableIconWithMaskableIcon) {
   gfx::ImageSkia dst_image_skia;
   apps::IconEffects icon_effect = apps::IconEffects::kRoundCorners;
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   if (base::FeatureList::IsEnabled(features::kAppServiceAdaptiveIcon)) {
     icon_effect |= apps::IconEffects::kCrOsStandardIcon;
   } else {
@@ -979,7 +978,7 @@ TEST_F(WebAppIconFactoryTest, LoadExactSizeIcon) {
   gfx::ImageSkia dst_image_skia;
   apps::IconEffects icon_effect = apps::IconEffects::kRoundCorners;
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   if (base::FeatureList::IsEnabled(features::kAppServiceAdaptiveIcon)) {
     icon_effect |= apps::IconEffects::kCrOsStandardIcon;
   } else {

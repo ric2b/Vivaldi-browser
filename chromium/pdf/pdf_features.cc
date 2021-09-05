@@ -12,9 +12,6 @@ namespace features {
 const base::Feature kAccessiblePDFForm = {"AccessiblePDFForm",
                                           base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kPdfHonorJsContentSettings = {
-    "PdfHonorJsContentSettings", base::FEATURE_ENABLED_BY_DEFAULT};
-
 // "Incremental loading" refers to loading the PDF as it arrives.
 // TODO(crbug.com/1064175): Remove this once incremental loading is fixed.
 const base::Feature kPdfIncrementalLoading = {
@@ -26,17 +23,24 @@ const base::Feature kPdfPartialLoading = {"PdfPartialLoading",
                                           base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kPDFViewerUpdate = {"PDFViewerUpdate",
-                                        base::FEATURE_DISABLED_BY_DEFAULT};
+                                        base::FEATURE_ENABLED_BY_DEFAULT};
+
+const base::Feature kPdfViewerDocumentProperties = {
+    "PdfViewerDocumentProperties", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kPdfViewerPresentationMode = {
     "PdfViewerPresentationMode", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Feature has no effect if Chrome is built with no XFA support.
+const base::Feature kPdfXfaSupport = {"PdfXfaSupport",
+                                      base::FEATURE_DISABLED_BY_DEFAULT};
+
 const base::Feature kSaveEditedPDFForm = {"SaveEditedPDFForm",
-#if BUILDFLAG(IS_ASH)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
                                           base::FEATURE_ENABLED_BY_DEFAULT
 #else
                                           base::FEATURE_DISABLED_BY_DEFAULT
-#endif  // BUILDFLAG(IS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 };
 
 const base::Feature kTabAcrossPDFAnnotations = {

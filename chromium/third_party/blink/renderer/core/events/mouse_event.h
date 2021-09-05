@@ -29,7 +29,6 @@
 #include "third_party/blink/renderer/core/dom/events/simulated_click_options.h"
 #include "third_party/blink/renderer/core/events/ui_event_with_key_state.h"
 #include "third_party/blink/renderer/platform/geometry/double_point.h"
-#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/wtf/casting.h"
 
 namespace blink {
@@ -56,6 +55,7 @@ class CORE_EXPORT MouseEvent : public UIEventWithKeyState {
 
   static MouseEvent* Create() { return MakeGarbageCollected<MouseEvent>(); }
 
+  // TODO(mustaq): looks like we don't need so many variations of Create() here
   static MouseEvent* Create(const AtomicString& event_type,
                             const MouseEventInit*,
                             base::TimeTicks platform_time_stamp,
@@ -66,20 +66,12 @@ class CORE_EXPORT MouseEvent : public UIEventWithKeyState {
                             const AtomicString& event_type,
                             const MouseEventInit*);
 
-  static MouseEvent* Create(const AtomicString& event_type,
-                            AbstractView*,
-                            const Event* underlying_event,
-                            SimulatedClickCreationScope);
-
   MouseEvent(const AtomicString& type,
              const MouseEventInit*,
-             base::TimeTicks platform_time_stamp,
+             base::TimeTicks platform_time_stamp = base::TimeTicks::Now(),
              SyntheticEventType = kRealOrIndistinguishable,
              WebMenuSourceType = kMenuSourceNone);
-  MouseEvent(const AtomicString& type, const MouseEventInit* init)
-      : MouseEvent(type, init, base::TimeTicks::Now()) {}
   MouseEvent();
-  ~MouseEvent() override;
 
   static uint16_t WebInputEventModifiersToButtons(unsigned modifiers);
   static void SetCoordinatesFromWebPointerProperties(
@@ -186,6 +178,8 @@ class CORE_EXPORT MouseEvent : public UIEventWithKeyState {
 
   DispatchEventResult DispatchEvent(EventDispatcher&) override;
 
+  void InitCoordinates(const double client_x, const double client_y);
+
   void Trace(Visitor*) const override;
 
   DoublePoint screen_location_;
@@ -217,8 +211,6 @@ class CORE_EXPORT MouseEvent : public UIEventWithKeyState {
                               EventTarget* related_target,
                               InputDeviceCapabilities* source_capabilities,
                               uint16_t buttons = 0);
-
-  void InitCoordinates(const double client_x, const double client_y);
 
   void ComputePageLocation();
 

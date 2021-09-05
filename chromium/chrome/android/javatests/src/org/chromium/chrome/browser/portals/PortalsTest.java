@@ -40,7 +40,6 @@ import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.banners.AppBannerManager;
-import org.chromium.chrome.browser.engagement.SiteEngagementService;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.history.BrowsingHistoryBridge;
 import org.chromium.chrome.browser.history.HistoryItem;
@@ -54,6 +53,7 @@ import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.browser.webapps.WebappTestPage;
 import org.chromium.components.location.LocationUtils;
 import org.chromium.components.permissions.PermissionDialogController;
+import org.chromium.components.site_engagement.SiteEngagementService;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.test.util.Coordinates;
 import org.chromium.content_public.browser.test.util.DOMUtils;
@@ -624,7 +624,7 @@ public class PortalsTest {
         final String url = WebappTestPage.getServiceWorkerUrlWithAction(
                 mTestServer, "call_stashed_prompt_on_click");
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            SiteEngagementService.getForProfile(Profile.getLastUsedRegularProfile())
+            SiteEngagementService.getForBrowserContext(Profile.getLastUsedRegularProfile())
                     .resetBaseScoreForUrl(url, 10);
         });
 
@@ -637,12 +637,13 @@ public class PortalsTest {
         CriteriaHelper.pollUiThread(() -> {
             Criteria.checkThat(tab.getTitle(), Matchers.is("Web app banner test page"));
         });
-        CriteriaHelper.pollUiThread(() -> !AppBannerManager.forTab(tab).isRunningForTesting());
+        CriteriaHelper.pollUiThread(
+                () -> !AppBannerManager.forWebContents(tab.getWebContents()).isRunningForTesting());
         TouchCommon.singleClickView(tab.getView());
 
         String expectedDialogTitle = ThreadUtils.runOnUiThreadBlocking(() -> {
             return mActivityTestRule.getActivity().getString(
-                    AppBannerManager.getHomescreenLanguageOption(tab).titleTextId);
+                    AppBannerManager.getHomescreenLanguageOption(tab.getWebContents()).titleTextId);
         });
         UiObject dialogUiObject = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
                                           .findObject(new UiSelector().text(expectedDialogTitle));

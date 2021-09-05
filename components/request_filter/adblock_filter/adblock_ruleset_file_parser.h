@@ -11,7 +11,7 @@ struct ParseResult;
 
 class RulesetFileParser {
  public:
-  explicit RulesetFileParser(ParseResult* parse_result);
+  explicit RulesetFileParser(ParseResult* parse_result, bool allow_abp_snippets);
   ~RulesetFileParser();
 
   void Parse(base::StringPiece file_contents);

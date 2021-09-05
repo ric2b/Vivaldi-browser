@@ -141,7 +141,7 @@ xcode = struct(
     # (current default) xc12 gm seed
     x12a7209 = xcode_enum("12a7209"),
     # latest Xcode 12 beta version.
-    x12b5035g = xcode_enum("12b5035g"),
+    x12c33 = xcode_enum("12c33"),
 )
 
 ################################################################################
@@ -285,9 +285,6 @@ defaults = args.defaults(
     bucket = args.COMPUTE,
     executable = args.COMPUTE,
     triggered_by = args.COMPUTE,
-
-    # Forward on luci.builder.defaults so users have a consistent interface
-    **{a: getattr(luci.builder.defaults, a) for a in dir(luci.builder.defaults)}
 )
 
 def builder(
@@ -635,15 +632,8 @@ def builder(
 
     return builder
 
-def builder_name(builder, bucket = args.DEFAULT):
-    bucket = defaults.get_value("bucket", bucket)
-    if bucket == args.COMPUTE:
-        fail("Either a default for bucket must be set or bucket must be passed in")
-    return "{}/{}".format(bucket, builder)
-
 builders = struct(
     builder = builder,
-    builder_name = builder_name,
     cpu = cpu,
     defaults = defaults,
     goma = goma,

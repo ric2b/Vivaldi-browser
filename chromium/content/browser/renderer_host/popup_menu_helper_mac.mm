@@ -175,7 +175,7 @@ void PopupMenuHelper::RenderWidgetHostVisibilityChanged(
 
 void PopupMenuHelper::RenderWidgetHostDestroyed(RenderWidgetHost* widget_host) {
   DCHECK(observation_.IsObservingSource(widget_host));
-  observation_.RemoveObservation();
+  observation_.Reset();
 }
 
 }  // namespace content

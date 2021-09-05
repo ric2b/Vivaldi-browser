@@ -13,18 +13,19 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/no_destructor.h"
-#include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
@@ -145,13 +146,14 @@
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "net/base/escape.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
+#include "pdf/buildflags.h"
 #include "ppapi/buildflags/buildflags.h"
 #include "printing/buildflags/buildflags.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/context_menu_data/edit_flags.h"
 #include "third_party/blink/public/common/context_menu_data/input_field_type.h"
-#include "third_party/blink/public/common/context_menu_data/media_type.h"
+#include "third_party/blink/public/mojom/context_menu/context_menu.mojom.h"
 #include "third_party/blink/public/mojom/frame/media_player_action.mojom.h"
 #include "third_party/blink/public/public_buildflags.h"
 #include "third_party/metrics_proto/omnibox_input_type.pb.h"
@@ -166,6 +168,7 @@
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/text_elider.h"
 #include "ui/strings/grit/ui_strings.h"
+#include "url/origin.h"
 
 #if BUILDFLAG(USE_RENDERER_SPELLCHECKER)
 #include "chrome/browser/renderer_context_menu/spelling_options_submenu_observer.h"
@@ -183,6 +186,10 @@
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "extensions/browser/view_type_utils.h"
 #include "extensions/common/extension.h"
+#endif
+
+#if BUILDFLAG(ENABLE_PDF)
+#include "extensions/common/constants.h"
 #endif
 
 #if BUILDFLAG(ENABLE_PLUGINS)
@@ -210,27 +217,24 @@
 #include "ui/base/resource/resource_bundle.h"
 #endif
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ash/public/cpp/clipboard_history_controller.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/arc/intent_helper/open_with_menu.h"
 #include "chrome/browser/chromeos/arc/intent_helper/start_smart_selection_action_menu.h"
 #include "chrome/browser/renderer_context_menu/quick_answers_menu_observer.h"
 #include "chromeos/constants/chromeos_features.h"
-#include "ui/views/controls/menu/menu_types.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
-#include "browser/menus/vivaldi_menu_enums.h"
-#include "browser/menus/vivaldi_menus.h"
 #include "browser/vivaldi_browser_finder.h"
 
 using base::UserMetricsAction;
 using blink::ContextMenuDataEditFlags;
-using blink::ContextMenuDataMediaType;
 using blink::WebContextMenuData;
 using blink::WebString;
 using blink::WebURL;
+using blink::mojom::ContextMenuDataMediaType;
 using content::BrowserContext;
 using content::ChildProcessSecurityPolicy;
 using content::DownloadManager;
@@ -460,9 +464,6 @@ int FindUMAEnumValueForCommand(int id, UmaEnumIdLookupType type) {
   if (ContextMenuMatcher::IsExtensionsCustomCommandId(id))
     return 1;
 
-  if (::vivaldi::IsVivaldiCommandId(id))
-    return 1; // Vivaldi can be considered an extension
-
   id = CollapseCommandsForUMA(id);
   const auto& map = GetIdcToUmaMap(type);
   auto it = map.find(id);
@@ -519,7 +520,7 @@ content::WebContents* GetWebContentsToUse(content::WebContents* web_contents) {
 
 bool g_custom_id_ranges_initialized = false;
 
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
 void AddAvatarToLastMenuItem(const gfx::Image& icon,
                              ui::SimpleMenuModel* menu) {
   // Don't try to scale too small icons.
@@ -534,7 +535,7 @@ void AddAvatarToLastMenuItem(const gfx::Image& icon,
   menu->SetIcon(menu->GetItemCount() - 1,
                 ui::ImageModel::FromImage(sized_icon));
 }
-#endif  // !defined(OS_CHROMEOS)
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
 void OnProfileCreated(const GURL& link_url,
                       const content::Referrer& referrer,
@@ -569,6 +570,13 @@ bool DoesInputFieldTypeSupportEmoji(
       return true;
   }
 }
+
+#if BUILDFLAG(ENABLE_PDF)
+bool IsPdfPluginURL(const GURL& url) {
+  return url.SchemeIs(extensions::kExtensionScheme) &&
+         url.host_piece() == extension_misc::kPdfExtensionId;
+}
+#endif
 
 }  // namespace
 
@@ -685,12 +693,6 @@ bool RenderViewContextMenu::MenuItemMatchesParams(
 }
 
 void RenderViewContextMenu::AppendAllExtensionItems() {
-  // NOTE(espen@wivaldi.com): Do not add extension items in web panel menu.
-  extensions::WebViewGuest* web_view_guest =
-      extensions::WebViewGuest::FromWebContents(source_web_contents_);
-  if (web_view_guest && web_view_guest->IsVivaldiWebPanel())
-    return;
-
   extension_items_.Clear();
   extensions::ExtensionRegistry* registry =
       extensions::ExtensionRegistry::Get(browser_context_);
@@ -814,8 +816,6 @@ void RenderViewContextMenu::WriteURLToClipboard(const GURL& url) {
 void RenderViewContextMenu::InitMenu() {
   RenderViewContextMenuBase::InitMenu();
 
-  vivaldi::VivaldiInitMenu(source_web_contents_, params_);
-
   if (content_type_->SupportsGroup(
           ContextMenuContentType::ITEM_GROUP_PASSWORD)) {
     AppendPasswordItems();
@@ -906,12 +906,12 @@ void RenderViewContextMenu::InitMenu() {
   }
 
   bool supports_smart_text_selection = false;
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   supports_smart_text_selection =
       content_type_->SupportsGroup(
           ContextMenuContentType::ITEM_GROUP_SMART_SELECTION) &&
       arc::IsArcPlayStoreEnabledForProfile(GetProfile());
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
   if (supports_smart_text_selection)
     AppendSmartSelectionActionItems();
 
@@ -943,8 +943,6 @@ void RenderViewContextMenu::InitMenu() {
 
   if (content_type_->SupportsGroup(
           ContextMenuContentType::ITEM_GROUP_DEVELOPER)) {
-    ::vivaldi::VivaldiAddFullscreenItems(
-        &menu_model_, source_web_contents_, params_);
     AppendDeveloperItems();
   }
 
@@ -997,6 +995,13 @@ void RenderViewContextMenu::RecordUsedItem(int id) {
   UMA_HISTOGRAM_EXACT_LINEAR(
       "RenderViewContextMenu.Used", enum_id,
       GetUmaValueMax(UmaEnumIdLookupType::GeneralEnumId));
+
+  // Log a user action for the SEARCHWEBFOR case. This value is used as part of
+  // a high-level guiding metric, which is being migrated to user actions.
+  if (id == IDC_CONTENT_CONTEXT_SEARCHWEBFOR) {
+    base::RecordAction(base::UserMetricsAction(
+        "RenderViewContextMenu.Used.IDC_CONTENT_CONTEXT_SEARCHWEBFOR"));
+  }
 
   // Log other situations.
 
@@ -1087,7 +1092,7 @@ void RenderViewContextMenu::RecordShownItem(int id) {
 }
 
 bool RenderViewContextMenu::IsHTML5Fullscreen() const {
-  Browser* browser = chrome::FindBrowserWithWebContents(source_web_contents_);
+  Browser* browser = chrome::FindBrowserWithWebContents(embedder_web_contents_);
   if (!browser)
     return false;
 
@@ -1160,9 +1165,6 @@ void RenderViewContextMenu::AppendDeveloperItems() {
   }
   menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_INSPECTELEMENT,
                                   IDS_CONTENT_CONTEXT_INSPECTELEMENT);
-
-  ::vivaldi::VivaldiAddDeveloperItems(&menu_model_, source_web_contents_,
-      params_);
 }
 
 void RenderViewContextMenu::AppendDevtoolsForUnpackedExtensions() {
@@ -1210,7 +1212,7 @@ void RenderViewContextMenu::AppendLinkItems() {
     // time.
     // TODO(jochen): Consider adding support for ChromeOS with similar
     // semantics as the profile switcher in the system tray.
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
     // g_browser_process->profile_manager() is null during unit tests.
     if (g_browser_process->profile_manager() &&
         GetProfile()->IsRegularProfile()) {
@@ -1265,7 +1267,7 @@ void RenderViewContextMenu::AppendLinkItems() {
         }
       }
     }
-#endif  // !defined(OS_CHROMEOS)
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
     menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
 
@@ -1328,12 +1330,10 @@ void RenderViewContextMenu::AppendLinkItems() {
     menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_COPYLINKTEXT,
                                     IDS_CONTENT_CONTEXT_COPYLINKTEXT);
   }
-
-  ::vivaldi::VivaldiAddLinkItems(&menu_model_, source_web_contents_, params_);
 }
 
 void RenderViewContextMenu::AppendOpenWithLinkItems() {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   open_with_menu_observer_ =
       std::make_unique<arc::OpenWithMenu>(browser_context_, this);
   observers_.AddObserver(open_with_menu_observer_.get());
@@ -1342,7 +1342,7 @@ void RenderViewContextMenu::AppendOpenWithLinkItems() {
 }
 
 void RenderViewContextMenu::AppendQuickAnswersItems() {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   if (!quick_answers_menu_observer_) {
     quick_answers_menu_observer_ =
         std::make_unique<QuickAnswersMenuObserver>(this);
@@ -1354,7 +1354,7 @@ void RenderViewContextMenu::AppendQuickAnswersItems() {
 }
 
 void RenderViewContextMenu::AppendSmartSelectionActionItems() {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   start_smart_selection_action_menu_observer_ =
       std::make_unique<arc::StartSmartSelectionActionMenu>(this);
   observers_.AddObserver(start_smart_selection_action_menu_observer_.get());
@@ -1414,8 +1414,6 @@ void RenderViewContextMenu::AppendImageItems() {
   // Don't double-add for linked images, which also add the item.
   if (params_.link_url.is_empty())
     AppendQRCodeGeneratorItem(/*for_image=*/true, /*draw_icon=*/false);
-
-  ::vivaldi::VivaldiAddImageItems(&menu_model_, source_web_contents_, params_);
 }
 
 void RenderViewContextMenu::AppendSearchWebForImageItems() {
@@ -1590,7 +1588,6 @@ void RenderViewContextMenu::AppendPageItems() {
         IDC_CONTENT_CONTEXT_TRANSLATE,
         l10n_util::GetStringFUTF16(IDS_CONTENT_CONTEXT_TRANSLATE, language));
   }
-  ::vivaldi::VivaldiAddPageItems(&menu_model_, source_web_contents_, params_);
 }
 
 void RenderViewContextMenu::AppendExitFullscreenItem() {
@@ -1615,7 +1612,6 @@ void RenderViewContextMenu::AppendCopyItem() {
     menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
   menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_COPY,
                                   IDS_CONTENT_CONTEXT_COPY);
-  ::vivaldi::VivaldiAddCopyItems(&menu_model_, source_web_contents_, params_);
 }
 
 void RenderViewContextMenu::AppendCopyLinkToTextItem() {
@@ -1678,11 +1674,6 @@ void RenderViewContextMenu::AppendSearchProvider() {
   EscapeAmpersands(&printable_selection_text);
 
   if (AutocompleteMatch::IsSearchType(match.type)) {
-    //NOTE(arnar@vivaldi.com): Search context menu is now
-    //created in javascript.
-    if (vivaldi::IsVivaldiRunning()){
-      return;
-    }
     const TemplateURL* const default_provider =
         TemplateURLServiceFactory::GetForProfile(GetProfile())
             ->GetDefaultSearchProvider();
@@ -1766,27 +1757,20 @@ void RenderViewContextMenu::AppendEditableItems() {
                                     IDS_CONTENT_CONTEXT_PASTE_AND_MATCH_STYLE);
   }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   if (chromeos::features::IsClipboardHistoryEnabled()) {
     menu_model_.AddItemWithStringId(
         IDC_CONTENT_CLIPBOARD_HISTORY_MENU,
         IDS_CONTEXT_MENU_SHOW_CLIPBOARD_HISTORY_MENU);
+    menu_model_.SetIsNewFeatureAt(
+        menu_model_.GetIndexOfCommandId(IDC_CONTENT_CLIPBOARD_HISTORY_MENU),
+        chromeos::features::IsClipboardHistoryContextMenuNudgeEnabled());
   }
 #endif
 
   if (!has_misspelled_word) {
     menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_SELECTALL,
                                     IDS_CONTENT_CONTEXT_SELECTALL);
-  }
-
-  if (vivaldi::IsVivaldiRunning()) {
-    menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
-    ::vivaldi::VivaldiAddCopyItems(&menu_model_, source_web_contents_, params_);
-    AppendInsertNoteSubMenu();
-    menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
-
-    ::vivaldi::VivaldiAddEditableItems(&menu_model_, source_web_contents_,
-                                       params_);
   }
 }
 
@@ -2038,7 +2022,6 @@ bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
     case IDC_CONTENT_CONTEXT_LOAD_IMAGE:
     case IDC_CONTENT_CONTEXT_OPENIMAGENEWTAB:
     case IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE:
-    case IDC_CONTENT_CONTEXT_RELOADIMAGE:  // added by Vivaldi
       return params_.src_url.is_valid() &&
              (params_.src_url.scheme() != content::kChromeUIScheme);
 
@@ -2065,8 +2048,17 @@ bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
               WebContextMenuData::kMediaCanToggleControls) != 0;
 
     case IDC_CONTENT_CONTEXT_ROTATECW:
-    case IDC_CONTENT_CONTEXT_ROTATECCW:
-      return (params_.media_flags & WebContextMenuData::kMediaCanRotate) != 0;
+    case IDC_CONTENT_CONTEXT_ROTATECCW: {
+      bool is_pdf_viewer_fullscreen = false;
+#if BUILDFLAG(ENABLE_PDF)
+      // Rotate commands should be disabled when in PDF Viewer's Presentation
+      // mode.
+      is_pdf_viewer_fullscreen =
+          IsPdfPluginURL(GetDocumentURL(params_)) && IsHTML5Fullscreen();
+#endif
+      return !is_pdf_viewer_fullscreen &&
+             (params_.media_flags & WebContextMenuData::kMediaCanRotate) != 0;
+    }
 
     case IDC_CONTENT_CONTEXT_COPYAVLOCATION:
     case IDC_CONTENT_CONTEXT_COPYIMAGELOCATION:
@@ -2171,7 +2163,7 @@ bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
       return true;
 
     case IDC_CONTENT_CLIPBOARD_HISTORY_MENU:
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
       if (chromeos::features::IsClipboardHistoryEnabled())
         return ash::ClipboardHistoryController::Get()->CanShowMenu();
 #else
@@ -2180,13 +2172,6 @@ bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
       return false;
 
     default:
-      {
-        bool enabled = false;
-        if (::vivaldi::IsVivaldiCommandIdEnabled(
-              menu_model_, params_, id, &enabled))
-          return enabled;
-      }
-
       NOTREACHED();
       return false;
   }
@@ -2255,9 +2240,6 @@ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
   switch (id) {
     case IDC_CONTENT_CONTEXT_OPENLINKNEWTAB:
       OpenURLWithExtraHeaders(params_.link_url, GetDocumentURL(params_),
-                              vivaldi::IsVivaldiRunning()
-                                ? vivaldi::VivaldiGetNewTabDispostion(
-                                      source_web_contents_) :
                               WindowOpenDisposition::NEW_BACKGROUND_TAB,
                               ui::PAGE_TRANSITION_LINK, "" /* extra_headers */,
                               true /* started_from_context_menu */);
@@ -2399,13 +2381,6 @@ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
     }
 
     case IDC_RELOAD:
-      // Override default handling in case we reload a web panel
-      // This is a sync call, Unretained is safe
-      if (::vivaldi::VivaldiExecuteCommand(
-        this, params_, source_web_contents_, event_flags, id,
-          base::Bind(&RenderViewContextMenu::OpenURL,
-              base::Unretained(this))))
-        break;
       chrome::Reload(GetBrowser(), WindowOpenDisposition::CURRENT_TAB);
       break;
 
@@ -2518,6 +2493,12 @@ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
       break;
 
     case IDC_CONTENT_CONTEXT_EMOJI: {
+      // The emoji dialog is UI that can interfere with the fullscreen bubble,
+      // so drop fullscreen when it is shown. https://crbug.com/1170584
+      // TODO(avi): Do we need to attach the fullscreen block to the emoji
+      // panel?
+      source_web_contents_->ForSecurityDropFullscreen().RunAndReset();
+
       Browser* browser = GetBrowser();
       if (browser) {
         browser->window()->ShowEmojiPanel();
@@ -2530,7 +2511,7 @@ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
     }
 
     case IDC_CONTENT_CLIPBOARD_HISTORY_MENU: {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
       // Calculate the anchor point in screen coordinates.
       gfx::Point anchor_point_in_screen =
           GetRenderFrameHost()->GetNativeView()->GetBoundsInScreen().origin();
@@ -2546,8 +2527,8 @@ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
         source_type = ui::MENU_SOURCE_KEYBOARD;
 
       ash::ClipboardHistoryController::Get()->ShowMenu(
-          gfx::Rect(anchor_point_in_screen, gfx::Size()),
-          views::MenuAnchorPosition::kTopLeft, source_type);
+          gfx::Rect(anchor_point_in_screen, gfx::Size()), source_type,
+          ash::ClipboardHistoryController::ShowSource::kRenderViewContextMenu);
 #else
       NOTREACHED();
 #endif
@@ -2555,12 +2536,6 @@ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
     }
 
     default:
-      // This is a sync call, Unretained is safe
-      if (::vivaldi::VivaldiExecuteCommand(
-            this, params_, source_web_contents_, event_flags, id,
-            base::Bind(&RenderViewContextMenu::OpenURL,
-                base::Unretained(this))))
-        break;
       NOTREACHED();
       break;
   }
@@ -2624,13 +2599,6 @@ void RenderViewContextMenu::EscapeAmpersands(base::string16* text) {
 // Controller functions --------------------------------------------------------
 
 bool RenderViewContextMenu::IsReloadEnabled() const {
-  if (vivaldi::IsVivaldiRunning()) {
-    extensions::WebViewGuest* web_view_guest =
-        extensions::WebViewGuest::FromWebContents(source_web_contents_);
-    if (web_view_guest && web_view_guest->IsVivaldiWebPanel())
-      return true;
-  }
-
   CoreTabHelper* core_tab_helper =
       CoreTabHelper::FromWebContents(embedder_web_contents_);
   if (!core_tab_helper)
@@ -2685,7 +2653,6 @@ bool RenderViewContextMenu::IsTranslateEnabled() const {
   return ((params_.edit_flags & ContextMenuDataEditFlags::kCanTranslate) !=
           0) &&
          !original_lang.empty() &&  // Did we receive the page language yet?
-         !chrome_translate_client->GetLanguageState().IsPageTranslated() &&
          // There are some application locales which can't be used as a
          // target language for translation. In that case GetTargetLanguage()
          // may return empty.
@@ -2983,6 +2950,7 @@ void RenderViewContextMenu::ExecSaveLinkAs() {
   dl_params->set_referrer_policy(
       content::Referrer::ReferrerPolicyForUrlRequest(referrer.policy));
   dl_params->set_referrer_encoding(params_.frame_charset);
+  dl_params->set_initiator(url::Origin::Create(GetDocumentURL(params_)));
   dl_params->set_suggested_name(params_.suggested_filename);
   dl_params->set_prompt(true);
   dl_params->set_download_source(download::DownloadSource::CONTEXT_MENU);

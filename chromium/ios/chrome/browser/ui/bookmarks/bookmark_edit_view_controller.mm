@@ -34,6 +34,8 @@
 #import "ios/chrome/browser/ui/keyboard/UIKeyCommand+Chrome.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_text_header_footer_item.h"
 #import "ios/chrome/browser/ui/table_view/chrome_table_view_styler.h"
+#import "ios/chrome/browser/ui/table_view/table_view_utils.h"
+#include "ios/chrome/browser/ui/ui_feature_flags.h"
 #include "ios/chrome/browser/ui/util/rtl_geometry.h"
 #include "ios/chrome/browser/ui/util/ui_util.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
@@ -186,26 +188,32 @@ const CGFloat kEstimatedTableSectionFooterHeight = 40;
                          browser:(Browser*)browser {
   DCHECK(bookmark);
   DCHECK(browser);
-  self = [super initWithStyle:UITableViewStylePlain];
+  UITableViewStyle style = base::FeatureList::IsEnabled(kSettingsRefresh)
+                               ? ChromeTableViewStyle()
+                               : UITableViewStylePlain;
+  self = [super initWithStyle:style];
   if (self) {
     DCHECK(!bookmark->is_folder());
-    DCHECK(!browser->GetBrowserState()->IsOffTheRecord());
-    _bookmark = bookmark;
-    _bookmarkModel = ios::BookmarkModelFactory::GetForBrowserState(
-        browser->GetBrowserState());
 
-    _folder = bookmark->parent();
+    // Browser may be OTR, which is why the original browser state is being
+    // explicitly requested.
+    _browser = browser;
+    _browserState = browser->GetBrowserState()->GetOriginalChromeBrowserState();
+
+    _bookmark = bookmark;
+    _bookmarkModel =
+        ios::BookmarkModelFactory::GetForBrowserState(_browserState);
+
+    _folder = _bookmark->parent();
 
     // Set up the bookmark model oberver.
     _modelBridge.reset(
         new bookmarks::BookmarkModelBridge(self, _bookmarkModel));
 
-    _browser = browser;
-    _browserState = browser->GetBrowserState()->GetOriginalChromeBrowserState();
     // TODO(crbug.com/1045047): Use HandlerForProtocol after commands protocol
     // clean up.
     _dispatcher =
-        static_cast<id<BrowserCommands>>(browser->GetCommandDispatcher());
+        static_cast<id<BrowserCommands>>(_browser->GetCommandDispatcher());
   }
   return self;
 }

@@ -23,8 +23,9 @@ import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.signin.IdentityServicesProvider;
-import org.chromium.chrome.browser.signin.SigninHelper;
+import org.chromium.chrome.browser.signin.SigninHelperProvider;
+import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
+import org.chromium.chrome.browser.signin.services.SigninHelper;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.chrome.test.util.browser.signin.MockChangeEventChecker;
@@ -124,7 +125,7 @@ public class SyncTest {
 
             // Starts the rename process. Normally, this is triggered by the broadcast
             // listener as well.
-            SigninHelper.get().validateAccountSettings(true);
+            SigninHelperProvider.get().validateAccountSettings(true);
         });
 
         CriteriaHelper.pollInstrumentationThread(() -> {
@@ -155,7 +156,8 @@ public class SyncTest {
                 mSyncTestRule.setUpAccountAndEnableSyncForTesting());
         String authority = AndroidSyncSettings.getContractAuthority();
 
-        Assert.assertTrue(AndroidSyncSettingsTestUtils.getIsSyncEnabledOnUiThread());
+        Assert.assertTrue(AndroidSyncSettingsTestUtils.getIsChromeSyncEnabledOnUiThread());
+        Assert.assertTrue(AndroidSyncSettingsTestUtils.getDoesMasterSyncAllowSyncOnUiThread());
         Assert.assertTrue(SyncTestUtil.isSyncRequested());
 
         // Disabling Android sync should turn Chrome sync engine off.
@@ -175,7 +177,8 @@ public class SyncTest {
     public void testStopAndStartSyncThroughAndroidMasterSync() {
         mSyncTestRule.setUpAccountAndEnableSyncForTesting();
 
-        Assert.assertTrue(AndroidSyncSettingsTestUtils.getIsSyncEnabledOnUiThread());
+        Assert.assertTrue(AndroidSyncSettingsTestUtils.getIsChromeSyncEnabledOnUiThread());
+        Assert.assertTrue(AndroidSyncSettingsTestUtils.getDoesMasterSyncAllowSyncOnUiThread());
         Assert.assertTrue(SyncTestUtil.isSyncRequested());
 
         // Disabling Android's master sync should turn Chrome sync engine off.
@@ -197,7 +200,8 @@ public class SyncTest {
                 mSyncTestRule.setUpAccountAndEnableSyncForTesting());
         String authority = AndroidSyncSettings.getContractAuthority();
 
-        Assert.assertTrue(AndroidSyncSettingsTestUtils.getIsSyncEnabledOnUiThread());
+        Assert.assertTrue(AndroidSyncSettingsTestUtils.getIsChromeSyncEnabledOnUiThread());
+        Assert.assertTrue(AndroidSyncSettingsTestUtils.getDoesMasterSyncAllowSyncOnUiThread());
         Assert.assertTrue(SyncTestUtil.isSyncRequested());
         Assert.assertTrue(SyncTestUtil.canSyncFeatureStart());
 
@@ -231,7 +235,8 @@ public class SyncTest {
                 mSyncTestRule.setUpAccountAndEnableSyncForTesting());
         String authority = AndroidSyncSettings.getContractAuthority();
 
-        Assert.assertTrue(AndroidSyncSettingsTestUtils.getIsSyncEnabledOnUiThread());
+        Assert.assertTrue(AndroidSyncSettingsTestUtils.getIsChromeSyncEnabledOnUiThread());
+        Assert.assertTrue(AndroidSyncSettingsTestUtils.getDoesMasterSyncAllowSyncOnUiThread());
         Assert.assertTrue(SyncTestUtil.isSyncRequested());
         Assert.assertTrue(SyncTestUtil.canSyncFeatureStart());
 

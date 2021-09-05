@@ -20,10 +20,13 @@ import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
+import org.chromium.chrome.browser.theme.TopUiThemeColorProvider;
 import org.chromium.chrome.browser.toolbar.ControlContainer;
 import org.chromium.chrome.features.start_surface.StartSurface;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
 
+// Vivaldi
+import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelperManager;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
@@ -48,16 +51,21 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
      * @param startSurface An interface to talk to the Grid Tab Switcher. If it's NULL, VTS
      *                     should be used, otherwise GTS should be used.
      * @param tabContentManagerSupplier Supplier of the {@link TabContentManager} instance.
+     * @param layerTitleCacheSupplier Supplier of the {@link LayerTitleCache}.
+     * @param overviewModeBehaviorSupplier Supplier of the {@link OverviewModeBehavior}.
+     * @param layoutStateProviderOneshotSupplier Supplier of the {@link LayoutStateProvider}.
+     * @param topUiThemeColorProvider {@link ThemeColorProvider} for top UI.
      */
     public LayoutManagerChromePhone(LayoutManagerHost host, ViewGroup contentContainer,
             StartSurface startSurface,
             ObservableSupplier<TabContentManager> tabContentManagerSupplier,
             Supplier<LayerTitleCache> layerTitleCacheSupplier,
             OneshotSupplierImpl<OverviewModeBehavior> overviewModeBehaviorSupplier,
-            OneshotSupplierImpl<LayoutStateProvider> layoutStateProviderOneshotSupplier) {
+            OneshotSupplierImpl<LayoutStateProvider> layoutStateProviderOneshotSupplier,
+            Supplier<TopUiThemeColorProvider> topUiThemeColorProvider) {
         super(host, contentContainer, true, startSurface, tabContentManagerSupplier,
                 layerTitleCacheSupplier, overviewModeBehaviorSupplier,
-                layoutStateProviderOneshotSupplier);
+                layoutStateProviderOneshotSupplier, topUiThemeColorProvider);
 
         // Vivaldi
         Context context = mHost.getContext();
@@ -95,6 +103,9 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
         // Set up layout parameters
         mStaticLayout.setLayoutHandlesTabLifecycles(false);
 
+        // Note(david@vivaldi.com): In Vivaldi we don't move the toolbar while swiping. It does
+        // simply look better and is also in line with the bottom toolbar swiping behaviour.
+        if (!ChromeApplication.isVivaldi())
         mToolbarSwipeLayout.setMovesToolbar(true);
 
         // Initialize Layouts

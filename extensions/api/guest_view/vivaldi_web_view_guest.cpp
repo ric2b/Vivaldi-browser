@@ -151,8 +151,6 @@ static std::string ContentSettingsTypeToString(
       return "images";
     case ContentSettingsType::JAVASCRIPT:
       return "javascript";
-    case ContentSettingsType::PLUGINS:
-      return "plugins";
     case ContentSettingsType::POPUPS:
       return "popups";
     case ContentSettingsType::GEOLOCATION:
@@ -169,6 +167,8 @@ static std::string ContentSettingsTypeToString(
       return "midi-sysex";
     case ContentSettingsType::ADS:
       return "ads";
+    case ContentSettingsType::SOUND:
+      return "sound";
     default:
       // fallthrough
       break;

@@ -16,6 +16,7 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/autofill/autofill_uitest_util.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
@@ -173,7 +174,7 @@ class LocalCardMigrationBrowserTest
             fake_server::CreateFakeServerHttpPostProviderFactory(
                 GetFakeServer()->AsWeakPtr()));
     std::string username;
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     // In ChromeOS browser tests, the profile may already by authenticated with
     // stub account |user_manager::kStubUserEmail|.
     CoreAccountInfo info =
@@ -306,7 +307,7 @@ class LocalCardMigrationBrowserTest
     if (set_nickname)
       local_card.SetNickname(base::ASCIIToUTF16("card nickname"));
 
-    AddTestCreditCard(browser(), local_card);
+    AddTestCreditCard(browser()->profile(), local_card);
     return local_card;
   }
 
@@ -318,7 +319,7 @@ class LocalCardMigrationBrowserTest
                          card_number.substr(0, 12));
     server_card.set_record_type(CreditCard::FULL_SERVER_CARD);
     server_card.set_server_id("full_id_" + card_number);
-    AddTestServerCreditCard(browser(), server_card);
+    AddTestServerCreditCard(browser()->profile(), server_card);
     return server_card;
   }
 
@@ -505,7 +506,9 @@ class LocalCardMigrationBrowserTest
     return &test_url_loader_factory_;
   }
 
-  void WaitForCardDeletion() { WaitForPersonalDataChange(browser()); }
+  void WaitForCardDeletion() {
+    WaitForPersonalDataChange(browser()->profile());
+  }
 
   void WaitForAnimationToComplete() {
     if (base::FeatureList::IsEnabled(
@@ -516,10 +519,6 @@ class LocalCardMigrationBrowserTest
               ->toolbar_account_icon_container());
     }
   }
-
-  std::unique_ptr<
-      base::CallbackList<void(content::BrowserContext*)>::Subscription>
-      will_create_browser_context_services_subscription_;
 
   LocalCardMigrationManager* local_card_migration_manager_;
 
@@ -999,7 +998,7 @@ IN_PROC_BROWSER_TEST_F(LocalCardMigrationBrowserTest,
 
 // TODO(crbug.com/932818): Remove the condition once the experiment is enabled
 // on ChromeOS.
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
 // Ensures that the credit card icon will show in status chip.
 IN_PROC_BROWSER_TEST_F(LocalCardMigrationBrowserTestForStatusChip,
                        CreditCardIconShownInStatusChip) {
@@ -1152,7 +1151,7 @@ IN_PROC_BROWSER_TEST_F(LocalCardMigrationBrowserTestForStatusChip,
                    ->IsAnimating());
 }
 
-#endif  // !defined(OS_CHROMEOS)
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
 class LocalCardMigrationBrowserTestForFixedLogging
     : public LocalCardMigrationBrowserTest {

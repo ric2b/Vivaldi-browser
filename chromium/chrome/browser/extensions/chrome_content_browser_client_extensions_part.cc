@@ -16,6 +16,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "base/strings/string_piece.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/component_loader.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -62,7 +63,6 @@
 #include "extensions/browser/view_type_utils.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension_urls.h"
-#include "extensions/common/extensions_client.h"
 #include "extensions/common/manifest_constants.h"
 #include "extensions/common/manifest_handlers/app_isolation_info.h"
 #include "extensions/common/manifest_handlers/background_info.h"
@@ -71,10 +71,10 @@
 #include "extensions/common/switches.h"
 #include "url/origin.h"
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "extensions/browser/api/vpn_provider/vpn_service.h"
 #include "extensions/browser/api/vpn_provider/vpn_service_factory.h"
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 using blink::web_pref::WebPreferences;
 using content::BrowserContext;
@@ -598,7 +598,7 @@ std::vector<url::Origin> ChromeContentBrowserClientExtensionsPart::
 std::unique_ptr<content::VpnServiceProxy>
 ChromeContentBrowserClientExtensionsPart::GetVpnServiceProxy(
     content::BrowserContext* browser_context) {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   chromeos::VpnService* vpn_service =
       chromeos::VpnServiceFactory::GetForBrowserContext(browser_context);
   if (!vpn_service)
@@ -638,14 +638,11 @@ void ChromeContentBrowserClientExtensionsPart::RenderProcessWillLaunch(
   int id = host->GetID();
   Profile* profile = Profile::FromBrowserContext(host->GetBrowserContext());
 
-  host->AddFilter(new ChromeExtensionMessageFilter(id, profile));
+  host->AddFilter(new ChromeExtensionMessageFilter(profile));
   host->AddFilter(new ExtensionMessageFilter(id, profile));
   host->AddFilter(new ExtensionsGuestViewMessageFilter(id, profile));
-  if (extensions::ExtensionsClient::Get()
-          ->ExtensionAPIEnabledInExtensionServiceWorkers()) {
-    host->AddFilter(new ExtensionServiceWorkerMessageFilter(
-        id, profile, host->GetStoragePartition()->GetServiceWorkerContext()));
-  }
+  host->AddFilter(new ExtensionServiceWorkerMessageFilter(
+      id, profile, host->GetStoragePartition()->GetServiceWorkerContext()));
 }
 
 void ChromeContentBrowserClientExtensionsPart::SiteInstanceGotProcess(
@@ -728,8 +725,8 @@ void ChromeContentBrowserClientExtensionsPart::
 
 void ChromeContentBrowserClientExtensionsPart::GetURLRequestAutoMountHandlers(
     std::vector<storage::URLRequestAutoMountHandler>* handlers) {
-  handlers->push_back(
-      base::Bind(MediaFileSystemBackend::AttemptAutoMountForURLRequest));
+  handlers->push_back(base::BindRepeating(
+      MediaFileSystemBackend::AttemptAutoMountForURLRequest));
 }
 
 void ChromeContentBrowserClientExtensionsPart::GetAdditionalFileSystemBackends(

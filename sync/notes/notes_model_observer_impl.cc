@@ -77,16 +77,13 @@ void NotesModelObserverImpl::NotesNodeAdded(vivaldi::NotesModel* model,
                                             size_t index) {
   const vivaldi::NoteNode* node = parent->children()[index].get();
 
-  // Similar to the directory implementation here:
-  // https://cs.chromium.org/chromium/src/components/sync/syncable/mutable_entry.cc?l=237&gsn=CreateEntryKernel
   // Assign a temp server id for the entity. Will be overriden by the actual
   // server id upon receiving commit response.
-  DCHECK(base::IsValidGUIDOutputString(node->guid()));
-
   // Local note creations should have used a random GUID so it's safe to
   // use it as originator client item ID, without the risk for collision.
   const sync_pb::UniquePosition unique_position =
-      ComputePosition(*parent, index, node->guid()).ToProto();
+      ComputePosition(*parent, index, node->guid().AsLowercaseString())
+          .ToProto();
 
   sync_pb::EntitySpecifics specifics =
       CreateSpecificsFromNoteNode(node, model, /*include_guid=*/true);
@@ -102,8 +99,9 @@ void NotesModelObserverImpl::NotesNodeAdded(vivaldi::NotesModel* model,
     note_tracker_->Update(entity, entity->metadata()->server_version(),
                           creation_time, unique_position, specifics);
   } else {
-    entity = note_tracker_->Add(node, node->guid(), syncer::kUncommittedVersion,
-                                creation_time, unique_position, specifics);
+    entity = note_tracker_->Add(node, node->guid().AsLowercaseString(),
+                                syncer::kUncommittedVersion, creation_time,
+                                unique_position, specifics);
   }
 
   // Mark the entity that it needs to be committed.

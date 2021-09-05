@@ -24,6 +24,7 @@
 #include "content/public/browser/site_instance.h"
 #include "content/public/browser/visibility.h"
 #include "content/public/common/javascript_dialog_type.h"
+#include "media/mojo/mojom/media_player.mojom.h"
 #include "media/mojo/services/media_metrics_provider.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -105,9 +106,10 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   // Callback used with HandleClipboardPaste() method.  If the clipboard paste
   // is allowed to proceed, the callback is called with true.  Otherwise the
   // callback is called with false.
-  using ClipboardPasteAllowed = RenderFrameHostImpl::ClipboardPasteAllowed;
-  using IsClipboardPasteAllowedCallback =
-      RenderFrameHostImpl::IsClipboardPasteAllowedCallback;
+  using ClipboardPasteContentAllowed =
+      RenderFrameHostImpl::ClipboardPasteContentAllowed;
+  using IsClipboardPasteContentAllowedCallback =
+      RenderFrameHostImpl::IsClipboardPasteContentAllowedCallback;
 
   using JavaScriptDialogCallback =
       content::JavaScriptDialogManager::DialogClosedCallback;
@@ -148,13 +150,16 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   // description of the semantics.
   virtual const GURL& GetMainFrameLastCommittedURL();
 
-  // A message was added to to the console.
+  // A message was added to to the console. |source_id| is a URL.
+  // |untrusted_stack_trace| is not present for most messages; only when
+  // requested in advance and only for exceptions.
   virtual bool DidAddMessageToConsole(
       RenderFrameHost* source_frame,
       blink::mojom::ConsoleMessageLevel log_level,
       const base::string16& message,
       int32_t line_no,
-      const base::string16& source_id);
+      const base::string16& source_id,
+      const base::Optional<base::string16>& untrusted_stack_trace);
 
   // Called when a RenderFrame for |render_frame_host| is created in the
   // renderer process. Use |RenderFrameDeleted| to listen for when this
@@ -238,6 +243,12 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   // not a WebContents, returns null.
   virtual WebContents* GetAsWebContents();
 
+  // Creates a MediaPlayerHost object associated to |frame_host| via its
+  // associated MediaWebContentsObserver, and binds |receiver| to it.
+  virtual void CreateMediaPlayerHostForRenderFrameHost(
+      RenderFrameHost* frame_host,
+      mojo::PendingReceiver<media::mojom::MediaPlayerHost> receiver) {}
+
   // The render frame has requested access to media devices listed in
   // |request|, and the client should grant or deny that permission by
   // calling |callback|.
@@ -296,8 +307,10 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   virtual void ExitFullscreenMode(bool will_cause_resize) {}
 
   // Notification that this frame has changed fullscreen state.
-  virtual void FullscreenStateChanged(RenderFrameHost* rfh,
-                                      bool is_fullscreen) {}
+  virtual void FullscreenStateChanged(
+      RenderFrameHost* rfh,
+      bool is_fullscreen,
+      blink::mojom::FullscreenOptionsPtr options) {}
 
 #if defined(OS_ANDROID)
   // Updates information to determine whether a user gesture should carryover to
@@ -352,7 +365,7 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   // Creates a WebUI object for a frame navigating to |url|. If no WebUI
   // applies, returns null.
   virtual std::unique_ptr<WebUIImpl> CreateWebUIForRenderFrameHost(
-      RenderFrameHost* frame_host,
+      RenderFrameHostImpl* frame_host,
       const GURL& url);
 
   // Called by |frame| to notify that it has received an update on focused
@@ -423,6 +436,11 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   virtual bool ShouldAllowRunningInsecureContent(bool allowed_per_prefs,
                                                  const url::Origin& origin,
                                                  const GURL& resource_url);
+
+  // Notifies that content with certificate errors will be committed in a
+  // subframe.
+  virtual void RecordActiveContentWithCertificateErrors(
+      RenderFrameHostImpl* render_frame_host) {}
 
   // Opens a new view-source tab for the last committed document in |frame|.
   virtual void ViewSource(RenderFrameHostImpl* frame) {}
@@ -505,7 +523,7 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
       FrameTreeNode* frame_tree_node);
 
   // Determine if the frame is of a low priority.
-  virtual bool IsFrameLowPriority(const RenderFrameHost* render_frame_host);
+  virtual bool IsFrameLowPriority(RenderFrameHost* render_frame_host);
 
   // Registers a new URL handler for the given protocol.
   virtual void RegisterProtocolHandler(RenderFrameHostImpl* host,
@@ -547,11 +565,11 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   //
   // The callback is called, possibly asynchronously, with a status indicating
   // whether the operation is allowed or not.
-  virtual void IsClipboardPasteAllowed(
+  virtual void IsClipboardPasteContentAllowed(
       const GURL& url,
       const ui::ClipboardFormatType& data_type,
       const std::string& data,
-      IsClipboardPasteAllowedCallback callback);
+      IsClipboardPasteContentAllowedCallback callback);
 
   // Notified when the main frame adjusts the page scale.
   virtual void OnPageScaleFactorChanged(RenderFrameHostImpl* source,
@@ -633,6 +651,30 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
 
   // The page is trying to move the main frame's representation in the client.
   virtual void SetWindowRect(const gfx::Rect& new_bounds) {}
+
+  // Returns the list of top-level RenderFrameHosts hosting active documents
+  // that belong to the same browsing context group as |render_frame_host|.
+  virtual std::vector<RenderFrameHostImpl*>
+  GetActiveTopLevelDocumentsInBrowsingContextGroup(
+      RenderFrameHostImpl* render_frame_host);
+
+#if BUILDFLAG(ENABLE_PLUGINS)
+  virtual void OnPepperInstanceCreated(RenderFrameHostImpl* source,
+                                       int32_t pp_instance) {}
+  virtual void OnPepperInstanceDeleted(RenderFrameHostImpl* source,
+                                       int32_t pp_instance) {}
+  virtual void OnPepperStartsPlayback(RenderFrameHostImpl* source,
+                                      int32_t pp_instance) {}
+  virtual void OnPepperStopsPlayback(RenderFrameHostImpl* source,
+                                     int32_t pp_instance) {}
+  virtual void OnPepperPluginCrashed(RenderFrameHostImpl* source,
+                                     const base::FilePath& plugin_path,
+                                     base::ProcessId plugin_pid) {}
+  virtual void OnPepperPluginHung(RenderFrameHostImpl* source,
+                                  int plugin_child_id,
+                                  const base::FilePath& path,
+                                  bool is_hung) {}
+#endif
 
  protected:
   virtual ~RenderFrameHostDelegate() = default;

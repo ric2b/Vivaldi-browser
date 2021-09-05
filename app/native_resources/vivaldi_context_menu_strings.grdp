@@ -19,6 +19,9 @@
     <message name="IDS_VIV_OPEN_IMAGE_NEW_PRIVATE_WINDOW" desc="Where to open an image">
         Open Image in Private Window
     </message>
+    <message name="IDS_VIV_OPEN_IMAGE_PROFILE" desc="Where to open an image">
+        Open Image as <ph name="USER">$1<ex>user@example.com</ex></ph>
+    </message>
     <message name="IDS_VIV_OPEN_LINK_CURRENT_TAB" desc="Where to open a link">
         Open Link
     </message>
@@ -33,6 +36,9 @@
     </message>
     <message name="IDS_VIV_OPEN_LINK_NEW_PRIVATE_WINDOW" desc="Where to open a link">
         Open Link in Private Window
+    </message>
+    <message name="IDS_VIV_OPEN_LINK_PROFILE" desc="Where to open a link">
+        Open Link as <ph name="USER">$1<ex>user@example.com</ex></ph>
     </message>
     <message name="IDS_VIV_COPY_TO_NOTE" desc="Save selected text as a new note">
         Copy to Note

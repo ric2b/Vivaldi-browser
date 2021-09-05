@@ -65,7 +65,7 @@ bool IsTimezoneAutomaticDetectionUserEditable() {
 
 }  // namespace
 
-DateTimeHandler::DateTimeHandler() : scoped_observer_(this) {}
+DateTimeHandler::DateTimeHandler() {}
 
 DateTimeHandler::~DateTimeHandler() = default;
 
@@ -89,7 +89,7 @@ void DateTimeHandler::RegisterMessages() {
 
 void DateTimeHandler::OnJavascriptAllowed() {
   SystemClockClient* system_clock_client = SystemClockClient::Get();
-  scoped_observer_.Add(system_clock_client);
+  scoped_observation_.Observe(system_clock_client);
   SystemClockCanSetTimeChanged(system_clock_client->CanSetTime());
 
   // The system time zone policy disables auto-detection entirely. (However,
@@ -97,20 +97,22 @@ void DateTimeHandler::OnJavascriptAllowed() {
   system_timezone_policy_subscription_ =
       CrosSettings::Get()->AddSettingsObserver(
           kSystemTimezonePolicy,
-          base::Bind(&DateTimeHandler::NotifyTimezoneAutomaticDetectionPolicy,
-                     weak_ptr_factory_.GetWeakPtr()));
+          base::BindRepeating(
+              &DateTimeHandler::NotifyTimezoneAutomaticDetectionPolicy,
+              weak_ptr_factory_.GetWeakPtr()));
 
   // The auto-detection policy can force auto-detection on or off.
   local_state_pref_change_registrar_.Init(g_browser_process->local_state());
   local_state_pref_change_registrar_.Add(
       prefs::kSystemTimezoneAutomaticDetectionPolicy,
-      base::Bind(&DateTimeHandler::NotifyTimezoneAutomaticDetectionPolicy,
-                 base::Unretained(this)));
+      base::BindRepeating(
+          &DateTimeHandler::NotifyTimezoneAutomaticDetectionPolicy,
+          base::Unretained(this)));
 }
 
 void DateTimeHandler::OnJavascriptDisallowed() {
-  scoped_observer_.RemoveAll();
-  system_timezone_policy_subscription_.reset();
+  scoped_observation_.Reset();
+  system_timezone_policy_subscription_ = {};
   local_state_pref_change_registrar_.RemoveAll();
 }
 

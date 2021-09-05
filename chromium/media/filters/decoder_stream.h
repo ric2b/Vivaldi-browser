@@ -14,7 +14,7 @@
 #include "base/containers/circular_deque.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
-#include "base/util/type_safety/pass_key.h"
+#include "base/types/pass_key.h"
 #include "media/base/audio_decoder.h"
 #include "media/base/audio_timestamp_helper.h"
 #include "media/base/demuxer_stream.h"
@@ -131,9 +131,10 @@ class MEDIA_EXPORT DecoderStream {
     config_change_observer_cb_ = config_change_observer;
   }
 
-  // Allows tests to keep track the currently selected decoder.
+  // Allow interested folks to keep track the currently selected decoder.  The
+  // provided decoder is valid only during the scope of the callback.
   using DecoderChangeObserverCB = base::RepeatingCallback<void(Decoder*)>;
-  void set_decoder_change_observer_for_testing(
+  void set_decoder_change_observer(
       DecoderChangeObserverCB decoder_change_observer_cb) {
     decoder_change_observer_cb_ = std::move(decoder_change_observer_cb);
   }
@@ -149,7 +150,7 @@ class MEDIA_EXPORT DecoderStream {
   bool is_demuxer_read_pending() const { return pending_demuxer_read_; }
 
   DecoderSelector<StreamType>& GetDecoderSelectorForTesting(
-      util::PassKey<class VideoDecoderStreamTest>) {
+      base::PassKey<class VideoDecoderStreamTest>) {
     return decoder_selector_;
   }
 

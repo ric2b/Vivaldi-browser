@@ -29,6 +29,7 @@ enum class StatusCode : StatusCodeType {
 
   // General errors: 0x00
   kAborted = 0x00000001,
+  kInvalidArgument = 0x00000002,
 
   // Decoder Errors: 0x01
   kDecoderInitializeNeverCompleted = 0x00000101,
@@ -77,6 +78,8 @@ enum class StatusCode : StatusCodeType {
   kCreateVideoProcessorEnumeratorFailed = 0x00000312,
   kCreateVideoProcessorFailed = 0x00000313,
   kQueryVideoContextFailed = 0x00000314,
+  kAcceleratorFlushFailed = 0x00000315,
+  kTryAgainNotSupported = 0x00000316,
 
   // MojoDecoder Errors: 0x04
   kMojoDecoderNoWrappedDecoder = 0x00000401,
@@ -122,9 +125,42 @@ enum class StatusCode : StatusCodeType {
   kVaapiBadImageSize = 0x0000070C,
   kVaapiNoTexture = 0x0000070D,
 
-  // Format errors: 0x08
+  // Format Errors: 0x08
   kH264ParsingError = 0x00000801,
   kH264BufferTooSmall = 0x00000802,
+
+  // Pipeline Errors: 0x09
+  // Deprecated: kPipelineErrorUrlNotFound = 0x00000901,
+  kPipelineErrorNetwork = 0x00000902,
+  kPipelineErrorDecode = 0x00000903,
+  // Deprecated: kPipelineErrorDecrypt = 0x00000904,
+  kPipelineErrorAbort = 0x00000905,
+  kPipelineErrorInitializationFailed = 0x00000906,
+  // Unused: 0x00000907
+  kPipelineErrorCouldNotRender = 0x00000908,
+  kPipelineErrorRead = 0x00000909,
+  // Deprecated: kPipelineErrorOperationPending = 0x0000090a,
+  kPipelineErrorInvalidState = 0x0000090b,
+  // Demuxer related errors.
+  kPipelineErrorDemuxerErrorCouldNotOpen = 0x0000090c,
+  kPipelineErrorDemuxerErrorCouldNotParse = 0x0000090d,
+  kPipelineErrorDemuxerErrorNoSupportedStreams = 0x0000090e,
+  // Decoder related errors.
+  kPipelineErrorDecoderErrorNotSupported = 0x0000090f,
+  // ChunkDemuxer related errors.
+  kPipelineErrorChuckDemuxerErrorAppendFailed = 0x00000910,
+  kPipelineErrorChunkDemuxerErrorEosStatusDecodeError = 0x00000911,
+  kPipelineErrorChunkDemuxerErrorEosStatusNetworkError = 0x00000912,
+  // Audio rendering errors.
+  kPipelineErrorAudioRendererError = 0x00000913,
+  // Deprecated: kPipelineErrorAudioRendererErrorSpliceFailed = 0x00000914,
+  kPipelineErrorExternalRendererFailed = 0x00000915,
+  // Android only. Used as a signal to fallback MediaPlayerRenderer, and thus
+  // not exactly an 'error' per say.
+  kPipelineErrorDemuxerErrorDetectedHLS = 0x00000916,
+
+  // Frame operation errors: 0x0A
+  kUnsupportedFrameFormatError = 0x00000A01,
 
   // DecodeStatus temporary codes.  These names were chosen to match the
   // DecodeStatus enum, so that un-converted code can DecodeStatus::OK/etc.

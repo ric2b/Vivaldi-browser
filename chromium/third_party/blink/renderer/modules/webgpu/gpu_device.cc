@@ -7,6 +7,7 @@
 #include "gpu/command_buffer/client/webgpu_interface.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_compute_pipeline_descriptor.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_device_descriptor.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_extension_name.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_uncaptured_error_event_init.h"
@@ -21,6 +22,7 @@
 #include "third_party/blink/renderer/modules/webgpu/gpu_command_encoder.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_compute_pipeline.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_device_lost_info.h"
+#include "third_party/blink/renderer/modules/webgpu/gpu_out_of_memory_error.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_pipeline_layout.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_query_set.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_queue.h"
@@ -30,6 +32,7 @@
 #include "third_party/blink/renderer/modules/webgpu/gpu_shader_module.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_texture.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_uncaptured_error_event.h"
+#include "third_party/blink/renderer/modules/webgpu/gpu_validation_error.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 
 namespace blink {
@@ -79,12 +82,6 @@ GPUDevice::GPUDevice(ExecutionContext* execution_context,
   GetProcs().deviceSetDeviceLostCallback(GetHandle(),
                                          lost_callback_->UnboundCallback(),
                                          lost_callback_->AsUserdata());
-
-  if (extension_name_list_.Contains("textureCompressionBC")) {
-    AddConsoleWarning(
-        "The extension name 'textureCompressionBC' is deprecated: use "
-        "'texture-compression-bc' instead");
-  }
 }
 
 GPUDevice::~GPUDevice() {
@@ -144,11 +141,71 @@ void GPUDevice::OnUncapturedError(WGPUErrorType errorType,
 }
 
 void GPUDevice::OnDeviceLostError(const char* message) {
+  // This function is called by a callback created by BindDawnCallback.
+  // Release the unique_ptr holding it since BindDawnCallback is self-deleting.
+  // This is stored as a unique_ptr because the lost callback may never be
+  // called.
+  lost_callback_.release();
+
   AddConsoleWarning(message);
 
   if (lost_property_->GetState() == LostProperty::kPending) {
     auto* device_lost_info = MakeGarbageCollected<GPUDeviceLostInfo>(message);
     lost_property_->Resolve(device_lost_info);
+  }
+}
+
+void GPUDevice::OnCreateReadyRenderPipelineCallback(
+    ScriptPromiseResolver* resolver,
+    WGPUCreateReadyPipelineStatus status,
+    WGPURenderPipeline render_pipeline,
+    const char* message) {
+  switch (status) {
+    case WGPUCreateReadyPipelineStatus_Success: {
+      resolver->Resolve(
+          MakeGarbageCollected<GPURenderPipeline>(this, render_pipeline));
+      break;
+    }
+
+    case WGPUCreateReadyPipelineStatus_Error:
+    case WGPUCreateReadyPipelineStatus_DeviceLost:
+    case WGPUCreateReadyPipelineStatus_DeviceDestroyed:
+    case WGPUCreateReadyPipelineStatus_Unknown: {
+      resolver->Reject(MakeGarbageCollected<DOMException>(
+          DOMExceptionCode::kOperationError, message));
+      break;
+    }
+
+    default: {
+      NOTREACHED();
+    }
+  }
+}
+
+void GPUDevice::OnCreateReadyComputePipelineCallback(
+    ScriptPromiseResolver* resolver,
+    WGPUCreateReadyPipelineStatus status,
+    WGPUComputePipeline compute_pipeline,
+    const char* message) {
+  switch (status) {
+    case WGPUCreateReadyPipelineStatus_Success: {
+      resolver->Resolve(
+          MakeGarbageCollected<GPUComputePipeline>(this, compute_pipeline));
+      break;
+    }
+
+    case WGPUCreateReadyPipelineStatus_Error:
+    case WGPUCreateReadyPipelineStatus_DeviceLost:
+    case WGPUCreateReadyPipelineStatus_DeviceDestroyed:
+    case WGPUCreateReadyPipelineStatus_Unknown: {
+      resolver->Reject(MakeGarbageCollected<DOMException>(
+          DOMExceptionCode::kOperationError, message));
+      break;
+    }
+
+    default: {
+      NOTREACHED();
+    }
   }
 }
 
@@ -213,6 +270,59 @@ GPURenderPipeline* GPUDevice::createRenderPipeline(
 GPUComputePipeline* GPUDevice::createComputePipeline(
     const GPUComputePipelineDescriptor* descriptor) {
   return GPUComputePipeline::Create(this, descriptor);
+}
+
+ScriptPromise GPUDevice::createReadyRenderPipeline(
+    ScriptState* script_state,
+    const GPURenderPipelineDescriptor* descriptor) {
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
+  ScriptPromise promise = resolver->Promise();
+
+  OwnedRenderPipelineDescriptor dawn_desc_info;
+  v8::Isolate* isolate = script_state->GetIsolate();
+  ExceptionState exception_state(isolate, ExceptionState::kConstructionContext,
+                                 "GPUVertexStateDescriptor");
+  ConvertToDawnType(isolate, descriptor, &dawn_desc_info, exception_state);
+  if (exception_state.HadException()) {
+    resolver->Reject(MakeGarbageCollected<DOMException>(
+        DOMExceptionCode::kOperationError,
+        "Error in parsing GPURenderPipelineDescriptor"));
+  } else {
+    auto* callback =
+        BindDawnCallback(&GPUDevice::OnCreateReadyRenderPipelineCallback,
+                         WrapPersistent(this), WrapPersistent(resolver));
+    GetProcs().deviceCreateReadyRenderPipeline(
+        GetHandle(), &dawn_desc_info.dawn_desc, callback->UnboundCallback(),
+        callback->AsUserdata());
+  }
+
+  // WebGPU guarantees that promises are resolved in finite time so we need to
+  // ensure commands are flushed.
+  EnsureFlush();
+  return promise;
+}
+
+ScriptPromise GPUDevice::createReadyComputePipeline(
+    ScriptState* script_state,
+    const GPUComputePipelineDescriptor* descriptor) {
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
+  ScriptPromise promise = resolver->Promise();
+
+  std::string label;
+  OwnedProgrammableStageDescriptor computeStageDescriptor;
+  WGPUComputePipelineDescriptor dawn_desc =
+      AsDawnType(descriptor, &label, &computeStageDescriptor);
+
+  auto* callback =
+      BindDawnCallback(&GPUDevice::OnCreateReadyComputePipelineCallback,
+                       WrapPersistent(this), WrapPersistent(resolver));
+  GetProcs().deviceCreateReadyComputePipeline(GetHandle(), &dawn_desc,
+                                              callback->UnboundCallback(),
+                                              callback->AsUserdata());
+  // WebGPU guarantees that promises are resolved in finite time so we need to
+  // ensure commands are flushed.
+  EnsureFlush();
+  return promise;
 }
 
 GPUCommandEncoder* GPUDevice::createCommandEncoder(

@@ -19,6 +19,7 @@
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "components/apdu/apdu_response.h"
 #include "components/cbor/reader.h"
 #include "components/cbor/writer.h"
 #include "crypto/ec_private_key.h"
@@ -279,18 +280,28 @@ CtapDeviceResponseCode ConfirmPresentedPIN(
 
 // SetPIN sets the current PIN based on the ciphertext in |encrypted_pin|, given
 // that |shared_key| is the result of the ECDH key agreement.
-CtapDeviceResponseCode SetPIN(PINUVAuthProtocol protocol,
-                              VirtualCtap2Device::State* state,
-                              const std::vector<uint8_t>& shared_key,
-                              const std::vector<uint8_t>& encrypted_pin,
-                              const std::vector<uint8_t>& pin_auth) {
+CtapDeviceResponseCode SetPIN(
+    PINUVAuthProtocol protocol,
+    VirtualCtap2Device::State* state,
+    const std::vector<uint8_t>& shared_key,
+    const std::vector<uint8_t>& encrypted_pin,
+    const std::vector<uint8_t>& pin_auth,
+    base::Optional<base::span<const uint8_t>> current_encrypted_pin_hash) {
   const pin::Protocol& pin_protocol = pin::ProtocolVersion(protocol);
-  if (!pin_protocol.Verify(shared_key, encrypted_pin, pin_auth)) {
+  std::vector<uint8_t> pin_auth_bytes;
+  pin_auth_bytes.insert(pin_auth_bytes.begin(), encrypted_pin.begin(),
+                        encrypted_pin.end());
+  if (current_encrypted_pin_hash) {
+    pin_auth_bytes.insert(pin_auth_bytes.end(),
+                          current_encrypted_pin_hash->begin(),
+                          current_encrypted_pin_hash->end());
+  }
+  if (!pin_protocol.Verify(shared_key, pin_auth_bytes, pin_auth)) {
     return CtapDeviceResponseCode::kCtap2ErrPinAuthInvalid;
   }
 
   if (encrypted_pin.size() < 64) {
-    return CtapDeviceResponseCode::kCtap2ErrPinPolicyViolation;
+    return CtapDeviceResponseCode::kCtap2ErrPinAuthInvalid;
   }
 
   std::vector<uint8_t> plaintext_pin =
@@ -303,7 +314,7 @@ CtapDeviceResponseCode SetPIN(PINUVAuthProtocol protocol,
   }
 
   plaintext_pin.resize(plaintext_pin.size() - padding_len);
-  if (padding_len == 0 || plaintext_pin.size() < 4 ||
+  if (padding_len == 0 || plaintext_pin.size() < state->min_pin_length ||
       plaintext_pin.size() > 63) {
     return CtapDeviceResponseCode::kCtap2ErrPinPolicyViolation;
   }
@@ -312,6 +323,7 @@ CtapDeviceResponseCode SetPIN(PINUVAuthProtocol protocol,
                            plaintext_pin.size());
   state->pin_retries = kMaxPinRetries;
   state->uv_retries = kMaxUvRetries;
+  state->force_pin_change = false;
 
   return CtapDeviceResponseCode::kSuccess;
 }
@@ -472,8 +484,6 @@ VirtualCtap2Device::VirtualCtap2Device(scoped_refptr<State> state,
   Init({ProtocolVersion::kCtap2});
   std::vector<ProtocolVersion> versions = {ProtocolVersion::kCtap2};
   if (config.u2f_support) {
-    // Devices with alwaysUv may disable u2f. Let's be strict here.
-    DCHECK(!config.always_uv);
     versions.emplace_back(ProtocolVersion::kU2f);
     u2f_device_ = std::make_unique<VirtualU2fDevice>(NewReferenceToState());
   }
@@ -506,7 +516,7 @@ VirtualCtap2Device::VirtualCtap2Device(scoped_refptr<State> state,
 
   options.supports_pin_uv_auth_token = config.pin_uv_auth_token_support;
   DCHECK(!options.supports_pin_uv_auth_token ||
-         base::Contains(config.ctap2_versions, Ctap2Version::kCtap2_1));
+         SupportsAtLeast(Ctap2Version::kCtap2_1));
 
   if (config.resident_key_support) {
     options_updated = true;
@@ -565,13 +575,15 @@ VirtualCtap2Device::VirtualCtap2Device(scoped_refptr<State> state,
 
   if (config.large_blob_support) {
     DCHECK(config.resident_key_support);
-    DCHECK(base::Contains(config.ctap2_versions, Ctap2Version::kCtap2_1));
+    DCHECK(SupportsAtLeast(Ctap2Version::kCtap2_1));
     DCHECK((!config.pin_support && !config.internal_uv_support) ||
            config.pin_uv_auth_token_support)
         << "PinUvAuthToken support is required to write large blobs for "
            "uv-enabled authenticators";
     options_updated = true;
     options.supports_large_blobs = true;
+    device_info_->max_serialized_large_blob_array =
+        config.available_large_blob_storage;
   }
 
   if (config.always_uv) {
@@ -625,10 +637,16 @@ VirtualCtap2Device::VirtualCtap2Device(scoped_refptr<State> state,
         base::flat_set<PINUVAuthProtocol>{config.pin_protocol};
   }
 
-  if (config.resident_key_support &&
-      base::Contains(config.ctap2_versions, Ctap2Version::kCtap2_1)) {
+  if (config.resident_key_support && SupportsAtLeast(Ctap2Version::kCtap2_1)) {
     device_info_->remaining_discoverable_credentials =
         remaining_resident_credentials();
+  }
+
+  if (config.min_pin_length_support) {
+    DCHECK(config.pin_support);
+    DCHECK(config.pin_uv_auth_token_support);
+    device_info_->min_pin_length = mutable_state()->min_pin_length;
+    device_info_->force_pin_change = mutable_state()->force_pin_change;
   }
 }
 
@@ -638,10 +656,23 @@ void VirtualCtap2Device::SetPin(std::string pin) {
   DCHECK_NE(
       device_info_->options.client_pin_availability,
       AuthenticatorSupportedOptions::ClientPinAvailability::kNotSupported);
+  DCHECK_GE(pin.size(), mutable_state()->min_pin_length);
   mutable_state()->pin = std::move(pin);
   mutable_state()->pin_retries = device::kMaxPinRetries;
   device_info_->options.client_pin_availability =
       AuthenticatorSupportedOptions::ClientPinAvailability::kSupportedAndPinSet;
+}
+
+void VirtualCtap2Device::SetForcePinChange(bool force_pin_change) {
+  DCHECK(config_.min_pin_length_support);
+  mutable_state()->force_pin_change = force_pin_change;
+  device_info_->force_pin_change = force_pin_change;
+}
+
+void VirtualCtap2Device::SetMinPinLength(uint32_t min_pin_length) {
+  DCHECK(config_.min_pin_length_support);
+  mutable_state()->min_pin_length = min_pin_length;
+  device_info_->min_pin_length = min_pin_length;
 }
 
 // As all operations for VirtualCtap2Device are synchronous and we do not wait
@@ -660,15 +691,36 @@ FidoDevice::CancelToken VirtualCtap2Device::DeviceTransact(
   // The CTAP2 commands start at one, so a "command" of zero indicates that this
   // is a U2F message.
   if (cmd_type == 0 && config_.u2f_support) {
+    if (config_.always_uv && !mutable_state()->fingerprints_enrolled) {
+      // The U2F_REGISTER and U2F_AUTHENTICATE commands MUST immediately fail
+      // and return SW_COMMAND_NOT_ALLOWED if the alwaysUv option is true and
+      // the device is not protected by a built-in user verification method.
+      // Have the authenticator will just fail all u2f requests for simplicity.
+      NOTREACHED();
+      std::move(cb).Run(
+          apdu::ApduResponse({},
+                             apdu::ApduResponse::Status::SW_COMMAND_NOT_ALLOWED)
+              .GetEncodedResponse());
+      return 0;
+    }
     u2f_device_->DeviceTransact(std::move(command), std::move(cb));
     return 0;
   }
 
+  const CtapRequestCommand ctap_command =
+      static_cast<CtapRequestCommand>(cmd_type);
+  if (config_.override_response_map.contains(ctap_command)) {
+    ReturnCtap2Response(std::move(cb),
+                        config_.override_response_map.at(ctap_command), {});
+    return 0;
+  }
+
   const auto request_bytes = base::make_span(command).subspan(1);
-  CtapDeviceResponseCode response_code = CtapDeviceResponseCode::kCtap2ErrOther;
+  CtapDeviceResponseCode response_code =
+      CtapDeviceResponseCode::kCtap1ErrInvalidCommand;
   std::vector<uint8_t> response_data;
 
-  switch (static_cast<CtapRequestCommand>(cmd_type)) {
+  switch (ctap_command) {
     case CtapRequestCommand::kAuthenticatorGetInfo:
       if (!request_bytes.empty()) {
         ReturnCtap2Response(std::move(cb),
@@ -715,6 +767,14 @@ FidoDevice::CancelToken VirtualCtap2Device::DeviceTransact(
     case CtapRequestCommand::kAuthenticatorBioEnrollment:
     case CtapRequestCommand::kAuthenticatorBioEnrollmentPreview:
       response_code = OnBioEnrollment(request_bytes, &response_data);
+      break;
+    case CtapRequestCommand::kAuthenticatorSelection:
+      DCHECK(SupportsAtLeast(Ctap2Version::kCtap2_1));
+      if (!SimulatePress()) {
+        // Simulate timeout due to unresponded User Presence check.
+        return 0;
+      }
+      response_code = CtapDeviceResponseCode::kSuccess;
       break;
     case CtapRequestCommand::kAuthenticatorLargeBlobs:
       response_code = OnLargeBlobs(request_bytes, &response_data);
@@ -1017,8 +1077,11 @@ base::Optional<CtapDeviceResponseCode> VirtualCtap2Device::OnMakeCredential(
     return CtapDeviceResponseCode::kCtap2ErrUnsupportedOption;
   }
 
-  // Step 10.
-  if (!user_verified && !SimulatePress()) {
+  // Step 10. Simulate a press unless the user has been verified by internal
+  // user verification.
+  if ((!user_verified || request.user_verification ==
+                             UserVerificationRequirement::kDiscouraged) &&
+      !SimulatePress()) {
     return base::nullopt;
   }
 
@@ -1320,8 +1383,12 @@ base::Optional<CtapDeviceResponseCode> VirtualCtap2Device::OnGetAssertion(
   }
 
   // Step 7.
-  if (request.user_presence_required && !user_verified && !SimulatePress())
+  if (request.user_presence_required &&
+      (!user_verified || request.user_verification ==
+                             UserVerificationRequirement::kDiscouraged) &&
+      !SimulatePress()) {
     return base::nullopt;
+  }
 
   // Step 8.
   if (found_registrations.empty()) {
@@ -1668,7 +1735,7 @@ base::Optional<CtapDeviceResponseCode> VirtualCtap2Device::OnPINCommand(
 
       CtapDeviceResponseCode err =
           SetPIN(*pin_protocol, mutable_state(), shared_key, *encrypted_pin,
-                 *pin_auth);
+                 *pin_auth, /*current_encrypted_pin_hash=*/base::nullopt);
       if (err != CtapDeviceResponseCode::kSuccess) {
         return err;
       }
@@ -1713,7 +1780,7 @@ base::Optional<CtapDeviceResponseCode> VirtualCtap2Device::OnPINCommand(
       }
 
       err = SetPIN(*pin_protocol, mutable_state(), shared_key,
-                   *encrypted_new_pin, *pin_auth);
+                   *encrypted_new_pin, *pin_auth, encrypted_pin_hash);
       if (err != CtapDeviceResponseCode::kSuccess) {
         return err;
       }
@@ -1782,6 +1849,13 @@ base::Optional<CtapDeviceResponseCode> VirtualCtap2Device::OnPINCommand(
       }
 
       mutable_state()->pin_retries = kMaxPinRetries;
+
+      if (mutable_state()->force_pin_change) {
+        return subcommand ==
+                       static_cast<int>(device::pin::Subcommand::kGetPINToken)
+                   ? CtapDeviceResponseCode::kCtap2ErrPinInvalid
+                   : CtapDeviceResponseCode::kCtap2ErrPinPolicyViolation;
+      }
 
       mutable_state()->pin_uv_token_permissions = permissions.permissions;
       mutable_state()->pin_uv_token_rpid = permissions.rp_id;
@@ -2542,7 +2616,7 @@ AttestedCredentialData VirtualCtap2Device::ConstructAttestedCredentialData(
                                 std::move(public_key));
 }
 
-size_t VirtualCtap2Device::remaining_resident_credentials() {
+size_t VirtualCtap2Device::remaining_resident_credentials() const {
   size_t num_resident_keys = 0;
   for (const auto& registration : mutable_state()->registrations) {
     if (registration.second.is_resident) {
@@ -2552,6 +2626,13 @@ size_t VirtualCtap2Device::remaining_resident_credentials() {
 
   DCHECK_LE(num_resident_keys, config_.resident_credential_storage);
   return config_.resident_credential_storage - num_resident_keys;
+}
+
+bool VirtualCtap2Device::SupportsAtLeast(Ctap2Version ctap2_version) const {
+  return base::ranges::any_of(config_.ctap2_versions,
+                              [ctap2_version](const Ctap2Version& version) {
+                                return version >= ctap2_version;
+                              });
 }
 
 }  // namespace device

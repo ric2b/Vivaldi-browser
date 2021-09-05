@@ -1,0 +1,51 @@
+{
+  "name": "adblockpluscore",
+  "version": "0.2.0",
+  "repository": "https://gitlab.com/eyeo/adblockplus/adblockpluscore.git",
+  "license": "GPL-3.0-only",
+  "engines": {
+    "node": ">=10.12.0"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@tensorflow/tfjs-core": "1.3.2",
+    "@tensorflow/tfjs-node": "1.3.2",
+    "babel-eslint": "^10.1.0",
+    "c8": "^7.1.2",
+    "chai": "^4.2.0",
+    "chrome-remote-interface": "^0.27.2",
+    "chromedriver": "2.36.0",
+    "dmg": "0.1.0",
+    "eslint": "^7.4.0",
+    "eslint-config-eyeo": "^3.1.0",
+    "extract-zip": "^2.0.0",
+    "geckodriver": "^1.9.0",
+    "got": "^11.1.3",
+    "jsdoc": "^3.6.3",
+    "jsdoc-to-markdown": "^5.0.0",
+    "memory-fs": "0.4.1",
+    "mocha": "^7.1.1",
+    "ncp": "2.0.0",
+    "sandboxed-module": "2.0.3",
+    "script-loader": "0.7.0",
+    "selenium-webdriver": "^4.0.0-alpha",
+    "untar-memory": "^1.2.0",
+    "webpack": "^4.41.6"
+  },
+  "scripts": {
+    "benchmark": "node --expose-gc benchmark.js EasyList && node --expose-gc benchmark.js EasyList+AA",
+    "jsdoc": "jsdoc --configure .jsdoc.conf --tutorials build/docs/tutorials --destination docs lib",
+    "snippet-filter-tutorial": "jsdoc2md --helper build/handlebars-helpers/include.js --template build/docs/snippet-filter-tutorial.hbs --files lib/content/snippets.js > build/docs/tutorials/snippet-filter-tutorial.md",
+    "helpcenter:snippet-filters-tutorial": "jsdoc2md --helper build/handlebars-helpers/include.js --template build/docs/snippet-filters-helpcenter.hbs --files lib/content/snippets.js > snippet-filters-tutorial.md",
+    "helpcenter:xpath-filters": "jsdoc2md --helper build/handlebars-helpers/include.js --template build/docs/tutorials/xpath-filters.hbs --files lib/content/snippets.js > xpath-filters.md",
+    "helpcenter": "npm run helpcenter:snippet-filters-tutorial && npm run helpcenter:xpath-filters",
+    "docs": "npm run snippet-filter-tutorial && npm run jsdoc",
+    "lint": "eslint *.js *.mjs lib test build",
+    "unit-tests": "c8 --include=lib/*.js --exclude=lib/index.js --exclude=lib/jsbn.js --exclude=lib/rusha.js --all mocha --check-leaks",
+    "test": "node --experimental-modules test_runner.mjs",
+    "posttest": "npm run lint",
+    "updatepsl": "node build/updatepsl.js",
+    "update-subscriptions": "node build/updateSubscriptions.js"
+  },
+  "main": "lib"
+}

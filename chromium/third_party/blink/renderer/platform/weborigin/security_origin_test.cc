@@ -47,6 +47,7 @@
 #include "third_party/blink/renderer/platform/wtf/text/string_operators.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "url/gurl.h"
+#include "url/origin_abstract_tests.h"
 #include "url/url_util.h"
 
 namespace blink {
@@ -102,6 +103,9 @@ TEST_F(SecurityOriginTest, IsPotentiallyTrustworthy) {
     const char* url;
   };
 
+  // TODO(crbug.com/1153336): Merge SecurityOrigin::IsPotentiallyTrustworthy
+  // into network::IsOriginPotentiallyTrustworthy.
+  // https://w3c.github.io/webappsec-secure-contexts/#is-origin-trustworthy
   TestCase inputs[] = {
       // Access is granted to webservers running on localhost.
       {true, true, "http://localhost"},
@@ -144,20 +148,22 @@ TEST_F(SecurityOriginTest, IsPotentiallyTrustworthy) {
       // IPv4 compatible IPv6 literal for 127.0.0.1.
       {false, false, "http://[::127.0.0.1]"},
 
-      // TODO(eroman): Not documented why these are recognized.
-      {true, true, "http://localhost6"},
-      {true, true, "ftp://localhost6.localdomain6"},
-      {true, true, "http://localhost.localdomain"},
+      // Legacy localhost names.
+      {false, false, "http://localhost.localdomain"},
+      {false, false, "http://localhost6"},
+      {false, false, "ftp://localhost6.localdomain6"},
 
       // Secure transports are considered trustworthy.
       {true, false, "https://foobar.com"},
       {true, false, "wss://foobar.com"},
+      {true, false, "quic-transport://example.com/counter"},
 
       // Insecure transports are not considered trustworthy.
       {false, false, "ftp://foobar.com"},
       {false, false, "http://foobar.com"},
       {false, false, "http://foobar.com:443"},
       {false, false, "ws://foobar.com"},
+      {false, false, "custom-scheme://example.com"},
 
       // Local files are considered trustworthy.
       {true, false, "file:///home/foobar/index.html"},
@@ -170,6 +176,10 @@ TEST_F(SecurityOriginTest, IsPotentiallyTrustworthy) {
        "blob:https://foopy:99/578223a1-8c13-17b3-84d5-eca045ae384a"},
       {false, false, "blob:http://baz:99/578223a1-8c13-17b3-84d5-eca045ae384a"},
       {false, false, "blob:ftp://evil:99/578223a1-8c13-17b3-84d5-eca045ae384a"},
+      {false, false, "blob:data:text/html,Hello"},
+      {false, false, "blob:about:blank"},
+      {false, false,
+       "blob:blob:https://example.com/578223a1-8c13-17b3-84d5-eca045ae384a"},
 
       // filesystem: URLs work the same as blob: URLs, and look to the inner
       // URL for security origin.
@@ -177,6 +187,16 @@ TEST_F(SecurityOriginTest, IsPotentiallyTrustworthy) {
       {true, false, "filesystem:https://foopy:99/foo"},
       {false, false, "filesystem:http://baz:99/foo"},
       {false, false, "filesystem:ftp://evil:99/foo"},
+      {false, false, "filesystem:data:text/html,Hello"},
+      {false, false, "filesystem:about:blank"},
+      {false, false,
+       "filesystem:blob:https://example.com/"
+       "578223a1-8c13-17b3-84d5-eca045ae384a"},
+
+      // about: and data: URLs.
+      {false, false, "about:blank"},
+      {false, false, "about:srcdoc"},
+      {false, false, "data:text/html,Hello"},
   };
 
   for (size_t i = 0; i < base::size(inputs); ++i) {
@@ -208,6 +228,9 @@ TEST_F(SecurityOriginTest, IsSecure) {
     bool is_secure;
     const char* url;
   } inputs[] = {
+      // TODO(crbug.com/1153336): Should SecurityOrigin::IsSecure be aligned
+      // with network::IsURLPotentiallyTrustworthy?
+      // https://w3c.github.io/webappsec-secure-contexts/#is-url-trustworthy
       {false, "blob:ftp://evil:99/578223a1-8c13-17b3-84d5-eca045ae384a"},
       {false, "blob:http://example.com/578223a1-8c13-17b3-84d5-eca045ae384a"},
       {false, "file:///etc/passwd"},
@@ -217,8 +240,25 @@ TEST_F(SecurityOriginTest, IsSecure) {
       {true, "blob:https://example.com/578223a1-8c13-17b3-84d5-eca045ae384a"},
       {true, "https://example.com/"},
       {true, "wss://example.com/"},
-
       {true, "about:blank"},
+      {true, "about:srcdoc"},
+      {true, "about:about"},
+      {true, "data:text/html,Hello"},
+      {false,
+       "filesystem:http://example.com/578223a1-8c13-17b3-84d5-eca045ae384a"},
+      {true,
+       "filesystem:https://example.com/578223a1-8c13-17b3-84d5-eca045ae384a"},
+      {true, "blob:data:text/html,Hello"},
+      {true, "blob:about:blank"},
+      {false, "filesystem:data:text/html,Hello"},
+      {false, "filesystem:about:blank"},
+      {false,
+       "blob:blob:https://example.com/578223a1-8c13-17b3-84d5-eca045ae384a"},
+      {false,
+       "filesystem:blob:https://example.com/"
+       "578223a1-8c13-17b3-84d5-eca045ae384a"},
+      {false, "custom-scheme://example.com"},
+      {true, "quic-transport://example.com/counter"},
       {false, ""},
       {false, "\0"},
   };
@@ -230,10 +270,55 @@ TEST_F(SecurityOriginTest, IsSecure) {
   EXPECT_FALSE(SecurityOrigin::IsSecure(NullURL()));
 }
 
+// Tests the trustworthiness of an URL and origin whose scheme was added to the
+// custom sets of standard and secure schemes. A scheme must be added to both
+// to be considered trustworthy.
+TEST_F(SecurityOriginTest, CustomScheme) {
+  const char* custom_scheme = "custom-scheme";
+  const char* custom_scheme_example = "custom-scheme://example.com";
+  KURL url = KURL(custom_scheme_example);
+  {
+    EXPECT_FALSE(SecurityOrigin::IsSecure(url));
+    scoped_refptr<const SecurityOrigin> origin =
+        SecurityOrigin::CreateFromString(custom_scheme_example);
+    EXPECT_FALSE(origin->IsPotentiallyTrustworthy());
+  }
+  {
+    url::ScopedSchemeRegistryForTests scoped_registry;
+    url::AddSecureScheme(custom_scheme);
+    // TODO(crbug.com/1153336): Should SecurityOrigin::IsSecure always consider
+    // non-standard schemes as insecure?
+    EXPECT_TRUE(SecurityOrigin::IsSecure(url));
+    scoped_refptr<const SecurityOrigin> origin =
+        SecurityOrigin::CreateFromString(custom_scheme_example);
+    EXPECT_FALSE(origin->IsPotentiallyTrustworthy());
+  }
+  {
+    url::ScopedSchemeRegistryForTests scoped_registry;
+    url::AddStandardScheme(custom_scheme, url::SchemeType::SCHEME_WITH_HOST);
+    EXPECT_FALSE(SecurityOrigin::IsSecure(url));
+    scoped_refptr<const SecurityOrigin> origin =
+        SecurityOrigin::CreateFromString(custom_scheme_example);
+    EXPECT_FALSE(origin->IsPotentiallyTrustworthy());
+  }
+  {
+    url::ScopedSchemeRegistryForTests scoped_registry;
+    url::AddStandardScheme(custom_scheme, url::SchemeType::SCHEME_WITH_HOST);
+    url::AddSecureScheme(custom_scheme);
+    EXPECT_TRUE(SecurityOrigin::IsSecure(url));
+    scoped_refptr<const SecurityOrigin> origin =
+        SecurityOrigin::CreateFromString(custom_scheme_example);
+    EXPECT_TRUE(origin->IsPotentiallyTrustworthy());
+  }
+}
+
 TEST_F(SecurityOriginTest, IsSecureViaTrustworthy) {
+  // TODO(crbug.com/1153336): Should SecurityOrigin::IsSecure be aligned with
+  // network::IsURLPotentiallyTrustworthy?
+  // https://w3c.github.io/webappsec-secure-contexts/#is-url-trustworthy
   const char* urls[] = {"http://localhost/", "http://localhost:8080/",
                         "http://127.0.0.1/", "http://127.0.0.1:8080/",
-                        "http://[::1]/"};
+                        "http://[::1]/",     "http://vhost.localhost/"};
 
   for (const char* test : urls) {
     KURL url(test);
@@ -545,25 +630,21 @@ TEST_F(SecurityOriginTest, PunycodeNotUnicode) {
   EXPECT_FALSE(origin->CanRequest(unicode_url));
 }
 
-TEST_F(SecurityOriginTest, PortAndEffectivePortMethod) {
+TEST_F(SecurityOriginTest, Port) {
   struct TestCase {
     uint16_t port;
-    uint16_t effective_port;
     const char* origin;
   } cases[] = {
-      {0, 80, "http://example.com"},
-      {0, 80, "http://example.com:80"},
-      {81, 81, "http://example.com:81"},
-      {0, 443, "https://example.com"},
-      {0, 443, "https://example.com:443"},
-      {444, 444, "https://example.com:444"},
+      {80, "http://example.com"},       {80, "http://example.com:80"},
+      {81, "http://example.com:81"},    {443, "https://example.com"},
+      {443, "https://example.com:443"}, {444, "https://example.com:444"},
+      {0, "https://example.com:0"},     {0, "file:///"},
   };
 
   for (const auto& test : cases) {
     scoped_refptr<const SecurityOrigin> origin =
         SecurityOrigin::CreateFromString(test.origin);
     EXPECT_EQ(test.port, origin->Port());
-    EXPECT_EQ(test.effective_port, origin->EffectivePort());
   }
 }
 
@@ -575,6 +656,7 @@ TEST_F(SecurityOriginTest, CreateFromTuple) {
     const char* origin;
   } cases[] = {
       {"http", "example.com", 80, "http://example.com"},
+      {"http", "example.com", 0, "http://example.com:0"},
       {"http", "example.com", 81, "http://example.com:81"},
       {"https", "example.com", 443, "https://example.com"},
       {"https", "example.com", 444, "https://example.com:444"},
@@ -663,8 +745,8 @@ TEST_F(SecurityOriginTest, CanonicalizeHost) {
 
 TEST_F(SecurityOriginTest, UrlOriginConversions) {
   url::ScopedSchemeRegistryForTests scoped_registry;
+  url::AddNoAccessScheme("no-access");
   url::AddLocalScheme("nonstandard-but-local");
-  SchemeRegistry::RegisterURLSchemeAsLocal("nonstandard-but-local");
   struct TestCases {
     const char* const url;
     const char* const scheme;
@@ -692,11 +774,15 @@ TEST_F(SecurityOriginTest, UrlOriginConversions) {
       {"http://example.com:123/?query", "http", "example.com", 123},
       {"https://example.com/#1234", "https", "example.com", 443},
       {"https://u:p@example.com:123/?query#1234", "https", "example.com", 123},
+      {"https://example.com:0/", "https", "example.com", 0},
 
       // Nonstandard schemes.
       {"unrecognized-scheme://localhost/", "", "", 0, true},
       {"mailto:localhost/", "", "", 0, true},
       {"about:blank", "", "", 0, true},
+
+      // Custom no-access scheme.
+      {"no-access:blah", "", "", 0, true},
 
       // Registered URLs
       {"ftp://example.com/", "ftp", "example.com", 21},
@@ -739,10 +825,8 @@ TEST_F(SecurityOriginTest, UrlOriginConversions) {
     EXPECT_EQ(test_case.scheme, security_origin_via_kurl->Protocol());
     EXPECT_EQ(test_case.host, security_origin_via_gurl->Host());
     EXPECT_EQ(test_case.host, security_origin_via_kurl->Host());
-    EXPECT_EQ(security_origin_via_gurl->Port(),
-              security_origin_via_kurl->Port());
-    EXPECT_EQ(test_case.port, security_origin_via_gurl->EffectivePort());
-    EXPECT_EQ(test_case.port, security_origin_via_kurl->EffectivePort());
+    EXPECT_EQ(test_case.port, security_origin_via_gurl->Port());
+    EXPECT_EQ(test_case.port, security_origin_via_kurl->Port());
     EXPECT_EQ(test_case.opaque, security_origin_via_gurl->IsOpaque());
     EXPECT_EQ(test_case.opaque, security_origin_via_kurl->IsOpaque());
     EXPECT_EQ(!test_case.opaque, security_origin_via_kurl->IsSameOriginWith(
@@ -878,21 +962,27 @@ TEST_F(SecurityOriginTest, ToTokenForFastCheck) {
   }
 }
 
+// See also OriginTest.ConstructFromGURL_OpaqueOrigin and
+// NavigationUrlRewriteBrowserTest.RewriteToNoAccess.
+TEST_F(SecurityOriginTest, StandardNoAccessScheme) {
+  url::ScopedSchemeRegistryForTests scoped_registry;
+  url::AddStandardScheme("std-no-access", url::SCHEME_WITH_HOST);
+  url::AddNoAccessScheme("std-no-access");
+  url::AddStandardScheme("std", url::SCHEME_WITH_HOST);
+
+  scoped_refptr<const SecurityOrigin> custom_standard_noaccess_origin =
+      SecurityOrigin::CreateFromString("std-no-access://host");
+  EXPECT_TRUE(custom_standard_noaccess_origin->IsOpaque());
+
+  scoped_refptr<const SecurityOrigin> custom_standard_origin =
+      SecurityOrigin::CreateFromString("std://host");
+  EXPECT_FALSE(custom_standard_origin->IsOpaque());
+}
+
 TEST_F(SecurityOriginTest, NonStandardScheme) {
   scoped_refptr<const SecurityOrigin> origin =
       SecurityOrigin::CreateFromString("cow://");
   EXPECT_TRUE(origin->IsOpaque());
-}
-
-TEST_F(SecurityOriginTest, NonStandardSchemeWithAndroidWebViewHack) {
-  url::ScopedSchemeRegistryForTests scoped_registry;
-  url::EnableNonStandardSchemesForAndroidWebView();
-  scoped_refptr<const SecurityOrigin> origin =
-      SecurityOrigin::CreateFromString("cow://");
-  EXPECT_FALSE(origin->IsOpaque());
-  EXPECT_EQ("cow", origin->Protocol());
-  EXPECT_EQ("", origin->Host());
-  EXPECT_EQ(0, origin->Port());
 }
 
 TEST_F(SecurityOriginTest, OpaqueIsolatedCopy) {
@@ -1182,3 +1272,38 @@ TEST_F(SecurityOriginTest, PercentEncodesHost) {
 }
 
 }  // namespace blink
+
+// Apparently INSTANTIATE_TYPED_TEST_SUITE_P needs to be used in the same
+// namespace as where the typed test suite was defined.
+namespace url {
+
+class BlinkSecurityOriginTestTraits final
+    : public url::OriginTraitsBase<scoped_refptr<blink::SecurityOrigin>> {
+ public:
+  OriginType CreateOriginFromString(base::StringPiece s) const override {
+    return blink::SecurityOrigin::CreateFromString(
+        String(s.data(), s.length()));
+  }
+
+  bool IsOpaque(const OriginType& origin) const override {
+    return origin->IsOpaque();
+  }
+
+  std::string GetScheme(const OriginType& origin) const override {
+    return origin->Protocol().Utf8();
+  }
+
+  std::string GetHost(const OriginType& origin) const override {
+    return origin->Host().Utf8();
+  }
+
+  uint16_t GetPort(const OriginType& origin) const override {
+    return origin->Port();
+  }
+};
+
+INSTANTIATE_TYPED_TEST_SUITE_P(BlinkSecurityOrigin,
+                               AbstractOriginTest,
+                               BlinkSecurityOriginTestTraits);
+
+}  // namespace url

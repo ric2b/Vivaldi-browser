@@ -26,6 +26,7 @@
 #include "third_party/blink/renderer/core/layout/hit_test_result.h"
 #include "third_party/blink/renderer/core/layout/layout_box_model_object.h"
 #include "third_party/blink/renderer/core/layout/svg/svg_layout_support.h"
+#include "third_party/blink/renderer/core/layout/svg/svg_resources.h"
 #include "third_party/blink/renderer/core/layout/svg/transformed_hit_test_location.h"
 #include "third_party/blink/renderer/core/paint/paint_info.h"
 #include "third_party/blink/renderer/core/svg/svg_clip_path_element.h"
@@ -177,7 +178,7 @@ sk_sp<const PaintRecord> LayoutSVGResourceClipper::CreatePaintRecord() {
   if (cached_paint_record_)
     return cached_paint_record_;
 
-  PaintRecordBuilder builder(nullptr, nullptr);
+  PaintRecordBuilder builder;
   // Switch to a paint behavior where all children of this <clipPath> will be
   // laid out using special constraints:
   // - fill-opacity/stroke-opacity/opacity set to 1
@@ -278,6 +279,22 @@ FloatRect LayoutSVGResourceClipper::ResourceBoundingBox(
   return CalculateClipTransform(reference_box).MapRect(local_clip_bounds_);
 }
 
+bool LayoutSVGResourceClipper::FindCycleFromSelf(
+    SVGResourcesCycleSolver& solver) const {
+  NOT_DESTROYED();
+  // Check nested clip-path.
+  if (auto* reference_clip =
+          DynamicTo<ReferenceClipPathOperation>(StyleRef().ClipPath())) {
+    // The resource can be null if the reference is external but external
+    // references are not allowed.
+    if (SVGResource* resource = reference_clip->Resource()) {
+      if (resource->FindCycle(*SVGResources::GetClient(*this), solver))
+        return true;
+    }
+  }
+  return LayoutSVGResourceContainer::FindCycleFromSelf(solver);
+}
+
 void LayoutSVGResourceClipper::StyleDidChange(StyleDifference diff,
                                               const ComputedStyle* old_style) {
   NOT_DESTROYED();
@@ -286,13 +303,6 @@ void LayoutSVGResourceClipper::StyleDidChange(StyleDifference diff,
     MarkAllClientsForInvalidation(SVGResourceClient::kClipCacheInvalidation |
                                   SVGResourceClient::kPaintInvalidation);
   }
-}
-
-void LayoutSVGResourceClipper::WillBeDestroyed() {
-  NOT_DESTROYED();
-  MarkAllClientsForInvalidation(SVGResourceClient::kClipCacheInvalidation |
-                                SVGResourceClient::kPaintInvalidation);
-  LayoutSVGResourceContainer::WillBeDestroyed();
 }
 
 }  // namespace blink

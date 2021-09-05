@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/web_applications/test/web_app_install_observer.h"
+
 #include <memory>
 
 #include "base/run_loop.h"
@@ -122,6 +123,11 @@ void WebAppInstallObserver::SetWebAppInstalledWithOsHooksDelegate(
   app_installed_with_os_hooks_delegate_ = delegate;
 }
 
+void WebAppInstallObserver::SetWebAppWillBeUninstalledDelegate(
+    WebAppWillBeUninstalledDelegate delegate) {
+  app_will_be_uninstalled_delegate_ = delegate;
+}
+
 void WebAppInstallObserver::SetWebAppUninstalledDelegate(
     WebAppUninstalledDelegate delegate) {
   app_uninstalled_delegate_ = delegate;
@@ -159,6 +165,11 @@ void WebAppInstallObserver::OnWebAppsWillBeUpdatedFromSync(
     const std::vector<const WebApp*>& new_apps_state) {
   if (app_will_be_updated_from_sync_delegate_)
     app_will_be_updated_from_sync_delegate_.Run(new_apps_state);
+}
+
+void WebAppInstallObserver::OnWebAppWillBeUninstalled(const AppId& app_id) {
+  if (app_will_be_uninstalled_delegate_)
+    app_will_be_uninstalled_delegate_.Run(app_id);
 }
 
 void WebAppInstallObserver::OnWebAppUninstalled(const AppId& app_id) {

@@ -527,10 +527,6 @@ void WebViewGuest::CreateWebContents(const base::DictionaryValue& create_params,
 
       contentsimpl->GetBrowserPluginGuest()->set_allow_blocked_by_client();
 
-      // NOTE(andre@vivaldi.com) : Need to set this otherwise script injection
-      // can fail. See WebViewInternalExecuteCodeFunction::Init().
-      src_ = new_contents->GetURL();
-
       // Set the owners blobregistry as fallback when accessing blob-urls.
       StoragePartition* partition =
           content::BrowserContext::GetStoragePartition(
@@ -725,13 +721,6 @@ void WebViewGuest::DidAttachToEmbedder() {
 
 }
 
-void WebViewGuest::DidDropLink(const GURL& url) {
-  auto args = std::make_unique<base::DictionaryValue>();
-  args->SetString(guest_view::kUrl, url.spec());
-  DispatchEventToView(std::make_unique<GuestViewEvent>(webview::kEventDropLink,
-                                                       std::move(args)));
-}
-
 void WebViewGuest::DidInitialize(const base::DictionaryValue& create_params) {
   script_executor_ = std::make_unique<ScriptExecutor>(web_contents());
 
@@ -770,7 +759,7 @@ void WebViewGuest::DidInitialize(const base::DictionaryValue& create_params) {
 
 void WebViewGuest::ClearCodeCache(base::Time remove_since,
                                   uint32_t removal_mask,
-                                  const base::Closure& callback) {
+                                  base::OnceClosure callback) {
   content::StoragePartition* partition =
       content::BrowserContext::GetStoragePartition(
           web_contents()->GetBrowserContext(),
@@ -778,7 +767,7 @@ void WebViewGuest::ClearCodeCache(base::Time remove_since,
   DCHECK(partition);
   base::OnceClosure code_cache_removal_done_callback = base::BindOnce(
       &WebViewGuest::ClearDataInternal, weak_ptr_factory_.GetWeakPtr(),
-      remove_since, removal_mask, callback);
+      remove_since, removal_mask, std::move(callback));
   partition->ClearCodeCaches(remove_since, base::Time::Now(),
                              base::RepeatingCallback<bool(const GURL&)>(),
                              std::move(code_cache_removal_done_callback));
@@ -786,11 +775,11 @@ void WebViewGuest::ClearCodeCache(base::Time remove_since,
 
 void WebViewGuest::ClearDataInternal(base::Time remove_since,
                                      uint32_t removal_mask,
-                                     const base::Closure& callback) {
+                                     base::OnceClosure callback) {
   uint32_t storage_partition_removal_mask =
       GetStoragePartitionRemovalMask(removal_mask);
   if (!storage_partition_removal_mask) {
-    callback.Run();
+    std::move(callback).Run();
     return;
   }
 
@@ -827,7 +816,7 @@ void WebViewGuest::ClearDataInternal(base::Time remove_since,
       content::StoragePartition::QUOTA_MANAGED_STORAGE_MASK_ALL,
       content::StoragePartition::OriginMatcherFunction(),
       std::move(cookie_delete_filter), perform_cleanup, remove_since,
-      base::Time::Max(), callback);
+      base::Time::Max(), std::move(callback));
 }
 
 void WebViewGuest::GuestViewDidStopLoading() {
@@ -1143,7 +1132,7 @@ void WebViewGuest::Terminate() {
 
 bool WebViewGuest::ClearData(base::Time remove_since,
                              uint32_t removal_mask,
-                             const base::Closure& callback) {
+                             base::OnceClosure callback) {
   base::RecordAction(UserMetricsAction("WebView.Guest.ClearData"));
   content::StoragePartition* partition =
       content::BrowserContext::GetStoragePartition(
@@ -1165,7 +1154,7 @@ bool WebViewGuest::ClearData(base::Time remove_since,
 
     base::OnceClosure cache_removal_done_callback = base::BindOnce(
         &WebViewGuest::ClearCodeCache, weak_ptr_factory_.GetWeakPtr(),
-        remove_since, removal_mask, callback);
+        remove_since, removal_mask, std::move(callback));
 
     // We cannot use |BrowsingDataRemover| here since it doesn't support
     // non-default StoragePartition.
@@ -1175,7 +1164,7 @@ bool WebViewGuest::ClearData(base::Time remove_since,
     return true;
   }
 
-  ClearDataInternal(remove_since, removal_mask, callback);
+  ClearDataInternal(remove_since, removal_mask, std::move(callback));
   return true;
 }
 
@@ -1222,7 +1211,7 @@ void WebViewGuest::ReadyToCommitNavigation(
       WebViewContentScriptManager::Get(browser_context());
   int embedder_process_id =
       owner_web_contents()->GetMainFrame()->GetProcess()->GetID();
-  std::set<int> script_ids = script_manager->GetContentScriptIDSet(
+  std::set<std::string> script_ids = script_manager->GetContentScriptIDSet(
       embedder_process_id, view_instance_id());
   if (script_ids.empty())
     return;
@@ -1263,18 +1252,16 @@ void WebViewGuest::DidFinishNavigation(
       return;
   }
 
-  if (navigation_handle->IsInMainFrame()) {
-    // For LoadDataWithBaseURL loads, |url| contains the data URL, but the
-    // virtual URL is needed in that case. So use WebContents::GetURL instead.
-    src_ = web_contents()->GetURL();
+  if (navigation_handle->IsInMainFrame() && pending_zoom_factor_) {
     // Handle a pending zoom if one exists.
-    if (pending_zoom_factor_) {
-      SetZoom(pending_zoom_factor_);
-      pending_zoom_factor_ = 0.0;
-    }
+    SetZoom(pending_zoom_factor_);
+    pending_zoom_factor_ = 0.0;
   }
+
   auto args = std::make_unique<base::DictionaryValue>();
-  args->SetString(guest_view::kUrl, src_.spec());
+  args->SetString(guest_view::kUrl, navigation_handle->GetURL().spec());
+  args->SetString(webview::kInternalVisibleUrl,
+                  web_contents()->GetVisibleURL().spec());
   args->SetBoolean(guest_view::kIsTopLevel, navigation_handle->IsInMainFrame());
   args->SetString(webview::kInternalBaseURLForDataURL,
                   web_contents()
@@ -1388,7 +1375,8 @@ void WebViewGuest::OnDidAddMessageToConsole(
     blink::mojom::ConsoleMessageLevel log_level,
     const base::string16& message,
     int32_t line_no,
-    const base::string16& source_id) {
+    const base::string16& source_id,
+    const base::Optional<base::string16>& untrusted_stack_trace) {
   auto args = std::make_unique<base::DictionaryValue>();
   // Log levels are from base/logging.h: LogSeverity.
   args->SetInteger(webview::kLevel,
@@ -1517,8 +1505,8 @@ void WebViewGuest::NavigateGuest(const std::string& src,
   // platform-apps, and turn off some settings. This is done in
   // |VivaldiContentBrowserClientParts::OverrideWebkitPrefs|
   bool is_navigating_away_from_vivaldi =
-      (src_.SchemeIs(extensions::kExtensionScheme) &&
-       IsVivaldiApp(src_.host())) &&
+      (web_contents()->GetURL().SchemeIs(extensions::kExtensionScheme) &&
+       IsVivaldiApp(web_contents()->GetURL().host())) &&
       !url.SchemeIs(extensions::kExtensionScheme);
   SetIsNavigatingAwayFromVivaldiUI(is_navigating_away_from_vivaldi);
   if (is_navigating_away_from_vivaldi) {
@@ -1989,7 +1977,7 @@ void WebViewGuest::LoadURLWithParams(
       // if the src is an internal page of ours or extension and the new scheme
       // is javascript.
       scheme_is_blocked = url.SchemeIs(url::kJavaScriptScheme) &&
-                          src_.SchemeIs(extensions::kExtensionScheme);
+          web_contents()->GetURL().SchemeIs(extensions::kExtensionScheme);
     }
     // We need to allow the chrome-devtools: scheme in webview as it reloads
     // it when changing themes in devtools.
@@ -2014,8 +2002,13 @@ void WebViewGuest::LoadURLWithParams(
     return;
   }
 
-  if (!force_navigation && (src_ == url))
-    return;
+  if (!force_navigation) {
+    content::NavigationEntry* last_committed_entry =
+        web_contents()->GetController().GetLastCommittedEntry();
+    if (last_committed_entry && last_committed_entry->GetURL() == url) {
+      return;
+    }
+  }
 
   GURL validated_url(url);
   // If the embedder is Vivaldi do not filter the url, we want to open all urls.
@@ -2047,8 +2040,6 @@ void WebViewGuest::LoadURLWithParams(
   }
 
   web_contents()->GetController().LoadURLWithParams(load_url_params);
-
-  src_ = validated_url;
 }
 
 void WebViewGuest::RequestNewWindowPermission(WindowOpenDisposition disposition,
@@ -2144,7 +2135,8 @@ void WebViewGuest::OnWebViewNewWindowResponse(
       // If we are a new incognito window, don't open the tab here. Let the
       // tabs API (WindowsCreateFunction) handle that. Otherwise we would get a
       // second tab with the same URL.
-      if (!incognito && !src_.SchemeIs(content::kChromeDevToolsScheme)) {
+      if (!incognito &&
+          !web_contents()->GetURL().SchemeIs(content::kChromeDevToolsScheme)) {
         AddGuestToTabStripModel(guest, window_id, foreground,
                                 !(IsVivaldiWebPanel() || IsVivaldiMail()));
       } else {

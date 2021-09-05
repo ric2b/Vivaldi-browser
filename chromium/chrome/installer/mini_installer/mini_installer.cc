@@ -587,17 +587,14 @@ ProcessExitResult RunSetup(const Configuration& configuration,
     return ProcessExitResult(COMMAND_STRING_OVERFLOW);
   }
 
+  // Tell Vivaldi full installer that it was invoked from mini.
+  if (!cmd_line.append(L" --") || !cmd_line.append(L"vivaldi-mini")) {
+    return ProcessExitResult(COMMAND_STRING_OVERFLOW);
+  }
+
   // Get any command line option specified for mini_installer and pass them
   // on to setup.exe
   AppendCommandLineFlags(configuration.command_line(), &cmd_line);
-
-  // Enable Vivaldi install GUI.
-  cmd_line.append(L" --vivaldi");
-  if (cmd_line.findi(L"--do-not-launch-chrome") == NULL) {
-    // Launch Vivaldi on a successful install/upgrade/repair (VB-1802)
-    // unless explicitly asked not to.
-    cmd_line.append(L" --vivaldi-force-launch");
-  }
 
   return RunProcessAndWait(setup_exe.get(), cmd_line.get(),
                            RUN_SETUP_FAILED_FILE_NOT_FOUND,

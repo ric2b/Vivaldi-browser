@@ -21,6 +21,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "components/os_crypt/os_crypt.h"
 #include "components/os_crypt/os_crypt_mocker.h"
 #include "components/password_manager/core/browser/password_form.h"
@@ -378,7 +379,7 @@ TEST_F(LoginDatabaseTest, Logins) {
 
   // We update, and check to make sure it matches the
   // old form, and there is only one record.
-  EXPECT_EQ(UpdateChangeForForm(form5, /*passwordchanged=*/true),
+  EXPECT_EQ(UpdateChangeForForm(form5, /*password_changed=*/true),
             db().UpdateLogin(form5));
   // matches
   EXPECT_TRUE(db().GetLogins(PasswordStore::FormDigest(form5), &result));
@@ -1086,14 +1087,14 @@ TEST_F(LoginDatabaseTest, DisableAutoSignInForOrigin) {
   }
 }
 
-TEST_F(LoginDatabaseTest, BlacklistedLogins) {
+TEST_F(LoginDatabaseTest, BlocklistedLogins) {
   std::vector<std::unique_ptr<PasswordForm>> result;
 
   // Verify the database is empty.
-  EXPECT_TRUE(db().GetBlacklistLogins(&result));
+  EXPECT_TRUE(db().GetBlocklistLogins(&result));
   ASSERT_EQ(0U, result.size());
 
-  // Save a form as blacklisted.
+  // Save a form as blocklisted.
   PasswordForm form;
   form.url = GURL("http://accounts.google.com/LoginAuth");
   form.action = GURL("http://accounts.google.com/Login");
@@ -1112,21 +1113,21 @@ TEST_F(LoginDatabaseTest, BlacklistedLogins) {
   form.skip_zero_click = true;
   EXPECT_EQ(AddChangeForForm(form), db().AddLogin(form));
 
-  // Get all non-blacklisted logins (should be none).
+  // Get all non-blocklisted logins (should be none).
   EXPECT_TRUE(db().GetAutofillableLogins(&result));
   ASSERT_EQ(0U, result.size());
 
   // When we retrieve the form from the store, it should have |in_store| set.
   form.in_store = PasswordForm::Store::kProfileStore;
 
-  // GetLogins should give the blacklisted result.
+  // GetLogins should give the blocklisted result.
   EXPECT_TRUE(db().GetLogins(PasswordStore::FormDigest(form), &result));
   ASSERT_EQ(1U, result.size());
   EXPECT_EQ(form, *result[0]);
   result.clear();
 
-  // So should GetBlacklistedLogins.
-  EXPECT_TRUE(db().GetBlacklistLogins(&result));
+  // So should GetBlocklistedLogins.
+  EXPECT_TRUE(db().GetBlocklistLogins(&result));
   ASSERT_EQ(1U, result.size());
   EXPECT_EQ(form, *result[0]);
   result.clear();
@@ -1275,7 +1276,7 @@ TEST_F(LoginDatabaseTest, UpdateOverlappingCredentials) {
   // Simulate the user changing their password.
   complete_form.password_value = ASCIIToUTF16("new_password");
   complete_form.date_synced = base::Time::Now();
-  EXPECT_EQ(UpdateChangeForForm(complete_form, /*passwordchanged=*/true),
+  EXPECT_EQ(UpdateChangeForForm(complete_form, /*password_changed=*/true),
             db().UpdateLogin(complete_form));
 
   // When we retrieve the forms from the store, |in_store| should be set.
@@ -1358,7 +1359,7 @@ TEST_F(LoginDatabaseTest, UpdateLogin) {
   form.moving_blocked_for_list.push_back(GaiaIdHash::FromGaiaId("gaia_id"));
 
   PasswordStoreChangeList changes = db().UpdateLogin(form);
-  EXPECT_EQ(UpdateChangeForForm(form, /*passwordchanged=*/true), changes);
+  EXPECT_EQ(UpdateChangeForForm(form, /*password_changed=*/true), changes);
   ASSERT_EQ(1U, changes.size());
   EXPECT_EQ(1, changes[0].primary_key());
 
@@ -1396,7 +1397,7 @@ TEST_F(LoginDatabaseTest, UpdateLoginWithoutPassword) {
   form.moving_blocked_for_list.push_back(GaiaIdHash::FromGaiaId("gaia_id"));
 
   PasswordStoreChangeList changes = db().UpdateLogin(form);
-  EXPECT_EQ(UpdateChangeForForm(form, /*passwordchanged=*/false), changes);
+  EXPECT_EQ(UpdateChangeForForm(form, /*password_changed=*/false), changes);
   ASSERT_EQ(1U, changes.size());
   EXPECT_EQ(1, changes[0].primary_key());
 
@@ -1768,8 +1769,8 @@ TEST_F(LoginDatabaseTest, DuplicatesMetrics_NoDuplicates) {
   password_form.username_value = ASCIIToUTF16("username_2");
   ASSERT_EQ(AddChangeForForm(password_form), db().AddLogin(password_form));
 
-  // Blacklisted forms don't count as duplicates (neither against other
-  // blacklisted forms nor against actual saved credentials).
+  // Blocklisted forms don't count as duplicates (neither against other
+  // blocklisted forms nor against actual saved credentials).
   password_form.signon_realm = "http://example3.com/";
   password_form.url = GURL("http://example3.com/");
   password_form.username_value = ASCIIToUTF16("username_1");
@@ -2026,7 +2027,7 @@ TEST_F(LoginDatabaseTest, EncryptionDisabled) {
 }
 #endif  // defined(OS_LINUX) || defined(OS_CHROMEOS)
 
-#if defined(OS_ANDROID) || defined(OS_CHROMEOS)
+#if defined(OS_ANDROID) || BUILDFLAG(IS_CHROMEOS_ASH)
 // On Android and ChromeOS there is a mix of plain-text and obfuscated
 // passwords. Verify that they can both be accessed. Obfuscated passwords start
 // with "v10". Some password values also start with "v10". Test that both are
@@ -2075,7 +2076,7 @@ TEST_F(LoginDatabaseTest, HandleObfuscationMix) {
   EXPECT_EQ(k_plain_text_pw1, UTF16ToASCII(forms[1]->password_value));
   EXPECT_EQ(k_plain_text_pw2, UTF16ToASCII(forms[2]->password_value));
 }
-#endif  // defined(OS_ANDROID) || defined(OS_CHROMEOS)
+#endif  // defined(OS_ANDROID) || BUILDFLAG(IS_CHROMEOS_ASH)
 
 // If the database initialisation fails, the initialisation transaction should
 // roll back without crashing.
@@ -2601,6 +2602,28 @@ TEST_F(LoginDatabaseTest, GetLoginsEncryptedPassword) {
 
   ASSERT_EQ(1U, forms.size());
   ASSERT_FALSE(forms[0]->encrypted_password.empty());
+}
+
+TEST_F(LoginDatabaseTest, RemovingLoginRemovesCompromisedCredentials) {
+  PasswordForm form;
+  GenerateExamplePasswordForm(&form);
+
+  ignore_result(db().AddLogin(form));
+  CompromisedCredentials credential1{form.signon_realm, form.username_value,
+                                     base::Time(), CompromiseType::kLeaked,
+                                     IsMuted(false)};
+  CompromisedCredentials credential2 = credential1;
+  credential2.compromise_type = CompromiseType::kPhished;
+
+  db().insecure_credentials_table().AddRow(credential1);
+  db().insecure_credentials_table().AddRow(credential2);
+
+  EXPECT_THAT(db().insecure_credentials_table().GetAllRows(),
+              testing::ElementsAre(credential1, credential2));
+
+  EXPECT_TRUE(db().RemoveLogin(form, nullptr));
+  EXPECT_THAT(db().insecure_credentials_table().GetAllRows(),
+              testing::IsEmpty());
 }
 
 class LoginDatabaseForAccountStoreTest : public testing::Test {

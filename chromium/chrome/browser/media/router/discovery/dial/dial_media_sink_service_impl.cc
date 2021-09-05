@@ -7,7 +7,7 @@
 #include <algorithm>
 
 #include "base/bind.h"
-#include "base/stl_util.h"
+#include "base/containers/contains.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -36,7 +36,7 @@ bool IsDiscoveryOnly(const std::string& model_name) {
 SinkAppStatus GetSinkAppStatusFromResponse(const DialAppInfoResult& result) {
   if (!result.app_info) {
     if (result.result_code == DialAppInfoResultCode::kParsingError ||
-        result.result_code == DialAppInfoResultCode::kNotFound) {
+        result.result_code == DialAppInfoResultCode::kHttpError) {
       return SinkAppStatus::kUnavailable;
     } else {
       return SinkAppStatus::kUnknown;
@@ -100,7 +100,7 @@ DialAppDiscoveryService* DialMediaSinkServiceImpl::app_discovery_service() {
   return app_discovery_service_.get();
 }
 
-DialMediaSinkServiceImpl::SinkQueryByAppSubscription
+base::CallbackListSubscription
 DialMediaSinkServiceImpl::StartMonitoringAvailableSinksForApp(
     const std::string& app_name,
     const SinkQueryByAppCallback& callback) {

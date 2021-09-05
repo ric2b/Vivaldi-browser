@@ -303,14 +303,6 @@ void MetricsRenderFrameObserver::DidCreateDocumentElement() {
   if (render_frame()->IsMainFrame())
     return;
 
-  // Every frame creates an initial about:blank document element prior to
-  // receiving a navigation to about:blank. Ignore this initial document
-  // element.
-  if (!first_document_observed_) {
-    first_document_observed_ = true;
-    return;
-  }
-
   // A new document element was created in a frame that did not commit a
   // provisional load. This can be due to a doc.write in the frame that aborted
   // a navigation. Create a page timing sender to track this load. This sender
@@ -368,13 +360,14 @@ void MetricsRenderFrameObserver::DidCommitProvisionalLoad(
 void MetricsRenderFrameObserver::SetAdResourceTracker(
     subresource_filter::AdResourceTracker* ad_resource_tracker) {
   // Remove all sources and set a new source for the observer.
-  if (scoped_ad_resource_observation_.IsObserving())
-    scoped_ad_resource_observation_.RemoveObservation();
+  scoped_ad_resource_observation_.Reset();
   scoped_ad_resource_observation_.Observe(ad_resource_tracker);
 }
 
 void MetricsRenderFrameObserver::OnAdResourceTrackerGoingAway() {
-  scoped_ad_resource_observation_.RemoveObservation();
+  DCHECK(scoped_ad_resource_observation_.IsObserving());
+
+  scoped_ad_resource_observation_.Reset();
 }
 
 void MetricsRenderFrameObserver::OnAdResourceObserved(int request_id) {

@@ -95,30 +95,27 @@ public class SmsProviderGms {
         // fails. The initial call to verification is expected to be cheap so this should not have
         // any noticeable impact.
 
-        // TODO(yigu): Add UMA to better understand this. In particular it is
-        // interesting to find out how often we use the fallback option.
-        // http://crbug.com/1141024
         if (mBackend == GmsBackend.AUTO) {
             Log.d(TAG, "Retry using user consent API.");
             mUserConsentReceiver.listen(mWindow);
         } else {
-            // TODO(majidvp): We should probably cancel the request here but
-            // we should care to avoid interfere with UserCancel metric
-            // collection.
-            // http://crbug.com/1141024
+            onNotAvailable();
         }
     }
 
     // --------- Callbacks for receivers
 
-    void onReceive(String sms) {
-        SmsProviderGmsJni.get().onReceive(mSmsProviderGmsAndroid, sms);
+    void onReceive(String sms, @GmsBackend int backend) {
+        SmsProviderGmsJni.get().onReceive(mSmsProviderGmsAndroid, sms, backend);
     }
     void onTimeout() {
         SmsProviderGmsJni.get().onTimeout(mSmsProviderGmsAndroid);
     }
     void onCancel() {
         SmsProviderGmsJni.get().onCancel(mSmsProviderGmsAndroid);
+    }
+    void onNotAvailable() {
+        SmsProviderGmsJni.get().onNotAvailable(mSmsProviderGmsAndroid);
     }
 
     public WindowAndroid getWindow() {
@@ -149,8 +146,9 @@ public class SmsProviderGms {
 
     @NativeMethods
     interface Natives {
-        void onReceive(long nativeSmsProviderGms, String sms);
+        void onReceive(long nativeSmsProviderGms, String sms, @GmsBackend int backend);
         void onTimeout(long nativeSmsProviderGms);
         void onCancel(long nativeSmsProviderGms);
+        void onNotAvailable(long nativeSmsProviderGms);
     }
 }

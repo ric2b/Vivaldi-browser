@@ -149,7 +149,7 @@ void PluginInfoHostImpl::Context::ShutdownOnUIThread() {
 
 PluginInfoHostImpl::PluginInfoHostImpl(int render_process_id, Profile* profile)
     : context_(render_process_id, profile) {
-  shutdown_notifier_ =
+  shutdown_subscription_ =
       PluginInfoHostImplShutdownNotifierFactory::GetInstance()
           ->Get(profile)
           ->Subscribe(base::Bind(&PluginInfoHostImpl::ShutdownOnUIThread,
@@ -159,7 +159,7 @@ PluginInfoHostImpl::PluginInfoHostImpl(int render_process_id, Profile* profile)
 void PluginInfoHostImpl::ShutdownOnUIThread() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   context_.ShutdownOnUIThread();
-  shutdown_notifier_.reset();
+  shutdown_subscription_ = {};
 }
 
 // static
@@ -253,7 +253,6 @@ void PluginInfoHostImpl::Context::DecidePluginStatus(
       &is_managed);
 
   DCHECK(plugin_setting != CONTENT_SETTING_DEFAULT);
-  DCHECK(plugin_setting != CONTENT_SETTING_ASK);
 
   if (*status == chrome::mojom::PluginStatus::kFlashHiddenPreferHtml) {
     if (plugin_setting == CONTENT_SETTING_BLOCK) {
@@ -295,7 +294,7 @@ void PluginInfoHostImpl::Context::DecidePluginStatus(
   }
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
-  if (plugin_setting == CONTENT_SETTING_DETECT_IMPORTANT_CONTENT ||
+  if (plugin_setting == CONTENT_SETTING_ASK ||
       (plugin_setting == CONTENT_SETTING_ALLOW &&
        !run_all_flash_in_allow_mode_.GetValue())) {
     *status = chrome::mojom::PluginStatus::kPlayImportantContent;

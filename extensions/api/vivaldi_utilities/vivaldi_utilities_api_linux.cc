@@ -124,9 +124,4 @@ bool UtilitiesGetSystemDateFormatFunction::ReadDateFormats(
   return true;
 }
 
-std::string UtilitiesGetSystemCountryFunction::ReadCountry() {
-  // TODO(igor@vivaldi.com): Implement this.
-  return std::string();
-}
-
 }  // namespace extensions

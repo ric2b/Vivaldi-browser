@@ -150,7 +150,7 @@ const base::Feature kTurnOffStreamingMediaCachingAlways{
     "TurnOffStreamingMediaCachingAlways", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kLegacyTLSEnforced{"LegacyTLSEnforced",
-                                       base::FEATURE_DISABLED_BY_DEFAULT};
+                                       base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kSchemefulSameSite{"SchemefulSameSite",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
@@ -192,6 +192,12 @@ extern const base::FeatureParam<base::TimeDelta> kTimeoutTcpConnectAttemptMax(
     &kTimeoutTcpConnectAttempt,
     "TimeoutTcpConnectAttemptMax",
     base::TimeDelta::FromSeconds(30));
+
+constexpr base::Feature kFirstPartySets{"FirstPartySets",
+                                        base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::FeatureParam<bool> kFirstPartySetsIsDogfooder{
+    &kFirstPartySets, "FirstPartySetsIsDogfooder", false};
 
 }  // namespace features
 }  // namespace net

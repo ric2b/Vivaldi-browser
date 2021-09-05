@@ -13,6 +13,7 @@
 #include "chromeos/components/phonehub/do_not_disturb_controller_impl.h"
 #include "chromeos/components/phonehub/feature_status_provider_impl.h"
 #include "chromeos/components/phonehub/find_my_device_controller_impl.h"
+#include "chromeos/components/phonehub/invalid_connection_disconnector.h"
 #include "chromeos/components/phonehub/message_receiver_impl.h"
 #include "chromeos/components/phonehub/message_sender_impl.h"
 #include "chromeos/components/phonehub/multidevice_setup_state_updater.h"
@@ -37,8 +38,7 @@ PhoneHubManagerImpl::PhoneHubManagerImpl(
     chromeos::secure_channel::SecureChannelClient* secure_channel_client,
     std::unique_ptr<BrowserTabsModelProvider> browser_tabs_model_provider,
     const base::RepeatingClosure& show_multidevice_setup_dialog_callback)
-    : user_action_recorder_(std::make_unique<UserActionRecorderImpl>()),
-      connection_manager_(
+    : connection_manager_(
           std::make_unique<ConnectionManagerImpl>(multidevice_setup_client,
                                                   device_sync_client,
                                                   secure_channel_client)),
@@ -48,14 +48,18 @@ PhoneHubManagerImpl::PhoneHubManagerImpl(
           connection_manager_.get(),
           session_manager::SessionManager::Get(),
           chromeos::PowerManagerClient::Get())),
+      user_action_recorder_(std::make_unique<UserActionRecorderImpl>(
+          feature_status_provider_.get())),
       message_receiver_(
           std::make_unique<MessageReceiverImpl>(connection_manager_.get())),
       message_sender_(
           std::make_unique<MessageSenderImpl>(connection_manager_.get())),
+      phone_model_(std::make_unique<MutablePhoneModel>()),
       cros_state_sender_(
           std::make_unique<CrosStateSender>(message_sender_.get(),
                                             connection_manager_.get(),
-                                            multidevice_setup_client)),
+                                            multidevice_setup_client,
+                                            phone_model_.get())),
       do_not_disturb_controller_(std::make_unique<DoNotDisturbControllerImpl>(
           message_sender_.get(),
           user_action_recorder_.get())),
@@ -63,7 +67,6 @@ PhoneHubManagerImpl::PhoneHubManagerImpl(
           connection_manager_.get(),
           feature_status_provider_.get())),
       find_my_device_controller_(std::make_unique<FindMyDeviceControllerImpl>(
-          do_not_disturb_controller_.get(),
           message_sender_.get(),
           user_action_recorder_.get())),
       notification_access_manager_(
@@ -81,7 +84,6 @@ PhoneHubManagerImpl::PhoneHubManagerImpl(
           feature_status_provider_.get(),
           multidevice_setup_client,
           show_multidevice_setup_dialog_callback)),
-      phone_model_(std::make_unique<MutablePhoneModel>()),
       phone_status_processor_(std::make_unique<PhoneStatusProcessor>(
           do_not_disturb_controller_.get(),
           feature_status_provider_.get(),
@@ -105,9 +107,17 @@ PhoneHubManagerImpl::PhoneHubManagerImpl(
           std::make_unique<MultideviceSetupStateUpdater>(
               pref_service,
               multidevice_setup_client,
-              notification_access_manager_.get())) {}
+              notification_access_manager_.get())),
+      invalid_connection_disconnector_(
+          std::make_unique<InvalidConnectionDisconnector>(
+              connection_manager_.get(),
+              phone_model_.get())) {}
 
 PhoneHubManagerImpl::~PhoneHubManagerImpl() = default;
+
+BrowserTabsModelProvider* PhoneHubManagerImpl::GetBrowserTabsModelProvider() {
+  return browser_tabs_model_provider_.get();
+}
 
 ConnectionScheduler* PhoneHubManagerImpl::GetConnectionScheduler() {
   return connection_scheduler_.get();
@@ -152,12 +162,12 @@ UserActionRecorder* PhoneHubManagerImpl::GetUserActionRecorder() {
 // These should be destroyed in the opposite order of how these objects are
 // initialized in the constructor.
 void PhoneHubManagerImpl::Shutdown() {
+  invalid_connection_disconnector_.reset();
   multidevice_setup_state_updater_.reset();
   browser_tabs_model_controller_.reset();
   browser_tabs_model_provider_.reset();
   tether_controller_.reset();
   phone_status_processor_.reset();
-  phone_model_.reset();
   onboarding_ui_tracker_.reset();
   notification_manager_.reset();
   notification_access_manager_.reset();
@@ -165,11 +175,12 @@ void PhoneHubManagerImpl::Shutdown() {
   connection_scheduler_.reset();
   do_not_disturb_controller_.reset();
   cros_state_sender_.reset();
+  phone_model_.reset();
   message_sender_.reset();
   message_receiver_.reset();
+  user_action_recorder_.reset();
   feature_status_provider_.reset();
   connection_manager_.reset();
-  user_action_recorder_.reset();
 }
 
 }  // namespace phonehub

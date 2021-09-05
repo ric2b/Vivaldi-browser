@@ -32,6 +32,11 @@
 #endif
 
 #if defined(OS_WIN)
+#include "base/allocator/buildflags.h"
+#if BUILDFLAG(USE_ALLOCATOR_SHIM)
+#include "base/allocator/allocator_shim.h"
+#endif
+
 #include <timeapi.h>
 
 #include "base/base_switches.h"
@@ -72,6 +77,12 @@ int ChromeMain(int argc, const char** argv) {
 #endif
 
 #if defined(OS_WIN)
+#if BUILDFLAG(USE_ALLOCATOR_SHIM) && BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+  // Call this early on in order to configure heap workarounds. This must be
+  // called from chrome.dll. This may be a NOP on some platforms.
+  base::allocator::ConfigurePartitionAlloc();
+#endif
+
   base::UmaHistogramEnumeration("Windows.ChromeDllPrefetchResult",
                                 prefetch_result_code);
   install_static::InitializeFromPrimaryModule();

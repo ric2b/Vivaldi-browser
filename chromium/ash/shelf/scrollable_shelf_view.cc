@@ -554,13 +554,13 @@ void ScrollableShelfView::OnFocusRingActivationChanged(bool activated) {
   if (activated) {
     focus_ring_activated_ = true;
     SetPaneFocusAndFocusDefault();
-    if (Shell::Get()->IsInTabletMode())
-      GetShelf()->shelf_widget()->ForceToShowHotseat();
+    force_show_hotseat_resetter_ =
+        GetShelf()->shelf_widget()->ForceShowHotseatInTabletMode();
   } else {
     // Shows the gradient shader when the focus ring is disabled.
     focus_ring_activated_ = false;
-    if (Shell::Get()->IsInTabletMode())
-      GetShelf()->shelf_widget()->ForceToHideHotseat();
+    if (force_show_hotseat_resetter_)
+      force_show_hotseat_resetter_.RunAndReset();
   }
 
   MaybeUpdateGradientZone();
@@ -1157,8 +1157,8 @@ void ScrollableShelfView::ButtonPressed(views::Button* sender,
 void ScrollableShelfView::HandleAccessibleActionScrollToMakeVisible(
     ShelfButton* button) {
   // Scrollable shelf can only be hidden in tablet mode.
-  if (Shell::Get()->IsInTabletMode())
-    GetShelf()->shelf_widget()->ForceToShowHotseat();
+  GetShelf()->hotseat_widget()->set_manually_extended(true);
+  GetShelf()->shelf_widget()->shelf_layout_manager()->UpdateVisibilityState();
 }
 
 std::unique_ptr<ScrollableShelfView::ScopedActiveInkDropCount>
@@ -1649,6 +1649,15 @@ bool ScrollableShelfView::ProcessGestureEvent(const ui::GestureEvent& event) {
 
 void ScrollableShelfView::HandleMouseWheelEvent(ui::MouseWheelEvent* event) {
   // Note that the scrolling from touchpad is propagated as mouse wheel event.
+  // Let the shelf handle mouse wheel events over the empty area of the shelf
+  // view, as these events would be ignored by the scrollable shelf view.
+  gfx::Point location_in_shelf_view = event->location();
+  View::ConvertPointToTarget(this, shelf_view_, &location_in_shelf_view);
+  if (!shelf_view_->LocationInsideVisibleShelfItemBounds(
+          location_in_shelf_view)) {
+    GetShelf()->ProcessMouseWheelEvent(event, false);
+    return;
+  }
 
   if (!ShouldHandleScroll(gfx::Vector2dF(event->x_offset(), event->y_offset()),
                           /*is_gesture_fling=*/false)) {

@@ -146,8 +146,10 @@ bool MenuCodec::DecodeNode(Menu_Node* parent, const base::Value& value,
           LOG(ERROR) << "Menu Codec: Developer - Missing in profile file, "
                         "remove that file.";
         }
-#endif
+        return true;  // Do not stop parsing in devel mode.
+#else
         return false;
+#endif  // !OFFICIAL_BUILD
       }
       if (!action && *type != "separator") {
         LOG(ERROR) << "Menu Codec: Action missing for " << *type;

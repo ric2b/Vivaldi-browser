@@ -4,13 +4,16 @@
 <translation id="1033008476608128425">Listnany (Krajina 3)</translation>
 <translation id="1118377629180821201">Vesnička (Krajina 12)</translation>
 <translation id="1158503667684816647">Již nezobrazovat potvrzení</translation>
+<translation id="1222195720020481779">Spouštění instalátoru…</translation>
 <translation id="1276145862619442150">Rychlé přístupy</translation>
 <translation id="1281950884873973195">Kočka (Zvířena 6)</translation>
 <translation id="1411638389238344450">Odeslat odkaz poštou</translation>
 <translation id="1454726940098520109">Již nezobrazovat</translation>
 <translation id="1462666970065907900">Opravdu chcete uzavřít toto okno?</translation>
+<translation id="1526344461589023948">Při pokusu o uložení stahované aktualizace došlo k chybě. Zkontrolujte, že má váš počítač dostatek volného místa na disku a zkuste to znovu.</translation>
 <translation id="1657174850639146440">Týpek (Příšerka 9)</translation>
 <translation id="1676595396635191120">Nové soukromé okno</translation>
+<translation id="1702758681952953055">Pokud chyba přetrvává, nahlašte ji prosím spolu s následujícími podrobnostmi:</translation>
 <translation id="1728549374069268714">Vložit a přejít</translation>
 <translation id="1756026472674246267">Otevřít odkaz v novém listu</translation>
 <translation id="1759842336958782510">Google Chrome</translation>
@@ -19,10 +22,17 @@
 <translation id="1921101374471252440">Znovu načíst ob&amp;rázek</translation>
 <translation id="1924750141060565109">Sahara (Krajina 15)</translation>
 <translation id="19598411548897379">Obecný</translation>
+<translation id="1985669426322966465">Aktualizace aplikace</translation>
 <translation id="2079036669923635404">Klepněte sem k aktualizaci Vivaldi na verzi <ph name="VERSION" />.</translation>
+<translation id="2141974047387702305">Při stahování aktualizačního souboru došlo k chybě. Zkontrolujte své internetové připojení a zkuste to znovu.</translation>
+<translation id="2339641773402824483">Vyhledávání aktualizací…</translation>
 <translation id="2441056087170876076">Králičí zoubky (Příšerka 2)</translation>
 <translation id="2444387452209867610">Vložit poznámku</translation>
 <translation id="2486841023299517366">Psisko (Zvířena 4)</translation>
+<translation id="2612127540243995147">Připraveno k instalaci. Vivaldi bude ukončen a poté opět znovu spuštěn.</translation>
+<translation id="2613387515621326337">Zobrazit stránku s aktualizacemi</translation>
+<translation id="2647368062414805334">Je nám líto, ale nemůžeme získat nastavení prohlížeče Edge, běží-li zrovna. K importování těchto nastavení do Vivaldi, uložte vše potřebné a ukončete všechna okna Edge. Pak klepněte na Pokračovat.</translation>
+<translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">Panda červená (Zvířena 3)</translation>
 <translation id="2873951654529031587">Koš</translation>
 <translation id="292258461174562431">Rošťák (Příšerka 4)</translation>
@@ -33,9 +43,12 @@
 <translation id="3084011186245865060">Potok (Krajina 6)</translation>
 <translation id="3127383884976966729">Panda velká (Zvířena 7)</translation>
 <translation id="3156398087075132709">Nová záložka</translation>
+<translation id="3255747772218936245">Instalovat aktualizaci</translation>
 <translation id="3259769196742189631">Ověřit správnost HTML zápisu</translation>
 <translation id="3302905971452834934">Darebák (Příšerka 1)</translation>
 <translation id="3334610655141903168">(nepojmenováno)</translation>
+<translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> je aktuálně nejnovější dostupná verze.</translation>
+<translation id="3383198080133834965">Aplikace je aktuální!</translation>
 <translation id="3402602684546832928">Vyberte soubor se záložkami Opery</translation>
 <translation id="3451317331714872347">Lesnaté úpatí (Krajina 8)</translation>
 <translation id="3457498675806041407">Potvrzení ukončení</translation>
@@ -45,13 +58,17 @@
 <translation id="3542768452570884558">Otevřít odkaz v novém okně</translation>
 <translation id="3588820906588687999">Otevřít obrázek v novém listu</translation>
 <translation id="3601066750251199488">Mimozemšťan (Příšerka 3)</translation>
+<translation id="3680031241659195730">Je dostupná nová verze Vivaldi!</translation>
+<translation id="3708982624815781692">Stahování bylo zrušeno.</translation>
 <translation id="3732157130969736834">Přidat odkaz do záložek</translation>
 <translation id="3732388226447288666">Liška ryšavá (Zvířena 2)</translation>
 <translation id="3732439195215136813">Koala (Zvířena 5)</translation>
+<translation id="3795800845758778870">Je nám líto, ale nemůžeme získat nastavení prohlížeče Brave, běží-li zrovna. K importování těchto nastavení do Vivaldi, uložte vše potřebné a ukončete všechna okna Brave. Pak klepněte na Pokračovat.</translation>
 <translation id="3832132597516774400">Přímořský soumrak (Krajina 5)</translation>
 <translation id="3914946330804881301">Importováno z Opery</translation>
 <translation id="3921292902397893431">Vejtaha (Příšerka 8)</translation>
 <translation id="3943857333388298514">Vložit</translation>
+<translation id="4005270918754737597">Přeskočit tuto verzi</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4073157431025461511">&amp;Příště nezobrazovat</translation>
 <translation id="4074744496918018786">Otevřít obrázek v soukromém okně</translation>
@@ -68,6 +85,7 @@
 <translation id="4677434526832593569">Vlk (Zvířena 8)</translation>
 <translation id="474217410105706308">Ztlumit zvuk listu</translation>
 <translation id="4881695831933465202">Otevřít</translation>
+<translation id="498766871928286903"><ph name="DOWNLOADED" /> z <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
 <translation id="5014281392052865061">Importovaný rychlý přístup</translation>
 <translation id="5092656712000637858">Přidat stránku jako webový panel</translation>
 <translation id="5177818338935286353">Pomelka (Příšerka 7)</translation>
@@ -81,30 +99,41 @@
 <translation id="5594602170491763400">„Smějící se bestie“ (Příšerka 5)</translation>
 <translation id="5615637589913244581">Opera verze 15+ (Beta)</translation>
 <translation id="5648110075441906505">Otevřít obrázek v novém okně</translation>
+<translation id="5656371807944747581">Chyba aktualizace!</translation>
 <translation id="5716238312826274098">Zkuste deaktivovat předvídání akcí sítě</translation>
+<translation id="5732584064771442623">K dispozici je Vivaldi <ph name="NEW_VERSION" /> (nainstalována je verze <ph name="OLD_VERSION" />. Chcete ji stáhnout?</translation>
 <translation id="5770433027661640693">Ostrov (Krajina 10)</translation>
 <translation id="5857090052475505287">Nová složka</translation>
 <translation id="588258955323874662">Celá obrazovka</translation>
 <translation id="5916080360077521750">Je nám líto, ale nemůžeme získat nastavení prohlížeče Chrome, běží-li zrovna. K importování těchto nastavení do Vivaldi, uložte vše potřebné a ukončete všechna okna Chromu. Pak klepněte na Pokračovat.</translation>
+<translation id="6040143037577758943">Zavřít</translation>
 <translation id="6229528619562190452">Klepněte sem pro aktualizaci Vivaldi.</translation>
 <translation id="6234173136417926046">Použít obrázek jako pozadí úvodní stránky</translation>
 <translation id="630690498669249215">Opera – soubor se záložkami</translation>
 <translation id="6339818817272922368">Místní účet</translation>
 <translation id="6438786710866753178">Jehličnany (Krajina 4)</translation>
-<translation id="6477028720702061455">Vyberte složku s profilem Opery</translation>
+<translation id="6477028720702061455">Vyberte složku s Opera profilem</translation>
 <translation id="6510706699590490869">&amp;Aktualizovat Vivaldi</translation>
 <translation id="6538338088414940408">Otevřít odkaz v listu na pozadí</translation>
 <translation id="6551219277044048123">Přidat jako &amp;vyhledávač…</translation>
 <translation id="6630781781151951863">Tropy (Krajina 18)</translation>
+<translation id="6635049669875534328">Poznámky k vydání:</translation>
+<translation id="6693585104974197539">Vyberte složku s Edge profilem</translation>
+<translation id="6726279523566323394">Vyberte složku s Brave profilem</translation>
 <translation id="6804831687363620480">Je nám líto, ale nemůžeme získat nastavení prohlížeče Opera 15+, běží-li zrovna. K importování těchto nastavení do Vivaldi, uložte vše potřebné a ukončete všechna okna Opery 15+. Pak klepněte na Pokračovat.</translation>
+<translation id="6892812721183419409">Otevřít odkaz jako <ph name="USER" /></translation>
 <translation id="6896758677409633944">Kopírovat</translation>
 <translation id="7086554968911045110">Noc ve skalách (Krajina 7)</translation>
 <translation id="7111492742514999492">Větrný mlýn (Krajina 9)</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7496505986576158197">Prohlížeč Vivaldi mohl vzniknout díky <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> open source projektu a dalšímu <ph name="BEGIN_LINK_OSS" />otevřenému softwaru<ph name="END_LINK_OSS" />.</translation>
+<translation id="7581266044164103589">Instalátor aktualizace se nepodařilo spustit. Zkontrolujte, že má váš počítač dostatek volné paměti a místa na disku a zkuste to znovu.</translation>
+<translation id="7658239707568436148">Zrušit</translation>
 <translation id="7715497554424665066">&amp;Odložit aktualizaci</translation>
 <translation id="7724603315864178912">Vyjmout</translation>
+<translation id="7727481996062361502">Ověřování aktualizace…</translation>
 <translation id="7793738202466490491">Přidat jako událost kalendáře</translation>
+<translation id="7848222781052558334">Elektronický podpis stahovaných souborů se nepodařilo ověřit.</translation>
 <translation id="7865983598101744945">Potvrďte ukončení</translation>
 <translation id="7957213167373139414">Můj kalendář</translation>
 <translation id="8027581147000338959">Otevřít v novém okně</translation>
@@ -113,9 +142,13 @@
 <translation id="8261506727792406068">Odstranit</translation>
 <translation id="8331671104904436324">Otevřít v listu na pozadí</translation>
 <translation id="8373293945112511707">Vodopád (Krajina 1)</translation>
+<translation id="8388552048012645975">Stahování aktualizace…</translation>
 <translation id="8427094907586191051">Savana (Krajina 17)</translation>
+<translation id="8439034818057146672">Nová verze Vivaldi je připravena k instalaci.</translation>
 <translation id="8446668873108041390">Vykonávání JavaScriptu skrze AppleScript je vypnuto. JavaScript z Apple událostí můžete povolit v Nastavení → Soukromí → Apple události.</translation>
 <translation id="8539196077526389150">Louka (Krajina 13)</translation>
+<translation id="8562339533180097902">Ukončit Vivaldi a nainstalovat</translation>
+<translation id="8567452685425968223">Rozbalování aktualizace…</translation>
 <translation id="8624587806981488221">&amp;Znovu načíst obrázek</translation>
 <translation id="864444594187862076">Opera verze 15+ (Developer)</translation>
 <translation id="8651348004684669199">Přidat aktivní list</translation>
@@ -123,12 +156,15 @@
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8768970203213061953">Americká poušť (Krajina 14)</translation>
 <translation id="8773635261052182196">Již dále neuvidíte tato upozornění. Znovu si je můžete zapnout v nastavení Vivaldi.</translation>
+<translation id="8813277370772331957">Připomenout později</translation>
 <translation id="8894900864683381599">Přidat odkaz jako webový panel</translation>
 <translation id="8912720443398351457">Opravdu chcete ukončit Vivaldi?</translation>
 <translation id="8947109330183116400">Vyberte HTML soubor se záložkami</translation>
-<translation id="9017566390391482291">Vyberte složku s profilem Vivaldi</translation>
+<translation id="9017566390391482291">Vyberte složku s Vivaldi profilem</translation>
 <translation id="9065203028668620118">Upravit</translation>
+<translation id="912022491595344261">Otevřít obrázek jako <ph name="USER" /></translation>
 <translation id="9157539936604258187">Otevřít odkaz v současném listu</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
+<translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">Zámek (Krajina 16)</translation>
 </translationbundle>

@@ -14,6 +14,7 @@
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/image_decoder/image_decoder.h"
@@ -59,7 +60,7 @@ message_center::Notification CreateNearbyNotification(const std::string& id) {
 
   // TODO(crbug.com/1102348): Also show settings for other platforms once there
   // is a nearby settings page in Chrome browser.
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   notification.set_settings_button_handler(
       message_center::SettingsButtonHandler::DELEGATE);
 #endif
@@ -119,7 +120,7 @@ int GetTextAttachmentsStringId(const std::vector<TextAttachment>& texts) {
     case TextAttachment::Type::kUrl:
       return IDS_NEARBY_TEXT_ATTACHMENTS_LINKS;
     default:
-      return IDS_NEARBY_UNKNOWN_ATTACHMENTS;
+      return IDS_NEARBY_TEXT_ATTACHMENTS_UNKNOWN;
   }
 }
 
@@ -170,6 +171,20 @@ base::string16 GetFailureNotificationTitle(const ShareTarget& share_target) {
                         : IDS_NEARBY_NOTIFICATION_SEND_FAILURE_TITLE);
 }
 
+base::Optional<base::string16> GetFailureNotificationMessage(
+    TransferMetadata::Status status) {
+  switch (status) {
+    case TransferMetadata::Status::kTimedOut:
+      return l10n_util::GetStringUTF16(IDS_NEARBY_ERROR_TIME_OUT);
+    case TransferMetadata::Status::kNotEnoughSpace:
+      return l10n_util::GetStringUTF16(IDS_NEARBY_ERROR_NOT_ENOUGH_SPACE);
+    case TransferMetadata::Status::kUnsupportedAttachmentType:
+      return l10n_util::GetStringUTF16(IDS_NEARBY_ERROR_UNSUPPORTED_FILE_TYPE);
+    default:
+      return base::nullopt;
+  }
+}
+
 base::string16 GetConnectionRequestNotificationMessage(
     const ShareTarget& share_target,
     const TransferMetadata& transfer_metadata) {
@@ -200,8 +215,15 @@ gfx::Image GetImageFromShareTarget(const ShareTarget& share_target) {
 
 NearbyNotificationManager::ReceivedContentType GetReceivedContentType(
     const ShareTarget& share_target) {
-  if (!share_target.text_attachments.empty())
+  if (!share_target.text_attachments.empty()) {
+    const TextAttachment& file = share_target.text_attachments[0];
+    if (share_target.text_attachments.size() == 1 &&
+        file.type() == sharing::mojom::TextMetadata::Type::kUrl) {
+      return NearbyNotificationManager::ReceivedContentType::kSingleUrl;
+    }
+
     return NearbyNotificationManager::ReceivedContentType::kText;
+  }
 
   if (share_target.file_attachments.size() != 1)
     return NearbyNotificationManager::ReceivedContentType::kFiles;
@@ -363,6 +385,10 @@ class SuccessNotificationDelegate : public NearbyNotificationDelegate {
         DCHECK_EQ(0, *action_index);
         CopyTextToClipboard();
         break;
+      case NearbyNotificationManager::ReceivedContentType::kSingleUrl:
+        DCHECK_EQ(0, *action_index);
+        OpenTextLink();
+        break;
       case NearbyNotificationManager::ReceivedContentType::kSingleImage:
         switch (*action_index) {
           case 0:
@@ -402,6 +428,16 @@ class SuccessNotificationDelegate : public NearbyNotificationDelegate {
       std::move(testing_callback_)
           .Run(NearbyNotificationManager::SuccessNotificationAction::
                    kOpenDownloads);
+    }
+  }
+
+  void OpenTextLink() {
+    const std::string& url = share_target_.text_attachments[0].text_body();
+    manager_->OpenURL(GURL(url));
+
+    if (testing_callback_) {
+      std::move(testing_callback_)
+          .Run(NearbyNotificationManager::SuccessNotificationAction::kOpenUrl);
     }
   }
 
@@ -512,12 +548,6 @@ NearbyNotificationManager::~NearbyNotificationManager() {
 void NearbyNotificationManager::OnTransferUpdate(
     const ShareTarget& share_target,
     const TransferMetadata& transfer_metadata) {
-  NS_LOG(VERBOSE) << __func__ << ": Nearby notification manager: "
-                  << "Transfer update for share target with ID "
-                  << share_target.id << ": "
-                  << TransferMetadata::StatusToString(
-                         transfer_metadata.status());
-
   if (!share_target_)
     share_target_ = share_target;
   DCHECK_EQ(share_target_->id, share_target.id);
@@ -545,11 +575,11 @@ void NearbyNotificationManager::OnTransferUpdate(
     case TransferMetadata::Status::kFailed:
     case TransferMetadata::Status::kNotEnoughSpace:
     case TransferMetadata::Status::kUnsupportedAttachmentType:
-      ShowFailure(share_target);
+      ShowFailure(share_target, transfer_metadata);
       break;
     default:
       if (transfer_metadata.is_final_status())
-        ShowFailure(share_target);
+        ShowFailure(share_target, transfer_metadata);
       break;
   }
 
@@ -716,6 +746,10 @@ void NearbyNotificationManager::ShowIncomingSuccess(
       notification_actions.emplace_back(l10n_util::GetStringUTF16(
           IDS_NEARBY_NOTIFICATION_ACTION_COPY_TO_CLIPBOARD));
       break;
+    case ReceivedContentType::kSingleUrl:
+      notification_actions.emplace_back(
+          l10n_util::GetStringUTF16(IDS_NEARBY_NOTIFICATION_ACTION_OPEN_URL));
+      break;
     case ReceivedContentType::kSingleImage:
       notification_actions.emplace_back(l10n_util::GetStringUTF16(
           IDS_NEARBY_NOTIFICATION_ACTION_OPEN_FOLDER));
@@ -751,7 +785,9 @@ void NearbyNotificationManager::ShowIncomingSuccess(
   }
 }
 
-void NearbyNotificationManager::ShowFailure(const ShareTarget& share_target) {
+void NearbyNotificationManager::ShowFailure(
+    const ShareTarget& share_target,
+    const TransferMetadata& transfer_metadata) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   // If there is an existing notification, close it first otherwise we won't
@@ -761,6 +797,12 @@ void NearbyNotificationManager::ShowFailure(const ShareTarget& share_target) {
   message_center::Notification notification =
       CreateNearbyNotification(kNearbyNotificationId);
   notification.set_title(GetFailureNotificationTitle(share_target));
+
+  base::Optional<base::string16> message =
+      GetFailureNotificationMessage(transfer_metadata.status());
+  if (message) {
+    notification.set_message(*message);
+  }
 
   delegate_map_.erase(kNearbyNotificationId);
 
@@ -788,6 +830,10 @@ NearbyNotificationDelegate* NearbyNotificationManager::GetNotificationDelegate(
     return nullptr;
 
   return iter->second.get();
+}
+
+void NearbyNotificationManager::OpenURL(GURL url) {
+  nearby_service_->OpenURL(url);
 }
 
 void NearbyNotificationManager::CancelTransfer() {

@@ -63,7 +63,6 @@
 #include "third_party/blink/renderer/core/loader/frame_loader_types.h"
 #include "third_party/blink/renderer/core/loader/navigation_policy.h"
 #include "third_party/blink/renderer/core/loader/preload_helper.h"
-#include "third_party/blink/renderer/core/loader/previews_resource_loading_hints.h"
 #include "third_party/blink/renderer/core/page/viewport_description.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/loader/fetch/client_hints_preferences.h"
@@ -115,6 +114,12 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
                  std::unique_ptr<WebNavigationParams> navigation_params);
   ~DocumentLoader() override;
 
+  // Returns WebNavigationParams that can be used to clone DocumentLoader. Used
+  // for javascript: URL and XSLT commits, where we want to create a new
+  // Document but keep most of the property of the current DocumentLoader.
+  std::unique_ptr<WebNavigationParams>
+  CreateWebNavigationParamsToCloneDocument();
+
   static bool WillLoadUrlAsEmpty(const KURL&);
 
   LocalFrame* GetFrame() const { return frame_; }
@@ -135,13 +140,6 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
   void SetSubresourceFilter(SubresourceFilter*);
   SubresourceFilter* GetSubresourceFilter() const {
     return subresource_filter_.Get();
-  }
-  void SetPreviewsResourceLoadingHints(
-      PreviewsResourceLoadingHints* resource_loading_hints) {
-    resource_loading_hints_ = resource_loading_hints;
-  }
-  PreviewsResourceLoadingHints* GetPreviewsResourceLoadingHints() const {
-    return resource_loading_hints_;
   }
 
   const KURL& Url() const;
@@ -225,6 +223,8 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
   };
   InitialScrollState& GetInitialScrollState() { return initial_scroll_state_; }
 
+  enum State { kNotStarted, kProvisional, kCommitted, kSentDidFinishLoad };
+
   void DispatchLinkHeaderPreloads(const ViewportDescription*,
                                   PreloadHelper::MediaPreloadPolicy);
 
@@ -300,7 +300,8 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
 
   void SetHistoryItemStateForCommit(HistoryItem* old_item,
                                     WebFrameLoadType,
-                                    HistoryNavigationType);
+                                    HistoryNavigationType,
+                                    CommitReason commit_reason);
 
   mojo::PendingReceiver<mojom::blink::WorkerTimingContainer>
   TakePendingWorkerTimingReceiver(int request_id);
@@ -449,9 +450,8 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
   base::Optional<WebOriginPolicy> origin_policy_;
   const scoped_refptr<const SecurityOrigin> requestor_origin_;
   const KURL unreachable_url_;
+  const KURL pre_redirect_url_for_failed_navigations_;
   std::unique_ptr<WebNavigationBodyLoader> body_loader_;
-  const network::mojom::IPAddressSpace ip_address_space_ =
-      network::mojom::IPAddressSpace::kUnknown;
   const bool grant_load_local_resources_ = false;
   const base::Optional<blink::mojom::FetchCacheMode> force_fetch_cache_mode_;
   const FramePolicy frame_policy_;
@@ -467,9 +467,6 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
 
   Member<SubresourceFilter> subresource_filter_;
 
-  // Stores the resource loading hints for this document.
-  Member<PreviewsResourceLoadingHints> resource_loading_hints_;
-
   // A reference to actual request's url and referrer used to
   // inititate this load.
   KURL original_url_;
@@ -482,9 +479,9 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
   bool is_client_redirect_;
   bool replaces_current_history_item_;
   bool data_received_;
+  const bool is_error_page_for_failed_navigation_;
 
   const Member<ContentSecurityPolicy> content_security_policy_;
-  const bool was_blocked_by_csp_;
   mojo::Remote<mojom::blink::ContentSecurityNotifier>
       content_security_notifier_;
 
@@ -507,7 +504,6 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
   ClientHintsPreferences client_hints_preferences_;
   InitialScrollState initial_scroll_state_;
 
-  enum State { kNotStarted, kProvisional, kCommitted, kSentDidFinishLoad };
   State state_;
 
   // Used to block the parser.
@@ -578,7 +574,7 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
   // Whether the document can be scrolled on load
   bool navigation_scroll_allowed_ = true;
 
-  bool origin_isolated_ = false;
+  bool origin_agent_cluster_ = false;
 
   // Whether this load request is cross browsing context group.
   bool is_cross_browsing_context_group_navigation_ = false;

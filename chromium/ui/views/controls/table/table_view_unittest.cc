@@ -471,10 +471,14 @@ class TableViewTest : public ViewsTestBase,
                          " selection=";
     const ui::ListSelectionModel::SelectedIndices& selection(
         model.selected_indices());
-    for (size_t i = 0; i < selection.size(); ++i) {
-      if (i != 0)
+    bool first = true;
+    for (int index : selection) {
+      if (first) {
+        first = false;
+      } else {
         result += " ";
-      result += base::NumberToString(selection[i]);
+      }
+      result += base::NumberToString(index);
     }
     return result;
   }
@@ -1293,6 +1297,29 @@ TEST_P(TableViewTest, Selection) {
   EXPECT_EQ("active=0 anchor=0 selection=0", SelectionStateAsString());
 
   table_->set_observer(nullptr);
+}
+
+TEST_P(TableViewTest, SelectAll) {
+  TableViewObserverImpl observer;
+  table_->set_observer(&observer);
+
+  // Initially no selection.
+  EXPECT_EQ("active=-1 anchor=-1 selection=", SelectionStateAsString());
+
+  table_->SetSelectionAll(/*select=*/true);
+  EXPECT_EQ(1, observer.GetChangedCountAndClear());
+  EXPECT_EQ("active=-1 anchor=-1 selection=0 1 2 3", SelectionStateAsString());
+
+  table_->Select(2);
+  EXPECT_EQ(1, observer.GetChangedCountAndClear());
+  EXPECT_EQ("active=2 anchor=2 selection=2", SelectionStateAsString());
+
+  table_->SetSelectionAll(/*select=*/true);
+  EXPECT_EQ(1, observer.GetChangedCountAndClear());
+  EXPECT_EQ("active=2 anchor=2 selection=0 1 2 3", SelectionStateAsString());
+
+  table_->SetSelectionAll(/*select=*/false);
+  EXPECT_EQ("active=2 anchor=2 selection=", SelectionStateAsString());
 }
 
 TEST_P(TableViewTest, RemoveUnselectedRows) {

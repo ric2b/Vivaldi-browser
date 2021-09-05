@@ -52,7 +52,6 @@
 #include "content/browser/renderer_host/compositor_impl_android.h"
 #include "content/browser/renderer_host/delegated_frame_host_client_android.h"
 #include "content/browser/renderer_host/display_util.h"
-#include "content/browser/renderer_host/frame_metadata_util.h"
 #include "content/browser/renderer_host/input/input_router.h"
 #include "content/browser/renderer_host/input/synthetic_gesture_target_android.h"
 #include "content/browser/renderer_host/input/touch_selection_controller_client_manager_android.h"
@@ -324,11 +323,6 @@ void RenderWidgetHostViewAndroid::InitAsPopup(
   NOTIMPLEMENTED();
 }
 
-void RenderWidgetHostViewAndroid::InitAsFullscreen(
-    RenderWidgetHostView* reference_host_view) {
-  NOTIMPLEMENTED();
-}
-
 void RenderWidgetHostViewAndroid::NotifyVirtualKeyboardOverlayRect(
     const gfx::Rect& keyboard_rect) {
   RenderFrameHostImpl* frame_host = static_cast<RenderFrameHostImpl*>(
@@ -428,12 +422,8 @@ void RenderWidgetHostViewAndroid::OnRenderFrameMetadataChangedBeforeActivation(
     is_transparent = false;
   }
 
-  bool is_mobile_optimized = IsMobileOptimizedFrame(
-      metadata.page_scale_factor, metadata.min_page_scale_factor,
-      metadata.max_page_scale_factor, metadata.scrollable_viewport_size,
-      metadata.root_layer_size);
-
-  gesture_provider_.SetDoubleTapSupportForPageEnabled(!is_mobile_optimized);
+  gesture_provider_.SetDoubleTapSupportForPageEnabled(
+      !metadata.is_mobile_optimized);
 
   float dip_scale = view_.GetDipScale();
   gfx::SizeF root_layer_size_dip = metadata.root_layer_size;
@@ -983,6 +973,8 @@ void RenderWidgetHostViewAndroid::OnDidNavigateMainFrameToNewPage() {
   if (view_.parent())
     view_.parent()->MoveToFront(&view_);
   ResetGestureDetection();
+  if (delegated_frame_host_)
+    delegated_frame_host_->OnNavigateToNewPage();
 }
 
 void RenderWidgetHostViewAndroid::SetDoubleTapSupportEnabled(bool enabled) {
@@ -1166,7 +1158,7 @@ void RenderWidgetHostViewAndroid::MaybeCreateSynchronousCompositor() {
     sync_compositor_ =
         SynchronousCompositorHost::Create(this, host()->GetFrameSinkId());
     view_.SetCopyOutputCallback(sync_compositor_->GetCopyViewCallback());
-    if (render_widget_initialized_)
+    if (renderer_widget_created_)
       sync_compositor_->InitMojo();
   }
 }
@@ -1230,10 +1222,12 @@ void RenderWidgetHostViewAndroid::OnSelectionEvent(
       event, GetSelectionRect(*touch_selection_controller_));
 }
 
-void RenderWidgetHostViewAndroid::OnDragUpdate(const gfx::PointF& position) {
+void RenderWidgetHostViewAndroid::OnDragUpdate(
+    const ui::TouchSelectionDraggable::Type type,
+    const gfx::PointF& position) {
   if (!selection_popup_controller_)
     return;
-  selection_popup_controller_->OnDragUpdate(position);
+  selection_popup_controller_->OnDragUpdate(type, position);
 }
 
 ui::TouchSelectionControllerClient*
@@ -1686,17 +1680,6 @@ RenderWidgetHostViewAndroid::FilterInputEvent(
   return blink::mojom::InputEventResultState::kNotConsumed;
 }
 
-BrowserAccessibilityManager*
-RenderWidgetHostViewAndroid::CreateBrowserAccessibilityManager(
-    BrowserAccessibilityDelegate* delegate,
-    bool for_root_frame) {
-  auto* wcax = GetWebContentsAccessibilityAndroid();
-  return new BrowserAccessibilityManagerAndroid(
-      BrowserAccessibilityManagerAndroid::GetEmptyDocument(),
-      for_root_frame && host() && wcax ? wcax->GetWeakPtr() : nullptr,
-      delegate);
-}
-
 blink::mojom::PointerLockResult RenderWidgetHostViewAndroid::LockMouse(
     bool request_unadjusted_movement) {
   NOTIMPLEMENTED();
@@ -2052,8 +2035,8 @@ const viz::LocalSurfaceId& RenderWidgetHostViewAndroid::GetLocalSurfaceId()
   return local_surface_id_allocator_.GetCurrentLocalSurfaceId();
 }
 
-void RenderWidgetHostViewAndroid::OnRenderWidgetInit() {
-  render_widget_initialized_ = true;
+void RenderWidgetHostViewAndroid::OnRendererWidgetCreated() {
+  renderer_widget_created_ = true;
   if (sync_compositor_)
     sync_compositor_->InitMojo();
 }
@@ -2353,6 +2336,11 @@ void RenderWidgetHostViewAndroid::DidNavigate() {
   is_first_navigation_ = false;
 }
 
+WebContentsAccessibility*
+RenderWidgetHostViewAndroid::GetWebContentsAccessibility() {
+  return web_contents_accessibility_;
+}
+
 viz::ScopedSurfaceIdAllocator
 RenderWidgetHostViewAndroid::DidUpdateVisualProperties(
     const cc::RenderFrameMetadata& metadata) {
@@ -2467,6 +2455,7 @@ void RenderWidgetHostViewAndroid::HandleSwipeToMoveCursorGestureAck(
       // 0x0.
       if (rect.width() != 0.f || rect.height() != 0.f) {
         selection_popup_controller_->OnDragUpdate(
+            ui::TouchSelectionDraggable::Type::kNone,
             gfx::PointF(event.PositionInWidget().x(), rect.right_center().y()));
       }
       break;

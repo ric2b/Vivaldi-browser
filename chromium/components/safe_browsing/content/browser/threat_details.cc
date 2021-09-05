@@ -13,11 +13,11 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/lazy_instance.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/stl_util.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "components/history/core/browser/history_service.h"
@@ -330,9 +330,9 @@ class ThreatDetailsFactoryImpl : public ThreatDetailsFactory {
       ReferrerChainProvider* referrer_chain_provider,
       bool trim_to_ad_tags,
       ThreatDetailsDoneCallback done_callback) override {
-    // We can't use make_unique due to the protected constructor. We can't
-    // directly use std::unique_ptr<ThreatDetails>(new ThreatDetails(...))
-    // due to presubmit errors. So we use base::WrapUnique:
+    // We can't use make_unique due to the protected constructor, so we use bare
+    // new and base::WrapUnique. base::PassKey would allow make_unique to be
+    // used.
     auto threat_details = base::WrapUnique(new ThreatDetails(
         ui_manager, web_contents, unsafe_resource, url_loader_factory,
         history_service, referrer_chain_provider, trim_to_ad_tags,
@@ -646,6 +646,14 @@ void ThreatDetails::StartCollection() {
 void ThreatDetails::RequestThreatDOMDetails(content::RenderFrameHost* frame) {
   content::BackForwardCache::DisableForRenderFrameHost(
       frame, "safe_browsing::ThreatDetails");
+  if (!frame->IsRenderFrameCreated()) {
+    // A child frame may have been created browser-side but has not completed
+    // setting up the renderer for it yet. In particular, this occurs if the
+    // child frame was blocked and that's why we're showing a safe browsing page
+    // in the main frame.
+    DCHECK(frame->GetParent());
+    return;
+  }
   mojo::Remote<safe_browsing::mojom::ThreatReporter> threat_reporter;
   frame->GetRemoteInterfaces()->GetInterface(
       threat_reporter.BindNewPipeAndPassReceiver());
@@ -885,17 +893,12 @@ void ThreatDetails::AllDone() {
 }
 
 void ThreatDetails::FrameDeleted(RenderFrameHost* render_frame_host) {
-  auto render_frame_host_it =
-      std::find(pending_render_frame_hosts_.begin(),
-                pending_render_frame_hosts_.end(), render_frame_host);
-  if (render_frame_host_it != pending_render_frame_hosts_.end()) {
-    pending_render_frame_hosts_.erase(render_frame_host_it);
-  }
+  base::Erase(pending_render_frame_hosts_, render_frame_host);
 }
 
 void ThreatDetails::RenderFrameHostChanged(RenderFrameHost* old_host,
                                            RenderFrameHost* new_host) {
-  FrameDeleted(old_host);
+  base::Erase(pending_render_frame_hosts_, old_host);
 }
 
 base::WeakPtr<ThreatDetails> ThreatDetails::GetWeakPtr() {

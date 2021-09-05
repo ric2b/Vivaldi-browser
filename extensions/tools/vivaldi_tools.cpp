@@ -8,11 +8,12 @@
 
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
-#include "components/zoom/zoom_controller.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/common/extensions/command.h"
+#include "components/zoom/zoom_controller.h"
 #include "extensions/api/bookmarks/bookmarks_private_api.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/common/manifest_constants.h"
@@ -37,7 +38,6 @@ const char* kVivaldiKeyDivide = "/";
 const char* kVivaldiKeySubtract = "-";
 const char* kVivaldiKeyPeriod = ".";
 const char* kVivaldiKeyComma = ",";
-
 
 ui::KeyboardCode GetFunctionKey(std::string token) {
   int size = token.size();
@@ -173,13 +173,33 @@ Browser* FindVivaldiBrowser() {
 void BroadcastEvent(const std::string& eventname,
                     std::unique_ptr<base::ListValue> args,
                     content::BrowserContext* context) {
-  std::unique_ptr<extensions::Event> event(new extensions::Event(
-    extensions::events::VIVALDI_EXTENSION_EVENT, eventname, std::move(args)));
+  auto event = std::make_unique<extensions::Event>(
+      extensions::events::VIVALDI_EXTENSION_EVENT, eventname, std::move(args));
   extensions::EventRouter* event_router = extensions::EventRouter::Get(context);
   if (event_router) {
     event_router->BroadcastEvent(std::move(event));
   }
-}  // namespace
+}
+
+void BroadcastEventToAllProfiles(const std::string& eventname,
+                                 std::unique_ptr<base::ListValue> args_list) {
+  if (!args_list) {
+    args_list = std::make_unique<base::ListValue>();
+  }
+  ProfileManager* profile_manager = g_browser_process->profile_manager();
+  std::vector<Profile*> active_profiles = profile_manager->GetLoadedProfiles();
+  for (size_t i = 0; i < active_profiles.size(); ++i) {
+    Profile* profile = active_profiles[i];
+    DCHECK(profile);
+    std::unique_ptr<base::ListValue> args;
+    if (i + 1 == active_profiles.size()) {
+      args = std::move(args_list);
+    } else {
+      args = std::make_unique<base::ListValue>(args_list->GetList());
+    }
+    BroadcastEvent(eventname, std::move(args), profile);
+  }
+}
 
 // Start chromium copied code
 // Copyright (c) 2012 The Chromium Authors. All rights reserved.
@@ -193,12 +213,12 @@ double MilliSecondsFromTime(const base::Time& time) {
 base::Time GetTime(double ms_from_epoch) {
   double seconds_from_epoch = ms_from_epoch / 1000.0;
   return (seconds_from_epoch == 0)
-    ? base::Time::UnixEpoch()
-    : base::Time::FromDoubleT(seconds_from_epoch);
+             ? base::Time::UnixEpoch()
+             : base::Time::FromDoubleT(seconds_from_epoch);
 }
 
 gfx::PointF FromUICoordinates(content::WebContents* web_contents,
-                              const gfx::PointF &p) {
+                              const gfx::PointF& p) {
   // Account for the zoom factor in the UI.
   zoom::ZoomController* zoom_controller =
       zoom::ZoomController::FromWebContents(web_contents);
@@ -220,7 +240,8 @@ void FromUICoordinates(content::WebContents* web_contents, gfx::RectF* rect) {
   rect->Scale(zoom_factor);
 }
 
-gfx::PointF ToUICoordinates(content::WebContents* web_contents, const gfx::PointF &p) {
+gfx::PointF ToUICoordinates(content::WebContents* web_contents,
+                            const gfx::PointF& p) {
   // Account for the zoom factor in the UI.
   zoom::ZoomController* zoom_controller =
       zoom::ZoomController::FromWebContents(web_contents);
@@ -267,7 +288,7 @@ base::string16 KeyCodeToName(ui::KeyboardCode key_code) {
       string_id = IDS_APP_LEFT_ARROW_KEY;
       break;
     case ui::VKEY_RIGHT:
-      string_id =IDS_APP_RIGHT_ARROW_KEY;
+      string_id = IDS_APP_RIGHT_ARROW_KEY;
       break;
     case ui::VKEY_UP:
       string_id = IDS_APP_UP_ARROW_KEY;
@@ -311,7 +332,7 @@ base::string16 KeyCodeToName(ui::KeyboardCode key_code) {
   return string_id ? l10n_util::GetStringUTF16(string_id) : base::string16();
 }
 
-#endif // OS_MACOS
+#endif  // OS_MACOS
 
 std::string ShortcutTextFromEvent(
     const content::NativeWebKeyboardEvent& event) {
@@ -330,8 +351,7 @@ std::string ShortcutText(int windows_key_code, int modifiers, int dom_code) {
   // like Accelerator::GetShortcutText() does, so it's suitable for us.
   // It doesn't handle all keys, however, and doesn't work with ctrl+alt
   // shortcuts so we're left with doing a little tweaking.
-  ui::KeyboardCode key_code =
-      static_cast<ui::KeyboardCode>(windows_key_code);
+  ui::KeyboardCode key_code = static_cast<ui::KeyboardCode>(windows_key_code);
   ui::Accelerator accelerator =
       ui::Accelerator(key_code, 0, ui::Accelerator::KeyState::PRESSED);
 
@@ -362,43 +382,42 @@ std::string ShortcutText(int windows_key_code, int modifiers, int dom_code) {
   } else if (windows_key_code >= ui::VKEY_NUMPAD0 &&
              windows_key_code <= ui::VKEY_NUMPAD9) {
     char buf[8];
-    base::snprintf(buf, 8, "Numpad%d",
-                   windows_key_code - ui::VKEY_NUMPAD0);
+    base::snprintf(buf, 8, "Numpad%d", windows_key_code - ui::VKEY_NUMPAD0);
     shortcutText += buf;
 
-  // Enter is somehow not covered anywhere else.
+    // Enter is somehow not covered anywhere else.
   } else if (windows_key_code == ui::VKEY_RETURN) {
     shortcutText += "Enter";
-  // GetShortcutText doesn't translate numbers and digits but
-  // 'does' translate backspace
+    // GetShortcutText doesn't translate numbers and digits but
+    // 'does' translate backspace
   } else if (windows_key_code == ui::VKEY_BACK) {
     shortcutText += "Backspace";
-  // Escape was being translated as well in some languages
+    // Escape was being translated as well in some languages
   } else if (windows_key_code == ui::VKEY_ESCAPE) {
     shortcutText += "Esc";
   } else {
 #if defined(OS_MAC)
-  // This is equivalent to js event.code and deals with a few
-  // MacOS keyboard shortcuts like cmd+alt+n that fall through
-  // in some languages, i.e. AcceleratorToString returns a blank.
-  // Cmd+Alt shortcuts seem to be the only case where this fallback
-  // is required.
-  if (modifiers & content::NativeWebKeyboardEvent::kAltKey &&
-      modifiers & content::NativeWebKeyboardEvent::kMetaKey) {
-    shortcutText += ui::DomCodeToUsLayoutCharacter(
-        static_cast<ui::DomCode>(dom_code), 0);
-  } else {
-    // With chrome 67 accelerator.GetShortcutText() will return Mac specific
-    // symbols (like '⎋' for escape). All is private so we bypass that by
-    // testing with KeyCodeToName first.
-    base::string16 shortcut = KeyCodeToName(key_code);
-    if (shortcut.empty())
-      shortcut = accelerator.GetShortcutText();
-    shortcutText += base::UTF16ToUTF8(shortcut);
-  }
+    // This is equivalent to js event.code and deals with a few
+    // MacOS keyboard shortcuts like cmd+alt+n that fall through
+    // in some languages, i.e. AcceleratorToString returns a blank.
+    // Cmd+Alt shortcuts seem to be the only case where this fallback
+    // is required.
+    if (modifiers & content::NativeWebKeyboardEvent::kAltKey &&
+        modifiers & content::NativeWebKeyboardEvent::kMetaKey) {
+      shortcutText +=
+          ui::DomCodeToUsLayoutCharacter(static_cast<ui::DomCode>(dom_code), 0);
+    } else {
+      // With chrome 67 accelerator.GetShortcutText() will return Mac specific
+      // symbols (like '⎋' for escape). All is private so we bypass that by
+      // testing with KeyCodeToName first.
+      base::string16 shortcut = KeyCodeToName(key_code);
+      if (shortcut.empty())
+        shortcut = accelerator.GetShortcutText();
+      shortcutText += base::UTF16ToUTF8(shortcut);
+    }
 #else
     shortcutText += base::UTF16ToUTF8(accelerator.GetShortcutText());
-#endif // OS_MAC
+#endif  // OS_MAC
   }
   return shortcutText;
 }

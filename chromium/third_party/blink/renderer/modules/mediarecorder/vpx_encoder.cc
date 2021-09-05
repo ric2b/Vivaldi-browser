@@ -8,6 +8,7 @@
 
 #include "base/system/sys_info.h"
 #include "media/base/video_frame.h"
+#include "media/base/video_util.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
 #include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread.h"
@@ -74,7 +75,7 @@ void VpxEncoder::EncodeOnEncodingTaskRunner(scoped_refptr<VideoFrame> frame,
 
   if (frame->format() == media::PIXEL_FORMAT_NV12 &&
       frame->storage_type() == media::VideoFrame::STORAGE_GPU_MEMORY_BUFFER)
-    frame = WrapMappedGpuMemoryBufferVideoFrame(frame);
+    frame = media::ConvertToMemoryMappedFrame(frame);
   if (!frame) {
     LOG(WARNING) << "Invalid video frame to encode";
     return;
@@ -344,7 +345,7 @@ base::TimeDelta VpxEncoder::EstimateFrameDuration(const VideoFrame& frame) {
   base::TimeDelta predicted_frame_duration =
       frame.timestamp() - last_frame_timestamp_;
   base::TimeDelta frame_duration =
-      frame.metadata()->frame_duration.value_or(predicted_frame_duration);
+      frame.metadata().frame_duration.value_or(predicted_frame_duration);
   last_frame_timestamp_ = frame.timestamp();
   // Make sure |frame_duration| is in a safe range of values.
   const base::TimeDelta kMaxFrameDuration =

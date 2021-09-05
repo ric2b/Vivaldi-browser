@@ -20,9 +20,8 @@
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/navigation_policy.h"
-#include "content/public/common/origin_util.h"
 #include "net/base/url_util.h"
-#include "third_party/blink/public/common/loader/network_utils.h"
+#include "services/network/public/cpp/is_potentially_trustworthy.h"
 #include "third_party/blink/public/common/security_context/insecure_request_policy.h"
 #include "third_party/blink/public/common/web_preferences/web_preferences.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom.h"
@@ -37,7 +36,6 @@ namespace content {
 
 namespace {
 
-// Should return the same value as SchemeRegistry::shouldTreatURLSchemeAsSecure.
 bool IsSecureScheme(const std::string& scheme) {
   return base::Contains(url::GetSecureSchemes(), scheme);
 }
@@ -55,8 +53,7 @@ bool IsUrlPotentiallySecure(const GURL& url) {
   // to same-origin contexts, so they are not blocked.
   return url.SchemeIs(url::kBlobScheme) ||
          url.SchemeIs(url::kFileSystemScheme) ||
-         blink::network_utils::IsOriginSecure(url) ||
-         IsPotentiallyTrustworthyOrigin(url::Origin::Create(url));
+         network::IsUrlPotentiallyTrustworthy(url);
 }
 
 // This method should return the same results as
@@ -110,16 +107,16 @@ NavigationThrottle::ThrottleCheckResult
 MixedContentNavigationThrottle::WillRedirectRequest() {
   // Upon redirects the same checks are to be executed as for requests.
   bool should_block = ShouldBlockNavigation(true);
-  return should_block ? CANCEL : PROCEED;
+  if (!should_block) {
+    MaybeHandleCertificateError();
+    return PROCEED;
+  }
+  return CANCEL;
 }
 
 NavigationThrottle::ThrottleCheckResult
 MixedContentNavigationThrottle::WillProcessResponse() {
-  // TODO(carlosk): At this point we are about to process the request response.
-  // So if we ever need to, here/now it is a good moment to check for the final
-  // attained security level of the connection. For instance, does it use an
-  // outdated protocol? The implementation should be based off
-  // MixedContentChecker::handleCertificateError. See https://crbug.com/576270.
+  MaybeHandleCertificateError();
   return PROCEED;
 }
 
@@ -288,7 +285,7 @@ RenderFrameHostImpl* MixedContentNavigationThrottle::InWhichFrameIsContentMixed(
           blink::mojom::WebFeature::
               kMixedContentInNonHTTPSFrameThatRestrictsMixedContent);
     }
-  } else if (!blink::network_utils::IsOriginSecure(url) &&
+  } else if (!network::IsUrlPotentiallyTrustworthy(url) &&
              (IsSecureScheme(root->GetLastCommittedOrigin().scheme()) ||
               IsSecureScheme(parent->GetLastCommittedOrigin().scheme()))) {
     mixed_content_features_.insert(
@@ -349,6 +346,27 @@ void MixedContentNavigationThrottle::ReportBasicMixedContentFeatures(
       return;
   }
   mixed_content_features_.insert(feature);
+}
+
+void MixedContentNavigationThrottle::MaybeHandleCertificateError() {
+  // Main frame certificate errors are handled separately in SSLManager.
+  if (navigation_handle()->IsInMainFrame()) {
+    return;
+  }
+
+  // If there was no SSL info, then it was not an HTTPS resource load, and we
+  // can ignore it.
+  if (!navigation_handle()->GetSSLInfo()) {
+    return;
+  }
+
+  if (!net::IsCertStatusError(navigation_handle()->GetSSLInfo()->cert_status)) {
+    return;
+  }
+
+  NavigationRequest* request = NavigationRequest::From(navigation_handle());
+  RenderFrameHostImpl* rfh = request->frame_tree_node()->current_frame_host();
+  rfh->delegate()->RecordActiveContentWithCertificateErrors(rfh);
 }
 
 // static

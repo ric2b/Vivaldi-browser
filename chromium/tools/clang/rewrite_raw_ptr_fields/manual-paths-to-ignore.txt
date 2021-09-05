@@ -27,9 +27,15 @@ net/tools/
 chrome/chrome_elf/
 chrome/installer/mini_installer/
 
+# Exclude pocdll.dll asnit doesn't depend on //base and only used for testing.
+sandbox/win/sandbox_poc/pocdll
+
 # The folder holds headers that are duplicated in the Android source and need to
 # provide a stable C ABI. Can't depend on //base.
 android_webview/public/
+
+# Exclude dependences of checked_ptr.h
+base/logging.h
 
 # Exclude code that only runs inside a renderer process - renderer
 # processes are excluded for now from the MiraclePtr project scope,

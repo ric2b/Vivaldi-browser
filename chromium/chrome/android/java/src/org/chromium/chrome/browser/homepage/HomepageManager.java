@@ -13,16 +13,20 @@ import androidx.annotation.VisibleForTesting;
 import org.chromium.base.ObserverList;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.homepage.settings.HomepageMetricsEnums.HomepageLocationType;
 import org.chromium.chrome.browser.homepage.settings.HomepageSettings;
 import org.chromium.chrome.browser.partnercustomizations.PartnerBrowserCustomizations;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
-import org.chromium.chrome.browser.settings.SettingsLauncher;
 import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
+import org.chromium.components.browser_ui.settings.SettingsLauncher;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.embedder_support.util.UrlUtilities;
+
+// Vivaldi
+import org.vivaldi.browser.common.VivaldiUrlConstants;
+
+import org.chromium.chrome.browser.ChromeApplication;
 
 /**
  * Provides information regarding homepage enabled states and URI.
@@ -85,12 +89,7 @@ public class HomepageManager implements HomepagePolicyManager.HomepagePolicyStat
      * @param context {@link Context} used for launching a settings activity.
      */
     public void onMenuClick(Context context) {
-        assert ChromeFeatureList.isInitialized();
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.HOMEPAGE_SETTINGS_UI_CONVERSION)) {
-            mSettingsLauncher.launchSettingsActivity(context, HomepageSettings.class);
-        } else {
-            setPrefHomepageEnabled(false);
-        }
+        mSettingsLauncher.launchSettingsActivity(context, HomepageSettings.class);
     }
 
     /**
@@ -174,13 +173,13 @@ public class HomepageManager implements HomepagePolicyManager.HomepagePolicyStat
      * Get homepage URI without checking if the homepage is enabled.
      * @return Homepage URI based on policy and shared preference settings.
      */
-    public @NonNull String getHomepageUriIgnoringEnabledState() {
-        // TODO(wenyufu): Move this function back to #getHomepageUri after
-        //  ChromeFeatureList#HOMEPAGE_SETTINGS_UI_CONVERSION 100% release
+    private @NonNull String getHomepageUriIgnoringEnabledState() {
         if (HomepagePolicyManager.isHomepageManagedByPolicy()) {
             return HomepagePolicyManager.getHomepageUrl();
         }
         if (getPrefHomepageUseChromeNTP()) {
+            if (ChromeApplication.isVivaldi())
+                return VivaldiUrlConstants.NTP_NON_NATIVE_URL;
             return UrlConstants.NTP_NON_NATIVE_URL;
         }
         if (getPrefHomepageUseDefaultUri()) {

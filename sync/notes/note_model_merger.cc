@@ -8,6 +8,7 @@
 #include <string>
 #include <utility>
 
+#include "base/containers/contains.h"
 #include "base/guid.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -50,7 +51,7 @@ const char kMainNotesTag[] = "main_notes";
 const char kOtherNotesTag[] = "other_notes";
 const char kTrashNotesTag[] = "trash_notes";
 
-// Maximum depth to sync bookmarks tree to protect against stack overflow.
+// Maximum depth to sync notes tree to protect against stack overflow.
 // Keep in sync with |base::internal::kAbsoluteMaxDepth| in json_common.h.
 const size_t kMaxNoteTreeDepth = 200;
 
@@ -179,7 +180,8 @@ bool CompareDuplicateUpdates(const UpdateResponseData& next_update,
 void DeduplicateValidUpdatesByGUID(UpdatesPerParentId* updates_per_parent_id) {
   DCHECK(updates_per_parent_id);
 
-  std::unordered_map<std::string, std::list<UpdateResponseData>::iterator>
+  std::unordered_map<base::GUID, std::list<UpdateResponseData>::iterator,
+                     base::GUIDHash>
       guid_to_update;
 
   // Removing data in a separate loop helps easier merge parents since one of
@@ -193,9 +195,9 @@ void DeduplicateValidUpdatesByGUID(UpdatesPerParentId* updates_per_parent_id) {
       DCHECK(!update.entity.is_deleted());
       DCHECK(update.entity.server_defined_unique_tag.empty());
 
-      const std::string& guid_in_specifics =
-          update.entity.specifics.notes().guid();
-      DCHECK(!guid_in_specifics.empty());
+      const base::GUID guid_in_specifics =
+          base::GUID::ParseLowercase(update.entity.specifics.notes().guid());
+      DCHECK(guid_in_specifics.is_valid());
 
       auto it_and_success =
           guid_to_update.emplace(guid_in_specifics, updates_iter);
@@ -204,7 +206,7 @@ void DeduplicateValidUpdatesByGUID(UpdatesPerParentId* updates_per_parent_id) {
       }
       const UpdateResponseData& duplicate_update =
           *it_and_success.first->second;
-      DCHECK_EQ(guid_in_specifics,
+      DCHECK_EQ(guid_in_specifics.AsLowercaseString(),
                 duplicate_update.entity.specifics.notes().guid());
       DLOG(ERROR) << "Duplicate guid for new sync ID " << update.entity.id
                   << " and original sync ID " << duplicate_update.entity.id;
@@ -228,8 +230,9 @@ void DeduplicateValidUpdatesByGUID(UpdatesPerParentId* updates_per_parent_id) {
   for (std::list<UpdateResponseData>::iterator updates_iter :
        updates_to_remove) {
     if (updates_iter->entity.is_folder) {
-      const std::string& guid = updates_iter->entity.specifics.notes().guid();
-      DCHECK_EQ(1U, guid_to_update.count(guid));
+      const base::GUID guid = base::GUID::ParseLowercase(
+          updates_iter->entity.specifics.notes().guid());
+      DCHECK(base::Contains(guid_to_update, guid));
       DCHECK(guid_to_update[guid] != updates_iter);
 
       // Never remove a folder if its duplicate is a URL.
@@ -243,7 +246,7 @@ void DeduplicateValidUpdatesByGUID(UpdatesPerParentId* updates_per_parent_id) {
     }
 
     const std::string& parent_id = updates_iter->entity.parent_id;
-    DCHECK_EQ(1U, updates_per_parent_id->count(parent_id));
+    DCHECK(base::Contains(*updates_per_parent_id, parent_id));
     (*updates_per_parent_id)[parent_id].erase(updates_iter);
   }
 }
@@ -323,13 +326,14 @@ NoteModelMerger::RemoteTreeNode& NoteModelMerger::RemoteTreeNode::operator=(
     NoteModelMerger::RemoteTreeNode&&) = default;
 
 void NoteModelMerger::RemoteTreeNode::EmplaceSelfAndDescendantsByGUID(
-    std::unordered_map<std::string, const RemoteTreeNode*>*
+    std::unordered_map<base::GUID, const RemoteTreeNode*, base::GUIDHash>*
         guid_to_remote_node_map) const {
   DCHECK(guid_to_remote_node_map);
 
   if (entity().server_defined_unique_tag.empty()) {
-    const std::string& guid = entity().specifics.notes().guid();
-    DCHECK(base::IsValidGUIDOutputString(guid));
+    const base::GUID guid =
+        base::GUID::ParseLowercase(entity().specifics.notes().guid());
+    DCHECK(guid.is_valid());
 
     // Duplicate GUIDs have been sorted out before.
     bool success = guid_to_remote_node_map->emplace(guid, this).second;
@@ -473,14 +477,14 @@ NoteModelMerger::RemoteForest NoteModelMerger::BuildRemoteForest(
 }
 
 // static
-std::unordered_map<std::string, NoteModelMerger::GuidMatch>
+std::unordered_map<base::GUID, NoteModelMerger::GuidMatch, base::GUIDHash>
 NoteModelMerger::FindGuidMatchesOrReassignLocal(
     const RemoteForest& remote_forest,
     vivaldi::NotesModel* notes_model) {
   DCHECK(notes_model);
 
   // Build a temporary lookup table for remote GUIDs.
-  std::unordered_map<std::string, const RemoteTreeNode*>
+  std::unordered_map<base::GUID, const RemoteTreeNode*, base::GUIDHash>
       guid_to_remote_node_map;
   for (const auto& tree_tag_and_root : remote_forest) {
     tree_tag_and_root.second.EmplaceSelfAndDescendantsByGUID(
@@ -488,7 +492,8 @@ NoteModelMerger::FindGuidMatchesOrReassignLocal(
   }
 
   // Iterate through all local notes to find matches by GUID.
-  std::unordered_map<std::string, NoteModelMerger::GuidMatch> guid_to_match_map;
+  std::unordered_map<base::GUID, NoteModelMerger::GuidMatch, base::GUIDHash>
+      guid_to_match_map;
   // Because ReplaceNoteNodeGUID() cannot be used while iterating the local
   // notes model, a temporary list is constructed first to reassign later.
   std::vector<const vivaldi::NoteNode*> nodes_to_replace_guid;
@@ -496,7 +501,7 @@ NoteModelMerger::FindGuidMatchesOrReassignLocal(
       notes_model->root_node());
   while (iterator.has_next()) {
     const vivaldi::NoteNode* const node = iterator.Next();
-    DCHECK(base::IsValidGUIDOutputString(node->guid()));
+    DCHECK(node->guid().is_valid());
 
     const auto remote_it = guid_to_remote_node_map.find(node->guid());
     if (remote_it == guid_to_remote_node_map.end()) {
@@ -541,7 +546,7 @@ NoteModelMerger::FindGuidMatchesOrReassignLocal(
   }
 
   for (const vivaldi::NoteNode* node : nodes_to_replace_guid) {
-    ReplaceNoteNodeGUID(node, base::GenerateGUID(), notes_model);
+    ReplaceNoteNodeGUID(node, base::GUID::GenerateRandomV4(), notes_model);
   }
 
   return guid_to_match_map;
@@ -658,14 +663,15 @@ NoteModelMerger::UpdateNoteNodeFromSpecificsIncludingGUID(
   // Update the local GUID if necessary for semantic matches (it's obviously not
   // needed for GUID-based matches).
   const vivaldi::NoteNode* possibly_replaced_local_node = local_node;
-  if (!specifics.guid().empty() && specifics.guid() != local_node->guid()) {
+  if (!specifics.guid().empty() &&
+      specifics.guid() != local_node->guid().AsLowercaseString()) {
     // If it's a semantic match, neither of the nodes should be involved in any
     // GUID-based match.
     DCHECK(!FindMatchingLocalNodeByGUID(remote_node));
     DCHECK(!FindMatchingRemoteNodeByGUID(local_node));
 
-    possibly_replaced_local_node =
-        ReplaceNoteNodeGUID(local_node, specifics.guid(), notes_model_);
+    possibly_replaced_local_node = ReplaceNoteNodeGUID(
+        local_node, base::GUID::ParseLowercase(specifics.guid()), notes_model_);
 
     // TODO(rushans): remove the code below since DCHECKs above guarantee that
     // |guid_to_match_map_| has no such GUID.
@@ -742,13 +748,12 @@ void NoteModelMerger::ProcessLocalCreation(const vivaldi::NoteNode* parent,
   // server id upon receiving commit response.
   const vivaldi::NoteNode* node = parent->children()[index].get();
   DCHECK(!FindMatchingRemoteNodeByGUID(node));
-  DCHECK(base::IsValidGUIDOutputString(node->guid()));
 
   // The node's GUID cannot run into collisions because
   // FindGuidMatchesOrReassignLocal() takes care of reassigning local GUIDs if
   // they won't actually be merged with the remote note with the same GUID
   // (e.g. incompatible types).
-  const std::string sync_id = node->guid();
+  const std::string sync_id = node->guid().AsLowercaseString();
   const int64_t server_version = syncer::kUncommittedVersion;
   const base::Time creation_time = base::Time::Now();
   const std::string& suffix = syncer::GenerateSyncableNotesHash(
@@ -808,8 +813,8 @@ NoteModelMerger::FindMatchingRemoteNodeByGUID(
 const vivaldi::NoteNode* NoteModelMerger::FindMatchingLocalNodeByGUID(
     const RemoteTreeNode& remote_node) const {
   const syncer::EntityData& remote_entity = remote_node.entity();
-  const auto it =
-      guid_to_match_map_.find(remote_entity.specifics.notes().guid());
+  const auto it = guid_to_match_map_.find(
+      base::GUID::ParseLowercase(remote_entity.specifics.notes().guid()));
   if (it == guid_to_match_map_.end()) {
     return nullptr;
   }

@@ -9,7 +9,6 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/chromeos/borealis/borealis_features.h"
-#include "chrome/browser/chromeos/borealis/borealis_installer_factory.h"
 #include "chrome/browser/chromeos/borealis/borealis_metrics.h"
 #include "chrome/browser/chromeos/borealis/borealis_prefs.h"
 #include "chrome/browser/chromeos/borealis/borealis_service.h"
@@ -19,7 +18,9 @@
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/dlcservice/fake_dlcservice_client.h"
 #include "components/prefs/pref_service.h"
+#include "content/public/browser/network_service_instance.h"
 #include "content/public/test/browser_task_environment.h"
+#include "services/network/test/test_network_connection_tracker.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 namespace borealis {
@@ -51,7 +52,8 @@ class BorealisInstallerTest : public testing::Test {
     histogram_tester_ = std::make_unique<base::HistogramTester>();
     CreateProfile();
 
-    installer_ = BorealisInstallerFactory::GetForProfile(profile_.get());
+    installer_impl_ = std::make_unique<BorealisInstallerImpl>(profile_.get());
+    installer_ = installer_impl_.get();
     observer_ = std::make_unique<StrictMock<MockObserver>>();
     installer_->AddObserver(observer_.get());
 
@@ -108,6 +110,7 @@ class BorealisInstallerTest : public testing::Test {
 
   std::unique_ptr<TestingProfile> profile_;
   std::unique_ptr<base::HistogramTester> histogram_tester_;
+  std::unique_ptr<BorealisInstallerImpl> installer_impl_;
   BorealisInstaller* installer_;
   std::unique_ptr<MockObserver> observer_;
   content::BrowserTaskEnvironment task_environment_;
@@ -139,6 +142,23 @@ TEST_F(BorealisInstallerTest, BorealisNotAllowed) {
 
   EXPECT_CALL(*observer_,
               OnInstallationEnded(BorealisInstallResult::kBorealisNotAllowed));
+
+  StartAndRunToCompletion();
+  UpdateCurrentDlcs();
+  ASSERT_EQ(current_dlcs_.dlc_infos_size(), 0);
+  EXPECT_FALSE(
+      BorealisService::GetForProfile(profile_.get())->Features().IsEnabled());
+}
+
+TEST_F(BorealisInstallerTest, DeviceOfflineInstallationFails) {
+  feature_list_.InitAndEnableFeature(features::kBorealis);
+  std::unique_ptr<network::TestNetworkConnectionTracker>
+      network_connection_tracker =
+          network::TestNetworkConnectionTracker::CreateInstance();
+  network::TestNetworkConnectionTracker::GetInstance()->SetConnectionType(
+      network::mojom::ConnectionType::CONNECTION_NONE);
+
+  EXPECT_CALL(*observer_, OnInstallationEnded(BorealisInstallResult::kOffline));
 
   StartAndRunToCompletion();
   UpdateCurrentDlcs();

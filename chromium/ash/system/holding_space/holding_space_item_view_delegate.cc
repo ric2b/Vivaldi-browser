@@ -56,6 +56,20 @@ void OpenItems(const std::vector<const HoldingSpaceItemView*>& views) {
 
 }  // namespace
 
+// HoldingSpaceItemViewDelegate::ScopedSelectionRestore ------------------------
+
+HoldingSpaceItemViewDelegate::ScopedSelectionRestore::ScopedSelectionRestore(
+    HoldingSpaceItemViewDelegate* delegate)
+    : delegate_(delegate) {
+  for (const HoldingSpaceItemView* view : delegate_->GetSelection())
+    selected_item_ids_.push_back(view->item_id());
+}
+
+HoldingSpaceItemViewDelegate::ScopedSelectionRestore::
+    ~ScopedSelectionRestore() {
+  delegate_->SetSelection(selected_item_ids_);
+}
+
 // HoldingSpaceItemViewDelegate ------------------------------------------------
 
 HoldingSpaceItemViewDelegate::HoldingSpaceItemViewDelegate() {
@@ -101,9 +115,10 @@ bool HoldingSpaceItemViewDelegate::OnHoldingSpaceItemViewAccessibleAction(
 void HoldingSpaceItemViewDelegate::OnHoldingSpaceItemViewGestureEvent(
     HoldingSpaceItemView* view,
     const ui::GestureEvent& event) {
-  // When a long press gesture occurs we are going to show the context menu.
-  // Ensure that the pressed `view` is the only view selected.
-  if (event.type() == ui::ET_GESTURE_LONG_PRESS) {
+  // When a long press or two finger tap gesture occurs we are going to show the
+  // context menu. Ensure that the pressed `view` is the only view selected.
+  if (event.type() == ui::ET_GESTURE_LONG_PRESS ||
+      event.type() == ui::ET_GESTURE_TWO_FINGER_TAP) {
     SetSelection(view);
     return;
   }
@@ -210,6 +225,29 @@ void HoldingSpaceItemViewDelegate::OnHoldingSpaceItemViewMouseReleased(
   // the items associated with the current selection.
   if (event.flags() & ui::EF_IS_DOUBLE_CLICK)
     OpenItems(GetSelection());
+}
+
+bool HoldingSpaceItemViewDelegate::OnHoldingSpaceTrayBubbleKeyPressed(
+    const ui::KeyEvent& event) {
+  // The ENTER key should open all selected holding space items.
+  if (event.key_code() == ui::KeyboardCode::VKEY_RETURN) {
+    if (!GetSelection().empty()) {
+      OpenItems(GetSelection());
+      return true;
+    }
+  }
+  return false;
+}
+
+void HoldingSpaceItemViewDelegate::OnHoldingSpaceTrayChildBubbleGestureEvent(
+    const ui::GestureEvent& event) {
+  if (event.type() == ui::ET_GESTURE_TAP)
+    SetSelection({});
+}
+
+void HoldingSpaceItemViewDelegate::OnHoldingSpaceTrayChildBubbleMousePressed(
+    const ui::MouseEvent& event) {
+  SetSelection({});
 }
 
 void HoldingSpaceItemViewDelegate::ShowContextMenuForViewImpl(
@@ -329,7 +367,8 @@ ui::SimpleMenuModel* HoldingSpaceItemViewDelegate::BuildMenuModel() {
         HoldingSpaceCommandId::kShowInFolder,
         l10n_util::GetStringUTF16(
             IDS_ASH_HOLDING_SPACE_CONTEXT_MENU_SHOW_IN_FOLDER),
-        ui::ImageModel::FromVectorIcon(kFolderIcon));
+        ui::ImageModel::FromVectorIcon(kFolderIcon, /*color_id=*/-1,
+                                       kHoldingSpaceIconSize));
 
     std::string mime_type;
     const bool is_image =
@@ -344,16 +383,15 @@ ui::SimpleMenuModel* HoldingSpaceItemViewDelegate::BuildMenuModel() {
           HoldingSpaceCommandId::kCopyImageToClipboard,
           l10n_util::GetStringUTF16(
               IDS_ASH_HOLDING_SPACE_CONTEXT_MENU_COPY_IMAGE_TO_CLIPBOARD),
-          ui::ImageModel::FromVectorIcon(kCopyIcon));
+          ui::ImageModel::FromVectorIcon(kCopyIcon, /*color_id=*/-1,
+                                         kHoldingSpaceIconSize));
     }
   }
 
   const bool is_any_unpinned = std::any_of(
       selection.begin(), selection.end(), [](const HoldingSpaceItemView* view) {
-        return !HoldingSpaceController::Get()->model()->GetItem(
-            HoldingSpaceItem::GetFileBackedItemId(
-                HoldingSpaceItem::Type::kPinnedFile,
-                view->item()->file_path()));
+        return !HoldingSpaceController::Get()->model()->ContainsItem(
+            HoldingSpaceItem::Type::kPinnedFile, view->item()->file_path());
       });
 
   if (is_any_unpinned) {
@@ -363,14 +401,16 @@ ui::SimpleMenuModel* HoldingSpaceItemViewDelegate::BuildMenuModel() {
     context_menu_model_->AddItemWithIcon(
         HoldingSpaceCommandId::kPinItem,
         l10n_util::GetStringUTF16(IDS_ASH_HOLDING_SPACE_CONTEXT_MENU_PIN),
-        ui::ImageModel::FromVectorIcon(views::kPinIcon));
+        ui::ImageModel::FromVectorIcon(views::kPinIcon, /*color_id=*/-1,
+                                       kHoldingSpaceIconSize));
   } else {
     // The "Unpin" command should be present only if all selected holding space
     // items are already pinned.
     context_menu_model_->AddItemWithIcon(
         HoldingSpaceCommandId::kUnpinItem,
         l10n_util::GetStringUTF16(IDS_ASH_HOLDING_SPACE_CONTEXT_MENU_UNPIN),
-        ui::ImageModel::FromVectorIcon(views::kUnpinIcon));
+        ui::ImageModel::FromVectorIcon(views::kUnpinIcon, /*color_id=*/-1,
+                                       kHoldingSpaceIconSize));
   }
 
   return context_menu_model_.get();
@@ -389,6 +429,12 @@ HoldingSpaceItemViewDelegate::GetSelection() {
 void HoldingSpaceItemViewDelegate::SetSelection(views::View* selection) {
   for (HoldingSpaceItemView* view : views_)
     view->SetSelected(view == selection);
+}
+
+void HoldingSpaceItemViewDelegate::SetSelection(
+    const std::vector<std::string>& item_ids) {
+  for (HoldingSpaceItemView* view : views_)
+    view->SetSelected(base::Contains(item_ids, view->item_id()));
 }
 
 }  // namespace ash

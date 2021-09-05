@@ -305,10 +305,10 @@ void WebSocket::WebSocketEventHandler::OnFailChannel(
   if (impl_->handshake_client_.is_bound()) {
     impl_->handshake_client_->OnFailure(message, net_error,
                                         response_code.value_or(-1));
-    impl_->handshake_client_.ResetWithReason(mojom::WebSocket::kInternalFailure,
-                                             message);
+    // Additional error information is provided via OnFailure in this case.
+    impl_->handshake_client_.reset();
   }
-  impl_->client_.ResetWithReason(mojom::WebSocket::kInternalFailure, message);
+  impl_->client_.ResetWithReason(0, message);
   impl_->Reset();
 }
 
@@ -432,10 +432,6 @@ WebSocket::WebSocket(
       reassemble_short_messages_(base::FeatureList::IsEnabled(
           network::features::kWebSocketReassembleShortMessages)) {
   DCHECK(handshake_client_);
-  // If |require_network_isolation_key| is set on the URLRequestContext,
-  // |isolation_info| must not be empty.
-  DCHECK(!factory_->GetURLRequestContext()->require_network_isolation_key() ||
-         !isolation_info.IsEmpty());
   // |delay| should be zero if this connection is not throttled.
   DCHECK(pending_connection_tracker.has_value() || delay.is_zero());
   if (auth_handler_) {

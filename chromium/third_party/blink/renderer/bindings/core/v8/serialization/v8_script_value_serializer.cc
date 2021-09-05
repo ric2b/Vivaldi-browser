@@ -118,7 +118,7 @@ scoped_refptr<SerializedScriptValue> V8ScriptValueSerializer::Serialize(
 
   if (shared_array_buffers_.size()) {
     auto* execution_context = ExecutionContext::From(script_state_);
-    if (!execution_context->SharedArrayBufferTransferAllowed()) {
+    if (!execution_context->CheckSharedArrayBufferTransferAllowedAndReport()) {
       exception_state.ThrowDOMException(
           DOMExceptionCode::kDataCloneError,
           "SharedArrayBuffer transfer requires self.crossOriginIsolated.");
@@ -304,7 +304,8 @@ bool V8ScriptValueSerializer::WriteDOMObject(ScriptWrappable* wrappable,
       return false;
     }
     WriteTag(kImageBitmapTag);
-    SerializedColorParams color_params(image_bitmap->GetCanvasColorParams());
+    SkImageInfo info = image_bitmap->GetBitmapSkImageInfo();
+    SerializedImageBitmapSettings color_params(info);
     WriteUint32Enum(ImageSerializationTag::kCanvasColorSpaceTag);
     WriteUint32Enum(color_params.GetSerializedColorSpace());
     WriteUint32Enum(ImageSerializationTag::kCanvasPixelFormatTag);
@@ -314,11 +315,11 @@ bool V8ScriptValueSerializer::WriteDOMObject(ScriptWrappable* wrappable,
     WriteUint32Enum(ImageSerializationTag::kOriginCleanTag);
     WriteUint32(image_bitmap->OriginClean());
     WriteUint32Enum(ImageSerializationTag::kIsPremultipliedTag);
-    WriteUint32(image_bitmap->IsPremultiplied());
+    WriteUint32(color_params.IsPremultiplied());
     WriteUint32Enum(ImageSerializationTag::kEndTag);
     WriteUint32(image_bitmap->width());
     WriteUint32(image_bitmap->height());
-    Vector<uint8_t> pixels = image_bitmap->CopyBitmapData();
+    Vector<uint8_t> pixels = image_bitmap->CopyBitmapData(info, false);
     // Check if we succeeded to copy the BitmapData.
     if (image_bitmap->width() != 0 && image_bitmap->height() != 0 &&
         pixels.size() == 0) {
@@ -334,19 +335,24 @@ bool V8ScriptValueSerializer::WriteDOMObject(ScriptWrappable* wrappable,
   if (wrapper_type_info == V8ImageData::GetWrapperTypeInfo()) {
     ImageData* image_data = wrappable->ToImpl<ImageData>();
     WriteTag(kImageDataTag);
-    SerializedColorParams color_params(image_data->GetCanvasColorParams(),
-                                       image_data->GetImageDataStorageFormat());
+    SerializedImageDataSettings settings(
+        image_data->GetCanvasColorSpace(),
+        image_data->GetImageDataStorageFormat());
     WriteUint32Enum(ImageSerializationTag::kCanvasColorSpaceTag);
-    WriteUint32Enum(color_params.GetSerializedColorSpace());
+    WriteUint32Enum(settings.GetSerializedColorSpace());
     WriteUint32Enum(ImageSerializationTag::kImageDataStorageFormatTag);
-    WriteUint32Enum(color_params.GetSerializedImageDataStorageFormat());
+    WriteUint32Enum(settings.GetSerializedImageDataStorageFormat());
     WriteUint32Enum(ImageSerializationTag::kEndTag);
     WriteUint32(image_data->width());
     WriteUint32(image_data->height());
-    DOMArrayBufferBase* pixel_buffer = image_data->BufferBase();
-    size_t pixel_buffer_length = pixel_buffer->ByteLength();
-    WriteUint64(base::strict_cast<uint64_t>(pixel_buffer_length));
-    WriteRawBytes(pixel_buffer->Data(), pixel_buffer_length);
+    if (image_data->IsBufferBaseDetached()) {
+      WriteUint64(0u);
+    } else {
+      SkPixmap image_data_pixmap = image_data->GetSkPixmap();
+      size_t pixel_buffer_length = image_data_pixmap.computeByteSize();
+      WriteUint64(base::strict_cast<uint64_t>(pixel_buffer_length));
+      WriteRawBytes(image_data_pixmap.addr(), pixel_buffer_length);
+    }
     return true;
   }
   if (wrapper_type_info == V8DOMPoint::GetWrapperTypeInfo()) {

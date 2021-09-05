@@ -8,6 +8,7 @@
 #include "ash/accessibility/accessibility_focus_ring_controller_impl.h"
 #include "ash/accessibility/accessibility_focus_ring_layer.h"
 #include "ash/public/cpp/ash_features.h"
+#include "ash/public/cpp/ash_view_ids.h"
 #include "ash/public/cpp/system_tray_test_api.h"
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
@@ -16,6 +17,7 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/memory/weak_ptr.h"
+#include "build/branding_buildflags.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/accessibility/speech_monitor.h"
 #include "chrome/browser/profiles/profile.h"
@@ -26,13 +28,13 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_service.h"
-#include "content/public/browser/system_connector.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "extensions/browser/extension_host.h"
 #include "extensions/browser/notification_types.h"
 #include "extensions/browser/process_manager.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "ui/accessibility/accessibility_features.h"
 #include "ui/accessibility/accessibility_switches.h"
 #include "ui/events/test/event_generator.h"
 #include "url/url_constants.h"
@@ -73,8 +75,9 @@ class SelectToSpeakTest : public InProcessBrowserTest {
     ui_test_utils::NavigateToURL(browser(), GURL(url::kAboutBlankURL));
   }
 
-  SpeechMonitor sm_;
+  test::SpeechMonitor sm_;
   std::unique_ptr<ui::test::EventGenerator> generator_;
+  std::unique_ptr<ash::SystemTrayTestApi> tray_test_api_;
 
   gfx::Rect GetWebContentsBounds() const {
     // TODO(katie): Find a way to get the exact bounds programmatically.
@@ -144,7 +147,6 @@ class SelectToSpeakTest : public InProcessBrowserTest {
   }
 
  private:
-  std::unique_ptr<ash::SystemTrayTestApi> tray_test_api_;
   scoped_refptr<content::MessageLoopRunner> loop_runner_;
   scoped_refptr<content::MessageLoopRunner> tray_loop_runner_;
   base::WeakPtrFactory<SelectToSpeakTest> weak_ptr_factory_{this};
@@ -161,7 +163,9 @@ class SelectToSpeakTestWithLanguageDetection : public SelectToSpeakTest {
   }
 };
 
-IN_PROC_BROWSER_TEST_F(SelectToSpeakTest, SpeakStatusTray) {
+// The status tray is not active on official builds.
+// Disable the test on Chromium due to flaky: crbug.com/1165749
+IN_PROC_BROWSER_TEST_F(SelectToSpeakTest, DISABLED_SpeakStatusTray) {
   gfx::Rect tray_bounds = ash::Shell::Get()
                               ->GetPrimaryRootWindowController()
                               ->GetStatusAreaWidget()
@@ -175,7 +179,7 @@ IN_PROC_BROWSER_TEST_F(SelectToSpeakTest, SpeakStatusTray) {
   generator_->ReleaseLeftButton();
   generator_->ReleaseKey(ui::VKEY_LWIN, 0 /* flags */);
 
-  sm_.ExpectSpeechPattern("Status tray*");
+  sm_.ExpectSpeechPattern("*Status tray*");
   sm_.Replay();
 }
 
@@ -327,8 +331,7 @@ IN_PROC_BROWSER_TEST_F(SelectToSpeakTest, DoesNotCrashWithMousewheelEvent) {
   sm_.Replay();
 }
 
-// Flaky test: crbug.com/950049.
-IN_PROC_BROWSER_TEST_F(SelectToSpeakTest, DISABLED_FocusRingMovesWithMouse) {
+IN_PROC_BROWSER_TEST_F(SelectToSpeakTest, FocusRingMovesWithMouse) {
   // Create a callback for the focus ring observer.
   base::RepeatingCallback<void()> callback =
       base::BindRepeating(&SelectToSpeakTest::OnFocusRingChanged, GetWeakPtr());
@@ -403,9 +406,7 @@ IN_PROC_BROWSER_TEST_F(SelectToSpeakTest, DISABLED_FocusRingMovesWithMouse) {
   EXPECT_EQ(focus_rings.size(), 0u);
 }
 
-// TODO(https://crbug.com/1114854): test is flaky.
-IN_PROC_BROWSER_TEST_F(SelectToSpeakTest,
-                       DISABLED_ContinuesReadingDuringResize) {
+IN_PROC_BROWSER_TEST_F(SelectToSpeakTest, ContinuesReadingDuringResize) {
   ActivateSelectToSpeakInWindowBounds(
       "data:text/html;charset=utf-8,<p>First paragraph</p>"
       "<div id='resize' style='width:300px; font-size: 1em'>"
@@ -449,6 +450,36 @@ IN_PROC_BROWSER_TEST_F(SelectToSpeakTest, WorksWithStickyKeys) {
   sm_.Call([]() { AccessibilityManager::Get()->EnableStickyKeys(false); });
 
   sm_.Replay();
+}
+
+/* Test fixture enabling navigation control */
+class SelectToSpeakTestWithNavigationControl : public SelectToSpeakTest {
+ public:
+  void SetUpInProcessBrowserTestFixture() override {
+    scoped_feature_list_.InitAndEnableFeature(
+        ::features::kSelectToSpeakNavigationControl);
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_F(SelectToSpeakTestWithNavigationControl,
+                       SelectToSpeakDoesNotDismissTrayBubble) {
+  // Open tray bubble menu.
+  tray_test_api_->ShowBubble();
+
+  // Search key + click the avatar button.
+  generator_->PressKey(ui::VKEY_LWIN, 0 /* flags */);
+  tray_test_api_->ClickBubbleView(ash::VIEW_ID_USER_AVATAR_BUTTON);
+  generator_->ReleaseKey(ui::VKEY_LWIN, 0 /* flags */);
+
+  // Should read out text.
+  sm_.ExpectSpeechPattern("*stub-user@example.com*");
+  sm_.Replay();
+
+  // Tray bubble menu should remain open.
+  ASSERT_TRUE(tray_test_api_->IsTrayBubbleOpen());
 }
 
 }  // namespace chromeos

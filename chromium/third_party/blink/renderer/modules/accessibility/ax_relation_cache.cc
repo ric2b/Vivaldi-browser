@@ -15,7 +15,7 @@ AXRelationCache::AXRelationCache(AXObjectCacheImpl* object_cache)
 
 AXRelationCache::~AXRelationCache() = default;
 
-void AXRelationCache::Init() {
+void AXRelationCache::DoInitialDocumentScan() {
   // Init the relation cache with elements already in the document.
   Document& document = object_cache_->GetDocument();
   for (Element& element :
@@ -28,15 +28,24 @@ void AXRelationCache::Init() {
     // document are created, e.g. in the devtools accessibility panel.
     // Defers adding aria-owns targets as children of their new parents,
     // and to the relation cache, until the appropriate document lifecycle.
+#if DCHECK_IS_ON()
+    DCHECK(document.Lifecycle().GetState() >= DocumentLifecycle::kLayoutClean)
+        << "Unclean document at lifecycle " << document.Lifecycle().ToString();
+#endif
     if (element.FastHasAttribute(html_names::kAriaOwnsAttr)) {
       if (AXObject* owner = GetOrCreate(&element)) {
         owner_ids_to_update_.insert(owner->AXObjectID());
       }
     }
   }
+
+  initialized_ = true;
 }
 
 void AXRelationCache::ProcessUpdatesWithCleanLayout() {
+  if (!initialized_)
+    DoInitialDocumentScan();
+
   for (AXID aria_owns_obj_id : owner_ids_to_update_) {
     AXObject* obj = ObjectFromAXID(aria_owns_obj_id);
     if (obj)
@@ -192,8 +201,10 @@ void AXRelationCache::GetAriaOwnedChildren(
       aria_owner_to_children_mapping_.at(owner->AXObjectID());
   for (AXID child_id : current_child_axids) {
     AXObject* child = ObjectFromAXID(child_id);
-    if (child)
+    if (child) {
       validated_owned_children_result.push_back(child);
+      DCHECK(IsAriaOwned(child)) << "Owned child not in owned child map";
+    }
   }
 }
 
@@ -359,12 +370,33 @@ void AXRelationCache::UpdateRelatedText(Node* node) {
 }
 
 void AXRelationCache::RemoveAXID(AXID obj_id) {
+  // Need to remove from maps.
+  // There are maps from children to their owners, and owners to their children.
+  // In addition, the removed id may be an owner, or be owned, or both.
+
+  // |obj_id| owned others:
   if (aria_owner_to_children_mapping_.Contains(obj_id)) {
+    // |obj_id| longer owns anything.
     Vector<AXID> child_axids = aria_owner_to_children_mapping_.at(obj_id);
     aria_owned_child_to_owner_mapping_.RemoveAll(child_axids);
+    // Owned children are no longer owned by |obj_id|
     aria_owner_to_children_mapping_.erase(obj_id);
   }
-  aria_owned_child_to_owner_mapping_.erase(obj_id);
+
+  // Another id owned |obj_id|:
+  if (aria_owned_child_to_owner_mapping_.Contains(obj_id)) {
+    // Previous owner no longer relevant to this child.
+    // Also, remove |obj_id| from previous owner's owned child list:
+    AXID owner_id = aria_owned_child_to_owner_mapping_.Take(obj_id);
+    const Vector<AXID>& owners_owned_children =
+        aria_owner_to_children_mapping_.at(owner_id);
+    for (wtf_size_t index = 0; index < owners_owned_children.size(); index++) {
+      if (owners_owned_children[index] == obj_id) {
+        aria_owner_to_children_mapping_.at(owner_id).EraseAt(index);
+        break;
+      }
+    }
+  }
 }
 
 AXObject* AXRelationCache::ObjectFromAXID(AXID axid) const {

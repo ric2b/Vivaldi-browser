@@ -4,13 +4,16 @@
 <translation id="1033008476608128425">Lânskip 3</translation>
 <translation id="1118377629180821201">Lânskip 12</translation>
 <translation id="1158503667684816647">Lit dizze befêstiging net wer sjen</translation>
+<translation id="1222195720020481779">De ynstallearder úteinsette...</translation>
 <translation id="1276145862619442150">Fluchkiezer</translation>
 <translation id="1281950884873973195">Bist 6</translation>
 <translation id="1411638389238344450">Keppeling mei e-post stjoere</translation>
 <translation id="1454726940098520109">Befêstiging net wer sjen litte</translation>
 <translation id="1462666970065907900">Wolle jo dit finster slute?</translation>
+<translation id="1526344461589023948">Der barde in flater by it bewarjen fan de ynladen fernijing. Kontrolearje of de kompjûter genôch skiifromte hat en besykje it nochris.</translation>
 <translation id="1657174850639146440">Meunster 9</translation>
 <translation id="1676595396635191120">Nij privee finster</translation>
+<translation id="1702758681952953055">As de flater oanhâld, meitsje der dan in melding fan mei de folgjende details:</translation>
 <translation id="1728549374069268714">Plakke en gean</translation>
 <translation id="1756026472674246267">Keppeling yn nije ljepper iepenje</translation>
 <translation id="1759842336958782510">Chrome</translation>
@@ -19,10 +22,15 @@
 <translation id="1921101374471252440">&amp;Ofbylding op 'e nij lade</translation>
 <translation id="1924750141060565109">Lânskip 15</translation>
 <translation id="19598411548897379">Algemien</translation>
+<translation id="1985669426322966465">Software-fernijing</translation>
 <translation id="2079036669923635404">Klik hjir om Vivaldi te fernijen nei ferzje <ph name="VERSION" />.</translation>
+<translation id="2141974047387702305">Der barde in flater by it ynladen fan triemmen foar it fernijen. Kontrolearje jo ynternet ferbining en besykje nochris.</translation>
+<translation id="2339641773402824483">Kontrolearje op fernijings...</translation>
 <translation id="2441056087170876076">Meunster 2</translation>
 <translation id="2444387452209867610">Notysje ynfoegje</translation>
 <translation id="2486841023299517366">Bist 4</translation>
+<translation id="2612127540243995147">Klear om te ynstallearjen. Vivaldi sil einigje en op 'e nij úteinsetten.</translation>
+<translation id="2613387515621326337">Fernijing webstee sjen litte</translation>
 <translation id="2848085334714181751">Bist 3</translation>
 <translation id="2873951654529031587">Jiskefet</translation>
 <translation id="292258461174562431">Meunster 4</translation>
@@ -33,9 +41,12 @@
 <translation id="3084011186245865060">Lânskip 6</translation>
 <translation id="3127383884976966729">Bist 7</translation>
 <translation id="3156398087075132709">Nije blêdwizer</translation>
+<translation id="3255747772218936245">Fernijing ynstallearje</translation>
 <translation id="3259769196742189631">Falidearje</translation>
 <translation id="3302905971452834934">Meunster 1</translation>
 <translation id="3334610655141903168">(gjin titel)</translation>
+<translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> is no de nijste ferzje beskikber.</translation>
+<translation id="3383198080133834965">De ferzje is folslein by de tiid!</translation>
 <translation id="3402602684546832928">Opera blêdwizer triem selektearje</translation>
 <translation id="3451317331714872347">Lânskip 8</translation>
 <translation id="3457498675806041407">Utgong befêstigje</translation>
@@ -45,6 +56,8 @@
 <translation id="3542768452570884558">Keppeling yn nije finster iepenje</translation>
 <translation id="3588820906588687999">Ofbylding yn nije ljepper iepenje</translation>
 <translation id="3601066750251199488">Meunster 3</translation>
+<translation id="3680031241659195730">In nije ferzje fan Vivaldi is beskikber!</translation>
+<translation id="3708982624815781692">De ynlaad is ôfbrútsen.</translation>
 <translation id="3732157130969736834">Keppeling as blêdwizer taheakje</translation>
 <translation id="3732388226447288666">Bist 2</translation>
 <translation id="3732439195215136813">Bist 5</translation>
@@ -52,6 +65,7 @@
 <translation id="3914946330804881301">Ymportearje út Opera</translation>
 <translation id="3921292902397893431">Meunster 8</translation>
 <translation id="3943857333388298514">Plakke</translation>
+<translation id="4005270918754737597">Dizze ferzje oerslaan</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4073157431025461511">&amp;Net mear sjen litte</translation>
 <translation id="4074744496918018786">Ofbylding yn privee finster iepenje</translation>
@@ -68,6 +82,7 @@
 <translation id="4677434526832593569">Bist 8</translation>
 <translation id="474217410105706308">Ljepper dimme</translation>
 <translation id="4881695831933465202">Iepenje</translation>
+<translation id="498766871928286903"><ph name="DOWNLOADED" /> fan 'e <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
 <translation id="5014281392052865061">Ymportearre fluchkiezer</translation>
 <translation id="5092656712000637858">Side oan webpaniel taheakje</translation>
 <translation id="5177818338935286353">Meunster 7</translation>
@@ -81,11 +96,14 @@
 <translation id="5594602170491763400">Meunster 5</translation>
 <translation id="5615637589913244581">Opera ferzje 15+ (Beta)</translation>
 <translation id="5648110075441906505">Ofbylding yn nij finster iepenje</translation>
+<translation id="5656371807944747581">Fernijingsflater!</translation>
 <translation id="5716238312826274098">Notifikaasjes útskeakelje</translation>
+<translation id="5732584064771442623">Vivaldi <ph name="NEW_VERSION" /> is no beskikber (Jo hawwe <ph name="OLD_VERSION" />). Wolle jo it no ynlade?</translation>
 <translation id="5770433027661640693">Lânskip 10</translation>
 <translation id="5857090052475505287">Nije map</translation>
 <translation id="588258955323874662">Folslein skerm</translation>
 <translation id="5916080360077521750">Jammer de Chrome ynstellings binne net beskikber as dy sneuper iepen stiet. Om dizze ynstellings te ymportearjen nei Vivaldi, bewarje jo wurk en lit alle finster fan Chrome de ein berinne. Klik dêrnei op trochgean.</translation>
+<translation id="6040143037577758943">Slute</translation>
 <translation id="6229528619562190452">Klik hjir om Vivaldi te fernijen.</translation>
 <translation id="6234173136417926046">Ofbylding as startside eftergrûn brûke</translation>
 <translation id="630690498669249215">Opera blêdwizer triem</translation>
@@ -96,15 +114,21 @@
 <translation id="6538338088414940408">Keppeling yn eftergrûn ljepper iepenje</translation>
 <translation id="6551219277044048123">As s&amp;ykmotor taheakje...</translation>
 <translation id="6630781781151951863">Lânskip 18</translation>
+<translation id="6635049669875534328">Utjefte notysjes:</translation>
 <translation id="6804831687363620480">Jammer de Opera 15+ ynstellings binne net beskikber as dy sneuper iepen stiet. Om dizze ynstellings te ymportearjen nei Vivaldi, bewarje jo wurk en lit alle finster fan Opera 15+ de ein berinne. Klik dêrnei op trochgean.</translation>
+<translation id="6892812721183419409">Keppeling iepenje as <ph name="USER" /></translation>
 <translation id="6896758677409633944">Kopiearje</translation>
 <translation id="7086554968911045110">Lânskip 7</translation>
 <translation id="7111492742514999492">Lânskip 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7496505986576158197">Vivaldi wurdt mooglik makke troch it <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> iepen boarne projekt en oare <ph name="BEGIN_LINK_OSS" />iepen boarne sêftguod<ph name="END_LINK_OSS" />.</translation>
+<translation id="7581266044164103589">It slagge net om de ynstallearder fan de fernijing te starten. Kontrolearje of jo kompjûter genôch ûnthâld en skiifromte hat en besykje nochris.</translation>
+<translation id="7658239707568436148">Ofbrekke</translation>
 <translation id="7715497554424665066">Fernijing &amp;negearje</translation>
 <translation id="7724603315864178912">Knippe</translation>
+<translation id="7727481996062361502">Fernijing ferifiearje...</translation>
 <translation id="7793738202466490491">Taheakje as kalinder barren</translation>
+<translation id="7848222781052558334">De digitale ûndertekening fan de ynladen triemmen koenen net ferifiearre wurde.</translation>
 <translation id="7865983598101744945">Utgong befêstigje</translation>
 <translation id="7957213167373139414">Myn kalinder</translation>
 <translation id="8027581147000338959">Iepenje yn nij finster</translation>
@@ -113,9 +137,13 @@
 <translation id="8261506727792406068">Wiskje</translation>
 <translation id="8331671104904436324">Iepenje op 'e eftergrûn ljepper</translation>
 <translation id="8373293945112511707">Lânskip 1</translation>
+<translation id="8388552048012645975">Fernijing wurdt ynladen...</translation>
 <translation id="8427094907586191051">Lânskip 17</translation>
+<translation id="8439034818057146672">In nije ferzje fan Vivaldi is ree foar ynstallaasje.</translation>
 <translation id="8446668873108041390">it útfieren fan JavaSkript troch AppleSkript is útskeakele. By Ynstellingen &gt; Privacy &gt; Apple barren stiet in ynstelling om JavaSkript fanút Apple barren ta te stean.</translation>
 <translation id="8539196077526389150">Lânskip 13</translation>
+<translation id="8562339533180097902">Vivaldi einigje litte en no ynstallearje</translation>
+<translation id="8567452685425968223">Fernijing útpakke...</translation>
 <translation id="8624587806981488221">&amp;Ofbylding op 'e nij lade</translation>
 <translation id="864444594187862076">Opera ferzje 15+ (Untwikkelder)</translation>
 <translation id="8651348004684669199">Aktive ljepper taheakje</translation>
@@ -123,11 +151,13 @@
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8768970203213061953">Lânskip 14</translation>
 <translation id="8773635261052182196">Jo sille dizze notifikaasjes net langer mear sjen. Jo kinne se wer oansette yn de Vivaldi ynstellings.</translation>
+<translation id="8813277370772331957">Werinnerje my letter</translation>
 <translation id="8894900864683381599">Keppeling oan webpaniel taheakje</translation>
 <translation id="8912720443398351457">Wolle jo Vivaldi ferlitte?</translation>
 <translation id="8947109330183116400">HTML blêdwizer triem selektearje</translation>
 <translation id="9017566390391482291">Selektearje Vivaldi profyl map foar ymportearjen</translation>
 <translation id="9065203028668620118">Bewurkje</translation>
+<translation id="912022491595344261">Ofbylding iepenje as <ph name="USER" /></translation>
 <translation id="9157539936604258187">Keppeling iepenje</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
 <translation id="970294721402795299">Lânskip 16</translation>

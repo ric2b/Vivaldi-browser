@@ -18,6 +18,7 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webauthn/authenticator_request_dialog.h"
@@ -28,6 +29,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/device_service.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
@@ -46,7 +48,7 @@
 #include "device/fido/win/authenticator.h"
 #endif
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ash/public/cpp/webauthn_request_registrar.h"
 #include "ui/aura/window.h"
 #endif
@@ -144,6 +146,20 @@ const char kPairingPrefId[] = "id";
 const char kPairingPrefSecret[] = "secret";
 const char kPairingPrefPublicKey[] = "pub_key";
 const char kPairingPrefTime[] = "time";
+
+// DeleteCablePairingByPublicKey erases any pairing with the given public key
+// from |list|.
+void DeleteCablePairingByPublicKey(base::ListValue* list,
+                                   const std::string& public_key_base64) {
+  list->EraseListValueIf([&public_key_base64](const auto& value) {
+    if (!value.is_dict()) {
+      return false;
+    }
+    const base::Value* pref_public_key = value.FindKey(kPairingPrefPublicKey);
+    return pref_public_key && pref_public_key->is_string() &&
+           pref_public_key->GetString() == public_key_base64;
+  });
+}
 
 }  // namespace
 
@@ -371,7 +387,10 @@ void ChromeAuthenticatorRequestDelegate::ConfigureCable(
     qr_generator_key.emplace();
     crypto::RandBytes(*qr_generator_key);
     qr_string = device::cablev2::qr::Encode(*qr_generator_key);
-    paired_phones = GetCablePairings();
+
+    if (!cable_extension_provided) {
+      paired_phones = GetCablePairings();
+    }
     have_paired_phones = !paired_phones.empty();
 
     mojo::Remote<device::mojom::UsbDeviceManager> usb_device_manager;
@@ -382,7 +401,7 @@ void ChromeAuthenticatorRequestDelegate::ConfigureCable(
         SystemNetworkContextManager::GetInstance()->GetContext());
   }
 
-  if (pairings.empty() && !qr_generator_key) {
+  if (!cable_extension_provided && !qr_generator_key) {
     return;
   }
 
@@ -392,7 +411,7 @@ void ChromeAuthenticatorRequestDelegate::ConfigureCable(
                                     std::move(paired_phones));
 
   discovery_factory->set_cable_pairing_callback(base::BindRepeating(
-      &ChromeAuthenticatorRequestDelegate::StoreNewCablePairingInPrefs,
+      &ChromeAuthenticatorRequestDelegate::HandleCablePairingEvent,
       weak_ptr_factory_.GetWeakPtr()));
 }
 
@@ -455,15 +474,16 @@ ChromeAuthenticatorRequestDelegate::TouchIdAuthenticatorConfigForProfile(
 }
 #endif
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 ChromeAuthenticatorRequestDelegate::ChromeOSGenerateRequestIdCallback
 ChromeAuthenticatorRequestDelegate::GetGenerateRequestIdCallback(
     content::RenderFrameHost* render_frame_host) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   aura::Window* window =
       render_frame_host->GetNativeView()->GetToplevelWindow();
   return ash::WebAuthnRequestRegistrar::Get()->GetRegisterCallback(window);
 }
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 void ChromeAuthenticatorRequestDelegate::UpdateLastTransportUsed(
     device::FidoTransportProtocol transport) {
@@ -489,12 +509,12 @@ bool ChromeAuthenticatorRequestDelegate::IsWebAuthnUIEnabled() {
 #if defined(OS_MAC)
 base::Optional<ChromeAuthenticatorRequestDelegate::TouchIdAuthenticatorConfig>
 ChromeAuthenticatorRequestDelegate::GetTouchIdAuthenticatorConfig() {
+  Profile* profile = Profile::FromBrowserContext(browser_context());
   // Touch ID is available in Incognito but not Guest windows.
-  if (Profile::FromBrowserContext(browser_context())->IsGuestSession())
+  if (profile->IsGuestSession() || profile->IsEphemeralGuestProfile())
     return base::nullopt;
 
-  return TouchIdAuthenticatorConfigForProfile(
-      Profile::FromBrowserContext(browser_context()));
+  return TouchIdAuthenticatorConfigForProfile(profile);
 }
 #endif  // defined(OS_MAC)
 
@@ -505,8 +525,6 @@ void ChromeAuthenticatorRequestDelegate::OnTransportAvailabilityEnumerated(
   }
 
   weak_dialog_model_->AddObserver(this);
-  weak_dialog_model_->set_incognito_mode(
-      Profile::FromBrowserContext(browser_context())->IsIncognitoProfile());
 
   weak_dialog_model_->StartFlow(std::move(data), GetLastTransportUsed());
 
@@ -562,12 +580,14 @@ bool ChromeAuthenticatorRequestDelegate::SupportsPIN() const {
 }
 
 void ChromeAuthenticatorRequestDelegate::CollectPIN(
-    base::Optional<int> attempts,
-    base::OnceCallback<void(std::string)> provide_pin_cb) {
+    CollectPINOptions options,
+    base::OnceCallback<void(base::string16)> provide_pin_cb) {
   if (!weak_dialog_model_)
     return;
 
-  weak_dialog_model_->CollectPIN(attempts, std::move(provide_pin_cb));
+  weak_dialog_model_->CollectPIN(options.reason, options.error,
+                                 options.min_pin_length, options.attempts,
+                                 std::move(provide_pin_cb));
 }
 
 void ChromeAuthenticatorRequestDelegate::StartBioEnrollment(
@@ -599,13 +619,6 @@ void ChromeAuthenticatorRequestDelegate::OnRetryUserVerification(int attempts) {
     return;
 
   weak_dialog_model_->OnRetryUserVerification(attempts);
-}
-
-void ChromeAuthenticatorRequestDelegate::OnInternalUserVerificationLocked() {
-  if (!weak_dialog_model_)
-    return;
-
-  weak_dialog_model_->set_internal_uv_locked();
 }
 
 void ChromeAuthenticatorRequestDelegate::SetMightCreateResidentCredential(
@@ -643,6 +656,10 @@ ChromeAuthenticatorRequestDelegate::GetLastTransportUsed() const {
 
 bool ChromeAuthenticatorRequestDelegate::ShouldPermitCableExtension(
     const url::Origin& origin) {
+  if (base::FeatureList::IsEnabled(device::kWebAuthCableExtensionAnywhere)) {
+    return true;
+  }
+
   // Because the future of the caBLE extension might be that we transition
   // everything to QR-code or sync-based pairing, we don't want use of the
   // extension to spread without consideration. Therefore it's limited to
@@ -694,8 +711,8 @@ ChromeAuthenticatorRequestDelegate::GetCablePairings() {
   return ret;
 }
 
-void ChromeAuthenticatorRequestDelegate::StoreNewCablePairingInPrefs(
-    std::unique_ptr<device::cablev2::Pairing> pairing) {
+void ChromeAuthenticatorRequestDelegate::HandleCablePairingEvent(
+    device::cablev2::PairingEvent event) {
   // This is called when doing a QR-code pairing with a phone and the phone
   // sends long-term pairing information during the handshake. The pairing
   // information is saved in preferences for future operations.
@@ -711,18 +728,21 @@ void ChromeAuthenticatorRequestDelegate::StoreNewCablePairingInPrefs(
       Profile::FromBrowserContext(browser_context())->GetPrefs(),
       kWebAuthnCablePairingsPrefName);
 
+  if (auto* disabled_public_key =
+          absl::get_if<std::array<uint8_t, device::kP256X962Length>>(&event)) {
+    // A pairing was reported to be invalid. Delete it.
+    DeleteCablePairingByPublicKey(update.Get(), Base64(*disabled_public_key));
+    return;
+  }
+
+  // Otherwise the event is a new pairing.
+  auto& pairing =
+      *absl::get_if<std::unique_ptr<device::cablev2::Pairing>>(&event);
   // Find any existing entries with the same public key and replace them. The
   // handshake protocol requires the phone to prove possession of the public key
   // so it's not possible for an evil phone to displace another's pairing.
-  const std::string public_key_base64 = Base64(pairing->peer_public_key_x962);
-  update->EraseListValueIf([&public_key_base64](const auto& value) {
-    if (!value.is_dict()) {
-      return false;
-    }
-    const base::Value* pref_public_key = value.FindKey(kPairingPrefPublicKey);
-    return pref_public_key && pref_public_key->is_string() &&
-           pref_public_key->GetString() == public_key_base64;
-  });
+  std::string public_key_base64 = Base64(pairing->peer_public_key_x962);
+  DeleteCablePairingByPublicKey(update.Get(), public_key_base64);
 
   auto dict = std::make_unique<base::Value>(base::Value::Type::DICTIONARY);
   dict->SetKey(kPairingPrefPublicKey,

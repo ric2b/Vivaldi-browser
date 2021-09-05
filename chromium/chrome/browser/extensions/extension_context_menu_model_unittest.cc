@@ -14,6 +14,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/metrics/user_action_tester.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/extensions/chrome_extension_browser_constants.h"
 #include "chrome/browser/extensions/context_menu_matcher.h"
@@ -59,7 +60,7 @@
 #include "ui/display/test/test_screen.h"
 #include "ui/gfx/image/image.h"
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/chromeos/app_mode/kiosk_app_manager.h"
 #endif
 
@@ -105,6 +106,9 @@ scoped_refptr<const Extension> BuildExtensionWithActionType(
       builder.SetAction(ExtensionBuilder::ActionType::ACTION);
       break;
   }
+
+  builder.SetManifestKey("manifest_version",
+                         GetManifestVersionForActionType(type));
 
   return builder.Build();
 }
@@ -405,7 +409,7 @@ void ExtensionContextMenuModelTest::TearDown() {
       browser_->tab_strip_model()->DetachWebContentsAt(0);
   }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // The KioskAppManager, if initialized, needs to be cleaned up.
   // TODO(devlin): This should probably go somewhere more central, like
   // chromeos::ScopedCrosSettingsTestHelper.
@@ -723,7 +727,8 @@ TEST_F(ExtensionContextMenuModelTest, TestPageAccessSubmenu) {
 
   // Pretend the extension wants to run.
   int run_count = 0;
-  base::Closure increment_run_count(base::Bind(&Increment, &run_count));
+  base::RepeatingClosure increment_run_count(
+      base::BindRepeating(&Increment, &run_count));
   action_runner->RequestScriptInjectionForTesting(
       extension, UserScript::DOCUMENT_IDLE, increment_run_count);
 

@@ -10,6 +10,7 @@ import org.chromium.chrome.browser.layouts.LayoutStateProvider;
 import org.chromium.chrome.browser.layouts.LayoutType;
 import org.chromium.chrome.browser.tabmodel.IncognitoStateProvider;
 import org.chromium.chrome.browser.tabmodel.IncognitoStateProvider.IncognitoStateObserver;
+import org.chromium.chrome.browser.theme.ThemeColorProvider;
 import org.chromium.components.browser_ui.styles.ChromeColors;
 
 /** A ThemeColorProvider for the app theme (incognito or standard theming). */
@@ -79,6 +80,10 @@ public class AppThemeColorProvider extends ThemeColorProvider implements Incogni
     void setLayoutStateProvider(LayoutStateProvider layoutStateProvider) {
         mLayoutStateProvider = layoutStateProvider;
         mLayoutStateProvider.addObserver(mLayoutStateObserver);
+
+        // Note(david@vivaldi.com): After changing the theme this class will be recreated and a new
+        // observer will be created. We need to make sure that we do an update.
+        updateTheme();
     }
 
     private void updateTheme() {

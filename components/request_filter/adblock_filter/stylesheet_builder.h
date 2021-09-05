@@ -10,6 +10,7 @@
 #include "base/files/file_path.h"
 #include "base/strings/string_piece.h"
 #include "components/request_filter/adblock_filter/adblock_metadata.h"
+#include "vivaldi/components/request_filter/adblock_filter/flat/adblock_rules_list_generated.h"
 
 namespace flatbuffers {
 struct String;
@@ -17,11 +18,12 @@ struct String;
 
 namespace adblock_filter {
 
-const std::string& GetSelector(const std::string& selector_item);
+const flat::CosmeticRule* GetCosmeticRule(
+    const flat::CosmeticRule* cosmetic_rule);
 
 template <typename U>
-const std::string& GetSelector(
-    const std::pair<const std::string, U>& selector_item) {
+const flat::CosmeticRule* GetCosmeticRule(
+    const std::pair<const flat::CosmeticRule* const, U>& selector_item) {
   return selector_item.first;
 }
 
@@ -41,7 +43,7 @@ std::string BuildStyleSheet(const T& selectors) {
       stylesheet += ", ";
     }
     selector_count++;
-    stylesheet += GetSelector(selector_item);
+    stylesheet += GetCosmeticRule(selector_item)->selector()->str();
   }
 
   if (selector_count > 0)

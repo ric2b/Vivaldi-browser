@@ -113,9 +113,13 @@
   "chrome/browser/resources/chromeos/cellular_setup/cellular_setup_resources.grd": {
     "structures": [1360],
   },
-  "chrome/browser/resources/chromeos/multidevice_internals/multidevice_internals_resources.grd": {
+  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/chromeos/emoji_picker/resources.grd": {
+    "META": {"sizes": {"includes": [20]}},
+    "includes": [1365],
+  },
+  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/chromeos/multidevice_internals/resources.grd": {
+    "META": {"sizes": {"includes": [35]}},
     "includes": [1370],
-    "structures": [1380],
   },
   "chrome/browser/resources/chromeos/multidevice_setup/multidevice_setup_resources.grd": {
     "structures": [1400],
@@ -151,14 +155,16 @@
     "META": {"sizes": {"includes": [100]}},
     "includes": [1640],
   },
-  "chrome/browser/resources/new_tab_page/new_tab_page_resources_vulcanized.grd": {
-    "includes": [1660],
-  },
-  "chrome/browser/resources/new_tab_page/new_tab_page_resources.grd": {
+  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/new_tab_page/resources.grd": {
+    "META": {"sizes": {"includes": [200]}},
     "includes": [1680],
   },
   "chrome/browser/resources/preinstalled_web_apps/resources.grd": {
     "includes": [1710],
+  },
+  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/pdf/resources.grd": {
+    "META": {"sizes": {"includes": [200]}},
+    "includes": [1715],
   },
   "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/print_preview/print_preview_resources.grd": {
     "META": {"sizes": {"includes": [500],}},
@@ -224,26 +230,31 @@
     "META": {"sizes": {"messages": [50]}, "join": 2},  # Relies on src-internal.
     "messages": [2015],
   },
-  "chrome/browser/resources/bluetooth_internals/resources.grd": {
+  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/bluetooth_internals/resources.grd": {
+    "META": {"sizes": {"includes": [30],}},
     "includes": [2020],
   },
   "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/chromeos/bluetooth_pairing_dialog/bluetooth_pairing_dialog_resources.grd": {
     "META": {"sizes": {"includes": [10],}},
     "includes": [2030],
   },
-  "chrome/browser/resources/gaia_auth_host/gaia_auth_host_resources.grd": {
+  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/gaia_auth_host/resources.grd": {
+    "META": {"sizes": {"includes": [10],}},
     "includes": [2080],
   },
-  "chrome/browser/resources/invalidations/invalidations_resources.grd": {
+  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/invalidations/resources.grd": {
+    "META": {"sizes": {"includes": [10],}},
     "includes": [2090],
   },
-  "chrome/browser/resources/media/webrtc_logs_resources.grd": {
+  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/media/webrtc_logs_resources.grd": {
+    "META": {"sizes": {"includes": [10],}},
     "includes": [2100],
   },
   "chrome/browser/resources/net_internals/net_internals_resources.grd": {
     "includes": [2120],
   },
-  "chrome/browser/resources/omnibox/resources.grd": {
+  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/omnibox/resources.grd": {
+    "META": {"sizes": {"includes": [20]}},
     "includes": [2140],
   },
   "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/quota_internals/quota_internals_resources.grd": {
@@ -253,15 +264,17 @@
   "chrome/browser/resources/sync_file_system_internals/sync_file_system_internals_resources.grd": {
     "includes": [2180],
   },
-  "chrome/browser/resources/usb_internals/resources.grd": {
+  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/usb_internals/resources.grd": {
+    "META": {"sizes": {"includes": [20]}},
     "includes": [2200],
   },
-  "chrome/browser/resources/webapks/webapks_ui_resources.grd": {
+  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/webapks/resources.grd": {
+    "META": {"sizes": {"includes": [10]}},
     "includes": [2220],
   },
-  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/webui_js_exception/webui_js_exception_resources.grd": {
-    "META": {"sizes": {"includes": [10],}},
-    "includes": [2230],
+  "<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/webui_js_error/webui_js_error_resources.grd": {
+   "META": {"sizes": {"includes": [10],}},
+   "includes": [2230],
   },
   "components/sync/driver/resources.grd": {
     "includes": [2240],
@@ -296,6 +309,9 @@
   },
   "chrome/test/data/webui_test_resources.grd": {
     "includes": [2420],
+  },
+  "chrome/test/data/chrome_test_resources.grd": {
+    "messages": [2440],
   },
   # END chrome/ miscellaneous section.
 
@@ -659,7 +675,7 @@
     "structures": [3820],
   },
   "<(SHARED_INTERMEDIATE_DIR)/ui/webui/resources/webui_generated_resources.grd": {
-    "META": {"sizes": {"includes": [600]}},
+    "META": {"sizes": {"includes": [800]}},
     "includes": [3830],
   },
   "weblayer/weblayer_resources.grd": {
@@ -668,7 +684,9 @@
 
   # This file is generated during the build.
   "<(SHARED_INTERMEDIATE_DIR)/devtools/devtools_resources.grd": {
-    "META": {"sizes": {"includes": [1000],}},
+    # In debug build, devtools frontend sources are not bundled and therefore
+    # includes a lot of individual resources
+    "META": {"sizes": {"includes": [2000],}},
     "includes": [3860],
   },
 

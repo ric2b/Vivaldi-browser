@@ -112,8 +112,7 @@ class MockRenderProcessHost : public RenderProcessHost {
   bool IsInitializedAndNotDead() override;
   void SetBlocked(bool blocked) override;
   bool IsBlocked() override;
-  std::unique_ptr<BlockStateChangedCallbackList::Subscription>
-  RegisterBlockStateChangedCallback(
+  base::CallbackListSubscription RegisterBlockStateChangedCallback(
       const BlockStateChangedCallback& cb) override;
   void Cleanup() override;
   void AddPendingView() override;
@@ -177,7 +176,7 @@ class MockRenderProcessHost : public RenderProcessHost {
       override {}
   void BindNativeFileSystemManager(
       const url::Origin& origin,
-      mojo::PendingReceiver<blink::mojom::NativeFileSystemManager> receiver)
+      mojo::PendingReceiver<blink::mojom::FileSystemAccessManager> receiver)
       override {}
   void BindIndexedDB(
       const url::Origin& origin,

@@ -20,8 +20,10 @@
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/command_updater.h"
+#include "chrome/browser/external_protocol/external_protocol_handler.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/reputation/url_elision_policy.h"
 #include "chrome/browser/send_tab_to_self/send_tab_to_self_desktop_util.h"
@@ -72,10 +74,10 @@
 #include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/base/dragdrop/os_exchange_data_provider.h"
 #include "ui/base/ime/input_method.h"
-#include "ui/base/ime/input_method_keyboard_controller.h"
 #include "ui/base/ime/text_edit_commands.h"
 #include "ui/base/ime/text_input_client.h"
 #include "ui/base/ime/text_input_type.h"
+#include "ui/base/ime/virtual_keyboard_controller.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/image_model.h"
 #include "ui/base/models/simple_menu_model.h"
@@ -94,6 +96,7 @@
 #include "ui/views/border.h"
 #include "ui/views/button_drag_utils.h"
 #include "ui/views/controls/textfield/textfield.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 #include "ui/views/views_features.h"
 #include "ui/views/widget/widget.h"
 #include "url/gurl.h"
@@ -363,9 +366,6 @@ void OmniboxViewViews::ElideAnimation::AnimationProgressed(
 
 // OmniboxViewViews -----------------------------------------------------------
 
-// static
-const char OmniboxViewViews::kViewClassName[] = "OmniboxViewViews";
-
 OmniboxViewViews::OmniboxViewViews(OmniboxEditController* controller,
                                    std::unique_ptr<OmniboxClient> client,
                                    bool popup_window_mode,
@@ -399,7 +399,7 @@ OmniboxViewViews::OmniboxViewViews(OmniboxEditController* controller,
 }
 
 OmniboxViewViews::~OmniboxViewViews() {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   chromeos::input_method::InputMethodManager::Get()->
       RemoveCandidateWindowObserver(this);
 #endif
@@ -415,7 +415,7 @@ void OmniboxViewViews::Init() {
   GetRenderText()->SetElideBehavior(gfx::ELIDE_TAIL);
   GetRenderText()->set_symmetric_selection_visual_bounds(true);
   InstallPlaceholderText();
-  scoped_template_url_service_observer_.Add(
+  scoped_template_url_service_observation_.Observe(
       model()->client()->GetTemplateURLService());
 
   if (popup_window_mode_)
@@ -439,7 +439,7 @@ void OmniboxViewViews::Init() {
   constexpr gfx::Insets kTextfieldInsets(3);
   SetBorder(views::CreateEmptyBorder(kTextfieldInsets));
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   chromeos::input_method::InputMethodManager::Get()->
       AddCandidateWindowObserver(this);
 #endif
@@ -516,12 +516,7 @@ void OmniboxViewViews::InstallPlaceholderText() {
   }
 }
 
-bool OmniboxViewViews::SelectionAtBeginning() const {
-  const gfx::Range sel = GetSelectedRange();
-  return sel.GetMax() == 0;
-}
-
-bool OmniboxViewViews::SelectionAtEnd() const {
+bool OmniboxViewViews::GetSelectionAtEnd() const {
   const gfx::Range sel = GetSelectedRange();
   return sel.GetMin() == GetText().size();
 }
@@ -549,7 +544,7 @@ void OmniboxViewViews::EmphasizeURLComponents() {
   // If the text isn't eligible to be elided to a simplified domain, and
   // simplified domain field trials are enabled, then ensure that as much of the
   // text as will fit is visible.
-  if (!IsURLEligibleForSimplifiedDomainEliding() &&
+  if (!GetURLEligibleForSimplifiedDomainEliding() &&
       (OmniboxFieldTrial::ShouldHidePathQueryRefOnInteraction() ||
        OmniboxFieldTrial::ShouldRevealPathQueryRefOnHover())) {
     FitToLocalBounds();
@@ -794,9 +789,16 @@ void OmniboxViewViews::ExecuteCommand(int command_id, int event_flags) {
   DestroyTouchSelection();
   switch (command_id) {
     // These commands don't invoke the popup via OnBefore/AfterPossibleChange().
-    case IDC_PASTE_AND_GO:
-      model()->PasteAndGo(GetClipboardText(/*notify_if_restricted=*/true));
+    case IDC_PASTE_AND_GO: {
+      auto weak_this = weak_factory_.GetWeakPtr();
+      base::string16 text = GetClipboardText(/*notify_if_restricted=*/true);
+      // Because ReadText() in GetClipboardText() runs a nested message loop,
+      // |this| may be deleted before it returns. See https://crbug.com/1161149.
+      if (!weak_this)
+        return;
+      model()->PasteAndGo(text);
       return;
+    }
     case IDC_SHOW_FULL_URLS:
     case IDC_EDIT_SEARCH_ENGINES:
       location_bar_view_->command_updater()->ExecuteCommand(command_id);
@@ -848,12 +850,12 @@ ui::TextInputType OmniboxViewViews::GetTextInputType() const {
 
 void OmniboxViewViews::AddedToWidget() {
   views::Textfield::AddedToWidget();
-  scoped_compositor_observer_.Add(GetWidget()->GetCompositor());
+  scoped_compositor_observation_.Observe(GetWidget()->GetCompositor());
 }
 
 void OmniboxViewViews::RemovedFromWidget() {
   views::Textfield::RemovedFromWidget();
-  scoped_compositor_observer_.RemoveAll();
+  scoped_compositor_observation_.Reset();
 }
 
 OmniboxViewViews::ElideAnimation*
@@ -938,8 +940,12 @@ base::string16 OmniboxViewViews::GetSelectedText() const {
 }
 
 void OmniboxViewViews::OnOmniboxPaste() {
-  const base::string16 text(GetClipboardText(/*notify_if_restricted=*/true));
-
+  auto weak_this = weak_factory_.GetWeakPtr();
+  base::string16 text = GetClipboardText(/*notify_if_restricted=*/true);
+  // Because ReadText() in GetClipboardText() runs a nested message loop, |this|
+  // may be deleted before it returns. See https://crbug.com/1161149.
+  if (!weak_this)
+    return;
   if (text.empty() ||
       // When the fakebox is focused, ignore pasted whitespace because if the
       // fakebox is hidden and there's only whitespace in the omnibox, it's
@@ -1008,7 +1014,7 @@ bool OmniboxViewViews::IsSelectAll() const {
 void OmniboxViewViews::UpdatePopup() {
   // Prevent inline autocomplete when the caret isn't at the end of the text.
   const gfx::Range sel = GetSelectedRange();
-  model()->UpdateInput(!sel.is_empty(), !SelectionAtEnd());
+  model()->UpdateInput(!sel.is_empty(), !GetSelectionAtEnd());
 }
 
 void OmniboxViewViews::ApplyCaretVisibility() {
@@ -1241,7 +1247,7 @@ int OmniboxViewViews::GetWidth() const {
 }
 
 bool OmniboxViewViews::IsImeShowingPopup() const {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   return ime_candidate_window_open_;
 #else
   return GetInputMethod() ? GetInputMethod()->IsCandidatePopupOpen() : false;
@@ -1255,7 +1261,7 @@ void OmniboxViewViews::ShowVirtualKeyboardIfEnabled() {
 
 void OmniboxViewViews::HideImeIfNeeded() {
   if (auto* input_method = GetInputMethod()) {
-    if (auto* keyboard = input_method->GetInputMethodKeyboardController())
+    if (auto* keyboard = input_method->GetVirtualKeyboardController())
       keyboard->DismissVirtualKeyboard();
   }
 }
@@ -1309,11 +1315,11 @@ void OmniboxViewViews::OnMouseMoved(const ui::MouseEvent& event) {
   if (model()->ShouldPreventElision())
     return;
 
-  if (!IsURLEligibleForSimplifiedDomainEliding())
+  if (!GetURLEligibleForSimplifiedDomainEliding())
     return;
 
   if (hover_start_time_ == base::Time() &&
-      IsURLEligibleForSimplifiedDomainEliding()) {
+      GetURLEligibleForSimplifiedDomainEliding()) {
     hover_start_time_ = clock_->Now();
   }
 
@@ -1409,7 +1415,7 @@ void OmniboxViewViews::OnMouseExited(const ui::MouseEvent& event) {
       model()->ShouldPreventElision()) {
     return;
   }
-  if (!IsURLEligibleForSimplifiedDomainEliding())
+  if (!GetURLEligibleForSimplifiedDomainEliding())
     return;
 
   // When the reveal-on-hover field trial is enabled, we bring the URL into view
@@ -1471,10 +1477,9 @@ base::string16 OmniboxViewViews::GetLabelForCommandId(int command_id) const {
 
   // Don't paste-and-go data that was marked by its originator as confidential.
   constexpr size_t kMaxSelectionTextLength = 50;
-  const base::string16 clipboard_text =
-      IsClipboardDataMarkedAsConfidential()
-          ? base::string16()
-          : GetClipboardText(/*notify_if_restricted=*/false);
+  const base::string16 clipboard_text = IsClipboardDataMarkedAsConfidential()
+                                            ? base::string16()
+                                            : clipboard_text_;
 
   if (clipboard_text.empty())
     return l10n_util::GetStringUTF16(IDS_PASTE_AND_GO_EMPTY);
@@ -1499,11 +1504,9 @@ base::string16 OmniboxViewViews::GetLabelForCommandId(int command_id) const {
   return l10n_util::GetStringFUTF16(IDS_PASTE_AND_GO, url);
 }
 
-const char* OmniboxViewViews::GetClassName() const {
-  return kViewClassName;
-}
-
 bool OmniboxViewViews::OnMousePressed(const ui::MouseEvent& event) {
+  PermitExternalProtocolHandler();
+
   // Clear focus of buttons, but do not clear keyword mode.
   if (model()->popup_model() && model()->popup_model()->selected_line_state() !=
                                     OmniboxPopupModel::KEYWORD_MODE) {
@@ -1606,6 +1609,8 @@ bool OmniboxViewViews::OnMouseDragged(const ui::MouseEvent& event) {
 }
 
 void OmniboxViewViews::OnMouseReleased(const ui::MouseEvent& event) {
+  PermitExternalProtocolHandler();
+
   views::Textfield::OnMouseReleased(event);
   // When the user has clicked and released to give us focus, select all.
   if ((event.IsOnlyLeftMouseButton() || event.IsOnlyRightMouseButton()) &&
@@ -1626,6 +1631,8 @@ void OmniboxViewViews::OnMouseReleased(const ui::MouseEvent& event) {
 }
 
 void OmniboxViewViews::OnGestureEvent(ui::GestureEvent* event) {
+  PermitExternalProtocolHandler();
+
   static const bool kTakeFocusOnTapUp =
       base::FeatureList::IsEnabled(views::features::kTextfieldFocusOnTapUp);
 
@@ -1816,7 +1823,7 @@ void OmniboxViewViews::OnBoundsChanged(const gfx::Rect& previous_bounds) {
   // simplified domain).
   if (!OmniboxFieldTrial::ShouldHidePathQueryRefOnInteraction() ||
       elide_after_web_contents_interaction_animation_) {
-    if (IsURLEligibleForSimplifiedDomainEliding() &&
+    if (GetURLEligibleForSimplifiedDomainEliding() &&
         !model()->ShouldPreventElision()) {
       ElideURL();
     }
@@ -1961,7 +1968,7 @@ void OmniboxViewViews::OnBlur() {
       hover_elide_or_unelide_animation_ =
           std::make_unique<OmniboxViewViews::ElideAnimation>(this,
                                                              GetRenderText());
-      if (IsURLEligibleForSimplifiedDomainEliding()) {
+      if (GetURLEligibleForSimplifiedDomainEliding()) {
         ElideURL();
       } else {
         // If the text isn't eligible to be elided to a simplified domain, then
@@ -1980,12 +1987,10 @@ void OmniboxViewViews::OnBlur() {
 
 bool OmniboxViewViews::IsCommandIdEnabled(int command_id) const {
   if (command_id == Textfield::kPaste)
-    return !GetReadOnly() &&
-           !GetClipboardText(/*notify_if_restricted=*/false).empty();
+    return !GetReadOnly() && !clipboard_text_.empty();
   if (command_id == IDC_PASTE_AND_GO) {
     return !GetReadOnly() && !IsClipboardDataMarkedAsConfidential() &&
-           model()->CanPasteAndGo(
-               GetClipboardText(/*notify_if_restricted=*/false));
+           model()->CanPasteAndGo(clipboard_text_);
   }
 
   // Menu item is only shown when it is valid.
@@ -1994,6 +1999,35 @@ bool OmniboxViewViews::IsCommandIdEnabled(int command_id) const {
 
   return Textfield::IsCommandIdEnabled(command_id) ||
          location_bar_view_->command_updater()->IsCommandEnabled(command_id);
+}
+
+void OmniboxViewViews::ShowContextMenu(const gfx::Point& p,
+                                       ui::MenuSourceType source_type) {
+  // Because ReadText() in GetClipboardText() runs a nested message loop, |this|
+  // may be deleted before it returns. See https://crbug.com/1161149.
+  auto weak_this = weak_factory_.GetWeakPtr();
+
+  // We shouldn't notify the user if the clipboard is restricted because they're
+  // not necessarily trying to access the clipboard here. This value is only
+  // used to enable/disable and populate the text of context menu entries.
+  base::string16 text = GetClipboardText(/*notify_if_restricted=*/false);
+
+  // Avoid running any of the Views menu code by returning early if |this| has
+  // been deleted.
+  if (!weak_this)
+    return;
+
+  // Save the clipboard text for use in GetLabelForCommandId() and
+  // IsCommandIdEnabled(). It would be possible to access the clipboard again in
+  // those methods, similarly protected by checking a weak pointer to |this|.
+  // But saving it here avoids that additional complexity while also serving as
+  // an optimization in the case where the clipboard contains a very large
+  // amount of data and reading it can take seconds.
+  clipboard_text_ = text;
+
+  View::ShowContextMenu(p, source_type);
+
+  clipboard_text_.clear();
 }
 
 void OmniboxViewViews::DidStartNavigation(
@@ -2045,7 +2079,8 @@ void OmniboxViewViews::DidFinishNavigation(
   // is to avoid frequent eliding/uneliding within single-page apps that do
   // frequent fragment navigations.
   if (navigation->IsErrorPage() || !navigation->IsSameDocument() ||
-      !navigation->GetPreviousURL().EqualsIgnoringRef(navigation->GetURL())) {
+      !navigation->GetPreviousMainFrameURL().EqualsIgnoringRef(
+          navigation->GetURL())) {
     ResetToHideOnInteraction();
   }
 }
@@ -2113,10 +2148,8 @@ bool OmniboxViewViews::IsTextEditCommandEnabled(
   switch (command) {
     case ui::TextEditCommand::MOVE_UP:
     case ui::TextEditCommand::MOVE_DOWN:
-      return !GetReadOnly();
     case ui::TextEditCommand::PASTE:
-      return !GetReadOnly() &&
-             !GetClipboardText(show_rejection_ui_if_any_).empty();
+      return !GetReadOnly();
     default:
       return Textfield::IsTextEditCommandEnabled(command);
   }
@@ -2127,8 +2160,6 @@ void OmniboxViewViews::ExecuteTextEditCommand(ui::TextEditCommand command) {
   // executed. Since we are not always calling the base class implementation
   // here, we need to deactivate touch text selection here, too.
   DestroyTouchSelection();
-
-  base::AutoReset<bool> show_rejection_ui(&show_rejection_ui_if_any_, true);
 
   if (!IsTextEditCommandEnabled(command))
     return;
@@ -2154,7 +2185,7 @@ bool OmniboxViewViews::ShouldShowPlaceholderText() const {
          !model()->is_caret_visible() && !model()->is_keyword_selected();
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 void OmniboxViewViews::CandidateWindowOpened(
       chromeos::input_method::InputMethodManager* manager) {
   ime_candidate_window_open_ = true;
@@ -2172,6 +2203,8 @@ void OmniboxViewViews::ContentsChanged(views::Textfield* sender,
 
 bool OmniboxViewViews::HandleKeyEvent(views::Textfield* textfield,
                                       const ui::KeyEvent& event) {
+  PermitExternalProtocolHandler();
+
   if (event.type() == ui::ET_KEY_RELEASED) {
     // The omnibox contents may change while the control key is pressed.
     if (event.key_code() == ui::VKEY_CONTROL)
@@ -2184,11 +2217,6 @@ bool OmniboxViewViews::HandleKeyEvent(views::Textfield* textfield,
   // Otherwise, if num-lock is off, the events are handled as [Up], [Down], etc.
   if (event.IsUnicodeKeyCode())
     return false;
-
-  // Show a notification if the clipboard is restricted by the rules of the
-  // data leak prevention policy. This state is used by the
-  // IsTextEditCommandEnabled(ui::TextEditCommand::PASTE) cases below.
-  base::AutoReset<bool> show_rejection_ui(&show_rejection_ui_if_any_, true);
 
   const bool shift = event.IsShiftDown();
   const bool control = event.IsControlDown();
@@ -2522,11 +2550,15 @@ void OmniboxViewViews::OnCompositingEnded(ui::Compositor* compositor) {
 }
 
 void OmniboxViewViews::OnCompositingShuttingDown(ui::Compositor* compositor) {
-  scoped_compositor_observer_.RemoveAll();
+  scoped_compositor_observation_.Reset();
 }
 
 void OmniboxViewViews::OnTemplateURLServiceChanged() {
   InstallPlaceholderText();
+}
+
+void OmniboxViewViews::PermitExternalProtocolHandler() {
+  ExternalProtocolHandler::PermitLaunchUrl();
 }
 
 gfx::Range OmniboxViewViews::GetSimplifiedDomainBounds(
@@ -2563,33 +2595,39 @@ gfx::Range OmniboxViewViews::GetSimplifiedDomainBounds(
   return gfx::Range(simplified_domain_pos, host.end());
 }
 
-bool OmniboxViewViews::IsURLEligibleForSimplifiedDomainEliding() {
+bool OmniboxViewViews::GetURLEligibleForSimplifiedDomainEliding() const {
   if (HasFocus() || model()->user_input_in_progress())
     return false;
   if (!model()->CurrentTextIsURL())
     return false;
   base::string16 text = GetText();
-  url::Component scheme, host;
-  AutocompleteInput::ParseForEmphasizeComponents(
-      text, model()->client()->GetSchemeClassifier(), &scheme, &host);
+  url::Parsed parts;
+  base::string16 scheme_str;
+  // Call Parse() here instead of ParseForEmphasizeComponents() because the
+  // latter parses the inner URL for blob:, filesystem:, and view-source: URLs.
+  // For those schemes, we want the outer scheme so that we can disable elision
+  // for those schemes.
+  AutocompleteInput::Parse(text, std::string(),
+                           model()->client()->GetSchemeClassifier(), &parts,
+                           &scheme_str, nullptr);
 
   // TODO(crbug.com/1117631): Simplified domain elision can have bugs for some
   // URLs with bidirectional hosts, disable elision for those URLs while the
   // bugs are fixed.
-  const base::string16 url_host = text.substr(host.begin, host.len);
+  const base::string16 url_host = text.substr(parts.host.begin, parts.host.len);
   if (base::i18n::GetStringDirection(url_host) ==
       base::i18n::TextDirection::UNKNOWN_DIRECTION) {
     return false;
   }
-  const base::string16 url_scheme = text.substr(scheme.begin, scheme.len);
+
   // Simplified domain display only makes sense for http/https schemes; for now
   // we don't want to mess with the display of other URLs like data:, blob:,
   // chrome:, etc.
-  return (url_scheme == base::UTF8ToUTF16(url::kHttpScheme) ||
-          url_scheme == base::UTF8ToUTF16(url::kHttpsScheme)) &&
-         host.is_nonempty() &&
+  return (scheme_str == base::UTF8ToUTF16(url::kHttpScheme) ||
+          scheme_str == base::UTF8ToUTF16(url::kHttpsScheme)) &&
+         !url_host.empty() &&
          !net::HostStringIsLocalhost(
-             base::UTF16ToUTF8(text.substr(host.begin, host.len)));
+             base::UTF16ToUTF8(text.substr(parts.host.begin, parts.host.len)));
 }
 
 void OmniboxViewViews::ResetToHideOnInteraction() {
@@ -2604,7 +2642,7 @@ void OmniboxViewViews::ResetToHideOnInteraction() {
   elide_after_web_contents_interaction_animation_.reset();
   hover_elide_or_unelide_animation_ =
       std::make_unique<OmniboxViewViews::ElideAnimation>(this, GetRenderText());
-  if (IsURLEligibleForSimplifiedDomainEliding()) {
+  if (GetURLEligibleForSimplifiedDomainEliding()) {
     ShowFullURLWithoutSchemeAndTrivialSubdomain();
   } else {
     if (!HasFocus() && !model()->user_input_in_progress())
@@ -2622,7 +2660,7 @@ void OmniboxViewViews::OnShouldPreventElisionChanged() {
   if (model()->ShouldPreventElision()) {
     hover_elide_or_unelide_animation_.reset();
     elide_after_web_contents_interaction_animation_.reset();
-    if (IsURLEligibleForSimplifiedDomainEliding())
+    if (GetURLEligibleForSimplifiedDomainEliding())
       ShowFullURL();
     return;
   }
@@ -2631,7 +2669,7 @@ void OmniboxViewViews::OnShouldPreventElisionChanged() {
       Observe(location_bar_view_->GetWebContents());
     ResetToHideOnInteraction();
   } else if (OmniboxFieldTrial::ShouldRevealPathQueryRefOnHover()) {
-    if (IsURLEligibleForSimplifiedDomainEliding()) {
+    if (GetURLEligibleForSimplifiedDomainEliding()) {
       ElideURL();
     }
     hover_elide_or_unelide_animation_ =
@@ -2659,7 +2697,7 @@ void OmniboxViewViews::MaybeElideURLWithAnimationFromInteraction() {
 
   // If we've already created and run the animation in an earlier call to this
   // method, we don't need to do so again.
-  if (!IsURLEligibleForSimplifiedDomainEliding() ||
+  if (!GetURLEligibleForSimplifiedDomainEliding() ||
       elide_after_web_contents_interaction_animation_) {
     return;
   }
@@ -2679,7 +2717,7 @@ void OmniboxViewViews::MaybeElideURLWithAnimationFromInteraction() {
 void OmniboxViewViews::ElideURL() {
   DCHECK(OmniboxFieldTrial::ShouldHidePathQueryRefOnInteraction() ||
          OmniboxFieldTrial::ShouldRevealPathQueryRefOnHover());
-  DCHECK(IsURLEligibleForSimplifiedDomainEliding());
+  DCHECK(GetURLEligibleForSimplifiedDomainEliding());
 
   std::vector<gfx::Range> ranges_surrounding_simplified_domain;
   gfx::Range simplified_domain_bounds =
@@ -2794,7 +2832,7 @@ void OmniboxViewViews::ShowFullURL() {
 }
 
 void OmniboxViewViews::ShowFullURLWithoutSchemeAndTrivialSubdomain() {
-  DCHECK(IsURLEligibleForSimplifiedDomainEliding());
+  DCHECK(GetURLEligibleForSimplifiedDomainEliding());
   DCHECK(OmniboxFieldTrial::ShouldHidePathQueryRefOnInteraction() ||
          OmniboxFieldTrial::ShouldRevealPathQueryRefOnHover());
   DCHECK(!model()->ShouldPreventElision());
@@ -2802,7 +2840,7 @@ void OmniboxViewViews::ShowFullURLWithoutSchemeAndTrivialSubdomain() {
   // First show the full URL, then figure out what to elide.
   ShowFullURL();
 
-  if (!IsURLEligibleForSimplifiedDomainEliding() ||
+  if (!GetURLEligibleForSimplifiedDomainEliding() ||
       model()->ShouldPreventElision()) {
     return;
   }
@@ -2873,7 +2911,7 @@ void OmniboxViewViews::ShowFullURLWithoutSchemeAndTrivialSubdomain() {
       -1 * (display_url_bounds.x() - current_display_rect.x()));
 }
 
-url::Component OmniboxViewViews::GetHostComponentAfterTrivialSubdomain() {
+url::Component OmniboxViewViews::GetHostComponentAfterTrivialSubdomain() const {
   url::Component host;
   url::Component unused_scheme;
   base::string16 text = GetText();
@@ -2882,3 +2920,14 @@ url::Component OmniboxViewViews::GetHostComponentAfterTrivialSubdomain() {
   url_formatter::StripWWWFromHostComponent(base::UTF16ToUTF8(text), &host);
   return host;
 }
+
+BEGIN_METADATA(OmniboxViewViews, views::Textfield)
+ADD_READONLY_PROPERTY_METADATA(bool, SelectionAtEnd)
+ADD_READONLY_PROPERTY_METADATA(int, TextWidth)
+ADD_READONLY_PROPERTY_METADATA(int, UnelidedTextWidth)
+ADD_READONLY_PROPERTY_METADATA(int, Width)
+ADD_READONLY_PROPERTY_METADATA(base::string16, SelectedText)
+ADD_READONLY_PROPERTY_METADATA(bool, URLEligibleForSimplifiedDomainEliding)
+ADD_READONLY_PROPERTY_METADATA(url::Component,
+                               HostComponentAfterTrivialSubdomain)
+END_METADATA

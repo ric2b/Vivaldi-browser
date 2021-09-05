@@ -12,7 +12,7 @@ textarea {
     width: 100%;
     }
 .permatoolbar {
-    background-color: white;
+    background-color: var(--default-surface);
     border: 0;
     box-sizing: border-box;
     display: flex;
@@ -34,7 +34,7 @@ textarea {
     fill: #5F9EA0;
     }
 .permatoolbar .button:hover {
-    background-color: #eee;
+    background-color: var(--default-surface-hover);
     }
 #pageSelector {
     min-width: 10em;
@@ -135,7 +135,7 @@ body[dir="rtl"] #pageSelector {
     transform: scaleY(1);
     }
 #netInspector #filterExprPicker {
-    background-color: white;
+    background-color: var(--default-surface);
     border: 1px solid gray;
     display: none;
     position: absolute;
@@ -233,7 +233,11 @@ body[dir="rtl"] #netInspector #filterExprPicker {
     }
 #vwRenderer .logEntry > div[data-status="1"],
 #netFilteringDialog > .panes > .details > div[data-status="1"] {
-    background-color: rgba(192, 0, 0, 0.1);
+    background-color: var(--logger-blocked-surface);
+    }
+#vwRenderer .logEntry > div[data-status="1"][data-modifier],
+#netFilteringDialog > .panes > .details > div[data-status="1"][data-modifier] {
+    background-color: var(--logger-modified-surface);
     }
 body.colorBlind #vwRenderer .logEntry > div[data-status="1"],
 body.colorBlind #netFilteringDialog > .panes > .details > div[data-status="1"] {
@@ -247,7 +251,7 @@ body.colorBlind #vwRenderer .logEntry > div[data-status="3"] {
     }
 #vwRenderer .logEntry > div[data-status="2"],
 #netFilteringDialog > .panes > .details > div[data-status="2"] {
-    background-color: rgba(0, 160, 0, 0.1);
+    background-color: var(--logger-allowed-surface);
     }
 body.colorBlind #vwRenderer .logEntry > div[data-status="2"],
 body.colorBlind #netFilteringDialog > .panes > .details > div[data-status="2"] {
@@ -380,7 +384,11 @@ body[dir="rtl"] #vwRenderer .logEntry > div > span:first-child {
     }
 #vwRenderer .logEntry > div[data-status="1"] > span:nth-of-type(7) b,
 #netFilteringDialog > .panes > .details > div[data-status="1"] b {
-    background-color: rgba(192, 0, 0, 0.2);
+    background-color: var(--logger-blocked-em-surface);
+    }
+#vwRenderer .logEntry > div[data-status="1"][data-modifier] > span:nth-of-type(7) b,
+#netFilteringDialog > .panes > .details > div[data-status="1"][data-modifier] b {
+    background-color: var(--logger-modified-em-surface);
     }
 body.colorBlind #vwRenderer .logEntry > div[data-status="1"] > span:nth-of-type(7) b,
 body.colorBlind #netFilteringDialog > .panes > .details > div[data-status="1"] b {
@@ -394,7 +402,7 @@ body.colorBlind #vwRenderer .logEntry > div[data-status="3"] > span:nth-of-type(
     }
 #vwRenderer .logEntry > div[data-status="2"] > span:nth-of-type(7) b,
 #netFilteringDialog > .panes > .details > div[data-status="2"] b {
-    background-color: rgba(0, 160, 0, 0.2);
+    background-color: var(--logger-allowed-em-surface);
     }
 body.colorBlind #vwRenderer .logEntry > div[data-status="2"] > span:nth-of-type(7) b,
 body.colorBlind #netFilteringDialog > .panes > .details > div[data-status="2"] b {
@@ -445,11 +453,12 @@ body.colorBlind #netFilteringDialog > .panes > .details > div[data-status="2"] b
     }
 
 #popupContainer {
-    background: white;
+    background-color: var(--default-surface);
     border: 1px solid gray;
     bottom: 0;
-    box-sizing: border-box;
     display: none;
+    max-height: 70vh;
+    min-width: 360px;
     overflow: hidden;
     position: fixed;
     right: 0;
@@ -480,7 +489,7 @@ body.colorBlind #netFilteringDialog > .panes > .details > div[data-status="2"] b
     position: relative;
     }
 #modalOverlay > div > div:nth-of-type(1) {
-    background-color: white;
+    background-color: var(--default-surface);
     border: 0;
     box-sizing: border-box;
     padding: 1em;
@@ -489,13 +498,13 @@ body.colorBlind #netFilteringDialog > .panes > .details > div[data-status="2"] b
     width: 90vw;
     }
 #modalOverlay > div > div:nth-of-type(2) {
-    stroke: #000;
+    stroke: var(--default-ink);
     stroke-width: 3px;
     position: absolute;
     width: 1.6em;
     height: 1.6em;
     bottom: calc(100% + 2px);
-    background-color: white;
+    background-color: var(--default-surface);
     }
 body[dir="ltr"] #modalOverlay > div > div:nth-of-type(2) {
     right: 0;
@@ -504,7 +513,7 @@ body[dir="rtl"] #modalOverlay > div > div:nth-of-type(2) {
     left: 0;
     }
 #modalOverlay > div > div:nth-of-type(2):hover {
-    background-color: #eee;
+    background-color: var(--default-surface-hover);
     }
 #modalOverlay > div > div:nth-of-type(2) > * {
     pointer-events: none;

@@ -15,8 +15,8 @@
 #include "chrome/browser/profiles/profile.h"
 #if defined(OS_WIN)
 #include "chrome/browser/ui/views/frame/browser_view.h"
-#include "chrome/browser/win/jumplist_factory.h"
 #include "chrome/browser/win/jumplist.h"
+#include "chrome/browser/win/jumplist_factory.h"
 #endif
 #include "chrome/common/extensions/api/bookmarks.h"
 #include "components/bookmarks/browser/bookmark_model.h"
@@ -25,22 +25,21 @@
 
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_constants.h"
+#include "browser/vivaldi_default_bookmarks.h"
 #include "components/bookmarks/vivaldi_bookmark_kit.h"
-#include "components/datasource/vivaldi_data_source_api.h"
 #include "components/datasource/vivaldi_data_source_api.h"
 #include "components/datasource/vivaldi_data_url_utils.h"
 #include "extensions/browser/extension_function.h"
 #include "extensions/schema/bookmarks_private.h"
 #include "extensions/tools/vivaldi_tools.h"
-#include "browser/vivaldi_default_bookmarks.h"
-#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 #include "ui/vivaldi_browser_window.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
-using vivaldi::IsVivaldiApp;
-using vivaldi::kVivaldiReservedApiError;
-using vivaldi::FindVivaldiBrowser;
 using bookmarks::BookmarkModel;
 using bookmarks::BookmarkNode;
+using vivaldi::FindVivaldiBrowser;
+using vivaldi::IsVivaldiApp;
+using vivaldi::kVivaldiReservedApiError;
 
 namespace extensions {
 
@@ -57,15 +56,15 @@ namespace bookmarks_private = vivaldi::bookmarks_private;
 
 // Helper
 static void GetPartnerIds(const bookmarks::BookmarkNode* node,
-                          std::vector<std::string>* ids,
-                          bool include_children) {
-  std::string partner;
-  if (node->GetMetaInfo("Partner", &partner) && partner.length() > 0) {
-    ids->push_back(partner);
+                          bool include_children,
+                          std::vector<base::GUID>& ids) {
+  base::GUID partner_id = vivaldi_bookmark_kit::GetPartner(node);
+  if (partner_id.is_valid()) {
+    ids.push_back(partner_id);
   }
   if (include_children) {
-    for (auto& it: node->children()) {
-      GetPartnerIds(it.get(), ids, true);
+    for (auto& it : node->children()) {
+      GetPartnerIds(it.get(), true, ids);
     }
   }
 }
@@ -73,36 +72,36 @@ static void GetPartnerIds(const bookmarks::BookmarkNode* node,
 static void ResetParterId(BookmarkModel* model,
                           const bookmarks::BookmarkNode* node,
                           bool include_children) {
-  std::string partner;
-  if (node->GetMetaInfo("Partner", &partner) && partner.length() > 0) {
-    model->SetNodeMetaInfo(node, "Partner", "");
-  }
+  vivaldi_bookmark_kit::RemovePartnerId(model, node);
   if (include_children) {
-    for (auto& it: node->children()) {
+    for (auto& it : node->children()) {
       ResetParterId(model, it.get(), true);
     }
   }
 }
 
-static void ClearPartnerId(BookmarkModel* model, const BookmarkNode* node,
+static void ClearPartnerId(BookmarkModel* model,
+                           const BookmarkNode* node,
                            content::BrowserContext* browser_context,
                            bool update_model,
                            bool include_children) {
-  std::vector<std::string> partners;
-  GetPartnerIds(node, &partners, include_children);
+  std::vector<base::GUID> partners;
+  GetPartnerIds(node, include_children, partners);
   if (!partners.empty()) {
     Profile* profile = Profile::FromBrowserContext(browser_context);
-    const base::ListValue* list = profile->GetPrefs()->GetList(
-        vivaldiprefs::kBookmarksDeletedPartners);
-    base::ListValue updated(list->GetList());
-    for (auto partner = partners.begin(); partner != partners.end();
-         partner++) {
-      auto it = std::find(list->begin(), list->end(), base::Value(*partner));
-      if (it == list->end()) {
-        updated.Append(base::Value(*partner));
+    const base::Value* list_value =
+        profile->GetPrefs()->GetList(vivaldiprefs::kBookmarksDeletedPartners);
+    base::Value::ListStorage updated(list_value->Clone().TakeList());
+    base::Value::ConstListView list_view = list_value->GetList();
+    for (const base::GUID& partner_id : partners) {
+      base::Value v(partner_id.AsLowercaseString());
+      auto it = std::find(list_view.begin(), list_view.end(), v);
+      if (it == list_view.end()) {
+        updated.push_back(std::move(v));
       }
     }
-    profile->GetPrefs()->Set(vivaldiprefs::kBookmarksDeletedPartners, updated);
+    profile->GetPrefs()->Set(vivaldiprefs::kBookmarksDeletedPartners,
+                             base::Value(std::move(updated)));
     if (update_model) {
       ResetParterId(model, node, include_children);
     }
@@ -114,6 +113,7 @@ class MetaInfoChangeFilter {
  public:
   MetaInfoChangeFilter(const BookmarkNode* node);
   bool HasChanged(const BookmarkNode* node);
+
  private:
   int64_t id_;
   bool speeddial_;
@@ -123,12 +123,11 @@ class MetaInfoChangeFilter {
 };
 
 MetaInfoChangeFilter::MetaInfoChangeFilter(const BookmarkNode* node)
-  :id_(node->id()),
-   speeddial_(vivaldi_bookmark_kit::GetSpeeddial(node)),
-   bookmarkbar_(vivaldi_bookmark_kit::GetBookmarkbar(node)),
-   description_(vivaldi_bookmark_kit::GetDescription(node)),
-   nickname_(vivaldi_bookmark_kit::GetNickname(node)) {
-}
+    : id_(node->id()),
+      speeddial_(vivaldi_bookmark_kit::GetSpeeddial(node)),
+      bookmarkbar_(vivaldi_bookmark_kit::GetBookmarkbar(node)),
+      description_(vivaldi_bookmark_kit::GetDescription(node)),
+      nickname_(vivaldi_bookmark_kit::GetNickname(node)) {}
 
 bool MetaInfoChangeFilter::HasChanged(const BookmarkNode* node) {
   if (id_ == node->id() &&
@@ -142,8 +141,7 @@ bool MetaInfoChangeFilter::HasChanged(const BookmarkNode* node) {
 }
 
 VivaldiBookmarksAPI::VivaldiBookmarksAPI(content::BrowserContext* context)
-    : browser_context_(context),
-      bookmark_model_(nullptr) {
+    : browser_context_(context), bookmark_model_(nullptr) {
   bookmark_model_ = BookmarkModelFactory::GetForBrowserContext(context);
   DCHECK(bookmark_model_);
   bookmark_model_->AddObserver(this);
@@ -155,7 +153,7 @@ void VivaldiBookmarksAPI::Shutdown() {
   bookmark_model_->RemoveObserver(this);
 }
 
-static base::LazyInstance<BrowserContextKeyedAPIFactory<VivaldiBookmarksAPI> >::
+static base::LazyInstance<BrowserContextKeyedAPIFactory<VivaldiBookmarksAPI>>::
     DestructorAtExit g_factory_bookmark = LAZY_INSTANCE_INITIALIZER;
 
 // static
@@ -187,7 +185,7 @@ void VivaldiBookmarksAPI::BookmarkNodeRemoved(
 }
 
 void VivaldiBookmarksAPI::BookmarkNodeChanged(BookmarkModel* model,
-                           const BookmarkNode* node) {
+                                              const BookmarkNode* node) {
   // Register modified partner node.
   if (!vivaldi_default_bookmarks::g_bookmark_update_actve) {
     ClearPartnerId(model, node, browser_context_, true, false);
@@ -221,7 +219,6 @@ void VivaldiBookmarksAPI::BookmarkMetaInfoChanged(BookmarkModel* model,
     ClearPartnerId(model, node, browser_context_, true, false);
   }
   change_filter_.reset();
-
 
   ::vivaldi::BroadcastEvent(bookmarks_private::OnMetaInfoChanged::kEventName,
                             bookmarks_private::OnMetaInfoChanged::Create(
@@ -281,14 +278,9 @@ BookmarksPrivateEmptyTrashFunction::RunOnReady() {
 
 ExtensionFunction::ResponseAction
 BookmarksPrivateUpdatePartnersFunction::Run() {
-  using vivaldi::bookmarks_private::UpdatePartners::Params;
-
-  std::unique_ptr<Params> params = Params::Create(*args_);
-  EXTENSION_FUNCTION_VALIDATE(params);
-
   Profile* profile = Profile::FromBrowserContext(browser_context());
   vivaldi_default_bookmarks::UpdatePartners(
-      profile, params->locale,
+      profile,
       base::Bind(
           &BookmarksPrivateUpdatePartnersFunction::OnUpdatePartnersResult,
           this));
@@ -296,10 +288,12 @@ BookmarksPrivateUpdatePartnersFunction::Run() {
 }
 
 void BookmarksPrivateUpdatePartnersFunction::OnUpdatePartnersResult(
-    bool ok, bool no_version) {
+    bool ok,
+    bool no_version,
+    const std::string& locale) {
   namespace Results = vivaldi::bookmarks_private::UpdatePartners::Results;
 
-  Respond(ArgumentList(Results::Create(ok, no_version)));
+  Respond(ArgumentList(Results::Create(ok, no_version, locale)));
 }
 
 ExtensionFunction::ResponseValue

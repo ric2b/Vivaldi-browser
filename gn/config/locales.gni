@@ -10,6 +10,7 @@ vivaldi_pending_locales = [
   "io",
   "ja-KS",
   "jbo",
+  "kab",
   "ku",
   "sc",
   "nn",
@@ -18,6 +19,7 @@ vivaldi_pending_locales = [
 if (!is_android) {
   vivaldi_pending_locales += [
     "af",
+    "az",
     "be",
     "eu",
     "gl",
@@ -25,6 +27,8 @@ if (!is_android) {
     "is",
     "ka",
     "mk",
+    "pa",
     "sq",
+    "sr-Latn",
   ]
 }

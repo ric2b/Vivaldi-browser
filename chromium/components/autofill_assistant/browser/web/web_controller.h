@@ -103,7 +103,7 @@ class WebController {
       const ElementFinder::Result& element,
       int max_rounds,
       base::TimeDelta check_interval,
-      base::OnceCallback<void(const ClientStatus&)> callback);
+      base::OnceCallback<void(const ClientStatus&, base::TimeDelta)> callback);
 
   // Check whether the center given element is on top. Fail with
   // ELEMENT_NOT_ON_TOP if the center of the element is covered.
@@ -135,11 +135,12 @@ class WebController {
                               const autofill::FormFieldData& field_data)>
           callback);
 
-  // Select the option to be picked given by the |value| in the |element|.
+  // Select the option to be picked given by the |re2| in the |element|.
   virtual void SelectOption(
       const ElementFinder::Result& element,
-      const std::string& value,
-      DropdownSelectStrategy select_strategy,
+      const std::string& re2,
+      bool case_sensitive,
+      SelectOptionProto::OptionComparisonAttribute option_comparison_attribute,
       base::OnceCallback<void(const ClientStatus&)> callback);
 
   // Highlight an |element|.
@@ -197,14 +198,24 @@ class WebController {
       const ElementFinder::Result& element,
       base::OnceCallback<void(const ClientStatus&)> callback);
 
-  // Sets the keyboard focus to |element| and inputs |codepoints|, one
-  // character at a time. Key presses will have a delay of |delay_in_milli|
-  // between them.
-  // Returns the result through |callback|.
+  // Inputs the specified codepoints into |element|. Expects the |element| to
+  // have focus. Key presses will have a delay of
+  // |key_press_delay_in_millisecond| between them. Returns the result through
+  // |callback|.
   virtual void SendKeyboardInput(
       const ElementFinder::Result& element,
       const std::vector<UChar32>& codepoints,
-      int delay_in_milli,
+      int key_press_delay_in_millisecond,
+      base::OnceCallback<void(const ClientStatus&)> callback);
+
+  // Inputs the specified |value| into |element| with keystrokes per character.
+  // Expects the |element| to have focus. Key presses will have a delay of
+  // |key_press_delay_in_millisecond| between them. Returns the result through
+  // |callback|.
+  virtual void SendTextInput(
+      int key_press_delay_in_millisecond,
+      const std::string& value,
+      const ElementFinder::Result& element,
       base::OnceCallback<void(const ClientStatus&)> callback);
 
   // Return the outerHTML of |element|.
@@ -262,6 +273,11 @@ class WebController {
       base::OnceCallback<void(const ClientStatus&,
                               DocumentReadyState,
                               base::TimeDelta)> callback);
+
+  // Trigger a "change" event on the |element|.
+  virtual void SendChangeEvent(
+      const ElementFinder::Result& element,
+      base::OnceCallback<void(const ClientStatus&)> callback);
 
   virtual base::WeakPtr<WebController> GetWeakPtr() const;
 
@@ -324,7 +340,8 @@ class WebController {
                     const ClientStatus& status);
   void OnWaitUntilElementIsStable(
       ElementPositionGetter* getter_to_release,
-      base::OnceCallback<void(const ClientStatus&)> callback,
+      base::TimeTicks wait_time_start,
+      base::OnceCallback<void(const ClientStatus&, base::TimeDelta)> callback,
       const ClientStatus& status);
   void TapOrClickOnCoordinates(
       ElementPositionGetter* getter_to_release,

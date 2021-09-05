@@ -18,17 +18,16 @@ import org.chromium.base.Callback;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
-import org.chromium.chrome.browser.ShortcutHelper;
+import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
-import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.chrome.test.util.browser.webapps.WebappTestPage;
+import org.chromium.components.webapps.WebappsIconUtils;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.device.mojom.ScreenOrientationLockType;
 import org.chromium.net.test.EmbeddedTestServer;
@@ -89,9 +88,9 @@ public class WebApkUpdateManagerTest {
         private CallbackHelper mWaiter;
         private boolean mNeedsUpdate;
 
-        public TestWebApkUpdateManager(CallbackHelper waiter, ChromeActivity activity,
+        public TestWebApkUpdateManager(CallbackHelper waiter, ActivityTabProvider tabProvider,
                 ActivityLifecycleDispatcher lifecycleDispatcher) {
-            super(activity, lifecycleDispatcher);
+            super(tabProvider, lifecycleDispatcher);
             mWaiter = waiter;
         }
 
@@ -165,8 +164,8 @@ public class WebApkUpdateManagerTest {
      /** Checks whether a WebAPK update is needed. */
     private boolean checkUpdateNeeded(final CreationData creationData) throws Exception {
         CallbackHelper waiter = new CallbackHelper();
-        final TestWebApkUpdateManager updateManager =
-                new TestWebApkUpdateManager(waiter, mActivity, mActivity.getLifecycleDispatcher());
+        final TestWebApkUpdateManager updateManager = new TestWebApkUpdateManager(
+                waiter, mActivity.getActivityTabProvider(), mActivity.getLifecycleDispatcher());
 
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             WebappDataStorage storage =
@@ -243,20 +242,7 @@ public class WebApkUpdateManagerTest {
     @Test
     @MediumTest
     @Feature({"WebApk"})
-    @Features.EnableFeatures(ChromeFeatureList.WEBAPK_ADAPTIVE_ICON)
-    public void testNewMaskableIconShouldUpdateWhenFeatureEnabled() throws Exception {
-        testNewMaskableIconShouldUpdate();
-    }
-
-    @Test
-    @MediumTest
-    @Feature({"WebApk"})
-    @Features.DisableFeatures(ChromeFeatureList.WEBAPK_ADAPTIVE_ICON)
-    public void testNewMaskableIconShouldUpdateWhenFeatureDisabled() throws Exception {
-        testNewMaskableIconShouldUpdate();
-    }
-
-    private void testNewMaskableIconShouldUpdate() throws Exception {
+    public void testMaskableIconShouldUpdate() throws Exception {
         final String maskableManifestUrl = "/chrome/test/data/banners/manifest_maskable.json";
 
         CreationData creationData = new CreationData();
@@ -284,8 +270,8 @@ public class WebApkUpdateManagerTest {
         WebappTestPage.navigateToServiceWorkerPageWithManifest(
                 mTestServer, mTab, maskableManifestUrl);
 
-        Assert.assertEquals(
-                ShortcutHelper.doesAndroidSupportMaskableIcons(), checkUpdateNeeded(creationData));
+        Assert.assertEquals(WebappsIconUtils.doesAndroidSupportMaskableIcons(),
+                checkUpdateNeeded(creationData));
     }
 
     @Test

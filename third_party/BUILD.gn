@@ -1,3 +1,0 @@
-if (is_win) {
-  group("sparkle") {}
-}

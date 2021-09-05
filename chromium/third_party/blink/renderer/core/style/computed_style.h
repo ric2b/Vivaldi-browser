@@ -27,7 +27,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_STYLE_COMPUTED_STYLE_H_
 
 #include <memory>
-#include "base/util/type_safety/pass_key.h"
+#include "base/types/pass_key.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/css/css_property_names.h"
 #include "third_party/blink/renderer/core/css/properties/css_property.h"
@@ -35,6 +35,7 @@
 #include "third_party/blink/renderer/core/css/style_color.h"
 #include "third_party/blink/renderer/core/layout/geometry/box_sides.h"
 #include "third_party/blink/renderer/core/layout/geometry/logical_size.h"
+#include "third_party/blink/renderer/core/layout/ng/ng_outline_type.h"
 #include "third_party/blink/renderer/core/scroll/scroll_types.h"
 #include "third_party/blink/renderer/core/style/border_value.h"
 #include "third_party/blink/renderer/core/style/computed_style_base.h"
@@ -109,6 +110,11 @@ class ColumnRuleColor;
 class Fill;
 class Float;
 class FloodColor;
+class InternalForcedBackgroundColor;
+class InternalForcedBorderColor;
+class InternalForcedColor;
+class InternalForcedOutlineColor;
+class InternalForcedVisitedColor;
 class InternalVisitedBackgroundColor;
 class InternalVisitedBorderBottomColor;
 class InternalVisitedBorderLeftColor;
@@ -117,7 +123,9 @@ class InternalVisitedBorderTopColor;
 class InternalVisitedCaretColor;
 class InternalVisitedColor;
 class InternalVisitedColumnRuleColor;
+class InternalVisitedFill;
 class InternalVisitedOutlineColor;
+class InternalVisitedStroke;
 class InternalVisitedTextDecorationColor;
 class InternalVisitedTextEmphasisColor;
 class InternalVisitedTextFillColor;
@@ -213,6 +221,11 @@ class ComputedStyle : public ComputedStyleBase,
   friend class css_longhand::Fill;
   friend class css_longhand::Float;
   friend class css_longhand::FloodColor;
+  friend class css_longhand::InternalForcedBackgroundColor;
+  friend class css_longhand::InternalForcedBorderColor;
+  friend class css_longhand::InternalForcedColor;
+  friend class css_longhand::InternalForcedOutlineColor;
+  friend class css_longhand::InternalForcedVisitedColor;
   friend class css_longhand::InternalVisitedBackgroundColor;
   friend class css_longhand::InternalVisitedBorderBottomColor;
   friend class css_longhand::InternalVisitedBorderLeftColor;
@@ -221,7 +234,9 @@ class ComputedStyle : public ComputedStyleBase,
   friend class css_longhand::InternalVisitedCaretColor;
   friend class css_longhand::InternalVisitedColor;
   friend class css_longhand::InternalVisitedColumnRuleColor;
+  friend class css_longhand::InternalVisitedFill;
   friend class css_longhand::InternalVisitedOutlineColor;
+  friend class css_longhand::InternalVisitedStroke;
   friend class css_longhand::InternalVisitedTextDecorationColor;
   friend class css_longhand::InternalVisitedTextEmphasisColor;
   friend class css_longhand::InternalVisitedTextFillColor;
@@ -242,13 +257,7 @@ class ComputedStyle : public ComputedStyleBase,
   friend class StyleCascade;
   friend class css_longhand::Appearance;
   // Editing has to only reveal unvisited info.
-  friend class ApplyStyleCommand;
-  // Editing has to only reveal unvisited info.
   friend class EditingStyle;
-  // Needs to be able to see visited and unvisited colors for devtools.
-  friend class ComputedStyleCSSValueMapping;
-  // Sets color styles
-  friend class StyleBuilderFunctions;
   // Saves Border/Background information for later comparison.
   friend class CachedUAStyle;
   // Accesses visited and unvisited colors.
@@ -257,13 +266,10 @@ class ComputedStyle : public ComputedStyleBase,
   friend class StyleAdjuster;
   // Access to private SetFontInternal().
   friend class FontBuilder;
-
-  // FIXME: When we stop resolving currentColor at style time, these can be
-  // removed.
-  friend class CSSToStyleMap;
+  // Access to GetCurrentColor(). (drop-shadow() does not resolve 'currentcolor'
+  // at use-time.)
   friend class FilterOperationResolver;
-  friend class StyleBuilderConverter;
-  friend class StyleResolverState;
+  // Access to SetInitialData() and GetCurrentColor().
   friend class StyleResolver;
 
  protected:
@@ -300,7 +306,7 @@ class ComputedStyle : public ComputedStyleBase,
   CORE_EXPORT static ComputedStyle& MutableInitialStyle();
 
  public:
-  using PassKey = util::PassKey<ComputedStyle>;
+  using PassKey = base::PassKey<ComputedStyle>;
 
   ALWAYS_INLINE ComputedStyle(PassKey, const ComputedStyle&);
   ALWAYS_INLINE explicit ComputedStyle(PassKey);
@@ -698,6 +704,16 @@ class ComputedStyle : public ComputedStyleBase,
   // outline-offset
   int16_t OutlineOffsetInt() const { return OutlineOffset().ToInt(); }
 
+  // For history and compatibility reasons, we draw outline:auto (for focus
+  // rings) and normal style outline differently.
+  // Focus rings enclose block visual overflows (of line boxes and descendants),
+  // while normal outlines don't.
+  NGOutlineType OutlineRectsShouldIncludeBlockVisualOverflow() const {
+    return OutlineStyleIsAuto()
+               ? NGOutlineType::kIncludeBlockVisualOverflow
+               : NGOutlineType::kDontIncludeBlockVisualOverflow;
+  }
+
   // -webkit-perspective-origin-x
   const Length& PerspectiveOriginX() const { return PerspectiveOrigin().X(); }
   void SetPerspectiveOriginX(const Length& v) {
@@ -943,6 +959,19 @@ class ComputedStyle : public ComputedStyleBase,
   // list-style-image
   CORE_EXPORT StyleImage* ListStyleImage() const;
   void SetListStyleImage(StyleImage*);
+
+  // list-style-type
+  // TODO(crbug.com/687225): These functions are deprecated. Callers should be
+  // migrated to GetListStyleType().
+  CORE_EXPORT EListStyleType ListStyleType() const;
+  AtomicString ListStyleStringValue() const;
+  // TODO(crbug.com/687225): Get rid of the deprecated functions above so that
+  // the getter can also be auto-generated.
+  ListStyleTypeData* GetListStyleType() const;
+  bool ListStyleTypeDataEquivalent(const ComputedStyle& other) const {
+    return DataEquivalent(ListStyleTypeInternal(),
+                          other.ListStyleTypeInternal());
+  }
 
   // quotes
   bool QuotesDataEquivalent(const ComputedStyle&) const;
@@ -2125,7 +2154,9 @@ class ComputedStyle : public ComputedStyleBase,
   void ClearCursorList();
 
   // Resize utility functions.
-  bool HasResize() const { return ResizeInternal() != EResize::kNone; }
+  bool HasResize() const {
+    return StyleType() == kPseudoIdNone && ResizeInternal() != EResize::kNone;
+  }
   EResize UnresolvedResize() const { return ResizeInternal(); }
 
   EResize Resize(const ComputedStyle& cb_style) const {
@@ -2221,7 +2252,7 @@ class ComputedStyle : public ComputedStyleBase,
     return HasCurrentOpacityAnimation() || HasCurrentTransformAnimation() ||
            HasCurrentFilterAnimation() || HasCurrentBackdropFilterAnimation();
   }
-  bool IsRunningAnimationOnCompositor() const {
+  bool RequiresPropertyNodeForAnimation() const {
     return IsRunningOpacityAnimationOnCompositor() ||
            IsRunningTransformAnimationOnCompositor() ||
            IsRunningFilterAnimationOnCompositor() ||
@@ -2233,7 +2264,10 @@ class ComputedStyle : public ComputedStyleBase,
 
   // Table layout utility functions.
   bool IsFixedTableLayout() const {
-    return TableLayout() == ETableLayout::kFixed && !LogicalWidth().IsAuto();
+    // https://www.w3.org/TR/css-tables-3/#table-layout-property
+    return TableLayout() == ETableLayout::kFixed &&
+           (LogicalWidth().IsSpecified() || LogicalWidth().IsMinContent() ||
+            LogicalWidth().IsFitContent());
   }
 
   LogicalSize TableBorderSpacing() const {
@@ -2392,6 +2426,12 @@ class ComputedStyle : public ComputedStyleBase,
            HasWillChangeTransformHint();
   }
 
+  // Return true if this style has properties ('filter', 'clip-path' and 'mask')
+  // that applies an effect to SVG elements.
+  bool HasSVGEffect() const {
+    return HasFilter() || ClipPath() || SvgStyle().HasMasker();
+  }
+
   // Paint utility functions.
   CORE_EXPORT void AddPaintImage(StyleImage*);
 
@@ -2534,7 +2574,8 @@ class ComputedStyle : public ComputedStyleBase,
   }
   bool HasBackgroundRelatedColorReferencingCurrentColor() const {
     if (BackgroundColor().IsCurrentColor() ||
-        InternalVisitedBackgroundColor().IsCurrentColor())
+        InternalVisitedBackgroundColor().IsCurrentColor() ||
+        InternalForcedBackgroundColor().IsCurrentColor())
       return true;
     if (!BoxShadow())
       return false;
@@ -2550,13 +2591,6 @@ class ComputedStyle : public ComputedStyleBase,
   // Color utility functions.
   CORE_EXPORT Color
   VisitedDependentColor(const CSSProperty& color_property) const;
-
-  // Helper for resolving a StyleColor which may contain currentColor or a
-  // system color keyword. This is intended for cases such as SVG <paint> where
-  // a given property consists of a StyleColor plus additional information. For
-  // <color> properties, prefer VisitedDependentColor() or
-  // Longhand::ColorIncludingFallback() instead.
-  Color ResolvedColor(const StyleColor& color) const;
 
   // -webkit-appearance utility functions.
   bool HasEffectiveAppearance() const {
@@ -2670,6 +2704,10 @@ class ComputedStyle : public ComputedStyleBase,
   }
   void SetInternalVisitedTextStrokeColor(const StyleColor& color) {
     SetInternalVisitedTextStrokeColorInternal(color);
+  }
+
+  void SetInternalForcedVisitedColor(const StyleColor& v) {
+    SetInternalForcedVisitedColorInternal(v);
   }
 
   static bool IsDisplayBlockContainer(EDisplay display) {
@@ -2827,6 +2865,22 @@ class ComputedStyle : public ComputedStyleBase,
     return InternalVisitedTextStrokeColorInternal();
   }
 
+  const StyleColor& InternalForcedBackgroundColor() const {
+    return InternalForcedBackgroundColorInternal();
+  }
+  const StyleColor& InternalForcedBorderColor() const {
+    return InternalForcedBorderColorInternal();
+  }
+  const StyleColor& InternalForcedColor() const {
+    return InternalForcedColorInternal();
+  }
+  const StyleColor& InternalForcedOutlineColor() const {
+    return InternalForcedOutlineColorInternal();
+  }
+  const StyleColor& InternalForcedVisitedColor() const {
+    return InternalForcedVisitedColorInternal();
+  }
+
   StyleColor DecorationColorIncludingFallback(bool visited_link) const;
 
   const StyleColor& StopColor() const { return SvgStyle().StopColor(); }
@@ -2872,6 +2926,15 @@ class ComputedStyle : public ComputedStyleBase,
 
   Color GetCurrentColor() const;
   Color GetInternalVisitedCurrentColor() const;
+  Color GetInternalForcedCurrentColor() const;
+  Color GetInternalForcedVisitedCurrentColor() const;
+
+  // Helper for resolving a StyleColor which may contain currentColor or a
+  // system color keyword. This is intended for cases where a given property
+  // consists of a StyleColor plus additional information. For <color>
+  // properties, prefer VisitedDependentColor() or
+  // Longhand::ColorIncludingFallback() instead.
+  Color ResolvedColor(const StyleColor& color) const;
 
   static bool ShadowListHasCurrentColor(const ShadowList*);
 
@@ -2920,6 +2983,10 @@ class ComputedStyle : public ComputedStyleBase,
   static Difference ComputeDifferenceIgnoringInheritedFirstLineStyle(
       const ComputedStyle& old_style,
       const ComputedStyle& new_style);
+
+  bool ShouldForceColor(const StyleColor& unforced_color) const;
+
+  void ClearBackgroundImage();
 
   FRIEND_TEST_ALL_PREFIXES(
       ComputedStyleTest,

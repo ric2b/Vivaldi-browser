@@ -27,6 +27,7 @@
 #include "components/user_manager/user_names.h"
 #include "content/public/test/browser_task_environment.h"
 #include "extensions/browser/extension_system.h"
+#include "extensions/browser/install/sandboxed_unpacker_failure_reason.h"
 #include "extensions/common/extension_builder.h"
 #include "net/base/net_errors.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -264,7 +265,7 @@ TEST_F(ExtensionInstallEventLogCollectorTest, LoginLogout) {
 
   EXPECT_EQ(0, delegate()->add_for_all_count());
 
-  collector->AddLoginEvent();
+  collector->OnLogin();
   EXPECT_EQ(1, delegate()->add_for_all_count());
   EXPECT_EQ(em::ExtensionInstallReportLogEvent::SESSION_STATE_CHANGE,
             delegate()->last_event().event_type());
@@ -293,7 +294,7 @@ TEST_F(ExtensionInstallEventLogCollectorTest, LoginTypes) {
   {
     ExtensionInstallEventLogCollector collector(registry(), delegate(),
                                                 profile());
-    collector.AddLoginEvent();
+    collector.OnLogin();
     EXPECT_EQ(1, delegate()->add_for_all_count());
     EXPECT_EQ(em::ExtensionInstallReportLogEvent::SESSION_STATE_CHANGE,
               delegate()->last_event().event_type());
@@ -312,7 +313,7 @@ TEST_F(ExtensionInstallEventLogCollectorTest, LoginTypes) {
                                                 profile());
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
         chromeos::switches::kLoginUser);
-    collector.AddLoginEvent();
+    collector.OnLogin();
     EXPECT_EQ(1, delegate()->add_for_all_count());
   }
 
@@ -321,7 +322,7 @@ TEST_F(ExtensionInstallEventLogCollectorTest, LoginTypes) {
     ExtensionInstallEventLogCollector collector(registry(), delegate(),
                                                 profile());
     g_browser_process->local_state()->SetBoolean(prefs::kWasRestarted, true);
-    collector.AddLogoutEvent();
+    collector.OnLogout();
     EXPECT_EQ(1, delegate()->add_for_all_count());
   }
 
@@ -380,7 +381,7 @@ TEST_F(ExtensionInstallEventLogCollectorTest, ConnectivityChanges) {
 
   EXPECT_EQ(0, delegate()->add_for_all_count());
 
-  collector->AddLoginEvent();
+  collector->OnLogin();
   EXPECT_EQ(1, delegate()->add_for_all_count());
   EXPECT_EQ(em::ExtensionInstallReportLogEvent::SESSION_STATE_CHANGE,
             delegate()->last_event().event_type());
@@ -524,7 +525,9 @@ TEST_F(ExtensionInstallEventLogCollectorTest,
   // One extension failed.
   tracker->ReportSandboxedUnpackerFailureReason(
       kExtensionId1,
-      extensions::SandboxedUnpackerFailureReason::CRX_HEADER_INVALID);
+      extensions::CrxInstallError(
+          extensions::SandboxedUnpackerFailureReason::CRX_HEADER_INVALID,
+          base::string16()));
   ASSERT_TRUE(VerifyEventAddedSuccessfully(1 /*expected_add_count*/,
                                            0 /*expected_add_all_count*/));
   EXPECT_EQ(em::ExtensionInstallReportLogEvent::INSTALLATION_FAILED,

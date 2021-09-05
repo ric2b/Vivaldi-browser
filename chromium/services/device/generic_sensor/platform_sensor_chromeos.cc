@@ -8,8 +8,8 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/containers/contains.h"
 #include "base/ranges/algorithm.h"
-#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
@@ -203,7 +203,6 @@ bool PlatformSensorChromeOS::StartSensor(
 void PlatformSensorChromeOS::StopSensor() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  sensor_device_remote_.reset();
   receiver_.reset();
 }
 

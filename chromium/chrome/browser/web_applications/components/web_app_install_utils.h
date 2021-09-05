@@ -11,7 +11,6 @@
 
 #include "url/gurl.h"
 
-enum class WebappInstallSource;
 struct WebApplicationInfo;
 class SkBitmap;
 
@@ -21,6 +20,10 @@ struct Manifest;
 
 namespace content {
 class WebContents;
+}
+
+namespace webapps {
+enum class WebappInstallSource;
 }
 
 namespace web_app {
@@ -61,12 +64,8 @@ void FilterAndResizeIconsGenerateMissing(WebApplicationInfo* web_app_info,
 // shown for this app.
 void RecordAppBanner(content::WebContents* contents, const GURL& app_url);
 
-WebappInstallSource ConvertExternalInstallSourceToInstallSource(
+webapps::WebappInstallSource ConvertExternalInstallSourceToInstallSource(
     ExternalInstallSource external_install_source);
-
-void RecordExternalAppInstallResultCode(
-    const char* histogram_name,
-    std::map<GURL, InstallResultCode> install_results);
 
 }  // namespace web_app
 

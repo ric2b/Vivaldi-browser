@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "components/signin/internal/identity_manager/account_fetcher_service.h"
 #include "components/signin/internal/identity_manager/account_tracker_service.h"
 #include "components/signin/internal/identity_manager/gaia_cookie_manager_service.h"
@@ -85,7 +86,7 @@ IdentityManager::IdentityManager(IdentityManager::InitParameters&& parameters)
       token_service_->GetDelegate()->GetJavaObject());
 #endif
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   chromeos_account_manager_ = parameters.chromeos_account_manager;
 #endif
 }
@@ -116,10 +117,7 @@ void IdentityManager::RemoveObserver(Observer* observer) {
 // TODO(862619) change return type to base::Optional<CoreAccountInfo>
 CoreAccountInfo IdentityManager::GetPrimaryAccountInfo(
     ConsentLevel consent) const {
-  if (consent == ConsentLevel::kNotRequired) {
-    return primary_account_manager_->GetUnconsentedPrimaryAccountInfo();
-  }
-  return primary_account_manager_->GetAuthenticatedAccountInfo();
+  return primary_account_manager_->GetPrimaryAccountInfo(consent);
 }
 
 CoreAccountId IdentityManager::GetPrimaryAccountId(ConsentLevel consent) const {
@@ -462,7 +460,7 @@ GaiaCookieManagerService* IdentityManager::GetGaiaCookieManagerService() const {
   return gaia_cookie_manager_service_.get();
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 chromeos::AccountManager* IdentityManager::GetChromeOSAccountManager() const {
   return chromeos_account_manager_;
 }
@@ -485,46 +483,26 @@ AccountInfo IdentityManager::GetAccountInfoForAccountWithRefreshToken(
   return account_info;
 }
 
-void IdentityManager::GoogleSigninSucceeded(
-    const CoreAccountInfo& account_info) {
-  for (auto& observer : observer_list_) {
-    observer.OnPrimaryAccountSet(account_info);
-  }
-#if defined(OS_ANDROID)
-  if (java_identity_manager_) {
-    JNIEnv* env = base::android::AttachCurrentThread();
-    Java_IdentityManager_onPrimaryAccountSet(
-        env, java_identity_manager_,
-        ConvertToJavaCoreAccountInfo(env, account_info));
-  }
-#endif
-}
-
-void IdentityManager::UnconsentedPrimaryAccountChanged(
-    const CoreAccountInfo& account_info) {
+void IdentityManager::OnPrimaryAccountChanged(
+    const PrimaryAccountChangeEvent& event_details) {
   for (auto& observer : observer_list_)
-    observer.OnUnconsentedPrimaryAccountChanged(account_info);
-}
-
-void IdentityManager::GoogleSignedOut(const CoreAccountInfo& account_info) {
-  DCHECK(!HasPrimaryAccount());
-  DCHECK(!account_info.IsEmpty());
-  for (auto& observer : observer_list_) {
-    observer.BeforePrimaryAccountCleared(account_info);
-  }
-
-  for (auto& observer : observer_list_) {
-    observer.OnPrimaryAccountCleared(account_info);
-  }
+    observer.OnPrimaryAccountChanged(event_details);
 
 #if defined(OS_ANDROID)
   if (java_identity_manager_) {
     JNIEnv* env = base::android::AttachCurrentThread();
-    Java_IdentityManager_onPrimaryAccountCleared(
+    Java_IdentityManager_onPrimaryAccountChanged(
         env, java_identity_manager_,
-        ConvertToJavaCoreAccountInfo(env, account_info));
+        ConvertToJavaPrimaryAccountChangeEvent(env, event_details));
   }
 #endif
+
+  if (event_details.GetEventTypeFor(ConsentLevel::kSync) ==
+      PrimaryAccountChangeEvent::Type::kCleared) {
+    for (auto& observer : observer_list_) {
+      observer.AfterSyncPrimaryAccountCleared();
+    }
+  }
 }
 
 void IdentityManager::OnRefreshTokenAvailable(const CoreAccountId& account_id) {
@@ -631,9 +609,10 @@ void IdentityManager::OnRefreshTokenRevokedFromSource(
 
 void IdentityManager::OnAccountUpdated(const AccountInfo& info) {
   if (HasPrimaryAccount()) {
-    const CoreAccountId primary_account_id = GetPrimaryAccountId();
+    const CoreAccountId primary_account_id =
+        GetPrimaryAccountId(ConsentLevel::kNotRequired);
     if (primary_account_id == info.account_id) {
-      primary_account_manager_->UpdateAuthenticatedAccountInfo();
+      primary_account_manager_->UpdatePrimaryAccountInfo();
     }
   }
 

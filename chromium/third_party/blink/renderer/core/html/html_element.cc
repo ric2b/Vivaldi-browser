@@ -1216,13 +1216,31 @@ void HTMLElement::AdjustDirectionalityIfNeededAfterChildAttributeChanged(
   }
 }
 
-void HTMLElement::CalculateAndAdjustDirectionality() {
+bool HTMLElement::CalculateAndAdjustDirectionality() {
   TextDirection text_direction = Directionality();
   const ComputedStyle* style = GetComputedStyle();
   if (style && style->Direction() != text_direction) {
     SetNeedsStyleRecalc(kLocalStyleChange,
                         StyleChangeReasonForTracing::Create(
                             style_change_reason::kWritingModeChange));
+    return true;
+  }
+  return false;
+}
+
+TextDirection HTMLElement::ComputeInheritedDirectionality() const {
+  const AtomicString& direction = FastGetAttribute(html_names::kDirAttr);
+  if (HasDirectionAuto()) {
+    return Directionality();
+  } else if (EqualIgnoringASCIICase(direction, "ltr")) {
+    return TextDirection::kLtr;
+  } else if (EqualIgnoringASCIICase(direction, "rtl")) {
+    return TextDirection::kRtl;
+  } else {
+    auto* parent =
+        DynamicTo<HTMLElement>(FlatTreeTraversal::ParentElement(*this));
+    return parent ? parent->ComputeInheritedDirectionality()
+                  : TextDirection::kLtr;
   }
 }
 
@@ -1231,13 +1249,17 @@ void HTMLElement::AdjustDirectionalityIfNeededAfterChildrenChanged(
   if (!SelfOrAncestorHasDirAutoAttribute())
     return;
 
-  UpdateDistributionForFlatTreeTraversal();
-
   for (Element* element_to_adjust = this; element_to_adjust;
        element_to_adjust =
            FlatTreeTraversal::ParentElement(*element_to_adjust)) {
     if (ElementAffectsDirectionality(element_to_adjust)) {
-      To<HTMLElement>(element_to_adjust)->CalculateAndAdjustDirectionality();
+      if (To<HTMLElement>(element_to_adjust)
+              ->CalculateAndAdjustDirectionality() &&
+          RuntimeEnabledFeatures::CSSPseudoDirEnabled()) {
+        SetNeedsStyleRecalc(kLocalStyleChange,
+                            StyleChangeReasonForTracing::Create(
+                                style_change_reason::kPseudoClass));
+      }
       return;
     }
   }
@@ -1574,7 +1596,6 @@ void HTMLElement::OnDirAttrChanged(const AttributeModificationParams& params) {
   // changes to dir attribute may affect the ancestor.
   if (!CanParticipateInFlatTree())
     return;
-  UpdateDistributionForFlatTreeTraversal();
   auto* parent =
       DynamicTo<HTMLElement>(FlatTreeTraversal::ParentElement(*this));
   if (parent && parent->SelfOrAncestorHasDirAutoAttribute()) {
@@ -1583,6 +1604,13 @@ void HTMLElement::OnDirAttrChanged(const AttributeModificationParams& params) {
 
   if (EqualIgnoringASCIICase(params.new_value, "auto"))
     CalculateAndAdjustDirectionality();
+
+  if (RuntimeEnabledFeatures::CSSPseudoDirEnabled()) {
+    SetNeedsStyleRecalc(
+        kSubtreeStyleChange,
+        StyleChangeReasonForTracing::Create(style_change_reason::kPseudoClass));
+    PseudoStateChanged(CSSSelector::kPseudoDir);
+  }
 }
 
 void HTMLElement::OnFormAttrChanged(const AttributeModificationParams& params) {

@@ -23,8 +23,6 @@ class CosmeticFilterAgent
       public content::RenderFrameObserverTracker<CosmeticFilterAgent>,
       public blink::WebCosmeticFilterClient {
  public:
-  static CosmeticFilterAgent* FromWebFrame(blink::WebLocalFrame* frame);
-
   explicit CosmeticFilterAgent(content::RenderFrame* render_frame);
   ~CosmeticFilterAgent() override;
 
@@ -36,9 +34,6 @@ class CosmeticFilterAgent
 
  private:
   void OnDestruct() override;
-  void DidCreateNewDocument() override;
-
-  void InjectStyleSheet(const std::string& stylesheet_code);
 
   void DoBlockWebRTCIfNeeded(base::WeakPtr<blink::RTCPeerConnectionHandler>
                                  rtc_peer_connection_handler,

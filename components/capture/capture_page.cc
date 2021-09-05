@@ -67,6 +67,7 @@ void CapturePage::CaptureImpl(content::WebContents* contents,
   param.rect = input_params.rect;
   param.full_page = input_params.full_page;
   param.target_size = input_params.target_size;
+  param.client_id = input_params.client_id;
 
   WebContentsObserver::Observe(contents);
 
@@ -116,7 +117,9 @@ bool CapturePage::OnMessageReceived(
 void CapturePage::OnRequestThumbnailForFrameResponse(
     int callback_id,
     gfx::Size image_size,
-    base::ReadOnlySharedMemoryRegion region) {
+    base::ReadOnlySharedMemoryRegion region,
+    int client_id) {
+
   Result captured;
   do {
     if (callback_id != callback_id_) {
@@ -150,6 +153,7 @@ void CapturePage::OnRequestThumbnailForFrameResponse(
     captured.region_ = std::move(region);
   } while (false);
 
+  captured.client_id_ = client_id;
   RespondAndDelete(std::move(captured));
 }
 
@@ -194,6 +198,10 @@ bool CapturePage::Result::MovePixelsToBitmap(SkBitmap* bitmap) {
   }
 
   return true;
+}
+
+int CapturePage::Result::client_id() {
+    return client_id_;
 }
 
 }  // namespace namespace vivaldi

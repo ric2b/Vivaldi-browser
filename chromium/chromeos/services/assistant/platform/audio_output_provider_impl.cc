@@ -8,7 +8,9 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/memory/weak_ptr.h"
 #include "chromeos/services/assistant/media_session/assistant_media_session.h"
+#include "chromeos/services/assistant/platform/audio_stream_factory_delegate.h"
 #include "chromeos/services/assistant/platform/audio_stream_handler.h"
 #include "chromeos/services/assistant/public/cpp/assistant_client.h"
 #include "chromeos/services/assistant/public/mojom/assistant_audio_decoder.mojom.h"
@@ -142,13 +144,12 @@ class AudioOutputImpl : public assistant_client::AudioOutput {
 }  // namespace
 
 AudioOutputProviderImpl::AudioOutputProviderImpl(
-    PowerManagerClient* power_manager_client,
-    CrasAudioHandler* cras_audio_handler,
     AssistantMediaSession* media_session,
     scoped_refptr<base::SequencedTaskRunner> background_task_runner,
     const std::string& device_id)
-    : loop_back_input_(power_manager_client,
-                       cras_audio_handler,
+    : audio_stream_factory_delegate_(
+          std::make_unique<DefaultAudioStreamFactoryDelegate>()),
+      loop_back_input_(audio_stream_factory_delegate_.get(),
                        media::AudioDeviceDescription::kLoopbackInputDeviceId),
       volume_control_impl_(media_session),
       main_task_runner_(base::SequencedTaskRunnerHandle::Get()),

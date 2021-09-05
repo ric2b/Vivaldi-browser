@@ -34,6 +34,9 @@ import org.chromium.ui.UiUtils;
 import org.chromium.ui.util.ColorUtils;
 import org.chromium.ui.vr.VrModeObserver;
 
+// Vivaldi
+import org.chromium.chrome.browser.ChromeApplication;
+
 /**
  * Controls the bottom system navigation bar color for the provided {@link Window}.
  */
@@ -74,6 +77,7 @@ class TabbedNavigationBarColorController implements VrModeObserver {
 
         // If we're not using a light navigation bar, it will always be the same dark color so
         // there's no need to register observers and manipulate coloring.
+        if (!ChromeApplication.isVivaldi())
         if (!mResources.getBoolean(R.bool.window_light_navigation_bar)) {
             mTabModelSelector = null;
             mTabModelSelectorObserver = null;

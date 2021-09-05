@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/ozone.gni")
 import("//build/config/ui.gni")
 import("//device/vr/buildflags/buildflags.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
@@ -299,6 +300,7 @@ component("gfx") {
     "//base:base_static",
     "//base:i18n",
     "//base/third_party/dynamic_annotations",
+    "//build:chromeos_buildflags",
     "//device/vr/buildflags",
     "//skia",
     "//third_party/zlib",
@@ -406,7 +408,11 @@ component("gfx") {
     ]
   }
 
-  if (use_x11) {
+  if (use_ozone) {
+    deps += [ "//ui/ozone:buildflags" ]
+  }
+
+  if (ozone_platform_x11 || use_x11) {
     deps += [ "//ui/gfx/x" ]
   }
 }
@@ -430,6 +436,7 @@ component("color_space") {
     ]
   }
   deps = [
+    "//build:chromeos_buildflags",
     "//skia:skcms",
     "//ui/gfx:buffer_types",
   ]
@@ -467,6 +474,8 @@ source_set("native_widget_types") {
     ":gfx_export",
     "//base",
   ]
+
+  deps = [ "//build:chromeos_buildflags" ]
 }
 
 group("selection_bound") {
@@ -564,6 +573,7 @@ source_set("memory_buffer_sources") {
     ":native_widget_types",
     "//base",
     "//build:chromecast_buildflags",
+    "//build:chromeos_buildflags",
     "//ui/gfx/geometry",
   ]
 
@@ -660,6 +670,27 @@ static_library("test_support") {
   }
 }
 
+if (is_mac) {
+  component("gfx_io_surface_hdr_metadata") {
+    sources = [
+      "mac/io_surface_hdr_metadata.cc",
+      "mac/io_surface_hdr_metadata.h",
+    ]
+    defines = [ "IS_GFX_IO_SURFACE_HDR_METADATA_IMPL" ]
+
+    # This is a separate component from the other sources because it depends on
+    # the mojo serialize and deserialize methods.
+    deps = [
+      ":gfx",
+      "//ui/gfx/mojom:mojom",
+    ]
+    frameworks = [
+      "CoreFoundation.framework",
+      "IOSurface.framework",
+    ]
+  }
+}
+
 test("gfx_unittests") {
   sources = [
     "font_names_testing.cc",
@@ -684,6 +715,7 @@ test("gfx_unittests") {
       "font_fallback_mac_unittest.cc",
       "image/image_mac_unittest.mm",
       "mac/coordinate_conversion_unittest.mm",
+      "mac/io_surface_unittest.cc",
       "path_mac_unittest.mm",
       "platform_font_mac_unittest.mm",
       "range/range_mac_unittest.mm",
@@ -733,6 +765,7 @@ test("gfx_unittests") {
       "geometry/quad_unittest.cc",
       "geometry/quaternion_unittest.cc",
       "geometry/rect_unittest.cc",
+      "geometry/resize_utils_unittest.cc",
       "geometry/rounded_corners_f_unittest.cc",
       "geometry/scroll_offset_unittest.cc",
       "geometry/size_unittest.cc",
@@ -740,6 +773,7 @@ test("gfx_unittests") {
       "geometry/vector3d_unittest.cc",
       "half_float_unittest.cc",
       "icc_profile_unittest.cc",
+      "image/image_skia_operations_unittest.cc",
       "image/image_util_unittest.cc",
       "mojom/mojom_traits_unittest.cc",
       "nine_image_painter_unittest.cc",
@@ -772,6 +806,7 @@ test("gfx_unittests") {
     ":test_support",
     "//base",
     "//base/test:test_support",
+    "//build:chromeos_buildflags",
     "//skia",
     "//skia:skcms",
     "//testing/gtest",
@@ -796,6 +831,10 @@ test("gfx_unittests") {
 
   if (is_apple) {
     deps += [ "//ui/resources:ui_test_pak_bundle_data" ]
+  }
+
+  if (is_mac) {
+    deps += [ ":gfx_io_surface_hdr_metadata" ]
   }
 
   if (!is_apple) {
@@ -913,6 +952,7 @@ fuzzer_test("render_text_api_fuzzer") {
     ":gfx",
     "//base",
     "//base/test:test_support",
+    "//build:chromeos_buildflags",
   ]
 
   dict = "test/data/render_text/unicode_text_fuzzer.dict"

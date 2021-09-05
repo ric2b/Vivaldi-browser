@@ -5,6 +5,7 @@
 import './elements/viewer-error-screen.js';
 import './elements/viewer-password-screen.js';
 import './elements/viewer-pdf-toolbar.js';
+import './elements/viewer-properties-dialog.js';
 import './elements/viewer-zoom-toolbar.js';
 import './elements/shared-vars.js';
 // <if expr="chromeos">
@@ -23,7 +24,7 @@ import {html} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.
 
 import {Bookmark} from './bookmark_type.js';
 import {BrowserApi} from './browser_api.js';
-import {Attachment, FittingType, Point, SaveRequestType} from './constants.js';
+import {Attachment, DocumentMetadata, FittingType, Point, SaveRequestType} from './constants.js';
 import {PluginController} from './controller.js';
 import {ViewerPdfSidenavElement} from './elements/viewer-pdf-sidenav.js';
 import {ViewerPdfToolbarNewElement} from './elements/viewer-pdf-toolbar-new.js';
@@ -31,7 +32,7 @@ import {ViewerPdfToolbarNewElement} from './elements/viewer-pdf-toolbar-new.js';
 import {InkController, InkControllerEventType} from './ink_controller.js';
 //</if>
 import {LocalStorageProxyImpl} from './local_storage_proxy.js';
-import {PDFMetrics, UserAction} from './metrics.js';
+import {record, recordTwoUpViewEnabled, UserAction} from './metrics.js';
 import {NavigatorDelegateImpl, PdfNavigator, WindowOpenDisposition} from './navigator.js';
 import {OpenPdfParamsParser} from './open_pdf_params_parser.js';
 import {DeserializeKeyEvent, LoadState, SerializeKeyEvent} from './pdf_scripting_api.js';
@@ -60,17 +61,6 @@ let EmailMessageData;
  * }}
  */
 let NavigateMessageData;
-
-/**
- * @typedef {{
- *   type: string,
- *   title: string,
- *   attachments: !Array<!Attachment>,
- *   bookmarks: !Array<!Bookmark>,
- *   canSerializeDocument: boolean,
- * }}
- */
-let MetadataMessageData;
 
 /**
  * @typedef {{
@@ -109,6 +99,15 @@ export function getFilenameFromURL(url) {
     }
     throw e;
   }
+}
+
+/**
+ * @param {string} event
+ * @param {!HTMLElement} target
+ * @return {!Promise<void>}
+ */
+function eventToPromise(event, target) {
+  return new Promise(resolve => listenOnce(target, event, resolve));
 }
 
 /** @type {string} */
@@ -176,6 +175,21 @@ export class PDFViewerElement extends PDFViewerBaseElement {
         value: false,
       },
 
+      /** @private {!DocumentMetadata} */
+      documentMetadata_: {
+        type: Object,
+        value: () => {},
+      },
+
+      /** @private */
+      documentPropertiesEnabled_: {
+        type: Boolean,
+        value: false,
+      },
+
+      /** @private */
+      fileName_: String,
+
       /** @private */
       hadPassword_: {
         type: Boolean,
@@ -240,16 +254,19 @@ export class PDFViewerElement extends PDFViewerBaseElement {
       },
 
       /** @private */
+      showPropertiesDialog_: {
+        type: Boolean,
+        value: false,
+      },
+
+      /** @private */
       sidenavCollapsed_: {
         type: Boolean,
         value: false,
       },
 
       /** @private */
-      title_: {
-        type: String,
-        value: '',
-      },
+      title_: String,
 
       /** @private */
       twoUpViewEnabled_: {
@@ -268,14 +285,6 @@ export class PDFViewerElement extends PDFViewerBaseElement {
         type: Object,
         value: () => ({min: 0, max: 0}),
       },
-
-      // <if expr="chromeos">
-      /** @private {?InkController} */
-      inkController_: {
-        type: Object,
-        value: null,
-      },
-      // </if>
     };
   }
 
@@ -315,6 +324,14 @@ export class PDFViewerElement extends PDFViewerBaseElement {
      */
     this.sidenavRestoreState_ = false;
 
+    /** @private {?PluginController} */
+    this.pluginController_ = null;
+
+    // <if expr="chromeos">
+    /** @private {?InkController} */
+    this.inkController_ = null;
+    // </if>
+
     FocusOutlineManager.forDocument(document);
   }
 
@@ -331,11 +348,6 @@ export class PDFViewerElement extends PDFViewerBaseElement {
     }
 
     return this.toolbarEnabled_ ? MATERIAL_TOOLBAR_HEIGHT : 0;
-  }
-
-  /** @override */
-  hasFixedToolbar() {
-    return this.pdfViewerUpdateEnabled_;
   }
 
   /** @override */
@@ -387,11 +399,11 @@ export class PDFViewerElement extends PDFViewerBaseElement {
   init(browserApi) {
     super.init(browserApi);
 
-    /** @private {?PluginController} */
     this.pluginController_ = PluginController.getInstance();
 
     // <if expr="chromeos">
-    this.inkController_ = new InkController(
+    this.inkController_ = InkController.getInstance();
+    this.inkController_.init(
         this.viewport, /** @type {!HTMLDivElement} */ (this.getContent()));
     this.tracker.add(
         this.inkController_.getEventTarget(),
@@ -399,7 +411,9 @@ export class PDFViewerElement extends PDFViewerBaseElement {
         () => chrome.mimeHandlerPrivate.setShowBeforeUnloadDialog(true));
     // </if>
 
-    this.title_ = getFilenameFromURL(this.originalUrl);
+    this.fileName_ = getFilenameFromURL(this.originalUrl);
+    this.title_ = this.fileName_;
+
     if (this.toolbarEnabled_) {
       this.getToolbar_().hidden = false;
     }
@@ -474,7 +488,7 @@ export class PDFViewerElement extends PDFViewerBaseElement {
    * @private
    */
   handleKeyEvent_(e) {
-    if (shouldIgnoreKeyEvents(document.activeElement) || e.defaultPrevented) {
+    if (shouldIgnoreKeyEvents() || e.defaultPrevented) {
       return;
     }
 
@@ -484,6 +498,21 @@ export class PDFViewerElement extends PDFViewerBaseElement {
 
     // Let the viewport handle directional key events.
     if (this.viewport.handleDirectionalKeyEvent(e, this.isFormFieldFocused_)) {
+      return;
+    }
+
+    if (document.fullscreenElement !== null) {
+      // Disable zoom shortcuts in Presentation mode.
+      let hasModifier = e.ctrlKey;
+      // <if expr="is_macosx">
+      hasModifier = e.metaKey;
+      // </if>
+      // Handle '+' and '-' buttons (both in the numpad and elsewhere).
+      if (hasModifier && (e.key === '=' || e.key === '-' || e.key === '+')) {
+        e.preventDefault();
+      }
+
+      // Disable further key handling when in Presentation mode.
       return;
     }
 
@@ -541,12 +570,10 @@ export class PDFViewerElement extends PDFViewerBaseElement {
    * @private
    */
   waitForSidenavTransition_() {
-    return new Promise(resolve => {
-      listenOnce(
-          /** @type {!ViewerPdfSidenavElement} */ (
-              this.shadowRoot.querySelector('#sidenav-container')),
-          'transitionend', e => resolve());
-    });
+    return eventToPromise(
+        'transitionend',
+        /** @type {!ViewerPdfSidenavElement} */
+        (this.shadowRoot.querySelector('#sidenav-container')));
   }
 
   /**
@@ -570,6 +597,7 @@ export class PDFViewerElement extends PDFViewerBaseElement {
     if (annotationMode) {
       // Enter annotation mode.
       assert(this.pluginController_.isActive);
+      assert(!this.inkController_.isActive);
       // TODO(dstockwell): set plugin read-only, begin transition
       this.updateProgress(0);
 
@@ -598,7 +626,7 @@ export class PDFViewerElement extends PDFViewerBaseElement {
           return;
         }
       }
-      PDFMetrics.record(UserAction.ENTER_ANNOTATION_MODE);
+      record(UserAction.ENTER_ANNOTATION_MODE);
       this.annotationMode_ = true;
       this.hasEnteredAnnotationMode_ = true;
       // TODO(dstockwell): feed real progress data from the Ink component
@@ -609,8 +637,9 @@ export class PDFViewerElement extends PDFViewerBaseElement {
       this.updateProgress(100);
     } else {
       // Exit annotation mode.
-      PDFMetrics.record(UserAction.EXIT_ANNOTATION_MODE);
+      record(UserAction.EXIT_ANNOTATION_MODE);
       assert(!this.pluginController_.isActive);
+      assert(this.inkController_.isActive);
       assert(this.currentController === this.inkController_);
       // TODO(dstockwell): set ink read-only, begin transition
       this.updateProgress(0);
@@ -686,9 +715,57 @@ export class PDFViewerElement extends PDFViewerBaseElement {
   }
 
   /** @private */
-  onFullscreenClick_() {
+  onPresentClick_() {
     assert(this.presentationModeEnabled_);
-    this.shadowRoot.querySelector('#main').requestFullscreen();
+
+    const onWheel = e => {
+      e.deltaY > 0 ? this.viewport.goToNextPage() :
+                     this.viewport.goToPreviousPage();
+    };
+
+    const scroller = /** @type {!HTMLElement} */ (
+        this.shadowRoot.querySelector('#scroller'));
+
+    Promise
+        .all([
+          eventToPromise('fullscreenchange', scroller),
+          scroller.requestFullscreen(),
+        ])
+        .then(() => {
+          this.forceFit(FittingType.FIT_TO_HEIGHT);
+
+          // Add a 'wheel' listener, only while in Presentation mode.
+          scroller.addEventListener('wheel', onWheel);
+
+          // Restrict the content to read only (e.g. disable forms and links).
+          this.pluginController_.setReadOnly(true);
+
+          // Revert back to the normal state when exiting Presentation mode.
+          eventToPromise('fullscreenchange', scroller).then(() => {
+            assert(document.fullscreenElement === null);
+            scroller.removeEventListener('wheel', onWheel);
+            this.pluginController_.setReadOnly(false);
+
+            // Ensure that directional keys still work after exiting.
+            this.shadowRoot.querySelector('embed').focus();
+          });
+
+          // Nothing else to do here. The viewport will be updated as a result
+          // of a 'resize' event callback.
+        });
+  }
+
+  /** @private */
+  onPropertiesClick_() {
+    assert(this.documentPropertiesEnabled_);
+    assert(!this.showPropertiesDialog_);
+    this.showPropertiesDialog_ = true;
+  }
+
+  /** @private */
+  onPropertiesDialogClose_() {
+    assert(this.showPropertiesDialog_);
+    this.showPropertiesDialog_ = false;
   }
 
   /**
@@ -703,7 +780,7 @@ export class PDFViewerElement extends PDFViewerBaseElement {
     if (!this.pdfViewerUpdateEnabled_) {
       this.toolbarManager_.forceHideTopToolbar();
     }
-    PDFMetrics.recordTwoUpViewEnabled(this.twoUpViewEnabled_);
+    recordTwoUpViewEnabled(this.twoUpViewEnabled_);
   }
 
   /**
@@ -718,7 +795,7 @@ export class PDFViewerElement extends PDFViewerBaseElement {
   goToPageAndXY_(origin, page, message) {
     this.viewport.goToPageAndXY(page, message.x, message.y);
     if (origin === 'bookmark') {
-      PDFMetrics.record(UserAction.FOLLOW_BOOKMARK);
+      record(UserAction.FOLLOW_BOOKMARK);
     }
   }
 
@@ -781,6 +858,8 @@ export class PDFViewerElement extends PDFViewerBaseElement {
   handleStrings(strings) {
     super.handleStrings(strings);
 
+    this.documentPropertiesEnabled_ =
+        loadTimeData.getBoolean('documentPropertiesEnabled');
     this.pdfAnnotationsEnabled_ =
         loadTimeData.getBoolean('pdfAnnotationsEnabled');
     this.pdfFormSaveEnabled_ = loadTimeData.getBoolean('pdfFormSaveEnabled');
@@ -826,8 +905,18 @@ export class PDFViewerElement extends PDFViewerBaseElement {
   handlePluginMessage(e) {
     const data = e.detail;
     switch (data.type.toString()) {
+      case 'attachments':
+        this.setAttachments_(
+            /** @type {{ attachmentsData: !Array<!Attachment> }} */ (data)
+                .attachmentsData);
+        return;
       case 'beep':
         this.handleBeep_();
+        return;
+      case 'bookmarks':
+        this.setBookmarks_(
+            /** @type {{ bookmarksData: !Array<!Bookmark> }} */ (data)
+                .bookmarksData);
         return;
       case 'documentDimensions':
         this.setDocumentDimensions(
@@ -858,7 +947,9 @@ export class PDFViewerElement extends PDFViewerBaseElement {
             destinationData.zoom);
         return;
       case 'metadata':
-        this.setDocumentMetadata_(/** @type {!MetadataMessageData} */ (data));
+        this.setDocumentMetadata_(
+            /** @type {{ metadataData: !DocumentMetadata }} */ (data)
+                .metadataData);
         return;
       case 'setIsEditing':
         // Editing mode can only be entered once, and cannot be exited.
@@ -955,16 +1046,33 @@ export class PDFViewerElement extends PDFViewerBaseElement {
   }
 
   /**
+   * Sets the document attachment data.
+   * @param {!Array<!Attachment>} attachments
+   * @private
+   */
+  setAttachments_(attachments) {
+    this.attachments_ = attachments;
+  }
+
+  /**
+   * Sets the document bookmarks data.
+   * @param {!Array<!Bookmark>} bookmarks
+   * @private
+   */
+  setBookmarks_(bookmarks) {
+    this.bookmarks_ = bookmarks;
+  }
+
+  /**
    * Sets document metadata from the current controller.
-   * @param {!MetadataMessageData} metadata
+   * @param {!DocumentMetadata} metadata
    * @private
    */
   setDocumentMetadata_(metadata) {
-    this.title_ = metadata.title || getFilenameFromURL(this.originalUrl);
+    this.documentMetadata_ = metadata;
+    this.title_ = this.documentMetadata_.title || this.fileName_;
     document.title = this.title_;
-    this.attachments_ = metadata.attachments;
-    this.bookmarks_ = metadata.bookmarks;
-    this.canSerializeDocument_ = metadata.canSerializeDocument;
+    this.canSerializeDocument_ = this.documentMetadata_.canSerializeDocument;
   }
 
   /**
@@ -1062,11 +1170,11 @@ export class PDFViewerElement extends PDFViewerBaseElement {
   onChangePage_(e) {
     this.viewport.goToPage(e.detail.page);
     if (e.detail.origin === 'bookmark') {
-      PDFMetrics.record(UserAction.FOLLOW_BOOKMARK);
+      record(UserAction.FOLLOW_BOOKMARK);
     } else if (e.detail.origin === 'pageselector') {
-      PDFMetrics.record(UserAction.PAGE_SELECTOR_NAVIGATE);
+      record(UserAction.PAGE_SELECTOR_NAVIGATE);
     } else if (e.detail.origin === 'thumbnail') {
-      PDFMetrics.record(UserAction.THUMBNAIL_NAVIGATE);
+      record(UserAction.THUMBNAIL_NAVIGATE);
     }
   }
 
@@ -1086,7 +1194,7 @@ export class PDFViewerElement extends PDFViewerBaseElement {
    */
   onDropdownOpened_(e) {
     if (e.detail === 'bookmarks') {
-      PDFMetrics.record(UserAction.OPEN_BOOKMARKS_PANEL);
+      record(UserAction.OPEN_BOOKMARKS_PANEL);
     }
   }
 
@@ -1184,25 +1292,25 @@ export class PDFViewerElement extends PDFViewerBaseElement {
    * @private
    */
   recordSaveMetrics_(requestType) {
-    PDFMetrics.record(UserAction.SAVE);
+    record(UserAction.SAVE);
     switch (requestType) {
       case SaveRequestType.ANNOTATION:
-        PDFMetrics.record(UserAction.SAVE_WITH_ANNOTATION);
+        record(UserAction.SAVE_WITH_ANNOTATION);
         break;
       case SaveRequestType.ORIGINAL:
-        PDFMetrics.record(
+        record(
             this.hasEdits_ ? UserAction.SAVE_ORIGINAL :
                              UserAction.SAVE_ORIGINAL_ONLY);
         break;
       case SaveRequestType.EDITED:
-        PDFMetrics.record(UserAction.SAVE_EDITED);
+        record(UserAction.SAVE_EDITED);
         break;
     }
   }
 
   /** @private */
   async onPrint_() {
-    PDFMetrics.record(UserAction.PRINT);
+    record(UserAction.PRINT);
     // <if expr="chromeos">
     await this.exitAnnotationMode_();
     // </if>

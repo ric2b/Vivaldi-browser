@@ -21,6 +21,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
@@ -81,7 +82,7 @@
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 #include "url/gurl.h"
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/sync/test/integration/printers_helper.h"
 #include "chrome/browser/sync/test/integration/sync_arc_package_helper.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs_factory.h"
@@ -91,7 +92,7 @@
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/constants/chromeos_switches.h"
 #include "components/arc/arc_util.h"
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if defined(OS_ANDROID)
 #include "chrome/browser/sync/test/integration/sync_test_utils_android.h"
@@ -124,20 +125,20 @@ void SetURLLoaderFactoryForTest(
       ChromeSigninClientFactory::GetForProfile(profile));
   signin_client->SetURLLoaderFactoryForTest(url_loader_factory);
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   chromeos::AccountManagerFactory* factory =
       g_browser_process->platform_part()->GetAccountManagerFactory();
   chromeos::AccountManager* account_manager =
       factory->GetAccountManager(profile->GetPath().value());
   account_manager->SetUrlLoaderFactoryForTests(url_loader_factory);
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 }
 
 class FakePerUserTopicSubscriptionManager
-    : public syncer::PerUserTopicSubscriptionManager {
+    : public invalidation::PerUserTopicSubscriptionManager {
  public:
   explicit FakePerUserTopicSubscriptionManager(PrefService* local_state)
-      : syncer::PerUserTopicSubscriptionManager(
+      : invalidation::PerUserTopicSubscriptionManager(
             /*identity_provider=*/nullptr,
             /*pref_service=*/local_state,
             /*url_loader_factory=*/nullptr,
@@ -145,28 +146,28 @@ class FakePerUserTopicSubscriptionManager
             /*migrate_prefs=*/false) {}
   ~FakePerUserTopicSubscriptionManager() override = default;
 
-  void UpdateSubscribedTopics(const syncer::Topics& topics,
+  void UpdateSubscribedTopics(const invalidation::Topics& topics,
                               const std::string& instance_id_token) override {}
 
  private:
   DISALLOW_COPY_AND_ASSIGN(FakePerUserTopicSubscriptionManager);
 };
 
-std::unique_ptr<syncer::FCMNetworkHandler> CreateFCMNetworkHandler(
+std::unique_ptr<invalidation::FCMNetworkHandler> CreateFCMNetworkHandler(
     Profile* profile,
-    std::map<const Profile*, syncer::FCMNetworkHandler*>*
+    std::map<const Profile*, invalidation::FCMNetworkHandler*>*
         profile_to_fcm_network_handler_map,
     gcm::GCMDriver* gcm_driver,
     instance_id::InstanceIDDriver* instance_id_driver,
     const std::string& sender_id,
     const std::string& app_id) {
-  auto handler = std::make_unique<syncer::FCMNetworkHandler>(
+  auto handler = std::make_unique<invalidation::FCMNetworkHandler>(
       gcm_driver, instance_id_driver, sender_id, app_id);
   (*profile_to_fcm_network_handler_map)[profile] = handler.get();
   return handler;
 }
 
-std::unique_ptr<syncer::PerUserTopicSubscriptionManager>
+std::unique_ptr<invalidation::PerUserTopicSubscriptionManager>
 CreatePerUserTopicSubscriptionManager(
     invalidation::IdentityProvider* identity_provider,
     PrefService* local_state,
@@ -176,9 +177,9 @@ CreatePerUserTopicSubscriptionManager(
   return std::make_unique<FakePerUserTopicSubscriptionManager>(local_state);
 }
 
-syncer::FCMNetworkHandler* GetFCMNetworkHandler(
+invalidation::FCMNetworkHandler* GetFCMNetworkHandler(
     Profile* profile,
-    std::map<const Profile*, syncer::FCMNetworkHandler*>*
+    std::map<const Profile*, invalidation::FCMNetworkHandler*>*
         profile_to_fcm_network_handler_map) {
   // Delivering FCM notifications does not work if explicitly signed-out.
   signin::IdentityManager* identity_manager =
@@ -244,7 +245,6 @@ void SyncTest::FakeInstanceID::GetToken(
     const std::string& authorized_entity,
     const std::string& scope,
     base::TimeDelta time_to_live,
-    const std::map<std::string, std::string>& options,
     std::set<Flags> flags,
     GetTokenCallback callback) {
   std::move(callback).Run(token_, instance_id::InstanceID::Result::SUCCESS);
@@ -388,7 +388,7 @@ void SyncTest::PostRunTestOnMainThread() {
 void SyncTest::SetUpCommandLine(base::CommandLine* cl) {
   AddTestSwitches(cl);
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   cl->AppendSwitch(chromeos::switches::kIgnoreUserProfileMappingForTests);
   cl->AppendSwitch(chromeos::switches::kDisableArcOptInVerification);
   arc::SetArcAvailableCommandLineForTesting(cl);
@@ -645,7 +645,7 @@ bool SyncTest::SetupClients() {
     cl->AppendSwitchASCII(switches::kSyncDeferredStartupTimeoutSeconds, "1");
   }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // ARC_PACKAGE do not support supervised users, switches::kSupervisedUserId
   // need to be set in SetUpCommandLine() when a test will use supervise users.
   if (!cl->HasSwitch(switches::kSupervisedUserId)) {
@@ -691,7 +691,7 @@ bool SyncTest::SetupClients() {
     WaitForDataModels(verifier());
   }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // SplitSettingsSync makes several types (e.g. APPS, APP_LIST, PRINTERS) into
   // OS sync types. OS sync is on-by-default, so enable it here.
   if (chromeos::features::IsSplitSettingsSyncEnabled()) {
@@ -1064,7 +1064,7 @@ void SyncTest::OnWillCreateBrowserContextServices(
 
 // static
 std::unique_ptr<KeyedService> SyncTest::CreateProfileInvalidationProvider(
-    std::map<const Profile*, syncer::FCMNetworkHandler*>*
+    std::map<const Profile*, invalidation::FCMNetworkHandler*>*
         profile_to_fcm_network_handler_map,
     std::map<const Profile*, std::unique_ptr<instance_id::InstanceIDDriver>>*
         profile_to_instance_id_driver_map,
@@ -1200,7 +1200,7 @@ void SyncTest::WaitForDataModels(Profile* profile) {
   bookmarks::test::WaitForBookmarkModelToLoad(
       BookmarkModelFactory::GetForBrowserContext(profile));
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   printers_helper::WaitForPrinterStoreToLoad(profile);
 #endif
 }
@@ -1332,7 +1332,7 @@ void SyncTest::StopConfigurationRefresher() {
 }
 
 arc::SyncArcPackageHelper* SyncTest::sync_arc_helper() {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   return arc::SyncArcPackageHelper::GetInstance();
 #else
   return nullptr;

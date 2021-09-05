@@ -11,6 +11,7 @@
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_piece.h"
+#include "cc/trees/ukm_manager.h"
 #include "content/child/webthemeengine_impl_default.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_constants.h"
@@ -23,11 +24,14 @@
 #include "content/renderer/agent_scheduling_group.h"
 #include "content/renderer/render_frame_proxy.h"
 #include "content/renderer/render_thread_impl.h"
+#include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/platform/impression_conversions.h"
 #include "third_party/blink/public/platform/modules/video_capture/web_video_capture_impl_manager.h"
 #include "third_party/blink/public/platform/url_conversion.h"
 #include "third_party/blink/public/web/modules/mediastream/web_media_stream_device_observer.h"
 #include "third_party/blink/public/web/web_frame_widget.h"
 #include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_page_popup.h"
 #include "third_party/blink/public/web/web_view.h"
 #include "third_party/blink/public/web/web_window_features.h"
 #include "ui/base/ui_base_features.h"
@@ -313,12 +317,6 @@ void RenderViewImpl::RemoveObserver(RenderViewObserver* observer) {
   observers_.RemoveObserver(observer);
 }
 
-// RenderWidgetOwnerDelegate -----------------------------------------
-
-bool RenderViewImpl::SupportsMultipleWindowsForWidget() {
-  return webview_->GetWebPreferences().supports_multiple_windows;
-}
-
 // IPC message handlers -----------------------------------------
 
 void RenderViewImpl::OnSetHistoryOffsetAndLength(int history_offset,
@@ -363,9 +361,9 @@ WebView* RenderViewImpl::CreateView(
     const WebString& frame_name,
     WebNavigationPolicy policy,
     network::mojom::WebSandboxFlags sandbox_flags,
-    const blink::FeaturePolicyFeatureState& opener_feature_state,
     const blink::SessionStorageNamespaceId& session_storage_namespace_id,
-    bool& consumed_user_gesture) {
+    bool& consumed_user_gesture,
+    const base::Optional<blink::WebImpression>& impression) {
   consumed_user_gesture = false;
   RenderFrameImpl* creator_frame = RenderFrameImpl::FromWebFrame(creator);
   mojom::CreateNewWindowParamsPtr params = mojom::CreateNewWindowParams::New();
@@ -380,11 +378,12 @@ WebView* RenderViewImpl::CreateView(
   params->window_container_type = WindowFeaturesToContainerType(features);
 
   params->session_storage_namespace_id = session_storage_namespace_id;
-  // TODO(dmurph): Don't copy session storage when features.noopener is true:
-  // https://html.spec.whatwg.org/multipage/browsers.html#copy-session-storage
-  // https://crbug.com/771959
-  params->clone_from_session_storage_namespace_id =
-      session_storage_namespace_id_;
+  if (!features.noopener ||
+      base::FeatureList::IsEnabled(
+          blink::features::kCloneSessionStorageForNoOpener)) {
+    params->clone_from_session_storage_namespace_id =
+        session_storage_namespace_id_;
+  }
 
   const std::string& frame_name_utf8 = frame_name.Utf8(
       WebString::UTF8ConversionMode::kStrictReplacingErrorsWithFFFD);
@@ -398,6 +397,10 @@ WebView* RenderViewImpl::CreateView(
         request.GetReferrerPolicy());
   }
   params->features = ConvertWebWindowFeaturesToMojoWindowFeatures(features);
+
+  if (impression) {
+    params->impression = blink::ConvertWebImpressionToImpression(*impression);
+  }
 
   // We preserve this information before sending the message since |params| is
   // moved on send.
@@ -460,11 +463,8 @@ WebView* RenderViewImpl::CreateView(
   view_params->widget_host = std::move(reply->widget_host);
   view_params->widget = std::move(reply->widget),
   view_params->blink_page_broadcast = std::move(reply->page_broadcast);
-  view_params->main_frame_interface_bundle =
-      mojom::DocumentScopedInterfaceBundle::New(
-          std::move(reply->main_frame_interface_bundle->interface_provider),
-          std::move(
-              reply->main_frame_interface_bundle->browser_interface_broker));
+  view_params->main_frame_interface_broker =
+      std::move(reply->main_frame_interface_broker);
   view_params->main_frame_widget_routing_id = reply->main_frame_widget_route_id;
   view_params->session_storage_namespace_id =
       reply->cloned_session_storage_namespace_id;
@@ -472,8 +472,6 @@ WebView* RenderViewImpl::CreateView(
       << "Session storage namespace must be populated.";
   view_params->replicated_frame_state.frame_policy.sandbox_flags =
       sandbox_flags;
-  view_params->replicated_frame_state.opener_feature_state =
-      opener_feature_state;
   view_params->replicated_frame_state.name = frame_name_utf8;
   view_params->devtools_main_frame_token = reply->devtools_main_frame_token;
   view_params->hidden = is_background_tab;
@@ -515,26 +513,21 @@ blink::WebPagePopup* RenderViewImpl::CreatePopup(
   RenderFrameImpl::FromWebFrame(creator)->GetFrameHost()->CreateNewPopupWidget(
       std::move(blink_popup_widget_host_receiver),
       std::move(blink_widget_host_receiver), std::move(blink_widget));
-  RenderWidget* opener_render_widget =
-      RenderFrameImpl::FromWebFrame(creator)->GetLocalRootRenderWidget();
-
-  RenderWidget* popup_widget =
-      RenderWidget::CreateForPopup(opener_render_widget->compositor_deps());
+  blink::WebFrameWidget* opener_widget =
+      RenderFrameImpl::FromWebFrame(creator)->GetLocalRootWebFrameWidget();
 
   // The returned WebPagePopup is self-referencing, so the pointer here is not
   // an owning pointer. It is de-referenced by calling Close().
-  blink::WebPagePopup* popup_web_widget = blink::WebPagePopup::Create(
-      popup_widget, std::move(blink_popup_widget_host),
-      std::move(blink_widget_host), std::move(blink_widget_receiver),
+  blink::WebPagePopup* popup = blink::WebPagePopup::Create(
+      std::move(blink_popup_widget_host), std::move(blink_widget_host),
+      std::move(blink_widget_receiver),
       agent_scheduling_group_.agent_group_scheduler().DefaultTaskRunner());
-
-  // Adds a self-reference on the |popup_widget| so it will not be destroyed
-  // when leaving scope. The WebPagePopup takes responsibility for Close()ing
-  // and thus destroying the RenderWidget.
-  popup_widget->InitForPopup(
-      opener_render_widget, popup_web_widget,
-      opener_render_widget->GetWebWidget()->GetOriginalScreenInfo());
-  return popup_web_widget;
+  popup->InitializeCompositing(compositor_deps_->GetWebMainThreadScheduler(),
+                               compositor_deps_->GetTaskGraphRunner(),
+                               opener_widget->GetOriginalScreenInfo(),
+                               compositor_deps_->CreateUkmRecorderFactory(),
+                               /*settings=*/nullptr);
+  return popup;
 }
 
 base::StringPiece RenderViewImpl::GetSessionStorageNamespaceId() {
@@ -544,10 +537,10 @@ base::StringPiece RenderViewImpl::GetSessionStorageNamespaceId() {
 
 void RenderViewImpl::PrintPage(WebLocalFrame* frame) {
   RenderFrameImpl* render_frame = RenderFrameImpl::FromWebFrame(frame);
-  RenderWidget* render_widget = render_frame->GetLocalRootRenderWidget();
+  blink::WebFrameWidget* frame_widget =
+      render_frame->GetLocalRootWebFrameWidget();
 
-  render_frame->ScriptedPrint(
-      render_widget->GetWebWidget()->HandlingInputEvent());
+  render_frame->ScriptedPrint(frame_widget->HandlingInputEvent());
 }
 
 void RenderViewImpl::ZoomLevelChanged() {
@@ -568,29 +561,6 @@ void RenderViewImpl::PropagatePageZoomToNewlyAttachedFrame(
     GetWebView()->SetZoomFactorForDeviceScaleFactor(device_scale_factor);
   else
     GetWebView()->SetZoomLevel(GetWebView()->ZoomLevel());
-}
-
-void RenderViewImpl::SetValidationMessageDirection(
-    base::string16* wrapped_main_text,
-    base::i18n::TextDirection main_text_hint,
-    base::string16* wrapped_sub_text,
-    base::i18n::TextDirection sub_text_hint) {
-  if (main_text_hint == base::i18n::LEFT_TO_RIGHT) {
-    *wrapped_main_text =
-        base::i18n::GetDisplayStringInLTRDirectionality(*wrapped_main_text);
-  } else if (main_text_hint == base::i18n::RIGHT_TO_LEFT &&
-             !base::i18n::IsRTL()) {
-    base::i18n::WrapStringWithRTLFormatting(wrapped_main_text);
-  }
-
-  if (!wrapped_sub_text->empty()) {
-    if (sub_text_hint == base::i18n::RIGHT_TO_LEFT) {
-      *wrapped_sub_text =
-          base::i18n::GetDisplayStringInLTRDirectionality(*wrapped_sub_text);
-    } else if (sub_text_hint == base::i18n::LEFT_TO_RIGHT) {
-      base::i18n::WrapStringWithRTLFormatting(wrapped_sub_text);
-    }
-  }
 }
 
 void RenderViewImpl::StartNavStateSyncTimerIfNecessary(RenderFrameImpl* frame) {
@@ -646,12 +616,6 @@ int RenderViewImpl::HistoryForwardListCount() {
   return history_list_length_ - HistoryBackListCount() - 1;
 }
 
-// blink::WebWidgetClient ----------------------------------------------------
-
-bool RenderViewImpl::CanHandleGestureEvent() {
-  return true;
-}
-
 void RenderViewImpl::OnPageVisibilityChanged(PageVisibilityState visibility) {
 #if defined(OS_ANDROID)
   SuspendVideoCaptureDevices(visibility != PageVisibilityState::kVisible);
@@ -694,19 +658,6 @@ RenderFrameImpl* RenderViewImpl::GetMainRenderFrame() {
 
 int RenderViewImpl::GetRoutingID() {
   return routing_id_;
-}
-
-float RenderViewImpl::GetZoomLevel() {
-  return webview_->ZoomLevel();
-}
-
-const blink::web_pref::WebPreferences& RenderViewImpl::GetBlinkPreferences() {
-  return webview_->GetWebPreferences();
-}
-
-void RenderViewImpl::SetBlinkPreferences(
-    const blink::web_pref::WebPreferences& preferences) {
-  webview_->SetWebPreferences(preferences);
 }
 
 blink::WebView* RenderViewImpl::GetWebView() {

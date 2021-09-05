@@ -68,6 +68,7 @@
 <translation id="3226128629678568754">Nhấn nút tải lại để gửi lại các dữ liệu cần thiết để tải trang.</translation>
 <translation id="3227137524299004712">Mi-cờ-rô</translation>
 <translation id="3234666976984236645">Luôn luôn phát hiện nội dung quan trọng trên trang web này</translation>
+<translation id="3308738399950580893">quảng cáo</translation>
 <translation id="3422472998109090673">Hiện không thể truy cập <ph name="HOST_NAME" />.</translation>
 <translation id="3427092606871434483">Cho phép (mặc định)</translation>
 <translation id="3447661539832366887">Chủ sở hữu của thiết bị này đã tắt trò chơi khủng long.</translation>
@@ -83,6 +84,7 @@
 <translation id="3681007416295224113">Thông tin chứng chỉ</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Kiểm tra proxy, tường lửa và cấu hình DNS<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Nếu bạn sử dụng máy chủ proxy...</translation>
+<translation id="3894751534882749287">Nếu bạn vẫn muốn xem trang, bạn có thể thay đổi mức độ bảo vệ theo dõi của nó trong cửa sổ bật lên của Trình-Chặn-Theo-Dõi hoặc bằng cách nhấp vào nút Cho phép</translation>
 <translation id="3950820424414687140">Đăng nhập</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> bị chặn</translation>
 <translation id="3987940399970879459">Dưới 1 MB</translation>
@@ -96,19 +98,20 @@
 <translation id="4235360514405112390">Hợp lệ</translation>
 <translation id="4250431568374086873">Kết nối của bạn tới trang web này không đủ an toàn</translation>
 <translation id="4265872034478892965">Được quản trị viên của bạn cho phép</translation>
+<translation id="4305666528087210886">Không thể truy cập vào tệp của bạn</translation>
 <translation id="4312866146174492540">Chặn (mặc định)</translation>
 <translation id="4356973930735388585">Những kẻ tấn công trên trang web này có thể tìm cách cài đặt các chương trình nguy hiểm vào máy tính của bạn, các chương trình này sẽ đánh cắp hoặc xóa thông tin của bạn (ví dụ: ảnh, mật khẩu, thư và thẻ tín dụng).</translation>
 <translation id="4408413947728134509">Cookie <ph name="NUM_COOKIES" /></translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> không chấp nhận chứng chỉ đăng nhập của bạn hoặc có thể bạn chưa cung cấp chứng chỉ đăng nhập.</translation>
 <translation id="4506599922270137252">Liên hệ với quản trị viên hệ thống</translation>
 <translation id="4522570452068850558">Chi tiết</translation>
-<translation id="4552089082226364758">Flash</translation>
 <translation id="4558551763791394412">Thử tắt tiện ích.</translation>
 <translation id="4592951414987517459">Kết nối của bạn tới <ph name="DOMAIN" /> được mã hóa bằng bộ mã hoá hiện đại.</translation>
 <translation id="4690462567478992370">Ngừng sử dụng chứng thư không hợp lệ</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Kết nối của bạn bị gián đoạn</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Đang thực thi Chẩn đoán Mạng Windows<ph name="END_LINK" /></translation>
+<translation id="4736016046474602958">Trình chặn Theo dõi</translation>
 <translation id="4744603770635761495">Đường dẫn thực thi</translation>
 <translation id="4750917950439032686">Thông tin của bạn (ví dụ: mật khẩu hoặc số thẻ tín dụng) sẽ được bảo mật khi được gửi tới trang web này.</translation>
 <translation id="4764776831041365478">Trang web tại <ph name="URL" /> có thể tạm thời không hoạt động hay được chuyển vĩnh viễn sang địa chỉ web mới.</translation>
@@ -149,6 +152,7 @@
 <translation id="6165508094623778733">Tìm hiểu thêm</translation>
 <translation id="6177128806592000436">Kết nối của bạn tới trang web này không an toàn</translation>
 <translation id="6203231073485539293">Kiểm tra kết nối Internet của bạn</translation>
+<translation id="6225522625585012689">Hãy truy cập vào &lt;strong&gt;vivaldi://policy&lt;/strong&gt; để xem danh sách các URL bị chặn và những chính sách khác do quản trị viên hệ thống thực thi.</translation>
 <translation id="625755898061068298">Bạn đã chọn tắt cảnh báo bảo mật cho trang web này.</translation>
 <translation id="6264485186158353794">Quay lại an toàn</translation>
 <translation id="6305205051461490394">Không thể truy cập <ph name="URL" />.</translation>
@@ -174,6 +178,7 @@
 <translation id="7219179957768738017">Kết nối sử dụng <ph name="SSL_VERSION" />.</translation>
 <translation id="7260504762447901703">Thu hồi quyền truy cập</translation>
 <translation id="7353601530677266744">Dòng Lệnh</translation>
+<translation id="7364115444476960850">Trang bạn đang cố truy cập đã bị chặn bởi <ph name="BLOCKER_NAME" /> của Vivaldi</translation>
 <translation id="7419106976560586862">Đường dẫn cấu hình</translation>
 <translation id="7445762425076701745">Không thể xác thực đầy đủ nhận dạng của máy chủ bạn đã kết nối. Bạn đã kết nối vào máy chủ bằng một tên chỉ hợp lệ trong mạng của bạn và đó là tên mà các tổ chức phát hành chứng chỉ bên ngoài không thể xác thực được. Vì một số tổ chức phát hành chứng chỉ sẽ cấp chứng chỉ cho các tên này thay thế, nên không có cách nào đảm bảo bạn được kết nối tới trang web đã chỉ định hay là một trang của kẻ tấn công.</translation>
 <translation id="7455133967321480974">Sử dụng cài đặt mặc định chung (Chặn)</translation>
@@ -196,6 +201,7 @@
 <translation id="8037357227543935929">Yêu cầu (mặc định)</translation>
 <translation id="8041940743680923270">Sử dụng cài đặt mặc định chung (Hỏi)</translation>
 <translation id="808894953321890993">Đổi mật khẩu</translation>
+<translation id="8119307142152921512">theo dõi và quảng cáo</translation>
 <translation id="8149426793427495338">Máy tính của bạn đã chuyển sang chế độ ngủ.</translation>
 <translation id="8150722005171944719">Không thể đọc được tệp tại <ph name="URL" />.  Tệp này có thể đã bị xóa, di chuyển hoặc quyền tệp có thể đang chặn truy cập.</translation>
 <translation id="8184538546369750125">Sử dụng cài đặt mặc định chung (Cho phép)</translation>
@@ -218,6 +224,7 @@
 <translation id="9011424611726486705">Mở cài đặt trang web</translation>
 <translation id="9025348182339809926">(Không hợp lệ)</translation>
 <translation id="9039213469156557790">Ngoài ra, trang này bao gồm các tài nguyên khác không an toàn. Những tài nguyên này có thể bị người khác xem khi đang gửi và có thể bị kẻ tấn công sửa đổi nhằm thay đổi hành vi của trang.</translation>
+<translation id="9062620674789239642">Tệp này có thể đã bị di chuyển, chỉnh sửa hoặc bị xóa.</translation>
 <translation id="9069693763241529744">Bị một tiện ích chặn</translation>
 <translation id="9169664750068251925">Luôn chặn trên trang web này</translation>
 <translation id="9180553614777056266">Trình chặn Quảng cáo</translation>

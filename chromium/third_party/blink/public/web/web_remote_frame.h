@@ -35,6 +35,7 @@ class WebRemoteFrameClient;
 class WebString;
 class WebView;
 struct FramePolicy;
+struct FrameVisualProperties;
 struct WebFrameOwnerProperties;
 struct WebRect;
 
@@ -99,9 +100,7 @@ class WebRemoteFrame : public WebFrame {
       WebFrame* opener) = 0;
 
   // Layer for the in-process compositor.
-  virtual void SetCcLayer(cc::Layer*,
-                          bool prevent_contents_opaque_changes,
-                          bool is_surface_layer) = 0;
+  virtual void SetCcLayer(cc::Layer*, bool is_surface_layer) = 0;
 
   // Set security origin replicated from another process.
   virtual void SetReplicatedOrigin(
@@ -115,13 +114,9 @@ class WebRemoteFrame : public WebFrame {
   virtual void SetReplicatedName(const WebString& name,
                                  const WebString& unique_name) = 0;
 
-  // Sets the FeaturePolicy header and the FeatureState (from opener) for the
-  // main frame. Once a non-empty |opener_feature_state| is set, it can no
-  // longer be modified (due to the fact that the original opener which passed
-  // down the FeatureState cannot be modified either).
-  virtual void SetReplicatedFeaturePolicyHeaderAndOpenerPolicies(
-      const ParsedFeaturePolicy& parsed_header,
-      const FeaturePolicyFeatureState& opener_feature_state) = 0;
+  // Sets the Feature Policy header for the main frame.
+  virtual void SetReplicatedFeaturePolicyHeader(
+      const ParsedFeaturePolicy& parsed_header) = 0;
 
   // Adds |header| to the set of replicated CSP headers.
   virtual void AddReplicatedContentSecurityPolicyHeader(
@@ -157,12 +152,26 @@ class WebRemoteFrame : public WebFrame {
       mojom::UserActivationNotificationType notification_type) = 0;
 
   virtual void SetHadStickyUserActivationBeforeNavigation(bool value) = 0;
+  virtual void EnableAutoResize(const gfx::Size& min_size,
+                                const gfx::Size& max_size) = 0;
+  virtual void DisableAutoResize() = 0;
 
+  // Return the interest rect for compositing in the frame's space.
   virtual WebRect GetCompositingRect() = 0;
+
+  virtual void SynchronizeVisualProperties() = 0;
+  virtual void ResendVisualProperties() = 0;
+
+  // Returns the ideal raster scale factor for the OOPIF's compositor so that it
+  // doesn't raster at a higher scale than it needs to.
+  virtual float GetCompositingScaleFactor() = 0;
 
   // Unique name is an opaque identifier for maintaining association with
   // session restore state for this frame.
   virtual WebString UniqueName() const = 0;
+
+  virtual const FrameVisualProperties& GetPendingVisualPropertiesForTesting()
+      const = 0;
 
   RemoteFrameToken GetRemoteFrameToken() const {
     return RemoteFrameToken(GetFrameToken());

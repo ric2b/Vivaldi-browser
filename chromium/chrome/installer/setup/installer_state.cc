@@ -24,6 +24,7 @@
 #include "chrome/installer/util/work_item.h"
 #include "chrome/installer/util/work_item_list.h"
 
+#include "base/vivaldi_switches.h"
 #include "installer/util/vivaldi_install_util.h"
 
 namespace installer {
@@ -84,20 +85,22 @@ void InstallerState::Initialize(const base::CommandLine& command_line,
 
   target_path_ = GetChromeInstallPath(system_install());
 
-  is_vivaldi_ = command_line.HasSwitch(vivaldi::constants::kVivaldi);
+  // TODO(igor@vivaldi.com): This partially duplicates what
+  // VivaldiPrepareConfig() does. Figure a good way to read the settings once.
   is_vivaldi_update_ =
       command_line.HasSwitch(vivaldi::constants::kVivaldiUpdate);
-  is_standalone_ =
+  is_vivaldi_standalone_ =
       command_line.HasSwitch(vivaldi::constants::kVivaldiStandalone);
-  register_standalone_ =
+  is_vivaldi_register_standalone_ =
       command_line.HasSwitch(vivaldi::constants::kVivaldiRegisterStandalone);
-  const bool install_dir_supplied =
+  is_vivaldi_silent_update_ =
+      command_line.HasSwitch(::switches::kVivaldiSilentUpdate);
+  const bool vivaldi_install_dir_supplied =
       command_line.HasSwitch(vivaldi::constants::kVivaldiInstallDir);
-
-  if (is_vivaldi_ && !install_dir_supplied) {
+  if (kVivaldi && !vivaldi_install_dir_supplied) {
     base::win::RegKey key;
     LONG result = key.Open(root_key_, vivaldi::constants::kVivaldiKey,
-      KEY_QUERY_VALUE | KEY_WOW64_32KEY);
+                           KEY_QUERY_VALUE | KEY_WOW64_32KEY);
     if (result == ERROR_SUCCESS) {
       if (is_uninstall) {
         // Use the UninstallString value from the registry.
@@ -204,9 +207,9 @@ void InstallerState::Clear() {
   msi_ = false;
   verbose_logging_ = false;
 
-  is_vivaldi_ = false;
-  is_standalone_ = false;
-  register_standalone_ = false;
+  is_vivaldi_standalone_ = false;
+  is_vivaldi_register_standalone_ = false;
+  is_vivaldi_silent_update_ = false;
 }
 
 void InstallerState::SetStage(InstallerStage stage) const {
@@ -218,7 +221,8 @@ void InstallerState::WriteInstallerResult(
     InstallStatus status,
     int string_resource_id,
     const base::string16* const launch_cmd) const {
-  if (!is_standalone()) {
+  if (!is_vivaldi_standalone()) {
+    // clang-format off
   // Use a no-rollback list since this is a best-effort deal.
   std::unique_ptr<WorkItemList> install_list(WorkItem::CreateWorkItemList());
   install_list->set_log_message("Write Installer Result");
@@ -230,9 +234,11 @@ void InstallerState::WriteInstallerResult(
       system_install, install_static::GetClientStateKeyPath(), status,
       string_resource_id, launch_cmd, install_list.get());
   install_list->Do();
+    // clang-format on
   }
-  if (string_resource_id != 0)
-    InstallUtil::ShowInstallerResultMessage(status, string_resource_id);
+  if (kVivaldi && operation_ != UNINSTALL && string_resource_id != 0) {
+    vivaldi::ShowInstallerResultMessage(string_resource_id);
+  }
 }
 
 bool InstallerState::RequiresActiveSetup() const {

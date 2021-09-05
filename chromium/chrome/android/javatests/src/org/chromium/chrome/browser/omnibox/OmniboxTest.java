@@ -31,17 +31,18 @@ import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.omnibox.status.StatusCoordinator;
 import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteController.OnSuggestionsReceivedListener;
-import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteResult;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabObserver;
+import org.chromium.chrome.browser.theme.ThemeColorProvider.ThemeColorObserver;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.OmniboxTestUtils;
 import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.components.embedder_support.util.UrlConstants;
+import org.chromium.components.omnibox.AutocompleteResult;
 import org.chromium.content_public.browser.test.util.KeyUtils;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.net.test.EmbeddedTestServer;
@@ -260,19 +261,24 @@ public class OmniboxTest {
                 ServerCertificate.CERT_OK);
         CallbackHelper didThemeColorChangedCallbackHelper = new CallbackHelper();
         CallbackHelper onSSLStateUpdatedCallbackHelper = new CallbackHelper();
-        ThreadUtils.runOnUiThreadBlocking(
-                ()
-                        -> new TabModelSelectorTabObserver(
-                                mActivityTestRule.getActivity().getTabModelSelector()) {
-                    @Override
-                    public void onDidChangeThemeColor(Tab tab, int color) {
-                        didThemeColorChangedCallbackHelper.notifyCalled();
-                    }
-                    @Override
-                    public void onSSLStateUpdated(Tab tab) {
-                        onSSLStateUpdatedCallbackHelper.notifyCalled();
-                    }
-                });
+        ThreadUtils.runOnUiThreadBlocking(() -> {
+            new TabModelSelectorTabObserver(mActivityTestRule.getActivity().getTabModelSelector()) {
+                @Override
+                public void onSSLStateUpdated(Tab tab) {
+                    onSSLStateUpdatedCallbackHelper.notifyCalled();
+                }
+            };
+
+            mActivityTestRule.getActivity()
+                    .getRootUiCoordinatorForTesting()
+                    .getTopUiThemeColorProvider()
+                    .addThemeColorObserver(new ThemeColorObserver() {
+                        @Override
+                        public void onThemeColorChanged(int color, boolean shouldAnimate) {
+                            didThemeColorChangedCallbackHelper.notifyCalled();
+                        }
+                    });
+        });
 
         try {
             final String testHttpsUrl =

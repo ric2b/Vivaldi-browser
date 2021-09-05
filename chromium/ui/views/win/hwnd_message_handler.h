@@ -36,7 +36,6 @@
 #include "ui/views/views_export.h"
 #include "ui/views/win/pen_event_processor.h"
 #include "ui/views/win/scoped_enable_unadjusted_mouse_events_win.h"
-#include "ui/views/window/window_resize_utils.h"
 
 namespace gfx {
 class ImageSkia;
@@ -608,7 +607,7 @@ class VIEWS_EXPORT HWNDMessageHandler : public gfx::WindowImpl,
 
   // Updates |rect| to adhere to the |aspect_ratio| of the window. |param|
   // refers to the edge of the window being sized.
-  void SizeRectToAspectRatio(UINT param, gfx::Rect* rect);
+  void SizeWindowToAspectRatio(UINT param, gfx::Rect* rect);
 
   // Get the cursor position, which may be mocked if running a test
   POINT GetCursorPos() const;

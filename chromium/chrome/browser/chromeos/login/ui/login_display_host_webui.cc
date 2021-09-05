@@ -312,13 +312,13 @@ void TriggerShowLoginWizardFinish(
   if (switch_locale.empty()) {
     ShowLoginWizardFinish(data->first_screen, data->startup_manifest);
   } else {
-    chromeos::locale_util::SwitchLanguageCallback callback(
-        base::Bind(&OnLanguageSwitchedCallback, base::Passed(std::move(data))));
+    chromeos::locale_util::SwitchLanguageCallback callback(base::BindOnce(
+        &OnLanguageSwitchedCallback, base::Passed(std::move(data))));
 
     // Load locale keyboards here. Hardware layout would be automatically
     // enabled.
     chromeos::locale_util::SwitchLanguage(
-        switch_locale, true, true /* login_layouts_only */, callback,
+        switch_locale, true, true /* login_layouts_only */, std::move(callback),
         ProfileManager::GetActiveUserProfile());
   }
 }
@@ -399,7 +399,7 @@ bool CanPlayStartupSound() {
   bool found =
       chromeos::CrasAudioHandler::Get()->GetPrimaryActiveOutputDevice(&device);
   return found && device.stable_device_id_version &&
-         device.type != chromeos::AudioDeviceType::AUDIO_TYPE_OTHER;
+         device.type != AudioDeviceType::kOther;
 }
 
 }  // namespace
@@ -453,13 +453,16 @@ LoginDisplayHostWebUI::LoginDisplayHostWebUI()
 
   audio::SoundsManager* manager = audio::SoundsManager::Get();
   ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
-  manager->Initialize(SOUND_STARTUP,
+  manager->Initialize(static_cast<int>(Sound::kStartup),
                       bundle.GetRawDataResource(IDR_SOUND_STARTUP_WAV));
 
   login_display_ = std::make_unique<LoginDisplayWebUI>();
 }
 
 LoginDisplayHostWebUI::~LoginDisplayHostWebUI() {
+  if (GetOobeUI())
+    GetOobeUI()->signin_screen_handler()->SetDelegate(nullptr);
+
   SessionManagerClient::Get()->RemoveObserver(this);
   CrasAudioHandler::Get()->RemoveAudioObserver(this);
   display::Screen::GetScreen()->RemoveObserver(this);
@@ -793,10 +796,8 @@ void LoginDisplayHostWebUI::OnDisplayMetricsChanged(
   }
 
   if (GetOobeUI()) {
-    const gfx::Size& size = primary_display.size();
-    GetOobeUI()->GetCoreOobeView()->SetClientAreaSize(size.width(),
-                                                      size.height());
-
+    GetOobeUI()->GetCoreOobeView()->UpdateClientAreaSize(
+        primary_display.size());
     if (changed_metrics & DISPLAY_METRIC_PRIMARY)
       GetOobeUI()->OnDisplayConfigurationChanged();
   }
@@ -818,7 +819,7 @@ void LoginDisplayHostWebUI::OnWillRemoveView(views::Widget* widget,
                                              views::View* view) {
   if (view != static_cast<views::View*>(login_view_))
     return;
-  login_view_ = nullptr;
+  ResetLoginView();
   widget->RemoveRemovalsObserver(this);
 }
 
@@ -830,7 +831,7 @@ void LoginDisplayHostWebUI::OnWidgetDestroying(views::Widget* widget) {
   login_window_->RemoveObserver(this);
 
   login_window_ = nullptr;
-  login_view_ = nullptr;
+  ResetLoginView();
 }
 
 void LoginDisplayHostWebUI::OnWidgetBoundsChanged(views::Widget* widget,
@@ -949,7 +950,7 @@ void LoginDisplayHostWebUI::ResetLoginWindowAndView() {
   // `login_view_` pointer.
   if (login_view_) {
     login_view_->SetUIEnabled(true);
-    login_view_ = nullptr;
+    ResetLoginView();
   }
 
   if (login_window_) {
@@ -974,6 +975,17 @@ void LoginDisplayHostWebUI::SetOobeProgressBarVisible(bool visible) {
 void LoginDisplayHostWebUI::TryToPlayOobeStartupSound() {
   need_to_play_startup_sound_ = true;
   PlayStartupSoundIfPossible();
+}
+
+void LoginDisplayHostWebUI::ResetLoginView() {
+  if (!login_view_)
+    return;
+
+  OobeUI* oobe_ui = login_view_->GetOobeUI();
+  if (oobe_ui)
+    oobe_ui->signin_screen_handler()->SetDelegate(nullptr);
+
+  login_view_ = nullptr;
 }
 
 void LoginDisplayHostWebUI::OnLoginPromptVisible() {
@@ -1002,14 +1014,17 @@ void LoginDisplayHostWebUI::DisableRestrictiveProxyCheckForTest() {
 }
 
 void LoginDisplayHostWebUI::ShowGaiaDialog(const AccountId& prefilled_account) {
-  // This is a special case, when WebUI sign-in screen shown with Views-based
-  // launch bar. Then "Add user" button will be Views-based, and user click
-  // will result in this call.
   ShowGaiaDialogCommon(prefilled_account);
 }
 
 void LoginDisplayHostWebUI::HideOobeDialog() {
   NOTREACHED();
+}
+
+void LoginDisplayHostWebUI::SetShelfButtonsEnabled(bool enabled) {
+  ash::LoginScreen::Get()->EnableShelfButtons(enabled);
+  if (GetWebUILoginView())
+    GetWebUILoginView()->set_shelf_enabled(enabled);
 }
 
 void LoginDisplayHostWebUI::UpdateOobeDialogState(ash::OobeDialogState state) {
@@ -1022,6 +1037,11 @@ void LoginDisplayHostWebUI::HandleDisplayCaptivePortal() {
 
 void LoginDisplayHostWebUI::OnCancelPasswordChangedFlow() {}
 
+void LoginDisplayHostWebUI::ShowEnableConsumerKioskScreen() {
+  if (GetExistingUserController())
+    GetExistingUserController()->OnStartKioskEnableScreen();
+}
+
 void LoginDisplayHostWebUI::UpdateAddUserButtonStatus() {
   NOTREACHED();
 }
@@ -1032,6 +1052,16 @@ void LoginDisplayHostWebUI::RequestSystemInfoUpdate() {
 
 bool LoginDisplayHostWebUI::HasUserPods() {
   return false;
+}
+
+void LoginDisplayHostWebUI::VerifyOwnerForKiosk(base::OnceClosure) {
+  NOTREACHED();
+}
+
+void LoginDisplayHostWebUI::ShowPasswordChangedDialog(
+    const AccountId& account_id,
+    bool show_password_error) {
+  NOTREACHED();
 }
 
 void LoginDisplayHostWebUI::AddObserver(LoginDisplayHost::Observer* observer) {
@@ -1067,7 +1097,7 @@ void LoginDisplayHostWebUI::PlayStartupSoundIfPossible() {
       base::TimeDelta::FromMilliseconds(kStartupSoundMaxDelayMs)) {
     return;
   }
-  AccessibilityManager::Get()->PlayEarcon(SOUND_STARTUP,
+  AccessibilityManager::Get()->PlayEarcon(Sound::kStartup,
                                           PlaySoundOption::ALWAYS);
 }
 
@@ -1095,6 +1125,8 @@ void ShowLoginWizard(OobeScreenId first_screen) {
     // login screen.
     system::InputDeviceSettings::Get()->SetPrimaryButtonRight(
         prefs->GetBoolean(prefs::kOwnerPrimaryMouseButtonRight));
+    system::InputDeviceSettings::Get()->SetPointingStickPrimaryButtonRight(
+        prefs->GetBoolean(prefs::kOwnerPrimaryPointingStickButtonRight));
     system::InputDeviceSettings::Get()->SetTapToClick(
         prefs->GetBoolean(prefs::kOwnerTapToClickEnabled));
   }

@@ -86,9 +86,11 @@ bool IsWebContentsFocused(content::WebContents* web_contents) {
 
 base::WeakPtr<media_router::WebContentsPresentationManager>
 GetPresentationManager(content::WebContents* web_contents) {
-  return web_contents
-             ? media_router::WebContentsPresentationManager::Get(web_contents)
-             : nullptr;
+  if (!web_contents ||
+      !media_router::MediaRouterEnabled(web_contents->GetBrowserContext())) {
+    return nullptr;
+  }
+  return media_router::WebContentsPresentationManager::Get(web_contents);
 }
 
 }  // anonymous namespace
@@ -250,8 +252,7 @@ void MediaNotificationService::Session::SetAudioSinkId(const std::string& id) {
   controller_->SetAudioSinkId(id);
 }
 
-std::unique_ptr<base::RepeatingCallbackList<void(bool)>::Subscription>
-MediaNotificationService::Session::
+base::CallbackListSubscription MediaNotificationService::Session::
     RegisterIsAudioDeviceSwitchingSupportedCallback(
         base::RepeatingCallback<void(bool)> callback) {
   callback.Run(is_audio_device_switching_supported_);
@@ -317,18 +318,19 @@ void MediaNotificationService::Session::MarkActiveIfNecessary() {
 MediaNotificationService::MediaNotificationService(Profile* profile,
                                                    bool show_from_all_profiles)
     : overlay_media_notifications_manager_(this) {
-  if (base::FeatureList::IsEnabled(media::kGlobalMediaControlsForCast) &&
-      media_router::MediaRouterEnabled(profile)) {
-    cast_notification_provider_ =
-        std::make_unique<CastMediaNotificationProvider>(
-            profile, this,
-            base::BindRepeating(
-                &MediaNotificationService::OnCastNotificationsChanged,
-                base::Unretained(this)));
-  }
-  if (media_router::GlobalMediaControlsCastStartStopEnabled()) {
-    presentation_request_notification_provider_ =
-        std::make_unique<PresentationRequestNotificationProvider>(this);
+  if (media_router::MediaRouterEnabled(profile)) {
+    if (base::FeatureList::IsEnabled(media::kGlobalMediaControlsForCast)) {
+      cast_notification_provider_ =
+          std::make_unique<CastMediaNotificationProvider>(
+              profile, this,
+              base::BindRepeating(
+                  &MediaNotificationService::OnCastNotificationsChanged,
+                  base::Unretained(this)));
+    }
+    if (media_router::GlobalMediaControlsCastStartStopEnabled()) {
+      presentation_request_notification_provider_ =
+          std::make_unique<PresentationRequestNotificationProvider>(this);
+    }
   }
 
   // Connect to the controller manager so we can create media controllers for
@@ -693,10 +695,12 @@ void MediaNotificationService::SetDialogDelegate(
 
   std::list<std::string> sorted_session_ids;
   for (const std::string& id : active_controllable_session_ids_) {
-    if (sessions_.find(id)->second.IsPlaying())
+    auto session_it = sessions_.find(id);
+    if (session_it != sessions_.end() && session_it->second.IsPlaying()) {
       sorted_session_ids.push_front(id);
-    else
+    } else {
       sorted_session_ids.push_back(id);
+    }
   }
 
   for (const std::string& id : sorted_session_ids) {
@@ -772,8 +776,7 @@ void MediaNotificationService::OnSessionBecameInactive(const std::string& id) {
   HideNotification(id);
 }
 
-std::unique_ptr<
-    MediaNotificationDeviceProvider::GetOutputDevicesCallbackList::Subscription>
+base::CallbackListSubscription
 MediaNotificationService::RegisterAudioOutputDeviceDescriptionsCallback(
     MediaNotificationDeviceProvider::GetOutputDevicesCallback callback) {
   if (!device_provider_)
@@ -783,7 +786,7 @@ MediaNotificationService::RegisterAudioOutputDeviceDescriptionsCallback(
       std::move(callback));
 }
 
-std::unique_ptr<base::RepeatingCallbackList<void(bool)>::Subscription>
+base::CallbackListSubscription
 MediaNotificationService::RegisterIsAudioOutputDeviceSwitchingSupportedCallback(
     const std::string& id,
     base::RepeatingCallback<void(bool)> callback) {

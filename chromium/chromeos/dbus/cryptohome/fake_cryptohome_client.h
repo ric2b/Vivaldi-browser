@@ -37,9 +37,6 @@ class COMPONENT_EXPORT(CRYPTOHOME_CLIENT) FakeCryptohomeClient
   // Checks that a FakeCryptohome instance was initialized and returns it.
   static FakeCryptohomeClient* Get();
 
-  // Expose stub password for tests.
-  static const char kStubTpmPassword[];
-
   // CryptohomeClient overrides
   void AddObserver(Observer* observer) override;
   void RemoveObserver(Observer* observer) override;
@@ -73,17 +70,6 @@ class COMPONENT_EXPORT(CRYPTOHOME_CLIENT) FakeCryptohomeClient
       DBusMethodCallback<cryptohome::BaseReply> callback) override;
   void GetRsuDeviceId(
       DBusMethodCallback<cryptohome::BaseReply> callback) override;
-  void TpmIsReady(DBusMethodCallback<bool> callback) override;
-  void TpmIsEnabled(DBusMethodCallback<bool> callback) override;
-  bool CallTpmIsEnabledAndBlock(bool* enabled) override;
-  void TpmGetPassword(DBusMethodCallback<std::string> callback) override;
-  void TpmIsOwned(DBusMethodCallback<bool> callback) override;
-  bool CallTpmIsOwnedAndBlock(bool* owned) override;
-  void TpmIsBeingOwned(DBusMethodCallback<bool> callback) override;
-  bool CallTpmIsBeingOwnedAndBlock(bool* owning) override;
-  void TpmCanAttemptOwnership(VoidDBusMethodCallback callback) override;
-  void TpmClearStoredPassword(VoidDBusMethodCallback callback) override;
-  bool CallTpmClearStoredPasswordAndBlock() override;
   void Pkcs11IsTpmTokenReady(DBusMethodCallback<bool> callback) override;
   void Pkcs11GetTpmTokenInfo(
       DBusMethodCallback<TpmTokenInfo> callback) override;
@@ -100,7 +86,9 @@ class COMPONENT_EXPORT(CRYPTOHOME_CLIENT) FakeCryptohomeClient
   void InstallAttributesIsReady(DBusMethodCallback<bool> callback) override;
   bool InstallAttributesIsInvalid(bool* is_invalid) override;
   bool InstallAttributesIsFirstInstall(bool* is_first_install) override;
-  void TpmGetVersion(DBusMethodCallback<TpmVersionInfo> callback) override;
+  void GetLoginStatus(
+      const cryptohome::GetLoginStatusRequest& request,
+      DBusMethodCallback<cryptohome::BaseReply> callback) override;
   void GetKeyDataEx(
       const cryptohome::AccountIdentifier& cryptohome_id,
       const cryptohome::AuthorizationRequest& auth,
@@ -125,10 +113,6 @@ class COMPONENT_EXPORT(CRYPTOHOME_CLIENT) FakeCryptohomeClient
       const cryptohome::AccountIdentifier& cryptohome_id,
       const cryptohome::AuthorizationRequest& auth,
       DBusMethodCallback<cryptohome::BaseReply> callback) override;
-  void UpdateKeyEx(const cryptohome::AccountIdentifier& cryptohome_id,
-                   const cryptohome::AuthorizationRequest& auth,
-                   const cryptohome::UpdateKeyRequest& request,
-                   DBusMethodCallback<cryptohome::BaseReply> callback) override;
   void RemoveKeyEx(const cryptohome::AccountIdentifier& cryptohome_id,
                    const cryptohome::AuthorizationRequest& auth,
                    const cryptohome::RemoveKeyRequest& request,
@@ -146,9 +130,6 @@ class COMPONENT_EXPORT(CRYPTOHOME_CLIENT) FakeCryptohomeClient
       DBusMethodCallback<cryptohome::BaseReply> callback) override;
   void FlushAndSignBootAttributes(
       const cryptohome::FlushAndSignBootAttributesRequest& request,
-      DBusMethodCallback<cryptohome::BaseReply> callback) override;
-  void GetTpmStatus(
-      const cryptohome::GetTpmStatusRequest& request,
       DBusMethodCallback<cryptohome::BaseReply> callback) override;
   void MigrateToDircrypto(const cryptohome::AccountIdentifier& cryptohome_id,
                           const cryptohome::MigrateToDircryptoRequest& request,
@@ -170,6 +151,14 @@ class COMPONENT_EXPORT(CRYPTOHOME_CLIENT) FakeCryptohomeClient
                              DBusMethodCallback<int64_t> callback) override;
   void GetCurrentSpaceForGid(gid_t android_gid,
                              DBusMethodCallback<int64_t> callback) override;
+  void GetCurrentSpaceForProjectId(
+      int project_id,
+      DBusMethodCallback<int64_t> callback) override;
+  void SetProjectId(const int project_id,
+                    const cryptohome::SetProjectIdAllowedPathType parent_path,
+                    const std::string& child_path,
+                    const cryptohome::AccountIdentifier& account_id,
+                    DBusMethodCallback<bool> callback) override;
   void CheckHealth(const cryptohome::CheckHealthRequest& request,
                    DBusMethodCallback<cryptohome::BaseReply> callback) override;
   void StartFingerprintAuthSession(
@@ -189,12 +178,6 @@ class COMPONENT_EXPORT(CRYPTOHOME_CLIENT) FakeCryptohomeClient
   // Runs pending availability callbacks reporting that the service is
   // unavailable. Expects service not to be available when called.
   void ReportServiceIsNotAvailable();
-
-  // Changes the behavior of TpmIsReady().
-  void set_tpm_is_ready(bool value) { tpm_is_ready_ = value; }
-
-  // Changes the behavior of TpmIsEnabled().
-  void set_tpm_is_enabled(bool value) { tpm_is_enabled_ = value; }
 
   // Sets whether the MountEx() call should fail when the |create| field is not
   // provided (the error code will be CRYPTOHOME_ERROR_ACCOUNT_NOT_FOUND).
@@ -247,11 +230,6 @@ class COMPONENT_EXPORT(CRYPTOHOME_CLIENT) FakeCryptohomeClient
     rsu_device_id_ = rsu_device_id;
   }
 
-  // Calls TpmInitStatusUpdated() on Observer instances.
-  void NotifyTpmInitStatusUpdated(bool ready,
-                                  bool owned,
-                                  bool was_owned_this_boot);
-
   // Calls DircryptoMigrationProgress() on Observer instances.
   void NotifyDircryptoMigrationProgress(
       cryptohome::DircryptoMigrationStatus status,
@@ -268,7 +246,6 @@ class COMPONENT_EXPORT(CRYPTOHOME_CLIENT) FakeCryptohomeClient
   bool to_migrate_from_ecryptfs() const {
     return last_mount_request_.to_migrate_from_ecryptfs();
   }
-  bool hidden_mount() const { return last_mount_request_.hidden_mount(); }
   bool public_mount() const { return last_mount_request_.public_mount(); }
   const cryptohome::AuthorizationRequest& get_last_mount_authentication()
       const {
@@ -378,8 +355,6 @@ class COMPONENT_EXPORT(CRYPTOHOME_CLIENT) FakeCryptohomeClient
   bool supports_low_entropy_credentials_ = false;
   // Controls if CheckKeyEx actually checks the key.
   bool enable_auth_check_ = false;
-  bool tpm_is_ready_ = true;
-  bool tpm_is_enabled_ = true;
 
   // Reply to GetRsuDeviceId().
   std::string rsu_device_id_;

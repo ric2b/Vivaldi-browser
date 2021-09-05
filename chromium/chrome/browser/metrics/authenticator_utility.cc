@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/metrics/histogram_functions.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -55,7 +56,11 @@ void ReportUVPlatformAuthenticatorAvailabilityMainThreadMac() {
   }
   Profile* profile = profile_manager->GetProfileByPath(
       profile_manager->GetLastUsedProfileDir(profile_manager->user_data_dir()));
-  DCHECK(profile);
+  // Some tests have profiles but do not load the last profile before
+  // PostBrowserStart().
+  if (!profile) {
+    return;
+  }
 
   // Return to a low-priority thread for the actual check.
   base::ThreadPool::PostTask(
@@ -86,7 +91,7 @@ void ReportUVPlatformAuthenticatorAvailability() {
   ReportAvailability(
       win_webauthn_api &&
       content::IsUVPlatformAuthenticatorAvailable(win_webauthn_api));
-#elif defined(OS_CHROMEOS)
+#elif BUILDFLAG(IS_CHROMEOS_ASH)
   ReportAvailability(content::IsUVPlatformAuthenticatorAvailable());
 #endif
 }

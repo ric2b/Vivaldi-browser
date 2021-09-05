@@ -1046,6 +1046,26 @@ int main(int argc, const char* argv[]) {
   match_finder.addMatcher(affected_ternary_operator_arg_matcher,
                           &affected_expr_rewriter);
 
+  // Affected string binary operator =========
+  // Given
+  //   struct S { const char* y; }
+  //   void foo(const S& s) {
+  //     std::string other;
+  //     bool v1 = s.y == other;
+  //     std::string v2 = s.y + other;
+  //   }
+  // binds the |s.y| expr if it matches the |affected_expr_matcher| above.
+  //
+  // See also testcases in tests/affected-expr-original.cc
+  auto std_string_expr_matcher =
+      expr(hasType(cxxRecordDecl(hasName("::std::basic_string"))));
+  auto affected_string_binary_operator_arg_matcher = cxxOperatorCallExpr(
+      hasAnyOverloadedOperatorName("+", "==", "!=", "<", "<=", ">", ">="),
+      hasAnyArgument(std_string_expr_matcher),
+      forEachArgumentWithParam(affected_expr_matcher, parmVarDecl()));
+  match_finder.addMatcher(affected_string_binary_operator_arg_matcher,
+                          &affected_expr_rewriter);
+
   // Calls to templated functions =========
   // Given
   //   struct S { int* y; };
@@ -1066,7 +1086,7 @@ int main(int argc, const char* argv[]) {
   // TODO(lukasza): It is unclear why |traverse| below is needed.  Maybe it can
   // be removed if https://bugs.llvm.org/show_bug.cgi?id=46287 is fixed.
   match_finder.addMatcher(
-      traverse(clang::ast_type_traits::TK_AsIs,
+      traverse(clang::TraversalKind::TK_AsIs,
                cxxConstructExpr(templated_function_arg_matcher)),
       &affected_expr_rewriter);
 
@@ -1081,10 +1101,12 @@ int main(int argc, const char* argv[]) {
   // binds the |s.y| expr if it matches the |affected_expr_matcher| above.
   //
   // See also testcases in tests/affected-expr-original.cc
-  auto implicit_ctor_expr_matcher = implicitCastExpr(has(cxxConstructExpr(allOf(
+  auto implicit_ctor_expr_matcher = cxxConstructExpr(allOf(
+      anyOf(hasParent(materializeTemporaryExpr()),
+            hasParent(implicitCastExpr())),
       hasDeclaration(
           cxxConstructorDecl(allOf(parameterCountIs(1), unless(isExplicit())))),
-      forEachArgumentWithParam(affected_expr_matcher, parmVarDecl())))));
+      forEachArgumentWithParam(affected_expr_matcher, parmVarDecl())));
   match_finder.addMatcher(implicit_ctor_expr_matcher, &affected_expr_rewriter);
 
   // |auto| type declarations =========

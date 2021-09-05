@@ -17,6 +17,7 @@
 #include "base/threading/thread_restrictions.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
@@ -53,7 +54,6 @@
 #include "components/signin/public/base/signin_pref_names.h"
 #include "components/signin/public/identity_manager/consent_level.h"
 #include "components/signin/public/identity_manager/identity_test_utils.h"
-#include "components/sync/driver/sync_driver_switches.h"
 #include "components/sync/driver/sync_service.h"
 #include "components/sync/driver/sync_user_settings.h"
 #include "components/sync/test/fake_server/fake_server_network_resources.h"
@@ -96,8 +96,8 @@ class UnconsentedPrimaryAccountChecker
   }
 
   // signin::IdentityManager::Observer overrides:
-  void OnUnconsentedPrimaryAccountChanged(
-      const CoreAccountInfo& unconsented_primary_account_info) override {
+  void OnPrimaryAccountChanged(
+      const signin::PrimaryAccountChangeEvent& event) override {
     CheckExitCondition();
   }
 
@@ -475,7 +475,7 @@ class ProfileMenuClickTestBase : public SyncTest,
   ~ProfileMenuClickTestBase() override = default;
 
   void SetUpInProcessBrowserTestFixture() override {
-    test_signin_client_factory_ =
+    test_signin_client_subscription_ =
         secondary_account_helper::SetUpSigninClient(&test_url_loader_factory_);
   }
 
@@ -511,8 +511,7 @@ class ProfileMenuClickTestBase : public SyncTest,
     return profile_menu_view()->GetFocusManager()->GetFocusedView();
   }
 
-  secondary_account_helper::ScopedSigninClientFactory
-      test_signin_client_factory_;
+  base::CallbackListSubscription test_signin_client_subscription_;
 
   base::HistogramTester histogram_tester_;
 
@@ -718,10 +717,8 @@ PROFILE_MENU_CLICK_TEST(kActionableItems_SyncPaused,
   sync_harness()->EnterSyncPausedStateForPrimaryAccount();
   // Check that the setup was successful.
   ASSERT_TRUE(identity_manager()->HasPrimaryAccount());
-  if (base::FeatureList::IsEnabled(switches::kStopSyncInPausedState)) {
-    ASSERT_EQ(syncer::SyncService::TransportState::PAUSED,
-              sync_service()->GetTransportState());
-  }
+  ASSERT_EQ(syncer::SyncService::TransportState::PAUSED,
+            sync_service()->GetTransportState());
 
   RunTest();
 }
@@ -866,8 +863,10 @@ INSTANTIATE_TEST_SUITE_P(
 
 // TODO(https://crbug.com/1125474): Remove OS_CHROMEOS and enable for Lacros
 // when supported.
+// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// of lacros-chrome is complete.
 #if defined(OS_WIN) || defined(OS_MAC) || \
-    (defined(OS_LINUX) && !defined(OS_CHROMEOS))
+    (defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
 // List of actionable items in the correct order as they appear in the menu.
 // If a new button is added to the menu, it should also be added to this list.
 constexpr ProfileMenuViewBase::ActionableItem
@@ -908,8 +907,8 @@ INSTANTIATE_TEST_SUITE_P(
     EphemeralGuestProfileMenuClickTest,
     ::testing::Range(size_t(0),
                      base::size(kActionableItems_EphemeralGuestProfile)));
-#endif  // defined(OS_WIN) || defined(OS_MAC) || (defined(OS_LINUX) &&
-        // !defined(OS_CHROMEOS))
+#endif  // defined(OS_WIN) || defined(OS_MAC) || (defined(OS_LINUX) ||
+        // BUILDFLAG(IS_CHROMEOS_LACROS))
 
 class ProfileMenuClickKeyAcceleratorTest : public ProfileMenuClickTestBase {
  public:

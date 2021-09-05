@@ -8,10 +8,14 @@
 #include <map>
 
 #include "content/common/content_export.h"
+#include "content/public/browser/global_routing_id.h"
+#include "third_party/blink/public/mojom/prerender/prerender.mojom.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
 namespace content {
 
+class FrameTreeNode;
 class PrerenderHost;
 
 // Prerender2:
@@ -19,7 +23,7 @@ class PrerenderHost;
 // to navigation code for activating prerendered contents. This is created and
 // owned by StoragePartitionImpl.
 //
-// TODO(https://crbug.com/1132746): Once the Prerender2 is migrated to the
+// TODO(https://crbug.com/1154501): Once the Prerender2 is migrated to the
 // MPArch, it would be more natural to make PrerenderHostRegistry scoped to
 // WebContents, that is, WebContents will own this.
 class CONTENT_EXPORT PrerenderHostRegistry {
@@ -32,16 +36,20 @@ class CONTENT_EXPORT PrerenderHostRegistry {
   PrerenderHostRegistry(PrerenderHostRegistry&&) = delete;
   PrerenderHostRegistry& operator=(PrerenderHostRegistry&&) = delete;
 
-  // Registers the host for `prerendering_url`.
-  void RegisterHost(const GURL& prerendering_url,
-                    std::unique_ptr<PrerenderHost> prerender_host);
+  // Creates and starts a host for `prerendering_url`.
+  void CreateAndStartHost(
+      blink::mojom::PrerenderAttributesPtr attributes,
+      const GlobalFrameRoutingId& initiator_render_frame_host_id,
+      const url::Origin& initiator_origin);
 
   // Destroys the host registered for `prerendering_url`.
   void AbandonHost(const GURL& prerendering_url);
 
-  // Selects the host for navigation to `url`. Returns nullptr if it's not found
-  // or not ready for activation yet.
-  std::unique_ptr<PrerenderHost> SelectForNavigation(const GURL& url);
+  // Selects the host to activate for a navigation for the given FrameTreeNode.
+  // Returns nullptr if it's not found or not ready for activation yet.
+  std::unique_ptr<PrerenderHost> SelectForNavigation(
+      const GURL& navigation_url,
+      FrameTreeNode& frame_tree_node);
 
   // Returns a prerender host for `prerendering_url`. Returns nullptr if the URL
   // doesn't match any prerender host.

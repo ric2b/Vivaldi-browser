@@ -29,19 +29,33 @@
 
 class SubresourceFilterTest : public SubresourceFilterTestHarness {};
 
+namespace {
+
+const char kSubresourceFilterActionsHistogram[] = "SubresourceFilter.Actions2";
+
+}  // namespace
+
 TEST_F(SubresourceFilterTest, SimpleAllowedLoad) {
+  base::HistogramTester histogram_tester;
   GURL url("https://example.test");
   SimulateNavigateAndCommit(url, main_rfh());
   EXPECT_TRUE(CreateAndNavigateDisallowedSubframe(main_rfh()));
-  EXPECT_FALSE(GetClient()->did_show_ui_for_navigation());
+
+  histogram_tester.ExpectBucketCount(
+      kSubresourceFilterActionsHistogram,
+      subresource_filter::SubresourceFilterAction::kUIShown, 0);
 }
 
 TEST_F(SubresourceFilterTest, SimpleDisallowedLoad) {
+  base::HistogramTester histogram_tester;
   GURL url("https://example.test");
   ConfigureAsSubresourceFilterOnlyURL(url);
   SimulateNavigateAndCommit(url, main_rfh());
   EXPECT_FALSE(CreateAndNavigateDisallowedSubframe(main_rfh()));
-  EXPECT_TRUE(GetClient()->did_show_ui_for_navigation());
+
+  histogram_tester.ExpectBucketCount(
+      kSubresourceFilterActionsHistogram,
+      subresource_filter::SubresourceFilterAction::kUIShown, 1);
 }
 
 TEST_F(SubresourceFilterTest, DeactivateUrl_ChangeSiteActivationToFalse) {
@@ -166,55 +180,6 @@ TEST_F(SubresourceFilterTest, RefreshMetadataOnActivation) {
   EXPECT_EQ(CONTENT_SETTING_ALLOW,
             GetSettingsManager()->GetSitePermission(url));
   EXPECT_TRUE(GetSettingsManager()->GetSiteActivationFromMetadata(url));
-}
-
-TEST_F(SubresourceFilterTest, ToggleForceActivation) {
-  base::HistogramTester histogram_tester;
-  const char actions_histogram[] = "SubresourceFilter.Actions2";
-  const GURL url("https://example.test/");
-
-  // Navigate initially, should be no activation.
-  SimulateNavigateAndCommit(url, main_rfh());
-  EXPECT_TRUE(CreateAndNavigateDisallowedSubframe(main_rfh()));
-  EXPECT_FALSE(GetSettingsManager()->GetSiteActivationFromMetadata(url));
-
-  // Simulate opening devtools and forcing activation.
-  GetClient()->ToggleForceActivationInCurrentWebContents(true);
-  histogram_tester.ExpectBucketCount(
-      actions_histogram,
-      subresource_filter::SubresourceFilterAction::kForcedActivationEnabled, 1);
-
-  SimulateNavigateAndCommit(url, main_rfh());
-  EXPECT_FALSE(CreateAndNavigateDisallowedSubframe(main_rfh()));
-  EXPECT_TRUE(GetClient()->did_show_ui_for_navigation());
-  EXPECT_TRUE(GetSettingsManager()->GetSiteActivationFromMetadata(url));
-  histogram_tester.ExpectBucketCount(
-      "SubresourceFilter.PageLoad.ActivationDecision",
-      subresource_filter::ActivationDecision::FORCED_ACTIVATION, 1);
-
-  // Simulate closing devtools.
-  GetClient()->ToggleForceActivationInCurrentWebContents(false);
-
-  SimulateNavigateAndCommit(url, main_rfh());
-  EXPECT_TRUE(CreateAndNavigateDisallowedSubframe(main_rfh()));
-  histogram_tester.ExpectBucketCount(
-      actions_histogram,
-      subresource_filter::SubresourceFilterAction::kForcedActivationEnabled, 1);
-}
-
-TEST_F(SubresourceFilterTest, ToggleOffForceActivation_AfterCommit) {
-  base::HistogramTester histogram_tester;
-  GetClient()->ToggleForceActivationInCurrentWebContents(true);
-  const GURL url("https://example.test/");
-  SimulateNavigateAndCommit(url, main_rfh());
-  GetClient()->ToggleForceActivationInCurrentWebContents(false);
-
-  // Resource should be disallowed, since navigation commit had activation.
-  EXPECT_FALSE(CreateAndNavigateDisallowedSubframe(main_rfh()));
-
-  histogram_tester.ExpectBucketCount(
-      "SubresourceFilter.Actions2",
-      subresource_filter::SubresourceFilterAction::kUIShown, 1);
 }
 
 enum class AdBlockOnAbusiveSitesTest { kEnabled, kDisabled };

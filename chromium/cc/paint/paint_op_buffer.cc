@@ -67,6 +67,7 @@ SkRect MapRect(const SkMatrix& matrix, const SkRect& src) {
   M(ClipRectOp)       \
   M(ClipRRectOp)      \
   M(ConcatOp)         \
+  M(Concat44Op)       \
   M(CustomDataOp)     \
   M(DrawColorOp)      \
   M(DrawDRRectOp)     \
@@ -89,6 +90,7 @@ SkRect MapRect(const SkMatrix& matrix, const SkRect& src) {
   M(SaveLayerAlphaOp) \
   M(ScaleOp)          \
   M(SetMatrixOp)      \
+  M(SetMatrix44Op)    \
   M(SetNodeIdOp)      \
   M(TranslateOp)
 
@@ -255,6 +257,8 @@ std::string PaintOpTypeToString(PaintOpType type) {
       return "ClipRRect";
     case PaintOpType::Concat:
       return "Concat";
+    case PaintOpType::Concat44:
+      return "Concat44";
     case PaintOpType::CustomData:
       return "CustomData";
     case PaintOpType::DrawColor:
@@ -299,6 +303,8 @@ std::string PaintOpTypeToString(PaintOpType type) {
       return "Scale";
     case PaintOpType::SetMatrix:
       return "SetMatrix";
+    case PaintOpType::SetMatrix44:
+      return "SetMatrix44";
     case PaintOpType::SetNodeId:
       return "SetNodeId";
     case PaintOpType::Translate:
@@ -312,10 +318,10 @@ std::ostream& operator<<(std::ostream& os, PaintOpType type) {
 }
 
 PlaybackParams::PlaybackParams(ImageProvider* image_provider)
-    : PlaybackParams(image_provider, SkMatrix::I()) {}
+    : PlaybackParams(image_provider, SkM44()) {}
 
 PlaybackParams::PlaybackParams(ImageProvider* image_provider,
-                               const SkMatrix& original_ctm,
+                               const SkM44& original_ctm,
                                CustomDataRasterCallback custom_callback,
                                DidDrawOpCallback did_draw_op_callback)
     : image_provider(image_provider),
@@ -339,7 +345,7 @@ PaintOp::SerializeOptions::SerializeOptions(
     bool can_use_lcd_text,
     bool context_supports_distance_field_text,
     int max_texture_size,
-    const SkMatrix& original_ctm)
+    const SkM44& original_ctm)
     : image_provider(image_provider),
       transfer_cache(transfer_cache),
       paint_cache(paint_cache),
@@ -426,6 +432,16 @@ size_t ConcatOp::Serialize(const PaintOp* base_op,
                            size_t size,
                            const SerializeOptions& options) {
   auto* op = static_cast<const ConcatOp*>(base_op);
+  PaintOpWriter helper(memory, size, options);
+  helper.Write(op->matrix);
+  return helper.size();
+}
+
+size_t Concat44Op::Serialize(const PaintOp* base_op,
+                             void* memory,
+                             size_t size,
+                             const SerializeOptions& options) {
+  auto* op = static_cast<const Concat44Op*>(base_op);
   PaintOpWriter helper(memory, size, options);
   helper.Write(op->matrix);
   return helper.size();
@@ -725,6 +741,12 @@ size_t ScaleOp::Serialize(const PaintOp* base_op,
   return helper.size();
 }
 
+// Just a helper for moving SkMatrix -> SkM44 here, these early-outs might not
+// be necessary
+bool IsSkM44Identity(const SkM44& m) {
+  return m == SkM44();
+}
+
 size_t SetMatrixOp::Serialize(const PaintOp* base_op,
                               void* memory,
                               size_t size,
@@ -732,12 +754,26 @@ size_t SetMatrixOp::Serialize(const PaintOp* base_op,
   auto* op = static_cast<const SetMatrixOp*>(base_op);
   PaintOpWriter helper(memory, size, options);
 
-  if (options.original_ctm.isIdentity()) {
+  // TODO(aaronhk) take out this early out and see if there's a perf regression
+  if (IsSkM44Identity(options.original_ctm)) {
     helper.Write(op->matrix);
   } else {
-    SkMatrix transformed = op->matrix;
-    transformed.postConcat(options.original_ctm);
-    helper.Write(transformed);
+    helper.Write(options.original_ctm.asM33() * op->matrix);
+  }
+  return helper.size();
+}
+
+size_t SetMatrix44Op::Serialize(const PaintOp* base_op,
+                                void* memory,
+                                size_t size,
+                                const SerializeOptions& options) {
+  auto* op = static_cast<const SetMatrix44Op*>(base_op);
+  PaintOpWriter helper(memory, size, options);
+
+  if (IsSkM44Identity(options.original_ctm)) {
+    helper.Write(op->matrix);
+  } else {
+    helper.Write(options.original_ctm * op->matrix);
   }
   return helper.size();
 }
@@ -870,6 +906,25 @@ PaintOp* ConcatOp::Deserialize(const volatile void* input,
 
   UpdateTypeAndSkip(op);
   PaintOpReader::FixupMatrixPostSerialization(&op->matrix);
+  return op;
+}
+
+PaintOp* Concat44Op::Deserialize(const volatile void* input,
+                                 size_t input_size,
+                                 void* output,
+                                 size_t output_size,
+                                 const DeserializeOptions& options) {
+  DCHECK_GE(output_size, sizeof(Concat44Op));
+  Concat44Op* op = new (output) Concat44Op;
+
+  PaintOpReader helper(input, input_size, options);
+  helper.Read(&op->matrix);
+  if (!helper.valid() || !op->IsValid()) {
+    op->~Concat44Op();
+    return nullptr;
+  }
+
+  UpdateTypeAndSkip(op);
   return op;
 }
 
@@ -1318,6 +1373,25 @@ PaintOp* SetMatrixOp::Deserialize(const volatile void* input,
   return op;
 }
 
+PaintOp* SetMatrix44Op::Deserialize(const volatile void* input,
+                                    size_t input_size,
+                                    void* output,
+                                    size_t output_size,
+                                    const DeserializeOptions& options) {
+  DCHECK_GE(output_size, sizeof(SetMatrix44Op));
+  SetMatrix44Op* op = new (output) SetMatrix44Op;
+
+  PaintOpReader helper(input, input_size, options);
+  helper.Read(&op->matrix);
+  if (!helper.valid() || !op->IsValid()) {
+    op->~SetMatrix44Op();
+    return nullptr;
+  }
+
+  UpdateTypeAndSkip(op);
+  return op;
+}
+
 PaintOp* SetNodeIdOp::Deserialize(const volatile void* input,
                                   size_t input_size,
                                   void* output,
@@ -1396,6 +1470,12 @@ void ClipRRectOp::Raster(const ClipRRectOp* op,
 void ConcatOp::Raster(const ConcatOp* op,
                       SkCanvas* canvas,
                       const PlaybackParams& params) {
+  canvas->concat(op->matrix);
+}
+
+void Concat44Op::Raster(const Concat44Op* op,
+                        SkCanvas* canvas,
+                        const PlaybackParams& params) {
   canvas->concat(op->matrix);
 }
 
@@ -1481,13 +1561,6 @@ void DrawImageRectOp::RasterWithFlags(const DrawImageRectOp* op,
     // see https://crbug.com/990382), an image provider may not be available, so
     // we should draw nothing.
     if (!params.image_provider)
-      return;
-    // TODO(crbug.com/1157152): We shouldn't need this check, QuickRejectDraw
-    // should have done the job.
-    const SkRect& clip_rect = SkRect::Make(canvas->getDeviceClipBounds());
-    const SkMatrix& ctm = canvas->getTotalMatrix();
-    gfx::Rect local_op_rect = PaintOp::ComputePaintRect(op, clip_rect, ctm);
-    if (local_op_rect.IsEmpty())
       return;
     ImageProvider::ScopedResult result =
         params.image_provider->GetRasterContent(DrawImage(op->image));
@@ -1700,7 +1773,13 @@ void ScaleOp::Raster(const ScaleOp* op,
 void SetMatrixOp::Raster(const SetMatrixOp* op,
                          SkCanvas* canvas,
                          const PlaybackParams& params) {
-  canvas->setMatrix(SkMatrix::Concat(params.original_ctm, op->matrix));
+  canvas->setMatrix(SkM44(op->matrix) * params.original_ctm);
+}
+
+void SetMatrix44Op::Raster(const SetMatrix44Op* op,
+                           SkCanvas* canvas,
+                           const PlaybackParams& params) {
+  canvas->setMatrix(op->matrix * params.original_ctm);
 }
 
 void SetNodeIdOp::Raster(const SetNodeIdOp* op,
@@ -1775,6 +1854,18 @@ bool PaintOp::AreSkMatricesEqual(const SkMatrix& left, const SkMatrix& right) {
 
   if (left.getType() != right.getType())
     return false;
+
+  return true;
+}
+
+// static
+bool PaintOp::AreSkM44sEqual(const SkM44& left, const SkM44& right) {
+  for (int r = 0; r < 4; ++r) {
+    for (int c = 0; c < 4; ++c) {
+      if (!AreEqualEvenIfNaN(left.rc(r, c), right.rc(r, c)))
+        return false;
+    }
+  }
 
   return true;
 }
@@ -1864,6 +1955,14 @@ bool ConcatOp::AreEqual(const PaintOp* base_left, const PaintOp* base_right) {
   DCHECK(left->IsValid());
   DCHECK(right->IsValid());
   return AreSkMatricesEqual(left->matrix, right->matrix);
+}
+
+bool Concat44Op::AreEqual(const PaintOp* base_left, const PaintOp* base_right) {
+  auto* left = static_cast<const Concat44Op*>(base_left);
+  auto* right = static_cast<const Concat44Op*>(base_right);
+  DCHECK(left->IsValid());
+  DCHECK(right->IsValid());
+  return AreSkM44sEqual(left->matrix, right->matrix);
 }
 
 bool CustomDataOp::AreEqual(const PaintOp* base_left,
@@ -2136,6 +2235,17 @@ bool SetMatrixOp::AreEqual(const PaintOp* base_left,
   return true;
 }
 
+bool SetMatrix44Op::AreEqual(const PaintOp* base_left,
+                             const PaintOp* base_right) {
+  auto* left = static_cast<const SetMatrix44Op*>(base_left);
+  auto* right = static_cast<const SetMatrix44Op*>(base_right);
+  DCHECK(left->IsValid());
+  DCHECK(right->IsValid());
+  if (!AreSkM44sEqual(left->matrix, right->matrix))
+    return false;
+  return true;
+}
+
 bool SetNodeIdOp::AreEqual(const PaintOp* base_left,
                            const PaintOp* base_right) {
   auto* left = static_cast<const SetNodeIdOp*>(base_left);
@@ -2370,6 +2480,15 @@ bool PaintOp::QuickRejectDraw(const PaintOp* op, const SkCanvas* canvas) {
     SkPaint paint = static_cast<const PaintOpWithFlags*>(op)->flags.ToSkPaint();
     if (!paint.canComputeFastBounds())
       return false;
+    // canvas->quickReject tried to be very fast, and sometimes give a false
+    // but conservative result. That's why we need the additional check for
+    // |local_op_rect| because it could quickReject could return false even if
+    // |local_op_rect| is empty.
+    const SkRect& clip_rect = SkRect::Make(canvas->getDeviceClipBounds());
+    const SkMatrix& ctm = canvas->getTotalMatrix();
+    gfx::Rect local_op_rect = PaintOp::ComputePaintRect(op, clip_rect, ctm);
+    if (local_op_rect.IsEmpty())
+      return true;
     paint.computeFastBounds(rect, &rect);
   }
 
@@ -2785,7 +2904,7 @@ void PaintOpBuffer::Playback(SkCanvas* canvas,
   // translate(x, y), then draw a paint record with a SetMatrix(identity),
   // the translation should be preserved instead of clobbering the top level
   // transform.  This could probably be done more efficiently.
-  PlaybackParams new_params(params.image_provider, canvas->getTotalMatrix(),
+  PlaybackParams new_params(params.image_provider, canvas->getLocalToDevice(),
                             params.custom_callback,
                             params.did_draw_op_callback);
   new_params.save_layer_alpha_should_preserve_lcd_text =

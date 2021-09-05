@@ -39,7 +39,7 @@ class ServiceConnectionImpl : public ServiceConnection {
       mojom::CrosHealthdDiagnosticsService::GetRoutineUpdateCallback callback)
       override;
   void RunUrandomRoutine(
-      uint32_t length_seconds,
+      const base::Optional<base::TimeDelta>& length_seconds,
       mojom::CrosHealthdDiagnosticsService::RunUrandomRoutineCallback callback)
       override;
   void RunBatteryCapacityRoutine(
@@ -57,15 +57,15 @@ class ServiceConnectionImpl : public ServiceConnection {
       mojom::CrosHealthdDiagnosticsService::RunAcPowerRoutineCallback callback)
       override;
   void RunCpuCacheRoutine(
-      const base::TimeDelta& exec_duration,
+      const base::Optional<base::TimeDelta>& exec_duration,
       mojom::CrosHealthdDiagnosticsService::RunCpuCacheRoutineCallback callback)
       override;
   void RunCpuStressRoutine(
-      const base::TimeDelta& exec_duration,
+      const base::Optional<base::TimeDelta>& exec_duration,
       mojom::CrosHealthdDiagnosticsService::RunCpuStressRoutineCallback
           callback) override;
   void RunFloatingPointAccuracyRoutine(
-      const base::TimeDelta& exec_duration,
+      const base::Optional<base::TimeDelta>& exec_duration,
       mojom::CrosHealthdDiagnosticsService::
           RunFloatingPointAccuracyRoutineCallback callback) override;
   void RunNvmeWearLevelRoutine(
@@ -83,8 +83,7 @@ class ServiceConnectionImpl : public ServiceConnection {
       mojom::CrosHealthdDiagnosticsService::RunDiskReadRoutineCallback callback)
       override;
   void RunPrimeSearchRoutine(
-      base::TimeDelta& exec_duration,
-      uint64_t max_num,
+      const base::Optional<base::TimeDelta>& exec_duration,
       mojom::CrosHealthdDiagnosticsService::RunPrimeSearchRoutineCallback
           callback) override;
   void RunBatteryDischargeRoutine(
@@ -126,6 +125,12 @@ class ServiceConnectionImpl : public ServiceConnection {
           callback) override;
   void RunHttpFirewallRoutine(
       mojom::CrosHealthdDiagnosticsService::RunHttpFirewallRoutineCallback
+          callback) override;
+  void RunHttpsFirewallRoutine(
+      mojom::CrosHealthdDiagnosticsService::RunHttpsFirewallRoutineCallback
+          callback) override;
+  void RunHttpsLatencyRoutine(
+      mojom::CrosHealthdDiagnosticsService::RunHttpsLatencyRoutineCallback
           callback) override;
   void AddBluetoothObserver(
       mojo::PendingRemote<mojom::CrosHealthdBluetoothObserver> pending_observer)
@@ -225,12 +230,17 @@ void ServiceConnectionImpl::GetRoutineUpdate(
 }
 
 void ServiceConnectionImpl::RunUrandomRoutine(
-    uint32_t length_seconds,
+    const base::Optional<base::TimeDelta>& length_seconds,
     mojom::CrosHealthdDiagnosticsService::RunUrandomRoutineCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   BindCrosHealthdDiagnosticsServiceIfNeeded();
-  cros_healthd_diagnostics_service_->RunUrandomRoutine(length_seconds,
-                                                       std::move(callback));
+  chromeos::cros_healthd::mojom::NullableUint32Ptr routine_parameter;
+  if (length_seconds.has_value()) {
+    routine_parameter = chromeos::cros_healthd::mojom::NullableUint32::New(
+        length_seconds.value().InSeconds());
+  }
+  cros_healthd_diagnostics_service_->RunUrandomRoutine(
+      std::move(routine_parameter), std::move(callback));
 }
 
 void ServiceConnectionImpl::RunBatteryCapacityRoutine(
@@ -271,32 +281,47 @@ void ServiceConnectionImpl::RunAcPowerRoutine(
 }
 
 void ServiceConnectionImpl::RunCpuCacheRoutine(
-    const base::TimeDelta& exec_duration,
+    const base::Optional<base::TimeDelta>& exec_duration,
     mojom::CrosHealthdDiagnosticsService::RunCpuCacheRoutineCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   BindCrosHealthdDiagnosticsServiceIfNeeded();
+  chromeos::cros_healthd::mojom::NullableUint32Ptr routine_duration;
+  if (exec_duration.has_value()) {
+    routine_duration = chromeos::cros_healthd::mojom::NullableUint32::New(
+        exec_duration.value().InSeconds());
+  }
   cros_healthd_diagnostics_service_->RunCpuCacheRoutine(
-      exec_duration.InSeconds(), std::move(callback));
+      std::move(routine_duration), std::move(callback));
 }
 
 void ServiceConnectionImpl::RunCpuStressRoutine(
-    const base::TimeDelta& exec_duration,
+    const base::Optional<base::TimeDelta>& exec_duration,
     mojom::CrosHealthdDiagnosticsService::RunCpuStressRoutineCallback
         callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   BindCrosHealthdDiagnosticsServiceIfNeeded();
+  chromeos::cros_healthd::mojom::NullableUint32Ptr routine_duration;
+  if (exec_duration.has_value()) {
+    routine_duration = chromeos::cros_healthd::mojom::NullableUint32::New(
+        exec_duration.value().InSeconds());
+  }
   cros_healthd_diagnostics_service_->RunCpuStressRoutine(
-      exec_duration.InSeconds(), std::move(callback));
+      std::move(routine_duration), std::move(callback));
 }
 
 void ServiceConnectionImpl::RunFloatingPointAccuracyRoutine(
-    const base::TimeDelta& exec_duration,
+    const base::Optional<base::TimeDelta>& exec_duration,
     mojom::CrosHealthdDiagnosticsService::
         RunFloatingPointAccuracyRoutineCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   BindCrosHealthdDiagnosticsServiceIfNeeded();
+  chromeos::cros_healthd::mojom::NullableUint32Ptr routine_duration;
+  if (exec_duration.has_value()) {
+    routine_duration = chromeos::cros_healthd::mojom::NullableUint32::New(
+        exec_duration.value().InSeconds());
+  }
   cros_healthd_diagnostics_service_->RunFloatingPointAccuracyRoutine(
-      exec_duration.InSeconds(), std::move(callback));
+      std::move(routine_duration), std::move(callback));
 }
 
 void ServiceConnectionImpl::RunNvmeWearLevelRoutine(
@@ -331,14 +356,18 @@ void ServiceConnectionImpl::RunDiskReadRoutine(
 }
 
 void ServiceConnectionImpl::RunPrimeSearchRoutine(
-    base::TimeDelta& exec_duration,
-    uint64_t max_num,
+    const base::Optional<base::TimeDelta>& exec_duration,
     mojom::CrosHealthdDiagnosticsService::RunPrimeSearchRoutineCallback
         callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   BindCrosHealthdDiagnosticsServiceIfNeeded();
+  chromeos::cros_healthd::mojom::NullableUint32Ptr routine_duration;
+  if (exec_duration.has_value()) {
+    routine_duration = chromeos::cros_healthd::mojom::NullableUint32::New(
+        exec_duration.value().InSeconds());
+  }
   cros_healthd_diagnostics_service_->RunPrimeSearchRoutine(
-      exec_duration.InSeconds(), max_num, std::move(callback));
+      std::move(routine_duration), std::move(callback));
 }
 
 void ServiceConnectionImpl::RunBatteryDischargeRoutine(
@@ -449,6 +478,24 @@ void ServiceConnectionImpl::RunHttpFirewallRoutine(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   BindCrosHealthdDiagnosticsServiceIfNeeded();
   cros_healthd_diagnostics_service_->RunHttpFirewallRoutine(
+      std::move(callback));
+}
+
+void ServiceConnectionImpl::RunHttpsFirewallRoutine(
+    mojom::CrosHealthdDiagnosticsService::RunHttpsFirewallRoutineCallback
+        callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  BindCrosHealthdDiagnosticsServiceIfNeeded();
+  cros_healthd_diagnostics_service_->RunHttpsFirewallRoutine(
+      std::move(callback));
+}
+
+void ServiceConnectionImpl::RunHttpsLatencyRoutine(
+    mojom::CrosHealthdDiagnosticsService::RunHttpsLatencyRoutineCallback
+        callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  BindCrosHealthdDiagnosticsServiceIfNeeded();
+  cros_healthd_diagnostics_service_->RunHttpsLatencyRoutine(
       std::move(callback));
 }
 

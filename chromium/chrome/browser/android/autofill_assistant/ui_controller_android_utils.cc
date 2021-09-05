@@ -436,15 +436,24 @@ base::android::ScopedJavaLocalRef<jobject> CreateJavaAssistantChip(
       return Java_AssistantChip_createHighlightedAssistantChip(
           env, chip.icon(),
           base::android::ConvertUTF8ToJavaString(env, chip.text()),
-          /* disabled = */ false, chip.sticky(), /* visible = */ true);
+          /* disabled = */ false, chip.sticky(), /* visible = */ true,
+          chip.has_content_description()
+              ? base::android::ConvertUTF8ToJavaString(
+                    env, chip.content_description())
+              : nullptr);
 
     case NORMAL_ACTION:
     case CANCEL_ACTION:
     case CLOSE_ACTION:
+    case FEEDBACK_ACTION:
       return Java_AssistantChip_createHairlineAssistantChip(
           env, chip.icon(),
           base::android::ConvertUTF8ToJavaString(env, chip.text()),
-          /* disabled = */ false, chip.sticky(), /* visible = */ true);
+          /* disabled = */ false, chip.sticky(), /* visible = */ true,
+          chip.has_content_description()
+              ? base::android::ConvertUTF8ToJavaString(
+                    env, chip.content_description())
+              : nullptr);
   }
 }
 
@@ -460,6 +469,33 @@ base::android::ScopedJavaLocalRef<jobject> CreateJavaAssistantChipList(
     Java_AssistantChip_addChipToList(env, jlist, jchip);
   }
   return jlist;
+}
+
+std::map<std::string, std::string> CreateStringMapFromJava(
+    JNIEnv* env,
+    const base::android::JavaRef<jobjectArray>& names,
+    const base::android::JavaRef<jobjectArray>& values) {
+  std::vector<std::string> names_vector;
+  base::android::AppendJavaStringArrayToStringVector(env, names, &names_vector);
+  std::vector<std::string> values_vector;
+  base::android::AppendJavaStringArrayToStringVector(env, values,
+                                                     &values_vector);
+  std::map<std::string, std::string> result;
+  DCHECK_EQ(names_vector.size(), values_vector.size());
+  for (size_t i = 0; i < names_vector.size(); ++i) {
+    result.insert(std::make_pair(names_vector[i], values_vector[i]));
+  }
+  return result;
+}
+
+std::unique_ptr<TriggerContextImpl> CreateTriggerContext(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jstring>& jexperiment_ids,
+    const base::android::JavaParamRef<jobjectArray>& jparameter_names,
+    const base::android::JavaParamRef<jobjectArray>& jparameter_values) {
+  return std::make_unique<TriggerContextImpl>(
+      CreateStringMapFromJava(env, jparameter_names, jparameter_values),
+      base::android::ConvertJavaStringToUTF8(env, jexperiment_ids));
 }
 
 }  // namespace ui_controller_android_utils

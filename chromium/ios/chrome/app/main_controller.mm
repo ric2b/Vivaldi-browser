@@ -15,6 +15,7 @@
 #include "components/component_updater/component_updater_service.h"
 #include "components/component_updater/crl_set_remover.h"
 #include "components/component_updater/installer_policies/on_device_head_suggest_component_installer.h"
+#include "components/component_updater/installer_policies/safety_tips_component_installer.h"
 #include "components/feature_engagement/public/event_constants.h"
 #include "components/feature_engagement/public/tracker.h"
 #include "components/metrics/metrics_pref_names.h"
@@ -25,6 +26,7 @@
 #import "components/previous_session_info/previous_session_info.h"
 #include "components/ukm/ios/features.h"
 #include "components/web_resource/web_resource_pref_names.h"
+#include "ios/chrome/app/app_metrics_app_state_agent.h"
 #import "ios/chrome/app/application_delegate/metrics_mediator.h"
 #import "ios/chrome/app/blocking_scene_commands.h"
 #import "ios/chrome/app/content_suggestions_scheduler_app_state_agent.h"
@@ -40,6 +42,7 @@
 #include "ios/chrome/app/startup/setup_debugging.h"
 #import "ios/chrome/app/startup_tasks.h"
 #include "ios/chrome/app/tests_hook.h"
+#import "ios/chrome/browser/accessibility/window_accessibility_change_notifier_app_agent.h"
 #include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state_manager.h"
@@ -93,6 +96,7 @@
 #import "ios/chrome/browser/ui/main/scene_delegate.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
 #include "ios/chrome/browser/ui/util/multi_window_support.h"
+#include "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/webui/chrome_web_ui_ios_controller_factory.h"
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
@@ -180,6 +184,7 @@ void RegisterComponentsForUpdate() {
 
   RegisterOnDeviceHeadSuggestComponent(
       cus, GetApplicationContext()->GetApplicationLocale());
+  RegisterSafetyTipsComponent(cus);
 }
 
 // The delay, in seconds, for cleaning external files.
@@ -603,8 +608,15 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
   [appState addObserver:self];
 
   // Create app state agents.
+  [appState addAgent:[[AppMetricsAppStateAgent alloc] init]];
   [appState addAgent:[[ContentSuggestionsSchedulerAppAgent alloc] init]];
   [appState addAgent:[[IncognitoUsageAppStateAgent alloc] init]];
+
+  // Create the window accessibility agent only when multuple windows are
+  // possible.
+  if (IsMultipleScenesSupported()) {
+    [appState addAgent:[[WindowAccessibityChangeNotifierAppAgent alloc] init]];
+  }
 }
 
 - (id<BrowserInterfaceProvider>)interfaceProvider {
@@ -709,23 +721,17 @@ void MainControllerAuthenticationServiceDelegate::ClearBrowsingData(
 }
 
 - (void)orientationDidChange:(NSNotification*)notification {
-  crash_keys::SetCurrentOrientation(
-      [[UIApplication sharedApplication] statusBarOrientation],
-      [[UIDevice currentDevice] orientation]);
+  crash_keys::SetCurrentOrientation(GetInterfaceOrientation(),
+                                    [[UIDevice currentDevice] orientation]);
 }
 
 - (void)registerForOrientationChangeNotifications {
-  // Register to both device orientation and UI orientation did change
-  // notification as these two events may be triggered independantely.
+  // Register device orientation. UI orientation will be registered by
+  // each window BVC. These two events may be triggered independantely.
   [[NSNotificationCenter defaultCenter]
       addObserver:self
          selector:@selector(orientationDidChange:)
              name:UIDeviceOrientationDidChangeNotification
-           object:nil];
-  [[NSNotificationCenter defaultCenter]
-      addObserver:self
-         selector:@selector(orientationDidChange:)
-             name:UIApplicationDidChangeStatusBarOrientationNotification
            object:nil];
 }
 

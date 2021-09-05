@@ -15,6 +15,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "content/browser/bad_message.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/devtools/devtools_manager.h"
@@ -70,6 +71,8 @@
 #else
 #include "content/browser/devtools/protocol/webauthn_handler.h"
 #endif
+
+#include "ui/content/vivaldi_tab_check.h"
 
 namespace content {
 
@@ -271,9 +274,12 @@ void RenderFrameDevToolsAgentHost::SetFrameTreeNode(
     // here that there is no other agent host.
     g_agent_host_instances.Get()[frame_tree_node] = this;
   }
-  WebContentsObserver::Observe(
-      frame_tree_node_ ? WebContentsImpl::FromFrameTreeNode(frame_tree_node_)
-                       : nullptr);
+  auto* wc = frame_tree_node_
+                 ? WebContentsImpl::FromFrameTreeNode(frame_tree_node_)
+                 : nullptr;
+  if (wc)
+    page_scale_factor_ = wc->page_scale_factor();
+  WebContentsObserver::Observe(wc);
 }
 
 BrowserContext* RenderFrameDevToolsAgentHost::GetBrowserContext() {
@@ -578,7 +584,7 @@ void RenderFrameDevToolsAgentHost::RenderProcessExited(
   switch (info.status) {
     case base::TERMINATION_STATUS_ABNORMAL_TERMINATION:
     case base::TERMINATION_STATUS_PROCESS_WAS_KILLED:
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     case base::TERMINATION_STATUS_PROCESS_WAS_KILLED_BY_OOM:
 #endif
     case base::TERMINATION_STATUS_PROCESS_CRASHED:
@@ -696,7 +702,8 @@ std::string RenderFrameDevToolsAgentHost::GetType() {
   }
   if (web_contents() &&
       static_cast<WebContentsImpl*>(web_contents())->GetOuterWebContents()) {
-    return kTypeGuest;
+    return VivaldiTabCheck::IsVivaldiTab(web_contents()) ? kTypePage
+                                                         : kTypeGuest;
   }
   if (IsChildFrame())
     return kTypeFrame;

@@ -22,6 +22,8 @@ import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.banners.AppData;
+import org.chromium.chrome.browser.webapps.AddToHomescreenProperties;
+import org.chromium.components.webapps.addtohomescreen.AppType;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.modelutil.PropertyModel;
 

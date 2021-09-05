@@ -7,9 +7,9 @@
 #include <vector>
 
 #include "base/values.h"
-#include "components/request_filter/adblock_filter/adblock_cosmetic_rule.h"
-#include "components/request_filter/adblock_filter/adblock_filter_rule.h"
+#include "components/request_filter/adblock_filter/adblock_content_injection_rule.h"
 #include "components/request_filter/adblock_filter/adblock_metadata.h"
+#include "components/request_filter/adblock_filter/adblock_request_filter_rule.h"
 
 namespace adblock_filter {
 struct ParseResult {
@@ -19,8 +19,9 @@ struct ParseResult {
   ParseResult(ParseResult&& parse_result);
 
   AdBlockMetadata metadata;
-  FilterRules filter_rules;
+  RequestFilterRules request_filter_rules;
   CosmeticRules cosmetic_rules;
+  ScriptletInjectionRules scriptlet_injection_rules;
   FetchResult fetch_result = FetchResult::kSuccess;
   RulesInfo rules_info;
   base::Value tracker_infos;

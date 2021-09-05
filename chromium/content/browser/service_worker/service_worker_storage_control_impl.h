@@ -45,7 +45,7 @@ class CONTENT_EXPORT ServiceWorkerStorageControlImpl
 
  private:
   // storage::mojom::ServiceWorkerStorageControl implementations:
-  void Disable() override;
+  void Disable(DisableCallback callback) override;
   void Delete(DeleteCallback callback) override;
   void Recover(
       std::vector<storage::mojom::ServiceWorkerLiveVersionInfoPtr> versions,
@@ -148,7 +148,8 @@ class CONTENT_EXPORT ServiceWorkerStorageControlImpl
   void PerformStorageCleanup(PerformStorageCleanupCallback callback) override;
   void ApplyPolicyUpdates(
       const std::vector<storage::mojom::LocalStoragePolicyUpdatePtr>
-          policy_updates) override;
+          policy_updates,
+      ApplyPolicyUpdatesCallback callback) override;
   void GetPurgingResourceIdsForTest(
       GetPurgingResourceIdsForTestCallback callback) override;
   void GetPurgeableResourceIdsForTest(

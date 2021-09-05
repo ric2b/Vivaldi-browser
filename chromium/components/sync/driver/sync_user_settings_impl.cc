@@ -4,12 +4,14 @@
 
 #include "components/sync/driver/sync_user_settings_impl.h"
 
+#include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
+#include "build/chromeos_buildflags.h"
 #include "components/sync/base/sync_prefs.h"
 #include "components/sync/base/user_selectable_type.h"
 #include "components/sync/driver/sync_service_crypto.h"
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chromeos/constants/chromeos_features.h"
 #endif
 
@@ -27,7 +29,7 @@ ModelTypeSet ResolvePreferredTypes(UserSelectableTypeSet selected_types) {
   return preferred_types;
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 ModelTypeSet ResolvePreferredOsTypes(UserSelectableOsTypeSet selected_types) {
   ModelTypeSet preferred_types;
   for (UserSelectableOsType type : selected_types) {
@@ -35,7 +37,7 @@ ModelTypeSet ResolvePreferredOsTypes(UserSelectableOsTypeSet selected_types) {
   }
   return preferred_types;
 }
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 }  // namespace
 
@@ -123,7 +125,7 @@ UserSelectableTypeSet SyncUserSettingsImpl::GetRegisteredSelectableTypes()
   return registered_types;
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 bool SyncUserSettingsImpl::IsSyncAllOsTypesEnabled() const {
   DCHECK(chromeos::features::IsSplitSettingsSyncEnabled());
   return prefs_->IsSyncAllOsTypesEnabled();
@@ -166,7 +168,7 @@ void SyncUserSettingsImpl::SetOsSyncFeatureEnabled(bool enabled) {
   DCHECK(chromeos::features::IsSplitSettingsSyncEnabled());
   prefs_->SetOsSyncFeatureEnabled(enabled);
 }
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 bool SyncUserSettingsImpl::IsEncryptEverythingAllowed() const {
   return !preference_provider_ ||
@@ -239,7 +241,7 @@ void SyncUserSettingsImpl::SetSyncRequestedIfNotSetExplicitly() {
 ModelTypeSet SyncUserSettingsImpl::GetPreferredDataTypes() const {
   ModelTypeSet types = ResolvePreferredTypes(GetSelectedTypes());
   types.PutAll(AlwaysPreferredUserTypes());
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   if (chromeos::features::IsSplitSettingsSyncEnabled())
     types.PutAll(ResolvePreferredOsTypes(GetSelectedOsTypes()));
 #endif

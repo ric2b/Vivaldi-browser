@@ -8,7 +8,7 @@
 #include "chrome/browser/chromeos/app_mode/kiosk_app_launcher.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_app_types.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_profile_loader.h"
-#include "chrome/browser/chromeos/login/app_mode/app_launch_signin_screen.h"
+#include "chrome/browser/extensions/forced_extensions/force_installed_tracker.h"
 #include "chrome/browser/ui/webui/chromeos/login/app_launch_splash_screen_handler.h"
 
 namespace chromeos {
@@ -40,7 +40,9 @@ class OobeUI;
 // 4. After the app is installed, KioskLaunchController is waiting for the
 //    splash screen timer to fire. (We can also end up in this state when the
 //    app was already installed).
-// 5. KioskLaunchController launches the app by calling
+// 5. KioskLaunchController waits until all force-installed extensions are
+//    ready. This step will stops if the time runs out.
+// 6. KioskLaunchController launches the app by calling
 //    KioskAppLauncher::LaunchApp.
 //
 // At any moment the user can press the shortcut to configure network setup, so
@@ -51,10 +53,11 @@ class OobeUI;
 //
 // It is all encompassed within the combination of two states -- AppState and
 // NetworkUI state.
-class KioskLaunchController : public KioskProfileLoader::Delegate,
-                              public AppLaunchSplashScreenView::Delegate,
-                              public KioskAppLauncher::Delegate,
-                              public AppLaunchSigninScreen::Delegate {
+class KioskLaunchController
+    : public KioskProfileLoader::Delegate,
+      public AppLaunchSplashScreenView::Delegate,
+      public KioskAppLauncher::Delegate,
+      public extensions::ForceInstalledTracker::Observer {
  public:
   using ReturnBoolCallback = base::Callback<bool()>;
 
@@ -82,11 +85,11 @@ class KioskLaunchController : public KioskProfileLoader::Delegate,
       std::unique_ptr<KioskAppLauncher> app_launcher);
 
   bool waiting_for_network() const {
-    return app_state_ == AppState::INIT_NETWORK;
+    return app_state_ == AppState::kInitNetwork;
   }
   bool network_wait_timedout() const { return network_wait_timedout_; }
   bool showing_network_dialog() const {
-    return network_ui_state_ == NetworkUIState::SHOWING;
+    return network_ui_state_ == NetworkUIState::kShowing;
   }
 
   void Start(const KioskAppId& kiosk_app_id, bool auto_launch);
@@ -95,18 +98,19 @@ class KioskLaunchController : public KioskProfileLoader::Delegate,
   friend class KioskLaunchControllerTest;
 
   enum AppState {
-    CREATING_PROFILE,  // Profile is being created.
-    INIT_NETWORK,      // Waiting for the network to initialize.
-    INSTALLING,        // App is installing.
-    INSTALLED,  // App is installed, waiting for the splash screen timer to
-                // fire.
-    LAUNCHED    // App is being launched.
+    kCreatingProfile = 0,   // Profile is being created.
+    kInitNetwork,           // Waiting for the network to initialize.
+    kInstallingApp,         // App is being installed.
+    kInstallingExtensions,  // Force-installed extensions are being installed.
+    kInstalled,  // Everything is installed, waiting for the splash screen timer
+                 // to fire.
+    kLaunched    // App is being launched.
   };
 
   enum NetworkUIState {
-    NOT_SHOWING,   // Network configure UI is not being shown.
-    NEED_TO_SHOW,  // We need to show the UI as soon as we can.
-    SHOWING        // Network configure UI is being shown.
+    kNotShowing = 0,  // Network configure UI is not being shown.
+    kNeedToShow,      // We need to show the UI as soon as we can.
+    kShowing          // Network configure UI is being shown.
   };
 
   KioskLaunchController();
@@ -138,8 +142,10 @@ class KioskLaunchController : public KioskProfileLoader::Delegate,
   void OnProfileLoadFailed(KioskAppLaunchError::Error error) override;
   void OnOldEncryptionDetected(const UserContext& user_context) override;
 
-  // AppLaunchSigninScreen::Delegate:
-  void OnOwnerSigninSuccess() override;
+  // ForceInstalledTracker::Observer:
+  void OnForceInstalledExtensionsReady() override;
+
+  void OnOwnerSigninSuccess();
 
   // Whether the network could be configured during launching.
   bool CanConfigureNetwork();
@@ -155,18 +161,18 @@ class KioskLaunchController : public KioskProfileLoader::Delegate,
   void HandleWebAppInstallFailed();
 
   void OnNetworkWaitTimedOut();
+  void OnExtensionWaitTimedOut();
   void OnTimerFire();
   void CloseSplashScreen();
   void CleanUp();
   void LaunchApp();
 
   // Current state of the controller.
-  AppState app_state_ = AppState::CREATING_PROFILE;
+  AppState app_state_ = AppState::kCreatingProfile;
   // Current state of network configure dialog.
-  NetworkUIState network_ui_state_ = NetworkUIState::NOT_SHOWING;
+  NetworkUIState network_ui_state_ = NetworkUIState::kNotShowing;
 
   LoginDisplayHost* const host_;  // Not owned, destructed upon shutdown.
-  OobeUI* oobe_ui_ = nullptr;
   AppLaunchSplashScreenView* splash_screen_view_ = nullptr;  // Owned by OobeUI.
   KioskAppId kiosk_app_id_;                                  // Current app.
   Profile* profile_ = nullptr;                               // Not owned.
@@ -179,7 +185,6 @@ class KioskLaunchController : public KioskProfileLoader::Delegate,
 
   // Used to login into kiosk user profile.
   std::unique_ptr<KioskProfileLoader> kiosk_profile_loader_;
-  std::unique_ptr<AppLaunchSigninScreen> signin_screen_;
 
   // A timer to ensure the app splash is shown for a minimum amount of time.
   base::OneShotTimer splash_wait_timer_;
@@ -191,6 +196,10 @@ class KioskLaunchController : public KioskProfileLoader::Delegate,
   // A timer that fires when the network was not prepared and we require user
   // network configuration to continue.
   base::OneShotTimer network_wait_timer_;
+
+  // A timer that fires when the force-installed extensions were not ready
+  // within the allocated time.
+  base::OneShotTimer extension_wait_timer_;
 
   base::WeakPtrFactory<KioskLaunchController> weak_ptr_factory_{this};
 };

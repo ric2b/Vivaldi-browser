@@ -37,7 +37,6 @@
 #include "cc/input/overscroll_behavior.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink-forward.h"
 #include "third_party/blink/public/web/web_navigation_policy.h"
-#include "third_party/blink/public/web/web_widget_client.h"
 #include "third_party/blink/public/web/web_window_features.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
@@ -89,7 +88,6 @@ class CORE_EXPORT ChromeClientImpl final : public ChromeClient {
                              const AtomicString& name,
                              const WebWindowFeatures&,
                              network::mojom::blink::WebSandboxFlags,
-                             const FeaturePolicyFeatureState&,
                              const SessionStorageNamespaceId&,
                              bool& consumed_user_gesture) override;
   void Show(const base::UnguessableToken& opener_frame_token,
@@ -108,8 +106,10 @@ class CORE_EXPORT ChromeClientImpl final : public ChromeClient {
                                 ScrollGranularity granularity,
                                 CompositorElementId scrollable_area_element_id,
                                 WebInputEvent::Type injected_type) override;
-  bool ShouldReportDetailedMessageForSource(LocalFrame&,
-                                            const String&) override;
+  bool ShouldReportDetailedMessageForSourceAndSeverity(
+      LocalFrame&,
+      mojom::blink::ConsoleMessageLevel log_level,
+      const String&) override;
   void AddMessageToConsole(LocalFrame*,
                            mojom::ConsoleMessageSource,
                            mojom::ConsoleMessageLevel,
@@ -195,7 +195,9 @@ class CORE_EXPORT ChromeClientImpl final : public ChromeClient {
                        FullscreenRequestType) override;
   void ExitFullscreen(LocalFrame&) override;
   void FullscreenElementChanged(Element* old_element,
-                                Element* new_element) override;
+                                Element* new_element,
+                                const FullscreenOptions*,
+                                FullscreenRequestType) override;
 
   void AnimateDoubleTapZoom(const gfx::Point& point,
                             const gfx::Rect& rect) override;
@@ -270,7 +272,8 @@ class CORE_EXPORT ChromeClientImpl final : public ChromeClient {
                      const cc::PaintImage&,
                      base::OnceCallback<void(bool)>) override;
 
-  void NotifySwapTime(LocalFrame& frame, ReportTimeCallback callback) override;
+  void NotifyPresentationTime(LocalFrame& frame,
+                              ReportTimeCallback callback) override;
 
   void RequestBeginMainFrameNotExpected(LocalFrame& frame,
                                         bool request) override;
@@ -285,7 +288,7 @@ class CORE_EXPORT ChromeClientImpl final : public ChromeClient {
   double UserZoomFactor() const override;
 
   void BatterySavingsChanged(LocalFrame& main_frame,
-                             WebBatterySavingsFlags savings) override;
+                             BatterySavingsFlags savings) override;
 
   void FormElementReset(HTMLFormElement& element) override;
 

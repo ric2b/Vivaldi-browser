@@ -43,6 +43,17 @@ void PageActionsEventRouter::OnScriptPathsChanged() {
                             browser_context_);
 }
 
+void PageActionsEventRouter::OnScriptOverridesChanged(
+    content::WebContents* tab_contents,
+    const base::FilePath& script_path,
+    page_actions::Service::ScriptOverride script_override) {
+  ::vivaldi::BroadcastEvent(
+      vivaldi::page_actions::OnOverridesChanged::kEventName,
+      vivaldi::page_actions::OnOverridesChanged::Create(
+          ExtensionTabUtil::GetTabId(tab_contents)),
+      browser_context_);
+}
+
 PageActionsEventRouter::~PageActionsEventRouter() {
   auto* service = page_actions::ServiceFactory::GetForBrowserContextIfExists(
       browser_context_);
@@ -55,6 +66,8 @@ PageActionsAPI::PageActionsAPI(content::BrowserContext* context)
   EventRouter* event_router = EventRouter::Get(browser_context_);
   event_router->RegisterObserver(
       this, vivaldi::page_actions::OnScriptsChanged::kEventName);
+  event_router->RegisterObserver(
+      this, vivaldi::page_actions::OnOverridesChanged::kEventName);
 }
 
 static base::LazyInstance<BrowserContextKeyedAPIFactory<PageActionsAPI>>::
@@ -77,6 +90,7 @@ void PageActionsAPI::OnListenerAdded(const EventListenerInfo& details) {
 // KeyedService implementation.
 void PageActionsAPI::Shutdown() {
   EventRouter::Get(browser_context_)->UnregisterObserver(this);
+  page_actions_event_router_.reset();
 }
 
 ExtensionFunction::ResponseAction PageActionsFunction::Run() {
@@ -85,6 +99,8 @@ ExtensionFunction::ResponseAction PageActionsFunction::Run() {
 
   if (!service->IsLoaded()) {
     service->AddObserver(this);
+    // Keep the function alive until we can respond.
+    AddRef();
     return RespondLater();
   }
 
@@ -93,7 +109,9 @@ ExtensionFunction::ResponseAction PageActionsFunction::Run() {
 
 void PageActionsFunction::OnServiceLoaded(page_actions::Service* service) {
   service->RemoveObserver(this);
-  return Respond(RunWithService(service));
+  Respond(RunWithService(service));
+  // Balance AddRef in Run().
+  Release();
 }
 
 /*static*/

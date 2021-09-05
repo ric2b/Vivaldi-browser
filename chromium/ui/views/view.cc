@@ -11,12 +11,13 @@
 #include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/containers/adapters.h"
+#include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/i18n/rtl.h"
+#include "base/logging.h"
 #include "base/macros.h"
 #include "base/notreached.h"
 #include "base/scoped_observer.h"
-#include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
@@ -54,8 +55,8 @@
 #include "ui/views/context_menu_controller.h"
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/drag_controller.h"
-#include "ui/views/layout/layout_manager.h"
 #include "ui/views/metadata/metadata_impl_macros.h"
+#include "ui/views/view_class_properties.h"
 #include "ui/views/view_observer.h"
 #include "ui/views/view_tracker.h"
 #include "ui/views/views_features.h"
@@ -80,6 +81,13 @@ constexpr bool kContextMenuOnMousePress = false;
 constexpr bool kContextMenuOnMousePress = true;
 #endif
 
+// Having UseDefaultFillLayout true by default wreaks a bit of havoc right now,
+// so it is false for the time being. Once the various sites which currently use
+// FillLayout are converted to using this and the other places that either
+// override Layout() or do nothing are also validated, this can be switched to
+// true.
+constexpr bool kUseDefaultFillLayout = false;
+
 // Default horizontal drag threshold in pixels.
 // Same as what gtk uses.
 constexpr int kDefaultHorizontalDragThreshold = 8;
@@ -87,6 +95,13 @@ constexpr int kDefaultHorizontalDragThreshold = 8;
 // Default vertical drag threshold in pixels.
 // Same as what gtk uses.
 constexpr int kDefaultVerticalDragThreshold = 8;
+
+// The following are used to offset the keys for the callbacks associated with
+// the bounds element callbacks.
+constexpr int kXChangedKey = sizeof(int) * 0;
+constexpr int kYChangedKey = sizeof(int) * 1;
+constexpr int kWidthChangedKey = sizeof(int) * 2;
+constexpr int kHeightChangedKey = sizeof(int) * 3;
 
 // Returns the top view in |view|'s hierarchy.
 const View* GetHierarchyRoot(const View* view) {
@@ -188,6 +203,8 @@ void ViewMaskLayer::OnViewBoundsChanged(View* observed_view) {
 
 View::View() {
   SetTargetHandler(this);
+  if (kUseDefaultFillLayout)
+    default_fill_layout_.emplace(DefaultFillLayout());
 }
 
 View::~View() {
@@ -362,8 +379,7 @@ void View::SetBoundsRect(const gfx::Rect& bounds) {
   }
 
   OnBoundsChanged(prev);
-  if (bounds_ != prev)
-    NotifyAccessibilityEvent(ax::mojom::Event::kLocationChanged, false);
+  NotifyAccessibilityEvent(ax::mojom::Event::kLocationChanged, false);
 
   if (needs_layout_ || is_size_changed) {
     needs_layout_ = false;
@@ -385,6 +401,17 @@ void View::SetBoundsRect(const gfx::Rect& bounds) {
 
   for (ViewObserver& observer : observers_)
     observer.OnViewBoundsChanged(this);
+
+  // The property effects have already been taken into account above. No need to
+  // redo them here.
+  if (prev.x() != bounds_.x())
+    OnPropertyChanged(&bounds_ + kXChangedKey, kPropertyEffectsNone);
+  if (prev.y() != bounds_.y())
+    OnPropertyChanged(&bounds_ + kYChangedKey, kPropertyEffectsNone);
+  if (prev.width() != bounds_.width())
+    OnPropertyChanged(&bounds_ + kWidthChangedKey, kPropertyEffectsNone);
+  if (prev.height() != bounds_.height())
+    OnPropertyChanged(&bounds_ + kHeightChangedKey, kPropertyEffectsNone);
 }
 
 void View::SetSize(const gfx::Size& size) {
@@ -485,8 +512,8 @@ void View::SizeToPreferredSize() {
 }
 
 gfx::Size View::GetMinimumSize() const {
-  if (layout_manager_)
-    return layout_manager_->GetMinimumSize(this);
+  if (HasLayoutManager())
+    return GetLayoutManager()->GetMinimumSize(this);
 
   return GetPreferredSize();
 }
@@ -496,14 +523,14 @@ gfx::Size View::GetMaximumSize() const {
 }
 
 int View::GetHeightForWidth(int w) const {
-  if (layout_manager_)
-    return layout_manager_->GetPreferredHeightForWidth(this, w);
+  if (HasLayoutManager())
+    return GetLayoutManager()->GetPreferredHeightForWidth(this, w);
   return GetPreferredSize().height();
 }
 
 SizeBounds View::GetAvailableSize(const View* child) const {
-  if (layout_manager_)
-    return layout_manager_->GetAvailableSize(this, child);
+  if (HasLayoutManager())
+    return GetLayoutManager()->GetAvailableSize(this, child);
   return SizeBounds();
 }
 
@@ -546,13 +573,17 @@ void View::SetVisible(bool visible) {
   }
 }
 
-PropertyChangedSubscription View::AddVisibleChangedCallback(
+base::CallbackListSubscription View::AddVisibleChangedCallback(
     PropertyChangedCallback callback) {
   return AddPropertyChangedCallback(&visible_, std::move(callback));
 }
 
 bool View::IsDrawn() const {
   return visible_ && parent_ ? parent_->IsDrawn() : false;
+}
+
+bool View::GetIsDrawn() const {
+  return IsDrawn();
 }
 
 bool View::GetEnabled() const {
@@ -569,14 +600,14 @@ void View::SetEnabled(bool enabled) {
   OnPropertyChanged(&enabled_, kPropertyEffectsPaint);
 }
 
-PropertyChangedSubscription View::AddEnabledChangedCallback(
+base::CallbackListSubscription View::AddEnabledChangedCallback(
     PropertyChangedCallback callback) {
   return AddPropertyChangedCallback(&enabled_, std::move(callback));
 }
 
 View::Views View::GetChildrenInZOrder() {
-  if (layout_manager_) {
-    const auto result = layout_manager_->GetChildViewsInPaintOrder(this);
+  if (HasLayoutManager()) {
+    const auto result = GetLayoutManager()->GetChildViewsInPaintOrder(this);
     DCHECK_EQ(children_.size(), result.size());
     return result;
   }
@@ -771,8 +802,8 @@ void View::Layout() {
   needs_layout_ = false;
 
   // If we have a layout manager, let it handle the layout for us.
-  if (layout_manager_)
-    layout_manager_->Layout(this);
+  if (HasLayoutManager())
+    GetLayoutManager()->Layout(this);
 
   // Make sure to propagate the Layout() call to any children that haven't
   // received it yet through the layout manager and need to be laid out. This
@@ -782,8 +813,9 @@ void View::Layout() {
   // the call can take appropriate action.
   internal::ScopedChildrenLock lock(this);
   for (auto* child : children_) {
-    if (child->needs_layout_ || !layout_manager_) {
-      TRACE_EVENT1("views", "View::Layout", "class", child->GetClassName());
+    if (child->needs_layout_ || !HasLayoutManager()) {
+      TRACE_EVENT1("views", "View::LayoutChildren", "class",
+                   child->GetClassName());
       child->needs_layout_ = false;
       child->Layout();
     }
@@ -794,8 +826,8 @@ void View::InvalidateLayout() {
   // Always invalidate up. This is needed to handle the case of us already being
   // valid, but not our parent.
   needs_layout_ = true;
-  if (layout_manager_)
-    layout_manager_->InvalidateLayout();
+  if (HasLayoutManager())
+    GetLayoutManager()->InvalidateLayout();
 
   if (parent_) {
     parent_->InvalidateLayout();
@@ -807,11 +839,35 @@ void View::InvalidateLayout() {
 }
 
 LayoutManager* View::GetLayoutManager() const {
-  return layout_manager_.get();
+  if (layout_manager_)
+    return layout_manager_.get();
+  if (default_fill_layout_.has_value())
+    return &const_cast<View*>(this)->default_fill_layout_.value();
+  return nullptr;
 }
 
 void View::SetLayoutManager(std::nullptr_t) {
   SetLayoutManagerImpl(nullptr);
+}
+
+bool View::GetUseDefaultFillLayout() const {
+  if (layout_manager_)
+    return false;
+  return default_fill_layout_.has_value();
+}
+
+void View::SetUseDefaultFillLayout(bool value) {
+  if (value == default_fill_layout_.has_value())
+    return;
+
+  if (value) {
+    default_fill_layout_.emplace(DefaultFillLayout());
+    // Kill the currently assigned layout manager if one had been assigned.
+    layout_manager_.reset();
+  } else {
+    default_fill_layout_.reset();
+  }
+  OnPropertyChanged(&default_fill_layout_, kPropertyEffectsLayout);
 }
 
 // Attributes ------------------------------------------------------------------
@@ -842,7 +898,7 @@ void View::SetID(int id) {
   OnPropertyChanged(&id_, kPropertyEffectsNone);
 }
 
-PropertyChangedSubscription View::AddIDChangedCallback(
+base::CallbackListSubscription View::AddIDChangedCallback(
     PropertyChangedCallback callback) {
   return AddPropertyChangedCallback(&id_, callback);
 }
@@ -860,7 +916,7 @@ int View::GetGroup() const {
   return group_;
 }
 
-PropertyChangedSubscription View::AddGroupChangedCallback(
+base::CallbackListSubscription View::AddGroupChangedCallback(
     PropertyChangedCallback callback) {
   return AddPropertyChangedCallback(&group_, callback);
 }
@@ -1167,7 +1223,8 @@ void View::SetFlipCanvasOnPaintForRTLUI(bool enable) {
   OnPropertyChanged(&flip_canvas_on_paint_for_rtl_ui_, kPropertyEffectsPaint);
 }
 
-PropertyChangedSubscription View::AddFlipCanvasOnPaintForRTLUIChangedCallback(
+base::CallbackListSubscription
+View::AddFlipCanvasOnPaintForRTLUIChangedCallback(
     PropertyChangedCallback callback) {
   return AddPropertyChangedCallback(&flip_canvas_on_paint_for_rtl_ui_,
                                     std::move(callback));
@@ -1356,6 +1413,10 @@ void View::OnTouchEvent(ui::TouchEvent* event) {
 }
 
 void View::OnGestureEvent(ui::GestureEvent* event) {}
+
+base::StringPiece View::GetLogContext() const {
+  return GetClassName();
+}
 
 void View::SetNotifyEnterExitOnChild(bool notify) {
   notify_enter_exit_on_child_ = notify;
@@ -1766,8 +1827,8 @@ bool View::HasObserver(const ViewObserver* observer) const {
 // Size and disposition --------------------------------------------------------
 
 gfx::Size View::CalculatePreferredSize() const {
-  if (layout_manager_)
-    return layout_manager_->GetPreferredSize(this);
+  if (HasLayoutManager())
+    return GetLayoutManager()->GetPreferredSize(this);
   return gfx::Size();
 }
 
@@ -2177,7 +2238,7 @@ void View::HandlePropertyChangeEffects(PropertyEffects effects) {
     SchedulePaint();
 }
 
-PropertyChangedSubscription View::AddPropertyChangedCallback(
+base::CallbackListSubscription View::AddPropertyChangedCallback(
     PropertyKey property,
     PropertyChangedCallback callback) {
   auto entry = property_changed_vectors_.find(property);
@@ -2202,6 +2263,34 @@ void View::OnPropertyChanged(PropertyKey property,
 
   PropertyChangedCallbacks* property_changed_callbacks = entry->second.get();
   property_changed_callbacks->Notify();
+}
+
+int View::GetX() const {
+  return x();
+}
+
+int View::GetY() const {
+  return y();
+}
+
+int View::GetWidth() const {
+  return width();
+}
+
+int View::GetHeight() const {
+  return height();
+}
+
+void View::SetWidth(int width) {
+  SetBounds(x(), y(), width, height());
+}
+
+void View::SetHeight(int height) {
+  SetBounds(x(), y(), width(), height);
+}
+
+base::string16 View::GetTooltip() const {
+  return GetTooltipText(gfx::Point());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2388,16 +2477,16 @@ void View::AddChildViewAtImpl(View* view, int index) {
   // inherit the visibility of the owner View.
   view->UpdateLayerVisibility();
 
+  // Need to notify the layout manager because one of the callbacks below might
+  // want to know the view's new preferred size, minimum size, etc.
+  if (HasLayoutManager())
+    GetLayoutManager()->ViewAdded(this, view);
+
   if (widget) {
     const ui::NativeTheme* new_theme = view->GetNativeTheme();
     if (new_theme != old_theme)
       view->PropagateThemeChanged();
   }
-
-  // Need to notify the layout manager because one of the callbacks below might
-  // want to know the view's new preferred size, minimum size, etc.
-  if (layout_manager_)
-    layout_manager_->ViewAdded(this, view);
 
   ViewHierarchyChangedDetails details(true, this, view, parent);
 
@@ -2452,8 +2541,8 @@ void View::DoRemoveChildView(View* view,
 
   // Need to notify the layout manager because one of the callbacks below might
   // want to know the view's new preferred size, minimum size, etc.
-  if (layout_manager_)
-    layout_manager_->ViewRemoved(this, view);
+  if (HasLayoutManager())
+    GetLayoutManager()->ViewRemoved(this, view);
 
   view->PropagateRemoveNotifications(this, new_parent, is_removed_from_widget);
   view->parent_ = nullptr;
@@ -2641,6 +2730,12 @@ void View::SetLayoutManagerImpl(std::unique_ptr<LayoutManager> layout_manager) {
   layout_manager_ = std::move(layout_manager);
   if (layout_manager_)
     layout_manager_->Installed(this);
+  // Only reset |default_fill_layout_| if it's already been set and there is a
+  // layout manager.
+  if (default_fill_layout_.has_value() && layout_manager_)
+    default_fill_layout_.reset();
+  else if (kUseDefaultFillLayout)
+    default_fill_layout_.emplace(DefaultFillLayout());
 }
 
 void View::SetLayerBounds(const gfx::Size& size,
@@ -2816,6 +2911,13 @@ void View::CreateMaskLayer() {
   DCHECK(layer());
   mask_layer_ = std::make_unique<views::ViewMaskLayer>(clip_path_, this);
   layer()->SetMaskLayer(mask_layer_->layer());
+}
+
+// Layout ----------------------------------------------------------------------
+
+bool View::HasLayoutManager() const {
+  return ((default_fill_layout_.has_value() && !children_.empty()) ||
+          layout_manager_);
 }
 
 // Input -----------------------------------------------------------------------
@@ -3068,6 +3170,41 @@ bool View::DoDrag(const ui::LocatedEvent& event,
   return true;
 }
 
+View::DefaultFillLayout::DefaultFillLayout() = default;
+
+View::DefaultFillLayout::~DefaultFillLayout() = default;
+
+void View::DefaultFillLayout::Layout(View* host) {
+  const gfx::Rect contents_bounds = host->GetContentsBounds();
+  for (auto* child : host->children()) {
+    if (!child->GetProperty(kViewIgnoredByLayoutKey))
+      child->SetBoundsRect(contents_bounds);
+  }
+}
+
+gfx::Size View::DefaultFillLayout::GetPreferredSize(const View* host) const {
+  gfx::Size preferred_size;
+  for (auto* child : host->children()) {
+    if (!child->GetProperty(kViewIgnoredByLayoutKey))
+      preferred_size.SetToMax(child->GetPreferredSize());
+  }
+  return preferred_size;
+}
+
+int View::DefaultFillLayout::GetPreferredHeightForWidth(const View* host,
+                                                        int width) const {
+  const gfx::Insets insets = host->GetInsets();
+  int preferred_height = 0;
+  for (auto* child : host->children()) {
+    if (!child->GetProperty(kViewIgnoredByLayoutKey)) {
+      preferred_height = std::max(
+          preferred_height,
+          child->GetHeightForWidth(width - insets.width()) + insets.height());
+    }
+  }
+  return preferred_height;
+}
+
 DEFINE_ENUM_CONVERTERS(View::FocusBehavior,
                        {View::FocusBehavior::ACCESSIBLE_ONLY,
                         base::ASCIIToUTF16("ACCESSIBLE_ONLY")},
@@ -3084,13 +3221,20 @@ ADD_PROPERTY_METADATA(bool, Enabled)
 ADD_PROPERTY_METADATA(View::FocusBehavior, FocusBehavior)
 ADD_PROPERTY_METADATA(bool, FlipCanvasOnPaintForRTLUI)
 ADD_PROPERTY_METADATA(int, Group)
+ADD_PROPERTY_METADATA(int, Height)
 ADD_PROPERTY_METADATA(int, ID)
+ADD_READONLY_PROPERTY_METADATA(bool, IsDrawn);
 ADD_READONLY_PROPERTY_METADATA(gfx::Size, MaximumSize)
 ADD_READONLY_PROPERTY_METADATA(gfx::Size, MinimumSize)
 ADD_PROPERTY_METADATA(bool, Mirrored)
 ADD_PROPERTY_METADATA(bool, NotifyEnterExitOnChild)
+ADD_READONLY_PROPERTY_METADATA(base::string16, Tooltip)
 ADD_PROPERTY_METADATA(bool, Visible)
 ADD_PROPERTY_METADATA(bool, CanProcessEventsWithinSubtree)
+ADD_PROPERTY_METADATA(bool, UseDefaultFillLayout)
+ADD_PROPERTY_METADATA(int, Width)
+ADD_PROPERTY_METADATA(int, X)
+ADD_PROPERTY_METADATA(int, Y)
 END_METADATA
 
 }  // namespace views

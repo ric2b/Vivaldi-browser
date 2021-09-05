@@ -11,6 +11,7 @@
     <output filename="values-io/android_chrome_strings.xml" lang="io" type="android" />
     <output filename="values-ja-rKS/android_chrome_strings.xml" lang="ja-KS" type="android" />
     <output filename="values-jbo/android_chrome_strings.xml" lang="jbo" type="android" />
+    <output filename="values-kab/android_chrome_strings.xml" lang="kab" type="android" />
     <output filename="values-ku/android_chrome_strings.xml" lang="ku" type="android" />
     <output filename="values-sc/android_chrome_strings.xml" lang="sc" type="android" />
     <output filename="values-nn/android_chrome_strings.xml" lang="nn" type="android" />
@@ -44,6 +45,7 @@
     <file path="strings/vivaldi_android_chrome_strings_it.xtb" lang="it" />
     <file path="strings/vivaldi_android_chrome_strings_ja.xtb" lang="ja" />
     <file path="strings/vivaldi_android_chrome_strings_ja-KS.xtb" lang="ja-KS" />
+    <file path="strings/vivaldi_android_chrome_strings_kab.xtb" lang="kab" />
     <file path="strings/vivaldi_android_chrome_strings_kn.xtb" lang="kn" />
     <file path="strings/vivaldi_android_chrome_strings_ko.xtb" lang="ko" />
     <file path="strings/vivaldi_android_chrome_strings_lt.xtb" lang="lt" />
@@ -213,6 +215,9 @@ To adjust your search term, long press to select. To refine your search, slide t
       </message>
       <message name="IDS_MENU_HOME" desc="Tooltip for the homepage button. [CHAR-LIMIT=27]">
         Homepage
+      </message>
+      <message name="IDS_ACCESSIBILITY_TABSTRIP_INCOGNITO_IDENTIFIER" desc="Content description for tabs that are not selected in incognito mode">
+        Private Tab
       </message>
     </messages>
   </release>

@@ -27,7 +27,9 @@ class FakeLocalFrameHost : public mojom::blink::LocalFrameHost {
   void EnterFullscreen(mojom::blink::FullscreenOptionsPtr options,
                        EnterFullscreenCallback callback) override;
   void ExitFullscreen() override;
-  void FullscreenStateChanged(bool is_fullscreen) override;
+  void FullscreenStateChanged(
+      bool is_fullscreen,
+      mojom::blink::FullscreenOptionsPtr options) override;
   void RegisterProtocolHandler(const WTF::String& scheme,
                                const ::blink::KURL& url,
                                bool user_gesture) override;
@@ -126,13 +128,12 @@ class FakeLocalFrameHost : public mojom::blink::LocalFrameHost {
                                  parsed_csp_attribute) override;
   void DidChangeFramePolicy(const base::UnguessableToken& child_frame_token,
                             const FramePolicy& frame_policy) override;
-  void BindPolicyContainer(
-      mojo::PendingAssociatedReceiver<mojom::blink::PolicyContainerHost>
-          receiver) override;
   void CapturePaintPreviewOfSubframe(
       const gfx::Rect& clip_rect,
       const base::UnguessableToken& guid) override;
   void Detach() override;
+  void IssueKeepAliveHandle(
+      mojo::PendingReceiver<mojom::blink::KeepAliveHandle> receiver) override;
 
  private:
   void BindFrameHostReceiver(mojo::ScopedInterfaceEndpointHandle handle);

@@ -25,14 +25,6 @@
     src: url('fonts/Metropolis/Metropolis-SemiBold.woff2') format('woff2');
 }
 
-/* Usage of FontAwesome is deprecated and will be removed eventually */
-@font-face {
-    font-family: FontAwesome;
-    font-weight: normal;
-    font-style: normal;
-    src: url('fonts/fontawesome-webfont.ttf') format('truetype');
-    }
-
 /**
     Common uBO spacing.
     Ref: https://github.com/uBlockOrigin/uBlock-issues/issues/1005
@@ -59,16 +51,6 @@ body {
     margin: 0;
     padding: 0;
     }
-.fa {
-    display: inline-block;
-    font-family: FontAwesome;
-    font-style: normal;
-    font-weight: normal;
-    line-height: 1;
-    user-select: none;
-      -moz-user-select: none;
-      -webkit-user-select: none;
-    }
 a {
     color: var(--link-ink);
     }
@@ -79,7 +61,7 @@ code, .code {
     }
 hr {
     border: 0;
-    border-top: 1px solid var(--hor-separator-color);
+    border-top: 1px solid var(--hr-ink);
     margin: 1em 0;
     }
 textarea {
@@ -98,7 +80,6 @@ button {
     fill: var(--button-ink);
     font-size: 14px;
     justify-content: center;
-    letter-spacing: 0.5px;
     min-height: 36px;
     padding: 0 var(--font-size);
     vertical-align: middle;
@@ -135,7 +116,6 @@ button.preferred {
     background-color: var(--button-preferred-surface);
     color: var(--button-preferred-ink);
     }
-button.iconifiable > .fa,
 button.iconifiable > .fa-icon {
     padding-left: 0;
     padding-right: 0.4em;
@@ -143,7 +123,6 @@ button.iconifiable > .fa-icon {
 button.iconifiable > .fa-icon {
     font-size: 120%;
     }
-body[dir="rtl"] button.iconifiable > .fa,
 body[dir="rtl"] button.iconifiable > .fa-icon {
     padding-left: 0.5em;
     }
@@ -234,7 +213,6 @@ select {
     -webkit-margin-start: 2em;
     }
 @media (max-width: 640px) {
-    button.iconifiable > .fa,
     button.iconifiable > .fa-icon {
         font-size: 1.2rem;
         padding: 0;
@@ -242,6 +220,16 @@ select {
     button.iconifiable > [data-i18n] {
         display: none;
         }
+    }
+
+.logo {
+    align-items: center;
+    display: inline-flex;
+    padding: 0 0.5em;
+    width: 1.25em;
+    }
+.logo > img {
+    width: 100%;
     }
 
 .ubo-icon {
@@ -276,6 +264,7 @@ select {
 :root.hidpi button {
     font-family: Metropolis, sans-serif;
     font-weight: 600;
+    letter-spacing: 0.5px;
     }
 :root.hidpi .fieldset-header {
     font-family: Metropolis, sans-serif;

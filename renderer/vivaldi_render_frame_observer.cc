@@ -383,7 +383,8 @@ void VivaldiRenderFrameObserver::OnRequestThumbnailForFrame(
   } while (false);
 
   render_frame()->Send(new VivaldiViewHostMsg_RequestThumbnailForFrame_ACK(
-      render_frame()->GetRoutingID(), params.callback_id, ack_size, shared_region));
+      render_frame()->GetRoutingID(), params.callback_id, ack_size, shared_region,
+        params.client_id));
 }
 
 }  // namespace vivaldi

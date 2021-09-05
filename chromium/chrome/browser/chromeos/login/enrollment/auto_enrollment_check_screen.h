@@ -21,7 +21,6 @@
 namespace chromeos {
 
 class ErrorScreensHistogramHelper;
-class ScreenManager;
 
 // Handles the control flow after OOBE auto-update completes to wait for the
 // enterprise auto-enrollment check that happens as part of OOBE. This includes
@@ -33,12 +32,12 @@ class AutoEnrollmentCheckScreen
       public BaseScreen,
       public NetworkPortalDetector::Observer {
  public:
+  using TView = AutoEnrollmentCheckScreenView;
+
   AutoEnrollmentCheckScreen(AutoEnrollmentCheckScreenView* view,
                             ErrorScreen* error_screen,
                             const base::RepeatingClosure& exit_callback);
   ~AutoEnrollmentCheckScreen() override;
-
-  static AutoEnrollmentCheckScreen* Get(ScreenManager* manager);
 
   // Clears the cached state causing the forced enrollment check to be retried.
   void ClearState();
@@ -116,15 +115,14 @@ class AutoEnrollmentCheckScreen
   base::RepeatingClosure exit_callback_;
   AutoEnrollmentController* auto_enrollment_controller_;
 
-  std::unique_ptr<AutoEnrollmentController::ProgressCallbackList::Subscription>
-      auto_enrollment_progress_subscription_;
+  base::CallbackListSubscription auto_enrollment_progress_subscription_;
 
   NetworkPortalDetector::CaptivePortalStatus captive_portal_status_;
   policy::AutoEnrollmentState auto_enrollment_state_;
 
   std::unique_ptr<ErrorScreensHistogramHelper> histogram_helper_;
 
-  ErrorScreen::ConnectRequestCallbackSubscription connect_request_subscription_;
+  base::CallbackListSubscription connect_request_subscription_;
 
   base::WeakPtrFactory<AutoEnrollmentCheckScreen> weak_ptr_factory_{this};
 

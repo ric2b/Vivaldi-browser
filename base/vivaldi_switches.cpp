@@ -19,6 +19,11 @@ const char kRunningVivaldi[] = "running-vivaldi";
 // select newer AVAssetReader.
 const char kVivaldiPlatformMedia[] = "platform-media";
 
+// The installer should perform updates completely silently and should not
+// terminate running browser instances. The name is criptic as it is not
+// intended to be used by the end-user.
+const char kVivaldiSilentUpdate[] = "vsu";
+
 // Specifies a custom URL for an appcast.xml file to be used for testing
 // auto updates. This switch is for internal use only and the switch name is
 // pseudonymous and hard to guess due to security reasons.

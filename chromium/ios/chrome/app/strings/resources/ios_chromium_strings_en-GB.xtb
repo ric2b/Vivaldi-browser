@@ -5,6 +5,7 @@
 <translation id="1185134272377778587">About Chromium</translation>
 <translation id="1257458525759135959">To save images, tap on settings to let Chromium add to your photos</translation>
 <translation id="1361748954329991663">Chromium is out of date. If no update is available in the <ph name="BEGIN_LINK" />app store<ph name="END_LINK" />, it's possible that your device doesn't support new versions of Chromium anymore.</translation>
+<translation id="1431818719585918472">Let Chromium lock your incognito tabs.</translation>
 <translation id="1472013873724362412">Your account does not work on Chromium. Please contact your domain administrator or use a regular Google Account to sign in.</translation>
 <translation id="1507010443238049608">Help improve Chromium's features and performance</translation>
 <translation id="1617663976202781617">Data from Chromium sync</translation>
@@ -22,6 +23,7 @@
 <translation id="2650312721222849884">To see your tabs from wherever you use Chromium, turn on sync</translation>
 <translation id="2730884209570016437">Chromium can't use your camera because it's in use by another application</translation>
 <translation id="2915596697727466327">Chromium uses Face ID to ensure authorised access to your passwords.</translation>
+<translation id="2918709798697875261">Your organisation requires you to stay signed out of Chromium.</translation>
 <translation id="2977470724722393594">Chromium is up to date</translation>
 <translation id="3256316712990552818">Copied to Chromium</translation>
 <translation id="3344973607274501920">Chromium couldn't check your passwords. Try checking your Internet connection.</translation>
@@ -45,9 +47,12 @@
 <translation id="5862307444128926510">Welcome to Chromium</translation>
 <translation id="5945387852661427312">You are signing in with an account managed by <ph name="DOMAIN" /> and giving its administrator control over your Chromium data. Your data will become permanently tied to this account. Signing out of Chromium will delete your data from this device, but it will remain stored in your Google Account.</translation>
 <translation id="602807004951640891">By using Chromium, you agree to the <ph name="BEGIN_LINK_TOS" />Terms of Service<ph name="END_LINK_TOS" />.</translation>
+<translation id="6119647025869519954">To make Chromium your default:
+1. Open settings
+2. Tap the default browser app
+3. Select Chromium.</translation>
 <translation id="6268381023930128611">Sign out of Chromium?</translation>
 <translation id="6424492062988593837">Chromium just got better! A new version is available.</translation>
-<translation id="6604711459180487467">Get a better experience in Chromium based on your location.</translation>
 <translation id="6820823224820483452">Chromium couldn't check all passwords. Try again tomorrow.</translation>
 <translation id="7018284295775193585">Chromium can't update</translation>
 <translation id="7099326575020694068">Chromium can't use your camera in Split View mode</translation>
@@ -63,6 +68,7 @@
 <translation id="7746854981345936341">Chromium tip. Some buttons are now at the bottom of your screen, such as Back, Forward and Search.</translation>
 <translation id="786327964234957808">You are switching sync accounts from <ph name="USER_EMAIL1" /> to <ph name="USER_EMAIL2" />. Your existing Chromium data is managed by <ph name="DOMAIN" />. This will delete your data from this device, but your data will remain in <ph name="USER_EMAIL1" />.</translation>
 <translation id="7890287942691234100">Start using Chromium scanner</translation>
+<translation id="7980860476903281594">Chromium shares your location with sites that you allow.</translation>
 <translation id="8013573822802650211">To see your tabs from wherever you use Chromium, sign in on all your devices</translation>
 <translation id="8073677936375100957">Clear your Chromium data from this device?</translation>
 <translation id="8175055321229419309">Tip: <ph name="BEGIN_LINK" />Move Chromium to your dock<ph name="END_LINK" /></translation>
@@ -74,6 +80,7 @@
 <translation id="8776843108004031667">This account and any unsaved data will be removed from Chromium.</translation>
 <translation id="9022552996538154597">Sign in to Chromium</translation>
 <translation id="9089354809943900324">Chromium is out of date</translation>
+<translation id="912386518501777532">When you were signed out of Chromium, your bookmarks, history, passwords and other settings were cleared from this device. Your synced data is still saved to your account.</translation>
 <translation id="921174536258924340">Chromium couldn't check all passwords. Try again tomorrow or <ph name="BEGIN_LINK" />check passwords in your Google Account.<ph name="END_LINK" /></translation>
 <translation id="985602178874221306">The Chromium Authors</translation>
 </translationbundle>

@@ -115,7 +115,7 @@ void DirectoryWatcher::DoAddPaths(const std::vector<base::FilePath>& paths) {
     pending_paths_.insert(path);
     auto watcher = std::make_unique<base::FilePathWatcher>();
     // Unretained OK because we own the watcher.
-    if (!watcher->Watch(path, true,
+    if (!watcher->Watch(path, base::FilePathWatcher::Type::kRecursive,
                         base::BindRepeating(&DirectoryWatcher::OnPathChanged,
                                             base::Unretained(this))))
       continue;

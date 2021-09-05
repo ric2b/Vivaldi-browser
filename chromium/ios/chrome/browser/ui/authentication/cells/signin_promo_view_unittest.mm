@@ -7,6 +7,7 @@
 #import <MaterialComponents/MaterialOverlayWindow.h>
 
 #import "ios/chrome/browser/ui/authentication/cells/signin_promo_view_constants.h"
+#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #include "testing/platform_test.h"
 #include "third_party/ocmock/gtest_support.h"
 
@@ -17,14 +18,14 @@
 using SigninPromoViewTest = PlatformTest;
 
 TEST_F(SigninPromoViewTest, ChromiumLogoImage) {
-  UIWindow* currentWindow = [[UIApplication sharedApplication] keyWindow];
+  UIWindow* currentWindow = GetAnyKeyWindow();
   SigninPromoView* view =
       [[SigninPromoView alloc] initWithFrame:CGRectMake(0, 0, 100, 100)];
-  view.mode = SigninPromoViewModeColdState;
+  view.mode = IdentityPromoViewModeNoAccounts;
   [currentWindow.rootViewController.view addSubview:view];
   UIImage* chromiumLogo = view.imageView.image;
   EXPECT_NE(nil, chromiumLogo);
-  view.mode = SigninPromoViewModeWarmState;
+  view.mode = IdentityPromoViewModeSigninWithAccount;
   UIImage* customImage = [[UIImage alloc] init];
   [view setProfileImage:customImage];
   EXPECT_NE(nil, view.imageView.image);
@@ -36,12 +37,12 @@ TEST_F(SigninPromoViewTest, ChromiumLogoImage) {
 }
 
 TEST_F(SigninPromoViewTest, SecondaryButtonVisibility) {
-  UIWindow* currentWindow = [[UIApplication sharedApplication] keyWindow];
+  UIWindow* currentWindow = GetAnyKeyWindow();
   SigninPromoView* view =
       [[SigninPromoView alloc] initWithFrame:CGRectMake(0, 0, 100, 100)];
-  view.mode = SigninPromoViewModeColdState;
+  view.mode = IdentityPromoViewModeNoAccounts;
   [currentWindow.rootViewController.view addSubview:view];
   EXPECT_TRUE(view.secondaryButton.hidden);
-  view.mode = SigninPromoViewModeWarmState;
+  view.mode = IdentityPromoViewModeSigninWithAccount;
   EXPECT_FALSE(view.secondaryButton.hidden);
 }

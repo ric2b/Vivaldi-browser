@@ -128,6 +128,14 @@ void SetRuntimeFeatureDefaultsForPlatform(
   WebRuntimeFeatures::EnableMediaControlsExpandGesture(
       base::FeatureList::IsEnabled(media::kMediaControlsExpandGesture));
 #endif
+
+#if defined(OS_ANDROID)
+  WebRuntimeFeatures::EnableCSSColorSchemeUARendering(
+      // Combining form-controls-refresh and form-controls-dark-mode
+      // to be launched together on Android. Only one about flags
+      // for both features.
+      base::FeatureList::IsEnabled(features::kFormControlsRefresh));
+#endif
 }
 
 enum RuntimeFeatureEnableOptions {
@@ -244,9 +252,6 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
      features::kLazyImageVisibleLoadTimeMetrics},
     {wf::EnablePictureInPicture, media::kPictureInPicture},
     {wf::EnableCacheInlineScriptCode, features::kCacheInlineScriptCode},
-    {wf::EnableExperimentalProductivityFeatures,
-     features::kExperimentalProductivityFeatures},
-    {wf::EnableFeaturePolicyForSandbox, features::kFeaturePolicyForSandbox},
     {wf::EnableAccessibilityExposeDisplayNone,
      features::kEnableAccessibilityExposeDisplayNone},
     {wf::EnableAccessibilityExposeHTMLElement,
@@ -259,7 +264,6 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
      blink::features::kAllowSyncXHRInPageDismissal},
     {wf::EnableAutoplayIgnoresWebAudio, media::kAutoplayIgnoreWebAudio},
     {wf::EnablePortals, blink::features::kPortals, kSetOnlyIfOverridden},
-    {wf::EnableImplicitRootScroller, blink::features::kImplicitRootScroller},
     {wf::EnableTextFragmentAnchor, blink::features::kTextFragmentAnchor},
     {wf::EnableBackgroundFetch, features::kBackgroundFetch},
     {wf::EnableForcedColors, features::kForcedColors},
@@ -305,6 +309,8 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
     {wf::EnableInstalledApp, features::kInstalledApp},
     {wf::EnableWebAuthenticationGetAssertionFeaturePolicy,
      device::kWebAuthGetAssertionFeaturePolicy},
+    {wf::EnableWebOTPAssertionFeaturePolicy,
+     features::kWebOTPAssertionFeaturePolicy, kSetOnlyIfOverridden},
     {wf::EnableTransformInterop, blink::features::kTransformInterop},
     {wf::EnableVideoWakeLockOptimisationHiddenMuted,
      media::kWakeLockOptimisationHiddenMuted},
@@ -318,6 +324,8 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
      blink::features::kWebAppEnableProtocolHandlers},
     {wf::EnableWebID, features::kWebID},
     {wf::EnableWheelEventRegions, features::kWheelEventRegions},
+    {wf::EnableAOMAriaRelationshipProperties,
+     features::kEnableAriaElementReflection},
   };
   for (const auto& mapping : blinkFeatureToBaseFeatureMapping) {
     SetRuntimeFeatureFromChromiumFeature(
@@ -340,8 +348,6 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
           {"BlockHTMLParserOnStyleSheets",
            blink::features::kBlockHTMLParserOnStyleSheets},
           {"CSSColorSchemeUARendering", features::kCSSColorSchemeUARendering},
-          {"CSSReducedFontLoadingLayoutInvalidations",
-           blink::features::kCSSReducedFontLoadingLayoutInvalidations},
           {"CSSMatchedPropertiesCacheDependencies",
            blink::features::kCSSMatchedPropertiesCacheDependencies},
           {"FeaturePolicyForClientHints",
@@ -354,10 +360,14 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
            blink::features::kForceSynchronousHTMLParsing},
           {"IgnoreCrossOriginWindowWhenNamedAccessOnWindow",
            blink::features::kIgnoreCrossOriginWindowWhenNamedAccessOnWindow},
+          {"InterestCohortFeaturePolicy",
+           blink::features::kInterestCohortFeaturePolicy},
           {"LangClientHintHeader", features::kLangClientHintHeader},
           {"LayoutNG", blink::features::kLayoutNG},
+          {"LayoutNGTable", blink::features::kLayoutNGTable},
           {"LayoutNGFieldset", blink::features::kLayoutNGFieldset},
           {"LayoutNGFragmentItem", blink::features::kFragmentItem},
+          {"LayoutNGTextControl", blink::features::kLayoutNGTextControl},
           {"LegacyWindowsDWriteFontFallback",
            features::kLegacyWindowsDWriteFontFallback},
           {"LinkDisabledNewSpecBehavior",

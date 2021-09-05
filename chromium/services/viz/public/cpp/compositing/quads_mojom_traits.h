@@ -259,10 +259,10 @@ struct StructTraits<viz::mojom::CompositorRenderPassQuadStateDataView,
     return quad->backdrop_filter_quality;
   }
 
-  static bool can_use_backdrop_filter_cache(const viz::DrawQuad& input) {
+  static bool intersects_damage_under(const viz::DrawQuad& input) {
     const viz::CompositorRenderPassDrawQuad* quad =
         viz::CompositorRenderPassDrawQuad::MaterialCast(&input);
-    return quad->can_use_backdrop_filter_cache;
+    return quad->intersects_damage_under;
   }
 
   static bool Read(viz::mojom::CompositorRenderPassQuadStateDataView data,
@@ -426,6 +426,12 @@ struct StructTraits<viz::mojom::TextureQuadStateDataView, viz::DrawQuad> {
     const viz::TextureDrawQuad* quad =
         viz::TextureDrawQuad::MaterialCast(&input);
     return quad->protected_video_type;
+  }
+
+  static uint32_t hw_protected_validation_id(const viz::DrawQuad& input) {
+    const viz::TextureDrawQuad* quad =
+        viz::TextureDrawQuad::MaterialCast(&input);
+    return quad->hw_protected_validation_id;
   }
 
   static bool Read(viz::mojom::TextureQuadStateDataView data,
